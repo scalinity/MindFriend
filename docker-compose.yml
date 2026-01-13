@@ -1,0 +1,102 @@
+version: "3.9"
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: mindfriend-postgres
+    environment:
+      POSTGRES_USER: mindfriend
+      POSTGRES_PASSWORD: mindfriend_dev
+      POSTGRES_DB: mindfriend
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mindfriend"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis (Cache + Job Queue)
+  redis:
+    image: redis:7-alpine
+    container_name: mindfriend-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # NestJS API (development mode)
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile.dev
+    container_name: mindfriend-api
+    env_file:
+      - ./apps/api/.env
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://mindfriend:mindfriend_dev@postgres:5432/mindfriend
+      - REDIS_URL=redis://redis:6379
+    ports:
+      - "3000:3000"
+      - "9229:9229"
+    volumes:
+      - ./apps/api:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: npm run start:dev
+
+  # BullMQ Worker (background jobs)
+  worker:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile.dev
+    container_name: mindfriend-worker
+    env_file:
+      - ./apps/api/.env
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://mindfriend:mindfriend_dev@postgres:5432/mindfriend
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./apps/api:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: npm run worker:dev
+    profiles:
+      - full
+
+  # Bull Board UI (job monitoring)
+  bullboard:
+    image: deadly0/bull-board
+    container_name: mindfriend-bullboard
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    ports:
+      - "3001:3000"
+    depends_on:
+      - redis
+    profiles:
+      - full
+
+volumes:
+  postgres_data:
+  redis_data:
