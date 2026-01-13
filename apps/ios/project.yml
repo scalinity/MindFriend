@@ -1,0 +1,160 @@
+name: MindFriendApp
+options:
+  bundleIdPrefix: com.mindfriend
+  deploymentTarget:
+    iOS: "17.0"
+  xcodeVersion: "15.0"
+  generateEmptyDirectories: true
+  groupSortPosition: top
+
+packages:
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    from: "8.0.0"
+  Sentry:
+    url: https://github.com/getsentry/sentry-cocoa
+    from: "8.0.0"
+  Supabase:
+    url: https://github.com/supabase/supabase-swift
+    from: "2.0.0"
+
+settings:
+  base:
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.9"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+
+targets:
+  MindFriendApp:
+    type: application
+    platform: iOS
+    sources:
+      - path: MindFriendApp
+        excludes:
+          - "**/.DS_Store"
+    resources:
+      - path: MindFriendApp/PrivacyInfo.xcprivacy
+    dependencies:
+      - package: GoogleSignIn
+        product: GoogleSignIn
+      - package: GoogleSignIn
+        product: GoogleSignInSwift
+      - package: Sentry
+        product: Sentry
+      - package: Supabase
+        product: Supabase
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mindfriend.app
+        INFOPLIST_FILE: MindFriendApp/Info.plist
+        CODE_SIGN_ENTITLEMENTS: MindFriendApp/MindFriendApp.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_PREVIEWS: YES
+        GENERATE_INFOPLIST_FILE: NO
+        SWIFT_EMIT_LOC_STRINGS: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+    entitlements:
+      path: MindFriendApp/MindFriendApp.entitlements
+    info:
+      path: MindFriendApp/Info.plist
+      properties:
+        CFBundleName: MindFriend
+        CFBundleDisplayName: MindFriend
+        CFBundleIdentifier: $(PRODUCT_BUNDLE_IDENTIFIER)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundlePackageType: $(PRODUCT_BUNDLE_PACKAGE_TYPE)
+        CFBundleExecutable: $(EXECUTABLE_NAME)
+        UILaunchScreen:
+          UIColorName: AccentColor
+          UIImageName: ""
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations: {}
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: false
+          NSExceptionDomains:
+            localhost:
+              NSExceptionAllowsInsecureHTTPLoads: true
+        ITSAppUsesNonExemptEncryption: false
+        CFBundleURLTypes:
+          - CFBundleURLSchemes:
+              - com.googleusercontent.apps.937820575713-3n91aim648r7vhjr9iojm08opbp84c1n
+              - mindfriend
+        # Push Notifications
+        UIBackgroundModes:
+          - remote-notification
+        # App Store Metadata
+        NSHumanReadableCopyright: "Copyright 2024 MindFriend. All rights reserved."
+        # Privacy Policy URL (for App Store Connect)
+        # Usage Descriptions for permissions
+        NSUserTrackingUsageDescription: "MindFriend uses this to provide personalized wellness insights. You can opt out at any time in Settings."
+        NSCameraUsageDescription: "MindFriend uses the camera to let you add photos to your journal entries and profile."
+        NSPhotoLibraryUsageDescription: "MindFriend needs access to your photos to let you add images to your journal entries and profile."
+        NSMicrophoneUsageDescription: "MindFriend uses the microphone for voice journaling and guided meditation recordings."
+        NSCalendarsUsageDescription: "MindFriend can add wellness reminders and quest schedules to your calendar."
+        NSFaceIDUsageDescription: "MindFriend uses Face ID to securely unlock your private journal and mood data."
+
+  MindFriendAppTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: MindFriendAppTests
+        excludes:
+          - "**/.DS_Store"
+    dependencies:
+      - target: MindFriendApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mindfriend.app.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/MindFriendApp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/MindFriendApp"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+
+  MindFriendAppUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: MindFriendAppUITests
+        excludes:
+          - "**/.DS_Store"
+    dependencies:
+      - target: MindFriendApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mindfriend.app.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: MindFriendApp
+
+schemes:
+  MindFriendApp:
+    build:
+      targets:
+        MindFriendApp: all
+        MindFriendAppTests: [test]
+        MindFriendAppUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - MindFriendAppTests
+        - MindFriendAppUITests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
