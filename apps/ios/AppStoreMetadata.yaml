@@ -1,0 +1,130 @@
+# MindFriend App Store Metadata
+# Use this file with fastlane deliver or App Store Connect API
+
+app:
+  name: MindFriend
+  subtitle: Your AI Wellness Companion
+  bundle_id: com.mindfriend.app
+  primary_category: Health & Fitness
+  secondary_category: Lifestyle
+
+# App Store Description
+description:
+  en-US: |
+    MindFriend is your personal AI wellness companion, designed to help you build better mental health habits through daily quests, mood tracking, and supportive conversations.
+
+    KEY FEATURES:
+
+    Daily Wellness Quests
+    Start each day with a personalized micro-task designed to boost your mood and build positive habits. Complete quests to earn XP and maintain your streak.
+
+    AI Chat Support
+    Have meaningful conversations with an AI companion that understands and supports your wellness journey. Available 24/7, whenever you need to talk.
+
+    Mood Tracking
+    Log your mood, anxiety levels, and energy throughout the day. Visualize your emotional patterns over time to gain insights into your mental health.
+
+    Guided Exercises
+    Access a library of breathing exercises, meditations, and grounding techniques to help manage stress and anxiety in the moment.
+
+    Circles
+    Connect with friends and family in private support circles. Share check-ins and support each other on your wellness journeys.
+
+    Privacy First
+    Your mental health data is yours. We use end-to-end encryption and never sell your data to third parties.
+
+    SUBSCRIPTION OPTIONS:
+
+    MindFriend is free to use with basic features. Premium unlocks unlimited AI conversations, advanced mood analytics, premium guided exercises, and priority support.
+
+    Payment will be charged to your Apple ID account at confirmation of purchase. Subscription automatically renews unless canceled at least 24 hours before the end of the current period.
+
+    Terms of Service: https://mindfriend.app/terms
+    Privacy Policy: https://mindfriend.app/privacy
+
+    DISCLAIMER:
+    MindFriend is not a replacement for professional mental health care. If you're experiencing a crisis, please contact emergency services or a crisis helpline immediately.
+
+# Keywords (max 100 characters total)
+keywords:
+  en-US: "mental health,wellness,mood tracker,meditation,anxiety,journal,mindfulness,self-care,therapy,stress"
+
+# What's New (Release Notes)
+whats_new:
+  en-US: |
+    Welcome to MindFriend 1.0!
+
+    - Daily wellness quests to build positive habits
+    - AI chat companion for supportive conversations
+    - Mood tracking with insights
+    - Guided breathing exercises and meditations
+    - Circles to connect with friends and family
+    - Sign in with Apple and Google
+
+# Promotional Text (can be updated without app update)
+promotional_text:
+  en-US: "Start your wellness journey today with personalized daily quests and AI-powered support."
+
+# Support Information
+support_url: https://mindfriend.app/support
+marketing_url: https://mindfriend.app
+privacy_url: https://mindfriend.app/privacy
+
+# App Rating
+rating:
+  alcohol_tobacco_drugs: NONE
+  contests: NONE
+  gambling: NONE
+  horror: NONE
+  mature_themes: NONE
+  medical_info: FREQUENT_MILD # Mental health content
+  profanity: NONE
+  sexual_content: NONE
+  violence_cartoon: NONE
+  violence_realistic: NONE
+  unrestricted_web_access: false
+  # Age Rating Result: 12+ (due to medical/treatment information)
+
+# Copyright
+copyright: "2024 MindFriend"
+
+# App Review Information
+review_info:
+  contact_email: review@mindfriend.app
+  notes: |
+    This app helps users track their mental wellness through:
+    1. Daily quests - small wellness tasks
+    2. Mood tracking - logging emotional states
+    3. AI chat - supportive conversations (not medical advice)
+    4. Exercises - breathing and meditation guides
+    5. Circles - private groups with friends/family
+
+    The app requires authentication via Apple or Google Sign-In.
+    Note: This is a wellness app, not a medical device.
+
+# Screenshots Required (dimensions)
+screenshots:
+  iphone_67: # 1290 x 2796
+    - "01_Home.png"
+    - "02_Mood.png"
+    - "03_Chat.png"
+    - "04_Exercises.png"
+    - "05_Circles.png"
+  ipad_129: # 2048 x 2732
+    - "01_Home_iPad.png"
+    - "02_Mood_iPad.png"
+
+# In-App Purchases
+in_app_purchases:
+  - product_id: com.mindfriend.premium.monthly
+    type: auto_renewable_subscription
+    name: "MindFriend Premium Monthly"
+  - product_id: com.mindfriend.premium.yearly
+    type: auto_renewable_subscription
+    name: "MindFriend Premium Yearly"
+
+# Build Information
+build:
+  version: "1.0.0"
+  build_number: "1"
+  min_ios_version: "17.0"
