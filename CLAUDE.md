@@ -250,7 +250,7 @@ Required environment variables for Edge Functions (set in Supabase Dashboard):
 
 | Variable                | Purpose                      |
 | ----------------------- | ---------------------------- |
-| `OPENAI_API_KEY`        | AI chat provider             |
+| `XAI_API_KEY`           | AI chat/voice provider       |
 | `APNS_KEY_ID`           | Push notifications           |
 | `APNS_TEAM_ID`          | Push notifications           |
 | `APNS_PRIVATE_KEY`      | Push notifications (base64)  |
