@@ -1,6 +1,28 @@
 import Foundation
 import Supabase
 
+// MARK: - API Errors
+
+enum APIError: LocalizedError {
+    case quotaExceeded
+    case badRequest(String)
+    case serverError(String)
+    case networkError(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .quotaExceeded:
+            return "Daily AI quota exceeded. Upgrade to premium for unlimited access."
+        case .badRequest(let message):
+            return message
+        case .serverError(let message):
+            return message
+        case .networkError(let message):
+            return message
+        }
+    }
+}
+
 /// Handles all data operations with Supabase
 @MainActor
 final class SupabaseDataService: ObservableObject {
@@ -56,6 +78,16 @@ final class SupabaseDataService: ObservableObject {
             .value
 
         return moods.map { $0.toMoodEntry() }
+    }
+
+    func getMoodsForPast(days: Int) async throws -> [MoodEntry] {
+        let formatter = ISO8601DateFormatter.dateOnly
+        let to = formatter.string(from: Date())
+        guard let pastDate = Calendar.current.date(byAdding: .day, value: -days, to: Date()) else {
+            return []
+        }
+        let from = formatter.string(from: pastDate)
+        return try await getMoods(from: from, to: to)
     }
 
     // MARK: - Quests
@@ -254,6 +286,8 @@ final class SupabaseDataService: ObservableObject {
     }
 
     func createConversation(title: String?) async throws -> Conversation {
+        print("[SupabaseDataService] Creating conversation for user: \(try userId)")
+
         let conversation = DBConversation(
             id: nil,
             userId: try userId,
@@ -270,16 +304,38 @@ final class SupabaseDataService: ObservableObject {
             .execute()
             .value
 
+        guard let conversationId = result.id else {
+            print("[SupabaseDataService] ERROR: Conversation created but no ID returned")
+            throw DataError.operationFailed("Failed to create conversation - no ID returned")
+        }
+
+        print("[SupabaseDataService] Conversation created with ID: \(conversationId)")
         Analytics.shared.track(.chatConversationCreated)
 
         return Conversation(
-            id: result.id?.uuidString ?? "",
+            id: conversationId.uuidString,
             title: result.title,
             status: .active,
             createdAt: result.createdAt ?? Date(),
             updatedAt: result.updatedAt ?? Date(),
             lastMessage: nil
         )
+    }
+
+    func deleteConversation(id: String) async throws {
+        guard let convId = UUID(uuidString: id) else {
+            throw DataError.invalidId
+        }
+
+        // Delete the conversation (messages will cascade delete via FK)
+        try await supabase
+            .from(Tables.conversations)
+            .delete()
+            .eq("id", value: convId)
+            .eq("user_id", value: try userId)
+            .execute()
+
+        Analytics.shared.track(.chatConversationDeleted)
     }
 
     func getMessages(conversationId: String, limit: Int = 50) async throws -> [Message] {
@@ -305,7 +361,102 @@ final class SupabaseDataService: ObservableObject {
         }
     }
 
-    func sendMessage(conversationId: String, content: String) async throws -> Message {
+    /// Send a message and get AI response via Edge Function
+    /// Returns the assistant's response message
+    func sendMessage(conversationId: String, content: String) async throws -> ChatResponse {
+        print("[SupabaseDataService] Invoking chat function for conversation: \(conversationId)")
+
+        // Validate conversation ID
+        guard UUID(uuidString: conversationId) != nil else {
+            print("[SupabaseDataService] ERROR: Invalid conversation ID: \(conversationId)")
+            throw DataError.invalidId
+        }
+
+        // Ensure we have a valid session before calling Edge Function
+        guard let accessToken = authService.session?.accessToken else {
+            print("[SupabaseDataService] No access token available")
+            throw APIError.badRequest("Not signed in. Please sign in again.")
+        }
+
+        // Refresh token to ensure it's valid
+        do {
+            try await authService.ensureValidSession()
+        } catch {
+            print("[SupabaseDataService] Session validation failed: \(error)")
+            throw APIError.badRequest("Session expired. Please sign in again.")
+        }
+
+        // Get the refreshed access token
+        guard let refreshedToken = authService.session?.accessToken else {
+            print("[SupabaseDataService] No access token after refresh")
+            throw APIError.badRequest("Session expired. Please sign in again.")
+        }
+
+        print("[SupabaseDataService] Using access token: \(refreshedToken.prefix(20))...")
+
+        // Call the chat Edge Function with explicit auth header
+        let chatResponse: ChatFunctionResponse
+        do {
+            chatResponse = try await supabase.functions.invoke(
+                "chat",
+                options: .init(
+                    headers: ["Authorization": "Bearer \(refreshedToken)"],
+                    body: [
+                        "conversationId": conversationId,
+                        "content": content
+                    ]
+                )
+            )
+            print("[SupabaseDataService] Chat function returned successfully")
+            print("[SupabaseDataService] Response: quotaUsed=\(chatResponse.quotaUsed ?? -1), quotaLimit=\(chatResponse.quotaLimit ?? -1)")
+        } catch let error as FunctionsError {
+            // Extract detailed error info from FunctionsError
+            switch error {
+            case .httpError(let code, let data):
+                let responseBody = String(data: data, encoding: .utf8) ?? "unknown"
+                print("[SupabaseDataService] Chat function HTTP error \(code): \(responseBody)")
+
+                if code == 429 || responseBody.lowercased().contains("quota") {
+                    throw APIError.quotaExceeded
+                } else if code == 401 {
+                    throw APIError.badRequest("Authentication failed: \(responseBody)")
+                } else if code == 404 {
+                    throw APIError.badRequest("User profile not found. Please try signing out and back in.")
+                } else {
+                    throw APIError.serverError("Server error (\(code)): \(responseBody)")
+                }
+            case .relayError:
+                print("[SupabaseDataService] Chat function relay error")
+                throw APIError.networkError("Unable to reach server")
+            }
+        } catch {
+            print("[SupabaseDataService] Chat function error: \(error)")
+            throw error
+        }
+
+        Analytics.shared.track(.chatMessageSent)
+
+        if chatResponse.isCrisisResponse == true {
+            Analytics.shared.track(.crisisDetected)
+        }
+
+        return ChatResponse(
+            message: Message(
+                id: chatResponse.message.id ?? UUID().uuidString,
+                role: .assistant,
+                content: chatResponse.message.content,
+                createdAt: ISO8601DateFormatter().date(from: chatResponse.message.createdAt ?? "") ?? Date(),
+                blocked: chatResponse.message.blocked ?? false
+            ),
+            isCrisisResponse: chatResponse.isCrisisResponse ?? false,
+            quotaUsed: chatResponse.quotaUsed,
+            quotaLimit: chatResponse.quotaLimit,
+            conversationTitle: chatResponse.conversationTitle
+        )
+    }
+
+    /// Legacy method for direct message insertion (without AI response)
+    func insertUserMessage(conversationId: String, content: String) async throws -> Message {
         guard let convId = UUID(uuidString: conversationId) else {
             throw DataError.invalidId
         }
@@ -325,15 +476,6 @@ final class SupabaseDataService: ObservableObject {
             .single()
             .execute()
             .value
-
-        // Update conversation timestamp
-        try await supabase
-            .from(Tables.conversations)
-            .update(["updated_at": ISO8601DateFormatter().string(from: Date())])
-            .eq("id", value: convId)
-            .execute()
-
-        Analytics.shared.track(.chatMessageSent)
 
         return Message(
             id: result.id?.uuidString ?? "",
@@ -456,8 +598,70 @@ final class SupabaseDataService: ObservableObject {
         Analytics.shared.track(.circleLeft)
     }
 
-    func postCheckin(circleId: String, moodEmoji: String, bodyText: String?) async throws {
-        guard let circleUUID = UUID(uuidString: circleId) else { return }
+    func getCircle(id: String) async throws -> CircleDetail {
+        guard let circleId = UUID(uuidString: id) else {
+            throw DataError.invalidId
+        }
+
+        // Fetch circle with members
+        let circle: DBCircleWithMembers = try await supabase
+            .from(Tables.circles)
+            .select("*, circle_members(user_id, joined_at, profiles(display_name, avatar_url))")
+            .eq("id", value: circleId)
+            .single()
+            .execute()
+            .value
+
+        let members = circle.circleMembers.compactMap { member -> CircleMember? in
+            guard let profile = member.profiles else { return nil }
+            return CircleMember(
+                id: member.userId.uuidString,
+                userId: member.userId.uuidString,
+                displayName: profile.displayName ?? "User",
+                role: circle.ownerId == member.userId ? .owner : .member,
+                joinedAt: Date()
+            )
+        }
+
+        return CircleDetail(
+            circle: circle.toCircle(currentUserId: try? userId),
+            members: members
+        )
+    }
+
+    func getCircleFeed(circleId: String, from: String, to: String) async throws -> [CirclePost] {
+        guard let circleUUID = UUID(uuidString: circleId) else {
+            throw DataError.invalidId
+        }
+
+        let checkins: [DBCircleCheckinWithProfile] = try await supabase
+            .from(Tables.circleCheckins)
+            .select("*, profiles(display_name)")
+            .eq("circle_id", value: circleUUID)
+            .gte("created_at", value: from)
+            .lte("created_at", value: to)
+            .order("created_at", ascending: false)
+            .execute()
+            .value
+
+        return checkins.map { checkin in
+            CirclePost(
+                id: checkin.id?.uuidString ?? UUID().uuidString,
+                userId: checkin.userId.uuidString,
+                userDisplayName: checkin.profiles?.displayName ?? "User",
+                kind: .checkin,
+                moodEmoji: checkin.moodEmoji,
+                bodyText: checkin.bodyText,
+                localDate: ISO8601DateFormatter.dateOnly.string(from: checkin.createdAt ?? Date()),
+                createdAt: checkin.createdAt ?? Date()
+            )
+        }
+    }
+
+    func postCheckin(circleId: String, moodEmoji: String, bodyText: String?) async throws -> CirclePost {
+        guard let circleUUID = UUID(uuidString: circleId) else {
+            throw DataError.invalidId
+        }
 
         let checkin = DBCircleCheckin(
             id: nil,
@@ -468,12 +672,35 @@ final class SupabaseDataService: ObservableObject {
             createdAt: nil
         )
 
-        try await supabase
+        let result: DBCircleCheckin = try await supabase
             .from(Tables.circleCheckins)
             .insert(checkin)
+            .select()
+            .single()
             .execute()
+            .value
+
+        // Fetch user's display name
+        let profile: DBMemberProfile = try await supabase
+            .from(Tables.profiles)
+            .select("display_name, avatar_url")
+            .eq("id", value: try userId)
+            .single()
+            .execute()
+            .value
 
         Analytics.shared.track(.circleCheckinPosted)
+
+        return CirclePost(
+            id: result.id?.uuidString ?? UUID().uuidString,
+            userId: (try userId).uuidString,
+            userDisplayName: profile.displayName ?? "User",
+            kind: .checkin,
+            moodEmoji: moodEmoji,
+            bodyText: bodyText,
+            localDate: ISO8601DateFormatter.dateOnly.string(from: Date()),
+            createdAt: result.createdAt ?? Date()
+        )
     }
 
     // MARK: - Crisis Resources
@@ -523,6 +750,182 @@ final class SupabaseDataService: ObservableObject {
             .from(Tables.devices)
             .upsert(device, onConflict: "user_id,apns_token")
             .execute()
+    }
+
+    // MARK: - Data Export
+
+    func exportUserData() async throws -> UserDataExport {
+        let userId = try userId
+
+        // Fetch all user data
+        let profile: DBProfile = try await supabase
+            .from(Tables.profiles)
+            .select()
+            .eq("id", value: userId)
+            .single()
+            .execute()
+            .value
+
+        let moods: [DBMood] = try await supabase
+            .from(Tables.moods)
+            .select()
+            .eq("user_id", value: userId)
+            .order("created_at", ascending: false)
+            .execute()
+            .value
+
+        let conversations: [DBConversation] = try await supabase
+            .from(Tables.conversations)
+            .select()
+            .eq("user_id", value: userId)
+            .order("created_at", ascending: false)
+            .execute()
+            .value
+
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+
+        return UserDataExport(
+            exportedAt: formatter.string(from: Date()),
+            user: UserDataExport.UserExportData(
+                id: userId.uuidString,
+                handle: profile.handle ?? "",
+                displayName: profile.displayName ?? "User",
+                email: profile.email
+            )
+        )
+    }
+
+    // MARK: - Memory Management
+
+    func getMemories() async throws -> [MemoryFragment] {
+        let now = ISO8601DateFormatter().string(from: Date())
+
+        // Filter expired memories at database level for efficiency
+        // Order by confidence (highest first) per spec
+        let memories: [DBMemoryFragment] = try await supabase
+            .from(Tables.memoryFragments)
+            .select()
+            .eq("user_id", value: try userId)
+            .or("expires_at.is.null,expires_at.gt.\(now)")
+            .order("confidence", ascending: false)
+            .execute()
+            .value
+
+        return memories.map { $0.toMemoryFragment() }
+    }
+
+    func getMemories(type: MemoryType) async throws -> [MemoryFragment] {
+        let now = ISO8601DateFormatter().string(from: Date())
+
+        // Filter expired memories at database level for efficiency
+        let memories: [DBMemoryFragment] = try await supabase
+            .from(Tables.memoryFragments)
+            .select()
+            .eq("user_id", value: try userId)
+            .eq("fragment_type", value: type.rawValue)
+            .or("expires_at.is.null,expires_at.gt.\(now)")
+            .order("confidence", ascending: false)
+            .execute()
+            .value
+
+        return memories.map { $0.toMemoryFragment() }
+    }
+
+    func deleteMemory(id: String) async throws {
+        guard let memoryId = UUID(uuidString: id) else {
+            throw DataError.invalidId
+        }
+
+        try await supabase
+            .from(Tables.memoryFragments)
+            .delete()
+            .eq("id", value: memoryId)
+            .eq("user_id", value: try userId)
+            .execute()
+
+        Analytics.shared.track(.memoryDeleted)
+    }
+
+    func deleteAllMemories() async throws {
+        try await supabase
+            .from(Tables.memoryFragments)
+            .delete()
+            .eq("user_id", value: try userId)
+            .execute()
+
+        Analytics.shared.track(.allMemoriesDeleted)
+    }
+
+    func deleteMemories(type: MemoryType) async throws {
+        try await supabase
+            .from(Tables.memoryFragments)
+            .delete()
+            .eq("user_id", value: try userId)
+            .eq("fragment_type", value: type.rawValue)
+            .execute()
+
+        Analytics.shared.track(.memoriesDeletedByType, properties: ["type": type.rawValue])
+    }
+
+    // MARK: - Onboarding
+
+    /// Update the user's wellness focus selection from onboarding quiz
+    func updateWellnessFocus(_ focus: WellnessFocus) async throws {
+        let currentUserId = try userId
+        print("[SupabaseDataService] Updating wellness focus to '\(focus.rawValue)' for user: \(currentUserId)")
+
+        try await supabase
+            .from(Tables.profiles)
+            .update(["wellness_focus": focus.rawValue])
+            .eq("id", value: currentUserId)
+            .execute()
+
+        print("[SupabaseDataService] Wellness focus updated successfully")
+        Analytics.shared.track(.onboardingStepCompleted, properties: [
+            "step": "quiz",
+            "wellness_focus": focus.rawValue
+        ])
+    }
+
+    /// Mark onboarding as complete for the current user
+    func markOnboardingComplete() async throws {
+        let currentUserId = try userId
+        let now = ISO8601DateFormatter().string(from: Date())
+        print("[SupabaseDataService] Marking onboarding complete for user: \(currentUserId)")
+
+        try await supabase
+            .from(Tables.profiles)
+            .update(["onboarding_completed_at": now])
+            .eq("id", value: currentUserId)
+            .execute()
+
+        print("[SupabaseDataService] Onboarding marked complete at: \(now)")
+        Analytics.shared.track(.onboardingCompleted)
+    }
+
+    /// Complete onboarding in a single atomic operation
+    func completeOnboarding(focus: WellnessFocus) async throws {
+        let currentUserId = try userId
+        let now = ISO8601DateFormatter().string(from: Date())
+        print("[SupabaseDataService] Completing onboarding with focus '\(focus.rawValue)' for user: \(currentUserId)")
+
+        // Single atomic update
+        try await supabase
+            .from(Tables.profiles)
+            .update([
+                "wellness_focus": focus.rawValue,
+                "onboarding_completed_at": now
+            ])
+            .eq("id", value: currentUserId)
+            .execute()
+
+        print("[SupabaseDataService] Onboarding completed successfully")
+        Analytics.shared.track(.onboardingStepCompleted, properties: [
+            "step": "quiz",
+            "wellness_focus": focus.rawValue
+        ])
+        Analytics.shared.track(.onboardingCompleted)
     }
 
     // MARK: - Helpers
@@ -612,7 +1015,7 @@ struct DBUserQuestWithTemplate: Codable {
                 estimatedMinutes: questTemplates.estimatedMinutes,
                 difficulty: "medium",
                 tags: [],
-                instructions: []
+                instructions: questTemplates.defaultInstructions()
             )
         )
     }
@@ -680,12 +1083,45 @@ struct DBMemberProfile: Codable {
     }
 }
 
+// MARK: - Chat Edge Function Response Types
+
+struct ChatFunctionResponse: Codable {
+    let message: ChatFunctionMessage
+    let isCrisisResponse: Bool?
+    let quotaUsed: Int?
+    let quotaLimit: Int?
+    let conversationTitle: String?
+}
+
+struct ChatFunctionMessage: Codable {
+    let id: String?
+    let role: String
+    let content: String
+    let createdAt: String?
+    let blocked: Bool?
+}
+
+/// Response from sendMessage containing the AI response and quota info
+struct ChatResponse {
+    let message: Message
+    let isCrisisResponse: Bool
+    let quotaUsed: Int?
+    let quotaLimit: Int?
+    let conversationTitle: String?
+
+    var isQuotaExceeded: Bool {
+        guard let used = quotaUsed, let limit = quotaLimit, limit > 0 else { return false }
+        return used >= limit
+    }
+}
+
 // MARK: - Errors
 
 enum DataError: Error, LocalizedError {
     case notAuthenticated
     case invalidId
     case circleNotFound
+    case quotaExceeded(used: Int, limit: Int)
     case operationFailed(String)
 
     var errorDescription: String? {
@@ -696,6 +1132,8 @@ enum DataError: Error, LocalizedError {
             return "Invalid identifier"
         case .circleNotFound:
             return "Circle not found. Check the invite code and try again."
+        case .quotaExceeded:
+            return "You've reached your daily AI chat limit. Upgrade to Premium for unlimited chats!"
         case .operationFailed(let message):
             return message
         }

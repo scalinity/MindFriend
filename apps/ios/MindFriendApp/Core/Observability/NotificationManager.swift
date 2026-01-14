@@ -114,9 +114,11 @@ final class NotificationManager: NSObject, ObservableObject {
         let osVersion = UIDevice.current.systemVersion
 
         do {
-            try await container.apiClient.request(
-                .registerDevice(apnsToken: token, deviceModel: deviceModel, osVersion: osVersion)
-            ) as EmptyResponse
+            try await container.supabaseDataService.registerDevice(
+                apnsToken: token,
+                deviceModel: deviceModel,
+                osVersion: osVersion
+            )
 
             Analytics.shared.track(.featureUsed, properties: [
                 "feature": "push_notifications",
@@ -298,7 +300,3 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
 extension Notification.Name {
     static let notificationDeepLinkReceived = Notification.Name("notificationDeepLinkReceived")
 }
-
-// MARK: - Empty Response for void endpoints
-
-struct EmptyResponse: Decodable {}

@@ -163,9 +163,9 @@ struct MoodCheckInView: View {
 
         Task {
             do {
-                let savedMood = try await container.moodService.createMood(mood)
+                try await container.supabaseDataService.createMood(mood)
                 await MainActor.run {
-                    appState.todayMood = savedMood
+                    appState.todayMood = mood
                     dismiss()
                 }
             } catch {

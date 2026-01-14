@@ -63,7 +63,7 @@ struct MoodHistoryView: View {
         defer { isLoading = false }
 
         do {
-            moods = try await container.moodService.getMoodsForPast(days: selectedDays)
+            moods = try await container.supabaseDataService.getMoodsForPast(days: selectedDays)
         } catch {
             appState.showError(.apiError(error.localizedDescription))
         }

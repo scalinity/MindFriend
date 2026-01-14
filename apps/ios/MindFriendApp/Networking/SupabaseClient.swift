@@ -4,7 +4,7 @@ import Supabase
 /// Supabase configuration and client
 enum SupabaseConfig {
     static let projectURL = URL(string: "https://***REMOVED***")!
-    static let anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzY2OTg0MDAsImV4cCI6MjA1MjI3NDQwMH0.sb_publishable_tn0k28wWJEV2zmKhX9Vmtg_VK_ZdpLP"
+    static let anonKey = "***REMOVED***"
 
     // OAuth redirect URL for Sign in with Apple/Google
     static let redirectURL = URL(string: "mindfriend://auth/callback")!
@@ -34,9 +34,15 @@ enum Tables {
     static let badges = "badges"
     static let userBadges = "user_badges"
     static let crisisResources = "crisis_resources"
+    static let memoryFragments = "memory_fragments"
 }
 
 // MARK: - Database Models (matching Supabase schema)
+
+/// Minimal profile struct for existence checks
+struct DBProfileId: Codable {
+    let id: UUID
+}
 
 struct DBProfile: Codable {
     let id: UUID
@@ -69,6 +75,10 @@ struct DBProfile: Codable {
     var dailyAiQuota: Int
     var dailyAiUsed: Int
 
+    // Onboarding
+    var wellnessFocus: String?
+    var onboardingCompletedAt: Date?
+
     enum CodingKeys: String, CodingKey {
         case id
         case handle
@@ -93,6 +103,8 @@ struct DBProfile: Codable {
         case subscriptionTier = "subscription_tier"
         case dailyAiQuota = "daily_ai_quota"
         case dailyAiUsed = "daily_ai_used"
+        case wellnessFocus = "wellness_focus"
+        case onboardingCompletedAt = "onboarding_completed_at"
     }
 }
 
@@ -118,6 +130,11 @@ struct DBMood: Codable {
     }
 }
 
+struct DBQuestInstruction: Codable {
+    let step: Int
+    let text: String
+}
+
 struct DBQuestTemplate: Codable {
     let id: UUID
     let title: String
@@ -126,12 +143,81 @@ struct DBQuestTemplate: Codable {
     let estimatedMinutes: Int
     let xpReward: Int
     let isPremium: Bool
+    let instructions: [DBQuestInstruction]?
 
     enum CodingKeys: String, CodingKey {
-        case id, title, description, category
+        case id, title, description, category, instructions
         case estimatedMinutes = "estimated_minutes"
         case xpReward = "xp_reward"
         case isPremium = "is_premium"
+    }
+
+    /// Generate default instructions based on quest category and title
+    func defaultInstructions() -> [QuestInstruction] {
+        // If database has instructions, use those
+        if let dbInstructions = instructions, !dbInstructions.isEmpty {
+            return dbInstructions.map { QuestInstruction(step: $0.step, text: $0.text, durationSeconds: nil) }
+        }
+
+        // Generate default instructions based on category
+        switch category.lowercased() {
+        case "gratitude":
+            return [
+                QuestInstruction(step: 1, text: "Find a quiet moment to reflect", durationSeconds: nil),
+                QuestInstruction(step: 2, text: "Think about what you're thankful for today", durationSeconds: 60),
+                QuestInstruction(step: 3, text: "Write down or mentally note 3 specific things", durationSeconds: 120),
+                QuestInstruction(step: 4, text: "For each one, consider why it matters to you", durationSeconds: 60),
+                QuestInstruction(step: 5, text: "Take a moment to feel the gratitude", durationSeconds: 30)
+            ]
+        case "mindfulness":
+            return [
+                QuestInstruction(step: 1, text: "Find a comfortable seated position", durationSeconds: nil),
+                QuestInstruction(step: 2, text: "Close your eyes and take 3 deep breaths", durationSeconds: 30),
+                QuestInstruction(step: 3, text: "Focus your attention on the present moment", durationSeconds: 60),
+                QuestInstruction(step: 4, text: "Notice any sensations without judgment", durationSeconds: 120),
+                QuestInstruction(step: 5, text: "Gently bring your awareness back when you're ready", durationSeconds: nil)
+            ]
+        case "social":
+            return [
+                QuestInstruction(step: 1, text: "Think of someone you'd like to connect with", durationSeconds: nil),
+                QuestInstruction(step: 2, text: "Consider what you appreciate about them", durationSeconds: 60),
+                QuestInstruction(step: 3, text: "Craft a genuine, heartfelt message", durationSeconds: 120),
+                QuestInstruction(step: 4, text: "Send your message through your preferred method", durationSeconds: nil),
+                QuestInstruction(step: 5, text: "Notice how reaching out makes you feel", durationSeconds: nil)
+            ]
+        case "physical":
+            return [
+                QuestInstruction(step: 1, text: "Prepare for your activity (comfortable clothes, water)", durationSeconds: nil),
+                QuestInstruction(step: 2, text: "Start with a gentle warm-up", durationSeconds: 60),
+                QuestInstruction(step: 3, text: "Begin your main activity at a comfortable pace", durationSeconds: nil),
+                QuestInstruction(step: 4, text: "Stay present and notice how your body feels", durationSeconds: nil),
+                QuestInstruction(step: 5, text: "Cool down and take a few deep breaths", durationSeconds: 60)
+            ]
+        case "creative":
+            return [
+                QuestInstruction(step: 1, text: "Gather your creative materials", durationSeconds: nil),
+                QuestInstruction(step: 2, text: "Set aside any expectations of perfection", durationSeconds: nil),
+                QuestInstruction(step: 3, text: "Begin creating freely without self-judgment", durationSeconds: 300),
+                QuestInstruction(step: 4, text: "Let your intuition guide your choices", durationSeconds: nil),
+                QuestInstruction(step: 5, text: "Appreciate what you've created, no matter how it looks", durationSeconds: nil)
+            ]
+        case "reflection", "focus":
+            return [
+                QuestInstruction(step: 1, text: "Find a quiet space where you won't be disturbed", durationSeconds: nil),
+                QuestInstruction(step: 2, text: "Take a few deep breaths to center yourself", durationSeconds: 30),
+                QuestInstruction(step: 3, text: "Reflect on the topic at hand", durationSeconds: 180),
+                QuestInstruction(step: 4, text: "Notice any thoughts or feelings that arise", durationSeconds: 60),
+                QuestInstruction(step: 5, text: "Consider what insights you've gained", durationSeconds: nil)
+            ]
+        default:
+            return [
+                QuestInstruction(step: 1, text: "Read through the quest description carefully", durationSeconds: nil),
+                QuestInstruction(step: 2, text: "Prepare yourself mentally for the activity", durationSeconds: nil),
+                QuestInstruction(step: 3, text: "Complete the quest mindfully and with intention", durationSeconds: nil),
+                QuestInstruction(step: 4, text: "Reflect on how the experience felt", durationSeconds: nil),
+                QuestInstruction(step: 5, text: "Celebrate completing your quest!", durationSeconds: nil)
+            ]
+        }
     }
 }
 
@@ -157,13 +243,18 @@ struct DBUserQuest: Codable {
     }
 }
 
+struct DBExerciseInstruction: Codable {
+    let step: Int
+    let text: String
+}
+
 struct DBExercise: Codable {
     let id: UUID
     let title: String
     let description: String
     let type: String
     let durationMinutes: Int
-    let instructions: [[String: String]]?
+    let instructions: [DBExerciseInstruction]?
     let isPremium: Bool
 
     enum CodingKeys: String, CodingKey {
@@ -253,6 +344,26 @@ struct DBCircleCheckin: Codable {
     }
 }
 
+struct DBCircleCheckinWithProfile: Codable {
+    let id: UUID?
+    let circleId: UUID
+    let userId: UUID
+    let moodEmoji: String
+    let bodyText: String?
+    let createdAt: Date?
+    let profiles: DBMemberProfile?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case circleId = "circle_id"
+        case userId = "user_id"
+        case moodEmoji = "mood_emoji"
+        case bodyText = "body_text"
+        case createdAt = "created_at"
+        case profiles
+    }
+}
+
 struct DBBadge: Codable {
     let id: UUID
     let name: String
@@ -289,6 +400,46 @@ struct DBCrisisResource: Codable {
     }
 }
 
+struct DBMemoryFragment: Codable {
+    let id: UUID
+    let userId: UUID
+    let fragmentType: String
+    let key: String
+    let value: String
+    let confidence: Double
+    let sourceConversationId: UUID?
+    let sourceMessageId: UUID?
+    let extractedAt: Date
+    let expiresAt: Date?
+    let createdAt: Date
+    let updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case fragmentType = "fragment_type"
+        case key, value, confidence
+        case sourceConversationId = "source_conversation_id"
+        case sourceMessageId = "source_message_id"
+        case extractedAt = "extracted_at"
+        case expiresAt = "expires_at"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+
+    func toMemoryFragment() -> MemoryFragment {
+        MemoryFragment(
+            id: id.uuidString,
+            fragmentType: MemoryType(rawValue: fragmentType) ?? .fact,
+            key: key,
+            value: value,
+            confidence: confidence,
+            extractedAt: extractedAt,
+            expiresAt: expiresAt
+        )
+    }
+}
+
 // MARK: - Model Conversion Extensions
 
 extension DBProfile {
@@ -321,7 +472,9 @@ extension DBProfile {
                 dailyAiQuota: dailyAiQuota,
                 dailyAiUsed: dailyAiUsed
             ),
-            badges: []
+            badges: [],
+            wellnessFocus: wellnessFocus.flatMap { WellnessFocus(rawValue: $0) },
+            onboardingCompletedAt: onboardingCompletedAt
         )
     }
 }

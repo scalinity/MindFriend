@@ -73,7 +73,7 @@ struct CirclesListView: View {
         defer { isLoading = false }
 
         do {
-            circles = try await container.circleService.getCircles()
+            circles = try await container.supabaseDataService.getCircles()
         } catch {
             appState.showError(.apiError(error.localizedDescription))
         }
@@ -204,7 +204,7 @@ struct CreateCircleView: View {
         isCreating = true
         Task {
             do {
-                let circle = try await container.circleService.createCircle(
+                let circle = try await container.supabaseDataService.createCircle(
                     name: name,
                     description: description.isEmpty ? nil : description
                 )
@@ -282,7 +282,7 @@ struct JoinCircleView: View {
 
         Task {
             do {
-                let circle = try await container.circleService.joinCircle(inviteCode: inviteCode)
+                let circle = try await container.supabaseDataService.joinCircle(inviteCode: inviteCode)
                 await MainActor.run {
                     onJoined(circle)
                     dismiss()
@@ -364,7 +364,7 @@ struct CircleDetailView: View {
         defer { isLoading = false }
 
         do {
-            let detail = try await container.circleService.getCircle(id: circle.id)
+            let detail = try await container.supabaseDataService.getCircle(id: circle.id)
             members = detail.members
 
             let to = Self.dateFormatter.string(from: Date())
@@ -375,7 +375,7 @@ struct CircleDetailView: View {
                 from = to
             }
 
-            posts = try await container.circleService.getFeed(circleId: circle.id, from: from, to: to)
+            posts = try await container.supabaseDataService.getCircleFeed(circleId: circle.id, from: from, to: to)
         } catch {
             appState.showError(.apiError(error.localizedDescription))
         }
@@ -528,7 +528,7 @@ struct CircleCheckinView: View {
         isPosting = true
         Task {
             do {
-                let post = try await container.circleService.postCheckin(
+                let post = try await container.supabaseDataService.postCheckin(
                     circleId: circleId,
                     moodEmoji: selectedEmoji,
                     bodyText: bodyText.isEmpty ? nil : bodyText

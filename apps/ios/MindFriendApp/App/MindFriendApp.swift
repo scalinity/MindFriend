@@ -17,18 +17,24 @@ struct MindFriendApp: App {
                 .environmentObject(container)
                 .environmentObject(notificationManager)
                 .task {
-                    // Restore session
-                    await container.sessionManager.restoreSession()
+                    // Restore Supabase session
+                    let hasSession = await container.supabaseAuthService.restoreSession()
 
                     // Check notification authorization
                     await notificationManager.checkAuthorizationStatus()
 
                     // Update auth state based on session status
-                    if container.sessionManager.hasValidSession {
+                    if hasSession {
                         // Try to fetch user profile
                         do {
-                            let profile = try await container.userService.getProfile()
-                            appState.setAuthenticated(user: profile)
+                            let profile = try await container.supabaseAuthService.fetchProfile()
+
+                            // Check if user needs onboarding
+                            if profile.needsOnboarding {
+                                appState.requireOnboarding()
+                            } else {
+                                appState.setAuthenticated(user: profile)
+                            }
 
                             // Set user context for crash reporting and analytics
                             CrashReporter.shared.setUser(

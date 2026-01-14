@@ -1,7 +1,6 @@
 import SwiftUI
 import AuthenticationServices
 import GoogleSignIn
-import GoogleSignInSwift
 
 struct SignInView: View {
     private let googleClientID = "937820575713-3n91aim648r7vhjr9iojm08opbp84c1n.apps.googleusercontent.com"
@@ -60,12 +59,24 @@ struct SignInView: View {
                     .cornerRadius(12)
                     .accessibilityLabel("Sign in with Apple")
 
-                    GoogleSignInButton(scheme: .dark, style: .wide, state: .normal) {
+                    Button {
                         handleGoogleSignIn()
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image("GoogleLogo")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 20, height: 20)
+                            Text("Continue with Google")
+                                .fontWeight(.medium)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 54)
+                        .background(Color(.systemGray5))
+                        .foregroundStyle(.primary)
+                        .cornerRadius(12)
                     }
-                    .frame(height: 54)
-                    .cornerRadius(12)
-                    .accessibilityLabel("Sign in with Google")
+                    .accessibilityLabel("Continue with Google")
 
                     // Email sign in button
                     Button {
@@ -144,7 +155,8 @@ struct SignInView: View {
             Task {
                 isLoading = true
                 do {
-                    let user = try await container.authService.signInWithApple(
+                    // Use SupabaseAuthService for Apple Sign-In
+                    let user = try await container.supabaseAuthService.signInWithApple(
                         identityToken: identityToken,
                         authorizationCode: authCode,
                         fullName: credential.fullName,
@@ -186,14 +198,13 @@ struct SignInView: View {
                     throw AuthError.missingIdToken
                 }
 
-                let email = result.user.profile?.email
-                let fullName = result.user.profile?.name
+                let accessToken = result.user.accessToken.tokenString
 
                 isLoading = true
-                let user = try await container.authService.signInWithGoogle(
+                // Use SupabaseAuthService for Google Sign-In
+                let user = try await container.supabaseAuthService.signInWithGoogle(
                     idToken: idToken,
-                    email: email,
-                    fullName: fullName
+                    accessToken: accessToken
                 )
 
                 await MainActor.run {
@@ -217,6 +228,12 @@ struct SignInView: View {
                 await MainActor.run {
                     showEmailAuth = false
                     appState.setAuthenticated(user: user)
+                }
+            } catch AuthError.emailConfirmationRequired {
+                await MainActor.run {
+                    showEmailAuth = false
+                    successMessage = "Please check your email and click the confirmation link before signing in."
+                    showSuccessMessage = true
                 }
             } catch {
                 self.error = error

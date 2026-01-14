@@ -54,6 +54,24 @@ MVP includes:
   - Supabase migrations
   - Tests validating contract behavior
 
+### Progress documentation
+
+- Write new ideas, improvements, and strategic notes to `SCRATCHPAD.md`.
+- Log significant progress milestones (features completed, major bugs fixed) in `SCRATCHPAD.md`.
+- Use `SCRATCHPAD.md` for brainstorming and "what if" explorations that don't belong in code or `decisions.md`.
+- Keep `SCRATCHPAD.md` organized with dated entries or clear section headers.
+
+### Decision documentation
+
+- Record all spec-adjacent or architectural decisions in `docs/decisions.md`.
+- Use `decisions.md` when:
+  - Implementing something not explicitly defined in the spec
+  - Choosing between multiple valid approaches
+  - Making trade-offs that affect future development
+  - Deviating from common patterns for a specific reason
+- Follow the template format (see Section 13 or the template at the end of `decisions.md`).
+- **`decisions.md` vs `SCRATCHPAD.md`:** Decisions are permanent architectural records; scratchpad is for ideas and progress notes.
+
 ---
 
 ## 2) Architecture Overview

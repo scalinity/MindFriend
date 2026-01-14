@@ -42,14 +42,18 @@ enable_signup = true
 double_confirm_changes = true
 enable_confirmations = false
 
-[auth.external.apple]
-enabled = true
+# External auth providers are configured in Supabase Dashboard
+# [auth.external.apple]
+# enabled = true
+# client_id = "env(APPLE_CLIENT_ID)"
 
-[auth.external.google]
-enabled = true
-
-[functions]
-verify_jwt = true
+# [auth.external.google]
+# enabled = true
+# client_id = "env(GOOGLE_CLIENT_ID)"
 
 [analytics]
 enabled = false
+
+# Edge Functions configuration
+[functions.chat]
+verify_jwt = false  # We handle auth in the function itself

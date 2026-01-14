@@ -1,0 +1,171 @@
+# MindFriend Engineering Decision Log
+
+This document records architectural and implementation decisions that deviate from or clarify the specification.
+
+---
+
+## 2025-01-12: Migrate from NestJS to Supabase-Only Architecture
+
+**Decision:** Replace the NestJS backend with Supabase Edge Functions, using Supabase as the single backend platform.
+
+**Rationale:**
+
+1. **Simpler stack** - Single platform for auth, database, functions, storage, realtime
+2. **Built-in security** - Row Level Security (RLS) eliminates most authorization middleware
+3. **Native iOS SDK** - `supabase-swift` provides seamless integration
+4. **Reduced operational complexity** - No separate API server to deploy/monitor
+5. **Edge Functions** - Handle complex logic (AI chat, billing validation) when RLS isn't enough
+
+**Alternatives considered:**
+
+- **Keep NestJS** - More control, but adds deployment complexity and maintenance burden
+- **Firebase** - Good iOS support, but less flexible for custom business logic
+- **Direct OpenAI from iOS** - Security risk, can't enforce quotas server-side
+
+**Implications:**
+
+- NestJS code archived to `archive/nestjs-api` branch for reference
+- iOS app uses Supabase Swift SDK directly
+- Complex logic (AI chat, billing) handled by Edge Functions
+- All authorization enforced via RLS policies + Edge Function checks
+
+---
+
+## 2025-01-12: Crisis Detection Approach
+
+**Decision:** Implement keyword-based crisis detection in the `chat` Edge Function with immediate escalation.
+
+**Rationale:**
+
+1. **Safety-critical** - Must block normal AI response when crisis detected
+2. **Server-side enforcement** - Can't trust client to handle correctly
+3. **Audit logging** - All crisis events logged to `crisis_events` table
+4. **Conservative approach** - Better to over-detect than miss genuine crisis
+
+**Implementation:**
+
+- Keyword list in `supabase/functions/_shared/crisis.ts`
+- Detection runs before OpenAI call
+- Crisis response is static template with hotline numbers
+- Event logged with truncated trigger content (privacy)
+
+**Implications:**
+
+- May produce false positives on non-crisis mentions of keywords
+- Crisis events table is append-only (service role access only)
+- Users cannot see their own crisis event history (safety measure)
+
+---
+
+## 2025-01-12: AI Quota Reset Strategy
+
+**Decision:** Reset daily AI quota at midnight based on the user's last interaction, not timezone.
+
+**Rationale:**
+
+1. **Simplicity** - Avoids timezone complexity in Edge Functions
+2. **Fairness** - Users get full quota each calendar day of usage
+3. **Implementation** - Compare `quota_reset_at` timestamp to current date
+
+**Implementation:**
+
+- `profiles.quota_reset_at` stores last reset timestamp
+- `profiles.daily_ai_used` tracks current day's usage
+- Edge Function checks if dates differ and resets if needed
+
+**Implications:**
+
+- Users who use the app across midnight may get "extra" messages
+- Premium users have unlimited quota (daily_ai_quota = -1)
+
+---
+
+## 2025-01-12: StoreKit 2 Validation - MVP Approach
+
+**Decision:** For MVP, accept client-reported subscription status with simplified server validation.
+
+**Rationale:**
+
+1. **Complexity** - Full App Store Server API requires ES256 JWT signing
+2. **Time constraint** - MVP needs to ship quickly
+3. **Risk assessment** - Low fraud risk during initial beta
+
+**Implementation:**
+
+- `verify-purchase` Edge Function updates subscription tier
+- Full Apple Server API validation marked as TODO
+- Development mode allows mock validation
+
+**Implications:**
+
+- Some subscription fraud theoretically possible in MVP
+- Must implement full validation before public App Store release
+- TODO comment in code for post-MVP hardening
+
+---
+
+## 2026-01-15: AI Memory Feature Implementation
+
+**Decision:** Implement AI Memory feature per `specs/01-ai-memory.md` with key/value storage schema.
+
+**Rationale:**
+
+1. **Differentiation** - Memory across conversations is MindFriend's key competitive advantage
+2. **Personalization** - Enables AI to reference past context naturally
+3. **User control** - Full management UI to view/delete memories
+
+**Implementation:**
+
+Schema aligned with spec:
+
+- `fragment_type`: person, event, preference, fact
+- `key`: short snake_case identifier (e.g., "dog_name", "work_location")
+- `value`: the actual information
+- `confidence`: extraction confidence score (0.0-1.0)
+- `UNIQUE(user_id, fragment_type, key)`: prevents duplicates, enables upsert
+
+Memory flow:
+
+1. **Extraction** - After each user message, grok-3-mini-fast extracts key/value facts
+2. **Injection** - Top 10 memories (by confidence) injected into system prompt
+3. **Management** - iOS MemorySettingsView allows viewing/deleting memories
+
+Security measures:
+
+- RLS prevents cross-user access
+- Explicit DENY policies block client-side INSERT/UPDATE
+- Service role only for memory writes
+- Prompt injection sanitization on extraction
+- Content sanitization before storage
+
+**Alternatives considered:**
+
+- **Simple content field** - Initially implemented, but spec requires key/value for structured updates
+- **Client-side extraction** - Rejected for security (can't trust client)
+- **Manual memory creation** - Deferred to V2 per spec
+
+**Implications:**
+
+- Event memories auto-expire after 7 days
+- Memories ordered by confidence for injection
+- pg_cron job needed for expired memory cleanup (scheduled but commented out)
+- Daily cleanup function available: `SELECT cleanup_expired_memories(1000)`
+
+---
+
+## Template for Future Decisions
+
+```markdown
+## YYYY-MM-DD: [Decision Title]
+
+**Decision:** What was decided.
+
+**Rationale:** Why this choice was made.
+
+**Alternatives considered:**
+
+- Option A: Why rejected
+- Option B: Why rejected
+
+**Implications:** What this affects going forward.
+```

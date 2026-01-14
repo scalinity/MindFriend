@@ -1,10 +1,11 @@
 import Foundation
 import StoreKit
+import Supabase
 
-/// Service for billing and subscriptions
+/// Service for billing and subscriptions - uses Supabase Edge Functions
 @MainActor
 final class BillingService: ObservableObject {
-    private let apiClient: APIClient
+    private let authService: SupabaseAuthService
 
     @Published private(set) var products: [Product] = []
     @Published private(set) var isPurchasing = false
@@ -17,8 +18,8 @@ final class BillingService: ObservableObject {
         "com.mindfriend.premium.yearly"
     ]
 
-    init(apiClient: APIClient) {
-        self.apiClient = apiClient
+    init(authService: SupabaseAuthService) {
+        self.authService = authService
         startTransactionListener()
     }
 
@@ -81,8 +82,22 @@ final class BillingService: ObservableObject {
     // MARK: - Entitlements
 
     func refreshEntitlements() async throws {
-        let response: EntitlementsResponse = try await apiClient.request(.getEntitlements)
-        entitlements = response.entitlements
+        // Fetch entitlements from Supabase profile
+        guard let userId = authService.userId else { return }
+
+        let profile: DBProfile = try await supabase
+            .from(Tables.profiles)
+            .select("subscription_tier, daily_ai_quota, daily_ai_used")
+            .eq("id", value: userId)
+            .single()
+            .execute()
+            .value
+
+        entitlements = Entitlements(
+            tier: Tier(rawValue: profile.subscriptionTier) ?? .free,
+            dailyAiQuota: profile.dailyAiQuota,
+            dailyAiUsed: profile.dailyAiUsed
+        )
     }
 
     // MARK: - Private
@@ -111,12 +126,14 @@ final class BillingService: ObservableObject {
     }
 
     private func submitTransaction(_ transaction: Transaction) async throws {
-        guard let jwsRepresentation = String(data: transaction.jsonRepresentation, encoding: .utf8) else {
-            throw BillingError.invalidTransaction
-        }
-
-        let _: SubmitTransactionResponse = try await apiClient.request(
-            .submitAppleTransaction(signedTransaction: jwsRepresentation)
+        // Call verify-purchase Edge Function
+        let _: VerifyPurchaseResponse = try await supabase.functions.invoke(
+            "verify-purchase",
+            options: .init(body: [
+                "originalTransactionId": String(transaction.originalID),
+                "productId": transaction.productID,
+                "environment": transaction.environment == .sandbox ? "sandbox" : "production"
+            ])
         )
 
         // Refresh entitlements after successful transaction
@@ -124,14 +141,11 @@ final class BillingService: ObservableObject {
     }
 }
 
-// MARK: - Response Types
-
-struct EntitlementsResponse: Decodable {
-    let entitlements: Entitlements
-}
-
-struct SubmitTransactionResponse: Decodable {
-    let status: String
+// Response from verify-purchase Edge Function
+struct VerifyPurchaseResponse: Codable {
+    let valid: Bool
+    let productId: String?
+    let message: String?
 }
 
 // MARK: - Billing Error

@@ -71,8 +71,9 @@ struct ExerciseLibraryView: View {
         defer { isLoading = false }
 
         do {
-            exercises = try await container.exerciseService.getExercises()
+            exercises = try await container.supabaseDataService.getExercises()
         } catch {
+            print("ExerciseLibraryView loadExercises error: \(error)")
             appState.showError(.apiError(error.localizedDescription))
         }
     }
@@ -267,7 +268,8 @@ struct ExercisePlayerView: View {
 
     private func startSession() async {
         do {
-            session = try await container.exerciseService.startExercise(id: exercise.id)
+            let sessionId = try await container.supabaseDataService.startExerciseSession(exerciseId: exercise.id)
+            session = ExerciseSession(id: sessionId, exerciseId: exercise.id, startedAt: Date(), endedAt: nil, completed: false)
         } catch {
             // Session tracking is optional - log for debugging but allow exercise to continue
             #if DEBUG
@@ -310,7 +312,7 @@ struct ExercisePlayerView: View {
 
         Task {
             do {
-                try await container.exerciseService.completeSession(
+                try await container.supabaseDataService.completeExerciseSession(
                     sessionId: session.id,
                     rating: rating > 0 ? rating : nil,
                     note: nil

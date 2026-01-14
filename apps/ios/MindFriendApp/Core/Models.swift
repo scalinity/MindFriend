@@ -13,6 +13,13 @@ struct UserProfile: Codable, Identifiable, Equatable {
     var stats: UserStats
     var entitlements: Entitlements
     var badges: [Badge]
+    var wellnessFocus: WellnessFocus?
+    var onboardingCompletedAt: Date?
+
+    /// Returns true if the user hasn't completed onboarding yet
+    var needsOnboarding: Bool {
+        onboardingCompletedAt == nil
+    }
 }
 
 struct UserSettings: Codable, Equatable {
@@ -84,6 +91,56 @@ enum PrivacyMode: String, Codable, CaseIterable {
         case .standard: return "Standard"
         case .enhanced: return "Enhanced"
         }
+    }
+}
+
+// MARK: - Wellness Focus
+
+enum WellnessFocus: String, Codable, CaseIterable {
+    case anxiety
+    case stress
+    case loneliness
+    case productivity
+    case general
+
+    var displayTitle: String {
+        switch self {
+        case .anxiety: return "Managing anxiety"
+        case .stress: return "Reducing stress"
+        case .loneliness: return "Feeling less lonely"
+        case .productivity: return "Staying productive"
+        case .general: return "General wellness"
+        }
+    }
+
+    var emoji: String {
+        switch self {
+        case .anxiety: return "😰"
+        case .stress: return "😓"
+        case .loneliness: return "💙"
+        case .productivity: return "🎯"
+        case .general: return "✨"
+        }
+    }
+
+    var aiGreeting: String {
+        switch self {
+        case .anxiety:
+            return "I hear you - anxiety can feel overwhelming. I'm here to help you find moments of calm. What's been weighing on you lately?"
+        case .stress:
+            return "Life can pile up fast. I'm here to help you decompress and find some balance. What's been stressing you out most?"
+        case .loneliness:
+            return "It takes courage to reach out. I'm glad you're here - you don't have to go through things alone. How are you feeling today?"
+        case .productivity:
+            return "I love that you're investing in yourself! Mental clarity is key to getting things done. What would you like to focus on?"
+        case .general:
+            return "Hey there! I'm your AI wellness buddy. I'm here to help however you need - whether that's venting, building habits, or just checking in. What's on your mind?"
+        }
+    }
+
+    /// Selectable options for the onboarding quiz (excludes .general which is the skip default)
+    static var selectableOptions: [WellnessFocus] {
+        [.anxiety, .stress, .loneliness, .productivity]
     }
 }
 
@@ -270,6 +327,7 @@ struct SendMessageResponse: Codable {
     let assistantMessage: Message
     let quotaRemaining: Int
     let crisisDetected: Bool?
+    let conversationTitle: String?
 }
 
 // MARK: - Circle
@@ -296,6 +354,11 @@ struct CircleMember: Codable, Identifiable, Equatable {
 enum CircleRole: String, Codable {
     case owner
     case member
+}
+
+struct CircleDetail: Equatable {
+    let circle: FriendCircle
+    let members: [CircleMember]
 }
 
 struct CirclePost: Codable, Identifiable, Equatable {
@@ -374,6 +437,64 @@ struct CrisisResource: Codable, Identifiable {
     let available: String
 }
 
+// MARK: - Memory
+
+struct MemoryFragment: Codable, Identifiable, Equatable {
+    let id: String
+    let fragmentType: MemoryType
+    let key: String           // e.g., "dog_name", "work_location"
+    let value: String         // e.g., "Max", "San Francisco"
+    let confidence: Double    // 0.0-1.0 extraction confidence
+    let extractedAt: Date
+    let expiresAt: Date?
+
+    var isExpired: Bool {
+        guard let expiresAt = expiresAt else { return false }
+        return expiresAt < Date()
+    }
+
+    /// Display string combining key and value
+    var displayContent: String {
+        // Format key nicely: dog_name -> Dog name
+        let formattedKey = key.replacingOccurrences(of: "_", with: " ").capitalized
+        return "\(formattedKey): \(value)"
+    }
+}
+
+enum MemoryType: String, Codable, CaseIterable {
+    case person
+    case event
+    case preference
+    case fact
+
+    var displayName: String {
+        switch self {
+        case .person: return "People"
+        case .event: return "Events"
+        case .preference: return "Preferences"
+        case .fact: return "Facts"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .person: return "person.2.fill"
+        case .event: return "calendar"
+        case .preference: return "heart.fill"
+        case .fact: return "info.circle.fill"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .person: return "Names of family, friends, pets, and coworkers"
+        case .event: return "Upcoming events and past experiences"
+        case .preference: return "Likes, dislikes, and communication style"
+        case .fact: return "Job, location, hobbies, and other facts"
+        }
+    }
+}
+
 // MARK: - Auth
 
 struct AuthTokens: Codable {
@@ -397,4 +518,18 @@ struct GoogleSignInRequest: Codable {
 
 struct RefreshTokenRequest: Codable {
     let refreshToken: String
+}
+
+// MARK: - Data Export
+
+struct UserDataExport: Codable {
+    let exportedAt: String
+    let user: UserExportData
+
+    struct UserExportData: Codable {
+        let id: String
+        let handle: String
+        let displayName: String
+        let email: String?
+    }
 }

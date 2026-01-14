@@ -1,304 +1,486 @@
 import SwiftUI
 
+// MARK: - Onboarding Container
+
 struct OnboardingFlow: View {
     @EnvironmentObject var appState: AppState
-    @State private var currentStep = 0
+    @EnvironmentObject var container: DependencyContainer
+
+    @State private var currentStep: OnboardingStep = .quiz
+    @State private var selectedFocus: WellnessFocus?
+    @State private var isCompleting = false
+    @State private var showError = false
+    @State private var errorMessage = ""
+
+    enum OnboardingStep: Int, CaseIterable {
+        case quiz = 0
+        case aiGreeting = 1
+        case complete = 2
+
+        var progress: Double {
+            Double(self.rawValue + 1) / Double(OnboardingStep.allCases.count)
+        }
+    }
 
     var body: some View {
-        VStack {
-            // Progress indicator
-            HStack(spacing: 8) {
-                ForEach(0..<4, id: \.self) { index in
-                    Capsule()
-                        .fill(index <= currentStep ? Color.accentColor : Color.secondary.opacity(0.3))
-                        .frame(height: 4)
+        VStack(spacing: 0) {
+            // Progress bar
+            ProgressView(value: currentStep.progress)
+                .progressViewStyle(.linear)
+                .tint(.accentColor)
+                .padding(.horizontal)
+                .padding(.top)
+
+            // Step content
+            Group {
+                switch currentStep {
+                case .quiz:
+                    OnboardingQuizView(
+                        selectedFocus: $selectedFocus,
+                        onContinue: advanceToAIGreeting,
+                        onSkip: { completeOnboarding(focus: .general, skippedQuiz: true) }
+                    )
+
+                case .aiGreeting:
+                    OnboardingAIGreetingView(
+                        wellnessFocus: selectedFocus ?? .general,
+                        onComplete: { completeOnboarding(focus: selectedFocus ?? .general, skippedQuiz: false) }
+                    )
+
+                case .complete:
+                    OnboardingCompleteView()
                 }
             }
-            .padding(.horizontal)
-            .padding(.top)
-
-            // Content
-            TabView(selection: $currentStep) {
-                WelcomeStep(onNext: { currentStep = 1 })
-                    .tag(0)
-
-                PrivacyStep(onNext: { currentStep = 2 })
-                    .tag(1)
-
-                NotificationStep(onNext: { currentStep = 3 })
-                    .tag(2)
-
-                PersonalizationStep(onComplete: completeOnboarding)
-                    .tag(3)
+            .transition(.asymmetric(
+                insertion: .move(edge: .trailing).combined(with: .opacity),
+                removal: .move(edge: .leading).combined(with: .opacity)
+            ))
+        }
+        .animation(.easeInOut(duration: 0.3), value: currentStep)
+        .alert("Setup Error", isPresented: $showError) {
+            Button("Try Again") {
+                currentStep = .quiz
+                isCompleting = false
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
+        } message: {
+            Text(errorMessage)
+        }
+        .onAppear {
+            Analytics.shared.track(.onboardingStarted)
         }
     }
 
-    private func completeOnboarding() {
-        appState.completeOnboarding()
+    private func advanceToAIGreeting() {
+        withAnimation {
+            currentStep = .aiGreeting
+        }
     }
-}
 
-struct WelcomeStep: View {
-    let onNext: () -> Void
+    private func completeOnboarding(focus: WellnessFocus, skippedQuiz: Bool) {
+        guard !isCompleting else { return }
+        isCompleting = true
 
-    var body: some View {
-        VStack(spacing: 32) {
-            Spacer()
+        withAnimation {
+            currentStep = .complete
+        }
 
-            Image(systemName: "heart.circle.fill")
-                .font(.system(size: 100))
-                .foregroundStyle(Color.accentColor)
+        Task {
+            do {
+                // Atomic update: save wellness focus + mark onboarding complete
+                try await container.supabaseDataService.completeOnboarding(focus: focus)
 
-            VStack(spacing: 16) {
-                Text("Welcome to MindFriend")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
+                // Track skip event if applicable
+                if skippedQuiz {
+                    Analytics.shared.track(.onboardingSkipped)
+                }
 
-                Text("Your personal AI wellness companion. Let's set up a few things to personalize your experience.")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+                // Fetch fresh profile with updated fields
+                let profile = try await container.supabaseAuthService.fetchProfile()
+
+                // Set crash reporter context
+                CrashReporter.shared.setUser(
+                    id: profile.id,
+                    email: profile.email,
+                    username: profile.handle
+                )
+                Analytics.shared.identify(userId: profile.id)
+                Analytics.shared.setUserProperty(.subscriptionTier, value: profile.entitlements.tier.rawValue)
+                Analytics.shared.track(.onboardingCompleted, properties: [
+                    "wellness_focus": focus.rawValue,
+                    "skipped_quiz": skippedQuiz
+                ])
+
+                // Update app state to transition to main app
+                await MainActor.run {
+                    appState.completeOnboarding(user: profile)
+                }
+            } catch {
+                await MainActor.run {
+                    isCompleting = false
+                    errorMessage = "Unable to complete setup. Please check your connection and try again."
+                    showError = true
+                }
+                error.report(context: ["action": "complete_onboarding"])
             }
-
-            Spacer()
-
-            Button(action: onNext) {
-                Text("Get Started")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.accentColor)
-                    .foregroundStyle(.white)
-                    .cornerRadius(12)
-            }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 32)
         }
     }
 }
 
-struct PrivacyStep: View {
-    let onNext: () -> Void
-    @State private var accepted = false
+// MARK: - Quiz View
+
+struct OnboardingQuizView: View {
+    @Binding var selectedFocus: WellnessFocus?
+    let onContinue: () -> Void
+    let onSkip: () -> Void
 
     var body: some View {
         VStack(spacing: 24) {
             Spacer()
 
-            Image(systemName: "lock.shield.fill")
-                .font(.system(size: 80))
-                .foregroundStyle(Color.accentColor)
-
-            VStack(spacing: 16) {
-                Text("Your Privacy Matters")
+            // Header
+            VStack(spacing: 12) {
+                Text("What brings you here today?")
                     .font(.title)
                     .fontWeight(.bold)
+                    .multilineTextAlignment(.center)
 
-                VStack(alignment: .leading, spacing: 12) {
-                    PrivacyPoint(icon: "checkmark.shield", text: "Your conversations are private and secure")
-                    PrivacyPoint(icon: "heart.text.square", text: "Crisis resources available anytime")
-                    PrivacyPoint(icon: "brain", text: "AI provides support, not medical advice")
-                    PrivacyPoint(icon: "trash", text: "Delete your data anytime")
-                }
-                .padding(.horizontal, 32)
+                Text("This helps me personalize your experience")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
             }
+            .padding(.horizontal, 32)
+
+            // Options
+            VStack(spacing: 12) {
+                ForEach(WellnessFocus.selectableOptions, id: \.self) { focus in
+                    WellnessFocusButton(
+                        focus: focus,
+                        isSelected: selectedFocus == focus,
+                        action: { selectedFocus = focus }
+                    )
+                }
+            }
+            .padding(.horizontal, 24)
 
             Spacer()
 
-            VStack(spacing: 16) {
-                Toggle(isOn: $accepted) {
-                    Text("I understand and agree to the Terms of Service and Privacy Policy")
-                        .font(.caption)
-                }
-                .toggleStyle(CheckboxToggleStyle())
-                .padding(.horizontal, 24)
-
-                Button(action: onNext) {
+            // Actions
+            VStack(spacing: 12) {
+                Button(action: onContinue) {
                     Text("Continue")
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(accepted ? Color.accentColor : Color.secondary)
+                        .background(selectedFocus != nil ? Color.accentColor : Color.secondary.opacity(0.3))
                         .foregroundStyle(.white)
                         .cornerRadius(12)
                 }
-                .disabled(!accepted)
-                .padding(.horizontal, 24)
-            }
-            .padding(.bottom, 32)
-        }
-    }
-}
+                .disabled(selectedFocus == nil)
+                .accessibilityLabel("Continue")
+                .accessibilityHint(selectedFocus != nil ? "Proceed to AI greeting" : "Select a focus area first")
 
-struct PrivacyPoint: View {
-    let icon: String
-    let text: String
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 24)
-            Text(text)
-                .font(.subheadline)
-        }
-    }
-}
-
-struct CheckboxToggleStyle: ToggleStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: configuration.isOn ? "checkmark.square.fill" : "square")
-                .foregroundStyle(configuration.isOn ? Color.accentColor : .secondary)
-                .onTapGesture {
-                    configuration.isOn.toggle()
-                }
-
-            configuration.label
-        }
-    }
-}
-
-struct NotificationStep: View {
-    let onNext: () -> Void
-    @State private var requestingPermission = false
-
-    var body: some View {
-        VStack(spacing: 32) {
-            Spacer()
-
-            Image(systemName: "bell.badge.fill")
-                .font(.system(size: 80))
-                .foregroundStyle(Color.accentColor)
-
-            VStack(spacing: 16) {
-                Text("Stay on Track")
-                    .font(.title)
-                    .fontWeight(.bold)
-
-                Text("Get gentle reminders for your daily quest and wellness check-ins. You can customize or disable notifications anytime.")
-                    .font(.body)
+                Button("Skip for now", action: onSkip)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-            }
-
-            Spacer()
-
-            VStack(spacing: 12) {
-                Button {
-                    requestNotificationPermission()
-                } label: {
-                    Text("Enable Notifications")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.accentColor)
-                        .foregroundStyle(.white)
-                        .cornerRadius(12)
-                }
-
-                Button {
-                    onNext()
-                } label: {
-                    Text("Maybe Later")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
+                    .accessibilityLabel("Skip personalization")
+                    .accessibilityHint("Skip the quiz and use default settings")
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 32)
         }
     }
+}
 
-    private func requestNotificationPermission() {
-        requestingPermission = true
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, _ in
-            DispatchQueue.main.async {
-                requestingPermission = false
-                onNext()
+// MARK: - Wellness Focus Button
+
+struct WellnessFocusButton: View {
+    let focus: WellnessFocus
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 16) {
+                Text(focus.emoji)
+                    .font(.title2)
+
+                Text(focus.displayTitle)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.primary)
+
+                Spacer()
+
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(Color.accentColor)
+                        .font(.title3)
+                }
             }
+            .padding()
+            .background(isSelected ? Color.accentColor.opacity(0.1) : Color(.secondarySystemBackground))
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+            )
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel(focus.displayTitle)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
-struct PersonalizationStep: View {
+// MARK: - AI Greeting View
+
+struct OnboardingAIGreetingView: View {
+    let wellnessFocus: WellnessFocus
     let onComplete: () -> Void
-    @State private var selectedTone: AITone = .friendly
-    @State private var questTime = Calendar.current.date(from: DateComponents(hour: 9, minute: 0)) ?? Date()
+
+    @State private var messages: [OnboardingMessage] = []
+    @State private var inputText = ""
+    @State private var isTyping = false
+    @State private var userMessageCount = 0
+    @FocusState private var isInputFocused: Bool
+
+    private let maxExchanges = 2
 
     var body: some View {
-        VStack(spacing: 24) {
-            Text("Personalize Your Experience")
-                .font(.title)
-                .fontWeight(.bold)
-                .padding(.top)
+        VStack(spacing: 0) {
+            // Chat area
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        ForEach(messages) { message in
+                            OnboardingMessageBubble(message: message)
+                                .id(message.id)
+                        }
 
-            ScrollView {
-                VStack(spacing: 32) {
-                    // AI Tone
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("How should I sound?")
-                            .font(.headline)
-
-                        ForEach(AITone.allCases, id: \.self) { tone in
-                            Button {
-                                selectedTone = tone
-                            } label: {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(tone.displayName)
-                                            .fontWeight(.medium)
-                                        Text(tone.description)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    Spacer()
-                                    if selectedTone == tone {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundStyle(Color.accentColor)
-                                    }
-                                }
-                                .padding()
-                                .background(selectedTone == tone ? Color.accentColor.opacity(0.1) : Color(.secondarySystemBackground))
-                                .cornerRadius(12)
-                            }
-                            .buttonStyle(.plain)
+                        if isTyping {
+                            OnboardingTypingIndicator()
+                                .id("typing")
                         }
                     }
-
-                    // Quest time
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("When should I send your daily quest?")
-                            .font(.headline)
-
-                        DatePicker("Quest Time", selection: $questTime, displayedComponents: .hourAndMinute)
-                            .datePickerStyle(.wheel)
-                            .labelsHidden()
+                    .padding()
+                }
+                .onChange(of: messages.count) { _, _ in
+                    withAnimation {
+                        if isTyping {
+                            proxy.scrollTo("typing", anchor: .bottom)
+                        } else {
+                            proxy.scrollTo(messages.last?.id, anchor: .bottom)
+                        }
                     }
                 }
-                .padding(.horizontal, 24)
+                .onChange(of: isTyping) { _, newValue in
+                    if newValue {
+                        withAnimation {
+                            proxy.scrollTo("typing", anchor: .bottom)
+                        }
+                    }
+                }
             }
 
-            Button(action: onComplete) {
-                Text("Let's Go!")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.accentColor)
-                    .foregroundStyle(.white)
-                    .cornerRadius(12)
+            Divider()
+
+            // Input area
+            VStack(spacing: 12) {
+                HStack(spacing: 12) {
+                    TextField("Type a message...", text: $inputText, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .lineLimit(1...3)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color(.secondarySystemBackground))
+                        .cornerRadius(20)
+                        .focused($isInputFocused)
+                        .submitLabel(.send)
+                        .onSubmit { sendMessage() }
+                        .accessibilityLabel("Message input")
+                        .accessibilityHint("Type your response to the AI assistant")
+
+                    Button(action: sendMessage) {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.title)
+                            .foregroundStyle(canSend ? Color.accentColor : Color.secondary)
+                    }
+                    .disabled(!canSend)
+                    .accessibilityLabel("Send message")
+                    .accessibilityHint(canSend ? "Send your message" : "Type a message first")
+                }
+
+                // Show "Get Started" after exchanges or as skip option
+                if userMessageCount >= maxExchanges {
+                    Button(action: onComplete) {
+                        Text("Get started")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.accentColor)
+                            .foregroundStyle(.white)
+                            .cornerRadius(12)
+                    }
+                    .accessibilityLabel("Get started")
+                    .accessibilityHint("Complete onboarding and enter the app")
+                } else if !messages.isEmpty {
+                    Button("Skip to app", action: onComplete)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("Skip to app")
+                        .accessibilityHint("Skip the conversation and enter the app")
+                }
             }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 32)
+            .padding()
+        }
+        .task {
+            // AI sends first message after a short delay
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            isTyping = true
+
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            isTyping = false
+            messages.append(OnboardingMessage(
+                role: .assistant,
+                content: wellnessFocus.aiGreeting
+            ))
+        }
+    }
+
+    private var canSend: Bool {
+        !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isTyping
+    }
+
+    private func sendMessage() {
+        let content = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !content.isEmpty, !isTyping else { return }
+
+        // Add user message
+        messages.append(OnboardingMessage(role: .user, content: content))
+        inputText = ""
+        userMessageCount += 1
+
+        // Show typing indicator
+        isTyping = true
+
+        // Generate canned response after delay using Task for proper lifecycle management
+        let response = generateResponse()
+        Task {
+            try? await Task.sleep(for: .milliseconds(1500))
+            guard !Task.isCancelled else { return }
+            isTyping = false
+            messages.append(OnboardingMessage(
+                role: .assistant,
+                content: response
+            ))
+        }
+
+        Analytics.shared.track(.onboardingStepCompleted, properties: [
+            "step": "ai_greeting",
+            "message_count": userMessageCount
+        ])
+    }
+
+    private func generateResponse() -> String {
+        if userMessageCount == 1 {
+            return "Thank you for sharing that with me. I'm here for you, and together we'll work on building habits that help. Ready to explore the app?"
+        } else {
+            return "I'm glad we connected! The app has daily quests, mood tracking, and more to support your journey. Let's get started!"
         }
     }
 }
 
-#Preview {
+// MARK: - Onboarding Message Model
+
+struct OnboardingMessage: Identifiable, Equatable {
+    let id = UUID()
+    let role: MessageRole
+    let content: String
+}
+
+// MARK: - Message Bubble
+
+struct OnboardingMessageBubble: View {
+    let message: OnboardingMessage
+
+    private var isUser: Bool { message.role == .user }
+
+    var body: some View {
+        HStack {
+            if isUser { Spacer(minLength: 60) }
+
+            Text(message.content)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(isUser ? Color.accentColor : Color(.secondarySystemBackground))
+                .foregroundStyle(isUser ? .white : .primary)
+                .cornerRadius(20)
+                .accessibilityLabel(isUser ? "You said: \(message.content)" : "MindFriend said: \(message.content)")
+
+            if !isUser { Spacer(minLength: 60) }
+        }
+    }
+}
+
+// MARK: - Typing Indicator
+
+struct OnboardingTypingIndicator: View {
+    @State private var animating = false
+
+    var body: some View {
+        HStack {
+            HStack(spacing: 4) {
+                ForEach(0..<3, id: \.self) { index in
+                    Circle()
+                        .fill(Color.secondary)
+                        .frame(width: 8, height: 8)
+                        .scaleEffect(animating ? 1.2 : 0.8)
+                        .animation(
+                            .easeInOut(duration: 0.6)
+                            .repeatForever()
+                            .delay(Double(index) * 0.2),
+                            value: animating
+                        )
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Color(.secondarySystemBackground))
+            .cornerRadius(20)
+            .accessibilityLabel("MindFriend is typing")
+
+            Spacer()
+        }
+        .onAppear { animating = true }
+    }
+}
+
+// MARK: - Complete View
+
+struct OnboardingCompleteView: View {
+    var body: some View {
+        VStack(spacing: 24) {
+            Spacer()
+
+            ProgressView()
+                .scaleEffect(1.5)
+                .accessibilityLabel("Loading")
+
+            Text("Setting up your experience...")
+                .font(.headline)
+                .foregroundStyle(.secondary)
+
+            Spacer()
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Setting up your experience, please wait")
+    }
+}
+
+// MARK: - Preview
+
+#Preview("Quiz") {
     OnboardingFlow()
         .environmentObject(AppState())
+        .environmentObject(DependencyContainer())
 }

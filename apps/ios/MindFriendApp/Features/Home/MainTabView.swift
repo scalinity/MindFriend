@@ -35,6 +35,15 @@ struct MainTabView: View {
         .sheet(isPresented: $appState.showPaywall) {
             PaywallView()
         }
+        .alert(
+            appState.globalError?.title ?? "Error",
+            isPresented: $appState.showError,
+            presenting: appState.globalError
+        ) { _ in
+            Button("OK", role: .cancel) { }
+        } message: { error in
+            Text(error.message)
+        }
     }
 }
 
