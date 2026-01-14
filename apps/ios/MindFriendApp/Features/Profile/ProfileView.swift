@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 
 struct ProfileView: View {
     @EnvironmentObject var appState: AppState
@@ -6,6 +7,7 @@ struct ProfileView: View {
     @State private var showLogoutConfirm = false
     @State private var showDeleteConfirm = false
     @State private var showEditProfile = false
+    @State private var showSubscription = false
 
     var body: some View {
         NavigationStack {
@@ -30,7 +32,9 @@ struct ProfileView: View {
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
 
-                                if appState.entitlements.tier == .premium {
+                                if let premiumBadge = appState.currentUser?.premiumBadge {
+                                    PremiumBadgeLabel(badge: premiumBadge)
+                                } else if appState.entitlements.tier == .premium {
                                     Label("Premium", systemImage: "star.fill")
                                         .font(.caption)
                                         .foregroundStyle(.yellow)
@@ -58,6 +62,21 @@ struct ProfileView: View {
                     .padding(.vertical, 8)
                 }
 
+                // Progress
+                Section("Progress") {
+                    NavigationLink {
+                        SkillTreeView()
+                    } label: {
+                        Label("Skills", systemImage: "chart.bar.fill")
+                    }
+
+                    NavigationLink {
+                        BadgesView()
+                    } label: {
+                        Label("Badges", systemImage: "star.fill")
+                    }
+                }
+
                 // Settings
                 Section("Settings") {
                     NavigationLink {
@@ -83,19 +102,44 @@ struct ProfileView: View {
                     } label: {
                         Label("AI Memory", systemImage: "brain.head.profile")
                     }
+
+                    NavigationLink {
+                        OurApproachView()
+                    } label: {
+                        Label("Our Approach", systemImage: "checkmark.seal.fill")
+                    }
                 }
 
-                // Premium
-                if appState.entitlements.tier == .free {
-                    Section {
+                // Premium / Subscription
+                Section {
+                    if appState.entitlements.tier == .free {
                         Button {
-                            appState.showPaywall = true
+                            showSubscription = true
                         } label: {
                             HStack {
                                 Image(systemName: "star.fill")
                                     .foregroundStyle(.yellow)
                                 Text("Upgrade to Premium")
                                     .fontWeight(.semibold)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    } else {
+                        Button {
+                            showSubscription = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "star.fill")
+                                    .foregroundStyle(.yellow)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Premium")
+                                        .fontWeight(.semibold)
+                                    Text("Manage subscription")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
                                 Spacer()
                                 Image(systemName: "chevron.right")
                                     .foregroundStyle(.secondary)
@@ -133,11 +177,11 @@ struct ProfileView: View {
                         Label("Contact Support", systemImage: "envelope")
                     }
 
-                    Link(destination: URL(string: "https://mindfriend.app/privacy")!) {
+                    Link(destination: URL(string: "https://getmindfriend.app/privacy")!) {
                         Label("Privacy Policy", systemImage: "doc.text")
                     }
 
-                    Link(destination: URL(string: "https://mindfriend.app/terms")!) {
+                    Link(destination: URL(string: "https://getmindfriend.app/terms")!) {
                         Label("Terms of Service", systemImage: "doc.text")
                     }
                 }
@@ -178,6 +222,9 @@ struct ProfileView: View {
             }
             .sheet(isPresented: $showEditProfile) {
                 EditProfileView()
+            }
+            .sheet(isPresented: $showSubscription) {
+                SubscriptionView()
             }
         }
     }
@@ -231,28 +278,256 @@ struct StatItem: View {
 struct NotificationSettingsView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
+
+    // Social notifications
+    @State private var notifyCircleActivity = true
+    @State private var notifyHugs = true
+    @State private var notifyChallenges = true
+
+    // Motivation notifications
+    @State private var notifyStreakRisk = true
+    @State private var notifyWeeklySummary = true
+
+    // Timing
     @State private var remindersEnabled = true
     @State private var questTime = Date()
+    @State private var preferredNotifyHour = 9
     @State private var quietHoursEnabled = false
     @State private var quietStart = Date()
     @State private var quietEnd = Date()
 
+    // State
+    @State private var isLoading = true
+    @State private var isSaving = false
+    @State private var systemNotificationsEnabled = true
+
     var body: some View {
         Form {
-            Section {
-                Toggle("Daily Reminders", isOn: $remindersEnabled)
-                DatePicker("Quest Time", selection: $questTime, displayedComponents: .hourAndMinute)
+            // System notification status
+            if !systemNotificationsEnabled {
+                Section {
+                    HStack {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.yellow)
+                        VStack(alignment: .leading) {
+                            Text("Notifications Disabled")
+                                .font(.headline)
+                            Text("Enable notifications in Settings to receive alerts")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button("Settings") {
+                            if let url = URL(string: UIApplication.openSettingsURLString) {
+                                UIApplication.shared.open(url)
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
             }
 
-            Section("Quiet Hours") {
-                Toggle("Enable Quiet Hours", isOn: $quietHoursEnabled)
-                if quietHoursEnabled {
-                    DatePicker("Start", selection: $quietStart, displayedComponents: .hourAndMinute)
-                    DatePicker("End", selection: $quietEnd, displayedComponents: .hourAndMinute)
+            // Social notifications
+            Section {
+                Toggle("Circle activity", isOn: $notifyCircleActivity)
+                    .onChange(of: notifyCircleActivity) { _, _ in saveSettings() }
+                Toggle("Hugs received", isOn: $notifyHugs)
+                    .onChange(of: notifyHugs) { _, _ in saveSettings() }
+                Toggle("Challenge updates", isOn: $notifyChallenges)
+                    .onChange(of: notifyChallenges) { _, _ in saveSettings() }
+            } header: {
+                Text("Social")
+            } footer: {
+                Text("Get notified when friends share, send hugs, or complete challenges")
+            }
+
+            // Motivation notifications
+            Section {
+                Toggle("Streak at risk", isOn: $notifyStreakRisk)
+                    .onChange(of: notifyStreakRisk) { _, _ in saveSettings() }
+                Toggle("Weekly summary", isOn: $notifyWeeklySummary)
+                    .onChange(of: notifyWeeklySummary) { _, _ in saveSettings() }
+            } header: {
+                Text("Motivation")
+            } footer: {
+                Text("Reminders to keep your streak and weekly progress summaries")
+            }
+
+            // Timing
+            Section {
+                Toggle("Daily Reminders", isOn: $remindersEnabled)
+                    .onChange(of: remindersEnabled) { _, _ in saveSettings() }
+
+                if remindersEnabled {
+                    DatePicker("Quest Time", selection: $questTime, displayedComponents: .hourAndMinute)
+                        .onChange(of: questTime) { _, _ in saveSettings() }
                 }
+
+                Picker("Preferred Notification Time", selection: $preferredNotifyHour) {
+                    ForEach(6..<22) { hour in
+                        Text(formatHour(hour)).tag(hour)
+                    }
+                }
+                .onChange(of: preferredNotifyHour) { _, _ in saveSettings() }
+
+                NavigationLink {
+                    QuietHoursView(
+                        isEnabled: $quietHoursEnabled,
+                        startTime: $quietStart,
+                        endTime: $quietEnd,
+                        onSave: saveSettings
+                    )
+                } label: {
+                    HStack {
+                        Text("Quiet Hours")
+                        Spacer()
+                        Text(quietHoursEnabled ? quietHoursSummary : "Off")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } header: {
+                Text("Timing")
             }
         }
         .navigationTitle("Notifications")
+        .disabled(isLoading || isSaving)
+        .overlay {
+            if isLoading {
+                ProgressView()
+            }
+        }
+        .task {
+            await loadSettings()
+            await checkSystemNotifications()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            Task { await checkSystemNotifications() }
+        }
+    }
+
+    private var quietHoursSummary: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h a"
+        return "\(formatter.string(from: quietStart)) - \(formatter.string(from: quietEnd))"
+    }
+
+    private func formatHour(_ hour: Int) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h a"
+        let date = Calendar.current.date(bySettingHour: hour, minute: 0, second: 0, of: Date())!
+        return formatter.string(from: date)
+    }
+
+    private func checkSystemNotifications() async {
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        await MainActor.run {
+            systemNotificationsEnabled = settings.authorizationStatus == .authorized
+        }
+    }
+
+    private func loadSettings() async {
+        isLoading = true
+        defer { isLoading = false }
+
+        guard let settings = appState.currentUser?.settings else { return }
+
+        await MainActor.run {
+            remindersEnabled = settings.remindersEnabled
+
+            // Parse quest time
+            if let time = parseTime(settings.dailyQuestTimeLocal) {
+                questTime = time
+            }
+
+            // Parse quiet hours
+            if let start = settings.quietHoursStartLocal,
+               let end = settings.quietHoursEndLocal {
+                quietHoursEnabled = true
+                if let startTime = parseTime(start) { quietStart = startTime }
+                if let endTime = parseTime(end) { quietEnd = endTime }
+            }
+
+            // Smart notification settings (with defaults for new columns)
+            notifyCircleActivity = settings.notifyCircleActivity ?? true
+            notifyHugs = settings.notifyHugs ?? true
+            notifyChallenges = settings.notifyChallenges ?? true
+            notifyStreakRisk = settings.notifyStreakRisk ?? true
+            notifyWeeklySummary = settings.notifyWeeklySummary ?? true
+            preferredNotifyHour = settings.preferredNotifyHour ?? 9
+        }
+    }
+
+    private func parseTime(_ timeString: String) -> Date? {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.date(from: timeString)
+    }
+
+    private func formatTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
+    }
+
+    private func saveSettings() {
+        guard !isLoading else { return }
+        isSaving = true
+
+        Task {
+            defer { isSaving = false }
+
+            do {
+                try await container.supabaseDataService.updateUserSettings(
+                    dailyQuestTimeLocal: formatTime(questTime),
+                    quietHoursStartLocal: quietHoursEnabled ? formatTime(quietStart) : nil,
+                    quietHoursEndLocal: quietHoursEnabled ? formatTime(quietEnd) : nil,
+                    remindersEnabled: remindersEnabled,
+                    notifyCircleActivity: notifyCircleActivity,
+                    notifyHugs: notifyHugs,
+                    notifyChallenges: notifyChallenges,
+                    notifyStreakRisk: notifyStreakRisk,
+                    notifyWeeklySummary: notifyWeeklySummary,
+                    preferredNotifyHour: preferredNotifyHour
+                )
+            } catch {
+                await MainActor.run {
+                    appState.showError(.apiError(error.localizedDescription))
+                }
+            }
+        }
+    }
+}
+
+struct QuietHoursView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var isEnabled: Bool
+    @Binding var startTime: Date
+    @Binding var endTime: Date
+    var onSave: () -> Void
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Enable Quiet Hours", isOn: $isEnabled)
+            } footer: {
+                Text("Notifications will be held until quiet hours end")
+            }
+
+            if isEnabled {
+                Section {
+                    DatePicker("Start", selection: $startTime, displayedComponents: .hourAndMinute)
+                    DatePicker("End", selection: $endTime, displayedComponents: .hourAndMinute)
+                } footer: {
+                    Text("Recommended: 10 PM to 8 AM")
+                }
+            }
+        }
+        .navigationTitle("Quiet Hours")
+        .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: isEnabled) { _, _ in onSave() }
+        .onChange(of: startTime) { _, _ in onSave() }
+        .onChange(of: endTime) { _, _ in onSave() }
     }
 }
 
@@ -298,6 +573,12 @@ struct PrivacySettingsView: View {
 
     var body: some View {
         Form {
+            Section {
+                PrivacyBanner()
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+            }
+
             Section {
                 Toggle("Share Mood in Circles", isOn: $shareMoodInCircles)
             } footer: {
@@ -383,45 +664,7 @@ struct DataExportView: View {
     }
 }
 
-struct BadgesView: View {
-    @EnvironmentObject var appState: AppState
-
-    var body: some View {
-        ScrollView {
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                ForEach(appState.currentUser?.badges ?? []) { badge in
-                    BadgeCard(badge: badge)
-                }
-            }
-            .padding()
-        }
-        .navigationTitle("Badges")
-    }
-}
-
-struct BadgeCard: View {
-    let badge: Badge
-
-    var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: badge.icon)
-                .font(.largeTitle)
-                .foregroundStyle(.yellow)
-
-            Text(badge.title)
-                .font(.headline)
-                .multilineTextAlignment(.center)
-
-            Text(badge.earnedAt, style: .date)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(16)
-    }
-}
+// NOTE: BadgesView and BadgeCard are defined in Features/Badges/BadgesView.swift
 
 extension Bundle {
     var appVersion: String {
@@ -616,6 +859,40 @@ struct EditProfileView: View {
             }
             isSaving = false
         }
+    }
+}
+
+// MARK: - Premium Badge Label
+
+struct PremiumBadgeLabel: View {
+    let badge: Badge
+
+    private var displayName: String {
+        switch badge.code {
+        case "premium_supporter": return "Premium"
+        case "annual_achiever": return "Annual"
+        case "family_champion": return "Family Champion"
+        default: return "Premium"
+        }
+    }
+
+    private var badgeColor: Color {
+        switch badge.code {
+        case "annual_achiever": return .purple
+        case "family_champion": return .blue
+        default: return .yellow
+        }
+    }
+
+    var body: some View {
+        Label(displayName, systemImage: badge.icon)
+            .font(.caption)
+            .fontWeight(.medium)
+            .foregroundStyle(badgeColor)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(badgeColor.opacity(0.15))
+            .cornerRadius(6)
     }
 }
 

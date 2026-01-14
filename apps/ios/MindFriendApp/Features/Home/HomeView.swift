@@ -13,6 +13,10 @@ struct HomeView: View {
     @EnvironmentObject var container: DependencyContainer
     @State private var questState: QuestLoadingState = .loading
     @State private var isRefreshing = false
+    @State private var userLevel: UserLevel?
+    @State private var activeEvent: SeasonalEvent?
+    @State private var eventParticipation: EventParticipation?
+    @State private var weeklyInsight: WeeklySummary?
 
     var body: some View {
         NavigationStack {
@@ -20,6 +24,20 @@ struct HomeView: View {
                 VStack(spacing: 24) {
                     // Greeting
                     GreetingHeader(userName: appState.currentUser?.displayName ?? "Friend")
+
+                    // Level progress
+                    if let level = userLevel {
+                        LevelProgressView(userLevel: level)
+                    }
+
+                    // Active event (if participating)
+                    if let event = activeEvent {
+                        SeasonalEventCard(
+                            event: event,
+                            participation: eventParticipation,
+                            onJoin: { joinEvent(event) }
+                        )
+                    }
 
                     // Mood check-in prompt
                     if let mood = appState.todayMood {
@@ -36,6 +54,9 @@ struct HomeView: View {
                         currentStreak: appState.currentStreak,
                         longestStreak: appState.currentUser?.stats.longestStreakDays ?? 0
                     )
+
+                    // Weekly Insights
+                    InsightsPreviewCard(insight: weeklyInsight)
 
                     // Quick actions
                     QuickActionsSection()
@@ -97,26 +118,70 @@ struct HomeView: View {
         }
 
         do {
-            // Use Supabase data service for quests
-            let questResult = try await container.supabaseDataService.getTodayQuest()
+            // Check and reset weekly XP if needed (fire-and-forget, don't block)
+            Task { _ = try? await container.supabaseDataService.resetWeeklyXPIfNeeded() }
 
-            // Use Supabase auth service for profile
-            let profileResult = try await container.supabaseAuthService.fetchProfile()
+            // Parallelize independent API calls for better performance
+            async let questTask = container.supabaseDataService.getTodayQuest()
+            async let profileTask = container.supabaseAuthService.fetchProfile()
+            async let eventsTask = container.supabaseDataService.getActiveEvents()
+            async let participationTask = container.supabaseDataService.getEventParticipation()
+            async let insightTask = container.supabaseDataService.getWeeklySummary()
+
+            // Await all results concurrently
+            let (questResult, profileResult, events, participation, insightResult) = try await (
+                questTask, profileTask, eventsTask, participationTask, insightTask
+            )
+
+            // Compute level info from profile
+            let levelResult = UserLevel.from(stats: profileResult.stats)
 
             await MainActor.run {
+                // Update quest state
                 if let quest = questResult {
                     questState = .loaded(quest)
                     appState.todayQuest = quest
                 } else {
                     questState = .noQuest
                 }
+
+                // Update user profile
                 appState.currentUser = profileResult
                 appState.currentStreak = profileResult.stats.currentStreakDays
                 appState.entitlements = profileResult.entitlements
+
+                // Set level info
+                userLevel = levelResult
+
+                // Set first active event and participation
+                activeEvent = events.first
+                if let event = activeEvent {
+                    eventParticipation = participation.first { $0.eventId == event.id }
+                }
+
+                // Set weekly insight
+                weeklyInsight = insightResult
             }
         } catch {
             print("HomeView loadData error: \(error)")
             questState = .error(error.localizedDescription)
+        }
+    }
+
+    private func joinEvent(_ event: SeasonalEvent) {
+        Task {
+            do {
+                try await container.supabaseDataService.joinEvent(id: event.id)
+
+                // Reload participation
+                let participation = try await container.supabaseDataService.getEventParticipation()
+
+                await MainActor.run {
+                    eventParticipation = participation.first { $0.eventId == event.id }
+                }
+            } catch {
+                appState.showError(.apiError(error.localizedDescription))
+            }
         }
     }
 
@@ -476,6 +541,74 @@ struct QuickActionsSection: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Insights Preview Card
+
+struct InsightsPreviewCard: View {
+    let insight: WeeklySummary?
+
+    var body: some View {
+        NavigationLink {
+            WeeklyInsightsView()
+        } label: {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Label("Weekly Insights", systemImage: "chart.bar.xaxis")
+                        .font(.headline)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let insight = insight {
+                    HStack(spacing: 16) {
+                        // Average mood
+                        if let avg = insight.avgMood {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(String(format: "%.1f", avg))
+                                    .font(.title)
+                                    .fontWeight(.bold)
+                                Text("avg mood")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        Spacer()
+
+                        // Trend indicator
+                        if let trend = insight.moodTrend {
+                            HStack(spacing: 4) {
+                                Text(trend.emoji)
+                                Text(trend.rawValue.capitalized)
+                                    .font(.subheadline)
+                                    .foregroundStyle(Color(trend.color))
+                            }
+                        }
+                    }
+
+                    // AI insight preview
+                    if let aiInsight = insight.aiInsight {
+                        Text(aiInsight)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                } else {
+                    Text("Your personalized insights will appear here on Sunday")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.secondarySystemBackground))
+            .cornerRadius(16)
+        }
+        .buttonStyle(.plain)
     }
 }
 

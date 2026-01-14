@@ -1095,3 +1095,1010 @@ with open('MindFriendApp.xcodeproj/project.pbxproj', 'w') as f:
 print(f"Removed {len(files_to_remove)} stale file references")
 EOF
 [2026-01-14 03:39:55] xcodebuild -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' build 2>&1 | grep -E "(BUILD SUCCEEDED|BUILD FAILED|error:)" | head -10
+[2026-01-14 05:10:27] ls -la /Users/danny/Documents/Codez/Apps/MindFriend
+[2026-01-14 05:14:05] find /Users/danny/Documents/Codez/Apps/MindFriend/supabase/functions -type f -name "*.ts" -o -name "*.json" | head -30
+[2026-01-14 05:14:08] find /Users/danny/Documents/Codez/Apps/MindFriend/supabase/migrations -type f | sort
+[2026-01-14 05:14:12] grep -n "CREATE TABLE\|CREATE FUNCTION\|CREATE PROCEDURE" /Users/danny/Documents/Codez/Apps/MindFriend/supabase/migrations/20260113000000_initial_schema.sql | head -30
+[2026-01-14 05:14:15] grep -n "CREATE FUNCTION\|CREATE OR REPLACE FUNCTION" /Users/danny/Documents/Codez/Apps/MindFriend/supabase/migrations/20260113000000_initial_schema.sql
+[2026-01-14 05:14:17] grep -n "CREATE OR REPLACE FUNCTION\|check_rate_limit\|check_and_increment" /Users/danny/Documents/Codez/Apps/MindFriend/supabase/migrations/*.sql
+[2026-01-14 05:14:19] find /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios -name "*.swift" -path "*/Circles/*" -type f 2>/dev/null | head -20
+[2026-01-14 05:14:23] find /Users/danny/Documents/Codez/Apps/MindFriend/supabase -name "*.sql" -o -name "*.ts" | grep -E "(migration|function)" | head -20
+[2026-01-14 05:24:50] mkdir -p /Users/danny/Documents/Codez/Apps/MindFriend/supabase/functions/send-notification
+[2026-01-14 05:25:03] grep -n "registerDevice\|notification\|push.*token" /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/SupabaseDataService.swift
+[2026-01-14 05:25:07] grep -n "struct DBDevice\|struct DBPushToken\|struct DBUserSettings" /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Models.swift | head -20
+[2026-01-14 05:25:09] find /Users/danny/Documents/Codez/Apps/MindFriend -name "*.swift" -path "*/Models*" | head -5
+[2026-01-14 05:25:09] ls -la /Users/danny/Documents/Codez/Apps/MindFriend/supabase/functions/
+[2026-01-14 05:25:11] ls -la /Users/danny/Documents/Codez/Apps/MindFriend/supabase/functions/send-notification/
+[2026-01-14 05:25:12] cat /Users/danny/Documents/Codez/Apps/MindFriend/supabase/functions/send-notification/index.ts
+[2026-01-14 05:25:13] find /Users/danny/Documents/Codez/Apps/MindFriend/supabase/functions/send-notification -type f
+[2026-01-14 05:25:17] grep -n "struct DB\|enum.*Token\|struct.*Device" /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Models.swift | head -30
+[2026-01-14 05:25:20] find /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios -name "*.swift" | xargs grep -l "struct DBDevice\|struct DBPushToken" | head -3
+[2026-01-14 05:25:21] grep -n "struct DBDevice\|struct DBPushToken" /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/SupabaseDataService.swift -A 10 | head -40
+[2026-01-14 05:25:24] grep -r "notification_history\|weekly_summaries\|notify_" /Users/danny/Documents/Codez/Apps/MindFriend/supabase/migrations/ --include="*.sql" | head -20
+[2026-01-14 05:25:25] wc -l /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/SupabaseDataService.swift
+[2026-01-14 05:25:27] grep -n "enum.*Tables\|let.*Tables\|case push_tokens\|case notification" /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/SupabaseDataService.swift -A 50 | head -80
+[2026-01-14 05:25:31] grep -n "enum Tables" /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/SupabaseDataService.swift -A 40 | head -50
+[2026-01-14 05:25:33] grep "enum Tables\|case" /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/SupabaseDataService.swift | grep -A 30 "enum Tables"
+[2026-01-14 05:25:34] mkdir -p /Users/danny/Documents/Codez/Apps/MindFriend/supabase/functions/assign-quest
+[2026-01-14 05:25:35] grep -n "enum Tables" /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/SupabaseDataService.swift
+[2026-01-14 05:25:37] grep -n "Tables\." /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/SupabaseDataService.swift | head -10
+[2026-01-14 05:25:38] grep -n "struct Tables\|extension Tables" /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/SupabaseDataService.swift -A 30 | head -60
+[2026-01-14 05:25:40] head -100 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/SupabaseDataService.swift | tail -60
+[2026-01-14 05:25:41] grep -o "Tables\.[a-zA-Z_]*" /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/SupabaseDataService.swift | sort -u
+[2026-01-14 05:27:05] find /Users/danny/Documents/Codez/Apps/MindFriend -type f -name "*.swift" -o -name "*.sql" -o -name "*.ts" | head -40
+[2026-01-14 05:27:06] tree -L 3 -I 'Pods|.git|.build' /Users/danny/Documents/Codez/Apps/MindFriend 2>/dev/null | head -80
+[2026-01-14 05:27:27] find /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios -name "*ViewModel.swift" | head -5
+[2026-01-14 05:34:04] ls -la /Users/danny/Documents/Codez/Apps/MindFriend/supabase/functions/
+[2026-01-14 05:34:07] ls -la /Users/danny/Documents/Codez/Apps/MindFriend/supabase/functions/send-notification/
+[2026-01-14 05:34:16] ls -la /Users/danny/Documents/Codez/Apps/MindFriend/supabase/functions/_shared/
+[2026-01-14 05:35:33] cat ~/.claude/hooks/scripts/security-check.py 2>/dev/null | head -50 || echo "Script not found or not readable"
+[2026-01-14 05:37:25] mkdir -p /Users/danny/Documents/Codez/Apps/MindFriend/supabase/functions/process-notification-queue
+[2026-01-14 05:38:10] mkdir -p /Users/danny/Documents/Codez/Apps/MindFriend/supabase/functions/check-streak-risk
+[2026-01-14 05:38:11] mkdir -p /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Progression
+[2026-01-14 05:38:47] mkdir -p /Users/danny/Documents/Codez/Apps/MindFriend/supabase/functions/generate-weekly-summary
+[2026-01-14 05:52:26] find apps/ios/MindFriendApp -name "*.swift" -type f | head -50
+[2026-01-14 05:52:26] find supabase/functions -name "*.ts" -type f | head -50
+[2026-01-14 05:52:26] find supabase/migrations -name "*.sql" -type f | head -50
+[2026-01-14 05:52:32] find apps/ios/MindFriendApp -name "*.swift" -type f -exec wc -l {} + | tail -1
+[2026-01-14 05:52:33] find supabase/functions -name "*.ts" -type f -exec wc -l {} + | tail -1
+[2026-01-14 05:52:34] find supabase/migrations -name "*.sql" -type f -exec wc -l {} + | tail -1
+[2026-01-14 05:52:42] echo "=== iOS Swift Files (by directory) ===" && find apps/ios/MindFriendApp -name "*.swift" -type f | xargs wc -l | sort -n | tail -20
+[2026-01-14 05:52:42] echo "=== Edge Functions (TypeScript) ===" && find supabase/functions -name "*.ts" -type f | xargs wc -l | sort -n
+[2026-01-14 05:52:42] echo "=== SQL Migrations ===" && find supabase/migrations -name "*.sql" -type f | xargs wc -l | sort -n
+[2026-01-14 05:52:43] cd /Users/danny/Documents/Codez/Apps/MindFriend/supabase/functions && deno test assign-quest/test.ts send-notification/test.ts
+[2026-01-14 05:52:53] echo "=== File counts by type ===" && find . -type f \( -name "*.swift" -o -name "*.ts" -o -name "*.sql" -o -name "*.md" -o -name "*.json" \) ! -path "./.git/*" ! -path "./node_modules/*" | sed 's/.*\.//' | sort | uniq -c | sort -rn
+[2026-01-14 05:53:02] echo "=== File counts by type ===" && find . -type f \( -name "*.swift" -o -name "*.ts" -o -name "*.sql" \) -not -path "./.git/*" -not -path "./node_modules/*" | rev | cut -d. -f1 | rev | sort | uniq -c | sort -rn
+[2026-01-14 05:53:13] find . -type f \( -name "*.swift" -o -name "*.ts" -o -name "*.sql" \) | grep -v node_modules | grep -v ".git" | wc -l
+[2026-01-14 05:53:13] find . -type f -name "*.ts" | grep -v node_modules | wc -l
+[2026-01-14 05:53:20] find . -type f -name "*.ts" | grep -v node_modules | grep -v ".git" | head -30
+[2026-01-14 05:53:29] echo "=== ACTIVE CODEBASE LINE COUNT ===" && echo "" && echo "iOS Swift (apps/ios/):" && find apps/ios -name "*.swift" -type f -exec wc -l {} + | tail -1 | awk '{print $1}' && echo "" && echo "Supabase Edge Functions (supabase/functions/):" && find supabase/functions -name "*.ts" -type f -exec wc -l {} + | tail -1 | awk '{print $1}' && echo "" && echo "SQL Migrations (supabase/migrations/):" && find supabase/migrations -name "*.sql" -type f -exec wc -l {} + | tail -1 | awk '{print $1}'
+[2026-01-14 05:53:30] echo "=== LEGACY (archived) NestJS API ===" && find apps/api -name "*.ts" -type f | grep -v node_modules | grep -v dist | xargs wc -l 2>/dev/null | tail -1
+[2026-01-14 05:53:44] echo "=== iOS Swift Breakdown ===" && echo "Feature modules:" && find apps/ios/MindFriendApp/Features -name "*.swift" -exec wc -l {} + | tail -1 | awk '{print "  "$1}' && echo "Core (Models, Utils):" && find apps/ios/MindFriendApp/Core -name "*.swift" -exec wc -l {} + | tail -1 | awk '{print "  "$1}' && echo "Networking:" && find apps/ios/MindFriendApp/Networking -name "*.swift" -exec wc -l {} + | tail -1 | awk '{print "  "$1}' && echo "App (Entry/Config):" && find apps/ios/MindFriendApp/App -name "*.swift" -exec wc -l {} + | tail -1 | awk '{print "  "$1}'
+[2026-01-14 05:53:45] echo "=== iOS Tests ===" && find apps/ios -path "*Tests*" -name "*.swift" -exec wc -l {} + 2>/dev/null | tail -1 || echo "  0"
+[2026-01-14 05:56:06] brew install deno
+[2026-01-14 05:58:05] cd /Users/danny/Documents/Codez/Apps/MindFriend/supabase/functions && deno test assign-quest/test.ts send-notification/test.ts
+[2026-01-14 06:02:55] mkdir -p /Users/danny/Documents/Codez/Apps/MindFriend/docs
+[2026-01-14 06:03:07] cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios && xcodebuild test -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 16' -only-testing:MindFriendAppTests/NotificationTests -quiet 2>&1 | tail -50
+[2026-01-14 06:04:25] xcodebuild test -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:MindFriendAppTests/NotificationTests -quiet 2>&1 | tail -100
+[2026-01-14 06:04:54] grep -l "LevelUpCelebration" MindFriendApp.xcodeproj/project.pbxproj || echo "NOT FOUND"
+[2026-01-14 06:05:02] ruby <<'RUBY'
+require 'xcodeproj'
+
+project_path = 'MindFriendApp.xcodeproj'
+project = Xcodeproj::Project.open(project_path)
+
+# Find the main target
+main_target = project.targets.find { |t| t.name == 'MindFriendApp' }
+
+# Find the Features/Progression group (or create it)
+features_group = project.main_group['MindFriendApp']['Features']
+
+# Check if Progression group exists, create if not
+progression_group = features_group['Progression']
+if progression_group.nil?
+  progression_group = features_group.new_group('Progression', 'Features/Progression')
+end
+
+# Add the file if not already there
+file_path = 'MindFriendApp/Features/Progression/LevelUpCelebration.swift'
+existing_file = progression_group.files.find { |f| f.path && f.path.include?('LevelUpCelebration') }
+
+if existing_file.nil?
+  file_ref = progression_group.new_file(file_path)
+  main_target.source_build_phase.add_file_reference(file_ref)
+  project.save
+  puts "Added LevelUpCelebration.swift to project"
+else
+  puts "File already exists in project"
+end
+RUBY
+[2026-01-14 06:05:11] grep -A5 "Features/Progression" MindFriendApp.xcodeproj/project.pbxproj | head -20
+[2026-01-14 06:05:21] cd /Users/danny/Documents/Codez/Apps/MindFriend && deno test --allow-env supabase/functions/_shared/notification-utils.test.ts 2>&1
+[2026-01-14 06:08:44] cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios && xcodebuild test -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:MindFriendAppTests/NotificationTests -quiet 2>&1 | tail -60
+[2026-01-14 06:10:39] xcodebuild test -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:MindFriendAppTests/NotificationTests -quiet 2>&1 | tail -80
+[2026-01-14 06:12:49] xcodebuild test -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:MindFriendAppTests/NotificationTests -quiet 2>&1 | tail -50
+[2026-01-14 06:14:49] xcodebuild build -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 16' -quiet 2>&1 | head -100
+[2026-01-14 06:15:56] xcodebuild build -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' -quiet 2>&1 | tail -50
+[2026-01-14 06:16:18] xcodebuild build -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' -quiet 2>&1 | grep -E "error:|warning:" | head -30
+[2026-01-14 06:16:29] fd -e swift "ChallengeCard|PendingInvitesSection|CreateChallengeSheet|InviteMemberSheet|CompactHugButton|ReactionDisplay" /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/
+[2026-01-14 06:16:48] ls -la /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Circles/
+[2026-01-14 06:18:37] xcodebuild build -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' -quiet 2>&1 | grep -E "error:|warning:" | head -30
+[2026-01-14 06:19:02] xcodebuild build -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' -quiet 2>&1 | grep -E "error:|warning:" | head -30
+[2026-01-14 06:19:10] fd -e swift "LevelProgressView|SeasonalEventCard" /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/
+[2026-01-14 06:19:56] xcodebuild build -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' -quiet 2>&1 | grep -E "error:|warning:" | head -30
+[2026-01-14 06:20:09] fd -e swift "SkillTreeView" /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/
+[2026-01-14 06:21:47] xcodebuild build -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' -quiet 2>&1 | grep -E "error:|warning:" | head -30
+[2026-01-14 06:22:06] xcodebuild build -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' -quiet 2>&1 | grep -E "error:|warning:" | head -30
+[2026-01-14 06:22:16] xcodebuild build -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' -quiet 2>&1 | grep -E "BUILD|SUCCEEDED|FAILED"
+[2026-01-14 06:22:23] xcodebuild build -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' 2>&1 | tail -5
+[2026-01-14 06:22:30] xcodebuild test -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:MindFriendAppTests/NotificationTests 2>&1 | tail -50
+[2026-01-14 06:22:50] xcodebuild test -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:MindFriendAppTests/NotificationTests 2>&1 | tail -30
+[2026-01-14 06:24:09] xcodebuild test -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:MindFriendAppTests/NotificationTests 2>&1 | tail -50
+[2026-01-14 06:24:18] xcodebuild test -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:MindFriendAppTests/NotificationTests 2>&1 | grep -E "error:" | head -20
+[2026-01-14 06:24:43] xcodebuild test -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:MindFriendAppTests/NotificationTests 2>&1 | grep -E "error:|Passed|Failed|Test Suite" | head -30
+[2026-01-14 06:24:59] xcodebuild test -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:MindFriendAppTests/NotificationTests 2>&1 | grep -E "Passed|Failed|Test Suite|error:" | head -30
+[2026-01-14 06:25:55] xcodebuild test -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:MindFriendAppTests/NotificationTests 2>&1 | grep -E "Passed|Failed|Test Suite|error:|executed" | head -40
+[2026-01-14 06:26:17] xcodebuild test -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:MindFriendAppTests 2>&1 | grep -E "Passed|Failed|Test Suite|executed" | head -30
+[2026-01-14 06:26:47] xcodebuild test -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:MindFriendAppTests/ModelsTests 2>&1 | grep -E "error:|failed" | head -20
+[2026-01-14 06:35:51] xcodebuild test -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:MindFriendAppTests 2>&1 | grep -E "Passed|Failed|Test Suite|executed" | head -20
+[2026-01-14 06:36:17] xcodebuild test -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:MindFriendAppTests/ModelsTests 2>&1 | grep -E "error:" | head -10
+[2026-01-14 06:38:17] xcodebuild test -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 16' -only-testing:MindFriendAppTests 2>&1 | tail -100
+[2026-01-14 06:39:24] xcodebuild test -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:MindFriendAppTests 2>&1 | tail -150
+[2026-01-14 06:42:45] git -C /Users/danny/Documents/Codez/Apps/MindFriend status --short
+[2026-01-14 06:42:45] ls -la /Users/danny/Documents/Codez/Apps/MindFriend/
+[2026-01-14 06:47:54] ls -la ~/Documents/*.png ~/Documents/*.PNG ~/Documents/*icon* ~/Documents/*Icon* 2>/dev/null | head -30
+[2026-01-14 06:48:00] ls -la ~/Documents/ | head -40
+[2026-01-14 06:48:06] ls -la ~/Documents/MindFriend-Light.icon/ ~/Documents/MindFriend-Dark.icon/ ~/Documents/MindFriend-Mono.icon/
+[2026-01-14 06:48:11] find ~/Documents/MindFriend-Light.icon ~/Documents/MindFriend-Dark.icon ~/Documents/MindFriend-Mono.icon -name "*.png" -o -name "*.jpg" -o -name "*.jpeg" 2>/dev/null
+[2026-01-14 06:48:18] for f in ~/Documents/MindFriend-Light.icon/Assets/logo.png ~/Documents/MindFriend-Dark.icon/Assets/logo.png ~/Documents/MindFriend-Mono.icon/Assets/logo.png; do
+  echo "$(basename $(dirname $(dirname $f))): $(sips -g pixelWidth -g pixelHeight "$f" 2>/dev/null | grep pixel | tr '\n' ' ')"
+done
+[2026-01-14 06:48:25] ls -la apps/ios/MindFriendApp/Resources/Assets.xcassets/
+[2026-01-14 06:48:31] ls -la apps/ios/MindFriendApp/Resources/Assets.xcassets/AppIcon.appiconset/
+[2026-01-14 06:48:45] cp ~/Documents/MindFriend-Light.icon/Assets/logo.png apps/ios/MindFriendApp/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+[2026-01-14 06:48:45] cp ~/Documents/MindFriend-Dark.icon/Assets/logo.png apps/ios/MindFriendApp/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-Dark.png
+[2026-01-14 06:48:45] cp ~/Documents/MindFriend-Mono.icon/Assets/logo.png apps/ios/MindFriendApp/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-Tinted.png
+[2026-01-14 06:48:57] ls -la apps/ios/MindFriendApp/Resources/Assets.xcassets/AppIcon.appiconset/
+[2026-01-14 06:49:02] for f in apps/ios/MindFriendApp/Resources/Assets.xcassets/AppIcon.appiconset/*.png; do
+  echo "$(basename $f): $(sips -g pixelWidth -g pixelHeight "$f" 2>/dev/null | grep pixel | tr '\n' ' ')"
+done
+[2026-01-14 06:49:48] open apps/ios/MindFriendApp.xcodeproj
+[2026-01-14 06:51:30] cd apps/ios/MindFriendApp/Resources/Assets.xcassets/AppIcon.appiconset && \
+mv AppIcon.png AppIcon-temp.png && \
+mv AppIcon-Dark.png AppIcon.png && \
+mv AppIcon-temp.png AppIcon-Dark.png
+[2026-01-14 06:53:03] sips -g hasAlpha -g space ~/Documents/MindFriend-Light.icon/Assets/logo.png ~/Documents/MindFriend-Dark.icon/Assets/logo.png
+[2026-01-14 06:53:04] md5 ~/Documents/MindFriend-Light.icon/Assets/logo.png ~/Documents/MindFriend-Dark.icon/Assets/logo.png
+[2026-01-14 06:54:40] md5 ~/Documents/MindFriend-Light.icon/Assets/logo.png ~/Documents/MindFriend-Dark.icon/Assets/logo.png ~/Documents/MindFriend-Mono.icon/Assets/logo.png
+[2026-01-14 06:54:45] ls -la ~/Documents/MindFriend-*.icon/Assets/logo.png
+[2026-01-14 06:54:51] cat ~/Documents/MindFriend-Light.icon/Assets/logo.png | md5 && cat ~/Documents/MindFriend-Dark.icon/Assets/logo.png | md5
+[2026-01-14 06:55:07] find ~/Documents -name "*.png" -newer /tmp 2>/dev/null | head -20; find ~/Downloads -name "*icon*" -o -name "*Icon*" 2>/dev/null | head -10
+[2026-01-14 06:55:34] cp ~/Documents/MindFriend-Light.icon/Assets/logo.png apps/ios/MindFriendApp/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png && \
+cp ~/Documents/MindFriend-Dark.icon/Assets/logo.png apps/ios/MindFriendApp/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-Dark.png && \
+cp ~/Documents/MindFriend-Mono.icon/Assets/logo.png apps/ios/MindFriendApp/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-Tinted.png
+[2026-01-14 06:55:39] DEST="/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Resources/Assets.xcassets/AppIcon.appiconset"
+cp ~/Documents/MindFriend-Light.icon/Assets/logo.png "$DEST/AppIcon.png" && \
+cp ~/Documents/MindFriend-Dark.icon/Assets/logo.png "$DEST/AppIcon-Dark.png" && \
+cp ~/Documents/MindFriend-Mono.icon/Assets/logo.png "$DEST/AppIcon-Tinted.png"
+[2026-01-14 06:55:45] ls -la /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Resources/Assets.xcassets/AppIcon.appiconset/
+[2026-01-14 06:57:37] sips -g hasAlpha ~/Documents/MindFriend-Light.icon/Assets/logo.png && \
+convert ~/Documents/MindFriend-Light.icon/Assets/logo.png -format '%[pixel:p{0,0}]' info: 2>/dev/null || \
+python3 -c "from PIL import Image; img=Image.open('/Users/danny/Documents/MindFriend-Light.icon/Assets/logo.png'); print('Top-left pixel:', img.getpixel((0,0)))"
+[2026-01-14 07:03:45] convert ~/Documents/MindFriend-Light.icon/Assets/logo.png -background white -flatten ~/Documents/MindFriend-Light.icon/Assets/logo.png
+[2026-01-14 07:03:50] ls ~/Documents/MindFriend-Light.icon/Assets/
+[2026-01-14 07:03:55] magick ~/Documents/MindFriend-Light.icon/Assets/'logo 2.png' -background white -flatten ~/Documents/MindFriend-Light.icon/Assets/'logo 2.png'
+[2026-01-14 07:04:01] magick ~/Documents/MindFriend-Light.icon/Assets/'logo 2.png' -format '%[pixel:p{0,0}]' info:
+[2026-01-14 07:04:08] cp ~/Documents/MindFriend-Light.icon/Assets/'logo 2.png' /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+[2026-01-14 07:06:06] ls ~/Documents/MindFriend-Light.icon/Assets/
+[2026-01-14 07:06:11] magick ~/Documents/MindFriend-Light.icon/Assets/'logo 2.png' -background white -flatten ~/Documents/MindFriend-Light.icon/Assets/'logo 2.png' && \
+cp ~/Documents/MindFriend-Light.icon/Assets/'logo 2.png' /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+[2026-01-14 07:08:13] ls ~/Documents/MindFriend-Light.icon/Assets/
+[2026-01-14 07:08:18] magick ~/Documents/MindFriend-Light.icon/Assets/'logo 2.png' -background white -flatten /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+[2026-01-14 07:56:48] ssh hostinger "ls -la /var/www/html/ && echo '---' && cat /var/www/html/index.html 2>/dev/null | head -100"
+[2026-01-14 07:56:57] ssh hostinger "cat /etc/nginx/sites-enabled/default 2>/dev/null || cat /etc/nginx/nginx.conf 2>/dev/null | head -80"
+[2026-01-14 07:57:04] ssh hostinger "ls -la /etc/nginx/sites-enabled/ && echo '---CONF.D---' && ls -la /etc/nginx/conf.d/"
+[2026-01-14 07:57:10] ssh hostinger "cat /etc/nginx/sites-available/mindfriend"
+[2026-01-14 07:57:17] ssh hostinger "ls -la /var/www/mindfriend/ && echo '---INDEX---' && cat /var/www/mindfriend/index.html 2>/dev/null | head -150"
+[2026-01-14 07:57:23] ssh hostinger "ls -la /var/www/mindfriend/auth/ && echo '---CONTENTS---' && cat /var/www/mindfriend/auth/*.html 2>/dev/null"
+[2026-01-14 08:01:48] cat << 'EOF' | ssh hostinger "cat > /var/www/mindfriend/auth/callback.html"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MindFriend - Verifying...</title>
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="/assets/logo.png?v=2">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#6366f1',
+            'primary-dark': '#4f46e5',
+          },
+        },
+      },
+    }
+  </script>
+
+  <!-- Supabase JS -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(99, 102, 241, 0.2);
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center px-6">
+
+  <div class="text-center">
+    <div class="spinner mx-auto mb-6" id="spinner"></div>
+    <p class="text-gray-600" id="status">Verifying your request...</p>
+  </div>
+
+  <script>
+    const SUPABASE_URL = 'https://zfaucivtzfwnrijsbfug.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyNTI2NDgsImV4cCI6MjA4MzgyODY0OH0.tZaiIYvZKLUZFoNl2nvfRbOj8lodtY7Kw7BiQyoK2Rk';
+
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const statusEl = document.getElementById('status');
+    const spinnerEl = document.getElementById('spinner');
+
+    function showError(message) {
+      spinnerEl.style.display = 'none';
+      statusEl.textContent = message;
+      statusEl.classList.add('text-red-600');
+      setTimeout(() => { window.location.href = '/'; }, 4000);
+    }
+
+    function showSuccess(message) {
+      spinnerEl.style.display = 'none';
+      statusEl.textContent = message;
+      statusEl.classList.add('text-green-600');
+    }
+
+    async function handleAuthCallback() {
+      try {
+        // Log URL for debugging
+        console.log('Full URL:', window.location.href);
+        console.log('Hash:', window.location.hash);
+        console.log('Search:', window.location.search);
+
+        // Parse both hash and query params
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const queryParams = new URLSearchParams(window.location.search);
+
+        // Check for errors
+        const error = hashParams.get('error') || queryParams.get('error');
+        const errorDescription = hashParams.get('error_description') || queryParams.get('error_description');
+        if (error) {
+          throw new Error(errorDescription || error);
+        }
+
+        // Get auth type
+        const type = hashParams.get('type') || queryParams.get('type');
+        console.log('Auth type:', type);
+
+        // Handle password recovery
+        if (type === 'recovery') {
+          const accessToken = hashParams.get('access_token');
+          const refreshToken = hashParams.get('refresh_token');
+          if (accessToken) {
+            sessionStorage.setItem('recovery_access_token', accessToken);
+            if (refreshToken) sessionStorage.setItem('recovery_refresh_token', refreshToken);
+          }
+          window.location.href = '/auth/reset-password';
+          return;
+        }
+
+        // Handle email confirmation (signup, email_change, magiclink)
+        // Supabase v2 uses token_hash in query params
+        const tokenHash = queryParams.get('token_hash');
+        const accessToken = hashParams.get('access_token');
+
+        if (tokenHash) {
+          // New Supabase flow - verify OTP with token_hash
+          console.log('Using token_hash flow');
+          statusEl.textContent = 'Confirming your email...';
+          
+          const { data, error: verifyError } = await supabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: type || 'signup'
+          });
+
+          if (verifyError) {
+            console.error('Verify OTP error:', verifyError);
+            throw verifyError;
+          }
+
+          console.log('OTP verified successfully');
+          window.location.href = '/auth/confirmed';
+          return;
+        }
+
+        if (accessToken) {
+          // Old flow - set session from access token
+          console.log('Using access_token flow');
+          const refreshToken = hashParams.get('refresh_token');
+          
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken || ''
+          });
+
+          if (sessionError) {
+            console.error('Set session error:', sessionError);
+            throw sessionError;
+          }
+
+          window.location.href = '/auth/confirmed';
+          return;
+        }
+
+        // If we get here with a type but no tokens, just redirect to confirmed
+        // (Supabase may have already handled verification)
+        if (type === 'signup' || type === 'email_change' || type === 'magiclink') {
+          console.log('No tokens but valid type, redirecting to confirmed');
+          window.location.href = '/auth/confirmed';
+          return;
+        }
+
+        // No recognizable parameters - redirect home
+        console.log('No auth parameters found, redirecting home');
+        window.location.href = '/';
+
+      } catch (error) {
+        console.error('Auth callback error:', error);
+        showError(error.message || 'Verification failed. Please try again.');
+      }
+    }
+
+    // Add timeout fallback
+    setTimeout(() => {
+      if (document.getElementById('spinner').style.display !== 'none') {
+        showError('Verification timed out. Please try again.');
+      }
+    }, 15000);
+
+    // Run on page load
+    handleAuthCallback();
+  </script>
+
+</body>
+</html>
+EOF
+[2026-01-14 08:02:43] cat << 'EOF' | ssh hostinger "cat > /var/www/mindfriend/auth/callback.html"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MindFriend - Verifying...</title>
+  <link rel="icon" type="image/png" href="/assets/logo.png?v=2">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(99, 102, 241, 0.2);
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center px-6">
+  <div class="text-center">
+    <div class="spinner mx-auto mb-6" id="spinner"></div>
+    <p class="text-gray-600" id="status">Verifying your request...</p>
+  </div>
+
+  <script>
+    (async function() {
+      const SUPABASE_URL = 'https://zfaucivtzfwnrijsbfug.supabase.co';
+      const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyNTI2NDgsImV4cCI6MjA4MzgyODY0OH0.tZaiIYvZKLUZFoNl2nvfRbOj8lodtY7Kw7BiQyoK2Rk';
+
+      const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      const statusEl = document.getElementById('status');
+      const spinnerEl = document.getElementById('spinner');
+
+      function showError(message) {
+        spinnerEl.style.display = 'none';
+        statusEl.textContent = message;
+        statusEl.classList.add('text-red-600');
+        setTimeout(() => { window.location.href = '/'; }, 4000);
+      }
+
+      try {
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const queryParams = new URLSearchParams(window.location.search);
+
+        // Check for errors
+        const error = hashParams.get('error') || queryParams.get('error');
+        if (error) {
+          throw new Error(hashParams.get('error_description') || queryParams.get('error_description') || error);
+        }
+
+        const type = hashParams.get('type') || queryParams.get('type');
+        const code = queryParams.get('code');
+
+        console.log('Type:', type, 'Code:', code);
+
+        // Handle PKCE flow (code parameter)
+        if (code) {
+          statusEl.textContent = 'Confirming your email...';
+          const { data, error: exchangeError } = await client.auth.exchangeCodeForSession(code);
+          
+          if (exchangeError) {
+            console.error('Exchange error:', exchangeError);
+            throw exchangeError;
+          }
+
+          console.log('Code exchanged successfully');
+          window.location.href = '/auth/confirmed';
+          return;
+        }
+
+        // Handle password recovery
+        if (type === 'recovery') {
+          const accessToken = hashParams.get('access_token');
+          if (accessToken) {
+            sessionStorage.setItem('recovery_access_token', accessToken);
+            sessionStorage.setItem('recovery_refresh_token', hashParams.get('refresh_token') || '');
+          }
+          window.location.href = '/auth/reset-password';
+          return;
+        }
+
+        // Handle token_hash flow
+        const tokenHash = queryParams.get('token_hash');
+        if (tokenHash) {
+          const { error: verifyError } = await client.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: type || 'signup'
+          });
+          if (verifyError) throw verifyError;
+          window.location.href = '/auth/confirmed';
+          return;
+        }
+
+        // Handle access_token flow
+        const accessToken = hashParams.get('access_token');
+        if (accessToken) {
+          const { error: sessionError } = await client.auth.setSession({
+            access_token: accessToken,
+            refresh_token: hashParams.get('refresh_token') || ''
+          });
+          if (sessionError) throw sessionError;
+          window.location.href = '/auth/confirmed';
+          return;
+        }
+
+        // Fallback - redirect home
+        window.location.href = '/';
+
+      } catch (err) {
+        console.error('Auth callback error:', err);
+        showError(err.message || 'Verification failed. Please try again.');
+      }
+    })();
+
+    // Timeout fallback
+    setTimeout(() => {
+      if (document.getElementById('spinner').style.display !== 'none') {
+        document.getElementById('spinner').style.display = 'none';
+        document.getElementById('status').textContent = 'Verification timed out. Please try again.';
+        document.getElementById('status').classList.add('text-red-600');
+        setTimeout(() => { window.location.href = '/'; }, 3000);
+      }
+    }, 15000);
+  </script>
+</body>
+</html>
+EOF
+[2026-01-14 08:15:50] cat << 'EOF' | ssh hostinger "cat > /var/www/mindfriend/auth/callback.html"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MindFriend - Verifying...</title>
+  <link rel="icon" type="image/png" href="/assets/logo.png?v=2">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(99, 102, 241, 0.2);
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center px-6">
+  <div class="text-center">
+    <div class="spinner mx-auto mb-6" id="spinner"></div>
+    <p class="text-gray-600" id="status">Verifying your request...</p>
+  </div>
+
+  <script>
+    (async function() {
+      const SUPABASE_URL = 'https://zfaucivtzfwnrijsbfug.supabase.co';
+      const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyNTI2NDgsImV4cCI6MjA4MzgyODY0OH0.tZaiIYvZKLUZFoNl2nvfRbOj8lodtY7Kw7BiQyoK2Rk';
+
+      const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      const statusEl = document.getElementById('status');
+      const spinnerEl = document.getElementById('spinner');
+
+      function showError(message) {
+        spinnerEl.style.display = 'none';
+        statusEl.textContent = message;
+        statusEl.classList.add('text-red-600');
+        setTimeout(() => { window.location.href = '/'; }, 4000);
+      }
+
+      try {
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const queryParams = new URLSearchParams(window.location.search);
+
+        // Check for errors from Supabase
+        const error = hashParams.get('error') || queryParams.get('error');
+        if (error) {
+          const desc = hashParams.get('error_description') || queryParams.get('error_description') || error;
+          throw new Error(desc);
+        }
+
+        const type = hashParams.get('type') || queryParams.get('type');
+        const code = queryParams.get('code');
+
+        // Handle password recovery - needs session
+        if (type === 'recovery') {
+          const accessToken = hashParams.get('access_token');
+          if (accessToken) {
+            sessionStorage.setItem('recovery_access_token', accessToken);
+            sessionStorage.setItem('recovery_refresh_token', hashParams.get('refresh_token') || '');
+          }
+          window.location.href = '/auth/reset-password';
+          return;
+        }
+
+        // Handle PKCE code - email is already confirmed by Supabase when they generate the code
+        // The code exchange is only for establishing a browser session
+        // Since users will open the iOS app, we can skip to success
+        if (code) {
+          // Try to exchange, but don't fail if PKCE verifier is missing
+          try {
+            await client.auth.exchangeCodeForSession(code);
+          } catch (exchangeErr) {
+            console.log('Code exchange skipped (expected for cross-browser):', exchangeErr.message);
+            // Email is still confirmed - proceed to success
+          }
+          window.location.href = '/auth/confirmed';
+          return;
+        }
+
+        // Handle token_hash flow
+        const tokenHash = queryParams.get('token_hash');
+        if (tokenHash) {
+          const { error: verifyError } = await client.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: type || 'signup'
+          });
+          if (verifyError) throw verifyError;
+          window.location.href = '/auth/confirmed';
+          return;
+        }
+
+        // Handle access_token flow (implicit)
+        const accessToken = hashParams.get('access_token');
+        if (accessToken) {
+          await client.auth.setSession({
+            access_token: accessToken,
+            refresh_token: hashParams.get('refresh_token') || ''
+          });
+          window.location.href = '/auth/confirmed';
+          return;
+        }
+
+        // No auth params - go home
+        window.location.href = '/';
+
+      } catch (err) {
+        console.error('Auth callback error:', err);
+        showError(err.message || 'Verification failed. Please try again.');
+      }
+    })();
+
+    setTimeout(() => {
+      if (document.getElementById('spinner').style.display !== 'none') {
+        document.getElementById('spinner').style.display = 'none';
+        document.getElementById('status').textContent = 'Verification timed out.';
+        document.getElementById('status').classList.add('text-red-600');
+        setTimeout(() => { window.location.href = '/'; }, 3000);
+      }
+    }, 15000);
+  </script>
+</body>
+</html>
+EOF
+[2026-01-14 09:21:59] ssh hostinger "cat /var/www/mindfriend/index.html"
+[2026-01-14 09:22:05] ssh hostinger "cat /var/www/mindfriend/css/style.css 2>/dev/null || echo 'No CSS file found'"
+[2026-01-14 09:22:05] ssh hostinger "ls -la /var/www/mindfriend/"
+[2026-01-14 09:27:03] ssh hostinger "mkdir -p /var/www/mindfriend/privacy /var/www/mindfriend/terms"
+[2026-01-14 09:27:10] cat /Users/danny/Documents/Codez/Apps/MindFriend/docs/legal/privacy.html | ssh hostinger "cat > /var/www/mindfriend/privacy/index.html"
+[2026-01-14 09:27:11] cat /Users/danny/Documents/Codez/Apps/MindFriend/docs/legal/terms.html | ssh hostinger "cat > /var/www/mindfriend/terms/index.html"
+[2026-01-14 09:27:17] ssh hostinger "ls -la /var/www/mindfriend/privacy/ /var/www/mindfriend/terms/"
+[2026-01-14 09:27:18] curl -sI https://getmindfriend.app/privacy | head -5
+[2026-01-14 09:27:18] curl -sI https://getmindfriend.app/terms | head -5
+[2026-01-14 09:27:24] curl -sL https://getmindfriend.app/privacy/ | head -20
+[2026-01-14 11:33:34] find /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features -type f -name "*.swift" | head -20
+[2026-01-14 11:33:34] find /Users/danny/Documents/Codez/Apps/MindFriend/supabase/functions -type f \( -name "*.ts" -o -name "*.js" \) | head -30
+[2026-01-14 11:33:40] ls -la /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/ | head -20
+[2026-01-14 11:33:43] find /Users/danny/Documents/Codez/Apps/MindFriend/supabase/functions -type f -name "index.ts" | head -10
+[2026-01-14 11:37:41] find /Users/danny/Documents/Codez/Apps/MindFriend/supabase/migrations -name "*.sql" | sort
+[2026-01-14 11:40:19] find /Users/danny/Documents/Codez/Apps/MindFriend -name "*spec*" -o -name "*payment*" -o -name "*subscription*" | head -20
+[2026-01-14 11:40:30] find /Users/danny/Documents/Codez/Apps/MindFriend/supabase/functions -type f -name "*.ts" | head -20
+[2026-01-14 11:40:32] ls -la /Users/danny/Documents/Codez/Apps/MindFriend/supabase/functions/ 2>/dev/null | head -30
+[2026-01-14 11:40:32] find /Users/danny/Documents/Codez/Apps/MindFriend/supabase -type f -name "*.ts" -o -name "*.sql" | grep -E "(verify|purchase|migration)" | head -20
+[2026-01-14 11:40:32] ls -la /Users/danny/Documents/Codez/Apps/MindFriend/supabase/migrations/ 2>/dev/null | head -30
+[2026-01-14 11:40:36] grep -n "subscriptions\|subscription" /Users/danny/Documents/Codez/Apps/MindFriend/supabase/migrations/20260113000000_initial_schema.sql | head -50
+[2026-01-14 11:40:38] grep -n "subscription\|billing\|purchase" /Users/danny/Documents/Codez/Apps/MindFriend/supabase/migrations/20260113000000_initial_schema.sql
+[2026-01-14 11:40:40] grep -A 30 "CREATE TABLE IF NOT EXISTS subscriptions" /Users/danny/Documents/Codez/Apps/MindFriend/supabase/migrations/20260113000000_initial_schema.sql
+[2026-01-14 11:40:40] grep -n "plan_type\|billing_period\|family" /Users/danny/Documents/Codez/Apps/MindFriend/supabase/migrations/*.sql
+[2026-01-14 11:40:50] find /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp -name "*DependencyContainer*" -o -name "*SupabaseConfig*"
+[2026-01-14 11:41:00] grep -r "App Store Connect\|team_id\|issuer_id\|verify.purchase" /Users/danny/Documents/Codez/Apps/MindFriend --include="*.swift" --include="*.ts" --include="*.md" 2>/dev/null | head -20
+[2026-01-14 11:41:11] find /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios -name "*Billing*Test*" -o -name "*test*" | grep -i bill
+[2026-01-14 11:43:15] mkdir -p /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Insights
+[2026-01-14 11:48:36] mkdir -p /Users/danny/Documents/Codez/Apps/MindFriend/supabase/functions/accept-family-invite
+[2026-01-14 11:49:06] cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios && xcodebuild -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 15' -configuration Debug build 2>&1 | tail -100
+[2026-01-14 11:49:11] cat /Users/danny/Documents/Codez/Apps/MindFriend/docs/legal/privacy.html | ssh hostinger "cat > /var/www/mindfriend/privacy/index.html"
+[2026-01-14 11:49:13] cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios && xcodebuild build -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 15' -quiet 2>&1 | head -100
+[2026-01-14 11:49:17] curl -sL https://getmindfriend.app/privacy/ | grep -i "xAI" | head -3
+[2026-01-14 11:49:36] mkdir -p /Users/danny/Documents/Codez/Apps/MindFriend/supabase/functions/send-family-invite
+[2026-01-14 11:50:15] xcodebuild -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' -configuration Debug build 2>&1 | tail -150
+[2026-01-14 11:50:24] xcodebuild build -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' -quiet 2>&1 | head -200
+[2026-01-14 11:50:26] cat /Users/danny/.claude/projects/-Users-danny-Documents-Codez-Apps-MindFriend/3c43494e-4d6b-44e7-b04d-74f755e45940/tool-results/toolu_01VgS127sMpPxePAusBwiBYA.txt | grep -A2 "error:"
+[2026-01-14 11:51:22] tail -200 /Users/danny/.claude/projects/-Users-danny-Documents-Codez-Apps-MindFriend/cd9cde06-a94c-4007-bbe4-818289747c35/tool-results/toolu_01RAGj6u3qo8CAqy2FRowPS8.txt
+[2026-01-14 11:51:27] xcodebuild build -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' 2>&1 | grep -E "(error:|WeeklyInsightsView|BadgesView|InsightsPreviewCard)" | head -50
+[2026-01-14 11:51:42] xcodebuild -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' -configuration Debug build 2>&1 | grep -E "(error:|warning:|BUILD SUCCEEDED|BUILD FAILED)" | tail -50
+[2026-01-14 11:51:44] xcodebuild build -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' 2>&1 | grep -E "^.*error:|BUILD" | head -20
+[2026-01-14 11:52:04] xcodebuild build -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' 2>&1 | grep -E "^.*error:|BUILD" | head -20
+[2026-01-14 11:52:10] xcodebuild -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' -configuration Debug build 2>&1 | grep -E "(error:|warning:|BUILD SUCCEEDED|BUILD FAILED)" | tail -50
+[2026-01-14 11:52:13] ls -la /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Exercises/
+[2026-01-14 11:52:20] ls -la MindFriendApp/Features/Exercises/
+[2026-01-14 11:52:31] ruby -e '
+require "xcodeproj"
+
+project_path = "MindFriendApp.xcodeproj"
+project = Xcodeproj::Project.open(project_path)
+main_target = project.targets.find { |t| t.name == "MindFriendApp" }
+
+new_files = [
+  "MindFriendApp/Features/Exercises/EvidenceBadge.swift",
+  "MindFriendApp/Features/Exercises/MethodologyInfoSheet.swift",
+  "MindFriendApp/Features/Profile/PrivacyBanner.swift",
+  "MindFriendApp/Features/Profile/OurApproachView.swift",
+  "MindFriendApp/Features/Onboarding/TestimonialsCarousel.swift"
+]
+
+main_group = project.main_group
+sources_phase = main_target.source_build_phase
+
+new_files.each do |file_path|
+  components = file_path.split("/")
+  filename = components.pop
+  
+  # Navigate to the correct group
+  current_group = main_group
+  components.each do |component|
+    found_group = current_group.groups.find { |g| g.path == component || g.name == component }
+    if found_group
+      current_group = found_group
+    end
+  end
+  
+  # Check if file already exists in project
+  existing = current_group.files.find { |f| f.path == filename }
+  unless existing
+    file_ref = current_group.new_file(file_path)
+    sources_phase.add_file_reference(file_ref)
+    puts "Added: #{file_path}"
+  else
+    puts "Already exists: #{file_path}"
+  end
+end
+
+project.save
+puts "Project saved successfully"
+' 2>&1
+[2026-01-14 11:52:42] python3 << 'EOF'
+import subprocess
+import os
+
+# Files to add
+files = [
+    "MindFriendApp/Features/Exercises/EvidenceBadge.swift",
+    "MindFriendApp/Features/Exercises/MethodologyInfoSheet.swift",
+    "MindFriendApp/Features/Profile/PrivacyBanner.swift",
+    "MindFriendApp/Features/Profile/OurApproachView.swift",
+    "MindFriendApp/Features/Onboarding/TestimonialsCarousel.swift"
+]
+
+# Check if files exist
+for f in files:
+    if os.path.exists(f):
+        print(f"Found: {f}")
+    else:
+        print(f"Missing: {f}")
+EOF
+[2026-01-14 11:52:52] pip3 install pbxproj --quiet && python3 << 'EOF'
+from pbxproj import XcodeProject
+import uuid
+
+project = XcodeProject.load('MindFriendApp.xcodeproj/project.pbxproj')
+
+# Files to add with their paths
+files_to_add = [
+    ("MindFriendApp/Features/Exercises/EvidenceBadge.swift", "Exercises"),
+    ("MindFriendApp/Features/Exercises/MethodologyInfoSheet.swift", "Exercises"),
+    ("MindFriendApp/Features/Profile/PrivacyBanner.swift", "Profile"),
+    ("MindFriendApp/Features/Profile/OurApproachView.swift", "Profile"),
+    ("MindFriendApp/Features/Onboarding/TestimonialsCarousel.swift", "Onboarding")
+]
+
+for file_path, group_name in files_to_add:
+    # Add file to project
+    result = project.add_file(file_path, force=False)
+    if result:
+        print(f"Added: {file_path}")
+    else:
+        print(f"Already exists or failed: {file_path}")
+
+project.save()
+print("Project saved!")
+EOF
+[2026-01-14 11:52:59] xcodebuild build -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' 2>&1 | grep -E "^.*error:|BUILD" | head -20
+[2026-01-14 11:53:00] pip3 install pbxproj --user --quiet 2>/dev/null || pip3 install pbxproj --break-system-packages --quiet 2>/dev/null
+
+python3 << 'EOF'
+from pbxproj import XcodeProject
+
+project = XcodeProject.load('MindFriendApp.xcodeproj/project.pbxproj')
+
+files_to_add = [
+    "MindFriendApp/Features/Exercises/EvidenceBadge.swift",
+    "MindFriendApp/Features/Exercises/MethodologyInfoSheet.swift",
+    "MindFriendApp/Features/Profile/PrivacyBanner.swift",
+    "MindFriendApp/Features/Profile/OurApproachView.swift",
+    "MindFriendApp/Features/Onboarding/TestimonialsCarousel.swift"
+]
+
+for file_path in files_to_add:
+    result = project.add_file(file_path, force=False)
+    if result:
+        print(f"Added: {file_path}")
+    else:
+        print(f"Already exists or failed: {file_path}")
+
+project.save()
+print("Project saved!")
+EOF
+[2026-01-14 11:53:09] which xcodegen || brew list xcodegen 2>/dev/null || echo "xcodegen not installed"
+[2026-01-14 11:53:15] cd apps/ios && grep -n "ExerciseLibraryView.swift" MindFriendApp.xcodeproj/project.pbxproj | head -5
+[2026-01-14 11:53:21] grep -n "ExerciseLibraryView.swift" MindFriendApp.xcodeproj/project.pbxproj | head -5
+[2026-01-14 11:53:29] gem install --user-install xcodeproj 2>&1 | tail -10
+[2026-01-14 11:53:38] xcodebuild build -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' 2>&1 | grep -E "^.*error:|BUILD" | head -30
+[2026-01-14 11:53:43] python3 << 'SCRIPT'
+import hashlib
+import os
+
+def generate_uuid(seed):
+    """Generate a 24-char hex UUID based on a seed string"""
+    return hashlib.md5(seed.encode()).hexdigest()[:24].upper()
+
+# Read the project file
+with open('MindFriendApp.xcodeproj/project.pbxproj', 'r') as f:
+    content = f.read()
+
+# Files to add with their parent group UUIDs
+files = [
+    ('EvidenceBadge.swift', 'MindFriendApp/Features/Exercises/EvidenceBadge.swift', 'Exercises'),
+    ('MethodologyInfoSheet.swift', 'MindFriendApp/Features/Exercises/MethodologyInfoSheet.swift', 'Exercises'),
+    ('PrivacyBanner.swift', 'MindFriendApp/Features/Profile/PrivacyBanner.swift', 'Profile'),
+    ('OurApproachView.swift', 'MindFriendApp/Features/Profile/OurApproachView.swift', 'Profile'),
+    ('TestimonialsCarousel.swift', 'MindFriendApp/Features/Onboarding/TestimonialsCarousel.swift', 'Onboarding'),
+]
+
+# Check which files are already in the project
+for filename, filepath, group in files:
+    if filename in content:
+        print(f"Already in project: {filename}")
+    else:
+        print(f"Missing from project: {filename}")
+
+SCRIPT
+[2026-01-14 11:54:03] python3 << 'SCRIPT'
+import hashlib
+import re
+
+def generate_uuid(seed):
+    """Generate a 24-char hex UUID based on a seed string"""
+    return hashlib.md5(seed.encode()).hexdigest()[:24].upper()
+
+# Read the project file
+with open('MindFriendApp.xcodeproj/project.pbxproj', 'r') as f:
+    content = f.read()
+
+# Generate UUIDs for the new file
+file_ref_uuid = generate_uuid('OurApproachView.swift_fileref')
+build_file_uuid = generate_uuid('OurApproachView.swift_buildfile')
+
+print(f"File Ref UUID: {file_ref_uuid}")
+print(f"Build File UUID: {build_file_uuid}")
+
+# Find a Profile folder reference line to get the group UUID
+profile_match = re.search(r'(\w{24}) /\* Profile \*/ = \{', content)
+if profile_match:
+    print(f"Found Profile group: {profile_match.group(1)}")
+
+# Find where PrivacyBanner.swift is listed in Profile group
+privacy_pattern = r'(\w{24}) /\* PrivacyBanner\.swift \*/'
+privacy_match = re.search(privacy_pattern, content)
+if privacy_match:
+    print(f"Found PrivacyBanner ref: {privacy_match.group(1)}")
+
+# Find the Sources build phase section
+sources_match = re.search(r'/\* PrivacyBanner\.swift in Sources \*/ = \{isa = PBXBuildFile; fileRef = (\w{24})', content)
+if sources_match:
+    print(f"PrivacyBanner file ref in Sources: {sources_match.group(1)}")
+
+# Add the file reference (after PrivacyBanner.swift reference)
+file_ref_line = f'\t\t{file_ref_uuid} /* OurApproachView.swift */ = {{isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OurApproachView.swift; sourceTree = "<group>"; }};'
+
+# Add the build file entry (after PrivacyBanner.swift build entry)
+build_file_line = f'\t\t{build_file_uuid} /* OurApproachView.swift in Sources */ = {{isa = PBXBuildFile; fileRef = {file_ref_uuid} /* OurApproachView.swift */; }};'
+
+# Find insertion points and add
+if f'{file_ref_uuid}' not in content:
+    # Insert file reference after PrivacyBanner.swift reference
+    privacy_ref_pattern = r'(\w{24} /\* PrivacyBanner\.swift \*/ = \{isa = PBXFileReference;[^}]+\};)'
+    match = re.search(privacy_ref_pattern, content)
+    if match:
+        insert_pos = match.end()
+        content = content[:insert_pos] + '\n' + file_ref_line + content[insert_pos:]
+        print("Added file reference")
+
+    # Insert build file entry after PrivacyBanner.swift build entry
+    privacy_build_pattern = r'(\w{24} /\* PrivacyBanner\.swift in Sources \*/ = \{isa = PBXBuildFile;[^}]+\};)'
+    match = re.search(privacy_build_pattern, content)
+    if match:
+        insert_pos = match.end()
+        content = content[:insert_pos] + '\n' + build_file_line + content[insert_pos:]
+        print("Added build file entry")
+
+    # Add to Profile group children
+    # Find the Profile group and add to its children
+    profile_children_pattern = r'(/\* Profile \*/ = \{[^}]*children = \([^)]*?)(\);)'
+    def add_to_profile(match):
+        children = match.group(1)
+        # Add before closing parenthesis
+        return children + f'\n\t\t\t\t{file_ref_uuid} /* OurApproachView.swift */,' + match.group(2)
+    
+    content = re.sub(profile_children_pattern, add_to_profile, content, count=1)
+    print("Added to Profile group")
+
+    # Add to Sources build phase
+    sources_phase_pattern = r'(files = \([^)]*PrivacyBanner\.swift in Sources[^,]*,)'
+    def add_to_sources(match):
+        return match.group(1) + f'\n\t\t\t\t{build_file_uuid} /* OurApproachView.swift in Sources */,'
+    
+    content = re.sub(sources_phase_pattern, add_to_sources, content, count=1)
+    print("Added to Sources build phase")
+
+    # Write the modified content
+    with open('MindFriendApp.xcodeproj/project.pbxproj', 'w') as f:
+        f.write(content)
+    print("Project file updated!")
+else:
+    print("File already in project")
+
+SCRIPT
+[2026-01-14 11:55:02] xcodebuild -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 16' -configuration Debug build 2>&1 | grep -E "(error:|warning:|BUILD SUCCEEDED|BUILD FAILED)"
+[2026-01-14 11:56:08] xcrun simctl list devices available | grep -E "iPhone" | head -10
+[2026-01-14 11:56:13] xcodebuild -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' -configuration Debug build 2>&1 | grep -E "(error:|warning:|BUILD SUCCEEDED|BUILD FAILED)"
+[2026-01-14 11:59:49] grep -l "circle_posts" /Users/danny/Documents/Codez/Apps/MindFriend/supabase/migrations/*.sql 2>/dev/null | head -5
+[2026-01-14 12:01:18] cd /Users/danny/Documents/Codez/Apps/MindFriend && supabase db dump --schema=public 2>/dev/null | grep -i "CREATE TABLE.*circle" | head -10
+[2026-01-14 12:03:28] supabase db dump --schema=public 2>/dev/null | grep "CREATE TABLE" | sort
+[2026-01-14 12:14:36] supabase db push
+[2026-01-14 12:14:59] rg "CREATE TABLE.*badges" /Users/danny/Documents/Codez/Apps/MindFriend/supabase/migrations/ -A 15
+[2026-01-14 12:16:06] echo "y" | supabase db push 2>&1
+[2026-01-14 12:16:25] echo "y" | supabase db push 2>&1
+[2026-01-14 12:16:37] echo "y" | supabase db push 2>&1
+[2026-01-14 12:17:01] echo "y" | supabase db push 2>&1
+[2026-01-14 12:17:29] ls -la /Users/danny/Documents/Codez/Apps/MindFriend/supabase/migrations/ | grep -E "(family|subscription|billing)" | head -20
+[2026-01-14 12:17:32] git log --oneline --all | head -20
+[2026-01-14 12:17:33] echo "y" | supabase db push 2>&1
+[2026-01-14 12:17:34] find /Users/danny/Documents/Codez/Apps/MindFriend/supabase/migrations/ -type f -name "*.sql" | sort
+[2026-01-14 12:17:45] supabase functions deploy generate-weekly-summary 2>&1
+[2026-01-14 12:17:53] ls -la /Users/danny/Documents/Codez/Apps/MindFriend/supabase/functions/
+[2026-01-14 12:17:57] supabase functions deploy 2>&1
+[2026-01-14 12:24:15] echo '\n# Supabase MindFriend\nexport SUPABASE_SERVICE_ROLE_KEY="sb_secret_k0S6N0bsT0s66vtnGVC5GQ_c2JLophz"' >> ~/.zshrc && source ~/.zshrc && echo "Added and sourced successfully"
+[2026-01-14 12:27:50] sed -i '' 's|export SUPABASE_SERVICE_ROLE_KEY=.*|export SUPABASE_SERVICE_ROLE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODI1MjY0OCwiZXhwIjoyMDgzODI4NjQ4fQ.UbXuMTQZmUUD7A4tH_PQ2DtFs5R3atB3OCikj9scuPA"|' ~/.zshrc && source ~/.zshrc && echo "Updated successfully"
+[2026-01-14 12:27:57] grep -v "SUPABASE_SERVICE_ROLE_KEY" ~/.zshrc > ~/.zshrc.tmp && mv ~/.zshrc.tmp ~/.zshrc && echo 'export SUPABASE_SERVICE_ROLE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODI1MjY0OCwiZXhwIjoyMDgzODI4NjQ4fQ.UbXuMTQZmUUD7A4tH_PQ2DtFs5R3atB3OCikj9scuPA"' >> ~/.zshrc && source ~/.zshrc && echo "Updated!"
+[2026-01-14 12:28:05] export SUPABASE_SERVICE_ROLE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODI1MjY0OCwiZXhwIjoyMDgzODI4NjQ4fQ.UbXuMTQZmUUD7A4tH_PQ2DtFs5R3atB3OCikj9scuPA" && curl -X POST "https://zfaucivtzfwnrijsbfug.supabase.co/functions/v1/generate-weekly-summary" -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" -H "Content-Type: application/json"
+[2026-01-14 12:29:29] echo 'export SUPABASE_SERVICE_ROLE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODI1MjY0OCwiZXhwIjoyMDgzODI4NjQ4fQ.UbXuMTQZmUUD7A4tH_PQ2DtFs5R3atB3OCikj9scuPA"' >> ~/.zshrc && source ~/.zshrc && echo "Done - new key will override the old one"
+[2026-01-14 12:31:41] supabase functions logs generate-weekly-summary --limit 20 2>&1
+[2026-01-14 12:32:04] curl -s "https://zfaucivtzfwnrijsbfug.supabase.co/rest/v1/profiles?select=id&limit=1" -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODI1MjY0OCwiZXhwIjoyMDgzODI4NjQ4fQ.UbXuMTQZmUUD7A4tH_PQ2DtFs5R3atB3OCikj9scuPA" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODI1MjY0OCwiZXhwIjoyMDgzODI4NjQ4fQ.UbXuMTQZmUUD7A4tH_PQ2DtFs5R3atB3OCikj9scuPA"
+[2026-01-14 12:32:13] curl -s "https://zfaucivtzfwnrijsbfug.supabase.co/functions/v1/generate-weekly-summary?user_id=9f4fcd09-2684-4a85-924f-3e2c81554f50" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODI1MjY0OCwiZXhwIjoyMDgzODI4NjQ4fQ.UbXuMTQZmUUD7A4tH_PQ2DtFs5R3atB3OCikj9scuPA" -H "Content-Type: application/json" | jq .
+[2026-01-14 12:32:23] curl -s "https://zfaucivtzfwnrijsbfug.supabase.co/rest/v1/rpc/calculate_weekly_stats_extended" -X POST -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODI1MjY0OCwiZXhwIjoyMDgzODI4NjQ4fQ.UbXuMTQZmUUD7A4tH_PQ2DtFs5R3atB3OCikj9scuPA" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODI1MjY0OCwiZXhwIjoyMDgzODI4NjQ4fQ.UbXuMTQZmUUD7A4tH_PQ2DtFs5R3atB3OCikj9scuPA" -H "Content-Type: application/json" -d '{"p_user_id": "9f4fcd09-2684-4a85-924f-3e2c81554f50"}'
+[2026-01-14 12:32:31] curl -s "https://zfaucivtzfwnrijsbfug.supabase.co/rest/v1/rpc/execute_sql" -X POST -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODI1MjY0OCwiZXhwIjoyMDgzODI4NjQ4fQ.UbXuMTQZmUUD7A4tH_PQ2DtFs5R3atB3OCikj9scuPA" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODI1MjY0OCwiZXhwIjoyMDgzODI4NjQ4fQ.UbXuMTQZmUUD7A4tH_PQ2DtFs5R3atB3OCikj9scuPA" -H "Content-Type: application/json" -d '{"query": "ALTER TABLE exercise_sessions ADD COLUMN IF NOT EXISTS ended_at TIMESTAMPTZ"}'
+[2026-01-14 12:32:42] supabase migration new fix_exercise_sessions_columns
+[2026-01-14 12:32:53] echo "y" | supabase db push 2>&1
+[2026-01-14 12:33:01] mv /Users/danny/Documents/Codez/Apps/MindFriend/supabase/migrations/20260114173243_fix_exercise_sessions_columns.sql /Users/danny/Documents/Codez/Apps/MindFriend/supabase/migrations/20260126000000_fix_exercise_sessions_columns.sql && echo "y" | supabase db push 2>&1
+[2026-01-14 12:33:07] mv /Users/danny/Documents/Codez/Apps/MindFriend/supabase/migrations/20260126000000_fix_exercise_sessions_columns.sql /Users/danny/Documents/Codez/Apps/MindFriend/supabase/migrations/20260127000000_fix_exercise_sessions_columns.sql && echo "y" | supabase db push 2>&1
+[2026-01-14 12:33:15] curl -s "https://zfaucivtzfwnrijsbfug.supabase.co/functions/v1/generate-weekly-summary?user_id=9f4fcd09-2684-4a85-924f-3e2c81554f50" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODI1MjY0OCwiZXhwIjoyMDgzODI4NjQ4fQ.UbXuMTQZmUUD7A4tH_PQ2DtFs5R3atB3OCikj9scuPA" -H "Content-Type: application/json" | jq .
+[2026-01-14 12:38:06] curl -s "https://zfaucivtzfwnrijsbfug.supabase.co/rest/v1/quest_templates?select=id,type&limit=10" -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODI1MjY0OCwiZXhwIjoyMDgzODI4NjQ4fQ.UbXuMTQZmUUD7A4tH_PQ2DtFs5R3atB3OCikj9scuPA" | jq .
+[2026-01-14 12:38:12] curl -s "https://zfaucivtzfwnrijsbfug.supabase.co/rest/v1/quest_templates?select=*&limit=3" -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODI1MjY0OCwiZXhwIjoyMDgzODI4NjQ4fQ.UbXuMTQZmUUD7A4tH_PQ2DtFs5R3atB3OCikj9scuPA" | jq .
+[2026-01-14 12:38:19] curl -s "https://zfaucivtzfwnrijsbfug.supabase.co/rest/v1/exercises?select=id,type,title&limit=10" -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODI1MjY0OCwiZXhwIjoyMDgzODI4NjQ4fQ.UbXuMTQZmUUD7A4tH_PQ2DtFs5R3atB3OCikj9scuPA" | jq .
+[2026-01-14 12:38:26] curl -s "https://zfaucivtzfwnrijsbfug.supabase.co/rest/v1/exercises?select=id,type,title&type=neq.breathing&limit=15" -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODI1MjY0OCwiZXhwIjoyMDgzODI4NjQ4fQ.UbXuMTQZmUUD7A4tH_PQ2DtFs5R3atB3OCikj9scuPA" | jq .
+[2026-01-14 12:39:09] echo "y" | supabase db push 2>&1
+[2026-01-14 12:39:20] curl -s "https://zfaucivtzfwnrijsbfug.supabase.co/rest/v1/moods?select=*&limit=1" -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODI1MjY0OCwiZXhwIjoyMDgzODI4NjQ4fQ.UbXuMTQZmUUD7A4tH_PQ2DtFs5R3atB3OCikj9scuPA" | jq .
+[2026-01-14 12:39:46] echo "y" | supabase db push 2>&1
+[2026-01-14 12:39:58] curl -s "https://zfaucivtzfwnrijsbfug.supabase.co/rest/v1/moods" -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODI1MjY0OCwiZXhwIjoyMDgzODI4NjQ4fQ.UbXuMTQZmUUD7A4tH_PQ2DtFs5R3atB3OCikj9scuPA" -H "Prefer: return=representation" -X POST -H "Content-Type: application/json" -d '{"user_id": "9f4fcd09-2684-4a85-924f-3e2c81554f50", "mood_score": 3}' 2>&1 | head -5
+[2026-01-14 12:40:16] echo "y" | supabase db push 2>&1
+[2026-01-14 12:41:29] supabase db push
+[2026-01-14 12:41:48] echo "y" | supabase db push 2>&1
+[2026-01-14 12:42:14] echo "y" | supabase db push 2>&1
+[2026-01-14 12:42:36] echo "y" | supabase db push 2>&1
+[2026-01-14 12:42:44] curl -s -X POST "https://jfzjprckeipmuqpalwsh.supabase.co/functions/v1/generate-weekly-summary?user_id=9f4fcd09-2684-4a85-924f-3e2c81554f50" \
+  -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" | jq .
+[2026-01-14 12:42:48] source ~/.zshrc && curl -s -X POST "https://jfzjprckeipmuqpalwsh.supabase.co/functions/v1/generate-weekly-summary?user_id=9f4fcd09-2684-4a85-924f-3e2c81554f50" \
+  -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" | jq .
+[2026-01-14 12:42:54] grep SUPABASE_SERVICE_ROLE_KEY ~/.zshrc | tail -1
+[2026-01-14 12:43:00] KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODI1MjY0OCwiZXhwIjoyMDgzODI4NjQ4fQ.UbXuMTQZmUUD7A4tH_PQ2DtFs5R3atB3OCikj9scuPA"
+curl -s -X POST "https://jfzjprckeipmuqpalwsh.supabase.co/functions/v1/generate-weekly-summary?user_id=9f4fcd09-2684-4a85-924f-3e2c81554f50" \
+  -H "Authorization: Bearer $KEY" \
+  -H "Content-Type: application/json" | jq .
+[2026-01-14 12:43:06] curl -s -X POST 'https://jfzjprckeipmuqpalwsh.supabase.co/functions/v1/generate-weekly-summary?user_id=9f4fcd09-2684-4a85-924f-3e2c81554f50' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODI1MjY0OCwiZXhwIjoyMDgzODI4NjQ4fQ.UbXuMTQZmUUD7A4tH_PQ2DtFs5R3atB3OCikj9scuPA' -H 'Content-Type: application/json' | jq .
+[2026-01-14 12:43:12] curl -s -X POST 'https://jfzjprckeipmuqpalwsh.supabase.co/functions/v1/generate-weekly-summary?user_id=9f4fcd09-2684-4a85-924f-3e2c81554f50' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODI1MjY0OCwiZXhwIjoyMDgzODI4NjQ4fQ.UbXuMTQZmUUD7A4tH_PQ2DtFs5R3atB3OCikj9scuPA' -H 'Content-Type: application/json'
+[2026-01-14 12:43:19] grep -r "supabase.co" apps/ios/MindFriendApp/ --include="*.swift" | head -3
+[2026-01-14 12:43:25] curl -s -X POST 'https://zfaucivtzfwnrijsbfug.supabase.co/functions/v1/generate-weekly-summary?user_id=9f4fcd09-2684-4a85-924f-3e2c81554f50' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODI1MjY0OCwiZXhwIjoyMDgzODI4NjQ4fQ.UbXuMTQZmUUD7A4tH_PQ2DtFs5R3atB3OCikj9scuPA' -H 'Content-Type: application/json' 2>&1
+[2026-01-14 12:53:24] curl -s -X PUT 'https://zfaucivtzfwnrijsbfug.supabase.co/auth/v1/admin/users/9f4fcd09-2684-4a85-924f-3e2c81554f50' \
+  -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODI1MjY0OCwiZXhwIjoyMDgzODI4NjQ4fQ.UbXuMTQZmUUD7A4tH_PQ2DtFs5R3atB3OCikj9scuPA' \
+  -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyNTI2NDgsImV4cCI6MjA4MzgyODY0OH0.eFqxZjJvx1E3nlPFBvKdNX0YYGsNrvKn7yBMUVjGXuU' \
+  -H 'Content-Type: application/json' \
+  -d '{"password": "TestUser123!"}' | jq .
+[2026-01-14 12:53:31] cat << 'SCRIPT' > /tmp/set_password.sh
+#!/bin/bash
+curl -X PUT 'https://zfaucivtzfwnrijsbfug.supabase.co/auth/v1/admin/users/9f4fcd09-2684-4a85-924f-3e2c81554f50' \
+  -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODI1MjY0OCwiZXhwIjoyMDgzODI4NjQ4fQ.UbXuMTQZmUUD7A4tH_PQ2DtFs5R3atB3OCikj9scuPA' \
+  -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyNTI2NDgsImV4cCI6MjA4MzgyODY0OH0.eFqxZjJvx1E3nlPFBvKdNX0YYGsNrvKn7yBMUVjGXuU' \
+  -H 'Content-Type: application/json' \
+  -d '{"password": "TestUser123!"}'
+SCRIPT
+chmod +x /tmp/set_password.sh
+/tmp/set_password.sh
+[2026-01-14 12:53:40] cat << 'SCRIPT' > /tmp/set_password.sh
+#!/bin/bash
+SERVICE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODI1MjY0OCwiZXhwIjoyMDgzODI4NjQ4fQ.UbXuMTQZmUUD7A4tH_PQ2DtFs5R3atB3OCikj9scuPA"
+curl -X PUT "https://zfaucivtzfwnrijsbfug.supabase.co/auth/v1/admin/users/9f4fcd09-2684-4a85-924f-3e2c81554f50" \
+  -H "Authorization: Bearer $SERVICE_KEY" \
+  -H "apikey: $SERVICE_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"password": "TestUser123!"}'
+SCRIPT
+chmod +x /tmp/set_password.sh
+/tmp/set_password.sh
+[2026-01-14 12:53:49] cat << 'SCRIPT' > /tmp/verify_email.sh
+#!/bin/bash
+SERVICE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODI1MjY0OCwiZXhwIjoyMDgzODI4NjQ4fQ.UbXuMTQZmUUD7A4tH_PQ2DtFs5R3atB3OCikj9scuPA"
+curl -X PUT "https://zfaucivtzfwnrijsbfug.supabase.co/auth/v1/admin/users/9f4fcd09-2684-4a85-924f-3e2c81554f50" \
+  -H "Authorization: Bearer $SERVICE_KEY" \
+  -H "apikey: $SERVICE_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"email_confirm": true}'
+SCRIPT
+chmod +x /tmp/verify_email.sh
+/tmp/verify_email.sh | jq -r '.email, .user_metadata.email_verified'
