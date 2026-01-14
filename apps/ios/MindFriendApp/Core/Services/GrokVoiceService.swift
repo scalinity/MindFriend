@@ -238,14 +238,10 @@ final class GrokVoiceService: ObservableObject {
 
     private func fetchVoiceToken() async throws -> VoiceTokenResponse {
         do {
-            let response = try await supabase.functions.invoke(
+            let data: Data = try await supabase.functions.invoke(
                 "voice-token",
                 options: FunctionInvokeOptions()
             )
-
-            guard let data = response.data else {
-                throw VoiceError.tokenGenerationFailed
-            }
 
             if let errorResponse = try? JSONDecoder().decode(VoiceErrorResponse.self, from: data),
                errorResponse.code == "QUOTA_EXCEEDED" {
@@ -509,16 +505,30 @@ final class GrokVoiceService: ObservableObject {
 
         let durationSeconds = Int(Date().timeIntervalSince(startTime))
 
+        struct EndSessionRequest: Encodable {
+            let sessionId: String
+            let durationSeconds: Int
+            let messagesCount: Int
+            let wasQuotaLimited: Bool
+
+            enum CodingKeys: String, CodingKey {
+                case sessionId = "session_id"
+                case durationSeconds = "duration_seconds"
+                case messagesCount = "messages_count"
+                case wasQuotaLimited = "was_quota_limited"
+            }
+        }
+
         do {
             _ = try await supabase.functions.invoke(
                 "voice-session-end",
                 options: FunctionInvokeOptions(
-                    body: [
-                        "session_id": sessionId,
-                        "duration_seconds": durationSeconds,
-                        "messages_count": messageCount,
-                        "was_quota_limited": false,
-                    ]
+                    body: EndSessionRequest(
+                        sessionId: sessionId,
+                        durationSeconds: durationSeconds,
+                        messagesCount: messageCount,
+                        wasQuotaLimited: false
+                    )
                 )
             )
         } catch {

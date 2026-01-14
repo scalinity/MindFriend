@@ -45,7 +45,7 @@ struct FamilyManagementView: View {
                 await loadData()
             }
             .sheet(isPresented: $showInviteSheet) {
-                InviteMemberSheet()
+                FamilyPlanInviteSheet()
             }
             .alert("Remove Member", isPresented: $showRemoveConfirm, presenting: memberToRemove) { member in
                 Button("Remove", role: .destructive) {
@@ -342,9 +342,9 @@ struct MemberRow: View {
     }
 }
 
-// MARK: - Invite Member Sheet
+// MARK: - Family Plan Invite Sheet
 
-struct InviteMemberSheet: View {
+struct FamilyPlanInviteSheet: View {
     @EnvironmentObject var container: DependencyContainer
     @Environment(\.dismiss) var dismiss
 
@@ -459,52 +459,55 @@ struct InviteMemberSheet: View {
                 .multilineTextAlignment(.center)
 
             // Invite Code Display with tap-to-reveal (P3-S6)
-            VStack(spacing: 8) {
-                Text("Invite Code")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            if let inviteCode = response.inviteCode {
+                VStack(spacing: 8) {
+                    Text("Invite Code")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
 
-                if isCodeRevealed {
-                    Text(response.inviteCode)
-                        .font(.system(.title, design: .monospaced))
-                        .fontWeight(.bold)
-                        .foregroundStyle(Color.accentColor)
-                        .padding()
-                        .background(Color(.secondarySystemBackground))
-                        .cornerRadius(12)
-                        .accessibilityLabel("Invite code: \(response.inviteCode)")
+                    if isCodeRevealed {
+                        Text(inviteCode)
+                            .font(.system(.title, design: .monospaced))
+                            .fontWeight(.bold)
+                            .foregroundStyle(Color.accentColor)
+                            .padding()
+                            .background(Color(.secondarySystemBackground))
+                            .cornerRadius(12)
+                            .accessibilityLabel("Invite code: \(inviteCode)")
 
-                    Button {
-                        UIPasteboard.general.string = response.inviteCode
-                        showCopiedFeedback = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                            showCopiedFeedback = false
+                        Button {
+                            UIPasteboard.general.string = inviteCode
+                            showCopiedFeedback = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                showCopiedFeedback = false
+                            }
+                        } label: {
+                            Label(showCopiedFeedback ? "Copied!" : "Copy Code", systemImage: showCopiedFeedback ? "checkmark" : "doc.on.doc")
+                                .font(.subheadline)
                         }
-                    } label: {
-                        Label(showCopiedFeedback ? "Copied!" : "Copy Code", systemImage: showCopiedFeedback ? "checkmark" : "doc.on.doc")
-                            .font(.subheadline)
-                    }
-                } else {
-                    Button {
-                        isCodeRevealed = true
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "eye.fill")
-                            Text("Tap to reveal code")
+                    } else {
+                        Button {
+                            isCodeRevealed = true
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "eye.fill")
+                                Text("Tap to reveal code")
+                            }
+                            .font(.headline)
+                            .foregroundStyle(Color.accentColor)
+                            .padding()
+                            .background(Color(.secondarySystemBackground))
+                            .cornerRadius(12)
                         }
-                        .font(.headline)
-                        .foregroundStyle(Color.accentColor)
-                        .padding()
-                        .background(Color(.secondarySystemBackground))
-                        .cornerRadius(12)
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Reveal invite code")
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Reveal invite code")
                 }
             }
 
             // Expiry info
-            if let expiresAt = ISO8601DateFormatter().date(from: response.expiresAt) {
+            if let expiresAtStr = response.expiresAt,
+               let expiresAt = ISO8601DateFormatter().date(from: expiresAtStr) {
                 Text("Expires \(expiresAt.formatted(date: .abbreviated, time: .omitted))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -617,7 +620,7 @@ struct PendingInvitationsView: View {
                             } label: {
                                 Text("Tap to reveal")
                                     .font(.caption)
-                                    .foregroundStyle(.accentColor)
+                                    .foregroundStyle(Color.accentColor)
                             }
                             .buttonStyle(.plain)
                         }

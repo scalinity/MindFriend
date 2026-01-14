@@ -398,7 +398,8 @@ final class SupabaseDataService: ObservableObject {
     }
 
     func createConversation(title: String?) async throws -> Conversation {
-        Log.data.debug("[Data] Creating conversation for user: \(try userId)")
+        let currentUserId = try self.userId
+        Log.data.debug("[Data] Creating conversation for user: \(currentUserId)")
 
         let conversation = DBConversation(
             id: nil,
@@ -731,7 +732,8 @@ final class SupabaseDataService: ObservableObject {
                 userId: member.userId.uuidString,
                 displayName: profile.displayName ?? "User",
                 role: circle.ownerId == member.userId ? .owner : .member,
-                joinedAt: Date()
+                joinedAt: Date(),
+                premiumBadge: profile.premiumBadge
             )
         }
 
@@ -2099,7 +2101,8 @@ struct DBCircleMemberWithProfile: Codable {
             userId: userId.uuidString,
             displayName: profile.displayName ?? "User",
             role: .member,
-            joinedAt: Date()
+            joinedAt: Date(),
+            premiumBadge: profile.premiumBadge
         )
     }
 }
@@ -2107,10 +2110,12 @@ struct DBCircleMemberWithProfile: Codable {
 struct DBMemberProfile: Codable {
     let displayName: String?
     let avatarUrl: String?
+    let premiumBadge: String?
 
     enum CodingKeys: String, CodingKey {
         case displayName = "display_name"
         case avatarUrl = "avatar_url"
+        case premiumBadge = "premium_badge"
     }
 }
 

@@ -312,7 +312,7 @@ struct SubscriptionView: View {
                 showInviteCode = true
             }
             .font(.subheadline)
-            .foregroundStyle(.accentColor)
+            .foregroundStyle(Color.accentColor)
         }
     }
 
@@ -384,13 +384,13 @@ struct SubscriptionView: View {
                 .font(.headline)
 
             VStack(spacing: 10) {
-                FeatureRow(icon: "infinity", title: "Unlimited AI Chat", included: true)
-                FeatureRow(icon: "sparkles", title: "Priority Responses", included: true)
-                FeatureRow(icon: "chart.line.uptrend.xyaxis", title: "Advanced Insights", included: true)
-                FeatureRow(icon: "bell.badge.fill", title: "Smart Notifications", included: true)
-                FeatureRow(icon: "star.fill", title: "Premium Exercises", included: true)
+                SubscriptionFeatureRow(icon: "infinity", title: "Unlimited AI Chat", included: true)
+                SubscriptionFeatureRow(icon: "sparkles", title: "Priority Responses", included: true)
+                SubscriptionFeatureRow(icon: "chart.line.uptrend.xyaxis", title: "Advanced Insights", included: true)
+                SubscriptionFeatureRow(icon: "bell.badge.fill", title: "Smart Notifications", included: true)
+                SubscriptionFeatureRow(icon: "star.fill", title: "Premium Exercises", included: true)
                 if selectedPlanType.isFamilyPlan {
-                    FeatureRow(icon: "person.3.fill", title: "Shared Family Circle", included: true)
+                    SubscriptionFeatureRow(icon: "person.3.fill", title: "Shared Family Circle", included: true)
                 }
             }
         }
@@ -571,7 +571,7 @@ struct BillingPeriodCard: View {
 
 // MARK: - Feature Row
 
-struct FeatureRow: View {
+private struct SubscriptionFeatureRow: View {
     let icon: String
     let title: String
     let included: Bool

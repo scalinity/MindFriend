@@ -312,7 +312,7 @@ struct VoiceChatView: View {
             } label: {
                 Image(systemName: "keyboard")
                     .font(.system(size: 22))
-                    .foregroundStyle(.accentColor)
+                    .foregroundStyle(Color.accentColor)
                     .frame(width: 56, height: 56)
                     .background(Color(.tertiarySystemBackground))
                     .clipShape(Circle())

@@ -19,6 +19,11 @@
 		MTHIS01BC23C3C719CD3C9F /* MethodologyInfoSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = MTHIS02493347E53EC5C762 /* MethodologyInfoSheet.swift */; };
 		PRVBN01BC23C3C719CD3C9F /* PrivacyBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = PRVBN02493347E53EC5C762 /* PrivacyBanner.swift */; };
 		TSTCR01BC23C3C719CD3C9F /* TestimonialsCarousel.swift in Sources */ = {isa = PBXBuildFile; fileRef = TSTCR02493347E53EC5C762 /* TestimonialsCarousel.swift */; };
+		LOG001BC23C3C719CD3C9F /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = LOG001493347E53EC5C762 /* Logger.swift */; };
+		CONST01BC23C3C719CD3C9F /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = CONST01493347E53EC5C762 /* Constants.swift */; };
+		SUBSC01BC23C3C719CD3C9F /* SubscriptionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SUBSC01493347E53EC5C762 /* SubscriptionView.swift */; };
+		FAMMG01BC23C3C719CD3C9F /* FamilyManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAMMG01493347E53EC5C762 /* FamilyManagementView.swift */; };
+		B2336477E0B7988469DAB14C /* OurApproachView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C01FD89BD82D62E6FECE438B /* OurApproachView.swift */; };
 		10F822CF68E88F0D2C1ED0A1 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CF8C702A16D26304471B516 /* HomeView.swift */; };
 		1D9648B788FA1CE3F884D6C2 /* CrashReporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 979CA4C9C16981D7D441806F /* CrashReporter.swift */; };
 		29B5CF0F4B760FAC70DD022C /* APIEndpointTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FFCA55F32D71076E6A78498 /* APIEndpointTests.swift */; };
@@ -98,6 +103,11 @@
 		MTHIS02493347E53EC5C762 /* MethodologyInfoSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MethodologyInfoSheet.swift; sourceTree = "<group>"; };
 		PRVBN02493347E53EC5C762 /* PrivacyBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyBanner.swift; sourceTree = "<group>"; };
 		TSTCR02493347E53EC5C762 /* TestimonialsCarousel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestimonialsCarousel.swift; sourceTree = "<group>"; };
+		LOG001493347E53EC5C762 /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
+		CONST01493347E53EC5C762 /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
+		SUBSC01493347E53EC5C762 /* SubscriptionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionView.swift; sourceTree = "<group>"; };
+		FAMMG01493347E53EC5C762 /* FamilyManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FamilyManagementView.swift; sourceTree = "<group>"; };
+		C01FD89BD82D62E6FECE438B /* OurApproachView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OurApproachView.swift; sourceTree = "<group>"; };
 		02F723822B9E7EEAACBBD352 /* MoodHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoodHistoryView.swift; sourceTree = "<group>"; };
 		036621370DFAC7E7A6611883 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		09C32441B14C261728B4FB9A /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
@@ -384,11 +394,13 @@
 			isa = PBXGroup;
 			children = (
 				MSET1N381F4DC447434793A6 /* MemorySettingsView.swift */,
+				C01FD89BD82D62E6FECE438B /* OurApproachView.swift */,
 				PRVBN02493347E53EC5C762 /* PrivacyBanner.swift */,
+				FAMMG01493347E53EC5C762 /* FamilyManagementView.swift */,
 				82200F5D3BA38777360CDF95 /* ProfileView.swift */,
+				SUBSC01493347E53EC5C762 /* SubscriptionView.swift */,
 				C1D2E3F405162738495A6B7D /* VoiceSettingsView.swift */,
-			
-				C01FD89BD82D62E6FECE438B /* OurApproachView.swift */,);
+			);
 			path = Profile;
 			sourceTree = "<group>";
 		};
@@ -446,6 +458,7 @@
 				3EE683BCB5BF2C0266169127 /* Extensions */,
 				FDF617906AC54900BE9C1E7C /* Observability */,
 				8E548C5CC1A91C74F13CA751 /* Utilities */,
+				CONST01493347E53EC5C762 /* Constants.swift */,
 				590C1A661399CE9EC2A66F1C /* Models.swift */,
 			);
 			path = Core;
@@ -473,6 +486,7 @@
 			children = (
 				61268AE19EEFC21688B5A4CE /* Analytics.swift */,
 				979CA4C9C16981D7D441806F /* CrashReporter.swift */,
+				LOG001493347E53EC5C762 /* Logger.swift */,
 				11D48595D696D12CA48780AF /* NotificationManager.swift */,
 			);
 			path = Observability;
@@ -666,6 +680,10 @@
 				PRVBN01BC23C3C719CD3C9F /* PrivacyBanner.swift in Sources */,
 				B2336477E0B7988469DAB14C /* OurApproachView.swift in Sources */,
 				TSTCR01BC23C3C719CD3C9F /* TestimonialsCarousel.swift in Sources */,
+				LOG001BC23C3C719CD3C9F /* Logger.swift in Sources */,
+				CONST01BC23C3C719CD3C9F /* Constants.swift in Sources */,
+				SUBSC01BC23C3C719CD3C9F /* SubscriptionView.swift in Sources */,
+				FAMMG01BC23C3C719CD3C9F /* FamilyManagementView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

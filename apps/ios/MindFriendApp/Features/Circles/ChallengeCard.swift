@@ -287,33 +287,29 @@ struct CreateChallengeSheet: View {
 }
 
 #Preview {
-    let mockChallenge = CircleChallenge(
-        id: "1",
-        circleId: "c1",
-        createdBy: "u1",
-        challengeType: .custom,
-        title: "Do a breathing exercise today",
-        description: "Take 5 minutes to practice deep breathing",
-        targetExerciseId: nil,
-        startsAt: Date(),
-        endsAt: Date().addingTimeInterval(86400),
-        createdAt: Date(),
-        completions: [
-            ChallengeCompletion(id: "comp1", challengeId: "1", userId: "u2", completedAt: Date(), userName: nil)
-        ],
-        creatorName: "Danny"
-    )
-
-    let mockMembers = [
-        CircleMember(id: "1", userId: "u1", displayName: "Danny", role: .owner, joinedAt: Date()),
-        CircleMember(id: "2", userId: "u2", displayName: "Sarah", role: .member, joinedAt: Date()),
-        CircleMember(id: "3", userId: "u3", displayName: "Mike", role: .member, joinedAt: Date()),
-    ]
-
-    return VStack {
+    VStack {
         ChallengeCard(
-            challenge: mockChallenge,
-            members: mockMembers,
+            challenge: CircleChallenge(
+                id: "1",
+                circleId: "c1",
+                createdBy: "u1",
+                challengeType: .custom,
+                title: "Do a breathing exercise today",
+                description: "Take 5 minutes to practice deep breathing",
+                targetExerciseId: nil,
+                startsAt: Date(),
+                endsAt: Date().addingTimeInterval(86400),
+                createdAt: Date(),
+                completions: [
+                    ChallengeCompletion(id: "comp1", challengeId: "1", userId: "u2", completedAt: Date(), userName: nil)
+                ],
+                creatorName: "Danny"
+            ),
+            members: [
+                CircleMember(id: "1", userId: "u1", displayName: "Danny", role: .owner, joinedAt: Date(), premiumBadge: "premium_supporter"),
+                CircleMember(id: "2", userId: "u2", displayName: "Sarah", role: .member, joinedAt: Date(), premiumBadge: nil),
+                CircleMember(id: "3", userId: "u3", displayName: "Mike", role: .member, joinedAt: Date(), premiumBadge: nil),
+            ],
             currentUserId: "u1"
         )
         .padding()
