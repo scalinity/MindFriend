@@ -43,7 +43,7 @@ This document records architectural and implementation decisions that deviate fr
 
 - **Keep NestJS** - More control, but adds deployment complexity and maintenance burden
 - **Firebase** - Good iOS support, but less flexible for custom business logic
-- **Direct OpenAI from iOS** - Security risk, can't enforce quotas server-side
+- **Direct xAI from iOS** - Security risk, can't enforce quotas server-side
 
 **Implications:**
 
@@ -68,7 +68,7 @@ This document records architectural and implementation decisions that deviate fr
 **Implementation:**
 
 - Keyword list in `supabase/functions/_shared/crisis.ts`
-- Detection runs before OpenAI call
+- Detection runs before AI call
 - Crisis response is static template with hotline numbers
 - Event logged with truncated trigger content (privacy)
 

@@ -831,7 +831,7 @@ Return JSON: {"insight": "...", "recommendations": [{"title": "...", "reason": "
 - Mood tracking working
 - Quest tracking working
 - Exercise sessions tracking
-- AI API (xAI/OpenAI) configured
+- AI API (xAI) configured
 
 ---
 
