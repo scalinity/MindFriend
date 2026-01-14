@@ -44,6 +44,11 @@ enum AnalyticsEvent: String {
     case circleJoined = "circle_joined"
     case circleLeft = "circle_left"
     case circleCheckinPosted = "circle_checkin_posted"
+    case hugSent = "hug_sent"
+    case challengeCreated = "challenge_created"
+    case challengeCompleted = "challenge_completed"
+    case reactionAdded = "reaction_added"
+    case inviteSent = "invite_sent"
 
     // Billing
     case paywallViewed = "paywall_viewed"
@@ -75,6 +80,21 @@ enum AnalyticsEvent: String {
     case allMemoriesDeleted = "all_memories_deleted"
     case memoriesDeletedByType = "memories_deleted_by_type"
     case memorySettingsViewed = "memory_settings_viewed"
+
+    // XP & Progression
+    case xpAwarded = "xp_awarded"
+    case levelUp = "level_up"
+    case eventJoined = "event_joined"
+    case eventCompleted = "event_completed"
+    case weeklyXPReset = "weekly_xp_reset"
+    case skillLevelUp = "skill_level_up"
+
+    // Notifications
+    case notificationSettingsUpdated = "notification_settings_updated"
+    case notificationOpened = "notification_opened"
+    case notificationReceived = "notification_received"
+    case pushPermissionGranted = "push_permission_granted"
+    case pushPermissionDenied = "push_permission_denied"
 }
 
 /// User properties for segmentation

@@ -2,11 +2,15 @@
 
 ## Overview
 
-Talk to your AI companion instead of typing. Voice mode transforms MindFriend from a text-based app into a conversational experience—like having a supportive friend on call. This is particularly valuable during moments when typing feels difficult: while walking, lying in bed anxious at night, or during emotional overwhelm.
+Talk to your AI companion instead of typing. Voice mode transforms MindFriend from a text-based app into a real-time conversational experience—like having a supportive friend on call. Powered by **Grok Voice Agent API** for natural, low-latency voice conversations with premium AI voices.
+
+This is particularly valuable during moments when typing feels difficult: while walking, lying in bed anxious at night, or during emotional overwhelm.
 
 **Priority:** Future (Big Bet)
 **Impact:** Differentiation ↑↑↑, Engagement ↑↑, Accessibility ↑↑
 **Complexity:** High
+
+**Technical Reference:** See `docs/grok-voice-agent-api.md` for full API documentation.
 
 ---
 
@@ -29,65 +33,69 @@ Talk to your AI companion instead of typing. Voice mode transforms MindFriend fr
 - As a **user in a quiet environment**, I want to switch to text mode so that I'm not disturbing others
 - As a **user in public**, I want headphone support so that my conversation stays private
 
+### Premium Features
+
+- As a **free user**, I want 3 voice minutes/month so that I can try voice mode
+- As a **premium user**, I want unlimited voice conversations so that I can always talk instead of type
+- As a **premium user**, I want to choose from multiple AI voices so that I can pick one that feels right
+
 ---
 
 ## Product Requirements
 
 ### Must Have (MVP)
 
-1. **Speech-to-Text Input**
-   - Push-to-talk button in chat view
-   - Real-time transcription display
-   - Support for continuous dictation
-   - Automatic punctuation
+1. **Real-Time Voice Conversations (Grok Voice Agent API)**
+   - Bidirectional WebSocket connection via backend relay
+   - Server-side VAD (Voice Activity Detection) for natural turn-taking
+   - Real-time transcription display during speech
+   - Natural AI voice responses with minimal latency
 
-2. **Text-to-Speech Output**
-   - AI responses read aloud automatically
-   - Natural-sounding voice (iOS system or premium voice)
-   - Pause/stop controls
-   - Speed adjustment (0.75x to 1.5x)
+2. **Voice Selection**
+   - 5 Grok voices: Ara (warm), Rex (professional), Sal (calm), Eve (energetic), Leo (authoritative)
+   - Default: Ara (warm, conversational)
+   - Voice preview in settings
 
 3. **Voice Mode Toggle**
    - Easy switch between voice and text modes
    - Remember user's preference
    - Per-conversation setting option
 
-4. **Basic Voice Settings**
-   - Enable/disable voice output
-   - Voice speed slider
+4. **Usage Limits & Paywall**
+   - **Free tier:** 3 minutes/month voice conversation
+   - **Premium tier:** Unlimited voice minutes
+   - Clear usage indicator and upgrade prompt
+   - Graceful fallback to text when limit reached
+
+5. **Basic Voice Settings**
+   - Enable/disable voice mode
+   - Voice selection (Premium only: all 5 voices)
    - Auto-play responses toggle
 
 ### Nice to Have (V2)
 
 1. **Hands-Free Mode**
-   - "Hey MindFriend" wake word activation
-   - Continuous listening mode
+   - Continuous conversation without tapping
    - Background audio support
 
-2. **Premium Voices**
-   - Multiple voice options (warm, calm, professional)
-   - Male/female voice choices
-   - Custom voice personalities
-
-3. **Voice Emotion Detection**
+2. **Voice Emotion Detection**
    - Detect stress/anxiety in user's voice
    - Adjust AI response tone accordingly
    - Log emotional markers for insights
 
-4. **Audio Sessions**
+3. **Audio Sessions**
    - Voice-only guided exercises
    - Breathing exercise with audio cues
    - Meditation with voice guidance
 
-5. **Transcript Export**
+4. **Transcript Export**
    - Save voice conversations as text
    - Share conversation summaries
    - Journal entry creation from voice
 
-6. **Multi-Language Voice**
-   - Speech recognition for other languages
+5. **Multi-Language Voice**
+   - 100+ languages with automatic detection
    - TTS in user's preferred language
-   - Real-time translation option
 
 ### Out of Scope
 
@@ -100,11 +108,62 @@ Talk to your AI companion instead of typing. Voice mode transforms MindFriend fr
 
 ---
 
+## Paywall & Limits
+
+### Voice Minutes Quota
+
+| Tier        | Voice Minutes | Voice Selection | Features                  |
+| ----------- | ------------- | --------------- | ------------------------- |
+| **Free**    | 3 min/month   | Ara only        | Basic voice mode          |
+| **Premium** | Unlimited     | All 5 voices    | Full voice mode + history |
+
+### Quota Enforcement
+
+1. Track `voice_minutes_used` in `voice_usage` table
+2. Check quota before establishing WebSocket connection
+3. Monitor session duration in real-time
+4. Graceful degradation when limit approached:
+   - At 80%: Show warning banner
+   - At 95%: Show upgrade prompt
+   - At 100%: End voice session, offer text fallback
+
+### Usage Reset
+
+- Monthly reset on billing cycle date
+- No rollover of unused minutes
+- Real-time usage display in settings
+
+---
+
 ## Technical Design
+
+### Architecture Overview
+
+```
+┌─────────────────┐     ┌────────────────────┐     ┌─────────────────┐
+│                 │     │                    │     │                 │
+│  iOS App        │────▶│  Supabase Edge     │────▶│  xAI Grok       │
+│  (WebSocket)    │◀────│  Function Relay    │◀────│  Voice API      │
+│                 │     │                    │     │                 │
+└─────────────────┘     └────────────────────┘     └─────────────────┘
+       │                         │
+       │ Audio PCM               │ Ephemeral tokens
+       │ (24kHz)                 │ Usage tracking
+       ▼                         ▼
+  [Microphone]              [Supabase DB]
+  [Speaker]                 [voice_usage]
+```
+
+**Why Backend Relay:**
+
+- Never expose xAI API key to client
+- Enforce usage quotas server-side
+- Log conversations for safety (crisis detection)
+- Apply MindFriend system prompt to voice sessions
 
 ### Data Model Changes
 
-#### Migration: `20250115000009_voice_mode.sql`
+#### Migration: `20260200000000_voice_mode.sql`
 
 ```sql
 -- Voice settings per user
@@ -112,179 +171,650 @@ CREATE TABLE voice_settings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE UNIQUE,
   voice_enabled BOOLEAN DEFAULT TRUE,
-  voice_speed FLOAT DEFAULT 1.0,
+  preferred_voice TEXT DEFAULT 'ara', -- 'ara', 'rex', 'sal', 'eve', 'leo'
   auto_play_responses BOOLEAN DEFAULT TRUE,
-  preferred_voice TEXT DEFAULT 'system', -- 'system', 'premium_calm', etc.
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Track voice usage for analytics
+-- Voice usage tracking for quota enforcement
+CREATE TABLE voice_usage (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  period_start DATE NOT NULL, -- First day of billing period
+  minutes_used FLOAT DEFAULT 0, -- Total minutes used this period
+  last_session_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, period_start)
+);
+
+-- Voice sessions for analytics
 CREATE TABLE voice_sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   conversation_id UUID REFERENCES conversations(id),
   started_at TIMESTAMPTZ DEFAULT NOW(),
   ended_at TIMESTAMPTZ,
-  input_duration_seconds INT DEFAULT 0, -- Total speech input time
-  output_duration_seconds INT DEFAULT 0, -- Total TTS output time
-  messages_count INT DEFAULT 0
-);
-
--- Optional: Voice emotion markers (V2)
-CREATE TABLE voice_emotion_markers (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
-  detected_emotion TEXT, -- 'calm', 'anxious', 'stressed', 'happy'
-  confidence FLOAT,
-  audio_features JSONB, -- pitch, tempo, volume variance
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  duration_seconds INT DEFAULT 0,
+  voice_used TEXT DEFAULT 'ara',
+  messages_count INT DEFAULT 0,
+  was_quota_limited BOOLEAN DEFAULT FALSE
 );
 
 -- Indexes
 CREATE INDEX idx_voice_settings_user_id ON voice_settings(user_id);
+CREATE INDEX idx_voice_usage_user_period ON voice_usage(user_id, period_start);
 CREATE INDEX idx_voice_sessions_user_id ON voice_sessions(user_id);
 CREATE INDEX idx_voice_sessions_conversation_id ON voice_sessions(conversation_id);
 
 -- RLS
 ALTER TABLE voice_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE voice_usage ENABLE ROW LEVEL SECURITY;
 ALTER TABLE voice_sessions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE voice_emotion_markers ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users manage own voice settings" ON voice_settings
   FOR ALL USING (auth.uid() = user_id);
 
-CREATE POLICY "Users view own voice sessions" ON voice_sessions
-  FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "Users view own voice usage" ON voice_usage
+  FOR SELECT USING (auth.uid() = user_id);
 
-CREATE POLICY "Users view own emotion markers" ON voice_emotion_markers
-  FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM messages
-      WHERE id = message_id
-      AND EXISTS (
-        SELECT 1 FROM conversations
-        WHERE id = messages.conversation_id
-        AND user_id = auth.uid()
-      )
-    )
+CREATE POLICY "Users view own voice sessions" ON voice_sessions
+  FOR SELECT USING (auth.uid() = user_id);
+
+-- Function to get current period usage
+CREATE OR REPLACE FUNCTION get_voice_minutes_remaining(p_user_id UUID)
+RETURNS FLOAT AS $$
+DECLARE
+  v_is_premium BOOLEAN;
+  v_minutes_used FLOAT;
+  v_limit FLOAT;
+BEGIN
+  -- Check premium status
+  SELECT EXISTS(
+    SELECT 1 FROM subscriptions
+    WHERE user_id = p_user_id
+    AND status = 'active'
+    AND current_period_end > NOW()
+  ) INTO v_is_premium;
+
+  -- Premium users have unlimited
+  IF v_is_premium THEN
+    RETURN 999999;
+  END IF;
+
+  -- Get current period usage
+  SELECT COALESCE(minutes_used, 0) INTO v_minutes_used
+  FROM voice_usage
+  WHERE user_id = p_user_id
+  AND period_start = DATE_TRUNC('month', NOW())::DATE;
+
+  -- Free tier limit: 3 minutes
+  v_limit := 3.0;
+
+  RETURN GREATEST(0, v_limit - COALESCE(v_minutes_used, 0));
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+```
+
+### Backend Implementation
+
+#### Edge Function: Voice Session Relay
+
+**File:** `supabase/functions/voice-session/index.ts`
+
+```typescript
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const XAI_API_KEY = Deno.env.get("XAI_API_KEY")!;
+const XAI_REALTIME_URL = "wss://api.x.ai/v1/realtime";
+
+const VOICE_INSTRUCTIONS = `You are a warm, supportive AI companion for MindFriend, a mental wellness app.
+
+Guidelines:
+- Be empathetic, understanding, and non-judgmental
+- Use a conversational, friendly tone
+- Ask follow-up questions to understand feelings better
+- Offer gentle suggestions without being prescriptive
+- If user expresses self-harm or crisis, immediately provide crisis resources
+- Keep responses concise for voice (2-3 sentences typically)
+- Acknowledge emotions before offering perspectives`;
+
+serve(async (req) => {
+  // Handle WebSocket upgrade
+  const { socket, response } = Deno.upgradeWebSocket(req);
+
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
+
+  // Get user from auth header
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
+
+  if (authError || !user) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
+  // Check voice quota
+  const { data: remaining } = await supabase.rpc(
+    "get_voice_minutes_remaining",
+    {
+      p_user_id: user.id,
+    },
+  );
+
+  if (remaining <= 0) {
+    socket.close(4003, "Voice quota exceeded");
+    return response;
+  }
+
+  // Get user's voice preference
+  const { data: settings } = await supabase
+    .from("voice_settings")
+    .select("preferred_voice")
+    .eq("user_id", user.id)
+    .single();
+
+  const preferredVoice = settings?.preferred_voice || "ara";
+
+  // Check if user is premium (for voice selection)
+  const { data: subscription } = await supabase
+    .from("subscriptions")
+    .select("status")
+    .eq("user_id", user.id)
+    .eq("status", "active")
+    .single();
+
+  const isPremium = !!subscription;
+
+  // Non-premium users can only use 'ara'
+  const voice = isPremium ? preferredVoice : "ara";
+
+  // Track session
+  let sessionId: string;
+  let sessionStart = Date.now();
+  let messageCount = 0;
+
+  // Create session record
+  const { data: session } = await supabase
+    .from("voice_sessions")
+    .insert({
+      user_id: user.id,
+      voice_used: voice,
+      started_at: new Date().toISOString(),
+    })
+    .select()
+    .single();
+
+  sessionId = session?.id;
+
+  // Connect to xAI Voice API
+  let xaiSocket: WebSocket | null = null;
+
+  socket.onopen = () => {
+    xaiSocket = new WebSocket(XAI_REALTIME_URL, {
+      headers: {
+        Authorization: `Bearer ${XAI_API_KEY}`,
+      },
+    });
+
+    xaiSocket.onopen = () => {
+      // Configure session with MindFriend personality
+      xaiSocket!.send(
+        JSON.stringify({
+          type: "session.update",
+          session: {
+            instructions: VOICE_INSTRUCTIONS,
+            voice: voice,
+            turn_detection: {
+              type: "server_vad",
+            },
+            audio: {
+              input: { format: { type: "audio/pcm", rate: 24000 } },
+              output: { format: { type: "audio/pcm", rate: 24000 } },
+            },
+          },
+        }),
+      );
+
+      // Notify client of connection
+      socket.send(
+        JSON.stringify({
+          type: "session.ready",
+          voice: voice,
+          minutes_remaining: remaining,
+        }),
+      );
+    };
+
+    xaiSocket.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+
+      // Track messages
+      if (data.type === "response.done") {
+        messageCount++;
+      }
+
+      // Check for crisis keywords in transcripts
+      if (data.type === "response.output_audio_transcript.delta") {
+        // Crisis detection handled by chat safety system
+      }
+
+      // Forward to client
+      socket.send(event.data);
+    };
+
+    xaiSocket.onerror = (error) => {
+      console.error("xAI WebSocket error:", error);
+      socket.send(
+        JSON.stringify({
+          type: "error",
+          error: { message: "Voice service unavailable" },
+        }),
+      );
+    };
+
+    xaiSocket.onclose = () => {
+      socket.close();
+    };
+  };
+
+  socket.onmessage = (event) => {
+    // Forward client messages to xAI
+    if (xaiSocket?.readyState === WebSocket.OPEN) {
+      xaiSocket.send(event.data);
+    }
+  };
+
+  socket.onclose = async () => {
+    // Close xAI connection
+    if (xaiSocket) {
+      xaiSocket.close();
+    }
+
+    // Calculate session duration
+    const durationSeconds = Math.ceil((Date.now() - sessionStart) / 1000);
+    const durationMinutes = durationSeconds / 60;
+
+    // Update session record
+    await supabase
+      .from("voice_sessions")
+      .update({
+        ended_at: new Date().toISOString(),
+        duration_seconds: durationSeconds,
+        messages_count: messageCount,
+      })
+      .eq("id", sessionId);
+
+    // Update usage
+    const periodStart = new Date();
+    periodStart.setDate(1);
+    periodStart.setHours(0, 0, 0, 0);
+
+    await supabase.rpc("increment_voice_usage", {
+      p_user_id: user.id,
+      p_minutes: durationMinutes,
+      p_period_start: periodStart.toISOString().split("T")[0],
+    });
+  };
+
+  socket.onerror = (error) => {
+    console.error("Client WebSocket error:", error);
+  };
+
+  return response;
+});
+```
+
+#### Edge Function: Get Ephemeral Token (Alternative Approach)
+
+**File:** `supabase/functions/voice-token/index.ts`
+
+```typescript
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+};
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  try {
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    const authHeader = req.headers.get("Authorization")!;
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
+
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Check quota
+    const { data: remaining } = await supabase.rpc(
+      "get_voice_minutes_remaining",
+      {
+        p_user_id: user.id,
+      },
+    );
+
+    if (remaining <= 0) {
+      return new Response(
+        JSON.stringify({
+          error: "Voice quota exceeded",
+          minutes_remaining: 0,
+          upgrade_required: true,
+        }),
+        {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    // Generate ephemeral token from xAI
+    const tokenResponse = await fetch(
+      "https://api.x.ai/v1/realtime/client_secrets",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${Deno.env.get("XAI_API_KEY")}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          expires_in: 300, // 5 minutes
+        }),
+      },
+    );
+
+    if (!tokenResponse.ok) {
+      throw new Error("Failed to generate voice token");
+    }
+
+    const { client_secret, expires_at } = await tokenResponse.json();
+
+    // Get user settings
+    const { data: settings } = await supabase
+      .from("voice_settings")
+      .select("preferred_voice")
+      .eq("user_id", user.id)
+      .single();
+
+    // Check premium status
+    const { data: subscription } = await supabase
+      .from("subscriptions")
+      .select("status")
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .single();
+
+    const isPremium = !!subscription;
+
+    return new Response(
+      JSON.stringify({
+        token: client_secret,
+        expires_at,
+        minutes_remaining: remaining,
+        voice: isPremium ? settings?.preferred_voice || "ara" : "ara",
+        is_premium: isPremium,
+        available_voices: isPremium
+          ? ["ara", "rex", "sal", "eve", "leo"]
+          : ["ara"],
+      }),
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
+  } catch (error) {
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});
 ```
 
 ### iOS Implementation
 
-#### Speech Recognition Service
+#### Grok Voice Service
 
-**File:** `apps/ios/MindFriendApp/Core/Services/SpeechService.swift`
+**File:** `apps/ios/MindFriendApp/Core/Services/GrokVoiceService.swift`
 
 ```swift
 import Foundation
-import Speech
 import AVFoundation
+import Combine
 
+/// Voice service using Grok Voice Agent API
 @MainActor
-class SpeechService: ObservableObject {
+class GrokVoiceService: ObservableObject {
     // MARK: - Published Properties
+    @Published var connectionState: ConnectionState = .disconnected
     @Published var isListening = false
-    @Published var transcribedText = ""
-    @Published var isAuthorized = false
     @Published var isSpeaking = false
-    @Published var speechProgress: Double = 0
+    @Published var transcribedText = ""
+    @Published var minutesRemaining: Double = 0
+    @Published var currentVoice: GrokVoice = .ara
+    @Published var availableVoices: [GrokVoice] = [.ara]
+    @Published var isPremium = false
+
+    enum ConnectionState {
+        case disconnected
+        case connecting
+        case connected
+        case error(String)
+    }
 
     // MARK: - Private Properties
-    private var speechRecognizer: SFSpeechRecognizer?
-    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
-    private var recognitionTask: SFSpeechRecognitionTask?
+    private var webSocket: URLSessionWebSocketTask?
     private let audioEngine = AVAudioEngine()
-    private let synthesizer = AVSpeechSynthesizer()
-    private var speechDelegate: SpeechSynthesizerDelegate?
+    private var audioPlayer: AVAudioPlayerNode?
+    private var audioFormat: AVAudioFormat?
+    private var playbackBuffer: [Data] = []
+    private var isPlaying = false
 
-    // MARK: - Settings
-    var speechRate: Float = AVSpeechUtteranceDefaultSpeechRate
-    var autoPlayResponses = true
+    private let supabaseClient: SupabaseClient
+    private var sessionStartTime: Date?
 
-    init() {
-        speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
-        speechDelegate = SpeechSynthesizerDelegate(service: self)
-        synthesizer.delegate = speechDelegate
+    // MARK: - Audio Configuration
+    private let sampleRate: Double = 24000
+    private let channelCount: AVAudioChannelCount = 1
+
+    init(supabaseClient: SupabaseClient) {
+        self.supabaseClient = supabaseClient
+        setupAudio()
     }
 
-    // MARK: - Authorization
+    // MARK: - Setup
 
-    func requestAuthorization() async {
-        // Speech recognition authorization
-        let speechStatus = await withCheckedContinuation { continuation in
-            SFSpeechRecognizer.requestAuthorization { status in
-                continuation.resume(returning: status)
-            }
+    private func setupAudio() {
+        audioFormat = AVAudioFormat(
+            commonFormat: .pcmFormatInt16,
+            sampleRate: sampleRate,
+            channels: channelCount,
+            interleaved: true
+        )
+
+        audioPlayer = AVAudioPlayerNode()
+        if let player = audioPlayer {
+            audioEngine.attach(player)
+            audioEngine.connect(player, to: audioEngine.mainMixerNode, format: audioFormat)
         }
-
-        // Microphone authorization
-        let micStatus: Bool
-        if #available(iOS 17.0, *) {
-            micStatus = await AVAudioApplication.requestRecordPermission()
-        } else {
-            micStatus = await withCheckedContinuation { continuation in
-                AVAudioSession.sharedInstance().requestRecordPermission { granted in
-                    continuation.resume(returning: granted)
-                }
-            }
-        }
-
-        isAuthorized = speechStatus == .authorized && micStatus
     }
 
-    // MARK: - Speech-to-Text
+    // MARK: - Connection
 
-    func startListening() throws {
-        guard isAuthorized else {
-            throw SpeechError.notAuthorized
+    func connect() async throws {
+        connectionState = .connecting
+
+        // Get voice token from backend
+        let response = try await supabaseClient.functions.invoke(
+            "voice-token",
+            options: .init()
+        )
+
+        guard let data = response.data else {
+            throw VoiceError.tokenGenerationFailed
         }
 
-        guard let speechRecognizer = speechRecognizer, speechRecognizer.isAvailable else {
-            throw SpeechError.recognizerUnavailable
+        let tokenResponse = try JSONDecoder().decode(VoiceTokenResponse.self, from: data)
+
+        // Check quota
+        guard tokenResponse.minutesRemaining > 0 else {
+            throw VoiceError.quotaExceeded
         }
 
-        // Cancel any existing task
-        stopListening()
+        minutesRemaining = tokenResponse.minutesRemaining
+        isPremium = tokenResponse.isPremium
+        availableVoices = tokenResponse.availableVoices.compactMap { GrokVoice(rawValue: $0) }
+        currentVoice = GrokVoice(rawValue: tokenResponse.voice) ?? .ara
 
-        // Configure audio session
-        let audioSession = AVAudioSession.sharedInstance()
-        try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
-        try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+        // Connect to xAI via WebSocket
+        let url = URL(string: "wss://api.x.ai/v1/realtime?token=\(tokenResponse.token)")!
+        let session = URLSession(configuration: .default)
+        webSocket = session.webSocketTask(with: url)
+        webSocket?.resume()
 
-        // Create recognition request
-        recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
-        guard let recognitionRequest = recognitionRequest else {
-            throw SpeechError.requestCreationFailed
-        }
+        // Configure session
+        try await configureSession()
 
-        recognitionRequest.shouldReportPartialResults = true
-        recognitionRequest.addsPunctuation = true
+        // Start receiving messages
+        receiveMessages()
 
-        // Start recognition task
-        recognitionTask = speechRecognizer.recognitionTask(with: recognitionRequest) { [weak self] result, error in
+        connectionState = .connected
+        sessionStartTime = Date()
+    }
+
+    private func configureSession() async throws {
+        let config: [String: Any] = [
+            "type": "session.update",
+            "session": [
+                "voice": currentVoice.rawValue,
+                "turn_detection": ["type": "server_vad"],
+                "audio": [
+                    "input": ["format": ["type": "audio/pcm", "rate": 24000]],
+                    "output": ["format": ["type": "audio/pcm", "rate": 24000]]
+                ]
+            ]
+        ]
+
+        let data = try JSONSerialization.data(withJSONObject: config)
+        try await webSocket?.send(.data(data))
+    }
+
+    // MARK: - Message Handling
+
+    private func receiveMessages() {
+        webSocket?.receive { [weak self] result in
             guard let self = self else { return }
 
-            if let result = result {
+            switch result {
+            case .success(let message):
                 Task { @MainActor in
-                    self.transcribedText = result.bestTranscription.formattedString
+                    await self.handleMessage(message)
                 }
-            }
+                self.receiveMessages() // Continue receiving
 
-            if error != nil || result?.isFinal == true {
+            case .failure(let error):
                 Task { @MainActor in
-                    self.stopListening()
+                    self.connectionState = .error(error.localizedDescription)
                 }
             }
         }
+    }
 
-        // Configure audio input
+    private func handleMessage(_ message: URLSessionWebSocketTask.Message) async {
+        guard case .string(let text) = message,
+              let data = text.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let type = json["type"] as? String else {
+            return
+        }
+
+        switch type {
+        case "session.updated":
+            connectionState = .connected
+
+        case "input_audio_buffer.speech_started":
+            isListening = true
+            stopPlayback() // Interrupt AI when user starts speaking
+
+        case "input_audio_buffer.speech_stopped":
+            isListening = false
+
+        case "response.output_audio.delta":
+            if let delta = json["delta"] as? String,
+               let audioData = Data(base64Encoded: delta) {
+                queueAudioPlayback(audioData)
+            }
+
+        case "response.output_audio_transcript.delta":
+            if let delta = json["delta"] as? String {
+                transcribedText += delta
+            }
+
+        case "response.done":
+            // Response complete
+            transcribedText = ""
+
+        case "error":
+            if let error = json["error"] as? [String: Any],
+               let message = error["message"] as? String {
+                connectionState = .error(message)
+            }
+
+        default:
+            break
+        }
+    }
+
+    // MARK: - Audio Input
+
+    func startListening() throws {
+        guard connectionState == .connected else {
+            throw VoiceError.notConnected
+        }
+
+        // Configure audio session for recording
+        let audioSession = AVAudioSession.sharedInstance()
+        try audioSession.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetooth])
+        try audioSession.setActive(true)
+
+        // Setup audio input tap
         let inputNode = audioEngine.inputNode
-        let recordingFormat = inputNode.outputFormat(forBus: 0)
+        let recordingFormat = AVAudioFormat(
+            commonFormat: .pcmFormatInt16,
+            sampleRate: sampleRate,
+            channels: 1,
+            interleaved: true
+        )!
 
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
-            self?.recognitionRequest?.append(buffer)
+            self?.sendAudioBuffer(buffer)
         }
 
         audioEngine.prepare()
@@ -294,162 +824,214 @@ class SpeechService: ObservableObject {
     }
 
     func stopListening() {
-        audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
-        recognitionRequest?.endAudio()
-        recognitionRequest = nil
-        recognitionTask?.cancel()
-        recognitionTask = nil
+        audioEngine.stop()
         isListening = false
+
+        // Commit the audio buffer
+        let commit: [String: Any] = ["type": "input_audio_buffer.commit"]
+        if let data = try? JSONSerialization.data(withJSONObject: commit) {
+            webSocket?.send(.data(data)) { _ in }
+        }
     }
 
-    func clearTranscription() {
-        transcribedText = ""
+    private func sendAudioBuffer(_ buffer: AVAudioPCMBuffer) {
+        guard let channelData = buffer.int16ChannelData else { return }
+
+        let frameCount = Int(buffer.frameLength)
+        let data = Data(bytes: channelData[0], count: frameCount * 2)
+        let base64 = data.base64EncodedString()
+
+        let message: [String: Any] = [
+            "type": "input_audio_buffer.append",
+            "audio": base64
+        ]
+
+        if let jsonData = try? JSONSerialization.data(withJSONObject: message) {
+            webSocket?.send(.data(jsonData)) { _ in }
+        }
     }
 
-    // MARK: - Text-to-Speech
+    // MARK: - Audio Output
 
-    func speak(_ text: String) {
-        // Stop any current speech
-        stopSpeaking()
+    private func queueAudioPlayback(_ data: Data) {
+        playbackBuffer.append(data)
 
-        let utterance = AVSpeechUtterance(string: text)
-        utterance.rate = speechRate
-        utterance.pitchMultiplier = 1.0
-        utterance.volume = 1.0
+        if !isPlaying {
+            playNextAudioChunk()
+        }
+    }
 
-        // Use a natural voice if available
-        if let voice = AVSpeechSynthesisVoice(language: "en-US") {
-            utterance.voice = voice
+    private func playNextAudioChunk() {
+        guard !playbackBuffer.isEmpty,
+              let player = audioPlayer,
+              let format = audioFormat else {
+            isPlaying = false
+            isSpeaking = false
+            return
         }
 
-        // Configure audio session for playback
-        do {
-            let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setCategory(.playback, mode: .default)
-            try audioSession.setActive(true)
-        } catch {
-            print("Failed to configure audio session: \(error)")
-        }
-
+        isPlaying = true
         isSpeaking = true
-        synthesizer.speak(utterance)
+
+        let audioData = playbackBuffer.removeFirst()
+
+        // Convert PCM data to AVAudioPCMBuffer
+        let frameCount = AVAudioFrameCount(audioData.count / 2)
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+            playNextAudioChunk()
+            return
+        }
+
+        buffer.frameLength = frameCount
+        audioData.withUnsafeBytes { rawBuffer in
+            if let baseAddress = rawBuffer.baseAddress {
+                memcpy(buffer.int16ChannelData![0], baseAddress, audioData.count)
+            }
+        }
+
+        // Schedule playback
+        player.scheduleBuffer(buffer) { [weak self] in
+            Task { @MainActor in
+                self?.playNextAudioChunk()
+            }
+        }
+
+        if !audioEngine.isRunning {
+            try? audioEngine.start()
+        }
+        player.play()
     }
 
-    func stopSpeaking() {
-        synthesizer.stopSpeaking(at: .immediate)
+    private func stopPlayback() {
+        audioPlayer?.stop()
+        playbackBuffer.removeAll()
+        isPlaying = false
         isSpeaking = false
-        speechProgress = 0
     }
 
-    func pauseSpeaking() {
-        synthesizer.pauseSpeaking(at: .word)
+    // MARK: - Voice Selection
+
+    func setVoice(_ voice: GrokVoice) async throws {
+        guard isPremium || voice == .ara else {
+            throw VoiceError.premiumRequired
+        }
+
+        currentVoice = voice
+
+        // Update session if connected
+        if connectionState == .connected {
+            try await configureSession()
+        }
+
+        // Save preference
+        try await supabaseClient
+            .from("voice_settings")
+            .upsert([
+                "user_id": supabaseClient.auth.currentUser?.id.uuidString ?? "",
+                "preferred_voice": voice.rawValue
+            ])
+            .execute()
     }
 
-    func continueSpeaking() {
-        synthesizer.continueSpeaking()
-    }
+    // MARK: - Disconnect
 
-    // MARK: - Progress Tracking
+    func disconnect() async {
+        webSocket?.cancel(with: .normalClosure, reason: nil)
+        webSocket = nil
+        connectionState = .disconnected
 
-    func updateProgress(_ progress: Double) {
-        speechProgress = progress
-    }
+        audioEngine.stop()
+        audioPlayer?.stop()
 
-    func finishedSpeaking() {
-        isSpeaking = false
-        speechProgress = 0
+        // Log session duration
+        if let startTime = sessionStartTime {
+            let duration = Date().timeIntervalSince(startTime)
+            // Duration tracking handled by backend
+        }
+
+        sessionStartTime = nil
     }
 }
 
-// MARK: - Speech Synthesizer Delegate
+// MARK: - Supporting Types
 
-private class SpeechSynthesizerDelegate: NSObject, AVSpeechSynthesizerDelegate {
-    weak var service: SpeechService?
+enum GrokVoice: String, CaseIterable, Identifiable {
+    case ara = "ara"
+    case rex = "rex"
+    case sal = "sal"
+    case eve = "eve"
+    case leo = "leo"
 
-    init(service: SpeechService) {
-        self.service = service
-    }
+    var id: String { rawValue }
 
-    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        Task { @MainActor in
-            service?.finishedSpeaking()
+    var displayName: String {
+        switch self {
+        case .ara: return "Ara"
+        case .rex: return "Rex"
+        case .sal: return "Sal"
+        case .eve: return "Eve"
+        case .leo: return "Leo"
         }
     }
 
-    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, willSpeakRangeOfSpeechString characterRange: NSRange, utterance: AVSpeechUtterance) {
-        let progress = Double(characterRange.location + characterRange.length) / Double(utterance.speechString.count)
-        Task { @MainActor in
-            service?.updateProgress(progress)
+    var description: String {
+        switch self {
+        case .ara: return "Warm & conversational"
+        case .rex: return "Professional & clear"
+        case .sal: return "Calm & balanced"
+        case .eve: return "Energetic & upbeat"
+        case .leo: return "Authoritative & strong"
+        }
+    }
+
+    var gender: String {
+        switch self {
+        case .ara, .eve: return "Female"
+        case .rex, .leo: return "Male"
+        case .sal: return "Neutral"
         }
     }
 }
 
-// MARK: - Errors
+struct VoiceTokenResponse: Codable {
+    let token: String
+    let expiresAt: String
+    let minutesRemaining: Double
+    let voice: String
+    let isPremium: Bool
+    let availableVoices: [String]
 
-enum SpeechError: LocalizedError {
-    case notAuthorized
-    case recognizerUnavailable
-    case requestCreationFailed
+    enum CodingKeys: String, CodingKey {
+        case token
+        case expiresAt = "expires_at"
+        case minutesRemaining = "minutes_remaining"
+        case voice
+        case isPremium = "is_premium"
+        case availableVoices = "available_voices"
+    }
+}
+
+enum VoiceError: LocalizedError {
+    case notConnected
+    case quotaExceeded
+    case premiumRequired
+    case tokenGenerationFailed
     case audioSessionFailed
 
     var errorDescription: String? {
         switch self {
-        case .notAuthorized:
-            return "Speech recognition is not authorized. Please enable it in Settings."
-        case .recognizerUnavailable:
-            return "Speech recognition is not available on this device."
-        case .requestCreationFailed:
-            return "Failed to create speech recognition request."
+        case .notConnected:
+            return "Voice service not connected"
+        case .quotaExceeded:
+            return "You've used all your voice minutes this month. Upgrade to Premium for unlimited voice conversations."
+        case .premiumRequired:
+            return "Premium subscription required to use additional voices."
+        case .tokenGenerationFailed:
+            return "Failed to start voice session. Please try again."
         case .audioSessionFailed:
-            return "Failed to configure audio session."
+            return "Failed to access microphone."
         }
-    }
-}
-```
-
-#### Voice Models
-
-```swift
-// Models.swift additions
-
-struct VoiceSettings: Codable {
-    let id: UUID
-    let userId: UUID
-    var voiceEnabled: Bool
-    var voiceSpeed: Double
-    var autoPlayResponses: Bool
-    var preferredVoice: String
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case userId = "user_id"
-        case voiceEnabled = "voice_enabled"
-        case voiceSpeed = "voice_speed"
-        case autoPlayResponses = "auto_play_responses"
-        case preferredVoice = "preferred_voice"
-    }
-}
-
-struct VoiceSession: Identifiable, Codable {
-    let id: UUID
-    let userId: UUID
-    let conversationId: UUID?
-    let startedAt: Date
-    var endedAt: Date?
-    var inputDurationSeconds: Int
-    var outputDurationSeconds: Int
-    var messagesCount: Int
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case userId = "user_id"
-        case conversationId = "conversation_id"
-        case startedAt = "started_at"
-        case endedAt = "ended_at"
-        case inputDurationSeconds = "input_duration_seconds"
-        case outputDurationSeconds = "output_duration_seconds"
-        case messagesCount = "messages_count"
     }
 }
 ```
@@ -463,28 +1045,37 @@ import SwiftUI
 
 struct VoiceChatView: View {
     @EnvironmentObject private var container: DependencyContainer
-    @StateObject private var speechService = SpeechService()
+    @StateObject private var voiceService: GrokVoiceService
     @ObservedObject var viewModel: ChatViewModel
 
-    @State private var voiceMode = true
     @State private var showSettings = false
+    @State private var showUpgradeSheet = false
+    @State private var errorMessage: String?
+
+    init(viewModel: ChatViewModel, supabaseClient: SupabaseClient) {
+        self.viewModel = viewModel
+        _voiceService = StateObject(wrappedValue: GrokVoiceService(supabaseClient: supabaseClient))
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            // Mode toggle
-            modeToggle
-
-            // Chat messages
-            messagesList
-
-            // Voice input area
-            if voiceMode {
-                voiceInputArea
-            } else {
-                textInputArea
+            // Usage indicator
+            if !voiceService.isPremium {
+                usageBar
             }
+
+            // Connection status
+            connectionStatus
+
+            // Voice visualization
+            voiceVisualization
+
+            Spacer()
+
+            // Voice controls
+            voiceControls
         }
-        .navigationTitle("AI Companion")
+        .navigationTitle("Voice Mode")
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
@@ -495,241 +1086,257 @@ struct VoiceChatView: View {
             }
         }
         .sheet(isPresented: $showSettings) {
-            VoiceSettingsView()
+            VoiceSettingsView(voiceService: voiceService)
+        }
+        .sheet(isPresented: $showUpgradeSheet) {
+            SubscriptionView()
+        }
+        .alert("Voice Error", isPresented: .constant(errorMessage != nil)) {
+            Button("OK") { errorMessage = nil }
+            if case .quotaExceeded = VoiceError.quotaExceeded {
+                Button("Upgrade") { showUpgradeSheet = true }
+            }
+        } message: {
+            Text(errorMessage ?? "")
         }
         .task {
-            await speechService.requestAuthorization()
+            await connectVoice()
         }
-        .onChange(of: viewModel.lastAIMessage) { _, newMessage in
-            if voiceMode && speechService.autoPlayResponses, let message = newMessage {
-                speechService.speak(message.content)
+        .onDisappear {
+            Task {
+                await voiceService.disconnect()
             }
         }
     }
 
-    // MARK: - Mode Toggle
+    // MARK: - Usage Bar
 
-    private var modeToggle: some View {
-        Picker("Input Mode", selection: $voiceMode) {
-            Label("Voice", systemImage: "mic.fill").tag(true)
-            Label("Text", systemImage: "keyboard").tag(false)
+    private var usageBar: some View {
+        VStack(spacing: 4) {
+            HStack {
+                Text("Voice Minutes")
+                    .font(.caption)
+                Spacer()
+                Text("\(String(format: "%.1f", voiceService.minutesRemaining)) min remaining")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Rectangle()
+                        .fill(Color(.systemGray5))
+                        .frame(height: 4)
+
+                    Rectangle()
+                        .fill(usageColor)
+                        .frame(width: geometry.size.width * usagePercentage, height: 4)
+                }
+                .cornerRadius(2)
+            }
+            .frame(height: 4)
         }
-        .pickerStyle(.segmented)
         .padding()
+        .background(Color(.systemBackground))
     }
 
-    // MARK: - Messages List
+    private var usagePercentage: Double {
+        let total = 3.0 // Free tier limit
+        let used = total - voiceService.minutesRemaining
+        return min(1.0, max(0, used / total))
+    }
 
-    private var messagesList: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: 12) {
-                    ForEach(viewModel.messages) { message in
-                        VoiceMessageBubble(
-                            message: message,
-                            isSpeaking: speechService.isSpeaking && viewModel.lastAIMessage?.id == message.id,
-                            onPlayTap: {
-                                speechService.speak(message.content)
-                            },
-                            onStopTap: {
-                                speechService.stopSpeaking()
-                            }
-                        )
-                        .id(message.id)
-                    }
+    private var usageColor: Color {
+        if usagePercentage >= 0.95 { return .red }
+        if usagePercentage >= 0.8 { return .orange }
+        return .accentColor
+    }
+
+    // MARK: - Connection Status
+
+    private var connectionStatus: some View {
+        Group {
+            switch voiceService.connectionState {
+            case .disconnected:
+                Label("Disconnected", systemImage: "wifi.slash")
+                    .foregroundStyle(.secondary)
+            case .connecting:
+                HStack {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                    Text("Connecting...")
                 }
-                .padding()
-            }
-            .onChange(of: viewModel.messages.count) { _, _ in
-                if let lastId = viewModel.messages.last?.id {
-                    withAnimation {
-                        proxy.scrollTo(lastId, anchor: .bottom)
-                    }
-                }
+                .foregroundStyle(.secondary)
+            case .connected:
+                Label("Connected • \(voiceService.currentVoice.displayName)", systemImage: "waveform")
+                    .foregroundStyle(.green)
+            case .error(let message):
+                Label(message, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.red)
             }
         }
+        .font(.caption)
+        .padding(.vertical, 8)
     }
 
-    // MARK: - Voice Input Area
+    // MARK: - Voice Visualization
 
-    private var voiceInputArea: some View {
-        VStack(spacing: 16) {
-            // Transcription preview
-            if !speechService.transcribedText.isEmpty {
-                transcriptionPreview
+    private var voiceVisualization: some View {
+        VStack(spacing: 24) {
+            // Live transcription
+            if !voiceService.transcribedText.isEmpty {
+                Text(voiceService.transcribedText)
+                    .font(.body)
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(12)
+                    .padding(.horizontal)
             }
 
-            // Voice controls
-            HStack(spacing: 32) {
-                // Cancel button (when listening)
-                if speechService.isListening {
-                    Button {
-                        speechService.stopListening()
-                        speechService.clearTranscription()
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 32))
-                            .foregroundStyle(.secondary)
-                    }
-                }
+            // Voice orb
+            ZStack {
+                // Outer glow when speaking/listening
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                voiceService.isListening ? Color.red.opacity(0.3) :
+                                voiceService.isSpeaking ? Color.accentColor.opacity(0.3) :
+                                Color.clear,
+                                Color.clear
+                            ],
+                            center: .center,
+                            startRadius: 60,
+                            endRadius: 120
+                        )
+                    )
+                    .frame(width: 240, height: 240)
+                    .scaleEffect(voiceService.isListening || voiceService.isSpeaking ? 1.2 : 1.0)
+                    .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: voiceService.isListening || voiceService.isSpeaking)
 
-                // Main microphone button
-                microphoneButton
+                // Main orb
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                voiceService.isListening ? Color.red :
+                                voiceService.isSpeaking ? Color.accentColor :
+                                Color(.systemGray4),
+                                voiceService.isListening ? Color.red.opacity(0.7) :
+                                voiceService.isSpeaking ? Color.accentColor.opacity(0.7) :
+                                Color(.systemGray5)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 120, height: 120)
 
-                // Send button (when we have text)
-                if !speechService.transcribedText.isEmpty && !speechService.isListening {
-                    Button {
-                        sendVoiceMessage()
-                    } label: {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.system(size: 32))
-                            .foregroundStyle(.accentColor)
-                    }
-                }
+                // Icon
+                Image(systemName: voiceService.isListening ? "waveform" :
+                      voiceService.isSpeaking ? "speaker.wave.2.fill" : "mic.fill")
+                    .font(.system(size: 40))
+                    .foregroundStyle(.white)
             }
 
             // Status text
             Text(statusText)
-                .font(.caption)
+                .font(.headline)
                 .foregroundStyle(.secondary)
         }
-        .padding()
-        .background(Color(.systemBackground))
-    }
-
-    private var transcriptionPreview: some View {
-        Text(speechService.transcribedText)
-            .font(.body)
-            .padding()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.systemGray6))
-            .cornerRadius(12)
-    }
-
-    private var microphoneButton: some View {
-        Button {
-            toggleListening()
-        } label: {
-            ZStack {
-                Circle()
-                    .fill(speechService.isListening ? Color.red : Color.accentColor)
-                    .frame(width: 72, height: 72)
-
-                if speechService.isListening {
-                    // Pulsing animation when listening
-                    Circle()
-                        .stroke(Color.red.opacity(0.5), lineWidth: 4)
-                        .frame(width: 88, height: 88)
-                        .scaleEffect(speechService.isListening ? 1.2 : 1.0)
-                        .opacity(speechService.isListening ? 0 : 1)
-                        .animation(
-                            .easeInOut(duration: 1.0).repeatForever(autoreverses: false),
-                            value: speechService.isListening
-                        )
-                }
-
-                Image(systemName: speechService.isListening ? "stop.fill" : "mic.fill")
-                    .font(.system(size: 28))
-                    .foregroundStyle(.white)
-            }
-        }
-        .disabled(!speechService.isAuthorized)
+        .padding(.top, 40)
     }
 
     private var statusText: String {
-        if !speechService.isAuthorized {
-            return "Microphone access required"
-        } else if speechService.isListening {
-            return "Listening..."
-        } else if !speechService.transcribedText.isEmpty {
-            return "Tap send or continue speaking"
-        } else {
-            return "Tap to speak"
+        switch voiceService.connectionState {
+        case .connected:
+            if voiceService.isListening {
+                return "Listening..."
+            } else if voiceService.isSpeaking {
+                return "Speaking..."
+            } else {
+                return "Tap to speak"
+            }
+        case .connecting:
+            return "Connecting..."
+        case .disconnected:
+            return "Tap to connect"
+        case .error:
+            return "Connection error"
         }
     }
 
-    // MARK: - Text Input (Fallback)
+    // MARK: - Voice Controls
 
-    private var textInputArea: some View {
-        HStack(spacing: 12) {
-            TextField("Type a message...", text: $viewModel.inputText, axis: .vertical)
-                .textFieldStyle(.roundedBorder)
-                .lineLimit(1...5)
-
+    private var voiceControls: some View {
+        HStack(spacing: 40) {
+            // End call
             Button {
-                Task { await viewModel.sendMessage() }
+                Task {
+                    await voiceService.disconnect()
+                }
             } label: {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 32))
-                    .foregroundStyle(.accentColor)
+                Image(systemName: "phone.down.fill")
+                    .font(.system(size: 24))
+                    .foregroundStyle(.white)
+                    .frame(width: 56, height: 56)
+                    .background(Color.red)
+                    .clipShape(Circle())
             }
-            .disabled(viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+            // Main microphone button
+            Button {
+                toggleVoice()
+            } label: {
+                Image(systemName: voiceService.isListening ? "stop.fill" : "mic.fill")
+                    .font(.system(size: 32))
+                    .foregroundStyle(.white)
+                    .frame(width: 80, height: 80)
+                    .background(voiceService.isListening ? Color.red : Color.accentColor)
+                    .clipShape(Circle())
+            }
+            .disabled(voiceService.connectionState != .connected)
+
+            // Switch to text
+            NavigationLink {
+                ChatView(viewModel: viewModel)
+            } label: {
+                Image(systemName: "keyboard")
+                    .font(.system(size: 24))
+                    .foregroundStyle(.accentColor)
+                    .frame(width: 56, height: 56)
+                    .background(Color(.systemGray5))
+                    .clipShape(Circle())
+            }
         }
-        .padding()
-        .background(Color(.systemBackground))
+        .padding(.bottom, 40)
     }
 
     // MARK: - Actions
 
-    private func toggleListening() {
-        if speechService.isListening {
-            speechService.stopListening()
-        } else {
-            do {
-                try speechService.startListening()
-            } catch {
-                print("Failed to start listening: \(error)")
+    private func connectVoice() async {
+        do {
+            try await voiceService.connect()
+        } catch let error as VoiceError {
+            errorMessage = error.localizedDescription
+            if case .quotaExceeded = error {
+                showUpgradeSheet = true
             }
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
-    private func sendVoiceMessage() {
-        let text = speechService.transcribedText
-        speechService.clearTranscription()
-        viewModel.inputText = text
-        Task { await viewModel.sendMessage() }
-    }
-}
-
-// MARK: - Voice Message Bubble
-
-struct VoiceMessageBubble: View {
-    let message: Message
-    let isSpeaking: Bool
-    let onPlayTap: () -> Void
-    let onStopTap: () -> Void
-
-    private var isUser: Bool {
-        message.role == .user
-    }
-
-    var body: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            if isUser { Spacer(minLength: 60) }
-
-            VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
-                Text(message.content)
-                    .padding(12)
-                    .background(isUser ? Color.accentColor : Color(.systemGray5))
-                    .foregroundStyle(isUser ? .white : .primary)
-                    .cornerRadius(16)
-
-                // Play button for AI messages
-                if !isUser {
-                    Button {
-                        isSpeaking ? onStopTap() : onPlayTap()
-                    } label: {
-                        Label(
-                            isSpeaking ? "Stop" : "Play",
-                            systemImage: isSpeaking ? "stop.fill" : "play.fill"
-                        )
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    }
-                }
+    private func toggleVoice() {
+        if voiceService.isListening {
+            voiceService.stopListening()
+        } else {
+            do {
+                try voiceService.startListening()
+            } catch {
+                errorMessage = error.localizedDescription
             }
-
-            if !isUser { Spacer(minLength: 60) }
         }
     }
 }
@@ -743,46 +1350,51 @@ struct VoiceMessageBubble: View {
 import SwiftUI
 
 struct VoiceSettingsView: View {
-    @EnvironmentObject private var container: DependencyContainer
+    @ObservedObject var voiceService: GrokVoiceService
     @Environment(\.dismiss) private var dismiss
 
-    @State private var voiceEnabled = true
-    @State private var voiceSpeed: Double = 1.0
-    @State private var autoPlayResponses = true
-
-    @StateObject private var speechService = SpeechService()
+    @State private var showUpgradeSheet = false
 
     var body: some View {
         NavigationStack {
             Form {
+                // Voice selection
                 Section {
-                    Toggle("Enable Voice Mode", isOn: $voiceEnabled)
+                    ForEach(GrokVoice.allCases) { voice in
+                        voiceRow(voice)
+                    }
+                } header: {
+                    Text("AI Voice")
                 } footer: {
-                    Text("When enabled, you can speak to your AI companion and hear responses.")
+                    if !voiceService.isPremium {
+                        Text("Upgrade to Premium to unlock all voices.")
+                    }
                 }
 
-                Section("Speech Output") {
-                    Toggle("Auto-Play AI Responses", isOn: $autoPlayResponses)
-
-                    VStack(alignment: .leading) {
-                        HStack {
-                            Text("Speech Speed")
-                            Spacer()
-                            Text(speedLabel)
+                // Usage
+                Section("Usage This Month") {
+                    HStack {
+                        Text("Minutes Used")
+                        Spacer()
+                        if voiceService.isPremium {
+                            Text("Unlimited")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("\(String(format: "%.1f", 3 - voiceService.minutesRemaining)) / 3 min")
                                 .foregroundStyle(.secondary)
                         }
-
-                        Slider(value: $voiceSpeed, in: 0.5...2.0, step: 0.25)
                     }
 
-                    Button {
-                        speechService.speechRate = Float(voiceSpeed) * AVSpeechUtteranceDefaultSpeechRate
-                        speechService.speak("This is how I'll sound at this speed.")
-                    } label: {
-                        Label("Test Voice", systemImage: "play.circle")
+                    if !voiceService.isPremium {
+                        Button {
+                            showUpgradeSheet = true
+                        } label: {
+                            Label("Upgrade for Unlimited Voice", systemImage: "star.fill")
+                        }
                     }
                 }
 
+                // Privacy
                 Section("Privacy") {
                     NavigationLink {
                         VoicePrivacyInfoView()
@@ -790,56 +1402,63 @@ struct VoiceSettingsView: View {
                         Label("How Voice Data is Used", systemImage: "lock.shield")
                     }
                 }
-
-                Section {
-                    Button(role: .destructive) {
-                        // Clear any stored voice data
-                    } label: {
-                        Label("Clear Voice History", systemImage: "trash")
-                    }
-                } footer: {
-                    Text("Voice input is processed on-device and not stored on our servers.")
-                }
             }
             .navigationTitle("Voice Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        saveSettings()
-                        dismiss()
-                    }
+                    Button("Done") { dismiss() }
                 }
+            }
+            .sheet(isPresented: $showUpgradeSheet) {
+                SubscriptionView()
             }
         }
     }
 
-    private var speedLabel: String {
-        switch voiceSpeed {
-        case 0.5: return "0.5x (Slow)"
-        case 0.75: return "0.75x"
-        case 1.0: return "1x (Normal)"
-        case 1.25: return "1.25x"
-        case 1.5: return "1.5x"
-        case 1.75: return "1.75x"
-        case 2.0: return "2x (Fast)"
-        default: return "\(voiceSpeed)x"
+    private func voiceRow(_ voice: GrokVoice) -> some View {
+        Button {
+            selectVoice(voice)
+        } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack {
+                        Text(voice.displayName)
+                            .font(.headline)
+
+                        Text("(\(voice.gender))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Text(voice.description)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                if voiceService.currentVoice == voice {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.accentColor)
+                } else if !voiceService.availableVoices.contains(voice) {
+                    Image(systemName: "lock.fill")
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
+        .foregroundStyle(.primary)
+        .disabled(!voiceService.availableVoices.contains(voice) && voice != .ara)
     }
 
-    private func saveSettings() {
+    private func selectVoice(_ voice: GrokVoice) {
+        guard voiceService.availableVoices.contains(voice) else {
+            showUpgradeSheet = true
+            return
+        }
+
         Task {
-            // Save to Supabase
-            try? await container.supabaseDataService.saveVoiceSettings(
-                VoiceSettings(
-                    id: UUID(),
-                    userId: UUID(), // Get from auth
-                    voiceEnabled: voiceEnabled,
-                    voiceSpeed: voiceSpeed,
-                    autoPlayResponses: autoPlayResponses,
-                    preferredVoice: "system"
-                )
-            )
+            try? await voiceService.setVoice(voice)
         }
     }
 }
@@ -858,27 +1477,27 @@ struct VoicePrivacyInfoView: View {
 
                 VStack(alignment: .leading, spacing: 12) {
                     PrivacyPoint(
-                        icon: "iphone",
-                        title: "On-Device Processing",
-                        description: "Speech recognition happens entirely on your device using Apple's built-in technology. Your voice never leaves your phone."
+                        icon: "server.rack",
+                        title: "Secure Processing",
+                        description: "Voice is processed through encrypted connections to our AI partner. Audio is never stored after the conversation ends."
                     )
 
                     PrivacyPoint(
                         icon: "text.bubble",
-                        title: "Text Only",
-                        description: "Only the transcribed text is sent to our AI for response. We never receive or store audio recordings."
-                    )
-
-                    PrivacyPoint(
-                        icon: "speaker.wave.2",
-                        title: "Local Text-to-Speech",
-                        description: "AI responses are spoken using your device's built-in voice synthesis. No audio data is transmitted."
+                        title: "Transcription Privacy",
+                        description: "Transcripts are used only for your conversation history and are protected by the same privacy policies as text messages."
                     )
 
                     PrivacyPoint(
                         icon: "trash",
                         title: "No Voice Storage",
-                        description: "We don't store voice recordings, voice prints, or any audio data. Your voice remains your private data."
+                        description: "We don't store voice recordings, voice prints, or any raw audio data. Your voice remains your private data."
+                    )
+
+                    PrivacyPoint(
+                        icon: "shield.checkered",
+                        title: "Safety First",
+                        description: "Voice conversations are monitored for crisis keywords to ensure your safety, just like text conversations."
                     )
                 }
             }
@@ -916,98 +1535,22 @@ struct PrivacyPoint: View {
 }
 ```
 
-### Backend Implementation
-
-No significant backend changes required for MVP since:
-
-- Speech-to-text uses iOS on-device processing (SFSpeechRecognizer)
-- Text-to-speech uses iOS on-device synthesis (AVSpeechSynthesizer)
-- Chat API receives transcribed text (same as typed messages)
-
-#### Optional: Voice Analytics Edge Function
-
-**File:** `supabase/functions/log-voice-session/index.ts`
-
-```typescript
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
-
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
-
-  try {
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-
-    const authHeader = req.headers.get("Authorization")!;
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
-
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const {
-      conversation_id,
-      input_duration_seconds,
-      output_duration_seconds,
-      messages_count,
-    } = await req.json();
-
-    // Log voice session for analytics
-    const { data, error } = await supabase
-      .from("voice_sessions")
-      .insert({
-        user_id: user.id,
-        conversation_id,
-        input_duration_seconds,
-        output_duration_seconds,
-        messages_count,
-        ended_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    return new Response(JSON.stringify({ success: true, session: data }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
-```
-
 ### Required Permissions
 
 **Info.plist additions:**
 
 ```xml
-<key>NSSpeechRecognitionUsageDescription</key>
-<string>MindFriend uses speech recognition to let you talk to your AI companion instead of typing.</string>
-
 <key>NSMicrophoneUsageDescription</key>
-<string>MindFriend needs microphone access so you can speak to your AI companion.</string>
+<string>MindFriend needs microphone access so you can have voice conversations with your AI companion.</string>
 ```
+
+### Environment Variables
+
+**Supabase Dashboard → Edge Functions → Secrets:**
+
+| Variable      | Purpose                  |
+| ------------- | ------------------------ |
+| `XAI_API_KEY` | Grok Voice Agent API key |
 
 ---
 
@@ -1017,69 +1560,62 @@ serve(async (req) => {
 
 ```
 ┌─────────────────────────────────────────┐
-│  < AI Companion              ⚙️         │
+│  < Voice Mode                    ⚙️      │
+├─────────────────────────────────────────┤
+│  Voice Minutes  ████████░░  12.5 min    │ ← Usage bar (free tier)
 ├─────────────────────────────────────────┤
 │                                         │
-│   ┌─────────────────────────────┐       │
-│   │ Voice │ Text                │       │ ← Mode toggle
-│   └─────────────────────────────┘       │
+│       🟢 Connected • Ara                │ ← Status
 │                                         │
-│   ┌─────────────────────────────────┐   │
-│   │ 😊 How are you feeling today?   │   │
-│   │                            🔊   │   │ ← Play button
-│   └─────────────────────────────────┘   │
-│                                         │
-│              ┌─────────────────────┐    │
-│              │ I'm feeling a bit  │    │
-│              │ anxious about work │    │
-│              └─────────────────────┘    │
-│                                         │
-│   ┌─────────────────────────────────┐   │
-│   │ I hear you. Work stress can    │   │
-│   │ really weigh on us...          │   │
-│   │                            🔊   │   │
-│   └─────────────────────────────────┘   │
-│                                         │
-├─────────────────────────────────────────┤
 │  ┌─────────────────────────────────┐    │
-│  │ "I've been having trouble..."  │    │ ← Live transcription
+│  │ "I've been feeling stressed..." │    │ ← Live transcription
 │  └─────────────────────────────────┘    │
 │                                         │
-│       ⛔              🎤              ➡️  │ ← Voice controls
-│     Cancel         (pulsing)        Send │
+│              ╭─────────╮                │
+│             ╱           ╲               │
+│            │   🎤        │              │ ← Animated orb
+│             ╲           ╱               │
+│              ╰─────────╯                │
+│           ~ ~ ~ ~ ~ ~ ~ ~               │ ← Pulse when active
 │                                         │
-│           Listening...                  │
+│           "Listening..."                │
+│                                         │
+├─────────────────────────────────────────┤
+│                                         │
+│      📞          🎤          ⌨️          │
+│     End        Speak       Text         │
+│                                         │
 └─────────────────────────────────────────┘
 ```
 
 ### Key Interactions
 
-1. **Push-to-Talk**
-   - Tap microphone to start listening
-   - Tap again to stop
-   - Pulsing animation while active
+1. **Tap to Speak**
+   - Tap microphone orb to start/stop
+   - Server VAD auto-detects speech boundaries
+   - Visual pulse animation while active
 
-2. **Live Transcription**
-   - Text appears as you speak
-   - Can edit before sending
-   - Clear X button to restart
+2. **Real-Time Feedback**
+   - Live transcription as you speak
+   - AI voice response plays automatically
+   - Orb color changes: blue (AI speaking), red (user speaking)
 
-3. **AI Response Playback**
-   - Auto-plays if setting enabled
-   - Tap speaker icon to replay
-   - Tap stop to interrupt
+3. **Quota Awareness**
+   - Progress bar shows remaining minutes
+   - Warning at 80% and 95% usage
+   - Upgrade prompt when limit reached
 
-4. **Mode Switching**
-   - Seamless toggle between voice/text
-   - Preserves conversation context
-   - Remembers preference
+4. **Voice Selection (Premium)**
+   - Settings → Voice selection
+   - Preview voices before selecting
+   - Locked icons for non-premium voices
 
 ### Accessibility
 
 - VoiceOver fully compatible
-- Haptic feedback for record start/stop
-- Visual indicators for all audio states
-- Adjustable speech rate for TTS
+- Haptic feedback for state changes
+- High contrast mode support
+- Reduced motion option
 
 ---
 
@@ -1087,54 +1623,54 @@ serve(async (req) => {
 
 ### Test Scenarios
 
-1. **Speech Recognition**
-   - Grant microphone permission
-   - Speak a sentence
-   - Verify accurate transcription
-   - Test background noise handling
+1. **Connection Flow**
+   - Launch voice mode
+   - Verify connection establishes
+   - Verify correct voice is set
 
-2. **Text-to-Speech**
-   - Receive AI response
-   - Verify auto-play (if enabled)
-   - Test play/stop controls
-   - Verify speed adjustment works
+2. **Voice Conversation**
+   - Speak to AI companion
+   - Verify transcription accuracy
+   - Verify AI responds with voice
+   - Verify natural turn-taking
 
-3. **Mode Switching**
-   - Switch from voice to text mid-conversation
-   - Verify messages preserved
-   - Switch back to voice
-   - Verify continuity
+3. **Quota Enforcement**
+   - Use voice until near limit
+   - Verify warning appears at 80%
+   - Verify upgrade prompt at 100%
+   - Verify graceful fallback
 
-4. **Permissions Denied**
-   - Deny microphone permission
-   - Verify graceful fallback to text
-   - Verify helpful error message
+4. **Premium Features**
+   - Verify free users can only use Ara
+   - Verify premium users can select all voices
+   - Verify voice preference persists
 
-5. **Offline Behavior**
-   - Test with airplane mode
-   - Verify recognition uses on-device model
-   - Verify TTS works offline
+5. **Error Handling**
+   - Test network disconnection
+   - Test microphone permission denied
+   - Test API errors
 
 ---
 
 ## Dependencies
 
-- **Requires:** iOS 17+ (for enhanced speech APIs)
+- **Requires:** iOS 17+
 - **Requires:** Chat system (existing)
-- **Optional:** Premium tier (for priority response—spec-08)
+- **Requires:** Premium subscription system (spec-08)
+- **Requires:** xAI API key with Voice Agent access
 
 ---
 
 ## Risks & Mitigations
 
-| Risk                             | Impact | Mitigation                                        |
-| -------------------------------- | ------ | ------------------------------------------------- |
-| Speech recognition accuracy      | High   | Use Apple's latest models, show edit option       |
-| Battery drain from audio         | Medium | Auto-stop after silence, efficient processing     |
-| User privacy concerns            | High   | On-device processing, clear privacy messaging     |
-| TTS sounds robotic               | Medium | Use premium voices (V2), user voice selection     |
-| Ambient noise interference       | Medium | Show noise indicator, suggest quieter environment |
-| App Store rejection (microphone) | Low    | Clear usage description, legitimate use case      |
+| Risk                  | Impact | Mitigation                                |
+| --------------------- | ------ | ----------------------------------------- |
+| API costs per minute  | High   | Enforce quotas, monitor usage             |
+| Latency issues        | Medium | Use server VAD, optimize audio buffering  |
+| User privacy concerns | High   | Clear privacy messaging, no audio storage |
+| Network reliability   | Medium | Graceful reconnection, offline fallback   |
+| Quota gaming          | Low    | Server-side enforcement only              |
+| xAI API availability  | Medium | Fallback to text mode, retry logic        |
 
 ---
 
@@ -1142,32 +1678,34 @@ serve(async (req) => {
 
 | Component                    | Estimate     |
 | ---------------------------- | ------------ |
-| SpeechService implementation | 8 hours      |
-| VoiceChatView                | 6 hours      |
-| Voice settings & UI          | 4 hours      |
 | Database migration           | 1 hour       |
-| Permission handling          | 2 hours      |
-| Testing & polish             | 6 hours      |
-| **Total**                    | **27 hours** |
+| Edge Function (voice-token)  | 4 hours      |
+| GrokVoiceService (iOS)       | 12 hours     |
+| VoiceChatView                | 6 hours      |
+| Voice settings UI            | 4 hours      |
+| Quota tracking & enforcement | 4 hours      |
+| Testing & polish             | 8 hours      |
+| **Total**                    | **39 hours** |
 
 ---
 
 ## Success Metrics
 
-| Metric                    | Target                           |
-| ------------------------- | -------------------------------- |
-| Voice mode adoption       | 30% of active users try it       |
-| Voice session completion  | 70% of started sessions complete |
-| Voice vs text preference  | 20% primarily use voice          |
-| User satisfaction (voice) | 4.5+ stars in feature feedback   |
+| Metric                     | Target                           |
+| -------------------------- | -------------------------------- |
+| Voice mode adoption        | 30% of active users try it       |
+| Voice session completion   | 70% of started sessions complete |
+| Premium conversion (voice) | 15% of voice users upgrade       |
+| Voice vs text preference   | 20% primarily use voice          |
+| User satisfaction (voice)  | 4.5+ stars in feature feedback   |
 
 ---
 
 ## Future Enhancements (V2+)
 
-1. **Wake Word Activation**
-   - "Hey MindFriend" hands-free start
-   - Always-listening mode (battery optimized)
+1. **Hands-Free Mode**
+   - Continuous conversation without tapping
+   - Background audio support
 
 2. **Emotion Detection**
    - Analyze voice stress markers
@@ -1177,14 +1715,11 @@ serve(async (req) => {
 3. **Voice Journaling**
    - Quick voice memo capture
    - Automatic transcription + analysis
-   - Add to journal entries
 
 4. **Guided Voice Exercises**
    - Voice-guided breathing
    - Audio meditation sessions
-   - Call-and-response prompts
 
 5. **Multi-Language Support**
-   - Detect spoken language
-   - Respond in same language
-   - Cross-language translation
+   - 100+ languages automatic detection
+   - Response in user's language
