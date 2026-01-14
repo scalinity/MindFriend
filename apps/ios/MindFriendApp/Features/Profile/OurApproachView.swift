@@ -113,7 +113,7 @@ private struct MethodologyCard: View {
             if let source = methodology.source {
                 Text("Source: \(source)")
                     .font(.caption2)
-                    .foregroundColor(.tertiary)
+                    .foregroundStyle(.tertiary)
                     .italic()
             }
         }
