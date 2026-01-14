@@ -30,7 +30,7 @@ final class MindFriendAppUITests: XCTestCase {
 
         // Wait for sign in screen to appear
         let signInWithAppleButton = app.buttons["Sign in with Apple"]
-        let signInWithGoogleButton = app.buttons["Sign in with Google"]
+        let signInWithGoogleButton = app.buttons["Continue with Google"]
 
         // Check that sign-in buttons exist
         XCTAssertTrue(signInWithAppleButton.waitForExistence(timeout: 5))
@@ -71,14 +71,20 @@ final class MindFriendAppUITests: XCTestCase {
     func testSignInButtonsAccessibility() throws {
         app.launch()
 
+        // Check Apple sign-in button is accessible (exists with accessibility label)
         let signInWithAppleButton = app.buttons["Sign in with Apple"]
-        XCTAssertTrue(signInWithAppleButton.waitForExistence(timeout: 5))
+        XCTAssertTrue(signInWithAppleButton.waitForExistence(timeout: 5), "Apple sign-in button should exist")
+        XCTAssertTrue(signInWithAppleButton.isHittable, "Apple sign-in button should be hittable")
 
-        // Check accessibility
-        XCTAssertTrue(signInWithAppleButton.isAccessibilityElement)
+        // Check Google sign-in button is accessible
+        let signInWithGoogleButton = app.buttons["Continue with Google"]
+        XCTAssertTrue(signInWithGoogleButton.exists, "Google sign-in button should exist")
+        XCTAssertTrue(signInWithGoogleButton.isHittable, "Google sign-in button should be hittable")
 
-        let signInWithGoogleButton = app.buttons["Sign in with Google"]
-        XCTAssertTrue(signInWithGoogleButton.isAccessibilityElement)
+        // Check Email sign-in button is accessible
+        let signInWithEmailButton = app.buttons["Continue with Email"]
+        XCTAssertTrue(signInWithEmailButton.exists, "Email sign-in button should exist")
+        XCTAssertTrue(signInWithEmailButton.isHittable, "Email sign-in button should be hittable")
     }
 
     // MARK: - Navigation Tests
