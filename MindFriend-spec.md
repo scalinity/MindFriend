@@ -69,7 +69,7 @@ MindFriend is a consumer iOS app that provides a personalized AI “wellness bud
   - Supabase Edge Functions (Deno) for complex logic
   - Supabase Realtime for live updates (circles)
   - Supabase Storage for audio assets
-- **AI Provider:** OpenAI-compatible Chat Completions via Edge Functions (never from device)
+- **AI Provider:** xAI (Grok) via Edge Functions (never from device)
 - **Observability:** Supabase Dashboard + Sentry (iOS)
 
 ### Deployment (MVP)
@@ -1809,7 +1809,7 @@ mindfriend/
         index.ts           # StoreKit transaction verification
       _shared/
         supabase.ts        # Shared Supabase client
-        openai.ts          # AI provider client
+        xai.ts             # AI provider client
         safety.ts          # Moderation utilities
     migrations/
       001_initial_schema.sql
@@ -1853,7 +1853,7 @@ mindfriend/
 
 - `@supabase/supabase-js` - Database access
 - `zod` - Schema validation
-- `openai` - AI provider SDK
+- `openai` - AI provider SDK (xAI-compatible)
 - Standard Deno APIs for fetch, crypto, etc.
 
 ---
@@ -1879,7 +1879,7 @@ mindfriend/
 ### Edge Function Secrets (set via Supabase CLI)
 
 ```bash
-supabase secrets set OPENAI_API_KEY=sk-...
+supabase secrets set XAI_API_KEY=xai-...
 supabase secrets set APNS_TEAM_ID=...
 supabase secrets set APNS_KEY_ID=...
 supabase secrets set APNS_PRIVATE_KEY_P8_BASE64=...
@@ -1928,7 +1928,7 @@ supabase secrets set APPLE_APPSTORE_PRIVATE_KEY=...
    ```
 5. Set secrets for Edge Functions:
    ```bash
-   supabase secrets set OPENAI_API_KEY=...
+   supabase secrets set XAI_API_KEY=...
    ```
 6. Configure RLS policies for all tables
 7. Enable Realtime for circles tables
