@@ -4,12 +4,19 @@ struct ExerciseLibraryView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
     @State private var exercises: [Exercise] = []
+    @State private var skillProgress: [SkillProgress] = []
     @State private var selectedType: ExerciseType?
     @State private var isLoading = true
 
     var filteredExercises: [Exercise] {
         guard let type = selectedType else { return exercises }
         return exercises.filter { $0.type == type }
+    }
+
+    /// Get skill progress for the selected type
+    var selectedSkillProgress: SkillProgress? {
+        guard let type = selectedType else { return nil }
+        return skillProgress.first { $0.skillType == type }
     }
 
     var body: some View {
@@ -34,6 +41,31 @@ struct ExerciseLibraryView: View {
                         }
                     }
                     .padding(.horizontal)
+                }
+
+                // Skill progress indicator (shown when a type is selected)
+                if let skill = selectedSkillProgress {
+                    SkillIndicatorView(
+                        skillType: skill.skillType,
+                        level: skill.skillLevel,
+                        xp: skill.xp
+                    )
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                } else if selectedType != nil {
+                    // Show starter indicator for types with no progress
+                    HStack(spacing: 6) {
+                        Image(systemName: "sparkles")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text("Complete exercises to level up this skill")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color(.systemGray5))
+                    .cornerRadius(12)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
 
                 // Exercises
@@ -71,7 +103,11 @@ struct ExerciseLibraryView: View {
         defer { isLoading = false }
 
         do {
-            exercises = try await container.supabaseDataService.getExercises()
+            async let exercisesTask = container.supabaseDataService.getExercises()
+            async let skillsTask = container.supabaseDataService.getSkillProgress()
+
+            exercises = try await exercisesTask
+            skillProgress = try await skillsTask
         } catch {
             print("ExerciseLibraryView loadExercises error: \(error)")
             appState.showError(.apiError(error.localizedDescription))
@@ -131,9 +167,17 @@ struct ExerciseCard: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
 
-                HStack {
+                HStack(spacing: 8) {
                     Label("\(durationMinutes) min", systemImage: "clock")
                     Label(exercise.type.rawValue.capitalized, systemImage: exercise.type.icon)
+
+                    if let basis = exercise.evidenceBasis {
+                        EvidenceBadge(
+                            basis: basis,
+                            isReviewed: exercise.isTherapistReviewed,
+                            showInfo: false
+                        )
+                    }
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -149,8 +193,19 @@ struct ExerciseCard: View {
         .background(Color(.secondarySystemBackground))
         .cornerRadius(16)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(exercise.title), \(exercise.type.rawValue) exercise, \(durationMinutes) minutes")
+        .accessibilityLabel(accessibilityDescription)
         .accessibilityHint("Double tap to start this exercise")
+    }
+
+    private var accessibilityDescription: String {
+        var description = "\(exercise.title), \(exercise.type.rawValue) exercise, \(durationMinutes) minutes"
+        if let basis = exercise.evidenceBasis {
+            description += ", based on \(basis.displayName)"
+            if exercise.isTherapistReviewed {
+                description += ", reviewed by mental health professionals"
+            }
+        }
+        return description
     }
 }
 
@@ -317,14 +372,28 @@ struct ExercisePlayerView: View {
                     rating: rating > 0 ? rating : nil,
                     note: nil
                 )
+
+                // Award XP for exercise completion
+                let xpResult = try await container.supabaseDataService.awardXP(activity: .exerciseComplete(exercise.type))
+
+                // Update event progress for this exercise type
+                _ = try? await container.supabaseDataService.incrementEventProgress(activityType: exercise.type.rawValue)
+
+                await MainActor.run {
+                    // Show level-up celebration if leveled up
+                    if xpResult.leveledUp {
+                        appState.showLevelUpCelebration(level: xpResult.newLevel, title: xpResult.newTitle)
+                    }
+                    dismiss()
+                }
             } catch {
                 // Completion tracking failure shouldn't block user - log for debugging
                 #if DEBUG
                 print("Failed to record exercise completion: \(error.localizedDescription)")
                 #endif
-            }
-            await MainActor.run {
-                dismiss()
+                await MainActor.run {
+                    dismiss()
+                }
             }
         }
     }

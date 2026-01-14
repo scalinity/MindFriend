@@ -1,6 +1,6 @@
 # CLAUDE.md — MindFriend Repo Guide (for Claude Code / AI Coding Agents)
 
-<!-- Last updated: 2025-01-12 | Version: 2.0 | Owner: @mindfriend-team -->
+<!-- Last updated: 2026-01-14 | Version: 2.1 | Owner: @mindfriend-team -->
 
 This file defines the operating constraints, repo conventions, and "definition of done" for automated coding agents working on **MindFriend**.
 
@@ -54,12 +54,57 @@ MVP includes:
   - Supabase migrations
   - Tests validating contract behavior
 
+### Migration discipline
+
+- **ALWAYS run `supabase db push` immediately after creating or modifying a migration file.**
+- Never leave migrations unapplied — schema drift causes cascading errors when later migrations reference missing tables/columns.
+- When creating migrations that reference other tables, verify those tables exist in the remote database first.
+- Use `CREATE TABLE IF NOT EXISTS` and `ALTER TABLE ADD COLUMN IF NOT EXISTS` for idempotency.
+- Wrap `CREATE POLICY` statements in conditional `DO $$ ... END $$` blocks checking `pg_policies` to avoid duplicate policy errors.
+- Order matters: create tables before policies that reference them (e.g., create `family_members` before `family_groups` policy that references it).
+
 ### Progress documentation
 
+- **After completing any feature or bug fix**, log it in `docs/PROGRESS.md` using the standard entry format.
 - Write new ideas, improvements, and strategic notes to `SCRATCHPAD.md`.
-- Log significant progress milestones (features completed, major bugs fixed) in `SCRATCHPAD.md`.
 - Use `SCRATCHPAD.md` for brainstorming and "what if" explorations that don't belong in code or `decisions.md`.
-- Keep `SCRATCHPAD.md` organized with dated entries or clear section headers.
+
+### Progress logging (REQUIRED)
+
+After each feature implementation or bug fix session, create an entry in `docs/PROGRESS.md`:
+
+```markdown
+## [YYYY-MM-DD] Feature/Fix Name
+
+**Type:** Feature | Bugfix | Refactor | Test | Docs
+**Status:** Complete | In Progress | Blocked
+
+### Summary
+
+One-line description of what was done.
+
+### Changes
+
+- **File:** `path/to/file` — Description of change
+
+### Testing
+
+- [ ] Unit tests added/updated
+- [ ] Integration tests pass
+- [ ] Manual verification done
+
+### Notes
+
+Any additional context, blockers, or follow-ups.
+```
+
+**Logging rules:**
+
+- Log immediately after completing work (not days later)
+- Include specific file paths and line numbers for significant changes
+- Mark testing checkboxes honestly
+- Use tables for multiple related changes
+- Keep summaries to one line; details go in Changes section
 
 ### Decision documentation
 
@@ -120,6 +165,7 @@ mindfriend/
     migrations/               # SQL migrations
     config.toml               # Supabase project config
   docs/
+    PROGRESS.md               # Development progress log (REQUIRED after each feature)
     decisions.md              # Architecture decision log
     runbooks.md               # Operational procedures
   .env.example
@@ -639,6 +685,7 @@ supabase gen types typescript --local > types/supabase.ts
 
 | Purpose              | Path                                                   |
 | -------------------- | ------------------------------------------------------ |
+| **Progress log**     | `docs/PROGRESS.md`                                     |
 | Decision log         | `docs/decisions.md`                                    |
 | iOS app entry        | `apps/ios/MindFriendApp/App/MindFriendApp.swift`       |
 | Dependency container | `apps/ios/MindFriendApp/App/DependencyContainer.swift` |
@@ -646,5 +693,83 @@ supabase gen types typescript --local > types/supabase.ts
 | Supabase config      | `supabase/config.toml`                                 |
 | Migrations           | `supabase/migrations/`                                 |
 | Edge Functions       | `supabase/functions/`                                  |
+
+---
+
+## 16) Landing Page Website (getmindfriend.app)
+
+The marketing/landing page is hosted on a Hostinger VPS.
+
+### SSH Access
+
+```bash
+# Connect to the server (uses ~/.ssh/config alias)
+ssh hostinger
+```
+
+### File Locations
+
+| Path                                    | Purpose             |
+| --------------------------------------- | ------------------- |
+| `/var/www/mindfriend/`                  | Website root        |
+| `/var/www/mindfriend/index.html`        | Landing page        |
+| `/var/www/mindfriend/auth/`             | Auth callback pages |
+| `/var/www/mindfriend/assets/`           | Images, logo        |
+| `/var/www/mindfriend/css/`              | Stylesheets         |
+| `/var/www/mindfriend/js/`               | JavaScript files    |
+| `/etc/nginx/sites-available/mindfriend` | Nginx site config   |
+
+### Auth Pages
+
+| File                       | Purpose                                    |
+| -------------------------- | ------------------------------------------ |
+| `auth/callback.html`       | Handles Supabase auth redirects (PKCE)     |
+| `auth/confirmed.html`      | Email confirmation success + app deep link |
+| `auth/reset-password.html` | Password reset form                        |
+
+### Common Operations
+
+```bash
+# View website files
+ssh hostinger "ls -la /var/www/mindfriend/"
+
+# Edit a file (use heredoc for multi-line)
+ssh hostinger "cat > /var/www/mindfriend/path/to/file.html" << 'EOF'
+<html>...</html>
+EOF
+
+# Or use cat with pipe
+cat local-file.html | ssh hostinger "cat > /var/www/mindfriend/path/to/file.html"
+
+# View nginx config
+ssh hostinger "cat /etc/nginx/sites-available/mindfriend"
+
+# Reload nginx (if config changed)
+ssh hostinger "sudo systemctl reload nginx"
+
+# Check nginx status
+ssh hostinger "sudo systemctl status nginx"
+
+# View nginx error logs
+ssh hostinger "sudo tail -50 /var/log/nginx/error.log"
+```
+
+### Supabase Auth Configuration
+
+The website handles Supabase email confirmation redirects. Ensure these settings in Supabase Dashboard → Authentication → URL Configuration:
+
+| Setting       | Value                                      |
+| ------------- | ------------------------------------------ |
+| Site URL      | `https://getmindfriend.app/auth/callback`  |
+| Redirect URLs | `https://getmindfriend.app`                |
+|               | `https://getmindfriend.app/auth/callback`  |
+|               | `https://getmindfriend.app/auth/confirmed` |
+|               | `mindfriend://` (for deep links)           |
+
+### Domain & DNS
+
+- **Domain:** getmindfriend.app (managed via Squarespace)
+- **DNS Records:** A record points to Hostinger VPS IP
+- **Email:** Uses Resend SMTP with SPF, DKIM, DMARC configured
 
 ---

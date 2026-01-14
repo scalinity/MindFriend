@@ -29,6 +29,11 @@ final class AppState: ObservableObject {
     @Published var showPaywall: Bool = false
     @Published var showCrisisResources: Bool = false
 
+    // MARK: - Level Up Celebration
+    @Published var showLevelUp: Bool = false
+    @Published var levelUpLevel: Int = 0
+    @Published var levelUpTitle: String = ""
+
     // MARK: - Error Handling
     @Published var globalError: AppError?
     @Published var showError: Bool = false
@@ -68,6 +73,16 @@ final class AppState: ObservableObject {
     func updateEntitlements(_ entitlements: Entitlements) {
         self.entitlements = entitlements
         self.currentUser?.entitlements = entitlements
+    }
+
+    func showLevelUpCelebration(level: Int, title: String) {
+        self.levelUpLevel = level
+        self.levelUpTitle = title
+        self.showLevelUp = true
+    }
+
+    func dismissLevelUp() {
+        self.showLevelUp = false
     }
 }
 

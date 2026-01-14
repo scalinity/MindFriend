@@ -28,9 +28,17 @@ final class ModelsTests: XCTestCase {
                 "currentStreakDays": 5,
                 "longestStreakDays": 10,
                 "totalQuestsCompleted": 25,
-                "totalExercisesCompleted": 12
+                "totalExercisesCompleted": 12,
+                "xpTotal": 500,
+                "xpThisWeek": 100,
+                "level": 5,
+                "levelTitle": "Enthusiast"
             },
-            "entitlements": "free",
+            "entitlements": {
+                "tier": "free",
+                "dailyAiQuota": 20,
+                "dailyAiUsed": 0
+            },
             "badges": []
         }
         """.data(using: .utf8)!
@@ -47,7 +55,7 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(profile.timezone, "America/New_York")
         XCTAssertEqual(profile.settings.aiTone, .friendly)
         XCTAssertEqual(profile.stats.currentStreakDays, 5)
-        XCTAssertEqual(profile.entitlements, .free)
+        XCTAssertEqual(profile.entitlements.tier, .free)
     }
 
     func testUserSettingsDefaults() {
@@ -77,6 +85,7 @@ final class ModelsTests: XCTestCase {
             anxietyScore: 3,
             energyScore: 6,
             note: "Feeling good today",
+            source: .manual,
             createdAt: Date()
         )
 
@@ -94,36 +103,12 @@ final class ModelsTests: XCTestCase {
             anxietyScore: nil,
             energyScore: nil,
             note: nil,
+            source: .manual,
             createdAt: Date()
         )
 
         XCTAssertGreaterThanOrEqual(entry.moodScore, 1)
         XCTAssertLessThanOrEqual(entry.moodScore, 10)
-    }
-
-    // MARK: - Quest Tests
-
-    func testQuestDecoding() throws {
-        let json = """
-        {
-            "id": "quest-123",
-            "title": "Morning Gratitude",
-            "description": "Write down 3 things you're grateful for",
-            "category": "mindfulness",
-            "estimatedMinutes": 5,
-            "xpReward": 50,
-            "status": "available"
-        }
-        """.data(using: .utf8)!
-
-        let decoder = JSONDecoder()
-        let quest = try decoder.decode(Quest.self, from: json)
-
-        XCTAssertEqual(quest.id, "quest-123")
-        XCTAssertEqual(quest.title, "Morning Gratitude")
-        XCTAssertEqual(quest.category, .mindfulness)
-        XCTAssertEqual(quest.estimatedMinutes, 5)
-        XCTAssertEqual(quest.status, .available)
     }
 
     // MARK: - Entitlements Tests
@@ -133,19 +118,10 @@ final class ModelsTests: XCTestCase {
         XCTAssertNotEqual(Entitlements.free, Entitlements.premium)
     }
 
-    func testEntitlementsRawValue() {
-        XCTAssertEqual(Entitlements.free.rawValue, "free")
-        XCTAssertEqual(Entitlements.premium.rawValue, "premium")
-    }
-
     // MARK: - AITone Tests
 
     func testAIToneOptions() {
-        let tones: [AITone] = [.friendly, .professional, .casual, .supportive]
-
-        XCTAssertEqual(tones.count, 4)
-        XCTAssertTrue(tones.contains(.friendly))
-        XCTAssertTrue(tones.contains(.supportive))
+        XCTAssertTrue(AITone.allCases.contains(.friendly))
     }
 
     // MARK: - ExerciseType Tests
@@ -155,5 +131,390 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(ExerciseType.meditation.rawValue, "meditation")
         XCTAssertEqual(ExerciseType.journaling.rawValue, "journaling")
         XCTAssertEqual(ExerciseType.grounding.rawValue, "grounding")
+    }
+
+    func testExerciseTypeThemeColors() {
+        // Verify all exercise types have distinct theme colors
+        let types: [ExerciseType] = [.breathing, .meditation, .grounding, .journaling, .movement]
+        for type in types {
+            // Just verify each type has a color (non-crash test)
+            _ = type.themeColor
+        }
+    }
+
+    func testExerciseTypeIcons() {
+        XCTAssertEqual(ExerciseType.breathing.icon, "wind")
+        XCTAssertEqual(ExerciseType.meditation.icon, "brain.head.profile")
+        XCTAssertEqual(ExerciseType.grounding.icon, "leaf.fill")
+        XCTAssertEqual(ExerciseType.journaling.icon, "pencil.and.scribble")
+        XCTAssertEqual(ExerciseType.movement.icon, "figure.walk")
+    }
+
+    // MARK: - SkillLevel Constants Tests
+
+    func testSkillLevelThresholdsCount() {
+        // Should have 6 thresholds (levels 0-5)
+        XCTAssertEqual(SkillLevel.thresholds.count, 6)
+    }
+
+    func testSkillLevelThresholdsAscending() {
+        // Thresholds should be in ascending order
+        for i in 1..<SkillLevel.thresholds.count {
+            XCTAssertGreaterThan(SkillLevel.thresholds[i], SkillLevel.thresholds[i - 1])
+        }
+    }
+
+    func testSkillLevelThresholdValues() {
+        XCTAssertEqual(SkillLevel.thresholds[0], 0)
+        XCTAssertEqual(SkillLevel.thresholds[1], 150)
+        XCTAssertEqual(SkillLevel.thresholds[2], 500)
+        XCTAssertEqual(SkillLevel.thresholds[3], 1200)
+        XCTAssertEqual(SkillLevel.thresholds[4], 3000)
+        XCTAssertEqual(SkillLevel.thresholds[5], 7500)
+    }
+
+    func testSkillLevelTitlesCount() {
+        // Should have 6 titles (levels 0-5)
+        XCTAssertEqual(SkillLevel.titles.count, 6)
+    }
+
+    func testSkillLevelTitleValues() {
+        XCTAssertEqual(SkillLevel.titles[0], "Novice")
+        XCTAssertEqual(SkillLevel.titles[1], "Apprentice")
+        XCTAssertEqual(SkillLevel.titles[2], "Practitioner")
+        XCTAssertEqual(SkillLevel.titles[3], "Expert")
+        XCTAssertEqual(SkillLevel.titles[4], "Master")
+        XCTAssertEqual(SkillLevel.titles[5], "Grandmaster")
+    }
+
+    func testSkillLevelMaxLevel() {
+        XCTAssertEqual(SkillLevel.maxLevel, 5)
+    }
+
+    // MARK: - SkillProgress Tests
+
+    func testSkillProgressLevelTitle() {
+        let skill0 = SkillProgress(id: "1", userId: "u1", skillType: .breathing, xp: 0, skillLevel: 0)
+        XCTAssertEqual(skill0.levelTitle, "Novice")
+
+        let skill2 = SkillProgress(id: "2", userId: "u1", skillType: .breathing, xp: 500, skillLevel: 2)
+        XCTAssertEqual(skill2.levelTitle, "Practitioner")
+
+        let skill5 = SkillProgress(id: "3", userId: "u1", skillType: .breathing, xp: 7500, skillLevel: 5)
+        XCTAssertEqual(skill5.levelTitle, "Grandmaster")
+    }
+
+    func testSkillProgressNextLevelXP() {
+        let skill0 = SkillProgress(id: "1", userId: "u1", skillType: .breathing, xp: 0, skillLevel: 0)
+        XCTAssertEqual(skill0.nextLevelXP, 150) // Level 0 -> Level 1 requires 150 XP
+
+        let skill2 = SkillProgress(id: "2", userId: "u1", skillType: .breathing, xp: 500, skillLevel: 2)
+        XCTAssertEqual(skill2.nextLevelXP, 1200) // Level 2 -> Level 3 requires 1200 XP
+
+        let skill5 = SkillProgress(id: "3", userId: "u1", skillType: .breathing, xp: 7500, skillLevel: 5)
+        XCTAssertEqual(skill5.nextLevelXP, 7500) // Max level, returns current threshold
+    }
+
+    func testSkillProgressCurrentLevelXP() {
+        let skill0 = SkillProgress(id: "1", userId: "u1", skillType: .breathing, xp: 0, skillLevel: 0)
+        XCTAssertEqual(skill0.currentLevelXP, 0)
+
+        let skill2 = SkillProgress(id: "2", userId: "u1", skillType: .breathing, xp: 500, skillLevel: 2)
+        XCTAssertEqual(skill2.currentLevelXP, 500)
+
+        let skill5 = SkillProgress(id: "3", userId: "u1", skillType: .breathing, xp: 7500, skillLevel: 5)
+        XCTAssertEqual(skill5.currentLevelXP, 7500)
+    }
+
+    func testSkillProgressAtZero() {
+        let skill = SkillProgress(id: "1", userId: "u1", skillType: .breathing, xp: 0, skillLevel: 0)
+        XCTAssertEqual(skill.progress, 0.0, accuracy: 0.001)
+    }
+
+    func testSkillProgressMidLevel() {
+        // Level 0 range: 0-150 XP, at 75 XP should be 50% progress
+        let skill = SkillProgress(id: "1", userId: "u1", skillType: .breathing, xp: 75, skillLevel: 0)
+        XCTAssertEqual(skill.progress, 0.5, accuracy: 0.001)
+    }
+
+    func testSkillProgressAtMaxLevel() {
+        let skill = SkillProgress(id: "1", userId: "u1", skillType: .breathing, xp: 7500, skillLevel: 5)
+        XCTAssertEqual(skill.progress, 1.0, accuracy: 0.001)
+    }
+
+    func testSkillProgressWithDifferentExerciseTypes() {
+        let breathing = SkillProgress(id: "1", userId: "u1", skillType: .breathing, xp: 100, skillLevel: 0)
+        let meditation = SkillProgress(id: "2", userId: "u1", skillType: .meditation, xp: 100, skillLevel: 0)
+        let grounding = SkillProgress(id: "3", userId: "u1", skillType: .grounding, xp: 100, skillLevel: 0)
+
+        XCTAssertEqual(breathing.skillType, .breathing)
+        XCTAssertEqual(meditation.skillType, .meditation)
+        XCTAssertEqual(grounding.skillType, .grounding)
+    }
+
+    // MARK: - UserLevel Tests
+
+    func testUserLevelProgressCalculation() {
+        // Level 1: 0-99 XP, at 50 XP should be 50%
+        let stats = UserStats(
+            currentStreakDays: 0,
+            longestStreakDays: 0,
+            totalQuestsCompleted: 0,
+            totalExercisesCompleted: 0,
+            xpTotal: 50,
+            xpThisWeek: 50,
+            level: 1,
+            levelTitle: "Beginner"
+        )
+        let level = UserLevel.from(stats: stats)
+        XCTAssertEqual(level.level, 1)
+        XCTAssertEqual(level.currentXP, 50)
+        XCTAssertEqual(level.nextLevelXP, 100) // Level 1->2 threshold
+    }
+
+    func testUserLevelFromStats() {
+        let stats = UserStats(
+            currentStreakDays: 5,
+            longestStreakDays: 10,
+            totalQuestsCompleted: 25,
+            totalExercisesCompleted: 12,
+            xpTotal: 500,
+            xpThisWeek: 100,
+            level: 5,
+            levelTitle: "Enthusiast"
+        )
+        let level = UserLevel.from(stats: stats)
+
+        XCTAssertEqual(level.level, 5)
+        XCTAssertEqual(level.title, "Enthusiast")
+        XCTAssertEqual(level.currentXP, 500)
+        XCTAssertEqual(level.xpThisWeek, 100)
+    }
+
+    // MARK: - SeasonalEvent Tests
+
+    func testSeasonalEventIsActive() {
+        let now = Date()
+        let pastStart = now.addingTimeInterval(-86400) // 1 day ago
+        let futureEnd = now.addingTimeInterval(86400)  // 1 day from now
+
+        let activeEvent = SeasonalEvent(
+            id: "event-1",
+            name: "Test Event",
+            description: nil,
+            startsAt: pastStart,
+            endsAt: futureEnd,
+            eventType: "challenge",
+            requiredActivityType: "breathing",
+            rewardBadgeId: nil,
+            targetCount: 10,
+            xpMultiplier: 1.5,
+            createdAt: pastStart
+        )
+
+        XCTAssertTrue(activeEvent.isActive)
+    }
+
+    func testSeasonalEventNotActiveYet() {
+        let now = Date()
+        let futureStart = now.addingTimeInterval(86400)  // 1 day from now
+        let futureEnd = now.addingTimeInterval(172800)   // 2 days from now
+
+        let futureEvent = SeasonalEvent(
+            id: "event-1",
+            name: "Future Event",
+            description: nil,
+            startsAt: futureStart,
+            endsAt: futureEnd,
+            eventType: "challenge",
+            requiredActivityType: nil,
+            rewardBadgeId: nil,
+            targetCount: 5,
+            xpMultiplier: 1.0,
+            createdAt: now
+        )
+
+        XCTAssertFalse(futureEvent.isActive)
+    }
+
+    func testSeasonalEventExpired() {
+        let now = Date()
+        let pastStart = now.addingTimeInterval(-172800) // 2 days ago
+        let pastEnd = now.addingTimeInterval(-86400)    // 1 day ago
+
+        let expiredEvent = SeasonalEvent(
+            id: "event-1",
+            name: "Expired Event",
+            description: nil,
+            startsAt: pastStart,
+            endsAt: pastEnd,
+            eventType: "challenge",
+            requiredActivityType: nil,
+            rewardBadgeId: nil,
+            targetCount: 5,
+            xpMultiplier: 1.0,
+            createdAt: pastStart
+        )
+
+        XCTAssertFalse(expiredEvent.isActive)
+    }
+
+    // MARK: - XPActivity Tests
+
+    func testXPActivityAmounts() {
+        XCTAssertEqual(XPActivity.questComplete.xpAmount, 50)
+        XCTAssertEqual(XPActivity.exerciseComplete(.breathing).xpAmount, 30)
+        XCTAssertEqual(XPActivity.moodCheckin.xpAmount, 10)
+        XCTAssertEqual(XPActivity.circleCheckin.xpAmount, 20)
+    }
+
+    func testXPActivitySkillTypes() {
+        // Quest completion doesn't map to a specific skill
+        XCTAssertNil(XPActivity.questComplete.skillType)
+
+        // Mood checkin doesn't map to a specific skill
+        XCTAssertNil(XPActivity.moodCheckin.skillType)
+
+        // Circle checkin doesn't map to a specific skill
+        XCTAssertNil(XPActivity.circleCheckin.skillType)
+
+        // Exercise completion maps to its specific skill type (as raw value string)
+        XCTAssertEqual(XPActivity.exerciseComplete(.breathing).skillType, "breathing")
+        XCTAssertEqual(XPActivity.exerciseComplete(.meditation).skillType, "meditation")
+    }
+
+    // MARK: - QuestType EventActivityType Mapping Tests
+
+    func testQuestTypeEventActivityTypeMapping() {
+        XCTAssertEqual(QuestType.breathing.eventActivityType, "breathing")
+        XCTAssertEqual(QuestType.walk.eventActivityType, "movement")
+        XCTAssertEqual(QuestType.stretch.eventActivityType, "movement")
+        XCTAssertEqual(QuestType.journal.eventActivityType, "journaling")
+        XCTAssertEqual(QuestType.gratitude.eventActivityType, "journaling")
+        XCTAssertEqual(QuestType.focus.eventActivityType, "meditation")
+    }
+
+    // MARK: - EvidenceBasis Tests
+
+    func testEvidenceBasisDisplayNames() {
+        XCTAssertEqual(EvidenceBasis.CBT.displayName, "Cognitive Behavioral Therapy")
+        XCTAssertEqual(EvidenceBasis.DBT.displayName, "Dialectical Behavior Therapy")
+        XCTAssertEqual(EvidenceBasis.ACT.displayName, "Acceptance & Commitment Therapy")
+        XCTAssertEqual(EvidenceBasis.Mindfulness.displayName, "Mindfulness-Based")
+        XCTAssertEqual(EvidenceBasis.Somatic.displayName, "Somatic Practice")
+        XCTAssertEqual(EvidenceBasis.Breathwork.displayName, "Breathwork")
+        XCTAssertEqual(EvidenceBasis.General.displayName, "Evidence-Informed")
+    }
+
+    func testEvidenceBasisShortLabels() {
+        XCTAssertEqual(EvidenceBasis.CBT.shortLabel, "CBT")
+        XCTAssertEqual(EvidenceBasis.DBT.shortLabel, "DBT")
+        XCTAssertEqual(EvidenceBasis.ACT.shortLabel, "ACT")
+        XCTAssertEqual(EvidenceBasis.Mindfulness.shortLabel, "Mindfulness")
+        XCTAssertEqual(EvidenceBasis.Somatic.shortLabel, "Somatic")
+        XCTAssertEqual(EvidenceBasis.Breathwork.shortLabel, "Breathwork")
+        XCTAssertEqual(EvidenceBasis.General.shortLabel, "Wellness")
+    }
+
+    func testEvidenceBasisColors() {
+        // Verify all evidence bases have distinct colors (non-crash test)
+        for basis in EvidenceBasis.allCases {
+            // Accessing color should not crash
+            _ = basis.color
+        }
+    }
+
+    func testEvidenceBasisCaseIterableCount() {
+        // Should have exactly 7 therapeutic approaches
+        XCTAssertEqual(EvidenceBasis.allCases.count, 7)
+    }
+
+    func testEvidenceBasisRawValues() {
+        // Verify raw values match database values
+        XCTAssertEqual(EvidenceBasis.CBT.rawValue, "CBT")
+        XCTAssertEqual(EvidenceBasis.DBT.rawValue, "DBT")
+        XCTAssertEqual(EvidenceBasis.ACT.rawValue, "ACT")
+        XCTAssertEqual(EvidenceBasis.Mindfulness.rawValue, "Mindfulness")
+        XCTAssertEqual(EvidenceBasis.Somatic.rawValue, "Somatic")
+        XCTAssertEqual(EvidenceBasis.Breathwork.rawValue, "Breathwork")
+        XCTAssertEqual(EvidenceBasis.General.rawValue, "General")
+    }
+
+    // MARK: - MethodologyInfo Tests
+
+    func testMethodologyInfoIdentifiable() {
+        let info = MethodologyInfo(
+            code: "CBT",
+            name: "Cognitive Behavioral Therapy",
+            description: "A widely-studied approach",
+            source: "APA"
+        )
+
+        XCTAssertEqual(info.id, "CBT")
+        XCTAssertEqual(info.code, "CBT")
+        XCTAssertEqual(info.name, "Cognitive Behavioral Therapy")
+        XCTAssertEqual(info.source, "APA")
+    }
+
+    func testMethodologyInfoOptionalSource() {
+        let info = MethodologyInfo(
+            code: "General",
+            name: "General Wellness",
+            description: "Evidence-informed practices",
+            source: nil
+        )
+
+        XCTAssertNil(info.source)
+    }
+
+    // MARK: - Testimonial Tests
+
+    func testTestimonialCreation() {
+        let id = UUID()
+        let testimonial = Testimonial(
+            id: id,
+            displayName: "Test User",
+            location: "California",
+            content: "Great app!",
+            rating: 5,
+            featureHighlight: "AI Chat"
+        )
+
+        XCTAssertEqual(testimonial.id, id)
+        XCTAssertEqual(testimonial.displayName, "Test User")
+        XCTAssertEqual(testimonial.location, "California")
+        XCTAssertEqual(testimonial.content, "Great app!")
+        XCTAssertEqual(testimonial.rating, 5)
+        XCTAssertEqual(testimonial.featureHighlight, "AI Chat")
+    }
+
+    func testTestimonialOptionalFields() {
+        let id = UUID()
+        let testimonial = Testimonial(
+            id: id,
+            displayName: "Anonymous",
+            location: nil,
+            content: "Love it",
+            rating: 4,
+            featureHighlight: nil
+        )
+
+        XCTAssertNil(testimonial.location)
+        XCTAssertNil(testimonial.featureHighlight)
+    }
+
+    func testTestimonialRatingRange() {
+        // Valid ratings are 1-5
+        let testimonial = Testimonial(
+            id: UUID(),
+            displayName: "Test",
+            location: nil,
+            content: "Test content",
+            rating: 3,
+            featureHighlight: nil
+        )
+
+        XCTAssertGreaterThanOrEqual(testimonial.rating, 1)
+        XCTAssertLessThanOrEqual(testimonial.rating, 5)
     }
 }

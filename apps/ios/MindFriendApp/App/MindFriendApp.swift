@@ -112,6 +112,9 @@ struct MindFriendApp: App {
         case .settings:
             // Navigate to settings
             print("[DeepLink] Navigate to settings")
+        case .insights:
+            // Navigate to insights/weekly summary
+            print("[DeepLink] Navigate to insights")
         case .none:
             break
         }
