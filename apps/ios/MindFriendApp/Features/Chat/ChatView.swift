@@ -61,7 +61,17 @@ struct ChatView: View {
             displayTitle = conversation.title ?? "Chat"
         }
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                NavigationLink {
+                    VoiceChatView(supabase: container.supabaseClient) {
+                        isInputFocused = true
+                    }
+                } label: {
+                    Image(systemName: "mic.fill")
+                }
+                .accessibilityLabel("Voice mode")
+                .accessibilityHint("Start a voice conversation")
+
                 Button {
                     appState.showCrisisResources = true
                 } label: {

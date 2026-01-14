@@ -35,6 +35,41 @@ Any additional context, blockers, or follow-ups.
 
 ---
 
+## [2026-01-14] Voice Mode Implementation (Phase 1-6)
+
+**Type:** Feature
+**Status:** Complete
+
+### Summary
+
+Added voice mode backend schema + Edge Functions and implemented iOS voice service, UI, and chat entry point.
+
+### Changes
+
+- **File:** `supabase/migrations/20260200000000_voice_mode.sql` (lines 1-221) — Added voice tables, RLS policies, usage/session RPCs, and grants
+- **File:** `supabase/functions/voice-token/index.ts` (lines 1-186) — Added ephemeral token issuance, quota checks, and voice selection
+- **File:** `supabase/functions/voice-session-end/index.ts` (lines 1-106) — Added session end endpoint and usage updates
+- **File:** `apps/ios/MindFriendApp/Core/Models.swift` (lines 114-260) — Added voice models and error types
+- **File:** `apps/ios/MindFriendApp/Core/Services/GrokVoiceService.swift` (lines 1-557) — Implemented streaming audio service with session tracking
+- **File:** `apps/ios/MindFriendApp/Features/Chat/VoiceChatView.swift` (lines 1-355) — Added voice mode UI with controls and transcription
+- **File:** `apps/ios/MindFriendApp/Features/Profile/VoiceSettingsView.swift` (lines 1-241) — Added voice settings and privacy info views
+- **File:** `apps/ios/MindFriendApp/Features/Chat/ChatView.swift` (lines 63-78) — Added voice mode entry button
+- **File:** `apps/ios/MindFriendApp/App/DependencyContainer.swift` (lines 8-31) — Added `supabaseClient` and `grokVoiceService`
+- **File:** `apps/ios/MindFriendApp/Info.plist` (lines 56-57) — Updated microphone usage string
+- **File:** `apps/ios/MindFriendApp.xcodeproj/project.pbxproj` (lines 61-655) — Registered voice files in project groups and sources
+
+### Testing
+
+- [ ] Unit tests added/updated
+- [ ] Integration tests pass
+- [ ] Manual verification done
+
+### Notes
+
+`supabase db push` failed locally due to missing `SUPABASE_ACCESS_TOKEN` (run `supabase login` or set the token before retrying).
+
+---
+
 ## [2026-01-14] Monetization Code Review Fixes (P2 + P3)
 
 **Type:** Bugfix / Refactor

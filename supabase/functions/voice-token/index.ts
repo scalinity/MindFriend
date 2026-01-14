@@ -1,0 +1,185 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCorsHeaders } from "../_shared/cors.ts";
+
+interface VoiceTokenResponse {
+  token: string;
+  expires_at: string;
+  minutes_remaining: number;
+  voice: string;
+  is_premium: boolean;
+  available_voices: string[];
+  session_id: string;
+}
+
+interface ErrorResponse {
+  error: string;
+  code: string;
+  minutes_remaining?: number;
+  upgrade_required?: boolean;
+}
+
+serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req.headers.get("Origin"));
+
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  try {
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    // Authenticate user
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return errorResponse(corsHeaders, "Missing authorization header", "UNAUTHORIZED", 401);
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      return errorResponse(corsHeaders, "Invalid or expired token", "UNAUTHORIZED", 401);
+    }
+
+    // Check voice quota
+    const { data: minutesRemaining, error: quotaError } = await supabase.rpc(
+      "get_voice_minutes_remaining",
+      { p_user_id: user.id },
+    );
+
+    if (quotaError) {
+      console.error("Quota check error:", quotaError);
+      return errorResponse(corsHeaders, "Failed to check voice quota", "QUOTA_ERROR", 500);
+    }
+
+    if (minutesRemaining <= 0) {
+      return new Response(
+        JSON.stringify({
+          error: "Voice quota exceeded",
+          code: "QUOTA_EXCEEDED",
+          minutes_remaining: 0,
+          upgrade_required: true,
+        } as ErrorResponse),
+        {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    // Check premium status
+    const { data: subscription } = await supabase
+      .from("subscriptions")
+      .select("status, expires_at")
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .gt("expires_at", new Date().toISOString())
+      .maybeSingle();
+
+    const isPremium = !!subscription;
+
+    // Get user's voice preference
+    const { data: settings } = await supabase
+      .from("voice_settings")
+      .select("preferred_voice")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    // Determine voice (non-premium users locked to 'ara')
+    const preferredVoice = settings?.preferred_voice || "ara";
+    const voice = isPremium ? preferredVoice : "ara";
+    const availableVoices = isPremium
+      ? ["ara", "rex", "sal", "eve", "leo"]
+      : ["ara"];
+
+    // Generate ephemeral token from xAI
+    const xaiApiKey = Deno.env.get("XAI_API_KEY");
+    if (!xaiApiKey) {
+      return errorResponse(corsHeaders, "Voice service not configured", "CONFIG_ERROR", 500);
+    }
+
+    const xaiResponse = await fetch(
+      "https://api.x.ai/v1/realtime/client_secrets",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${xaiApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          expires_in: 300, // 5 minutes
+        }),
+      },
+    );
+
+    if (!xaiResponse.ok) {
+      const errorText = await xaiResponse.text();
+      console.error("xAI token error:", xaiResponse.status, errorText);
+      return errorResponse(
+        corsHeaders,
+        "Failed to initialize voice session",
+        "XAI_ERROR",
+        502,
+      );
+    }
+
+    const xaiData = await xaiResponse.json();
+
+    // Create voice session record
+    const { data: sessionId, error: sessionError } = await supabase.rpc(
+      "create_voice_session",
+      {
+        p_user_id: user.id,
+        p_voice: voice,
+      },
+    );
+
+    if (sessionError) {
+      console.error("Session creation error:", sessionError);
+    }
+
+    const response: VoiceTokenResponse = {
+      token: xaiData.client_secret,
+      expires_at: xaiData.expires_at,
+      minutes_remaining: minutesRemaining,
+      voice,
+      is_premium: isPremium,
+      available_voices: availableVoices,
+      session_id: sessionId || "",
+    };
+
+    return new Response(JSON.stringify(response), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (error) {
+    console.error("Voice token error:", error);
+    return errorResponse(
+      corsHeaders,
+      error instanceof Error ? error.message : "Unknown error",
+      "INTERNAL_ERROR",
+      500,
+    );
+  }
+});
+
+function errorResponse(
+  corsHeaders: Record<string, string>,
+  message: string,
+  code: string,
+  status: number,
+): Response {
+  return new Response(
+    JSON.stringify({ error: message, code } as ErrorResponse),
+    {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    },
+  );
+}
