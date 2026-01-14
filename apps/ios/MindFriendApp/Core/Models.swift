@@ -111,6 +111,142 @@ enum Tier: String, Codable {
     case premium
 }
 
+// MARK: - Voice Mode Models
+
+/// Available Grok voice personalities
+enum GrokVoice: String, CaseIterable, Identifiable, Codable {
+    case ara = "ara"
+    case rex = "rex"
+    case sal = "sal"
+    case eve = "eve"
+    case leo = "leo"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .ara: return "Ara"
+        case .rex: return "Rex"
+        case .sal: return "Sal"
+        case .eve: return "Eve"
+        case .leo: return "Leo"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .ara: return "Warm & conversational"
+        case .rex: return "Professional & clear"
+        case .sal: return "Calm & balanced"
+        case .eve: return "Energetic & upbeat"
+        case .leo: return "Authoritative & strong"
+        }
+    }
+
+    var gender: String {
+        switch self {
+        case .ara, .eve: return "Female"
+        case .rex, .leo: return "Male"
+        case .sal: return "Neutral"
+        }
+    }
+}
+
+/// Response from voice-token Edge Function
+struct VoiceTokenResponse: Codable {
+    let token: String
+    let expiresAt: String
+    let minutesRemaining: Double
+    let voice: String
+    let isPremium: Bool
+    let availableVoices: [String]
+    let sessionId: String
+
+    enum CodingKeys: String, CodingKey {
+        case token
+        case expiresAt = "expires_at"
+        case minutesRemaining = "minutes_remaining"
+        case voice
+        case isPremium = "is_premium"
+        case availableVoices = "available_voices"
+        case sessionId = "session_id"
+    }
+
+    var grokVoice: GrokVoice {
+        GrokVoice(rawValue: voice) ?? .ara
+    }
+
+    var grokAvailableVoices: [GrokVoice] {
+        availableVoices.compactMap { GrokVoice(rawValue: $0) }
+    }
+}
+
+/// Voice error types
+enum VoiceError: LocalizedError {
+    case notAuthorized
+    case notConnected
+    case connectionFailed(String)
+    case quotaExceeded
+    case premiumRequired
+    case tokenGenerationFailed
+    case audioSessionFailed(String)
+    case microphonePermissionDenied
+    case networkUnavailable
+
+    var errorDescription: String? {
+        switch self {
+        case .notAuthorized:
+            return "Voice mode is not authorized. Please check your settings."
+        case .notConnected:
+            return "Voice service is not connected. Please try again."
+        case .connectionFailed(let reason):
+            return "Connection failed: \(reason)"
+        case .quotaExceeded:
+            return "You've used all your voice minutes this month. Upgrade to Premium for unlimited voice conversations."
+        case .premiumRequired:
+            return "Premium subscription required to use additional voices."
+        case .tokenGenerationFailed:
+            return "Failed to start voice session. Please try again."
+        case .audioSessionFailed(let reason):
+            return "Audio error: \(reason)"
+        case .microphonePermissionDenied:
+            return "Microphone access denied. Please enable it in Settings to use voice mode."
+        case .networkUnavailable:
+            return "No network connection. Voice mode requires an internet connection."
+        }
+    }
+
+    var isRecoverable: Bool {
+        switch self {
+        case .quotaExceeded, .premiumRequired, .microphonePermissionDenied:
+            return false
+        default:
+            return true
+        }
+    }
+}
+
+/// Voice settings stored in database
+struct VoiceSettings: Codable {
+    let id: UUID
+    let userId: UUID
+    var voiceEnabled: Bool
+    var preferredVoice: String
+    var autoPlayResponses: Bool
+    let createdAt: Date
+    var updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case voiceEnabled = "voice_enabled"
+        case preferredVoice = "preferred_voice"
+        case autoPlayResponses = "auto_play_responses"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+}
+
 // MARK: - Subscription & Family Plans
 
 enum PlanType: String, Codable, CaseIterable {
