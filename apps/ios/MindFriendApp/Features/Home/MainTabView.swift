@@ -33,7 +33,7 @@ struct MainTabView: View {
             CrisisResourcesView()
         }
         .sheet(isPresented: $appState.showPaywall) {
-            PaywallView()
+            SubscriptionView()
         }
         .alert(
             appState.globalError?.title ?? "Error",
@@ -44,6 +44,11 @@ struct MainTabView: View {
         } message: { error in
             Text(error.message)
         }
+        .levelUpCelebration(
+            isPresented: $appState.showLevelUp,
+            level: appState.levelUpLevel,
+            title: appState.levelUpTitle
+        )
     }
 }
 

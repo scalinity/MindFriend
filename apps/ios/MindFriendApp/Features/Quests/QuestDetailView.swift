@@ -104,6 +104,14 @@ struct QuestDetailView: View {
                     rating: rating > 0 ? rating : nil
                 )
 
+                // Award XP for quest completion
+                let xpResult = try await container.supabaseDataService.awardXP(activity: .questComplete)
+
+                // Update event progress for quest-related activities
+                if let activityType = quest.template.type.eventActivityType {
+                    _ = try? await container.supabaseDataService.incrementEventProgress(activityType: activityType)
+                }
+
                 // Fetch updated profile to get new streak
                 let profile = try await container.supabaseAuthService.fetchProfile()
 
@@ -111,6 +119,12 @@ struct QuestDetailView: View {
                     appState.currentStreak = profile.stats.currentStreakDays
                     appState.currentUser = profile
                     showReflection = false
+
+                    // Show level-up celebration if leveled up
+                    if xpResult.leveledUp {
+                        appState.showLevelUpCelebration(level: xpResult.newLevel, title: xpResult.newTitle)
+                    }
+
                     // Create completion result for display
                     completionResult = QuestCompletion(
                         questId: quest.id,

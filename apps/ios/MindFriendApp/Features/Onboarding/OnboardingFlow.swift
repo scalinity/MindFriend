@@ -134,59 +134,66 @@ struct OnboardingQuizView: View {
     let onSkip: () -> Void
 
     var body: some View {
-        VStack(spacing: 24) {
-            Spacer()
+        ScrollView {
+            VStack(spacing: 24) {
+                // Header
+                VStack(spacing: 12) {
+                    Text("What brings you here today?")
+                        .font(.title)
+                        .fontWeight(.bold)
+                        .multilineTextAlignment(.center)
 
-            // Header
-            VStack(spacing: 12) {
-                Text("What brings you here today?")
-                    .font(.title)
-                    .fontWeight(.bold)
-                    .multilineTextAlignment(.center)
-
-                Text("This helps me personalize your experience")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 32)
-
-            // Options
-            VStack(spacing: 12) {
-                ForEach(WellnessFocus.selectableOptions, id: \.self) { focus in
-                    WellnessFocusButton(
-                        focus: focus,
-                        isSelected: selectedFocus == focus,
-                        action: { selectedFocus = focus }
-                    )
+                    Text("This helps me personalize your experience")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
                 }
-            }
-            .padding(.horizontal, 24)
+                .padding(.horizontal, 32)
+                .padding(.top, 32)
 
-            Spacer()
-
-            // Actions
-            VStack(spacing: 12) {
-                Button(action: onContinue) {
-                    Text("Continue")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(selectedFocus != nil ? Color.accentColor : Color.secondary.opacity(0.3))
-                        .foregroundStyle(.white)
-                        .cornerRadius(12)
+                // Options
+                VStack(spacing: 12) {
+                    ForEach(WellnessFocus.selectableOptions, id: \.self) { focus in
+                        WellnessFocusButton(
+                            focus: focus,
+                            isSelected: selectedFocus == focus,
+                            action: { selectedFocus = focus }
+                        )
+                    }
                 }
-                .disabled(selectedFocus == nil)
-                .accessibilityLabel("Continue")
-                .accessibilityHint(selectedFocus != nil ? "Proceed to AI greeting" : "Select a focus area first")
+                .padding(.horizontal, 24)
 
-                Button("Skip for now", action: onSkip)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .accessibilityLabel("Skip personalization")
-                    .accessibilityHint("Skip the quiz and use default settings")
+                // Testimonials - social proof
+                TestimonialsCarousel()
+                    .padding(.top, 8)
+
+                // Privacy banner - trust building
+                PrivacyBanner()
+                    .padding(.horizontal, 24)
+
+                // Actions
+                VStack(spacing: 12) {
+                    Button(action: onContinue) {
+                        Text("Continue")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(selectedFocus != nil ? Color.accentColor : Color.secondary.opacity(0.3))
+                            .foregroundStyle(.white)
+                            .cornerRadius(12)
+                    }
+                    .disabled(selectedFocus == nil)
+                    .accessibilityLabel("Continue")
+                    .accessibilityHint(selectedFocus != nil ? "Proceed to AI greeting" : "Select a focus area first")
+
+                    Button("Skip for now", action: onSkip)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("Skip personalization")
+                        .accessibilityHint("Skip the quiz and use default settings")
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 32)
             }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 32)
         }
     }
 }

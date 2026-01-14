@@ -164,8 +164,21 @@ struct MoodCheckInView: View {
         Task {
             do {
                 try await container.supabaseDataService.createMood(mood)
+
+                // Award XP for mood check-in (only for new entries, not edits)
+                var xpResult: XPAward?
+                if existingMood == nil {
+                    xpResult = try await container.supabaseDataService.awardXP(activity: .moodCheckin)
+                }
+
                 await MainActor.run {
                     appState.todayMood = mood
+
+                    // Show level-up celebration if leveled up
+                    if let result = xpResult, result.leveledUp {
+                        appState.showLevelUpCelebration(level: result.newLevel, title: result.newTitle)
+                    }
+
                     dismiss()
                 }
             } catch {

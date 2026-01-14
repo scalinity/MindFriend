@@ -302,8 +302,13 @@ struct CircleDetailView: View {
 
     @State private var posts: [CirclePost] = []
     @State private var members: [CircleMember] = []
+    @State private var activeChallenge: CircleChallenge?
+    @State private var pendingInvites: [CircleInvite] = []
+    @State private var postReactions: [String: [ReactionSummary]] = [:]
     @State private var isLoading = true
     @State private var showCheckin = false
+    @State private var showCreateChallenge = false
+    @State private var showInviteMember = false
 
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -311,37 +316,110 @@ struct CircleDetailView: View {
         return formatter
     }()
 
+    private var currentUserId: String {
+        appState.currentUser?.id ?? ""
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
                 // Header
                 CircleHeaderView(circle: circle, members: members)
 
-                // Check-in button
-                Button {
-                    showCheckin = true
-                } label: {
-                    Label("Check In", systemImage: "hand.wave.fill")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.accentColor)
-                        .foregroundStyle(.white)
-                        .cornerRadius(12)
+                // Active Challenge
+                if let challenge = activeChallenge {
+                    ChallengeCard(
+                        challenge: challenge,
+                        members: members,
+                        currentUserId: currentUserId
+                    )
+                    .padding(.horizontal)
+                }
+
+                // Action buttons row
+                HStack(spacing: 12) {
+                    // Check-in button
+                    Button {
+                        showCheckin = true
+                    } label: {
+                        Label("Check In", systemImage: "hand.wave.fill")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.accentColor)
+                            .foregroundStyle(.white)
+                            .cornerRadius(12)
+                    }
+
+                    // Invite button
+                    Button {
+                        showInviteMember = true
+                    } label: {
+                        Image(systemName: "person.badge.plus")
+                            .font(.headline)
+                            .padding()
+                            .background(Color(.systemGray5))
+                            .foregroundStyle(.primary)
+                            .cornerRadius(12)
+                    }
                 }
                 .padding(.horizontal)
+
+                // Challenge creation (owner only)
+                if circle.role == .owner && activeChallenge == nil {
+                    Button {
+                        showCreateChallenge = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "flag.fill")
+                                .foregroundColor(.orange)
+                            Text("Create Challenge")
+                                .fontWeight(.medium)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.orange.opacity(0.1))
+                        .foregroundStyle(.primary)
+                        .cornerRadius(12)
+                    }
+                    .padding(.horizontal)
+                }
+
+                // Members with hug buttons
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Members")
+                        .font(.headline)
+                        .padding(.horizontal)
+
+                    ForEach(members) { member in
+                        MemberRowWithHug(
+                            member: member,
+                            circleId: circle.id,
+                            isCurrentUser: member.userId == currentUserId
+                        )
+                    }
+                }
+
+                // Pending invites
+                PendingInvitesSection(invites: pendingInvites)
 
                 // Feed
                 if posts.isEmpty {
                     EmptyFeedView()
                 } else {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Recent Check-ins")
+                        Text("Recent Activity")
                             .font(.headline)
                             .padding(.horizontal)
 
                         ForEach(posts) { post in
-                            CirclePostRow(post: post)
+                            CirclePostRowWithReactions(
+                                post: post,
+                                reactions: Binding(
+                                    get: { postReactions[post.id] ?? [] },
+                                    set: { postReactions[post.id] = $0 }
+                                )
+                            )
                         }
                     }
                 }
@@ -354,6 +432,23 @@ struct CircleDetailView: View {
                 posts.insert(post, at: 0)
             }
         }
+        .sheet(isPresented: $showCreateChallenge) {
+            CreateChallengeSheet(circleId: circle.id) { challenge in
+                activeChallenge = challenge
+            }
+        }
+        .sheet(isPresented: $showInviteMember) {
+            InviteMemberSheet(
+                circleId: circle.id,
+                circleName: circle.name,
+                onInviteSent: { invite in
+                    pendingInvites.insert(invite, at: 0)
+                }
+            )
+        }
+        .refreshable {
+            await loadData()
+        }
         .task {
             await loadData()
         }
@@ -364,9 +459,17 @@ struct CircleDetailView: View {
         defer { isLoading = false }
 
         do {
+            // Load circle details and members
             let detail = try await container.supabaseDataService.getCircle(id: circle.id)
             members = detail.members
 
+            // Load active challenge
+            activeChallenge = try await container.supabaseDataService.getActiveChallenge(for: circle.id)
+
+            // Load pending invites
+            pendingInvites = try await container.supabaseDataService.getPendingInvites(for: circle.id)
+
+            // Load feed
             let to = Self.dateFormatter.string(from: Date())
             let from: String
             if let weekAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) {
@@ -374,11 +477,134 @@ struct CircleDetailView: View {
             } else {
                 from = to
             }
-
             posts = try await container.supabaseDataService.getCircleFeed(circleId: circle.id, from: from, to: to)
+
+            // Batch load reactions for all posts (Fix 5: was N+1 query)
+            let postIds = posts.map { $0.id }
+            postReactions = try await container.supabaseDataService.getReactionsForPosts(postIds: postIds)
         } catch {
             appState.showError(.apiError(error.localizedDescription))
         }
+    }
+}
+
+/// Member row with hug button
+struct MemberRowWithHug: View {
+    let member: CircleMember
+    let circleId: String
+    let isCurrentUser: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Avatar
+            Circle()
+                .fill(Color.accentColor.opacity(0.15))
+                .frame(width: 40, height: 40)
+                .overlay {
+                    Text(String(member.displayName.prefix(1)).uppercased())
+                        .font(.headline)
+                        .foregroundColor(.accentColor)
+                }
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Text(member.displayName)
+                        .fontWeight(.medium)
+
+                    // Premium badge indicator
+                    if let badgeIcon = member.premiumBadgeIcon {
+                        Image(systemName: badgeIcon)
+                            .font(.caption)
+                            .foregroundStyle(member.premiumBadgeColor)
+                    }
+
+                    if isCurrentUser {
+                        Text("(You)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                if member.role == .owner {
+                    Text("Owner")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            Spacer()
+
+            // Hug button (not for self)
+            if !isCurrentUser {
+                CompactHugButton(memberId: member.userId, circleId: circleId)
+            }
+        }
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(12)
+        .padding(.horizontal)
+    }
+}
+
+/// Post row with reactions
+struct CirclePostRowWithReactions: View {
+    let post: CirclePost
+    @Binding var reactions: [ReactionSummary]
+
+    var isMilestone: Bool {
+        post.kind == .milestone
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 12) {
+                if isMilestone {
+                    Text("🔥")
+                        .font(.title)
+                } else {
+                    Text(post.moodEmoji ?? "👋")
+                        .font(.title)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(post.userDisplayName)
+                            .fontWeight(.semibold)
+
+                        if isMilestone {
+                            Text("MILESTONE")
+                                .font(.caption2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.orange)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.orange.opacity(0.15))
+                                .cornerRadius(4)
+                        }
+
+                        Spacer()
+
+                        Text(post.createdAt, style: .relative)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if let body = post.bodyText {
+                        Text(body)
+                            .font(.body)
+                            .foregroundStyle(isMilestone ? .primary : .secondary)
+                    }
+                }
+            }
+
+            // Reactions (show for all posts, especially milestones)
+            ReactionDisplay(postId: post.id, reactions: $reactions)
+                .padding(.leading, 48)
+        }
+        .padding()
+        .background(isMilestone ? Color.orange.opacity(0.05) : Color(.secondarySystemBackground))
+        .cornerRadius(12)
+        .padding(.horizontal)
     }
 }
 
@@ -533,7 +759,16 @@ struct CircleCheckinView: View {
                     moodEmoji: selectedEmoji,
                     bodyText: bodyText.isEmpty ? nil : bodyText
                 )
+
+                // Award XP for circle check-in
+                let xpResult = try await container.supabaseDataService.awardXP(activity: .circleCheckin)
+
                 await MainActor.run {
+                    // Show level-up celebration if leveled up
+                    if xpResult.leveledUp {
+                        appState.showLevelUpCelebration(level: xpResult.newLevel, title: xpResult.newTitle)
+                    }
+
                     onPosted(post)
                     dismiss()
                 }

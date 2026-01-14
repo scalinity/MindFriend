@@ -20,6 +20,7 @@ let supabase = SupabaseClient(
 
 enum Tables {
     static let profiles = "profiles"
+    static let userSettings = "user_settings"
     static let devices = "devices"
     static let moods = "moods"
     static let questTemplates = "quest_templates"
@@ -35,6 +36,14 @@ enum Tables {
     static let userBadges = "user_badges"
     static let crisisResources = "crisis_resources"
     static let memoryFragments = "memory_fragments"
+    // Progression system
+    static let userStats = "user_stats"
+    static let skillProgress = "skill_progress"
+    static let seasonalEvents = "seasonal_events"
+    static let eventParticipation = "event_participation"
+    // Credibility signals
+    static let testimonials = "testimonials"
+    static let methodologyInfo = "methodology_info"
 }
 
 // MARK: - Database Models (matching Supabase schema)
@@ -70,6 +79,13 @@ struct DBProfile: Codable {
     var totalQuestsCompleted: Int
     var totalExercisesCompleted: Int
 
+    // XP & Level Progression
+    var xpTotal: Int
+    var xpThisWeek: Int
+    var level: Int
+    var levelTitle: String
+    var lastXpResetWeek: String?
+
     // Subscription
     var subscriptionTier: String
     var dailyAiQuota: Int
@@ -100,6 +116,11 @@ struct DBProfile: Codable {
         case longestStreakDays = "longest_streak_days"
         case totalQuestsCompleted = "total_quests_completed"
         case totalExercisesCompleted = "total_exercises_completed"
+        case xpTotal = "xp_total"
+        case xpThisWeek = "xp_this_week"
+        case level
+        case levelTitle = "level_title"
+        case lastXpResetWeek = "last_xp_reset_week"
         case subscriptionTier = "subscription_tier"
         case dailyAiQuota = "daily_ai_quota"
         case dailyAiUsed = "daily_ai_used"
@@ -257,11 +278,21 @@ struct DBExercise: Codable {
     let instructions: [DBExerciseInstruction]?
     let isPremium: Bool
 
+    // Credibility fields
+    let evidenceBasis: String?
+    let therapistReviewed: Bool?
+    let reviewDate: String?
+    let methodologyNote: String?
+
     enum CodingKeys: String, CodingKey {
         case id, title, description, type
         case durationMinutes = "duration_minutes"
         case instructions
         case isPremium = "is_premium"
+        case evidenceBasis = "evidence_basis"
+        case therapistReviewed = "therapist_reviewed"
+        case reviewDate = "review_date"
+        case methodologyNote = "methodology_note"
     }
 }
 
@@ -465,7 +496,12 @@ extension DBProfile {
                 currentStreakDays: currentStreakDays,
                 longestStreakDays: longestStreakDays,
                 totalQuestsCompleted: totalQuestsCompleted,
-                totalExercisesCompleted: totalExercisesCompleted
+                totalExercisesCompleted: totalExercisesCompleted,
+                xpTotal: xpTotal,
+                xpThisWeek: xpThisWeek,
+                level: level,
+                levelTitle: levelTitle,
+                lastXpResetWeek: lastXpResetWeek
             ),
             entitlements: Entitlements(
                 tier: Tier(rawValue: subscriptionTier) ?? .free,
@@ -492,4 +528,117 @@ extension DBMood {
             createdAt: createdAt ?? Date()
         )
     }
+}
+
+// MARK: - Progression System Database Models
+
+struct DBSkillProgress: Codable {
+    let id: UUID
+    let userId: UUID
+    let skillType: String
+    let xp: Int
+    let level: Int
+    let exercisesCompleted: Int
+    let createdAt: Date?
+    let updatedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case skillType = "skill_type"
+        case xp, level
+        case exercisesCompleted = "exercises_completed"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+}
+
+struct DBSeasonalEvent: Codable {
+    let id: UUID
+    let name: String
+    let description: String?
+    let startsAt: Date
+    let endsAt: Date
+    let eventType: String
+    let requiredActivityType: String?
+    let rewardBadgeId: UUID?
+    let targetCount: Int
+    let xpMultiplier: Double
+    let createdAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, description
+        case startsAt = "starts_at"
+        case endsAt = "ends_at"
+        case eventType = "event_type"
+        case requiredActivityType = "required_activity_type"
+        case rewardBadgeId = "reward_badge_id"
+        case targetCount = "target_count"
+        case xpMultiplier = "xp_multiplier"
+        case createdAt = "created_at"
+    }
+}
+
+struct DBEventParticipation: Codable {
+    let id: UUID
+    let userId: UUID
+    let eventId: UUID
+    let progress: Int
+    let completedAt: Date?
+    let joinedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case eventId = "event_id"
+        case progress
+        case completedAt = "completed_at"
+        case joinedAt = "joined_at"
+    }
+}
+
+/// Response from the award_xp RPC function
+struct DBHugLimitResult: Codable {
+    let allowed: Bool
+}
+
+struct DBXPAwardResult: Codable {
+    let newXp: Int
+    let newLevel: Int
+    let newTitle: String
+    let levelUp: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case newXp = "new_xp"
+        case newLevel = "new_level"
+        case newTitle = "new_title"
+        case levelUp = "level_up"
+    }
+}
+
+/// Response from the increment_event_progress RPC function
+struct DBEventProgressResult: Codable {
+    let eventId: UUID
+    let eventName: String
+    let newProgress: Int
+    let targetCount: Int
+    let justCompleted: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case eventId = "event_id"
+        case eventName = "event_name"
+        case newProgress = "new_progress"
+        case targetCount = "target_count"
+        case justCompleted = "just_completed"
+    }
+}
+
+// MARK: - Date Formatter Extension
+
+extension ISO8601DateFormatter {
+    static let full: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
 }

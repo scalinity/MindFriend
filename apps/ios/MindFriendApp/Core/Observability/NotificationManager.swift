@@ -10,15 +10,21 @@ enum NotificationType: String {
     case circleActivity = "circle_activity"
     case chatMessage = "chat_message"
     case systemMessage = "system_message"
+    // Smart notification types
+    case hug = "hug"
+    case streakRisk = "streak_risk"
+    case weeklySummary = "weekly_summary"
+    case challenge = "challenge"
 }
 
 /// Deep link destinations from notifications
 enum NotificationDeepLink {
-    case quest(id: String)
+    case quest(id: String? = nil)
     case chat(conversationId: String)
     case circle(id: String)
     case mood
     case settings
+    case insights
     case none
 }
 
@@ -154,12 +160,19 @@ final class NotificationManager: NSObject, ObservableObject {
         print("[NotificationManager] Notification tapped: \(userInfo)")
 
         let deepLink = parseDeepLink(from: userInfo)
+        let notificationType = userInfo["type"] as? String ?? "unknown"
 
-        Analytics.shared.track(.featureUsed, properties: [
-            "feature": "push_notifications",
-            "action": "notification_tapped",
-            "notification_type": userInfo["type"] as? String ?? "unknown"
+        Analytics.shared.track(.notificationOpened, properties: [
+            "notification_type": notificationType,
+            "deep_link": String(describing: deepLink)
         ])
+
+        // Track notification open in backend for analytics
+        if let notificationId = userInfo["notification_id"] as? String {
+            Task {
+                await markNotificationOpened(id: notificationId)
+            }
+        }
 
         // Store deep link for navigation
         pendingDeepLink = deepLink
@@ -172,25 +185,93 @@ final class NotificationManager: NSObject, ObservableObject {
         )
     }
 
+    /// Mark notification as opened in backend
+    private func markNotificationOpened(id: String) async {
+        guard let container = container else { return }
+
+        do {
+            try await container.supabaseDataService.markNotificationOpened(notificationId: id)
+        } catch {
+            print("[NotificationManager] Failed to mark notification opened: \(error)")
+        }
+    }
+
     /// Parse deep link from notification payload
     private func parseDeepLink(from userInfo: [AnyHashable: Any]) -> NotificationDeepLink {
+        // Check for deep_link URL first (from smart notifications)
+        if let deepLinkUrl = userInfo["deep_link"] as? String {
+            return parseDeepLinkUrl(deepLinkUrl)
+        }
+
         guard let type = userInfo["type"] as? String else { return .none }
 
         switch type {
         case "daily_quest", "quest_reminder":
-            if let questId = userInfo["quest_id"] as? String {
-                return .quest(id: questId)
-            }
+            let questId = userInfo["quest_id"] as? String
+            return .quest(id: questId)
+
+        case "streak_risk":
+            // Streak risk goes to quest screen
+            return .quest(id: nil)
+
         case "chat_message":
             if let conversationId = userInfo["conversation_id"] as? String {
                 return .chat(conversationId: conversationId)
             }
-        case "circle_activity":
+
+        case "circle_activity", "hug", "challenge":
             if let circleId = userInfo["circle_id"] as? String {
                 return .circle(id: circleId)
             }
+
+        case "weekly_summary":
+            return .insights
+
         case "mood_reminder":
             return .mood
+
+        default:
+            break
+        }
+
+        return .none
+    }
+
+    /// Parse deep link from URL string (e.g., "mindfriend://circle/123")
+    /// Internal for testability
+    func parseDeepLinkUrl(_ urlString: String) -> NotificationDeepLink {
+        guard let url = URL(string: urlString),
+              url.scheme == "mindfriend" else {
+            return .none
+        }
+
+        let path = url.host ?? ""
+        let pathComponents = url.pathComponents.filter { $0 != "/" }
+
+        switch path {
+        case "quest":
+            let questId = pathComponents.first
+            return .quest(id: questId)
+
+        case "circle":
+            if let circleId = pathComponents.first {
+                return .circle(id: circleId)
+            }
+
+        case "chat":
+            if let conversationId = pathComponents.first {
+                return .chat(conversationId: conversationId)
+            }
+
+        case "insights":
+            return .insights
+
+        case "mood":
+            return .mood
+
+        case "settings":
+            return .settings
+
         default:
             break
         }
@@ -250,6 +331,22 @@ final class NotificationManager: NSObject, ObservableObject {
     /// Cancel all notifications
     func cancelAllNotifications() {
         UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+    }
+
+    // MARK: - App Activity Tracking
+
+    /// Track app open time for smart notification timing
+    /// Call this when app launches or becomes active
+    func trackAppOpen() {
+        guard let container = container else { return }
+
+        Task {
+            do {
+                try await container.supabaseDataService.updateTypicalActiveHour()
+            } catch {
+                print("[NotificationManager] Failed to track app open: \(error)")
+            }
+        }
     }
 
     // MARK: - Badge Management

@@ -27,4 +27,11 @@ final class DependencyContainer: ObservableObject {
     init() {
         // All services are lazy-initialized using Supabase
     }
+
+    // MARK: - Preview Support
+
+    /// Preview instance for SwiftUI previews
+    static var preview: DependencyContainer {
+        DependencyContainer()
+    }
 }
