@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 struct QuestDetailView: View {
     @EnvironmentObject var appState: AppState
@@ -76,20 +77,20 @@ struct QuestDetailView: View {
     }
 
     private func completeQuest() {
-        print("[QuestDetail] completeQuest() called")
+        Log.quests.debug("[Quest] completeQuest() called")
         isCompleting = true
 
         Task { @MainActor in
-            print("[QuestDetail] Task started")
+            Log.quests.debug("[Quest] Task started")
             // Check if we're in dev mode (no real Supabase session)
             let isDevMode = container.supabaseAuthService.userId == nil
-            print("[QuestDetail] isDevMode: \(isDevMode)")
+            Log.quests.debug("[Quest] isDevMode: \(isDevMode)")
 
             if isDevMode {
                 #if DEBUG
-                print("[QuestDetail] Calling completeQuestInDevMode()")
+                Log.quests.debug("[Quest] Calling completeQuestInDevMode()")
                 await completeQuestInDevMode()
-                print("[QuestDetail] completeQuestInDevMode() finished")
+                Log.quests.debug("[Quest] completeQuestInDevMode() finished")
                 #else
                 appState.showError(.apiError("Please sign in to complete quests"))
                 #endif
@@ -144,12 +145,12 @@ struct QuestDetailView: View {
 
     #if DEBUG
     private func completeQuestInDevMode() async {
-        print("[QuestDetail] completeQuestInDevMode started")
+        Log.quests.debug("[Quest] completeQuestInDevMode started")
 
         // Update streak in dev mode
         let newStreak = appState.currentStreak + 1
         appState.currentStreak = newStreak
-        print("[QuestDetail] Updated streak to \(newStreak)")
+        Log.quests.debug("[Quest] Updated streak to \(newStreak)")
 
         // Update user stats
         if var user = appState.currentUser {
@@ -171,7 +172,7 @@ struct QuestDetailView: View {
                 badges: user.badges
             )
             appState.currentUser = user
-            print("[QuestDetail] Updated user stats")
+            Log.quests.debug("[Quest] Updated user stats")
         }
 
         // Mark quest as completed locally
@@ -185,12 +186,12 @@ struct QuestDetailView: View {
                 template: todayQuest.template
             )
             appState.todayQuest = todayQuest
-            print("[QuestDetail] Marked quest as completed")
+            Log.quests.debug("[Quest] Marked quest as completed")
         }
 
         // Dismiss reflection sheet first
         showReflection = false
-        print("[QuestDetail] Dismissed reflection sheet")
+        Log.quests.debug("[Quest] Dismissed reflection sheet")
 
         // Wait for sheet dismissal animation
         try? await Task.sleep(nanoseconds: 400_000_000)
@@ -203,7 +204,7 @@ struct QuestDetailView: View {
             streakDays: newStreak,
             badgesEarned: []
         )
-        print("[QuestDetail] Set completionResult to show celebration")
+        Log.quests.debug("[Quest] Set completionResult to show celebration")
     }
     #endif
 
@@ -411,7 +412,7 @@ struct QuestReflectionSheet: View {
                     }
 
                     Button {
-                        print("[QuestReflectionSheet] Save & Complete button tapped")
+                        Log.quests.debug("[Quest] Save & Complete button tapped")
                         onComplete()
                     } label: {
                         Text("Save & Complete")

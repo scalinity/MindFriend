@@ -1,6 +1,7 @@
 import Foundation
 import StoreKit
 import Supabase
+import OSLog
 
 /// Service for billing and subscriptions - uses Supabase Edge Functions
 @MainActor
@@ -83,7 +84,7 @@ final class BillingService: ObservableObject {
                 products = loadedProducts
                 productsLoaded = true
             } catch {
-                print("Failed to load products: \(error)")
+                Log.billing.error("Failed to load products: \(error)")
             }
             productsLoadTask = nil
         }
@@ -201,7 +202,7 @@ final class BillingService: ObservableObject {
                 await loadFamilyGroup()
             }
         } catch {
-            print("Failed to load subscription: \(error)")
+            Log.billing.error("Failed to load subscription: \(error)")
         }
     }
 
@@ -258,7 +259,7 @@ final class BillingService: ObservableObject {
                 await loadFamilyMembers()
             }
         } catch {
-            print("Failed to load family group: \(error)")
+            Log.billing.error("Failed to load family group: \(error)")
         }
     }
 
@@ -325,7 +326,7 @@ final class BillingService: ObservableObject {
                 )
             }
         } catch {
-            print("Failed to load family members: \(error)")
+            Log.billing.error("Failed to load family members: \(error)")
         }
     }
 
@@ -439,7 +440,7 @@ final class BillingService: ObservableObject {
                     try await self.submitTransaction(transaction)
                     await transaction.finish()
                 } catch {
-                    print("Transaction update error: \(error)")
+                    Log.billing.error("Transaction update error: \(error)")
                 }
             }
         }

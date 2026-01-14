@@ -339,14 +339,19 @@ serve(async (req) => {
 
     const enhancedSystemPrompt = SYSTEM_PROMPT + memoryContext;
 
+    // Sanitize user content to prevent prompt injection attacks
+    // This removes role impersonation attempts and prompt manipulation patterns
+    const sanitizedContent = sanitizeForPrompt(trimmedContent);
+
     // Build message history for AI
     const messageHistory: Message[] = [
       { role: "system", content: enhancedSystemPrompt },
       ...(messages || []).map((m) => ({
         role: m.role as "user" | "assistant",
-        content: m.content,
+        // Sanitize historical messages too for defense in depth
+        content: m.role === "user" ? sanitizeForPrompt(m.content) : m.content,
       })),
-      { role: "user", content: trimmedContent },
+      { role: "user", content: sanitizedContent },
     ];
 
     // Save user message first

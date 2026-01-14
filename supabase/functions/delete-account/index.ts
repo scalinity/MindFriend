@@ -1,4 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createLogger } from "../_shared/logger.ts";
+
+const log = createLogger("delete-account");
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -42,7 +45,7 @@ Deno.serve(async (req) => {
     } = await userClient.auth.getUser();
 
     if (userError || !user) {
-      console.error("Auth error:", userError);
+      log.warn("Auth error during account deletion", { errorCode: userError?.code });
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -50,7 +53,7 @@ Deno.serve(async (req) => {
     }
 
     const userId = user.id;
-    console.log(`Deleting account for user: ${userId}`);
+    log.userAction("Deleting account", userId);
 
     // Admin client for deletion operations
     const adminClient = createClient(supabaseUrl, supabaseServiceKey, {
@@ -60,17 +63,7 @@ Deno.serve(async (req) => {
     // Delete user data from all tables (order matters due to foreign keys)
     // Most tables have ON DELETE CASCADE, but we'll be explicit
 
-    // 1. Delete messages (references conversations)
-    const { error: messagesError } = await adminClient
-      .from("messages")
-      .delete()
-      .eq(
-        "conversation_id",
-        adminClient.from("conversations").select("id").eq("user_id", userId),
-      );
-
-    // Actually, let's delete by joining through conversations
-    // First get conversation IDs
+    // 1. Delete messages (get conversation IDs first, then delete messages)
     const { data: conversations } = await adminClient
       .from("conversations")
       .select("id")
@@ -119,7 +112,7 @@ Deno.serve(async (req) => {
       await adminClient.auth.admin.deleteUser(userId);
 
     if (deleteAuthError) {
-      console.error("Error deleting auth user:", deleteAuthError);
+      log.error("Error deleting auth user", { errorMessage: deleteAuthError.message });
       return new Response(
         JSON.stringify({
           error: "Failed to delete account",
@@ -132,7 +125,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`Successfully deleted account for user: ${userId}`);
+    log.info("Account deleted successfully");
 
     return new Response(
       JSON.stringify({
@@ -145,7 +138,7 @@ Deno.serve(async (req) => {
       },
     );
   } catch (error) {
-    console.error("Delete account error:", error);
+    log.error("Delete account error", { error: String(error) });
     return new Response(
       JSON.stringify({
         error: "Internal server error",

@@ -6,6 +6,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
+import { isAuthorizedCronRequest } from "../_shared/auth.ts";
 import {
   sendAPNs,
   buildAPNsPayload,
@@ -24,6 +25,19 @@ serve(async (req) => {
     ...corsHeaders,
     "Content-Type": "application/json",
   };
+
+  // Require cron secret or service role key
+  const expectedCronSecret = Deno.env.get("CRON_SECRET") || "";
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+
+  if (
+    !isAuthorizedCronRequest(req.headers, expectedCronSecret, serviceRoleKey)
+  ) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers,
+    });
+  }
 
   try {
     // Initialize Supabase client with service role

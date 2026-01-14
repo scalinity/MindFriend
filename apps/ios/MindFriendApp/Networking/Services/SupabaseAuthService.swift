@@ -2,6 +2,7 @@ import Foundation
 import Supabase
 import AuthenticationServices
 import GoogleSignIn
+import OSLog
 
 // MARK: - Auth Errors
 
@@ -56,18 +57,18 @@ final class SupabaseAuthService: ObservableObject {
 
                 switch event {
                 case .initialSession:
-                    print("[Auth] Initial session loaded")
+                    Log.auth.debug("Initial session loaded")
                 case .signedIn:
-                    print("[Auth] User signed in: \(session?.user.id.uuidString ?? "unknown")")
+                    Log.auth.userAction("User signed in", userId: session?.user.id.uuidString ?? "unknown")
                     Analytics.shared.track(.signInCompleted, properties: ["provider": "supabase"])
                 case .signedOut:
-                    print("[Auth] User signed out")
+                    Log.auth.info("User signed out")
                     Analytics.shared.track(.signOut)
                     CrashReporter.shared.clearUser()
                 case .tokenRefreshed:
-                    print("[Auth] Token refreshed")
+                    Log.auth.debug("Token refreshed")
                 case .userUpdated:
-                    print("[Auth] User updated")
+                    Log.auth.debug("User updated")
                 case .passwordRecovery:
                     break
                 @unknown default:
@@ -98,9 +99,9 @@ final class SupabaseAuthService: ObservableObject {
                 do {
                     session = try await supabase.auth.refreshSession()
                     currentUser = session?.user
-                    print("[Auth] Session refreshed successfully")
+                    Log.auth.debug("Session refreshed successfully")
                 } catch {
-                    print("[Auth] Session refresh failed: \(error)")
+                    Log.auth.warning("Session refresh failed: \(error.localizedDescription)")
                     // Session is invalid, clear it
                     session = nil
                     currentUser = nil
@@ -110,7 +111,7 @@ final class SupabaseAuthService: ObservableObject {
 
             return session != nil
         } catch {
-            print("[Auth] No existing session: \(error)")
+            Log.auth.debug("No existing session: \(error.localizedDescription)")
             return false
         }
     }
@@ -124,9 +125,9 @@ final class SupabaseAuthService: ObservableObject {
         do {
             session = try await supabase.auth.refreshSession()
             currentUser = session?.user
-            print("[Auth] Session refreshed for API call")
+            Log.auth.debug("Session refreshed for API call")
         } catch {
-            print("[Auth] Session refresh failed: \(error)")
+            Log.auth.warning("Session refresh failed: \(error.localizedDescription)")
             session = nil
             currentUser = nil
             throw AuthError.sessionExpired
@@ -354,7 +355,7 @@ final class SupabaseAuthService: ObservableObject {
         } catch {
             // Profile doesn't exist yet - create it with defaults
             // This handles cases where the database trigger hasn't run yet
-            print("[Auth] Profile not found, creating default profile for user: \(userId)")
+            Log.auth.info("Profile not found, creating default profile")
             let email = currentUser?.email
             let now = Date()
 
@@ -514,9 +515,9 @@ final class SupabaseAuthService: ObservableObject {
             CrashReporter.shared.clearUser()
             Analytics.shared.reset()
 
-            print("[Auth] Account deleted successfully")
+            Log.auth.info("Account deleted successfully")
         } catch {
-            print("[Auth] Delete account error: \(error)")
+            Log.auth.error("Delete account error: \(error.localizedDescription)")
             throw AuthError.unknown("Failed to delete account: \(error.localizedDescription)")
         }
     }
