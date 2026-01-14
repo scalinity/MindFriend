@@ -187,14 +187,15 @@ final class BillingService: ObservableObject {
         guard let userId = authService.userId else { return }
 
         do {
-            let result: Subscription? = try await supabase
+            let results: [Subscription] = try await supabase
                 .from("subscriptions")
                 .select()
                 .eq("user_id", value: userId)
-                .maybeSingle()
+                .limit(1)
                 .execute()
                 .value
 
+            let result = results.first
             subscription = result
 
             // If user has a family group, load it
@@ -214,13 +215,15 @@ final class BillingService: ObservableObject {
 
         do {
             // First check if user is admin
-            var group: FamilyGroup? = try await supabase
+            let adminGroups: [FamilyGroup] = try await supabase
                 .from("family_groups")
                 .select()
                 .eq("admin_user_id", value: userId)
-                .maybeSingle()
+                .limit(1)
                 .execute()
                 .value
+
+            var group: FamilyGroup? = adminGroups.first
 
             // If not admin, check if member
             if group == nil {
@@ -233,15 +236,16 @@ final class BillingService: ObservableObject {
                     }
                 }
 
-                if let membership: MembershipResult = try await supabase
+                let memberships: [MembershipResult] = try await supabase
                     .from("family_members")
                     .select("family_id")
                     .eq("user_id", value: userId)
                     .eq("status", value: "active")
-                    .maybeSingle()
+                    .limit(1)
                     .execute()
                     .value
-                {
+
+                if let membership = memberships.first {
                     group = try await supabase
                         .from("family_groups")
                         .select()
@@ -340,12 +344,19 @@ final class BillingService: ObservableObject {
             throw BillingError.noSeatsAvailable
         }
 
+        struct InviteRequest: Encodable {
+            let email: String
+            let sendEmail: Bool
+
+            enum CodingKeys: String, CodingKey {
+                case email
+                case sendEmail = "send_email"
+            }
+        }
+
         let response: SendInviteResponse = try await supabase.functions.invoke(
             "send-family-invite",
-            options: .init(body: [
-                "email": email,
-                "send_email": sendEmail
-            ])
+            options: .init(body: InviteRequest(email: email, sendEmail: sendEmail))
         )
 
         if !response.success {
@@ -377,27 +388,48 @@ final class BillingService: ObservableObject {
     /// Remove a member from the family plan (admin only)
     func removeFamilyMember(memberId: String) async throws {
         guard let group = familyGroup,
-              group.adminUserId == authService.userId else {
+              let currentUserId = authService.userId,
+              group.adminUserId == currentUserId.uuidString else {
             throw BillingError.notFamilyAdmin
+        }
+
+        struct RemoveMemberUpdate: Encodable {
+            let status: String
+            let removedAt: String
+
+            enum CodingKeys: String, CodingKey {
+                case status
+                case removedAt = "removed_at"
+            }
         }
 
         try await supabase
             .from("family_members")
-            .update([
-                "status": "removed",
-                "removed_at": ISO8601DateFormatter().string(from: Date())
-            ])
+            .update(RemoveMemberUpdate(
+                status: "removed",
+                removedAt: ISO8601DateFormatter().string(from: Date())
+            ))
             .eq("id", value: memberId)
             .execute()
 
         // Decrement seats used on admin subscription
         if let sub = subscription {
+            struct SeatsUpdate: Encodable {
+                let seatsUsed: Int
+                let updatedAt: String
+
+                enum CodingKeys: String, CodingKey {
+                    case seatsUsed = "seats_used"
+                    case updatedAt = "updated_at"
+                }
+            }
+
             try await supabase
                 .from("subscriptions")
-                .update([
-                    "seats_used": max(1, sub.seatsUsed - 1),
-                    "updated_at": ISO8601DateFormatter().string(from: Date())
-                ])
+                .update(SeatsUpdate(
+                    seatsUsed: max(1, sub.seatsUsed - 1),
+                    updatedAt: ISO8601DateFormatter().string(from: Date())
+                ))
                 .eq("id", value: sub.id)
                 .execute()
         }
@@ -410,7 +442,8 @@ final class BillingService: ObservableObject {
     /// Get pending invitations for the family (admin only)
     func getPendingInvitations() async throws -> [FamilyInvitation] {
         guard let group = familyGroup,
-              group.adminUserId == authService.userId else {
+              let currentUserId = authService.userId,
+              group.adminUserId == currentUserId.uuidString else {
             return []
         }
 
@@ -418,7 +451,7 @@ final class BillingService: ObservableObject {
             .from("family_invitations")
             .select()
             .eq("family_id", value: group.id)
-            .is("accepted_at", value: NSNull())
+            .is("accepted_at", value: nil)
             .gt("expires_at", value: ISO8601DateFormatter().string(from: Date()))
             .execute()
             .value
@@ -426,7 +459,8 @@ final class BillingService: ObservableObject {
 
     /// Check if current user is the family admin
     var isFamilyAdmin: Bool {
-        familyGroup?.adminUserId == authService.userId
+        guard let currentUserId = authService.userId else { return false }
+        return familyGroup?.adminUserId == currentUserId.uuidString
     }
 
     // MARK: - Private
@@ -475,7 +509,7 @@ final class BillingService: ObservableObject {
 
 // MARK: - Billing Error
 
-enum BillingError: Error, LocalizedError {
+enum BillingError: Error, LocalizedError, Equatable {
     case cancelled
     case verificationFailed
     case invalidTransaction
