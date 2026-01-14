@@ -4,6 +4,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
+import { createLogger } from "../_shared/logger.ts";
 import {
   getPlanDetails,
   isFamilyPlan,
@@ -11,6 +12,8 @@ import {
   generateInviteCode,
   isValidProductId,
 } from "../_shared/billing-types.ts";
+
+const log = createLogger("verify-purchase");
 
 const APP_STORE_API_URL = "https://api.storekit.itunes.apple.com";
 const APP_STORE_SANDBOX_URL = "https://api.storekit-sandbox.itunes.apple.com";
@@ -159,9 +162,7 @@ serve(async (req) => {
     const isMockMode = !hasCredentials && !isProduction;
 
     if (isMockMode) {
-      console.log(
-        "[DEV MODE] App Store credentials not configured, using mock validation",
-      );
+      log.warn("App Store credentials not configured, using mock validation");
     }
 
     // TODO: Implement full App Store Server API validation when credentials configured
@@ -204,7 +205,7 @@ serve(async (req) => {
           .single();
 
         if (circleError) {
-          console.error("Error creating family circle:", circleError);
+          log.error("Error creating family circle", { error: circleError.message });
           // Continue without circle, not a blocking error
         } else {
           circleId = newCircle.id;
@@ -230,7 +231,7 @@ serve(async (req) => {
           .single();
 
         if (groupError) {
-          console.error("Error creating family group:", groupError);
+          log.error("Error creating family group", { error: groupError.message });
           return new Response(
             JSON.stringify({ error: "Failed to create family group" }),
             {
@@ -285,7 +286,7 @@ serve(async (req) => {
       });
 
     if (subError) {
-      console.error("Error upserting subscription:", subError);
+      log.error("Error upserting subscription", { error: subError.message });
     }
 
     // Award premium badge
@@ -349,7 +350,7 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
-    console.error("Verify purchase error:", error);
+    log.error("Verify purchase error", { error: String(error) });
     return new Response(
       JSON.stringify({ error: "Internal server error", valid: false }),
       {

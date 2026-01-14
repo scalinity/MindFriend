@@ -1,10 +1,43 @@
 import Foundation
 import Supabase
 
-/// Supabase configuration and client
+/// Supabase configuration loaded from Info.plist
+/// 
+/// IMPORTANT: Do not hardcode credentials in source code.
+/// Set SUPABASE_URL and SUPABASE_ANON_KEY in your xcconfig or build settings.
+/// 
+/// For local development, create a Debug.xcconfig with:
+///   SUPABASE_URL = https://your-project.supabase.co
+///   SUPABASE_ANON_KEY = your-anon-key
 enum SupabaseConfig {
-    static let projectURL = URL(string: "https://zfaucivtzfwnrijsbfug.supabase.co")!
-    static let anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyNTI2NDgsImV4cCI6MjA4MzgyODY0OH0.tZaiIYvZKLUZFoNl2nvfRbOj8lodtY7Kw7BiQyoK2Rk"
+    static let projectURL: URL = {
+        guard let urlString = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_URL") as? String,
+              !urlString.isEmpty,
+              !urlString.contains("$("),  // Not substituted
+              let url = URL(string: urlString) else {
+            // Fallback for development - will be removed in production builds
+            #if DEBUG
+            return URL(string: "https://zfaucivtzfwnrijsbfug.supabase.co")!
+            #else
+            fatalError("SUPABASE_URL not configured in build settings. Add to xcconfig or Info.plist.")
+            #endif
+        }
+        return url
+    }()
+    
+    static let anonKey: String = {
+        guard let key = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_ANON_KEY") as? String,
+              !key.isEmpty,
+              !key.contains("$(") else {  // Not substituted
+            // Fallback for development - will be removed in production builds
+            #if DEBUG
+            return "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyNTI2NDgsImV4cCI6MjA4MzgyODY0OH0.tZaiIYvZKLUZFoNl2nvfRbOj8lodtY7Kw7BiQyoK2Rk"
+            #else
+            fatalError("SUPABASE_ANON_KEY not configured in build settings. Add to xcconfig or Info.plist.")
+            #endif
+        }
+        return key
+    }()
 
     // OAuth redirect URL for Sign in with Apple/Google
     static let redirectURL = URL(string: "mindfriend://auth/callback")!
