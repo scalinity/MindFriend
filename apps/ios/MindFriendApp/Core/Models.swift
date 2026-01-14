@@ -277,6 +277,10 @@ enum PlanType: String, Codable, CaseIterable {
         case .family: return "Up to 6 people"
         }
     }
+
+    var isFamilyPlan: Bool {
+        self == .family || self == .couples
+    }
 }
 
 enum BillingPeriod: String, Codable, CaseIterable {
