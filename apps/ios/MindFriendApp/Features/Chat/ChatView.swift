@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 struct ChatView: View {
     @EnvironmentObject var appState: AppState
@@ -373,14 +374,14 @@ struct NewChatView: View {
         do {
             // Debug: Check if authenticated
             guard container.supabaseAuthService.userId != nil else {
-                print("[NewChatView] Error: User not authenticated")
+                Log.chat.warning("User not authenticated when creating chat")
                 errorMessage = "Please sign in to start a chat"
                 return
             }
 
             conversation = try await container.chatService.createConversation()
         } catch {
-            print("[NewChatView] Error creating conversation: \(error)")
+            Log.chat.error("Error creating conversation: \(error.localizedDescription)")
             errorMessage = error.localizedDescription
         }
         isRetrying = false

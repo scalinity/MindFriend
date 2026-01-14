@@ -1,6 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { checkRateLimit, getRateLimitHeaders } from "../_shared/ratelimit.ts";
+import { createLogger } from "../_shared/logger.ts";
+
+const log = createLogger("voice-token");
 
 interface VoiceTokenResponse {
   token: string;
@@ -46,6 +50,31 @@ serve(async (req) => {
 
     if (authError || !user) {
       return errorResponse(corsHeaders, "Invalid or expired token", "UNAUTHORIZED", 401);
+    }
+
+    // Rate limiting check (5 requests per minute to prevent token farming)
+    const rateLimitResult = await checkRateLimit(supabase, user.id, "voice-token", {
+      windowMs: 60 * 1000,
+      maxRequests: 5,
+    });
+
+    if (!rateLimitResult.allowed) {
+      log.warn("Rate limit exceeded for voice-token", { userId: user.id.slice(0, 8) });
+      return new Response(
+        JSON.stringify({
+          error: "Too many requests",
+          code: "RATE_LIMITED",
+          retryAfter: rateLimitResult.retryAfter,
+        }),
+        {
+          status: 429,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+            ...getRateLimitHeaders(rateLimitResult),
+          },
+        },
+      );
     }
 
     // Check voice quota

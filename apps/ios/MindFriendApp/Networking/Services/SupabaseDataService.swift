@@ -1,5 +1,6 @@
 import Foundation
 import Supabase
+import OSLog
 
 // MARK: - API Errors
 
@@ -397,7 +398,7 @@ final class SupabaseDataService: ObservableObject {
     }
 
     func createConversation(title: String?) async throws -> Conversation {
-        print("[SupabaseDataService] Creating conversation for user: \(try userId)")
+        Log.data.debug("[Data] Creating conversation for user: \(try userId)")
 
         let conversation = DBConversation(
             id: nil,
@@ -416,11 +417,11 @@ final class SupabaseDataService: ObservableObject {
             .value
 
         guard let conversationId = result.id else {
-            print("[SupabaseDataService] ERROR: Conversation created but no ID returned")
+            Log.data.error("[Data] Conversation created but no ID returned")
             throw DataError.operationFailed("Failed to create conversation - no ID returned")
         }
 
-        print("[SupabaseDataService] Conversation created with ID: \(conversationId)")
+        Log.data.debug("[Data] Conversation created with ID: \(conversationId)")
         Analytics.shared.track(.chatConversationCreated)
 
         return Conversation(
@@ -475,17 +476,17 @@ final class SupabaseDataService: ObservableObject {
     /// Send a message and get AI response via Edge Function
     /// Returns the assistant's response message
     func sendMessage(conversationId: String, content: String) async throws -> ChatResponse {
-        print("[SupabaseDataService] Invoking chat function for conversation: \(conversationId)")
+        Log.data.debug("[Data] Invoking chat function for conversation: \(conversationId)")
 
         // Validate conversation ID
         guard UUID(uuidString: conversationId) != nil else {
-            print("[SupabaseDataService] ERROR: Invalid conversation ID: \(conversationId)")
+            Log.data.error("[Data] Invalid conversation ID: \(conversationId)")
             throw DataError.invalidId
         }
 
         // Ensure we have a valid session before calling Edge Function
         guard let accessToken = authService.session?.accessToken else {
-            print("[SupabaseDataService] No access token available")
+            Log.data.warning("[Data] No access token available")
             throw APIError.badRequest("Not signed in. Please sign in again.")
         }
 
@@ -493,17 +494,17 @@ final class SupabaseDataService: ObservableObject {
         do {
             try await authService.ensureValidSession()
         } catch {
-            print("[SupabaseDataService] Session validation failed: \(error)")
+            Log.data.warning("[Data] Session validation failed: \(error)")
             throw APIError.badRequest("Session expired. Please sign in again.")
         }
 
         // Get the refreshed access token
         guard let refreshedToken = authService.session?.accessToken else {
-            print("[SupabaseDataService] No access token after refresh")
+            Log.data.warning("[Data] No access token after refresh")
             throw APIError.badRequest("Session expired. Please sign in again.")
         }
 
-        print("[SupabaseDataService] Using access token: \(refreshedToken.prefix(20))...")
+        Log.data.debug("[Data] Using access token: \(refreshedToken.prefix(20))...")
 
         // Call the chat Edge Function with explicit auth header
         let chatResponse: ChatFunctionResponse
@@ -518,14 +519,14 @@ final class SupabaseDataService: ObservableObject {
                     ]
                 )
             )
-            print("[SupabaseDataService] Chat function returned successfully")
-            print("[SupabaseDataService] Response: quotaUsed=\(chatResponse.quotaUsed ?? -1), quotaLimit=\(chatResponse.quotaLimit ?? -1)")
+            Log.data.debug("[Data] Chat function returned successfully")
+            Log.data.debug("[Data] Response: quotaUsed=\(chatResponse.quotaUsed ?? -1), quotaLimit=\(chatResponse.quotaLimit ?? -1)")
         } catch let error as FunctionsError {
             // Extract detailed error info from FunctionsError
             switch error {
             case .httpError(let code, let data):
                 let responseBody = String(data: data, encoding: .utf8) ?? "unknown"
-                print("[SupabaseDataService] Chat function HTTP error \(code): \(responseBody)")
+                Log.data.error("[Data] Chat function HTTP error \(code): \(responseBody)")
 
                 if code == 429 || responseBody.lowercased().contains("quota") {
                     throw APIError.quotaExceeded
@@ -537,11 +538,11 @@ final class SupabaseDataService: ObservableObject {
                     throw APIError.serverError("Server error (\(code)): \(responseBody)")
                 }
             case .relayError:
-                print("[SupabaseDataService] Chat function relay error")
+                Log.data.error("[Data] Chat function relay error")
                 throw APIError.networkError("Unable to reach server")
             }
         } catch {
-            print("[SupabaseDataService] Chat function error: \(error)")
+            Log.data.error("[Data] Chat function error: \(error)")
             throw error
         }
 
@@ -861,7 +862,7 @@ final class SupabaseDataService: ObservableObject {
                 options: .init(body: notificationBody)
             )
         } catch {
-            print("[SupabaseDataService] Failed to notify circle members: \(error)")
+            Log.data.error("[Data] Failed to notify circle members: \(error)")
         }
     }
 
@@ -1081,7 +1082,7 @@ final class SupabaseDataService: ObservableObject {
                 .value
 
             guard let challenge = challenges.first else {
-                print("[SupabaseDataService] Challenge not found: \(challengeId)")
+                Log.data.warning("[Data] Challenge not found: \(challengeId)")
                 return
             }
 
@@ -1136,7 +1137,7 @@ final class SupabaseDataService: ObservableObject {
                 options: .init(body: challengeNotifyBody)
             )
         } catch {
-            print("[SupabaseDataService] Failed to notify challenge completion: \(error)")
+            Log.data.error("[Data] Failed to notify challenge completion: \(error)")
         }
     }
 
@@ -1717,7 +1718,7 @@ final class SupabaseDataService: ObservableObject {
     /// Update the user's wellness focus selection from onboarding quiz
     func updateWellnessFocus(_ focus: WellnessFocus) async throws {
         let currentUserId = try userId
-        print("[SupabaseDataService] Updating wellness focus to '\(focus.rawValue)' for user: \(currentUserId)")
+        Log.data.debug("[Data] Updating wellness focus to '\(focus.rawValue)' for user: \(currentUserId)")
 
         try await supabase
             .from(Tables.profiles)
@@ -1725,7 +1726,7 @@ final class SupabaseDataService: ObservableObject {
             .eq("id", value: currentUserId)
             .execute()
 
-        print("[SupabaseDataService] Wellness focus updated successfully")
+        Log.data.debug("[Data] Wellness focus updated successfully")
         Analytics.shared.track(.onboardingStepCompleted, properties: [
             "step": "quiz",
             "wellness_focus": focus.rawValue
@@ -1736,7 +1737,7 @@ final class SupabaseDataService: ObservableObject {
     func markOnboardingComplete() async throws {
         let currentUserId = try userId
         let now = ISO8601DateFormatter().string(from: Date())
-        print("[SupabaseDataService] Marking onboarding complete for user: \(currentUserId)")
+        Log.data.debug("[Data] Marking onboarding complete for user: \(currentUserId)")
 
         try await supabase
             .from(Tables.profiles)
@@ -1744,7 +1745,7 @@ final class SupabaseDataService: ObservableObject {
             .eq("id", value: currentUserId)
             .execute()
 
-        print("[SupabaseDataService] Onboarding marked complete at: \(now)")
+        Log.data.debug("[Data] Onboarding marked complete at: \(now)")
         Analytics.shared.track(.onboardingCompleted)
     }
 
@@ -1752,7 +1753,7 @@ final class SupabaseDataService: ObservableObject {
     func completeOnboarding(focus: WellnessFocus) async throws {
         let currentUserId = try userId
         let now = ISO8601DateFormatter().string(from: Date())
-        print("[SupabaseDataService] Completing onboarding with focus '\(focus.rawValue)' for user: \(currentUserId)")
+        Log.data.debug("[Data] Completing onboarding with focus '\(focus.rawValue)' for user: \(currentUserId)")
 
         // Single atomic update
         try await supabase
@@ -1764,7 +1765,7 @@ final class SupabaseDataService: ObservableObject {
             .eq("id", value: currentUserId)
             .execute()
 
-        print("[SupabaseDataService] Onboarding completed successfully")
+        Log.data.debug("[Data] Onboarding completed successfully")
         Analytics.shared.track(.onboardingStepCompleted, properties: [
             "step": "quiz",
             "wellness_focus": focus.rawValue
