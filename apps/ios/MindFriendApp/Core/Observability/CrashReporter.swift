@@ -6,7 +6,7 @@ import UIKit
 final class CrashReporter {
     static let shared = CrashReporter()
 
-    private var isInitialized = false
+    private(set) var isInitialized = false
 
     private init() {}
 
@@ -24,8 +24,12 @@ final class CrashReporter {
         let dsn = "https://YOUR_SENTRY_DSN_HERE@sentry.io/PROJECT_ID"
         #endif
 
-        guard let sentryDSN = dsn, !sentryDSN.isEmpty else {
+        guard let sentryDSN = dsn, !sentryDSN.isEmpty, !sentryDSN.contains("YOUR_SENTRY_DSN") else {
+            #if DEBUG
+            // Silent in debug - this is expected when DSN isn't configured
+            #else
             print("[CrashReporter] Sentry DSN not configured, skipping initialization")
+            #endif
             return
         }
 
@@ -95,6 +99,7 @@ final class CrashReporter {
 
     /// Set the current user for crash reports
     func setUser(id: String, email: String? = nil, username: String? = nil) {
+        guard isInitialized else { return }
         let user = User(userId: id)
         user.email = email
         user.username = username
@@ -103,6 +108,7 @@ final class CrashReporter {
 
     /// Clear user information (call on logout)
     func clearUser() {
+        guard isInitialized else { return }
         SentrySDK.setUser(nil)
     }
 
@@ -110,6 +116,7 @@ final class CrashReporter {
 
     /// Capture a non-fatal error
     func capture(error: Error, context: [String: Any]? = nil) {
+        guard isInitialized else { return }
         let sentryEvent = Event(error: error)
 
         if let context = context {
@@ -121,6 +128,7 @@ final class CrashReporter {
 
     /// Capture a message with optional level
     func capture(message: String, level: SentryLevel = .info, context: [String: Any]? = nil) {
+        guard isInitialized else { return }
         SentrySDK.capture(message: message) { scope in
             scope.setLevel(level)
             if let context = context {
@@ -135,6 +143,7 @@ final class CrashReporter {
 
     /// Add a breadcrumb for debugging crash context
     func addBreadcrumb(category: String, message: String, level: SentryLevel = .info, data: [String: Any]? = nil) {
+        guard isInitialized else { return }
         let breadcrumb = Breadcrumb(level: level, category: category)
         breadcrumb.message = message
         if let data = data {
@@ -164,21 +173,22 @@ final class CrashReporter {
     // MARK: - Performance Monitoring
 
     /// Start a transaction for performance monitoring
-    func startTransaction(name: String, operation: String) -> any Span {
+    func startTransaction(name: String, operation: String) -> (any Span)? {
+        guard isInitialized else { return nil }
         return SentrySDK.startTransaction(name: name, operation: operation)
     }
 
     /// Measure the duration of a code block
     func measure<T>(name: String, operation: String, block: () throws -> T) rethrows -> T {
         let transaction = startTransaction(name: name, operation: operation)
-        defer { transaction.finish() }
+        defer { transaction?.finish() }
         return try block()
     }
 
     /// Measure async operation
     func measureAsync<T>(name: String, operation: String, block: () async throws -> T) async rethrows -> T {
         let transaction = startTransaction(name: name, operation: operation)
-        defer { transaction.finish() }
+        defer { transaction?.finish() }
         return try await block()
     }
 
@@ -186,6 +196,7 @@ final class CrashReporter {
 
     /// Set a tag that will be attached to all future events
     func setTag(key: String, value: String) {
+        guard isInitialized else { return }
         SentrySDK.configureScope { scope in
             scope.setTag(value: value, key: key)
         }
@@ -193,6 +204,7 @@ final class CrashReporter {
 
     /// Set extra context data
     func setContext(key: String, value: [String: Any]) {
+        guard isInitialized else { return }
         SentrySDK.configureScope { scope in
             scope.setContext(value: value, key: key)
         }

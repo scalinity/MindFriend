@@ -29,6 +29,9 @@ enum AnalyticsEvent: String {
     case chatStarted = "chat_started"
     case chatMessageSent = "chat_message_sent"
     case chatConversationCreated = "chat_conversation_created"
+    case chatConversationDeleted = "chat_conversation_deleted"
+    case crisisDetected = "crisis_detected"
+    case quotaExceeded = "quota_exceeded"
 
     // Exercises
     case exerciseViewed = "exercise_viewed"
@@ -66,6 +69,12 @@ enum AnalyticsEvent: String {
     // Features
     case featureUsed = "feature_used"
     case screenViewed = "screen_viewed"
+
+    // Memory
+    case memoryDeleted = "memory_deleted"
+    case allMemoriesDeleted = "all_memories_deleted"
+    case memoriesDeletedByType = "memories_deleted_by_type"
+    case memorySettingsViewed = "memory_settings_viewed"
 }
 
 /// User properties for segmentation
