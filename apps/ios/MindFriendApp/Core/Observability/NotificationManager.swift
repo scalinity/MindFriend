@@ -1,6 +1,7 @@
 import Foundation
 import UserNotifications
 import UIKit
+import OSLog
 
 /// Notification types the app can send/receive
 enum NotificationType: String {
@@ -72,7 +73,7 @@ final class NotificationManager: NSObject, ObservableObject {
 
             return granted
         } catch {
-            print("[NotificationManager] Authorization error: \(error)")
+            Log.notifications.debug("[Notifications] Authorization error: \(error)")
             error.report(context: ["action": "request_notification_authorization"])
             return false
         }
@@ -98,7 +99,7 @@ final class NotificationManager: NSObject, ObservableObject {
         let tokenString = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
         self.deviceToken = tokenString
 
-        print("[NotificationManager] Device token: \(tokenString)")
+        Log.notifications.debug("[Notifications] Device token: \(tokenString)")
 
         // Register with backend
         Task {
@@ -108,7 +109,7 @@ final class NotificationManager: NSObject, ObservableObject {
 
     /// Called when registration fails
     func didFailToRegisterForRemoteNotifications(withError error: Error) {
-        print("[NotificationManager] Failed to register: \(error)")
+        Log.notifications.debug("[Notifications] Failed to register: \(error)")
         error.report(context: ["action": "register_remote_notifications"])
     }
 
@@ -131,7 +132,7 @@ final class NotificationManager: NSObject, ObservableObject {
                 "action": "device_registered"
             ])
         } catch {
-            print("[NotificationManager] Failed to register device: \(error)")
+            Log.notifications.debug("[Notifications] Failed to register device: \(error)")
             error.report(context: ["action": "register_device_backend"])
         }
     }
@@ -141,7 +142,7 @@ final class NotificationManager: NSObject, ObservableObject {
     /// Handle notification when app is in foreground
     func handleForegroundNotification(_ notification: UNNotification) -> UNNotificationPresentationOptions {
         let userInfo = notification.request.content.userInfo
-        print("[NotificationManager] Foreground notification: \(userInfo)")
+        Log.notifications.debug("[Notifications] Foreground notification: \(userInfo)")
 
         // Add breadcrumb
         CrashReporter.shared.addBreadcrumb(
@@ -157,7 +158,7 @@ final class NotificationManager: NSObject, ObservableObject {
     /// Handle notification tap/interaction
     func handleNotificationResponse(_ response: UNNotificationResponse) {
         let userInfo = response.notification.request.content.userInfo
-        print("[NotificationManager] Notification tapped: \(userInfo)")
+        Log.notifications.debug("[Notifications] Notification tapped: \(userInfo)")
 
         let deepLink = parseDeepLink(from: userInfo)
         let notificationType = userInfo["type"] as? String ?? "unknown"
@@ -192,7 +193,7 @@ final class NotificationManager: NSObject, ObservableObject {
         do {
             try await container.supabaseDataService.markNotificationOpened(notificationId: id)
         } catch {
-            print("[NotificationManager] Failed to mark notification opened: \(error)")
+            Log.notifications.debug("[Notifications] Failed to mark notification opened: \(error)")
         }
     }
 
@@ -344,7 +345,7 @@ final class NotificationManager: NSObject, ObservableObject {
             do {
                 try await container.supabaseDataService.updateTypicalActiveHour()
             } catch {
-                print("[NotificationManager] Failed to track app open: \(error)")
+                Log.notifications.debug("[Notifications] Failed to track app open: \(error)")
             }
         }
     }
@@ -356,7 +357,7 @@ final class NotificationManager: NSObject, ObservableObject {
         do {
             try await UNUserNotificationCenter.current().setBadgeCount(count)
         } catch {
-            print("[NotificationManager] Failed to set badge: \(error)")
+            Log.notifications.debug("[Notifications] Failed to set badge: \(error)")
         }
     }
 
