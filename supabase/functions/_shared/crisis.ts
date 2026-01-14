@@ -23,6 +23,15 @@ export function detectCrisis(content: string): boolean {
   return CRISIS_KEYWORDS.some((keyword) => lowerContent.includes(keyword));
 }
 
+// Returns the matched keyword for logging (without storing user's actual content)
+// This protects PII while still allowing crisis event tracking
+export function getMatchedCrisisKeyword(content: string): string | null {
+  const lowerContent = content.toLowerCase();
+  return (
+    CRISIS_KEYWORDS.find((keyword) => lowerContent.includes(keyword)) || null
+  );
+}
+
 export const CRISIS_RESPONSE = `I hear that you're going through something really difficult right now, and I'm genuinely concerned about your wellbeing.
 
 What you're feeling matters, and you don't have to face this alone. Please reach out to someone who can help:

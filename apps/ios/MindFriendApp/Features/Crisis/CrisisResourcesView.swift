@@ -78,8 +78,7 @@ struct CrisisResourcesView: View {
         defer { isLoading = false }
 
         do {
-            let response: CrisisResourcesResponse = try await container.apiClient.request(.getCrisisResources(country: nil))
-            resources = response.resources
+            resources = try await container.supabaseDataService.getCrisisResources()
         } catch {
             // Load fallback resources
             resources = CrisisResource.fallbackResources

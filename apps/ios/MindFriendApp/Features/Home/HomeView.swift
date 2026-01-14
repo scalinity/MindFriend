@@ -1,9 +1,18 @@
 import SwiftUI
 
+// MARK: - Quest Loading State
+enum QuestLoadingState {
+    case loading
+    case loaded(Quest)
+    case noQuest
+    case error(String)
+}
+
 struct HomeView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
-    @State private var isLoading = true
+    @State private var questState: QuestLoadingState = .loading
+    @State private var isRefreshing = false
 
     var body: some View {
         NavigationStack {
@@ -19,12 +28,8 @@ struct HomeView: View {
                         MoodPromptCard()
                     }
 
-                    // Today's quest
-                    if let quest = appState.todayQuest {
-                        QuestCard(quest: quest)
-                    } else {
-                        QuestLoadingCard()
-                    }
+                    // Today's quest - with proper state handling
+                    questCard
 
                     // Streak
                     StreakCard(
@@ -60,26 +65,94 @@ struct HomeView: View {
         }
     }
 
+    // MARK: - Quest Card View
+    @ViewBuilder
+    private var questCard: some View {
+        switch questState {
+        case .loading:
+            QuestLoadingCard()
+        case .loaded(let quest):
+            QuestCard(quest: quest)
+        case .noQuest:
+            QuestEmptyCard(onRetry: { Task { await loadData() } })
+        case .error(let message):
+            QuestErrorCard(message: message, onRetry: { Task { await loadData() } })
+        }
+    }
+
     private func loadData() async {
-        isLoading = true
-        defer { isLoading = false }
+        questState = .loading
+
+        // Check if we're in dev mode (no real Supabase session)
+        let isDevMode = container.supabaseAuthService.userId == nil
+
+        if isDevMode {
+            // In dev mode, show a mock quest
+            #if DEBUG
+            await loadMockData()
+            #else
+            questState = .error("Please sign in to view your quest")
+            #endif
+            return
+        }
 
         do {
-            async let quest = container.questService.getTodayQuest()
-            async let profile = container.userService.getProfile()
+            // Use Supabase data service for quests
+            let questResult = try await container.supabaseDataService.getTodayQuest()
 
-            let (questResult, profileResult) = try await (quest, profile)
+            // Use Supabase auth service for profile
+            let profileResult = try await container.supabaseAuthService.fetchProfile()
 
             await MainActor.run {
-                appState.todayQuest = questResult
+                if let quest = questResult {
+                    questState = .loaded(quest)
+                    appState.todayQuest = quest
+                } else {
+                    questState = .noQuest
+                }
                 appState.currentUser = profileResult
                 appState.currentStreak = profileResult.stats.currentStreakDays
                 appState.entitlements = profileResult.entitlements
             }
         } catch {
-            appState.showError(.apiError(error.localizedDescription))
+            print("HomeView loadData error: \(error)")
+            questState = .error(error.localizedDescription)
         }
     }
+
+    #if DEBUG
+    private func loadMockData() async {
+        // Simulate network delay
+        try? await Task.sleep(nanoseconds: 500_000_000)
+
+        let mockQuest = Quest(
+            id: "mock-quest-1",
+            localDate: ISO8601DateFormatter.dateOnly.string(from: Date()),
+            status: .assigned,
+            assignedAt: Date(),
+            completedAt: nil,
+            template: QuestTemplate(
+                id: "mock-template-1",
+                type: .gratitude,
+                title: "Morning Gratitude",
+                description: "Write down 3 things you are grateful for this morning. Take a moment to reflect on the positive aspects of your life.",
+                estimatedMinutes: 5,
+                difficulty: "easy",
+                tags: ["gratitude", "morning"],
+                instructions: [
+                    QuestInstruction(step: 1, text: "Find a quiet space", durationSeconds: nil),
+                    QuestInstruction(step: 2, text: "Think of 3 things you're grateful for", durationSeconds: nil),
+                    QuestInstruction(step: 3, text: "Write them down", durationSeconds: nil)
+                ]
+            )
+        )
+
+        await MainActor.run {
+            questState = .loaded(mockQuest)
+            appState.todayQuest = mockQuest
+        }
+    }
+    #endif
 }
 
 // MARK: - Components
@@ -93,7 +166,7 @@ struct GreetingHeader: View {
         case 5..<12: return "Good morning"
         case 12..<17: return "Good afternoon"
         case 17..<21: return "Good evening"
-        default: return "Good night"
+        default: return "Goodnight"
         }
     }
 
@@ -257,6 +330,76 @@ struct QuestLoadingCard: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 40)
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(16)
+    }
+}
+
+struct QuestEmptyCard: View {
+    let onRetry: () -> Void
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "star.slash")
+                .font(.system(size: 40))
+                .foregroundStyle(.secondary)
+
+            VStack(spacing: 4) {
+                Text("No Quest Available")
+                    .font(.headline)
+
+                Text("Check back tomorrow for a new quest!")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+
+            Button {
+                onRetry()
+            } label: {
+                Label("Refresh", systemImage: "arrow.clockwise")
+                    .font(.subheadline)
+            }
+            .buttonStyle(.bordered)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 32)
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(16)
+    }
+}
+
+struct QuestErrorCard: View {
+    let message: String
+    let onRetry: () -> Void
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 40))
+                .foregroundStyle(.orange)
+
+            VStack(spacing: 4) {
+                Text("Unable to Load Quest")
+                    .font(.headline)
+
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+            }
+
+            Button {
+                onRetry()
+            } label: {
+                Label("Try Again", systemImage: "arrow.clockwise")
+                    .font(.subheadline)
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 32)
         .background(Color(.secondarySystemBackground))
         .cornerRadius(16)
     }

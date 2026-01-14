@@ -3,6 +3,43 @@ import Supabase
 import AuthenticationServices
 import GoogleSignIn
 
+// MARK: - Auth Errors
+
+enum AuthError: LocalizedError {
+    case invalidCredentials
+    case missingIdToken
+    case emailConfirmationRequired
+    case userNotFound
+    case accountNotFound
+    case sessionExpired
+    case handleTaken
+    case invalidHandle
+    case unknown(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidCredentials:
+            return "Incorrect email or password. Please try again."
+        case .missingIdToken:
+            return "Unable to retrieve authentication token"
+        case .emailConfirmationRequired:
+            return "Please check your email to confirm your account"
+        case .userNotFound:
+            return "User not found"
+        case .accountNotFound:
+            return "No account found with this email. Please sign up first."
+        case .sessionExpired:
+            return "Your session has expired. Please sign in again"
+        case .handleTaken:
+            return "This handle is already taken. Please choose another."
+        case .invalidHandle:
+            return "Handle can only contain letters, numbers, and underscores"
+        case .unknown(let message):
+            return message
+        }
+    }
+}
+
 /// Handles authentication with Supabase (Apple Sign-In, Google Sign-In)
 @MainActor
 final class SupabaseAuthService: ObservableObject {
@@ -55,10 +92,44 @@ final class SupabaseAuthService: ObservableObject {
         do {
             session = try await supabase.auth.session
             currentUser = session?.user
+
+            // If we have a session, try to refresh it to ensure it's valid
+            if session != nil {
+                do {
+                    session = try await supabase.auth.refreshSession()
+                    currentUser = session?.user
+                    print("[Auth] Session refreshed successfully")
+                } catch {
+                    print("[Auth] Session refresh failed: \(error)")
+                    // Session is invalid, clear it
+                    session = nil
+                    currentUser = nil
+                    return false
+                }
+            }
+
             return session != nil
         } catch {
             print("[Auth] No existing session: \(error)")
             return false
+        }
+    }
+
+    /// Ensure we have a valid session, refreshing if needed
+    func ensureValidSession() async throws {
+        guard session != nil else {
+            throw AuthError.sessionExpired
+        }
+
+        do {
+            session = try await supabase.auth.refreshSession()
+            currentUser = session?.user
+            print("[Auth] Session refreshed for API call")
+        } catch {
+            print("[Auth] Session refresh failed: \(error)")
+            session = nil
+            currentUser = nil
+            throw AuthError.sessionExpired
         }
     }
 
@@ -224,7 +295,26 @@ final class SupabaseAuthService: ObservableObject {
 
         } catch {
             Analytics.shared.trackSignIn(provider: "email", success: false, error: error)
-            throw error
+            // Check for specific error types
+            let errorString = String(describing: error).lowercased()
+
+            // Email not confirmed
+            if errorString.contains("email_not_confirmed") || errorString.contains("email not confirmed") {
+                throw AuthError.emailConfirmationRequired
+            }
+
+            // Invalid credentials (wrong password or account doesn't exist)
+            // Supabase returns same error for both - show helpful message
+            if errorString.contains("invalid_credentials") || errorString.contains("invalid login") {
+                throw AuthError.invalidCredentials
+            }
+
+            // User not found
+            if errorString.contains("user_not_found") || errorString.contains("user not found") {
+                throw AuthError.accountNotFound
+            }
+
+            throw AuthError.unknown(error.localizedDescription)
         }
     }
 
@@ -251,15 +341,65 @@ final class SupabaseAuthService: ObservableObject {
             throw AuthError.invalidCredentials
         }
 
-        let profile: DBProfile = try await supabase
-            .from(Tables.profiles)
-            .select()
-            .eq("id", value: userId)
-            .single()
-            .execute()
-            .value
+        do {
+            let profile: DBProfile = try await supabase
+                .from(Tables.profiles)
+                .select()
+                .eq("id", value: userId)
+                .single()
+                .execute()
+                .value
 
-        return profile.toUserProfile()
+            return profile.toUserProfile()
+        } catch {
+            // Profile doesn't exist yet - create it with defaults
+            // This handles cases where the database trigger hasn't run yet
+            print("[Auth] Profile not found, creating default profile for user: \(userId)")
+            let email = currentUser?.email
+            let now = Date()
+
+            // Extract display name from user metadata (set during signup)
+            let userMetadata = currentUser?.userMetadata
+            let displayName = userMetadata?["display_name"]?.stringValue
+                ?? userMetadata?["full_name"]?.stringValue
+                ?? userMetadata?["name"]?.stringValue
+
+            // Generate a default handle from email if not provided
+            let defaultHandle = email?.components(separatedBy: "@").first ?? "user_\(userId.uuidString.prefix(8))"
+
+            let newProfile: [String: AnyEncodable] = [
+                "id": AnyEncodable(userId),
+                "email": AnyEncodable(email),
+                "display_name": AnyEncodable(displayName),
+                "handle": AnyEncodable(defaultHandle),
+                "timezone": AnyEncodable(TimeZone.current.identifier),
+                "created_at": AnyEncodable(ISO8601DateFormatter().string(from: now)),
+                "updated_at": AnyEncodable(ISO8601DateFormatter().string(from: now)),
+                "daily_quest_time_local": AnyEncodable("09:00"),
+                "reminders_enabled": AnyEncodable(true),
+                "nudge_after_days_inactive": AnyEncodable(3),
+                "share_mood_in_circles": AnyEncodable(true),
+                "ai_tone": AnyEncodable("friendly"),
+                "privacy_mode": AnyEncodable("standard"),
+                "current_streak_days": AnyEncodable(0),
+                "longest_streak_days": AnyEncodable(0),
+                "total_quests_completed": AnyEncodable(0),
+                "total_exercises_completed": AnyEncodable(0),
+                "subscription_tier": AnyEncodable("free"),
+                "daily_ai_quota": AnyEncodable(10),
+                "daily_ai_used": AnyEncodable(0)
+            ]
+
+            let createdProfile: DBProfile = try await supabase
+                .from(Tables.profiles)
+                .insert(newProfile)
+                .select()
+                .single()
+                .execute()
+                .value
+
+            return createdProfile.toUserProfile()
+        }
     }
 
     func updateProfile(displayName: String? = nil, handle: String? = nil, timezone: String? = nil) async throws {
@@ -272,9 +412,26 @@ final class SupabaseAuthService: ObservableObject {
         if let displayName = displayName {
             updates["display_name"] = AnyEncodable(displayName)
         }
+
         if let handle = handle {
-            updates["handle"] = AnyEncodable(handle)
+            // Normalize handle: lowercase, trimmed
+            let normalizedHandle = handle.lowercased().trimmingCharacters(in: .whitespaces)
+
+            // Validate handle format (letters, numbers, underscores only)
+            let handleRegex = /^[a-z0-9_]{3,30}$/
+            guard normalizedHandle.wholeMatch(of: handleRegex) != nil else {
+                throw AuthError.invalidHandle
+            }
+
+            // Check if handle is available
+            let isAvailable = try await isHandleAvailable(normalizedHandle, excludingUserId: userId)
+            guard isAvailable else {
+                throw AuthError.handleTaken
+            }
+
+            updates["handle"] = AnyEncodable(normalizedHandle)
         }
+
         if let timezone = timezone {
             updates["timezone"] = AnyEncodable(timezone)
         }
@@ -284,6 +441,24 @@ final class SupabaseAuthService: ObservableObject {
             .update(updates)
             .eq("id", value: userId)
             .execute()
+    }
+
+    /// Check if a handle is available (not taken by another user)
+    func isHandleAvailable(_ handle: String, excludingUserId: UUID? = nil) async throws -> Bool {
+        var query = supabase
+            .from(Tables.profiles)
+            .select("id")
+            .eq("handle", value: handle.lowercased())
+
+        if let excludingUserId = excludingUserId {
+            query = query.neq("id", value: excludingUserId)
+        }
+
+        let results: [DBProfileId] = try await query
+            .execute()
+            .value
+
+        return results.isEmpty
     }
 
     func updateSettings(_ settings: UserSettings) async throws {
@@ -311,12 +486,39 @@ final class SupabaseAuthService: ObservableObject {
     // MARK: - Account Management
 
     func deleteAccount() async throws {
-        // Note: This soft-deletes by calling a Supabase Edge Function
-        // The Edge Function should handle proper data deletion
-        guard userId != nil else { return }
+        guard userId != nil else {
+            throw AuthError.userNotFound
+        }
 
-        // For now, just sign out - implement Edge Function for full deletion
-        try await signOut()
+        // Call delete-account Edge Function
+        // This deletes all user data and the auth user
+        struct DeleteResponse: Decodable {
+            let success: Bool?
+            let message: String?
+            let error: String?
+        }
+
+        do {
+            let response: DeleteResponse = try await supabase.functions.invoke(
+                "delete-account",
+                options: .init()
+            )
+
+            if let error = response.error {
+                throw AuthError.unknown(error)
+            }
+
+            // Clear local state
+            session = nil
+            currentUser = nil
+            CrashReporter.shared.clearUser()
+            Analytics.shared.reset()
+
+            print("[Auth] Account deleted successfully")
+        } catch {
+            print("[Auth] Delete account error: \(error)")
+            throw AuthError.unknown("Failed to delete account: \(error.localizedDescription)")
+        }
     }
 }
 

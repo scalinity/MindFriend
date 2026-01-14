@@ -10,7 +10,11 @@ struct ChatView: View {
     @State private var isLoading = true
     @State private var isSending = false
     @State private var showQuotaWarning = false
+    @State private var displayTitle: String = "Chat"
+    @State private var sendTask: Task<Void, Never>?
     @FocusState private var isInputFocused: Bool
+
+    private let quotaWarningThreshold = 3
 
     var body: some View {
         VStack(spacing: 0) {
@@ -51,8 +55,11 @@ struct ChatView: View {
             )
             .focused($isInputFocused)
         }
-        .navigationTitle(conversation.title ?? "Chat")
+        .navigationTitle(displayTitle)
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            displayTitle = conversation.title ?? "Chat"
+        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -61,10 +68,16 @@ struct ChatView: View {
                     Image(systemName: "heart.text.square.fill")
                         .foregroundStyle(.red)
                 }
+                .accessibilityLabel("Get crisis help")
+                .accessibilityHint("Opens crisis resources and hotlines")
             }
         }
         .task {
             await loadMessages()
+        }
+        .onDisappear {
+            // Cancel any in-flight send task when view disappears
+            sendTask?.cancel()
         }
     }
 
@@ -91,41 +104,72 @@ struct ChatView: View {
             return
         }
 
+        // Create optimistic user message
+        let tempMessageId = UUID().uuidString
+        let tempUserMessage = Message(
+            id: tempMessageId,
+            role: .user,
+            content: content,
+            createdAt: Date(),
+            blocked: false
+        )
+
+        // Add user message immediately (optimistic UI)
+        messages.append(tempUserMessage)
         inputText = ""
         isSending = true
 
-        Task {
+        // Store task reference for cancellation on view disappear
+        sendTask = Task {
+            defer { isSending = false }
+
             do {
+                // Check for cancellation before making network call
+                try Task.checkCancellation()
+
                 let response = try await container.chatService.sendMessage(
                     conversationId: conversation.id,
                     content: content
                 )
 
-                await MainActor.run {
-                    messages.append(response.userMessage)
-                    messages.append(response.assistantMessage)
-                    appState.entitlements.dailyAiUsed += 1
+                // Check for cancellation after network call
+                try Task.checkCancellation()
 
-                    showQuotaWarning = response.quotaRemaining <= 3
+                // Use removeAll(where:) for atomic removal (prevents race condition)
+                messages.removeAll { $0.id == tempMessageId }
+                messages.append(response.userMessage)
+                messages.append(response.assistantMessage)
 
-                    if response.crisisDetected == true {
-                        // Show crisis resources
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                            appState.showCrisisResources = true
-                        }
+                // Update quota tracking
+                appState.entitlements.dailyAiUsed += 1
+                showQuotaWarning = response.quotaRemaining <= quotaWarningThreshold
+
+                // Update title if generated
+                if let newTitle = response.conversationTitle {
+                    displayTitle = newTitle
+                }
+
+                // Show crisis resources after a brief delay
+                if response.crisisDetected == true {
+                    try? await Task.sleep(for: .seconds(1))
+                    if !Task.isCancelled {
+                        appState.showCrisisResources = true
                     }
                 }
+            } catch is CancellationError {
+                // Task was cancelled, clean up optimistic message
+                messages.removeAll { $0.id == tempMessageId }
             } catch let error as APIError {
                 if case .quotaExceeded = error {
                     appState.showPaywall = true
                 } else {
                     appState.showError(.apiError(error.localizedDescription))
                 }
+                // Keep the user message visible on error so user can see what they typed
             } catch {
                 appState.showError(.apiError(error.localizedDescription))
+                // Keep the user message visible on error
             }
-
-            isSending = false
         }
     }
 }
@@ -134,6 +178,12 @@ struct MessageBubble: View {
     let message: Message
 
     var isUser: Bool { message.role == .user }
+
+    private var accessibilityLabel: String {
+        let sender = isUser ? "You said" : "MindFriend said"
+        let time = message.createdAt.formatted(date: .omitted, time: .shortened)
+        return "\(sender): \(message.content). Sent at \(time)"
+    }
 
     var body: some View {
         HStack {
@@ -151,6 +201,8 @@ struct MessageBubble: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(accessibilityLabel)
 
             if !isUser { Spacer(minLength: 60) }
         }
@@ -180,6 +232,8 @@ struct TypingIndicator: View {
             .padding(.vertical, 12)
             .background(Color(.secondarySystemBackground))
             .cornerRadius(20)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("MindFriend is typing")
 
             Spacer()
         }
@@ -192,6 +246,10 @@ struct ChatInputBar: View {
     let isSending: Bool
     let onSend: () -> Void
 
+    private var canSend: Bool {
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSending
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             TextField("Message...", text: $text, axis: .vertical)
@@ -201,13 +259,23 @@ struct ChatInputBar: View {
                 .padding(.vertical, 10)
                 .background(Color(.secondarySystemBackground))
                 .cornerRadius(20)
+                .submitLabel(.send)
+                .onSubmit {
+                    if canSend {
+                        onSend()
+                    }
+                }
+                .accessibilityLabel("Message input")
+                .accessibilityHint("Type your message here")
 
             Button(action: onSend) {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.title)
-                    .foregroundStyle(text.isEmpty || isSending ? Color.secondary : Color.accentColor)
+                    .foregroundStyle(canSend ? Color.accentColor : Color.secondary)
             }
-            .disabled(text.isEmpty || isSending)
+            .disabled(!canSend)
+            .accessibilityLabel("Send message")
+            .accessibilityHint(canSend ? "Sends your message" : "Type a message first")
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
@@ -236,6 +304,9 @@ struct QuotaWarningBanner: View {
         .padding(.horizontal)
         .padding(.vertical, 8)
         .background(Color.orange.opacity(0.1))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Warning: Only \(remaining) message\(remaining == 1 ? "" : "s") left today. Tap to upgrade.")
+        .accessibilityAddTraits(.isButton)
     }
 }
 
@@ -245,24 +316,64 @@ struct NewChatView: View {
     @Environment(\.dismiss) var dismiss
 
     @State private var conversation: Conversation?
-    @State private var isCreating = true
+    @State private var errorMessage: String?
+    @State private var isRetrying = false
 
     var body: some View {
         Group {
             if let conversation = conversation {
                 ChatView(conversation: conversation)
+            } else if let error = errorMessage {
+                VStack(spacing: 16) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.largeTitle)
+                        .foregroundStyle(.secondary)
+
+                    Text("Couldn't start conversation")
+                        .font(.headline)
+
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+
+                    Button {
+                        isRetrying = true
+                        errorMessage = nil
+                        Task {
+                            await createChat()
+                        }
+                    } label: {
+                        Label("Try Again", systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isRetrying)
+                }
+                .padding()
             } else {
                 ProgressView("Starting conversation...")
             }
         }
         .task {
-            do {
-                conversation = try await container.chatService.createConversation()
-            } catch {
-                appState.showError(.apiError(error.localizedDescription))
-                dismiss()
-            }
+            await createChat()
         }
+    }
+
+    private func createChat() async {
+        do {
+            // Debug: Check if authenticated
+            guard container.supabaseAuthService.userId != nil else {
+                print("[NewChatView] Error: User not authenticated")
+                errorMessage = "Please sign in to start a chat"
+                return
+            }
+
+            conversation = try await container.chatService.createConversation()
+        } catch {
+            print("[NewChatView] Error creating conversation: \(error)")
+            errorMessage = error.localizedDescription
+        }
+        isRetrying = false
     }
 }
 
