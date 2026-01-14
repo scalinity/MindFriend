@@ -54,7 +54,9 @@ final class AppState: ObservableObject {
         self.authState = .onboarding
     }
 
-    func completeOnboarding() {
+    func completeOnboarding(user: UserProfile) {
+        self.currentUser = user
+        self.entitlements = user.entitlements
         self.authState = .authenticated
     }
 

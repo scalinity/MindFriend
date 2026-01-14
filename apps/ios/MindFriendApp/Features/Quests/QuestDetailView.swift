@@ -76,37 +76,157 @@ struct QuestDetailView: View {
     }
 
     private func completeQuest() {
+        print("[QuestDetail] completeQuest() called")
         isCompleting = true
 
-        Task {
+        Task { @MainActor in
+            print("[QuestDetail] Task started")
+            // Check if we're in dev mode (no real Supabase session)
+            let isDevMode = container.supabaseAuthService.userId == nil
+            print("[QuestDetail] isDevMode: \(isDevMode)")
+
+            if isDevMode {
+                #if DEBUG
+                print("[QuestDetail] Calling completeQuestInDevMode()")
+                await completeQuestInDevMode()
+                print("[QuestDetail] completeQuestInDevMode() finished")
+                #else
+                appState.showError(.apiError("Please sign in to complete quests"))
+                #endif
+                isCompleting = false
+                return
+            }
+
             do {
-                let result = try await container.questService.completeQuest(
+                try await container.supabaseDataService.completeQuest(
                     id: quest.id,
                     reflectionNote: reflectionNote.isEmpty ? nil : reflectionNote,
                     rating: rating > 0 ? rating : nil
                 )
 
+                // Fetch updated profile to get new streak
+                let profile = try await container.supabaseAuthService.fetchProfile()
+
                 await MainActor.run {
-                    appState.currentStreak = result.streakDays
+                    appState.currentStreak = profile.stats.currentStreakDays
+                    appState.currentUser = profile
                     showReflection = false
-                    completionResult = result
+                    // Create completion result for display
+                    completionResult = QuestCompletion(
+                        questId: quest.id,
+                        status: .completed,
+                        completedAt: Date(),
+                        streakDays: profile.stats.currentStreakDays,
+                        badgesEarned: []
+                    )
                 }
             } catch {
+                print("QuestDetailView completeQuest error: \(error)")
                 appState.showError(.apiError(error.localizedDescription))
             }
             isCompleting = false
         }
     }
 
+    #if DEBUG
+    private func completeQuestInDevMode() async {
+        print("[QuestDetail] completeQuestInDevMode started")
+
+        // Update streak in dev mode
+        let newStreak = appState.currentStreak + 1
+        appState.currentStreak = newStreak
+        print("[QuestDetail] Updated streak to \(newStreak)")
+
+        // Update user stats
+        if var user = appState.currentUser {
+            user = UserProfile(
+                id: user.id,
+                handle: user.handle,
+                displayName: user.displayName,
+                email: user.email,
+                timezone: user.timezone,
+                createdAt: user.createdAt,
+                settings: user.settings,
+                stats: UserStats(
+                    currentStreakDays: newStreak,
+                    longestStreakDays: max(user.stats.longestStreakDays, newStreak),
+                    totalQuestsCompleted: user.stats.totalQuestsCompleted + 1,
+                    totalExercisesCompleted: user.stats.totalExercisesCompleted
+                ),
+                entitlements: user.entitlements,
+                badges: user.badges
+            )
+            appState.currentUser = user
+            print("[QuestDetail] Updated user stats")
+        }
+
+        // Mark quest as completed locally
+        if var todayQuest = appState.todayQuest, todayQuest.id == quest.id {
+            todayQuest = Quest(
+                id: todayQuest.id,
+                localDate: todayQuest.localDate,
+                status: .completed,
+                assignedAt: todayQuest.assignedAt,
+                completedAt: Date(),
+                template: todayQuest.template
+            )
+            appState.todayQuest = todayQuest
+            print("[QuestDetail] Marked quest as completed")
+        }
+
+        // Dismiss reflection sheet first
+        showReflection = false
+        print("[QuestDetail] Dismissed reflection sheet")
+
+        // Wait for sheet dismissal animation
+        try? await Task.sleep(nanoseconds: 400_000_000)
+
+        // Then show celebration
+        completionResult = QuestCompletion(
+            questId: quest.id,
+            status: .completed,
+            completedAt: Date(),
+            streakDays: newStreak,
+            badgesEarned: []
+        )
+        print("[QuestDetail] Set completionResult to show celebration")
+    }
+    #endif
+
     private func skipQuest() {
         Task {
+            // Check if we're in dev mode
+            let isDevMode = container.supabaseAuthService.userId == nil
+
+            if isDevMode {
+                #if DEBUG
+                await MainActor.run {
+                    appState.currentStreak = 0
+                    if var todayQuest = appState.todayQuest, todayQuest.id == quest.id {
+                        todayQuest = Quest(
+                            id: todayQuest.id,
+                            localDate: todayQuest.localDate,
+                            status: .skipped,
+                            assignedAt: todayQuest.assignedAt,
+                            completedAt: nil,
+                            template: todayQuest.template
+                        )
+                        appState.todayQuest = todayQuest
+                    }
+                    dismiss()
+                }
+                #endif
+                return
+            }
+
             do {
-                try await container.questService.skipQuest(id: quest.id)
+                try await container.supabaseDataService.skipQuest(id: quest.id)
                 await MainActor.run {
                     appState.currentStreak = 0
                     dismiss()
                 }
             } catch {
+                print("QuestDetailView skipQuest error: \(error)")
                 appState.showError(.apiError(error.localizedDescription))
             }
         }
@@ -276,7 +396,10 @@ struct QuestReflectionSheet: View {
                             .lineLimit(3...6)
                     }
 
-                    Button(action: onComplete) {
+                    Button {
+                        print("[QuestReflectionSheet] Save & Complete button tapped")
+                        onComplete()
+                    } label: {
                         Text("Save & Complete")
                             .font(.headline)
                             .frame(maxWidth: .infinity)

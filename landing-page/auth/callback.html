@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MindFriend - Verifying...</title>
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="/assets/logo.png">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#6366f1',
+            'primary-dark': '#4f46e5',
+          },
+          fontFamily: {
+            sans: ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
+          },
+        },
+      },
+    }
+  </script>
+
+  <!-- Supabase JS -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(99, 102, 241, 0.2);
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center px-6">
+
+  <div class="text-center">
+    <div class="spinner mx-auto mb-6"></div>
+    <p class="text-gray-600" id="status">Verifying your request...</p>
+  </div>
+
+  <script>
+    const SUPABASE_URL = 'https://zfaucivtzfwnrijsbfug.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmYXVjaXZ0emZ3bnJpanNiZnVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyNTI2NDgsImV4cCI6MjA4MzgyODY0OH0.tZaiIYvZKLUZFoNl2nvfRbOj8lodtY7Kw7BiQyoK2Rk';
+
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    async function handleAuthCallback() {
+      const statusEl = document.getElementById('status');
+
+      try {
+        // Get the hash fragment or query params
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const queryParams = new URLSearchParams(window.location.search);
+
+        // Check for error first
+        const error = hashParams.get('error') || queryParams.get('error');
+        const errorDescription = hashParams.get('error_description') || queryParams.get('error_description');
+
+        if (error) {
+          throw new Error(errorDescription || error);
+        }
+
+        // Get the type of auth action
+        const type = hashParams.get('type') || queryParams.get('type');
+
+        // Handle different auth types
+        if (type === 'recovery') {
+          // Password reset - redirect to reset password page
+          // Pass the access token via hash
+          const accessToken = hashParams.get('access_token');
+          const refreshToken = hashParams.get('refresh_token');
+
+          if (accessToken) {
+            // Store tokens temporarily
+            sessionStorage.setItem('recovery_access_token', accessToken);
+            if (refreshToken) {
+              sessionStorage.setItem('recovery_refresh_token', refreshToken);
+            }
+          }
+
+          window.location.href = '/auth/reset-password';
+          return;
+        }
+
+        if (type === 'signup' || type === 'email_change' || type === 'magiclink') {
+          // Email confirmation - let Supabase handle the token exchange
+          const { data, error: sessionError } = await supabase.auth.getSession();
+
+          if (sessionError) {
+            throw sessionError;
+          }
+
+          // Redirect to confirmed page
+          window.location.href = '/auth/confirmed';
+          return;
+        }
+
+        // If we have tokens in the URL, try to set the session
+        const accessToken = hashParams.get('access_token');
+        if (accessToken) {
+          const refreshToken = hashParams.get('refresh_token');
+          const { error: setError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken
+          });
+
+          if (setError) {
+            throw setError;
+          }
+
+          // Default to confirmed page
+          window.location.href = '/auth/confirmed';
+          return;
+        }
+
+        // No recognizable action, redirect to home
+        window.location.href = '/';
+
+      } catch (error) {
+        console.error('Auth callback error:', error);
+        statusEl.textContent = error.message || 'Something went wrong. Please try again.';
+        statusEl.classList.add('text-red-600');
+
+        // Redirect to home after showing error
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 3000);
+      }
+    }
+
+    // Run on page load
+    handleAuthCallback();
+  </script>
+
+</body>
+</html>

@@ -15,12 +15,15 @@ struct ChatListView: View {
                 } else if conversations.isEmpty {
                     EmptyConversationsView(showNewChat: $showNewChat)
                 } else {
-                    List(conversations) { conversation in
-                        NavigationLink {
-                            ChatView(conversation: conversation)
-                        } label: {
-                            ConversationRow(conversation: conversation)
+                    List {
+                        ForEach(conversations) { conversation in
+                            NavigationLink {
+                                ChatView(conversation: conversation)
+                            } label: {
+                                ConversationRow(conversation: conversation)
+                            }
                         }
+                        .onDelete(perform: deleteConversations)
                     }
                     .listStyle(.plain)
                 }
@@ -64,6 +67,27 @@ struct ChatListView: View {
             conversations = try await container.chatService.getConversations()
         } catch {
             appState.showError(.apiError(error.localizedDescription))
+        }
+    }
+
+    private func deleteConversations(at offsets: IndexSet) {
+        let conversationsToDelete = offsets.map { conversations[$0] }
+
+        // Optimistic UI update
+        conversations.remove(atOffsets: offsets)
+
+        // Delete from server
+        Task {
+            for conversation in conversationsToDelete {
+                do {
+                    try await container.chatService.deleteConversation(id: conversation.id)
+                } catch {
+                    // Reload on error to restore state
+                    await loadConversations()
+                    appState.showError(.apiError(error.localizedDescription))
+                    break
+                }
+            }
         }
     }
 }

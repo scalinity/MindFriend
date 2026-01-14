@@ -5,31 +5,42 @@ struct ProfileView: View {
     @EnvironmentObject var container: DependencyContainer
     @State private var showLogoutConfirm = false
     @State private var showDeleteConfirm = false
+    @State private var showEditProfile = false
 
     var body: some View {
         NavigationStack {
             List {
                 // Profile header
                 Section {
-                    HStack(spacing: 16) {
-                        Image(systemName: "person.circle.fill")
-                            .font(.system(size: 60))
-                            .foregroundStyle(Color.accentColor)
+                    Button {
+                        showEditProfile = true
+                    } label: {
+                        HStack(spacing: 16) {
+                            Image(systemName: "person.circle.fill")
+                                .font(.system(size: 60))
+                                .foregroundStyle(Color.accentColor)
 
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(appState.currentUser?.displayName ?? "User")
-                                .font(.title2)
-                                .fontWeight(.semibold)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(appState.currentUser?.displayName ?? "User")
+                                    .font(.title2)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.primary)
 
-                            Text("@\(appState.currentUser?.handle ?? "")")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                Text("@\(appState.currentUser?.handle ?? "")")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
 
-                            if appState.entitlements.tier == .premium {
-                                Label("Premium", systemImage: "star.fill")
-                                    .font(.caption)
-                                    .foregroundStyle(.yellow)
+                                if appState.entitlements.tier == .premium {
+                                    Label("Premium", systemImage: "star.fill")
+                                        .font(.caption)
+                                        .foregroundStyle(.yellow)
+                                }
                             }
+
+                            Spacer()
+
+                            Image(systemName: "pencil")
+                                .foregroundStyle(.secondary)
                         }
                     }
                     .padding(.vertical, 8)
@@ -65,6 +76,12 @@ struct ProfileView: View {
                         PrivacySettingsView()
                     } label: {
                         Label("Privacy", systemImage: "lock.fill")
+                    }
+
+                    NavigationLink {
+                        MemorySettingsView()
+                    } label: {
+                        Label("AI Memory", systemImage: "brain.head.profile")
                     }
                 }
 
@@ -159,12 +176,19 @@ struct ProfileView: View {
             } message: {
                 Text("This will permanently delete your account and all data. This action cannot be undone.")
             }
+            .sheet(isPresented: $showEditProfile) {
+                EditProfileView()
+            }
         }
     }
 
     private func logout() {
         Task {
-            await container.sessionManager.logout()
+            do {
+                try await container.supabaseAuthService.signOut()
+            } catch {
+                print("Logout error: \(error)")
+            }
             await MainActor.run {
                 appState.setUnauthenticated()
             }
@@ -174,8 +198,7 @@ struct ProfileView: View {
     private func deleteAccount() {
         Task {
             do {
-                try await container.userService.deleteAccount()
-                await container.sessionManager.logout()
+                try await container.supabaseAuthService.deleteAccount()
                 await MainActor.run {
                     appState.setUnauthenticated()
                 }
@@ -347,7 +370,7 @@ struct DataExportView: View {
         isExporting = true
         Task {
             do {
-                let data = try await container.userService.exportData()
+                let data = try await container.supabaseDataService.exportUserData()
                 // In real app, would share the data file
                 print("Exported: \(data)")
             } catch {
@@ -403,6 +426,196 @@ struct BadgeCard: View {
 extension Bundle {
     var appVersion: String {
         "\(infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0") (\(infoDictionary?["CFBundleVersion"] as? String ?? "1"))"
+    }
+}
+
+struct EditProfileView: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var appState: AppState
+    @EnvironmentObject var container: DependencyContainer
+
+    @State private var displayName: String = ""
+    @State private var handle: String = ""
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+    @State private var handleValidation: HandleValidation = .empty
+
+    enum HandleValidation {
+        case empty
+        case checking
+        case valid
+        case tooShort
+        case invalidFormat
+        case taken
+
+        var message: String? {
+            switch self {
+            case .empty: return nil
+            case .checking: return "Checking availability..."
+            case .valid: return "Handle is available"
+            case .tooShort: return "Handle must be at least 3 characters"
+            case .invalidFormat: return "Only letters, numbers, and underscores allowed"
+            case .taken: return "This handle is already taken"
+            }
+        }
+
+        var color: Color {
+            switch self {
+            case .valid: return .green
+            case .tooShort, .invalidFormat, .taken: return .red
+            default: return .secondary
+            }
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Display Name", text: $displayName)
+                        .textContentType(.name)
+
+                    HStack {
+                        Text("@")
+                            .foregroundStyle(.secondary)
+                        TextField("handle", text: $handle)
+                            .textContentType(.username)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .onChange(of: handle) { _, newValue in
+                                validateHandle(newValue)
+                            }
+
+                        if handleValidation == .checking {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                        } else if handleValidation == .valid {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                        } else if handleValidation == .taken || handleValidation == .invalidFormat {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.red)
+                        }
+                    }
+                } footer: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        if let message = handleValidation.message {
+                            Text(message)
+                                .foregroundStyle(handleValidation.color)
+                        }
+                        Text("Your handle is how others find you in circles")
+                    }
+                }
+
+                if let error = errorMessage {
+                    Section {
+                        Text(error)
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+            .navigationTitle("Edit Profile")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        saveProfile()
+                    }
+                    .disabled(isSaving || displayName.isEmpty || !canSave)
+                }
+            }
+            .onAppear {
+                displayName = appState.currentUser?.displayName ?? ""
+                handle = appState.currentUser?.handle ?? ""
+            }
+            .interactiveDismissDisabled(isSaving)
+        }
+    }
+
+    private var canSave: Bool {
+        if handle.isEmpty {
+            return true // Handle is optional
+        }
+        return handleValidation == .valid
+    }
+
+    private func validateHandle(_ newHandle: String) {
+        let trimmed = newHandle.lowercased().trimmingCharacters(in: .whitespaces)
+
+        // Empty is OK (handle is optional)
+        guard !trimmed.isEmpty else {
+            handleValidation = .empty
+            return
+        }
+
+        // Check length
+        guard trimmed.count >= 3 else {
+            handleValidation = .tooShort
+            return
+        }
+
+        // Check format
+        let handleRegex = /^[a-z0-9_]{3,30}$/
+        guard trimmed.wholeMatch(of: handleRegex) != nil else {
+            handleValidation = .invalidFormat
+            return
+        }
+
+        // If it's the same as current handle, it's valid
+        if trimmed == appState.currentUser?.handle.lowercased() {
+            handleValidation = .valid
+            return
+        }
+
+        // Check availability
+        handleValidation = .checking
+        Task {
+            do {
+                let isAvailable = try await container.supabaseAuthService.isHandleAvailable(trimmed)
+                await MainActor.run {
+                    // Only update if still the same handle
+                    if handle.lowercased().trimmingCharacters(in: .whitespaces) == trimmed {
+                        handleValidation = isAvailable ? .valid : .taken
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    handleValidation = .invalidFormat
+                }
+            }
+        }
+    }
+
+    private func saveProfile() {
+        isSaving = true
+        errorMessage = nil
+
+        Task {
+            do {
+                try await container.supabaseAuthService.updateProfile(
+                    displayName: displayName,
+                    handle: handle.isEmpty ? nil : handle
+                )
+
+                // Refresh the profile
+                let updatedProfile = try await container.supabaseAuthService.fetchProfile()
+                await MainActor.run {
+                    appState.currentUser = updatedProfile
+                    dismiss()
+                }
+            } catch {
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                }
+            }
+            isSaving = false
+        }
     }
 }
 
