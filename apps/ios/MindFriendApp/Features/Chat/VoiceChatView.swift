@@ -70,6 +70,14 @@ struct VoiceChatView: View {
                 await voiceService.disconnect()
             }
         }
+        .onChange(of: voiceService.connectionState) { _, newState in
+            // Show paywall when quota is exhausted
+            if case .error(let message) = newState,
+               message.localizedCaseInsensitiveContains("quota") {
+                errorMessage = "You've used all your free voice minutes for today."
+                showUpgradeSheet = true
+            }
+        }
     }
 
     // MARK: - Usage Bar
@@ -186,26 +194,40 @@ struct VoiceChatView: View {
             }
 
             ZStack {
-                if voiceService.isListening || voiceService.isSpeaking {
+                // Outer pulse rings - animate when user speaking or AI speaking
+                if voiceService.isUserSpeaking || voiceService.isSpeaking {
                     Circle()
                         .fill(orbColor.opacity(0.2))
                         .frame(width: 180, height: 180)
-                        .scaleEffect(voiceService.isListening || voiceService.isSpeaking ? 1.3 : 1.0)
+                        .scaleEffect(1.3)
                         .animation(
-                            .easeInOut(duration: 1.0).repeatForever(autoreverses: true),
-                            value: voiceService.isListening || voiceService.isSpeaking
+                            .easeInOut(duration: voiceService.isUserSpeaking ? 0.5 : 1.0)
+                                .repeatForever(autoreverses: true),
+                            value: voiceService.isUserSpeaking || voiceService.isSpeaking
                         )
 
                     Circle()
                         .fill(orbColor.opacity(0.1))
                         .frame(width: 220, height: 220)
-                        .scaleEffect(voiceService.isListening || voiceService.isSpeaking ? 1.4 : 1.0)
+                        .scaleEffect(1.4)
                         .animation(
-                            .easeInOut(duration: 1.2).repeatForever(autoreverses: true),
-                            value: voiceService.isListening || voiceService.isSpeaking
+                            .easeInOut(duration: voiceService.isUserSpeaking ? 0.6 : 1.2)
+                                .repeatForever(autoreverses: true),
+                            value: voiceService.isUserSpeaking || voiceService.isSpeaking
+                        )
+                } else if voiceService.isListening {
+                    // Subtle pulse when listening but not speaking
+                    Circle()
+                        .fill(orbColor.opacity(0.1))
+                        .frame(width: 160, height: 160)
+                        .scaleEffect(1.1)
+                        .animation(
+                            .easeInOut(duration: 2.0).repeatForever(autoreverses: true),
+                            value: voiceService.isListening
                         )
                 }
 
+                // Main orb
                 Circle()
                     .fill(
                         LinearGradient(
@@ -216,13 +238,16 @@ struct VoiceChatView: View {
                     )
                     .frame(width: 140, height: 140)
                     .shadow(color: orbColor.opacity(0.4), radius: 20, x: 0, y: 10)
+                    .scaleEffect(voiceService.isUserSpeaking ? 1.05 : 1.0)
+                    .animation(.spring(response: 0.2), value: voiceService.isUserSpeaking)
 
                 Image(systemName: orbIcon)
                     .font(.system(size: 48, weight: .medium))
                     .foregroundStyle(.white)
             }
-            .animation(.spring(response: 0.4), value: voiceService.isListening)
-            .animation(.spring(response: 0.4), value: voiceService.isSpeaking)
+            .animation(.spring(response: 0.3), value: voiceService.isListening)
+            .animation(.spring(response: 0.3), value: voiceService.isSpeaking)
+            .animation(.spring(response: 0.2), value: voiceService.isUserSpeaking)
 
             Text(voiceStatusText)
                 .font(.title3.weight(.medium))
@@ -231,20 +256,24 @@ struct VoiceChatView: View {
     }
 
     private var orbColor: Color {
-        if voiceService.isListening {
-            return .red
+        if voiceService.isUserSpeaking {
+            return .green // User is speaking - green for "active"
         } else if voiceService.isSpeaking {
-            return .accentColor
+            return .accentColor // AI is responding
+        } else if voiceService.isListening {
+            return .orange // Ready and listening
         } else {
             return Color(.systemGray3)
         }
     }
 
     private var orbIcon: String {
-        if voiceService.isListening {
-            return "waveform"
+        if voiceService.isUserSpeaking {
+            return "waveform" // User speaking
         } else if voiceService.isSpeaking {
-            return "speaker.wave.2.fill"
+            return "speaker.wave.2.fill" // AI speaking
+        } else if voiceService.isListening {
+            return "ear" // Listening for speech
         } else {
             return "mic.fill"
         }
@@ -253,19 +282,21 @@ struct VoiceChatView: View {
     private var voiceStatusText: String {
         switch voiceService.connectionState {
         case .connected:
-            if voiceService.isListening {
+            if voiceService.isUserSpeaking {
                 return "Listening..."
             } else if voiceService.isSpeaking {
-                return "Speaking..."
+                return "\(voiceService.currentVoice.displayName) is speaking..."
+            } else if voiceService.isListening {
+                return "Start talking anytime"
             } else {
-                return "Tap to speak"
+                return "Initializing..."
             }
         case .connecting:
             return "Connecting..."
         case .reconnecting:
             return "Reconnecting..."
         case .disconnected:
-            return "Tap to connect"
+            return "Disconnected"
         case .error:
             return "Connection error"
         }
@@ -275,6 +306,7 @@ struct VoiceChatView: View {
 
     private var voiceControls: some View {
         HStack(spacing: 48) {
+            // End call button
             Button {
                 Task {
                     await voiceService.disconnect()
@@ -289,20 +321,23 @@ struct VoiceChatView: View {
                     .clipShape(Circle())
             }
 
+            // Center button - Force send (for edge cases when VAD doesn't trigger)
+            // With server VAD, this is optional - conversation flows automatically
             Button {
-                toggleVoice()
+                voiceService.stopListeningAndRespond()
             } label: {
-                Image(systemName: voiceService.isListening ? "stop.fill" : "mic.fill")
+                Image(systemName: "arrow.up.circle.fill")
                     .font(.system(size: 28))
                     .foregroundStyle(.white)
                     .frame(width: 80, height: 80)
-                    .background(voiceService.isListening ? Color.red : Color.accentColor)
+                    .background(voiceService.isUserSpeaking ? Color.green : Color.accentColor.opacity(0.6))
                     .clipShape(Circle())
-                    .shadow(color: (voiceService.isListening ? Color.red : Color.accentColor).opacity(0.4), radius: 10, x: 0, y: 5)
+                    .shadow(color: Color.accentColor.opacity(0.3), radius: 10, x: 0, y: 5)
             }
-            .disabled(!voiceService.connectionState.isConnected)
-            .opacity(voiceService.connectionState.isConnected ? 1.0 : 0.5)
+            .disabled(!voiceService.connectionState.isConnected || voiceService.isSpeaking)
+            .opacity(voiceService.connectionState.isConnected && !voiceService.isSpeaking ? 1.0 : 0.5)
 
+            // Switch to text button
             Button {
                 Task {
                     await voiceService.disconnect()
@@ -336,19 +371,6 @@ struct VoiceChatView: View {
         } catch {
             errorMessage = error.localizedDescription
             showError = true
-        }
-    }
-
-    private func toggleVoice() {
-        if voiceService.isListening {
-            voiceService.stopListening()
-        } else {
-            do {
-                try voiceService.startListening()
-            } catch {
-                errorMessage = error.localizedDescription
-                showError = true
-            }
         }
     }
 }

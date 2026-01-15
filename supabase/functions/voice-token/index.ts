@@ -38,28 +38,49 @@ serve(async (req) => {
 
     // Authenticate user
     const authHeader = req.headers.get("Authorization");
+    console.log("Auth header present:", !!authHeader);
+    console.log("Auth header prefix:", authHeader?.substring(0, 50));
+
     if (!authHeader) {
-      return errorResponse(corsHeaders, "Missing authorization header", "UNAUTHORIZED", 401);
+      return errorResponse(
+        corsHeaders,
+        "Missing authorization header",
+        "UNAUTHORIZED",
+        401,
+      );
     }
 
     const token = authHeader.replace("Bearer ", "");
+    console.log("Token prefix:", token.substring(0, 50));
     const {
       data: { user },
       error: authError,
     } = await supabase.auth.getUser(token);
 
     if (authError || !user) {
-      return errorResponse(corsHeaders, "Invalid or expired token", "UNAUTHORIZED", 401);
+      return errorResponse(
+        corsHeaders,
+        "Invalid or expired token",
+        "UNAUTHORIZED",
+        401,
+      );
     }
 
     // Rate limiting check (5 requests per minute to prevent token farming)
-    const rateLimitResult = await checkRateLimit(supabase, user.id, "voice-token", {
-      windowMs: 60 * 1000,
-      maxRequests: 5,
-    });
+    const rateLimitResult = await checkRateLimit(
+      supabase,
+      user.id,
+      "voice-token",
+      {
+        windowMs: 60 * 1000,
+        maxRequests: 5,
+      },
+    );
 
     if (!rateLimitResult.allowed) {
-      log.warn("Rate limit exceeded for voice-token", { userId: user.id.slice(0, 8) });
+      log.warn("Rate limit exceeded for voice-token", {
+        userId: user.id.slice(0, 8),
+      });
       return new Response(
         JSON.stringify({
           error: "Too many requests",
@@ -85,7 +106,12 @@ serve(async (req) => {
 
     if (quotaError) {
       console.error("Quota check error:", quotaError);
-      return errorResponse(corsHeaders, "Failed to check voice quota", "QUOTA_ERROR", 500);
+      return errorResponse(
+        corsHeaders,
+        "Failed to check voice quota",
+        "QUOTA_ERROR",
+        500,
+      );
     }
 
     if (minutesRemaining <= 0) {
@@ -131,7 +157,12 @@ serve(async (req) => {
     // Generate ephemeral token from xAI
     const xaiApiKey = Deno.env.get("XAI_API_KEY");
     if (!xaiApiKey) {
-      return errorResponse(corsHeaders, "Voice service not configured", "CONFIG_ERROR", 500);
+      return errorResponse(
+        corsHeaders,
+        "Voice service not configured",
+        "CONFIG_ERROR",
+        500,
+      );
     }
 
     const xaiResponse = await fetch(
@@ -143,7 +174,7 @@ serve(async (req) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          expires_in: 300, // 5 minutes
+          expires_after: { seconds: 300 }, // 5 minutes
         }),
       },
     );
@@ -153,13 +184,29 @@ serve(async (req) => {
       console.error("xAI token error:", xaiResponse.status, errorText);
       return errorResponse(
         corsHeaders,
-        "Failed to initialize voice session",
+        `Failed to initialize voice session: ${xaiResponse.status}`,
         "XAI_ERROR",
         502,
       );
     }
 
     const xaiData = await xaiResponse.json();
+    console.log("xAI response:", JSON.stringify(xaiData));
+
+    // Extract token - xAI returns { value: "...", expires_at: ... } directly
+    const voiceToken =
+      xaiData.value || xaiData.client_secret?.value || xaiData.client_secret;
+    const expiresAt = xaiData.expires_at || xaiData.client_secret?.expires_at;
+
+    if (!voiceToken) {
+      console.error("No token in xAI response:", xaiData);
+      return errorResponse(
+        corsHeaders,
+        `Invalid response from voice service: ${JSON.stringify(xaiData).substring(0, 200)}`,
+        "XAI_ERROR",
+        502,
+      );
+    }
 
     // Create voice session record
     const { data: sessionId, error: sessionError } = await supabase.rpc(
@@ -175,8 +222,8 @@ serve(async (req) => {
     }
 
     const response: VoiceTokenResponse = {
-      token: xaiData.client_secret,
-      expires_at: xaiData.expires_at,
+      token: voiceToken,
+      expires_at: String(expiresAt),
       minutes_remaining: minutesRemaining,
       voice,
       is_premium: isPremium,

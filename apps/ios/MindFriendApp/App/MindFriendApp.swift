@@ -17,6 +17,9 @@ struct MindFriendApp: App {
                 .environmentObject(container)
                 .environmentObject(notificationManager)
                 .task {
+                    // Configure notification manager with container for device registration
+                    notificationManager.configure(container: container)
+
                     // Restore Supabase session
                     let hasSession = await container.supabaseAuthService.restoreSession()
 
