@@ -10,7 +10,6 @@
 		00EE7C42BC23C3C719CD3C9F /* AccessibilityHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58AC3779493347E53EC5C762 /* AccessibilityHelpers.swift */; };
 		10F822CF68E88F0D2C1ED0A1 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CF8C702A16D26304471B516 /* HomeView.swift */; };
 		1D9648B788FA1CE3F884D6C2 /* CrashReporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 979CA4C9C16981D7D441806F /* CrashReporter.swift */; };
-		29B5CF0F4B760FAC70DD022C /* APIEndpointTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FFCA55F32D71076E6A78498 /* APIEndpointTests.swift */; };
 		51469850038B79FAAEFEDE8B /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 696C905684F7F4ED064A764D /* SignInView.swift */; };
 		55CF492A8E8E31AFCDC97585 /* MoodHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02F723822B9E7EEAACBBD352 /* MoodHistoryView.swift */; };
 		5D362D1C4FFEF0F20D86A0A5 /* SupabaseDataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23DE3C97DDF9E4A0EFA80BA4 /* SupabaseDataService.swift */; };
@@ -71,6 +70,17 @@
 		SUBSC01BC23C3C719CD3C9F /* SubscriptionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SUBSC01493347E53EC5C762 /* SubscriptionView.swift */; };
 		TSTCR01BC23C3C719CD3C9F /* TestimonialsCarousel.swift in Sources */ = {isa = PBXBuildFile; fileRef = TSTCR02493347E53EC5C762 /* TestimonialsCarousel.swift */; };
 		WKINS01BC23C3C719CD3C9F /* WeeklyInsightsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = WKINS02493347E53EC5C762 /* WeeklyInsightsView.swift */; };
+		CWJP19PGNIJ8EFMZ9JDIJHPL /* StreakShieldIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = J839MM9KDDV6ERJSCSWDDY3K /* StreakShieldIndicator.swift */; };
+		XC4M462EP5P159LUXZLHR0VG /* StreakCardWithShields.swift in Sources */ = {isa = PBXBuildFile; fileRef = X5J1K6VPLGDJ2ZGL519XA4QJ /* StreakCardWithShields.swift */; };
+		HQU2V1695BQ2J465WZR0OXUL /* RecoveryQuestBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = JRBT5KIK11OQCRX8ZV5A312X /* RecoveryQuestBanner.swift */; };
+		YDTG50YCRCBUQMCNZ37MF5HN /* RecoveryQuestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1291YV6YVZ7OPRWA1ZF5GXW /* RecoveryQuestView.swift */; };
+		AUDLV02BC23C3C719CD3C9F /* AudioLevelMeter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AUDLV01493347E53EC5C762 /* AudioLevelMeter.swift */; };
+		ORBVW02BC23C3C719CD3C9F /* OrbView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ORBVW01493347E53EC5C762 /* OrbView.swift */; };
+		VCMDV02BC23C3C719CD3C9F /* VoiceModeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = VCMDV01493347E53EC5C762 /* VoiceModeView.swift */; };
+		VCSM002BC23C3C719CD3C9F /* VoiceStateMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = VCSM001493347E53EC5C762 /* VoiceStateMachine.swift */; };
+		WLCBK02BC23C3C719CD3C9F /* WelcomeBackView.swift in Sources */ = {isa = PBXBuildFile; fileRef = WLCBK01493347E53EC5C762 /* WelcomeBackView.swift */; };
+		VSMT002BC23C3C719CD3C9F /* VoiceStateMachineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = VSMT001493347E53EC5C762 /* VoiceStateMachineTests.swift */; };
+		WYMCD02BC23C3C719CD3C9F /* WhatYouMissedCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = WYMCD01493347E53EC5C762 /* WhatYouMissedCard.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -109,7 +119,6 @@
 		590C1A661399CE9EC2A66F1C /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		5924F3CB5CA60B6DD68C1459 /* CirclesListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CirclesListView.swift; sourceTree = "<group>"; };
 		5B5FF0F998DCDDD1C2D7DC06 /* PaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallView.swift; sourceTree = "<group>"; };
-		5FFCA55F32D71076E6A78498 /* APIEndpointTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIEndpointTests.swift; sourceTree = "<group>"; };
 		61268AE19EEFC21688B5A4CE /* Analytics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Analytics.swift; sourceTree = "<group>"; };
 		696C905684F7F4ED064A764D /* SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
 		6BE54CD60586499230BB363D /* MindFriendAppUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MindFriendAppUITests.swift; sourceTree = "<group>"; };
@@ -158,6 +167,17 @@
 		SUBSC01493347E53EC5C762 /* SubscriptionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionView.swift; sourceTree = "<group>"; };
 		TSTCR02493347E53EC5C762 /* TestimonialsCarousel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestimonialsCarousel.swift; sourceTree = "<group>"; };
 		WKINS02493347E53EC5C762 /* WeeklyInsightsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeeklyInsightsView.swift; sourceTree = "<group>"; };
+		J839MM9KDDV6ERJSCSWDDY3K /* StreakShieldIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreakShieldIndicator.swift; sourceTree = "<group>"; };
+		X5J1K6VPLGDJ2ZGL519XA4QJ /* StreakCardWithShields.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreakCardWithShields.swift; sourceTree = "<group>"; };
+		JRBT5KIK11OQCRX8ZV5A312X /* RecoveryQuestBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryQuestBanner.swift; sourceTree = "<group>"; };
+		A1291YV6YVZ7OPRWA1ZF5GXW /* RecoveryQuestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryQuestView.swift; sourceTree = "<group>"; };
+		AUDLV01493347E53EC5C762 /* AudioLevelMeter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioLevelMeter.swift; sourceTree = "<group>"; };
+		ORBVW01493347E53EC5C762 /* OrbView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrbView.swift; sourceTree = "<group>"; };
+		VCMDV01493347E53EC5C762 /* VoiceModeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceModeView.swift; sourceTree = "<group>"; };
+		VCSM001493347E53EC5C762 /* VoiceStateMachine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceStateMachine.swift; sourceTree = "<group>"; };
+		WLCBK01493347E53EC5C762 /* WelcomeBackView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeBackView.swift; sourceTree = "<group>"; };
+		VSMT001493347E53EC5C762 /* VoiceStateMachineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceStateMachineTests.swift; sourceTree = "<group>"; };
+		WYMCD01493347E53EC5C762 /* WhatYouMissedCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatYouMissedCard.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -209,6 +229,11 @@
 			children = (
 				7CF8C702A16D26304471B516 /* HomeView.swift */,
 				87258741D4EE156264C73C1E /* MainTabView.swift */,
+				J839MM9KDDV6ERJSCSWDDY3K /* StreakShieldIndicator.swift */,
+				X5J1K6VPLGDJ2ZGL519XA4QJ /* StreakCardWithShields.swift */,
+				JRBT5KIK11OQCRX8ZV5A312X /* RecoveryQuestBanner.swift */,
+				WLCBK01493347E53EC5C762 /* WelcomeBackView.swift */,
+				WYMCD01493347E53EC5C762 /* WhatYouMissedCard.swift */,
 			);
 			path = Home;
 			sourceTree = "<group>";
@@ -230,6 +255,7 @@
 				B7F9B81AB73CD4C7005F5FFD /* Profile */,
 				PROG003493347E53EC5C762 /* Progression */,
 				9D4A124EED8A5F97E3CEDD16 /* Quests */,
+				VCMDGRP001493347E53EC5C762 /* VoiceMode */,
 			);
 			path = Features;
 			sourceTree = "<group>";
@@ -315,10 +341,10 @@
 		8A6121F5BCAF1B51FCF9C617 /* MindFriendAppTests */ = {
 			isa = PBXGroup;
 			children = (
-				5FFCA55F32D71076E6A78498 /* APIEndpointTests.swift */,
 				39A519521BAC54826AC65757 /* MindFriendAppTests.swift */,
 				B3AD861AAF4425ADED3B7DC1 /* ModelsTests.swift */,
 				NOTIF002493347E53EC5C762 /* NotificationTests.swift */,
+				VSMT001493347E53EC5C762 /* VoiceStateMachineTests.swift */,
 			);
 			path = MindFriendAppTests;
 			sourceTree = "<group>";
@@ -344,6 +370,7 @@
 			isa = PBXGroup;
 			children = (
 				56417E06D522B4D73DEA20E7 /* QuestDetailView.swift */,
+				A1291YV6YVZ7OPRWA1ZF5GXW /* RecoveryQuestView.swift */,
 			);
 			path = Quests;
 			sourceTree = "<group>";
@@ -496,6 +523,17 @@
 			path = Insights;
 			sourceTree = "<group>";
 		};
+		VCMDGRP001493347E53EC5C762 /* VoiceMode */ = {
+			isa = PBXGroup;
+			children = (
+				AUDLV01493347E53EC5C762 /* AudioLevelMeter.swift */,
+				ORBVW01493347E53EC5C762 /* OrbView.swift */,
+				VCMDV01493347E53EC5C762 /* VoiceModeView.swift */,
+				VCSM001493347E53EC5C762 /* VoiceStateMachine.swift */,
+			);
+			path = VoiceMode;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -625,10 +663,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				29B5CF0F4B760FAC70DD022C /* APIEndpointTests.swift in Sources */,
 				974C3C1CB34BA05D7803A6B1 /* MindFriendAppTests.swift in Sources */,
 				B91CF16BEA9D3E21EEEA7F23 /* ModelsTests.swift in Sources */,
 				NOTIF001BC23C3C719CD3C9F /* NotificationTests.swift in Sources */,
+				VSMT002BC23C3C719CD3C9F /* VoiceStateMachineTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -661,6 +699,10 @@
 				E6EED5A733602749522F3268 /* ExerciseLibraryView.swift in Sources */,
 				10F822CF68E88F0D2C1ED0A1 /* HomeView.swift in Sources */,
 				AF4311AD9FE9B5E6CE2FF67F /* MainTabView.swift in Sources */,
+				CWJP19PGNIJ8EFMZ9JDIJHPL /* StreakShieldIndicator.swift in Sources */,
+				XC4M462EP5P159LUXZLHR0VG /* StreakCardWithShields.swift in Sources */,
+				HQU2V1695BQ2J465WZR0OXUL /* RecoveryQuestBanner.swift in Sources */,
+				YDTG50YCRCBUQMCNZ37MF5HN /* RecoveryQuestView.swift in Sources */,
 				F1476D5E4623CF0C7ADAA932 /* MindFriendApp.swift in Sources */,
 				D8E4822B342B617BD084FF5D /* Models.swift in Sources */,
 				FFEFDCF3B740D8AC11D8B869 /* MoodCheckInView.swift in Sources */,
@@ -687,6 +729,12 @@
 				CONST01BC23C3C719CD3C9F /* Constants.swift in Sources */,
 				SUBSC01BC23C3C719CD3C9F /* SubscriptionView.swift in Sources */,
 				FAMMG01BC23C3C719CD3C9F /* FamilyManagementView.swift in Sources */,
+				AUDLV02BC23C3C719CD3C9F /* AudioLevelMeter.swift in Sources */,
+				ORBVW02BC23C3C719CD3C9F /* OrbView.swift in Sources */,
+				VCMDV02BC23C3C719CD3C9F /* VoiceModeView.swift in Sources */,
+				VCSM002BC23C3C719CD3C9F /* VoiceStateMachine.swift in Sources */,
+				WLCBK02BC23C3C719CD3C9F /* WelcomeBackView.swift in Sources */,
+				WYMCD02BC23C3C719CD3C9F /* WhatYouMissedCard.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

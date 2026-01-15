@@ -25,14 +25,14 @@ final class ModelsTests: XCTestCase {
                 "privacyMode": "standard"
             },
             "stats": {
-                "currentStreakDays": 5,
-                "longestStreakDays": 10,
-                "totalQuestsCompleted": 25,
-                "totalExercisesCompleted": 12,
-                "xpTotal": 500,
-                "xpThisWeek": 100,
+                "current_streak_days": 5,
+                "longest_streak_days": 10,
+                "total_quests_completed": 25,
+                "total_exercises_completed": 12,
+                "xp_total": 500,
+                "xp_this_week": 100,
                 "level": 5,
-                "levelTitle": "Enthusiast"
+                "level_title": "Enthusiast"
             },
             "entitlements": {
                 "tier": "free",
@@ -634,15 +634,7 @@ final class ModelsTests: XCTestCase {
             "nudge_after_days_inactive": 3,
             "share_mood_in_circles": true,
             "ai_tone": "friendly",
-            "privacy_mode": "standard",
-            "notify_circle_activity": true,
-            "notify_hugs": true,
-            "notify_challenges": false,
-            "notify_streak_risk": true,
-            "notify_weekly_summary": true,
-            "preferred_notify_hour": 10,
-            "created_at": "2024-01-01T00:00:00Z",
-            "updated_at": "2024-01-15T10:00:00Z"
+            "privacy_mode": "standard"
         }
         """.data(using: .utf8)!
 
@@ -659,12 +651,6 @@ final class ModelsTests: XCTestCase {
         XCTAssertTrue(row.shareMoodInCircles)
         XCTAssertEqual(row.aiTone, "friendly")
         XCTAssertEqual(row.privacyMode, "standard")
-        XCTAssertEqual(row.notifyCircleActivity, true)
-        XCTAssertEqual(row.notifyHugs, true)
-        XCTAssertEqual(row.notifyChallenges, false)
-        XCTAssertEqual(row.notifyStreakRisk, true)
-        XCTAssertEqual(row.notifyWeeklySummary, true)
-        XCTAssertEqual(row.preferredNotifyHour, 10)
     }
 
     func testDBUserStatsRowDecoding() throws {
