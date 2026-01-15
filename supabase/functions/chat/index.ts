@@ -254,7 +254,7 @@ serve(async (req) => {
       await supabaseAdmin.from("crisis_events").insert({
         user_id: user.id,
         conversation_id: conversationId,
-        trigger_keyword: matchedKeyword, // Only store which keyword matched, not actual content
+        trigger_content: matchedKeyword, // Only store which keyword matched, not actual content
         detected_at: now.toISOString(),
       });
 

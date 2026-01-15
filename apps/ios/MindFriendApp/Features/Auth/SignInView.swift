@@ -18,12 +18,14 @@ struct SignInView: View {
         NavigationStack {
             VStack(spacing: 32) {
                 Spacer()
+                    .frame(minHeight: 40)
 
                 // Logo and tagline
                 VStack(spacing: 16) {
-                    Image(systemName: "heart.circle.fill")
-                        .font(.system(size: 100))
-                        .foregroundStyle(Color.accentColor)
+                    Image("AppLogo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 120, height: 120)
 
                     Text("MindFriend")
                         .font(.largeTitle)

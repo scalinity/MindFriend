@@ -37,8 +37,9 @@ final class NotificationManager: NSObject, ObservableObject {
     @Published private(set) var isAuthorized = false
     @Published private(set) var deviceToken: String?
 
-    private let container: DependencyContainer?
+    private var container: DependencyContainer?
     private var pendingDeepLink: NotificationDeepLink?
+    private var pendingTokenRegistration: String?
 
     override init() {
         self.container = nil
@@ -50,6 +51,20 @@ final class NotificationManager: NSObject, ObservableObject {
         self.container = container
         super.init()
         UNUserNotificationCenter.current().delegate = self
+    }
+
+    /// Configure the notification manager with the dependency container.
+    /// Call this after container is initialized to register any pending device token.
+    func configure(container: DependencyContainer) {
+        self.container = container
+
+        // Register pending token if we received one before container was available
+        if let pendingToken = pendingTokenRegistration {
+            pendingTokenRegistration = nil
+            Task {
+                await registerDeviceWithBackend(token: pendingToken)
+            }
+        }
     }
 
     // MARK: - Authorization
@@ -115,7 +130,12 @@ final class NotificationManager: NSObject, ObservableObject {
 
     /// Register device token with backend
     private func registerDeviceWithBackend(token: String) async {
-        guard let container = container else { return }
+        guard let container = container else {
+            // Store token for later registration when container is configured
+            pendingTokenRegistration = token
+            Log.notifications.debug("[Notifications] Container not ready, storing token for later")
+            return
+        }
 
         let deviceModel = UIDevice.current.model
         let osVersion = UIDevice.current.systemVersion

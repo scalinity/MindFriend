@@ -1,18 +1,26 @@
+// MindFriend Delete Account Edge Function
+// Handles complete account deletion with proper cascade and cleanup
+
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCorsHeaders } from "../_shared/cors.ts";
 import { createLogger } from "../_shared/logger.ts";
 
 const log = createLogger("delete-account");
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
-
 Deno.serve(async (req) => {
+  const origin = req.headers.get("origin") ?? "";
+  const corsHeaders = getCorsHeaders(origin);
+
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
+  }
+
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      status: 405,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   try {
@@ -28,24 +36,25 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Create Supabase client with user's JWT
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // User client to get the user ID
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
+    // Admin client for all operations
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    // Get the authenticated user
+    // Authenticate user from token
+    const token = authHeader.replace("Bearer ", "");
     const {
       data: { user },
       error: userError,
-    } = await userClient.auth.getUser();
+    } = await supabaseAdmin.auth.getUser(token);
 
     if (userError || !user) {
-      log.warn("Auth error during account deletion", { errorCode: userError?.code });
+      log.warn("Auth error during account deletion", {
+        errorCode: userError?.code,
+      });
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -55,64 +64,40 @@ Deno.serve(async (req) => {
     const userId = user.id;
     log.userAction("Deleting account", userId);
 
-    // Admin client for deletion operations
-    const adminClient = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
+    // Delete from tables that don't have ON DELETE CASCADE FKs to profiles
+    // Most tables cascade automatically when the auth user is deleted
+    // because profiles.id references auth.users(id) with CASCADE
 
-    // Delete user data from all tables (order matters due to foreign keys)
-    // Most tables have ON DELETE CASCADE, but we'll be explicit
+    // 1. Delete rate limits (no FK)
+    await supabaseAdmin.from("rate_limits").delete().eq("user_id", userId);
 
-    // 1. Delete messages (get conversation IDs first, then delete messages)
-    const { data: conversations } = await adminClient
-      .from("conversations")
-      .select("id")
+    // 2. Delete notification history (no FK cascade)
+    await supabaseAdmin
+      .from("notification_history")
+      .delete()
       .eq("user_id", userId);
 
-    if (conversations && conversations.length > 0) {
-      const conversationIds = conversations.map((c) => c.id);
-      await adminClient
-        .from("messages")
-        .delete()
-        .in("conversation_id", conversationIds);
-    }
+    // 3. Delete memory fragments (complex relationships)
+    await supabaseAdmin.from("memory_fragments").delete().eq("user_id", userId);
 
-    // 2. Delete conversations
-    await adminClient.from("conversations").delete().eq("user_id", userId);
+    // 4. Delete voice sessions
+    await supabaseAdmin.from("voice_sessions").delete().eq("user_id", userId);
 
-    // 3. Delete circle checkins
-    await adminClient.from("circle_checkins").delete().eq("user_id", userId);
+    // 5. Handle family memberships (remove from groups, not delete groups)
+    await supabaseAdmin.from("family_members").delete().eq("user_id", userId);
 
-    // 4. Delete circle memberships
-    await adminClient.from("circle_members").delete().eq("user_id", userId);
+    // 6. Transfer ownership of circles user owns to no-one (or delete them)
+    // Deleting circles will cascade to circle_members, circle_posts
+    await supabaseAdmin.from("circles").delete().eq("owner_id", userId);
 
-    // 5. Delete circles owned by user
-    await adminClient.from("circles").delete().eq("owner_id", userId);
-
-    // 6. Delete exercise sessions
-    await adminClient.from("exercise_sessions").delete().eq("user_id", userId);
-
-    // 7. Delete user quests
-    await adminClient.from("user_quests").delete().eq("user_id", userId);
-
-    // 8. Delete user badges
-    await adminClient.from("user_badges").delete().eq("user_id", userId);
-
-    // 9. Delete moods
-    await adminClient.from("moods").delete().eq("user_id", userId);
-
-    // 10. Delete devices
-    await adminClient.from("devices").delete().eq("user_id", userId);
-
-    // 11. Delete profile
-    await adminClient.from("profiles").delete().eq("id", userId);
-
-    // 12. Finally, delete the auth user
+    // 7. Delete the auth user - this cascades to profiles and most other data
     const { error: deleteAuthError } =
-      await adminClient.auth.admin.deleteUser(userId);
+      await supabaseAdmin.auth.admin.deleteUser(userId);
 
     if (deleteAuthError) {
-      log.error("Error deleting auth user", { errorMessage: deleteAuthError.message });
+      log.error("Error deleting auth user", {
+        errorMessage: deleteAuthError.message,
+      });
       return new Response(
         JSON.stringify({
           error: "Failed to delete account",

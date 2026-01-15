@@ -108,30 +108,42 @@ final class SupabaseDataService: ObservableObject {
     func getTodayQuest() async throws -> Quest? {
         let today = ISO8601DateFormatter.dateOnly.string(from: Date())
 
-        // First try to get existing quest for today
-        let existingQuests: [DBUserQuestWithTemplate] = try await supabase
-            .from(Tables.userQuests)
-            .select("*, quest_templates(*)")
-            .eq("user_id", value: try userId)
-            .eq("assigned_date", value: today)
-            .execute()
-            .value
+        // Use the assign_daily_quest RPC which is idempotent - returns existing or creates new
+        // The RPC returns the quest row directly
+        struct AssignQuestResult: Codable {
+            let id: UUID
+            let userId: UUID
+            let templateId: UUID
+            let localDate: String
+            let status: String
+            let assignedAt: Date?
+            let completedAt: Date?
+            let createdAt: Date?
 
-        if let existing = existingQuests.first {
-            return existing.toQuest()
+            enum CodingKeys: String, CodingKey {
+                case id
+                case userId = "user_id"
+                case templateId = "template_id"
+                case localDate = "local_date"
+                case status
+                case assignedAt = "assigned_at"
+                case completedAt = "completed_at"
+                case createdAt = "created_at"
+            }
         }
 
-        // Assign a new quest using the database function
-        let result: UUID = try await supabase
-            .rpc("assign_daily_quest", params: ["p_user_id": try userId])
+        let results: [AssignQuestResult] = try await supabase
+            .rpc("assign_daily_quest", params: ["p_local_date": today])
             .execute()
             .value
 
-        // Fetch the newly assigned quest
-        let quests: [DBUserQuestWithTemplate] = try await supabase
-            .from(Tables.userQuests)
+        guard let result = results.first else { return nil }
+
+        // Fetch the full quest with template data
+        let quests: [DBQuestWithTemplate] = try await supabase
+            .from(Tables.quests)
             .select("*, quest_templates(*)")
-            .eq("id", value: result)
+            .eq("id", value: result.id)
             .execute()
             .value
 
@@ -149,14 +161,13 @@ final class SupabaseDataService: ObservableObject {
         ]
 
         try await supabase
-            .from(Tables.userQuests)
+            .from(Tables.quests)
             .update(updates)
             .eq("id", value: questId)
             .eq("user_id", value: try userId)
             .execute()
 
-        // Update streak and stats
-        try await updateQuestStats()
+        // Note: Stats/streak updates are handled by database trigger (trg_quest_completed_stats)
 
         Analytics.shared.track(.questCompleted, properties: [
             "quest_id": id,
@@ -169,24 +180,13 @@ final class SupabaseDataService: ObservableObject {
         guard let questId = UUID(uuidString: id) else { return }
 
         try await supabase
-            .from(Tables.userQuests)
+            .from(Tables.quests)
             .update(["status": "skipped"])
             .eq("id", value: questId)
             .eq("user_id", value: try userId)
             .execute()
 
         Analytics.shared.track(.questSkipped, properties: ["quest_id": id])
-    }
-
-    private func updateQuestStats() async throws {
-        // Increment total quests completed
-        try await supabase
-            .from(Tables.profiles)
-            .update([
-                "total_quests_completed": AnyEncodable("total_quests_completed + 1")
-            ])
-            .eq("id", value: try userId)
-            .execute()
     }
 
     // MARK: - Exercises
@@ -611,88 +611,143 @@ final class SupabaseDataService: ObservableObject {
         return circles.map { $0.toCircle(currentUserId: try? userId) }
     }
 
+    /// Creates a new circle with a unique invite code.
+    ///
+    /// The invite code is generated randomly from a 32-character alphabet (A-Z excluding I/O,
+    /// 2-9 excluding 0/1), giving 32^6 ≈ 1 billion combinations. In the rare case of a
+    /// collision, the function retries with exponential backoff.
+    ///
+    /// - Parameters:
+    ///   - name: The display name for the circle
+    ///   - description: Optional description
+    /// - Returns: The created FriendCircle
+    /// - Throws: DataError if creation fails after all retries
     func createCircle(name: String, description: String?) async throws -> FriendCircle {
-        let inviteCode = generateInviteCode()
+        let maxRetries = 5
+        let baseDelayMs: UInt64 = 100 // Start with 100ms delay
+        var lastError: Error?
 
-        let circle = DBCircle(
-            id: nil,
-            name: name,
-            description: description,
-            inviteCode: inviteCode,
-            ownerId: try userId,
-            createdAt: nil
-        )
+        // Retry loop for invite code collision with exponential backoff
+        for attempt in 1...maxRetries {
+            let inviteCode = generateInviteCode()
 
-        let result: DBCircle = try await supabase
-            .from(Tables.circles)
-            .insert(circle)
-            .select()
-            .single()
-            .execute()
-            .value
+            let circle = DBCircle(
+                id: nil,
+                name: name,
+                description: description,
+                inviteCode: inviteCode,
+                ownerId: try userId,
+                createdAt: nil
+            )
 
-        // Add creator as member
-        let membership = DBCircleMember(
-            id: nil,
-            circleId: result.id!,
-            userId: try userId,
-            joinedAt: nil
-        )
+            do {
+                let result: DBCircle = try await supabase
+                    .from(Tables.circles)
+                    .insert(circle)
+                    .select()
+                    .single()
+                    .execute()
+                    .value
 
-        try await supabase
-            .from(Tables.circleMembers)
-            .insert(membership)
-            .execute()
+                // Add creator as member
+                let membership = DBCircleMember(
+                    id: nil,
+                    circleId: result.id!,
+                    userId: try userId,
+                    joinedAt: nil
+                )
 
-        Analytics.shared.track(.circleCreated)
+                try await supabase
+                    .from(Tables.circleMembers)
+                    .insert(membership)
+                    .execute()
 
-        return FriendCircle(
-            id: result.id?.uuidString ?? "",
-            name: result.name,
-            description: result.description,
-            inviteCode: result.inviteCode ?? "",
-            maxMembers: 10,
-            memberCount: 1,
-            role: .owner,
-            joinedAt: Date()
-        )
+                Analytics.shared.track(.circleCreated)
+
+                return FriendCircle(
+                    id: result.id?.uuidString ?? "",
+                    name: result.name,
+                    description: result.description,
+                    inviteCode: result.inviteCode ?? "",
+                    maxMembers: 10,
+                    memberCount: 1,
+                    role: .owner,
+                    joinedAt: Date()
+                )
+            } catch {
+                lastError = error
+
+                // Check for unique constraint violation (PostgreSQL error code 23505)
+                // This happens when invite_code already exists - retry with new code
+                if isUniqueConstraintViolation(error) {
+                    Log.data.debug("Invite code collision on attempt \(attempt), retrying...")
+
+                    // Exponential backoff: 100ms, 200ms, 400ms, 800ms, 1600ms
+                    // Caps at ~1.6 seconds to avoid long waits
+                    let delayMs = baseDelayMs * UInt64(1 << (attempt - 1))
+                    let cappedDelayMs = min(delayMs, 2000)
+                    try? await Task.sleep(nanoseconds: cappedDelayMs * 1_000_000)
+
+                    continue
+                }
+
+                // For any other error, throw immediately
+                throw error
+            }
+        }
+
+        // If we exhausted all retries, throw the last error
+        throw lastError ?? DataError.custom("Failed to create circle after \(maxRetries) attempts")
     }
 
     func joinCircle(inviteCode: String) async throws -> FriendCircle {
-        // Find circle by invite code
-        let circles: [DBCircle] = try await supabase
-            .from(Tables.circles)
-            .select()
-            .eq("invite_code", value: inviteCode.uppercased())
+        // Use the join_circle_by_invite_code RPC (SECURITY DEFINER bypasses RLS)
+        struct JoinCircleResult: Codable {
+            let circleId: UUID?
+            let circleName: String?
+            let memberCount: Int
+            let success: Bool
+            let message: String
+
+            enum CodingKeys: String, CodingKey {
+                case circleId = "circle_id"
+                case circleName = "circle_name"
+                case memberCount = "member_count"
+                case success
+                case message
+            }
+        }
+
+        let results: [JoinCircleResult] = try await supabase
+            .rpc("join_circle_by_invite_code", params: ["p_invite_code": inviteCode])
             .execute()
             .value
 
-        guard let circle = circles.first, let circleId = circle.id else {
+        guard let result = results.first else {
             throw DataError.circleNotFound
         }
 
-        // Add membership
-        let membership = DBCircleMember(
-            id: nil,
-            circleId: circleId,
-            userId: try userId,
-            joinedAt: nil
-        )
-
-        try await supabase
-            .from(Tables.circleMembers)
-            .insert(membership)
-            .execute()
+        guard result.success, let circleId = result.circleId, let circleName = result.circleName else {
+            // Map error message to appropriate error
+            switch result.message {
+            case "Invalid invite code":
+                throw DataError.circleNotFound
+            case "Circle is full":
+                throw DataError.circleFull
+            default:
+                throw DataError.custom(result.message)
+            }
+        }
 
         Analytics.shared.track(.circleJoined)
 
         return FriendCircle(
             id: circleId.uuidString,
-            name: circle.name,
-            description: circle.description,
-            inviteCode: circle.inviteCode ?? "",
+            name: circleName,
+            description: nil,
+            inviteCode: inviteCode.uppercased(),
             maxMembers: 10,
-            memberCount: 1,
+            memberCount: result.memberCount,
             role: .member,
             joinedAt: Date()
         )
@@ -749,7 +804,7 @@ final class SupabaseDataService: ObservableObject {
         }
 
         let checkins: [DBCircleCheckinWithProfile] = try await supabase
-            .from(Tables.circleCheckins)
+            .from(Tables.circlePosts)
             .select("*, profiles(display_name)")
             .eq("circle_id", value: circleUUID)
             .gte("created_at", value: from)
@@ -779,17 +834,22 @@ final class SupabaseDataService: ObservableObject {
 
         let currentUserId = try userId
 
+        let todayDate = ISO8601DateFormatter.dateOnly.string(from: Date())
+
         let checkin = DBCircleCheckin(
             id: nil,
             circleId: circleUUID,
             userId: currentUserId,
+            kind: "checkin",
             moodEmoji: moodEmoji,
             bodyText: bodyText,
-            createdAt: nil
+            localDate: todayDate,
+            createdAt: nil,
+            postType: "checkin"
         )
 
         let result: DBCircleCheckin = try await supabase
-            .from(Tables.circleCheckins)
+            .from(Tables.circlePosts)
             .insert(checkin)
             .select()
             .single()
@@ -1391,14 +1451,14 @@ final class SupabaseDataService: ObservableObject {
         )
 
         try await supabase
-            .from(Tables.devices)
+            .from(Tables.pushTokens)
             .upsert(device, onConflict: "user_id,apns_token")
             .execute()
     }
 
     // MARK: - User Settings
 
-    /// Update all user settings including notifications and reminders
+    /// Update all user settings including notifications, reminders, AI preferences, and privacy
     func updateUserSettings(
         dailyQuestTimeLocal: String? = nil,
         quietHoursStartLocal: String? = nil,
@@ -1409,7 +1469,10 @@ final class SupabaseDataService: ObservableObject {
         notifyChallenges: Bool? = nil,
         notifyStreakRisk: Bool? = nil,
         notifyWeeklySummary: Bool? = nil,
-        preferredNotifyHour: Int? = nil
+        preferredNotifyHour: Int? = nil,
+        aiTone: AITone? = nil,
+        shareMoodInCircles: Bool? = nil,
+        privacyMode: PrivacyMode? = nil
     ) async throws {
         var updates: [String: AnyEncodable] = [:]
 
@@ -1442,6 +1505,15 @@ final class SupabaseDataService: ObservableObject {
         }
         if let preferredNotifyHour = preferredNotifyHour {
             updates["preferred_notify_hour"] = AnyEncodable(preferredNotifyHour)
+        }
+        if let aiTone = aiTone {
+            updates["ai_tone"] = AnyEncodable(aiTone.rawValue)
+        }
+        if let shareMoodInCircles = shareMoodInCircles {
+            updates["share_mood_in_circles"] = AnyEncodable(shareMoodInCircles)
+        }
+        if let privacyMode = privacyMode {
+            updates["privacy_mode"] = AnyEncodable(privacyMode.rawValue)
         }
 
         guard !updates.isEmpty else { return }
@@ -1967,6 +2039,16 @@ final class SupabaseDataService: ObservableObject {
         let chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
         return String((0..<6).map { _ in chars.randomElement()! })
     }
+
+    /// Checks if an error is a PostgreSQL unique constraint violation (error code 23505).
+    /// Used for retry logic when generating unique codes (invite codes, etc.)
+    /// Internal visibility for testability.
+    func isUniqueConstraintViolation(_ error: Error) -> Bool {
+        let errorString = String(describing: error).lowercased()
+        return errorString.contains("23505") ||
+               errorString.contains("unique") ||
+               errorString.contains("duplicate key")
+    }
 }
 
 // MARK: - Supporting Types
@@ -2107,19 +2189,8 @@ struct DBCircleMemberWithProfile: Codable {
     }
 }
 
-struct DBMemberProfile: Codable {
-    let displayName: String?
-    let avatarUrl: String?
-    let premiumBadge: String?
-
-    enum CodingKeys: String, CodingKey {
-        case displayName = "display_name"
-        case avatarUrl = "avatar_url"
-        case premiumBadge = "premium_badge"
-    }
-}
-
 // MARK: - Circle Virality DB Models
+// Note: DBMemberProfile is defined in SupabaseClient.swift
 
 struct DBCircleHug: Codable {
     let id: UUID?
@@ -2368,10 +2439,12 @@ enum DataError: Error, LocalizedError {
     case notAuthenticated
     case invalidId
     case circleNotFound
+    case circleFull
     case quotaExceeded(used: Int, limit: Int)
     case operationFailed(String)
     case hugLimitReached
     case missingInviteContact
+    case custom(String)
 
     var errorDescription: String? {
         switch self {
@@ -2381,6 +2454,8 @@ enum DataError: Error, LocalizedError {
             return "Invalid identifier"
         case .circleNotFound:
             return "Circle not found. Check the invite code and try again."
+        case .circleFull:
+            return "This circle is full and cannot accept new members."
         case .quotaExceeded:
             return "You've reached your daily AI chat limit. Upgrade to Premium for unlimited chats!"
         case .operationFailed(let message):
@@ -2389,6 +2464,8 @@ enum DataError: Error, LocalizedError {
             return "You've sent the maximum number of hugs to this person today. Try again tomorrow!"
         case .missingInviteContact:
             return "Please provide an email or phone number for the invite"
+        case .custom(let message):
+            return message
         }
     }
 }

@@ -1,9 +1,10 @@
 // MindFriend Verify Purchase Edge Function
-// Validates StoreKit 2 transactions and handles plan types, family groups
+// Validates StoreKit 2 transactions using Apple's JWS signature verification
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/cors.ts";
+import { createRemoteJWKSet, jwtVerify } from "npm:jose@5.2.4";
+import { getCorsHeaders } from "../_shared/cors.ts";
 import { createLogger } from "../_shared/logger.ts";
 import {
   getPlanDetails,
@@ -15,13 +16,43 @@ import {
 
 const log = createLogger("verify-purchase");
 
-const APP_STORE_API_URL = "https://api.storekit.itunes.apple.com";
-const APP_STORE_SANDBOX_URL = "https://api.storekit-sandbox.itunes.apple.com";
+// Apple's StoreKit JWS verification endpoints
+const STOREKIT_JWKS = {
+  production: "https://appleid.apple.com/auth/keys",
+  sandbox: "https://appleid.apple.com/auth/keys",
+} as const;
 
 interface VerifyRequest {
-  originalTransactionId: string;
-  productId: string;
+  signedTransaction: string; // StoreKit 2 JWS from Transaction.jwsRepresentation
   environment?: "sandbox" | "production";
+  // Legacy fields for backward compatibility during transition (will be removed)
+  originalTransactionId?: string;
+  productId?: string;
+}
+
+// Apple's StoreKit 2 transaction payload structure
+interface AppleTransactionPayload {
+  transactionId: string;
+  originalTransactionId: string;
+  bundleId: string;
+  productId: string;
+  purchaseDate: number; // milliseconds since epoch
+  originalPurchaseDate: number;
+  expiresDate?: number;
+  quantity: number;
+  type:
+    | "Auto-Renewable Subscription"
+    | "Non-Consumable"
+    | "Consumable"
+    | "Non-Renewing Subscription";
+  inAppOwnershipType: "PURCHASED" | "FAMILY_SHARED";
+  signedDate: number;
+  environment: "Production" | "Sandbox";
+  transactionReason?: "PURCHASE" | "RENEWAL";
+  storefront: string;
+  storefrontId: string;
+  price?: number;
+  currency?: string;
 }
 
 interface VerifyResponse {
@@ -33,10 +64,12 @@ interface VerifyResponse {
   circleId?: string;
   expiresAt?: string;
   message?: string;
-  mock?: boolean;
 }
 
 serve(async (req) => {
+  const origin = req.headers.get("origin") ?? "";
+  const corsHeaders = getCorsHeaders(origin);
+
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -69,17 +102,17 @@ serve(async (req) => {
       });
     }
 
-    const {
-      originalTransactionId,
-      productId,
-      environment = "production",
-    }: VerifyRequest = await req.json();
+    const requestBody: VerifyRequest = await req.json();
+    const { signedTransaction, environment = "production" } = requestBody;
 
-    if (!originalTransactionId) {
+    // Require signedTransaction for proper JWS verification
+    if (!signedTransaction) {
       return new Response(
         JSON.stringify({
-          error: "Missing originalTransactionId",
-          code: "MISSING_TRANSACTION_ID",
+          error: "Missing signedTransaction",
+          code: "MISSING_SIGNED_TRANSACTION",
+          message:
+            "Client must send Transaction.jwsRepresentation from StoreKit 2",
         }),
         {
           status: 400,
@@ -88,11 +121,53 @@ serve(async (req) => {
       );
     }
 
-    // Validate product ID
+    // Determine environment for JWS verification
+    const env: "sandbox" | "production" =
+      environment === "sandbox" ? "sandbox" : "production";
+
+    // Verify the JWS signature using Apple's public keys
+    let transactionPayload: AppleTransactionPayload;
+    try {
+      // Create a JWKS client for Apple's keys
+      const jwks = createRemoteJWKSet(new URL(STOREKIT_JWKS[env]));
+
+      // Verify the JWS signature
+      const { payload } = await jwtVerify(signedTransaction, jwks, {
+        // Apple's StoreKit JWS doesn't have standard issuer/audience claims
+        // The signature verification itself is the key security check
+      });
+
+      transactionPayload = payload as unknown as AppleTransactionPayload;
+
+      log.info("JWS verification successful", {
+        transactionId: transactionPayload.transactionId,
+        productId: transactionPayload.productId,
+        environment: transactionPayload.environment,
+      });
+    } catch (jwsError) {
+      log.error("JWS verification failed", { error: String(jwsError) });
+      return new Response(
+        JSON.stringify({
+          error: "Invalid transaction signature",
+          code: "JWS_VERIFICATION_FAILED",
+          valid: false,
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    // Extract verified transaction data
+    const { productId, originalTransactionId, expiresDate } =
+      transactionPayload;
+
+    // Validate product ID from verified payload
     if (!productId || !isValidProductId(productId)) {
       return new Response(
         JSON.stringify({
-          error: "Invalid product ID",
+          error: "Invalid product ID in transaction",
           code: "INVALID_PRODUCT_ID",
         }),
         {
@@ -128,45 +203,13 @@ serve(async (req) => {
       );
     }
 
-    // Get plan details from product ID
+    // Get plan details from verified product ID
     const planDetails = getPlanDetails(productId);
-    const expiresAt = calculateExpiryDate(planDetails.billingPeriod);
 
-    // Check environment and App Store credentials
-    const isProduction = Deno.env.get("ENVIRONMENT") === "production";
-    const issuerId = Deno.env.get("APP_STORE_ISSUER_ID");
-    const keyId = Deno.env.get("APP_STORE_KEY_ID");
-    const privateKey = Deno.env.get("APP_STORE_PRIVATE_KEY");
-
-    const hasCredentials = !!(issuerId && keyId && privateKey);
-
-    // CRITICAL: In production, require App Store validation
-    if (isProduction && !hasCredentials) {
-      console.error(
-        "CRITICAL: App Store credentials not configured in production!",
-      );
-      return new Response(
-        JSON.stringify({
-          error: "Payment verification unavailable",
-          code: "CREDENTIALS_NOT_CONFIGURED",
-          valid: false,
-        }),
-        {
-          status: 503,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    // Mock mode only allowed in development
-    const isMockMode = !hasCredentials && !isProduction;
-
-    if (isMockMode) {
-      log.warn("App Store credentials not configured, using mock validation");
-    }
-
-    // TODO: Implement full App Store Server API validation when credentials configured
-    // For now, trust the client-side StoreKit 2 validation in dev/sandbox
+    // Use expiry from Apple's verified payload, or calculate if not present
+    const expiresAt = expiresDate
+      ? new Date(expiresDate)
+      : calculateExpiryDate(planDetails.billingPeriod);
 
     let familyId: string | undefined;
     let circleId: string | undefined;
@@ -205,7 +248,9 @@ serve(async (req) => {
           .single();
 
         if (circleError) {
-          log.error("Error creating family circle", { error: circleError.message });
+          log.error("Error creating family circle", {
+            error: circleError.message,
+          });
           // Continue without circle, not a blocking error
         } else {
           circleId = newCircle.id;
@@ -231,7 +276,9 @@ serve(async (req) => {
           .single();
 
         if (groupError) {
-          log.error("Error creating family group", { error: groupError.message });
+          log.error("Error creating family group", {
+            error: groupError.message,
+          });
           return new Response(
             JSON.stringify({ error: "Failed to create family group" }),
             {
@@ -339,11 +386,6 @@ serve(async (req) => {
     }
     if (circleId) {
       response.circleId = circleId;
-    }
-    if (isMockMode) {
-      response.mock = true;
-      response.message =
-        "Mock validation - configure APP_STORE_* secrets for production";
     }
 
     return new Response(JSON.stringify(response), {

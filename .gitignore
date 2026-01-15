@@ -1,0 +1,88 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+.build/
+
+# Environment files (keep .env.example)
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Credentials and secrets
+test-credentials.txt
+*.pem
+*.key
+credentials.json
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Xcode
+*.xcuserstate
+*.xcworkspacedata
+xcuserdata/
+DerivedData/
+*.moved-aside
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+Package.resolved
+.swiftpm/
+
+# CocoaPods (if ever used)
+Pods/
+*.xcworkspace
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test artifacts
+coverage/
+.nyc_output/
+TestResults/
+
+# Supabase
+.supabase/
+supabase/.branches/
+supabase/.temp/
+
+# TypeScript
+*.tsbuildinfo
+
+# Temporary files
+*.tmp
+*.temp
+.cache/

@@ -41,9 +41,11 @@ struct ChatView: View {
                 }
             }
 
-            // Quota warning
+            // Quota warning - tappable to show paywall
             if showQuotaWarning {
-                QuotaWarningBanner(remaining: appState.entitlements.remaining)
+                QuotaWarningBanner(remaining: appState.entitlements.remaining) {
+                    appState.showPaywall = true
+                }
             }
 
             Divider()
@@ -151,9 +153,11 @@ struct ChatView: View {
                 messages.append(response.userMessage)
                 messages.append(response.assistantMessage)
 
-                // Update quota tracking
-                appState.entitlements.dailyAiUsed += 1
-                showQuotaWarning = response.quotaRemaining <= quotaWarningThreshold
+                // Update quota tracking (skip for premium users)
+                if appState.entitlements.tier != .premium {
+                    appState.entitlements.dailyAiUsed += 1
+                    showQuotaWarning = response.quotaRemaining <= quotaWarningThreshold
+                }
 
                 // Update title if generated
                 if let newTitle = response.conversationTitle {
@@ -296,28 +300,37 @@ struct ChatInputBar: View {
 
 struct QuotaWarningBanner: View {
     let remaining: Int
+    let onTap: () -> Void
 
     var body: some View {
-        HStack {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
+        Button(action: onTap) {
+            HStack {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
 
-            Text("Only \(remaining) message\(remaining == 1 ? "" : "s") left today")
-                .font(.caption)
+                Text("Only \(remaining) message\(remaining == 1 ? "" : "s") left today")
+                    .font(.caption)
+                    .foregroundStyle(.primary)
 
-            Spacer()
+                Spacer()
 
-            Text("Upgrade")
-                .font(.caption)
-                .fontWeight(.semibold)
-                .foregroundStyle(Color.accentColor)
+                Text("Upgrade")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Color.accentColor)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(Color.accentColor)
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+            .background(Color.orange.opacity(0.1))
         }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-        .background(Color.orange.opacity(0.1))
+        .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Warning: Only \(remaining) message\(remaining == 1 ? "" : "s") left today. Tap to upgrade.")
-        .accessibilityAddTraits(.isButton)
+        .accessibilityHint("Opens subscription options")
     }
 }
 

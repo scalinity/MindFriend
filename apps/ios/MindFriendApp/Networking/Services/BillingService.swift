@@ -15,7 +15,7 @@ final class BillingService: ObservableObject {
     @Published private(set) var familyGroup: FamilyGroup?
     @Published private(set) var familyMembers: [FamilyMember] = []
 
-    private var transactionListener: Task<Void, Error>?
+    private var transactionListener: Task<Void, Never>?
 
     // P3-P6: Cache products to avoid redundant StoreKit requests
     private var productsLoaded = false
@@ -127,7 +127,7 @@ final class BillingService: ObservableObject {
         switch result {
         case .success(let verification):
             let transaction = try checkVerified(verification)
-            try await submitTransaction(transaction)
+            try await submitTransaction(transaction, jwsRepresentation: verification.jwsRepresentation)
             await transaction.finish()
 
         case .pending:
@@ -149,7 +149,7 @@ final class BillingService: ObservableObject {
 
         for await result in Transaction.currentEntitlements {
             if let transaction = try? checkVerified(result) {
-                try await submitTransaction(transaction)
+                try await submitTransaction(transaction, jwsRepresentation: result.jwsRepresentation)
             }
         }
 
@@ -163,7 +163,20 @@ final class BillingService: ObservableObject {
         // Fetch entitlements from Supabase profile
         guard let userId = authService.userId else { return }
 
-        let profile: DBProfile = try await supabase
+        // Use dedicated struct for partial select to avoid decoding errors
+        struct DBEntitlementsRow: Codable {
+            let subscriptionTier: String
+            let dailyAiQuota: Int
+            let dailyAiUsed: Int
+
+            enum CodingKeys: String, CodingKey {
+                case subscriptionTier = "subscription_tier"
+                case dailyAiQuota = "daily_ai_quota"
+                case dailyAiUsed = "daily_ai_used"
+            }
+        }
+
+        let entitlementsRow: DBEntitlementsRow = try await supabase
             .from(Tables.profiles)
             .select("subscription_tier, daily_ai_quota, daily_ai_used")
             .eq("id", value: userId)
@@ -172,9 +185,9 @@ final class BillingService: ObservableObject {
             .value
 
         entitlements = Entitlements(
-            tier: Tier(rawValue: profile.subscriptionTier) ?? .free,
-            dailyAiQuota: profile.dailyAiQuota,
-            dailyAiUsed: profile.dailyAiUsed
+            tier: Tier(rawValue: entitlementsRow.subscriptionTier) ?? .free,
+            dailyAiQuota: entitlementsRow.dailyAiQuota,
+            dailyAiUsed: entitlementsRow.dailyAiUsed
         )
 
         // Also load subscription details
@@ -471,7 +484,7 @@ final class BillingService: ObservableObject {
                 guard let self else { return }
                 do {
                     let transaction = try self.checkVerified(result)
-                    try await self.submitTransaction(transaction)
+                    try await self.submitTransaction(transaction, jwsRepresentation: result.jwsRepresentation)
                     await transaction.finish()
                 } catch {
                     Log.billing.error("Transaction update error: \(error)")
@@ -489,13 +502,16 @@ final class BillingService: ObservableObject {
         }
     }
 
-    private func submitTransaction(_ transaction: Transaction) async throws {
-        // Call verify-purchase Edge Function
+    private func submitTransaction(_ transaction: Transaction, jwsRepresentation: String) async throws {
+        // Use the JWS representation from VerificationResult for server-side verification
+        // StoreKit 2's jwsRepresentation contains the Apple-signed transaction
+        let signedTransaction = jwsRepresentation
+
+        // Call verify-purchase Edge Function with signed transaction
         let _: VerifyPurchaseResponse = try await supabase.functions.invoke(
             "verify-purchase",
             options: .init(body: [
-                "originalTransactionId": String(transaction.originalID),
-                "productId": transaction.productID,
+                "signedTransaction": signedTransaction,
                 "environment": transaction.environment == .sandbox ? "sandbox" : "production"
             ])
         )
