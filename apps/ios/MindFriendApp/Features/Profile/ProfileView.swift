@@ -300,6 +300,10 @@ struct NotificationSettingsView: View {
     @State private var isLoading = true
     @State private var isSaving = false
     @State private var systemNotificationsEnabled = true
+    @State private var saveTask: Task<Void, Never>?
+
+    /// Debounce interval in seconds for batching rapid setting changes
+    private let debounceInterval: TimeInterval = 0.5
 
     var body: some View {
         Form {
@@ -470,31 +474,60 @@ struct NotificationSettingsView: View {
         return formatter.string(from: date)
     }
 
+    /// Schedules a debounced save operation.
+    /// Cancels any pending save and waits for the debounce interval before executing.
+    /// This prevents rapid API calls when users toggle multiple settings quickly.
     private func saveSettings() {
         guard !isLoading else { return }
+
+        // Cancel any pending save task
+        saveTask?.cancel()
+
+        // Schedule a new debounced save
+        saveTask = Task {
+            // Wait for debounce interval
+            try? await Task.sleep(nanoseconds: UInt64(debounceInterval * 1_000_000_000))
+
+            // Check if cancelled during sleep
+            guard !Task.isCancelled else { return }
+
+            await performSave()
+        }
+    }
+
+    /// Performs the actual save operation to the database.
+    @MainActor
+    private func performSave() async {
         isSaving = true
+        defer { isSaving = false }
 
-        Task {
-            defer { isSaving = false }
+        do {
+            try await container.supabaseDataService.updateUserSettings(
+                dailyQuestTimeLocal: formatTime(questTime),
+                quietHoursStartLocal: quietHoursEnabled ? formatTime(quietStart) : nil,
+                quietHoursEndLocal: quietHoursEnabled ? formatTime(quietEnd) : nil,
+                remindersEnabled: remindersEnabled,
+                notifyCircleActivity: notifyCircleActivity,
+                notifyHugs: notifyHugs,
+                notifyChallenges: notifyChallenges,
+                notifyStreakRisk: notifyStreakRisk,
+                notifyWeeklySummary: notifyWeeklySummary,
+                preferredNotifyHour: preferredNotifyHour
+            )
 
-            do {
-                try await container.supabaseDataService.updateUserSettings(
-                    dailyQuestTimeLocal: formatTime(questTime),
-                    quietHoursStartLocal: quietHoursEnabled ? formatTime(quietStart) : nil,
-                    quietHoursEndLocal: quietHoursEnabled ? formatTime(quietEnd) : nil,
-                    remindersEnabled: remindersEnabled,
-                    notifyCircleActivity: notifyCircleActivity,
-                    notifyHugs: notifyHugs,
-                    notifyChallenges: notifyChallenges,
-                    notifyStreakRisk: notifyStreakRisk,
-                    notifyWeeklySummary: notifyWeeklySummary,
-                    preferredNotifyHour: preferredNotifyHour
-                )
-            } catch {
-                await MainActor.run {
-                    appState.showError(.apiError(error.localizedDescription))
-                }
-            }
+            // Update appState to keep in-memory state consistent
+            appState.currentUser?.settings.dailyQuestTimeLocal = formatTime(questTime)
+            appState.currentUser?.settings.quietHoursStartLocal = quietHoursEnabled ? formatTime(quietStart) : nil
+            appState.currentUser?.settings.quietHoursEndLocal = quietHoursEnabled ? formatTime(quietEnd) : nil
+            appState.currentUser?.settings.remindersEnabled = remindersEnabled
+            appState.currentUser?.settings.notifyCircleActivity = notifyCircleActivity
+            appState.currentUser?.settings.notifyHugs = notifyHugs
+            appState.currentUser?.settings.notifyChallenges = notifyChallenges
+            appState.currentUser?.settings.notifyStreakRisk = notifyStreakRisk
+            appState.currentUser?.settings.notifyWeeklySummary = notifyWeeklySummary
+            appState.currentUser?.settings.preferredNotifyHour = preferredNotifyHour
+        } catch {
+            appState.showError(.apiError(error.localizedDescription))
         }
     }
 }
@@ -533,14 +566,16 @@ struct QuietHoursView: View {
 
 struct AIPreferencesView: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var container: DependencyContainer
     @State private var selectedTone: AITone = .friendly
+    @State private var isSaving = false
 
     var body: some View {
         Form {
             Section("AI Tone") {
                 ForEach(AITone.allCases, id: \.self) { tone in
                     Button {
-                        selectedTone = tone
+                        selectTone(tone)
                     } label: {
                         HStack {
                             VStack(alignment: .leading) {
@@ -557,6 +592,7 @@ struct AIPreferencesView: View {
                             }
                         }
                     }
+                    .disabled(isSaving)
                 }
             }
         }
@@ -565,11 +601,39 @@ struct AIPreferencesView: View {
             selectedTone = appState.currentUser?.settings.aiTone ?? .friendly
         }
     }
+
+    private func selectTone(_ tone: AITone) {
+        guard tone != selectedTone else { return }
+        selectedTone = tone
+        isSaving = true
+
+        Task {
+            defer { isSaving = false }
+
+            do {
+                try await container.supabaseDataService.updateUserSettings(aiTone: tone)
+
+                // Update local state
+                await MainActor.run {
+                    appState.currentUser?.settings.aiTone = tone
+                }
+            } catch {
+                await MainActor.run {
+                    // Revert on error
+                    selectedTone = appState.currentUser?.settings.aiTone ?? .friendly
+                    appState.showError(.apiError(error.localizedDescription))
+                }
+            }
+        }
+    }
 }
 
 struct PrivacySettingsView: View {
+    @EnvironmentObject var appState: AppState
+    @EnvironmentObject var container: DependencyContainer
     @State private var shareMoodInCircles = true
     @State private var privacyMode: PrivacyMode = .standard
+    @State private var isSaving = false
 
     var body: some View {
         Form {
@@ -581,6 +645,10 @@ struct PrivacySettingsView: View {
 
             Section {
                 Toggle("Share Mood in Circles", isOn: $shareMoodInCircles)
+                    .disabled(isSaving)
+                    .onChange(of: shareMoodInCircles) { _, newValue in
+                        saveShareMoodSetting(newValue)
+                    }
             } footer: {
                 Text("When enabled, your daily mood will be visible to your circle members")
             }
@@ -588,7 +656,7 @@ struct PrivacySettingsView: View {
             Section("Privacy Mode") {
                 ForEach(PrivacyMode.allCases, id: \.self) { mode in
                     Button {
-                        privacyMode = mode
+                        selectPrivacyMode(mode)
                     } label: {
                         HStack {
                             Text(mode.displayName)
@@ -600,10 +668,67 @@ struct PrivacySettingsView: View {
                             }
                         }
                     }
+                    .disabled(isSaving)
                 }
             }
         }
         .navigationTitle("Privacy")
+        .onAppear {
+            loadSettings()
+        }
+    }
+
+    private func loadSettings() {
+        guard let settings = appState.currentUser?.settings else { return }
+        shareMoodInCircles = settings.shareMoodInCircles
+        privacyMode = settings.privacyMode
+    }
+
+    private func saveShareMoodSetting(_ newValue: Bool) {
+        isSaving = true
+
+        Task {
+            defer { isSaving = false }
+
+            do {
+                try await container.supabaseDataService.updateUserSettings(shareMoodInCircles: newValue)
+
+                await MainActor.run {
+                    appState.currentUser?.settings.shareMoodInCircles = newValue
+                }
+            } catch {
+                await MainActor.run {
+                    // Revert on error
+                    shareMoodInCircles = appState.currentUser?.settings.shareMoodInCircles ?? true
+                    appState.showError(.apiError(error.localizedDescription))
+                }
+            }
+        }
+    }
+
+    private func selectPrivacyMode(_ mode: PrivacyMode) {
+        guard mode != privacyMode else { return }
+        let previousMode = privacyMode
+        privacyMode = mode
+        isSaving = true
+
+        Task {
+            defer { isSaving = false }
+
+            do {
+                try await container.supabaseDataService.updateUserSettings(privacyMode: mode)
+
+                await MainActor.run {
+                    appState.currentUser?.settings.privacyMode = mode
+                }
+            } catch {
+                await MainActor.run {
+                    // Revert on error
+                    privacyMode = previousMode
+                    appState.showError(.apiError(error.localizedDescription))
+                }
+            }
+        }
     }
 }
 

@@ -18,7 +18,7 @@ CREATE POLICY "Family admins can read their invitations"
         )
         OR
         -- User is looking up their own email's invitations
-        invited_email = (SELECT email FROM auth.users WHERE id = auth.uid())
+        email = (SELECT email FROM auth.users WHERE id = auth.uid())
     );
 
 -- Ensure admins can still insert invitations via Edge Function
@@ -42,10 +42,8 @@ CREATE POLICY "Family admins can update invitations"
         )
     );
 
--- Add index for email lookup performance
-CREATE INDEX IF NOT EXISTS idx_family_invitations_email
-    ON family_invitations(invited_email)
-    WHERE accepted_at IS NULL;
+-- Add index for email lookup performance (already exists, so use CONCURRENTLY to avoid conflict)
+-- Note: idx_family_invitations_email already exists from 20260125000000
 
 -- Add composite index for family + status queries
 CREATE INDEX IF NOT EXISTS idx_family_invitations_family_pending

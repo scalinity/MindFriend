@@ -342,64 +342,39 @@ final class SupabaseAuthService: ObservableObject {
             throw AuthError.invalidCredentials
         }
 
+        // Query all three tables in parallel for efficiency
+        async let profileTask: DBProfileRow = supabase
+            .from(Tables.profiles)
+            .select()
+            .eq("id", value: userId)
+            .single()
+            .execute()
+            .value
+
+        async let settingsTask: DBUserSettingsRow = supabase
+            .from(Tables.userSettings)
+            .select()
+            .eq("user_id", value: userId)
+            .single()
+            .execute()
+            .value
+
+        async let statsTask: DBUserStatsRow = supabase
+            .from(Tables.userStats)
+            .select()
+            .eq("user_id", value: userId)
+            .single()
+            .execute()
+            .value
+
         do {
-            let profile: DBProfile = try await supabase
-                .from(Tables.profiles)
-                .select()
-                .eq("id", value: userId)
-                .single()
-                .execute()
-                .value
-
-            return profile.toUserProfile()
+            let (profile, settings, stats) = try await (profileTask, settingsTask, statsTask)
+            return profile.toUserProfile(settings: settings, stats: stats)
         } catch {
-            // Profile doesn't exist yet - create it with defaults
-            // This handles cases where the database trigger hasn't run yet
-            Log.auth.info("Profile not found, creating default profile")
-            let email = currentUser?.email
-            let now = Date()
-
-            // Extract display name from user metadata (set during signup)
-            let userMetadata = currentUser?.userMetadata
-            let displayName = userMetadata?["display_name"]?.stringValue
-                ?? userMetadata?["full_name"]?.stringValue
-                ?? userMetadata?["name"]?.stringValue
-
-            // Generate a default handle from email if not provided
-            let defaultHandle = email?.components(separatedBy: "@").first ?? "user_\(userId.uuidString.prefix(8))"
-
-            let newProfile: [String: AnyEncodable] = [
-                "id": AnyEncodable(userId),
-                "email": AnyEncodable(email),
-                "display_name": AnyEncodable(displayName),
-                "handle": AnyEncodable(defaultHandle),
-                "timezone": AnyEncodable(TimeZone.current.identifier),
-                "created_at": AnyEncodable(ISO8601DateFormatter().string(from: now)),
-                "updated_at": AnyEncodable(ISO8601DateFormatter().string(from: now)),
-                "daily_quest_time_local": AnyEncodable("09:00"),
-                "reminders_enabled": AnyEncodable(true),
-                "nudge_after_days_inactive": AnyEncodable(3),
-                "share_mood_in_circles": AnyEncodable(true),
-                "ai_tone": AnyEncodable("friendly"),
-                "privacy_mode": AnyEncodable("standard"),
-                "current_streak_days": AnyEncodable(0),
-                "longest_streak_days": AnyEncodable(0),
-                "total_quests_completed": AnyEncodable(0),
-                "total_exercises_completed": AnyEncodable(0),
-                "subscription_tier": AnyEncodable("free"),
-                "daily_ai_quota": AnyEncodable(10),
-                "daily_ai_used": AnyEncodable(0)
-            ]
-
-            let createdProfile: DBProfile = try await supabase
-                .from(Tables.profiles)
-                .insert(newProfile)
-                .select()
-                .single()
-                .execute()
-                .value
-
-            return createdProfile.toUserProfile()
+            // If any table is missing data, the DB trigger may not have run yet.
+            // Log the error but don't try to create rows here - let the trigger handle it.
+            Log.auth.warning("Failed to fetch profile data: \(error.localizedDescription)")
+            throw AuthError.userNotFound
         }
     }
 
@@ -445,21 +420,22 @@ final class SupabaseAuthService: ObservableObject {
     }
 
     /// Check if a handle is available (not taken by another user)
+    /// Uses SECURITY DEFINER RPC to avoid exposing profile data
     func isHandleAvailable(_ handle: String, excludingUserId: UUID? = nil) async throws -> Bool {
-        var query = supabase
-            .from(Tables.profiles)
-            .select("id")
-            .eq("handle", value: handle.lowercased())
-
+        // Build params - exclude_user_id is optional
+        var params: [String: AnyEncodable] = [
+            "p_handle": AnyEncodable(handle)
+        ]
         if let excludingUserId = excludingUserId {
-            query = query.neq("id", value: excludingUserId)
+            params["p_exclude_user_id"] = AnyEncodable(excludingUserId)
         }
 
-        let results: [DBProfileId] = try await query
+        let result: Bool = try await supabase
+            .rpc("is_handle_available", params: params)
             .execute()
             .value
 
-        return results.isEmpty
+        return result
     }
 
     func updateSettings(_ settings: UserSettings) async throws {
@@ -478,9 +454,9 @@ final class SupabaseAuthService: ObservableObject {
         ]
 
         try await supabase
-            .from(Tables.profiles)
+            .from(Tables.userSettings)
             .update(updates)
-            .eq("id", value: userId)
+            .eq("user_id", value: userId)
             .execute()
     }
 

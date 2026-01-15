@@ -99,8 +99,23 @@ struct Entitlements: Codable, Equatable {
     let dailyAiQuota: Int
     var dailyAiUsed: Int
 
-    var remaining: Int { dailyAiQuota - dailyAiUsed }
-    var isQuotaExceeded: Bool { dailyAiUsed >= dailyAiQuota }
+    /// Remaining AI messages for the day. Premium users have unlimited (Int.max).
+    var remaining: Int {
+        if tier == .premium { return Int.max }
+        return max(0, dailyAiQuota - dailyAiUsed)
+    }
+
+    /// Whether the user has exceeded their daily quota. Premium users never exceed.
+    var isQuotaExceeded: Bool {
+        if tier == .premium { return false }
+        return dailyAiUsed >= dailyAiQuota
+    }
+
+    /// Whether the user is approaching their quota limit (for warning display)
+    var isNearQuotaLimit: Bool {
+        if tier == .premium { return false }
+        return remaining <= 3 && remaining > 0
+    }
 
     static let free = Entitlements(tier: .free, dailyAiQuota: 20, dailyAiUsed: 0)
     static let premium = Entitlements(tier: .premium, dailyAiQuota: 9999, dailyAiUsed: 0)
@@ -186,6 +201,7 @@ enum VoiceError: LocalizedError {
     case notAuthorized
     case notConnected
     case connectionFailed(String)
+    case connectionTimeout
     case quotaExceeded
     case premiumRequired
     case tokenGenerationFailed
@@ -201,6 +217,8 @@ enum VoiceError: LocalizedError {
             return "Voice service is not connected. Please try again."
         case .connectionFailed(let reason):
             return "Connection failed: \(reason)"
+        case .connectionTimeout:
+            return "Connection timed out. Please check your network and try again."
         case .quotaExceeded:
             return "You've used all your voice minutes this month. Upgrade to Premium for unlimited voice conversations."
         case .premiumRequired:

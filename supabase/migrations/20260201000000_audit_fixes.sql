@@ -17,10 +17,6 @@ ON notification_history USING GIN (metadata);
 CREATE INDEX IF NOT EXISTS idx_notification_history_sender_id 
 ON notification_history ((metadata->>'senderId'));
 
--- L1: Document deprecated trigger_content column in crisis_events
--- The trigger_content column is deprecated for PII protection
--- Only trigger_keyword is populated now (contains just the matched keyword, not user content)
-COMMENT ON COLUMN crisis_events.trigger_content IS 'DEPRECATED (2026-01-14): No longer populated for PII protection. Use trigger_keyword instead which stores only the matched keyword pattern.';
-
--- Update comment on trigger_keyword to explain its purpose
-COMMENT ON COLUMN crisis_events.trigger_keyword IS 'The crisis keyword pattern that was detected. Does NOT contain actual user content for privacy protection.';
+-- L1: Document trigger_content column in crisis_events for PII protection
+-- The trigger_content column should only store the matched keyword pattern, not actual user content
+COMMENT ON COLUMN crisis_events.trigger_content IS 'The crisis keyword pattern that was detected. Should NOT contain actual user content for privacy protection - only the matched keyword.';

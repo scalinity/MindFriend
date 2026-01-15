@@ -336,7 +336,7 @@ struct InstructionRow: View {
                         .multilineTextAlignment(.leading)
 
                     if let duration = instruction.durationSeconds {
-                        Text("\(duration / 60) min")
+                        Text(formatDuration(duration))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -349,6 +349,20 @@ struct InstructionRow: View {
             .cornerRadius(12)
         }
         .buttonStyle(.plain)
+    }
+
+    private func formatDuration(_ seconds: Int) -> String {
+        if seconds < 60 {
+            return "\(seconds) sec"
+        } else {
+            let minutes = seconds / 60
+            let remainingSeconds = seconds % 60
+            if remainingSeconds == 0 {
+                return "\(minutes) min"
+            } else {
+                return "\(minutes)m \(remainingSeconds)s"
+            }
+        }
     }
 }
 
