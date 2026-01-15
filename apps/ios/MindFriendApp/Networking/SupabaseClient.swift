@@ -15,26 +15,16 @@ enum SupabaseConfig {
               !urlString.isEmpty,
               !urlString.contains("$("),  // Not substituted
               let url = URL(string: urlString) else {
-            // Fallback for development - will be removed in production builds
-            #if DEBUG
-            return URL(string: "https://***REMOVED***")!
-            #else
-            fatalError("SUPABASE_URL not configured in build settings. Add to xcconfig or Info.plist.")
-            #endif
+            fatalError("SUPABASE_URL not configured. Add Debug.xcconfig/Release.xcconfig with SUPABASE_URL.")
         }
         return url
     }()
-    
+
     static let anonKey: String = {
         guard let key = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_ANON_KEY") as? String,
               !key.isEmpty,
               !key.contains("$(") else {  // Not substituted
-            // Fallback for development - will be removed in production builds
-            #if DEBUG
-            return "***REMOVED***"
-            #else
-            fatalError("SUPABASE_ANON_KEY not configured in build settings. Add to xcconfig or Info.plist.")
-            #endif
+            fatalError("SUPABASE_ANON_KEY not configured. Add Debug.xcconfig/Release.xcconfig with SUPABASE_ANON_KEY.")
         }
         return key
     }()
@@ -52,28 +42,49 @@ let supabase = SupabaseClient(
 // MARK: - Database Table Names
 
 enum Tables {
+    // Core user data (split across 3 tables per schema)
     static let profiles = "profiles"
     static let userSettings = "user_settings"
-    static let devices = "devices"
+    static let userStats = "user_stats"
+
+    // Mood tracking
     static let moods = "moods"
+
+    // Quests (correct table name - not "user_quests")
     static let questTemplates = "quest_templates"
-    static let userQuests = "user_quests"
+    static let quests = "quests"
+
+    // Exercises
     static let exercises = "exercises"
     static let exerciseSessions = "exercise_sessions"
+
+    // Chat
     static let conversations = "conversations"
     static let messages = "messages"
+
+    // Circles (correct table name for posts - not "circle_checkins")
     static let circles = "circles"
     static let circleMembers = "circle_members"
-    static let circleCheckins = "circle_checkins"
+    static let circlePosts = "circle_posts"
+
+    // Badges
     static let badges = "badges"
     static let userBadges = "user_badges"
+
+    // Crisis
     static let crisisResources = "crisis_resources"
+
+    // Memory
     static let memoryFragments = "memory_fragments"
+
+    // Push notifications (correct table name - not "devices")
+    static let pushTokens = "push_tokens"
+
     // Progression system
-    static let userStats = "user_stats"
     static let skillProgress = "skill_progress"
     static let seasonalEvents = "seasonal_events"
     static let eventParticipation = "event_participation"
+
     // Credibility signals
     static let testimonials = "testimonials"
     static let methodologyInfo = "methodology_info"
@@ -85,6 +96,296 @@ enum Tables {
 struct DBProfileId: Codable {
     let id: UUID
 }
+
+// MARK: - Schema-Correct Row Structs (Issue #003)
+// These match the actual Supabase migrations where profiles, user_settings, and user_stats are separate tables
+
+/// Profile row from `profiles` table - identity and entitlements only
+struct DBProfileRow: Codable {
+    let id: UUID
+    var handle: String
+    var displayName: String
+    var email: String?
+    var avatarUrl: String?
+    var timezone: String
+    var subscriptionTier: String
+    var dailyAiQuota: Int
+    var dailyAiUsed: Int
+    var quotaResetAt: Date?
+    var premiumBadge: String?
+    var wellnessFocus: String?
+    var onboardingCompletedAt: Date?
+    let createdAt: Date
+    var updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, handle, email, timezone
+        case displayName = "display_name"
+        case avatarUrl = "avatar_url"
+        case subscriptionTier = "subscription_tier"
+        case dailyAiQuota = "daily_ai_quota"
+        case dailyAiUsed = "daily_ai_used"
+        case quotaResetAt = "quota_reset_at"
+        case premiumBadge = "premium_badge"
+        case wellnessFocus = "wellness_focus"
+        case onboardingCompletedAt = "onboarding_completed_at"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+}
+
+/// Settings row from `user_settings` table
+struct DBUserSettingsRow: Codable {
+    let userId: UUID
+    var dailyQuestTimeLocal: String
+    var quietHoursStartLocal: String?
+    var quietHoursEndLocal: String?
+    var remindersEnabled: Bool
+    var nudgeAfterDaysInactive: Int
+    var shareMoodInCircles: Bool
+    var aiTone: String
+    var privacyMode: String
+
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case dailyQuestTimeLocal = "daily_quest_time_local"
+        case quietHoursStartLocal = "quiet_hours_start_local"
+        case quietHoursEndLocal = "quiet_hours_end_local"
+        case remindersEnabled = "reminders_enabled"
+        case nudgeAfterDaysInactive = "nudge_after_days_inactive"
+        case shareMoodInCircles = "share_mood_in_circles"
+        case aiTone = "ai_tone"
+        case privacyMode = "privacy_mode"
+    }
+}
+
+/// Stats row from `user_stats` table
+struct DBUserStatsRow: Codable {
+    let userId: UUID
+    var currentStreakDays: Int
+    var longestStreakDays: Int
+    var totalQuestsCompleted: Int
+    var totalExercisesCompleted: Int
+    var lastQuestDate: String?
+    var xpTotal: Int
+    var xpThisWeek: Int
+    var level: Int
+    var levelTitle: String
+    var lastXpResetWeek: String?
+
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case currentStreakDays = "current_streak_days"
+        case longestStreakDays = "longest_streak_days"
+        case totalQuestsCompleted = "total_quests_completed"
+        case totalExercisesCompleted = "total_exercises_completed"
+        case lastQuestDate = "last_quest_date"
+        case xpTotal = "xp_total"
+        case xpThisWeek = "xp_this_week"
+        case level
+        case levelTitle = "level_title"
+        case lastXpResetWeek = "last_xp_reset_week"
+    }
+}
+
+/// Compose UserProfile from the three separate table rows
+extension DBProfileRow {
+    func toUserProfile(settings: DBUserSettingsRow, stats: DBUserStatsRow) -> UserProfile {
+        UserProfile(
+            id: id.uuidString,
+            handle: handle,
+            displayName: displayName,
+            email: email,
+            timezone: timezone,
+            createdAt: createdAt,
+            settings: UserSettings(
+                dailyQuestTimeLocal: settings.dailyQuestTimeLocal,
+                quietHoursStartLocal: settings.quietHoursStartLocal,
+                quietHoursEndLocal: settings.quietHoursEndLocal,
+                remindersEnabled: settings.remindersEnabled,
+                nudgeAfterDaysInactive: settings.nudgeAfterDaysInactive,
+                shareMoodInCircles: settings.shareMoodInCircles,
+                aiTone: AITone(rawValue: settings.aiTone) ?? .friendly,
+                privacyMode: PrivacyMode(rawValue: settings.privacyMode) ?? .standard
+            ),
+            stats: UserStats(
+                currentStreakDays: stats.currentStreakDays,
+                longestStreakDays: stats.longestStreakDays,
+                totalQuestsCompleted: stats.totalQuestsCompleted,
+                totalExercisesCompleted: stats.totalExercisesCompleted,
+                xpTotal: stats.xpTotal,
+                xpThisWeek: stats.xpThisWeek,
+                level: stats.level,
+                levelTitle: stats.levelTitle,
+                lastXpResetWeek: stats.lastXpResetWeek
+            ),
+            entitlements: Entitlements(
+                tier: Tier(rawValue: subscriptionTier) ?? .free,
+                dailyAiQuota: dailyAiQuota,
+                dailyAiUsed: dailyAiUsed
+            ),
+            badges: [],
+            wellnessFocus: wellnessFocus.flatMap { WellnessFocus(rawValue: $0) },
+            onboardingCompletedAt: onboardingCompletedAt
+        )
+    }
+}
+
+// MARK: - Quest Row (correct schema - uses "quests" table with "local_date")
+
+/// Quest row from `quests` table (not the legacy "user_quests")
+struct DBQuest: Codable {
+    let id: UUID?
+    let userId: UUID
+    let templateId: UUID
+    let localDate: String
+    var status: String
+    var reflectionNote: String?
+    var rating: Int?
+    var assignedAt: Date?
+    var completedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case templateId = "template_id"
+        case localDate = "local_date"
+        case status
+        case reflectionNote = "reflection_note"
+        case rating
+        case assignedAt = "assigned_at"
+        case completedAt = "completed_at"
+    }
+}
+
+/// Quest with template (for joined queries)
+struct DBQuestWithTemplate: Codable {
+    let id: UUID
+    let userId: UUID
+    let templateId: UUID
+    let localDate: String
+    var status: String
+    var reflectionNote: String?
+    var rating: Int?
+    var assignedAt: Date?
+    var completedAt: Date?
+    let questTemplates: DBQuestTemplate?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case templateId = "template_id"
+        case localDate = "local_date"
+        case status
+        case reflectionNote = "reflection_note"
+        case rating
+        case assignedAt = "assigned_at"
+        case completedAt = "completed_at"
+        case questTemplates = "quest_templates"
+    }
+
+    func toQuest() -> Quest? {
+        guard let dbTemplate = questTemplates else { return nil }
+        let questTemplate = QuestTemplate(
+            id: dbTemplate.id.uuidString,
+            type: QuestType(rawValue: dbTemplate.category.lowercased()) ?? .focus,
+            title: dbTemplate.title,
+            description: dbTemplate.description,
+            estimatedMinutes: dbTemplate.estimatedMinutes,
+            difficulty: "medium",
+            tags: [],
+            instructions: dbTemplate.defaultInstructions()
+        )
+        return Quest(
+            id: id.uuidString,
+            localDate: localDate,
+            status: QuestStatus(rawValue: status) ?? .assigned,
+            assignedAt: assignedAt ?? Date(),
+            completedAt: completedAt,
+            template: questTemplate
+        )
+    }
+}
+
+// MARK: - Circle Post Row (correct schema - uses "circle_posts" table with "kind")
+
+/// Circle post row from `circle_posts` table (not the legacy "circle_checkins")
+struct DBCirclePost: Codable {
+    let id: UUID?
+    let circleId: UUID
+    let userId: UUID
+    let kind: String // "checkin", "milestone", "encouragement"
+    let moodEmoji: String?
+    let bodyText: String?
+    let localDate: String?
+    let createdAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case circleId = "circle_id"
+        case userId = "user_id"
+        case kind
+        case moodEmoji = "mood_emoji"
+        case bodyText = "body_text"
+        case localDate = "local_date"
+        case createdAt = "created_at"
+    }
+}
+
+/// Helper struct for embedded profile in circle post/member queries
+struct DBMemberProfile: Codable {
+    let displayName: String?
+    let handle: String?
+    let avatarUrl: String?
+    let premiumBadge: String?
+
+    enum CodingKeys: String, CodingKey {
+        case displayName = "display_name"
+        case handle
+        case avatarUrl = "avatar_url"
+        case premiumBadge = "premium_badge"
+    }
+}
+
+/// Circle post with profile data (for joined queries)
+struct DBCirclePostWithProfile: Codable {
+    let id: UUID?
+    let circleId: UUID
+    let userId: UUID
+    let kind: String
+    let moodEmoji: String?
+    let bodyText: String?
+    let localDate: String?
+    let createdAt: Date?
+    let profiles: DBMemberProfile?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case circleId = "circle_id"
+        case userId = "user_id"
+        case kind
+        case moodEmoji = "mood_emoji"
+        case bodyText = "body_text"
+        case localDate = "local_date"
+        case createdAt = "created_at"
+        case profiles
+    }
+
+    func toCirclePost() -> CirclePost {
+        CirclePost(
+            id: id?.uuidString ?? UUID().uuidString,
+            userId: userId.uuidString,
+            userDisplayName: profiles?.displayName ?? "Member",
+            kind: PostKind(rawValue: kind) ?? .checkin,
+            moodEmoji: moodEmoji,
+            bodyText: bodyText,
+            localDate: localDate ?? "",
+            createdAt: createdAt ?? Date()
+        )
+    }
+}
+
+// MARK: - Legacy DBProfile (kept for backward compatibility during transition)
 
 struct DBProfile: Codable {
     let id: UUID
@@ -225,11 +526,11 @@ struct DBQuestTemplate: Codable {
             ]
         case "mindfulness":
             return [
-                QuestInstruction(step: 1, text: "Find a comfortable seated position", durationSeconds: nil),
+                QuestInstruction(step: 1, text: "Find a comfortable seated position", durationSeconds: 30),
                 QuestInstruction(step: 2, text: "Close your eyes and take 3 deep breaths", durationSeconds: 30),
                 QuestInstruction(step: 3, text: "Focus your attention on the present moment", durationSeconds: 60),
-                QuestInstruction(step: 4, text: "Notice any sensations without judgment", durationSeconds: 120),
-                QuestInstruction(step: 5, text: "Gently bring your awareness back when you're ready", durationSeconds: nil)
+                QuestInstruction(step: 4, text: "Scan through your body, noticing sensations", durationSeconds: 150),
+                QuestInstruction(step: 5, text: "Gently bring your awareness back when you're ready", durationSeconds: 30)
             ]
         case "social":
             return [
@@ -394,17 +695,23 @@ struct DBCircleCheckin: Codable {
     let id: UUID?
     let circleId: UUID
     let userId: UUID
-    let moodEmoji: String
+    let kind: String
+    let moodEmoji: String?
     let bodyText: String?
+    let localDate: String
     let createdAt: Date?
+    let postType: String
 
     enum CodingKeys: String, CodingKey {
         case id
         case circleId = "circle_id"
         case userId = "user_id"
+        case kind
         case moodEmoji = "mood_emoji"
         case bodyText = "body_text"
+        case localDate = "local_date"
         case createdAt = "created_at"
+        case postType = "post_type"
     }
 }
 
@@ -412,18 +719,24 @@ struct DBCircleCheckinWithProfile: Codable {
     let id: UUID?
     let circleId: UUID
     let userId: UUID
-    let moodEmoji: String
+    let kind: String?
+    let moodEmoji: String?
     let bodyText: String?
+    let localDate: String?
     let createdAt: Date?
+    let postType: String?
     let profiles: DBMemberProfile?
 
     enum CodingKeys: String, CodingKey {
         case id
         case circleId = "circle_id"
         case userId = "user_id"
+        case kind
         case moodEmoji = "mood_emoji"
         case bodyText = "body_text"
+        case localDate = "local_date"
         case createdAt = "created_at"
+        case postType = "post_type"
         case profiles
     }
 }

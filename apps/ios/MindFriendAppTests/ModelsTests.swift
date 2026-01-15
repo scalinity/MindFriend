@@ -118,6 +118,70 @@ final class ModelsTests: XCTestCase {
         XCTAssertNotEqual(Entitlements.free, Entitlements.premium)
     }
 
+    func testEntitlementsRemaining_FreeUser() {
+        var entitlements = Entitlements(tier: .free, dailyAiQuota: 20, dailyAiUsed: 5)
+        XCTAssertEqual(entitlements.remaining, 15)
+
+        entitlements.dailyAiUsed = 20
+        XCTAssertEqual(entitlements.remaining, 0)
+
+        entitlements.dailyAiUsed = 25 // Over quota
+        XCTAssertEqual(entitlements.remaining, 0) // Should not be negative
+    }
+
+    func testEntitlementsRemaining_PremiumUser() {
+        let entitlements = Entitlements(tier: .premium, dailyAiQuota: 9999, dailyAiUsed: 100)
+        XCTAssertEqual(entitlements.remaining, Int.max) // Premium has unlimited
+    }
+
+    func testEntitlementsIsQuotaExceeded_FreeUser() {
+        var entitlements = Entitlements(tier: .free, dailyAiQuota: 20, dailyAiUsed: 19)
+        XCTAssertFalse(entitlements.isQuotaExceeded)
+
+        entitlements.dailyAiUsed = 20
+        XCTAssertTrue(entitlements.isQuotaExceeded)
+
+        entitlements.dailyAiUsed = 25
+        XCTAssertTrue(entitlements.isQuotaExceeded)
+    }
+
+    func testEntitlementsIsQuotaExceeded_PremiumUser() {
+        let entitlements = Entitlements(tier: .premium, dailyAiQuota: 9999, dailyAiUsed: 9999)
+        XCTAssertFalse(entitlements.isQuotaExceeded) // Premium never exceeds
+    }
+
+    func testEntitlementsIsNearQuotaLimit_FreeUser() {
+        var entitlements = Entitlements(tier: .free, dailyAiQuota: 20, dailyAiUsed: 16)
+        XCTAssertFalse(entitlements.isNearQuotaLimit) // 4 remaining, not near
+
+        entitlements.dailyAiUsed = 17
+        XCTAssertTrue(entitlements.isNearQuotaLimit) // 3 remaining
+
+        entitlements.dailyAiUsed = 18
+        XCTAssertTrue(entitlements.isNearQuotaLimit) // 2 remaining
+
+        entitlements.dailyAiUsed = 19
+        XCTAssertTrue(entitlements.isNearQuotaLimit) // 1 remaining
+
+        entitlements.dailyAiUsed = 20
+        XCTAssertFalse(entitlements.isNearQuotaLimit) // 0 remaining, quota exceeded
+    }
+
+    func testEntitlementsIsNearQuotaLimit_PremiumUser() {
+        let entitlements = Entitlements(tier: .premium, dailyAiQuota: 9999, dailyAiUsed: 9996)
+        XCTAssertFalse(entitlements.isNearQuotaLimit) // Premium never near limit
+    }
+
+    func testEntitlementsStaticValues() {
+        XCTAssertEqual(Entitlements.free.tier, .free)
+        XCTAssertEqual(Entitlements.free.dailyAiQuota, 20)
+        XCTAssertEqual(Entitlements.free.dailyAiUsed, 0)
+
+        XCTAssertEqual(Entitlements.premium.tier, .premium)
+        XCTAssertEqual(Entitlements.premium.dailyAiQuota, 9999)
+        XCTAssertEqual(Entitlements.premium.dailyAiUsed, 0)
+    }
+
     // MARK: - AITone Tests
 
     func testAIToneOptions() {
@@ -516,5 +580,151 @@ final class ModelsTests: XCTestCase {
 
         XCTAssertGreaterThanOrEqual(testimonial.rating, 1)
         XCTAssertLessThanOrEqual(testimonial.rating, 5)
+    }
+
+    // MARK: - DB Row Decoding Tests
+
+    func testDBProfileRowDecoding() throws {
+        let json = """
+        {
+            "id": "550e8400-e29b-41d4-a716-446655440000",
+            "handle": "testuser",
+            "display_name": "Test User",
+            "email": "test@example.com",
+            "avatar_url": null,
+            "timezone": "America/New_York",
+            "subscription_tier": "free",
+            "daily_ai_quota": 20,
+            "daily_ai_used": 5,
+            "quota_reset_at": null,
+            "premium_badge": null,
+            "wellness_focus": "anxiety",
+            "onboarding_completed_at": "2024-01-15T10:00:00Z",
+            "created_at": "2024-01-01T00:00:00Z",
+            "updated_at": "2024-01-15T10:00:00Z"
+        }
+        """.data(using: .utf8)!
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let row = try decoder.decode(DBProfileRow.self, from: json)
+
+        XCTAssertEqual(row.id.uuidString.lowercased(), "550e8400-e29b-41d4-a716-446655440000")
+        XCTAssertEqual(row.handle, "testuser")
+        XCTAssertEqual(row.displayName, "Test User")
+        XCTAssertEqual(row.email, "test@example.com")
+        XCTAssertNil(row.avatarUrl)
+        XCTAssertEqual(row.timezone, "America/New_York")
+        XCTAssertEqual(row.subscriptionTier, "free")
+        XCTAssertEqual(row.dailyAiQuota, 20)
+        XCTAssertEqual(row.dailyAiUsed, 5)
+        XCTAssertEqual(row.wellnessFocus, "anxiety")
+        XCTAssertNotNil(row.onboardingCompletedAt)
+    }
+
+    func testDBUserSettingsRowDecoding() throws {
+        let json = """
+        {
+            "user_id": "550e8400-e29b-41d4-a716-446655440000",
+            "daily_quest_time_local": "09:00",
+            "quiet_hours_start_local": "22:00",
+            "quiet_hours_end_local": "08:00",
+            "reminders_enabled": true,
+            "nudge_after_days_inactive": 3,
+            "share_mood_in_circles": true,
+            "ai_tone": "friendly",
+            "privacy_mode": "standard",
+            "notify_circle_activity": true,
+            "notify_hugs": true,
+            "notify_challenges": false,
+            "notify_streak_risk": true,
+            "notify_weekly_summary": true,
+            "preferred_notify_hour": 10,
+            "created_at": "2024-01-01T00:00:00Z",
+            "updated_at": "2024-01-15T10:00:00Z"
+        }
+        """.data(using: .utf8)!
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let row = try decoder.decode(DBUserSettingsRow.self, from: json)
+
+        XCTAssertEqual(row.dailyQuestTimeLocal, "09:00")
+        XCTAssertEqual(row.quietHoursStartLocal, "22:00")
+        XCTAssertEqual(row.quietHoursEndLocal, "08:00")
+        XCTAssertTrue(row.remindersEnabled)
+        XCTAssertEqual(row.nudgeAfterDaysInactive, 3)
+        XCTAssertTrue(row.shareMoodInCircles)
+        XCTAssertEqual(row.aiTone, "friendly")
+        XCTAssertEqual(row.privacyMode, "standard")
+        XCTAssertEqual(row.notifyCircleActivity, true)
+        XCTAssertEqual(row.notifyHugs, true)
+        XCTAssertEqual(row.notifyChallenges, false)
+        XCTAssertEqual(row.notifyStreakRisk, true)
+        XCTAssertEqual(row.notifyWeeklySummary, true)
+        XCTAssertEqual(row.preferredNotifyHour, 10)
+    }
+
+    func testDBUserStatsRowDecoding() throws {
+        let json = """
+        {
+            "user_id": "550e8400-e29b-41d4-a716-446655440000",
+            "current_streak_days": 7,
+            "longest_streak_days": 15,
+            "total_quests_completed": 42,
+            "total_exercises_completed": 20,
+            "xp_total": 1500,
+            "xp_this_week": 250,
+            "level": 5,
+            "level_title": "Enthusiast",
+            "last_xp_reset_week": "2024-01-08",
+            "updated_at": "2024-01-15T10:00:00Z"
+        }
+        """.data(using: .utf8)!
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let row = try decoder.decode(DBUserStatsRow.self, from: json)
+
+        XCTAssertEqual(row.currentStreakDays, 7)
+        XCTAssertEqual(row.longestStreakDays, 15)
+        XCTAssertEqual(row.totalQuestsCompleted, 42)
+        XCTAssertEqual(row.totalExercisesCompleted, 20)
+        XCTAssertEqual(row.xpTotal, 1500)
+        XCTAssertEqual(row.xpThisWeek, 250)
+        XCTAssertEqual(row.level, 5)
+        XCTAssertEqual(row.levelTitle, "Enthusiast")
+        XCTAssertEqual(row.lastXpResetWeek, "2024-01-08")
+    }
+
+    func testDBUserStatsRowDecoding_WithNullOptionals() throws {
+        let json = """
+        {
+            "user_id": "550e8400-e29b-41d4-a716-446655440000",
+            "current_streak_days": 0,
+            "longest_streak_days": 0,
+            "total_quests_completed": 0,
+            "total_exercises_completed": 0,
+            "xp_total": 0,
+            "xp_this_week": 0,
+            "level": 1,
+            "level_title": "Beginner",
+            "last_xp_reset_week": null,
+            "updated_at": "2024-01-15T10:00:00Z"
+        }
+        """.data(using: .utf8)!
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let row = try decoder.decode(DBUserStatsRow.self, from: json)
+
+        XCTAssertEqual(row.currentStreakDays, 0)
+        XCTAssertEqual(row.level, 1)
+        XCTAssertEqual(row.levelTitle, "Beginner")
+        XCTAssertNil(row.lastXpResetWeek)
     }
 }
