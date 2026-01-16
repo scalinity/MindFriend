@@ -751,6 +751,8 @@ struct StreakCard: View {
 }
 
 struct QuickActionsSection: View {
+    @EnvironmentObject var container: DependencyContainer
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Quick Actions")
@@ -810,8 +812,8 @@ struct QuickActionsSection: View {
                     )
                 }
 
-                Spacer()
-                Spacer()
+                // TODO: MicroMomentsHubView and PeerSupportHubView coming in future releases
+
                 Spacer()
             }
         }

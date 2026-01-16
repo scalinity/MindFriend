@@ -61,20 +61,33 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // This should only be called via cron or internally
-  // Check for service role or authorization
+  // This should only be called via cron or internally with service role key
+  // SECURITY: Strict auth check - service role key required
   const authHeader = req.headers.get("Authorization");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-  if (authHeader !== `Bearer ${serviceRoleKey}`) {
-    // Allow requests from within Supabase (cron jobs)
-    const isSupabaseCron = req.headers.get("X-Supabase-Webhook") === "true";
-    if (!isSupabaseCron && !authHeader?.includes(serviceRoleKey || "")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
+  // Validate service role key exists and is not empty
+  if (!serviceRoleKey || serviceRoleKey.length < 32) {
+    console.error("SUPABASE_SERVICE_ROLE_KEY is missing or invalid");
+    return new Response(
+      JSON.stringify({ error: "Server configuration error" }),
+      {
+        status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+      },
+    );
+  }
+
+  // Check for exact match of service role key
+  const isValidServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
+  // Allow requests from within Supabase (cron jobs) with webhook header
+  const isSupabaseCron = req.headers.get("X-Supabase-Webhook") === "true";
+
+  if (!isValidServiceRole && !isSupabaseCron) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   const supabase = createClient(
