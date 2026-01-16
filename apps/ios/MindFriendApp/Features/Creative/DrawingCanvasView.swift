@@ -354,28 +354,6 @@ class DrawingState: ObservableObject {
     }
 }
 
-// MARK: - Drawing Tool
-
-enum DrawingTool: String, CaseIterable, Codable {
-    case pen
-    case marker
-    case watercolor
-    case eraser
-
-    var displayName: String {
-        rawValue.capitalized
-    }
-
-    var icon: String {
-        switch self {
-        case .pen: return "pencil"
-        case .marker: return "highlighter"
-        case .watercolor: return "paintbrush"
-        case .eraser: return "eraser"
-        }
-    }
-}
-
 // MARK: - Drawing Canvas (PencilKit wrapper)
 
 struct DrawingCanvas: UIViewRepresentable {
@@ -430,14 +408,14 @@ struct CreativeExercisesListView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         FilterChip(
-                            title: "All",
+                            label: "All",
                             isSelected: selectedCategory == nil,
                             action: { selectedCategory = nil }
                         )
 
                         ForEach(CreativeExerciseCategory.allCases, id: \.self) { category in
                             FilterChip(
-                                title: category.displayName,
+                                label: category.displayName,
                                 isSelected: selectedCategory == category,
                                 action: { selectedCategory = category }
                             )

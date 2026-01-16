@@ -328,7 +328,7 @@ struct CreativeWorkThumbnail: View {
     }
 
     private func storageURL(for path: String) -> URL? {
-        guard let baseURL = URL(string: SupabaseConfig.supabaseURL) else { return nil }
+        guard let baseURL = URL(string: SupabaseConfig.projectURL.absoluteString) else { return nil }
         return baseURL.appendingPathComponent("storage/v1/object/public/creative-works/\(path)")
     }
 }
