@@ -27,6 +27,7 @@ enum NotificationDeepLink {
     case settings
     case insights
     case buddy(code: String)
+    case micro(templateId: String? = nil)
     case none
 }
 

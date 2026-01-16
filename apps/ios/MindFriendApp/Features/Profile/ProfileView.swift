@@ -64,17 +64,7 @@ struct ProfileView: View {
 
                 // Progress
                 Section("Progress") {
-                    NavigationLink {
-                        SkillTreeView()
-                    } label: {
-                        Label("Skills", systemImage: "chart.bar.fill")
-                    }
-
-                    NavigationLink {
-                        BadgesView()
-                    } label: {
-                        Label("Badges", systemImage: "star.fill")
-                    }
+                    // TODO: AchievementsView and achievementService coming in future release
 
                     NavigationLink {
                         CertificatesListView()

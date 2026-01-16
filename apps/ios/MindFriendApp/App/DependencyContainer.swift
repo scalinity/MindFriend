@@ -5,7 +5,7 @@ import Supabase
 /// Dependency injection container for all app services
 @MainActor
 final class DependencyContainer: ObservableObject {
-    let supabaseClient: SupabaseClient = supabase
+    private(set) lazy var supabaseClient: SupabaseClient = supabase
 
     // MARK: - Supabase Services
     lazy var supabaseAuthService: SupabaseAuthService = {
@@ -37,29 +37,26 @@ final class DependencyContainer: ObservableObject {
         CreativeExpressionService()
     }()
 
-    lazy var microMomentsService: MicroMomentsService = {
-        MicroMomentsService(supabase: supabaseClient)
+    lazy var personalizationService: PersonalizationService = {
+        PersonalizationService(supabase: supabaseClient)
     }()
 
-    lazy var peerSupportService: PeerSupportService = {
-        PeerSupportService(supabase: supabaseClient)
-    }()
-
-    // MARK: - Audio Services
-
-    lazy var audioPlayerService: AudioPlayerService = {
-        AudioPlayerService(supabase: supabaseClient)
-    }()
-
-    lazy var audioContentService: AudioContentService = {
-        AudioContentService(supabase: supabaseClient)
-    }()
+    // MARK: - Incomplete Feature Services (TODO: Add when features are ready)
+    // lazy var microMomentsService: MicroMomentsService
+    // lazy var peerSupportService: PeerSupportService
+    // lazy var achievementService: AchievementService
+    // lazy var audioPlayerService: AudioPlayerService
+    // lazy var audioContentService: AudioContentService
 
     // MARK: - Initialization
 
-    init() {
-        // All services are lazy-initialized using Supabase
-    }
+    // MARK: - Shared Instance
+
+    /// Shared singleton instance for the app
+    static let shared = DependencyContainer()
+
+    /// Convenience accessor for Supabase client
+    var supabase: SupabaseClient { supabaseClient }
 
     // MARK: - Preview Support
 

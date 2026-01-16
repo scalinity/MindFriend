@@ -1248,9 +1248,158 @@ BEGIN
 END;
 $$;
 
+-- Atomic listener matching with row-level locking to prevent race conditions
+-- This function finds an available listener and claims them atomically
+CREATE OR REPLACE FUNCTION claim_listener_for_session(
+    p_session_id UUID,
+    p_topic_tags TEXT[] DEFAULT NULL,
+    p_preferred_language TEXT DEFAULT 'en',
+    p_session_type TEXT DEFAULT 'quick',
+    p_user_timezone TEXT DEFAULT 'UTC'
+)
+RETURNS TABLE (
+    listener_id UUID,
+    user_id UUID,
+    display_name TEXT,
+    average_rating DECIMAL,
+    total_sessions INTEGER
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_listener RECORD;
+    v_day_of_week INTEGER;
+    v_current_time TIME;
+    v_utc_offset INTERVAL;
+BEGIN
+    -- Calculate the current time in the listener's timezone context
+    -- For simplicity, we convert to UTC and compare against availability
+    v_day_of_week := EXTRACT(DOW FROM NOW() AT TIME ZONE p_user_timezone);
+    v_current_time := (NOW() AT TIME ZONE p_user_timezone)::TIME;
+
+    -- Find and lock an available listener atomically
+    -- FOR UPDATE SKIP LOCKED prevents race conditions - if another transaction
+    -- is already processing a listener, we skip to the next one
+    FOR v_listener IN
+        SELECT l.id, l.user_id, l.display_name, l.average_rating, l.total_sessions
+        FROM listeners l
+        WHERE l.status = 'active'
+        AND l.is_available = true
+        -- Check topic specialization match if provided
+        AND (p_topic_tags IS NULL OR p_topic_tags = '{}' OR l.specializations && p_topic_tags)
+        -- Check language preference
+        AND p_preferred_language = ANY(l.languages)
+        -- Check crisis bridge capability if needed
+        AND (p_session_type != 'crisis_bridge' OR l.accepts_crisis_bridge = true)
+        -- Check availability schedule
+        AND EXISTS (
+            SELECT 1 FROM listener_availability la
+            WHERE la.listener_id = l.id
+            AND la.is_active = true
+            AND la.day_of_week = v_day_of_week
+            AND v_current_time BETWEEN la.start_time AND la.end_time
+        )
+        -- Check no active sessions
+        AND NOT EXISTS (
+            SELECT 1 FROM support_sessions ss
+            WHERE ss.listener_id = l.id
+            AND ss.status IN ('matched', 'active')
+        )
+        ORDER BY l.average_rating DESC NULLS LAST, l.total_sessions ASC
+        FOR UPDATE OF l SKIP LOCKED
+        LIMIT 1
+    LOOP
+        -- Found an available listener, claim them for this session
+        UPDATE support_sessions
+        SET
+            listener_id = v_listener.id,
+            status = 'matched',
+            matched_at = NOW()
+        WHERE id = p_session_id
+        AND status = 'pending';  -- Only update if still pending
+
+        IF FOUND THEN
+            -- Return the matched listener info
+            RETURN QUERY SELECT
+                v_listener.id,
+                v_listener.user_id,
+                v_listener.display_name,
+                v_listener.average_rating,
+                v_listener.total_sessions;
+            RETURN;
+        END IF;
+    END LOOP;
+
+    -- No listener found
+    RETURN;
+END;
+$$;
+
+-- Get anonymous-safe session info (hides seeker_id when anonymous)
+CREATE OR REPLACE FUNCTION get_session_for_listener(p_session_id UUID)
+RETURNS TABLE (
+    id UUID,
+    seeker_display_name TEXT,
+    session_type TEXT,
+    topic_tags TEXT[],
+    seeker_mood_before INTEGER,
+    seeker_notes TEXT,
+    is_anonymous BOOLEAN,
+    status TEXT,
+    created_at TIMESTAMPTZ
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_user_id UUID := auth.uid();
+    v_is_listener BOOLEAN;
+BEGIN
+    -- Verify caller is the listener for this session
+    SELECT EXISTS (
+        SELECT 1 FROM support_sessions ss
+        JOIN listeners l ON l.id = ss.listener_id
+        WHERE ss.id = p_session_id
+        AND l.user_id = v_user_id
+    ) INTO v_is_listener;
+
+    IF NOT v_is_listener THEN
+        RAISE EXCEPTION 'Not authorized to view this session';
+    END IF;
+
+    RETURN QUERY
+    SELECT
+        ss.id,
+        -- Only show display name if NOT anonymous
+        CASE
+            WHEN ss.is_anonymous THEN 'Anonymous User'
+            ELSE COALESCE(p.display_name, 'User')
+        END AS seeker_display_name,
+        ss.session_type,
+        ss.topic_tags,
+        ss.seeker_mood_before,
+        -- Redact notes if anonymous and contains personal info
+        CASE
+            WHEN ss.is_anonymous THEN '[Notes hidden for privacy]'
+            ELSE ss.seeker_notes
+        END AS seeker_notes,
+        ss.is_anonymous,
+        ss.status,
+        ss.created_at
+    FROM support_sessions ss
+    LEFT JOIN profiles p ON p.id = ss.seeker_id
+    WHERE ss.id = p_session_id;
+END;
+$$;
+
 COMMENT ON TABLE listeners IS 'Certified peer support listeners';
 COMMENT ON TABLE support_sessions IS 'One-on-one peer support sessions';
 COMMENT ON TABLE mentorships IS 'Long-term mentor-mentee relationships';
 COMMENT ON TABLE gratitude_actions IS 'Ways users give back to the community';
 COMMENT ON TABLE community_wisdom IS 'User-contributed tips and wisdom';
 COMMENT ON TABLE anonymous_rooms IS 'Anonymous group support spaces';
+COMMENT ON FUNCTION claim_listener_for_session IS 'Atomically claims an available listener for a session using row-level locking';
+COMMENT ON FUNCTION get_session_for_listener IS 'Returns session info with anonymous-safe data for listeners';

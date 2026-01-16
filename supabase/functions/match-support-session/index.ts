@@ -8,6 +8,8 @@ import {
   getCorsHeaders,
   validateContentType,
   parseJsonBody,
+  checkRateLimit,
+  getRateLimitHeaders,
 } from "../_shared/cors.ts";
 
 interface MatchRequest {
@@ -18,16 +20,6 @@ interface MatchRequest {
   preferredGender?: string;
   seekerMood?: number;
   seekerNotes?: string;
-}
-
-interface ListenerInfo {
-  id: string;
-  user_id: string;
-  display_name: string | null;
-  specializations: string[];
-  languages: string[];
-  average_rating: number | null;
-  total_sessions: number;
 }
 
 interface MatchResult {
@@ -91,6 +83,27 @@ serve(async (req) => {
       {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
+  }
+
+  // Rate limiting - 5 support requests per minute per user
+  const rateLimit = checkRateLimit(`support:${user.id}`, 5, 60000);
+  if (!rateLimit.allowed) {
+    return new Response(
+      JSON.stringify({
+        error:
+          "Too many requests. Please wait before requesting support again.",
+        code: "RATE_LIMITED",
+        retryAfter: Math.ceil(rateLimit.resetIn / 1000),
+      }),
+      {
+        status: 429,
+        headers: {
+          ...corsHeaders,
+          ...getRateLimitHeaders(rateLimit.remaining, rateLimit.resetIn),
+          "Content-Type": "application/json",
+        },
       },
     );
   }
@@ -263,122 +276,47 @@ async function attemptMatch(
   session: { id: string; session_type: string },
   request: MatchRequest,
 ): Promise<MatchResult> {
-  // Get current time and day for availability check
-  const now = new Date();
-  const dayOfWeek = now.getUTCDay();
-  const currentTime = now.toISOString().split("T")[1].slice(0, 5);
+  // Use the atomic claim_listener_for_session RPC which handles:
+  // 1. Row-level locking to prevent race conditions
+  // 2. Timezone-aware availability matching
+  // 3. Topic and language filtering
+  // 4. Active session checks
+  const { data: matchedListener, error: matchError } = await supabase.rpc(
+    "claim_listener_for_session",
+    {
+      p_session_id: session.id,
+      p_topic_tags: request.topicTags || [],
+      p_preferred_language: request.preferredLanguage || "en",
+      p_session_type: session.session_type,
+      // Use seeker's timezone if available, fallback to UTC
+      p_user_timezone:
+        Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+    },
+  );
 
-  // Build listener query
-  let listenerQuery = supabase
-    .from("listeners")
-    .select(
-      `
-      id,
-      user_id,
-      display_name,
-      specializations,
-      languages,
-      average_rating,
-      total_sessions
-    `,
-    )
-    .eq("status", "active")
-    .eq("is_available", true);
-
-  // Filter by specialization if topics provided
-  if (request.topicTags?.length) {
-    listenerQuery = listenerQuery.overlaps(
-      "specializations",
-      request.topicTags,
-    );
-  }
-
-  // Filter by language
-  if (request.preferredLanguage) {
-    listenerQuery = listenerQuery.contains("languages", [
-      request.preferredLanguage,
-    ]);
-  }
-
-  // Check for crisis bridge capability if needed
-  if (session.session_type === "crisis_bridge") {
-    listenerQuery = listenerQuery.eq("accepts_crisis_bridge", true);
-  }
-
-  const { data: listeners, error: listenerError } = await listenerQuery;
-
-  if (listenerError) {
-    console.error("Error fetching listeners:", listenerError);
+  if (matchError) {
+    console.error("Error in claim_listener_for_session:", matchError);
     return {
       matched: false,
       estimatedWait: await estimateWaitTime(supabase),
     };
   }
 
-  if (!listeners?.length) {
+  // Check if we got a match (RPC returns array with 0 or 1 rows)
+  if (matchedListener && matchedListener.length > 0) {
+    const listener = matchedListener[0];
+
+    // Notify listener via push notification
+    await notifyListener(supabase, listener.user_id, session);
+
     return {
-      matched: false,
-      estimatedWait: await estimateWaitTime(supabase),
+      matched: true,
+      listener: {
+        displayName: listener.display_name,
+        rating: listener.average_rating,
+        sessionCount: listener.total_sessions,
+      },
     };
-  }
-
-  // Sort by rating (best match first)
-  const sortedListeners = [...listeners].sort((a, b) => {
-    const ratingA = a.average_rating || 0;
-    const ratingB = b.average_rating || 0;
-    return ratingB - ratingA;
-  });
-
-  // Check availability for each listener
-  for (const listener of sortedListeners as ListenerInfo[]) {
-    // Check if listener is available at current time
-    const { data: availability } = await supabase
-      .from("listener_availability")
-      .select("*")
-      .eq("listener_id", listener.id)
-      .eq("day_of_week", dayOfWeek)
-      .eq("is_active", true)
-      .lte("start_time", currentTime)
-      .gte("end_time", currentTime);
-
-    if (availability?.length) {
-      // Check listener doesn't have active session
-      const { data: activeSession } = await supabase
-        .from("support_sessions")
-        .select("id")
-        .eq("listener_id", listener.id)
-        .in("status", ["matched", "active"])
-        .maybeSingle();
-
-      if (!activeSession) {
-        // Match found!
-        const { error: updateError } = await supabase
-          .from("support_sessions")
-          .update({
-            listener_id: listener.id,
-            status: "matched",
-            matched_at: new Date().toISOString(),
-          })
-          .eq("id", session.id);
-
-        if (updateError) {
-          console.error("Failed to update session with match:", updateError);
-          continue;
-        }
-
-        // Notify listener via push notification
-        await notifyListener(supabase, listener.user_id, session);
-
-        return {
-          matched: true,
-          listener: {
-            displayName: listener.display_name,
-            rating: listener.average_rating,
-            sessionCount: listener.total_sessions,
-          },
-        };
-      }
-    }
   }
 
   return {

@@ -5,6 +5,7 @@ import Foundation
 import AVFoundation
 import MediaPlayer
 import Combine
+import Supabase
 
 @MainActor
 final class AudioPlayerService: NSObject, ObservableObject {
