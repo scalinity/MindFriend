@@ -324,7 +324,7 @@ CREATE TABLE IF NOT EXISTS content_age_ratings (
 
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
-    CONSTRAINT unique_content_rating UNIQUE (content_type, content_id)
+    CONSTRAINT unique_content_age_rating UNIQUE (content_type, content_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_content_age_ratings_content ON content_age_ratings(content_type, content_id);
