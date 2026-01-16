@@ -11,8 +11,8 @@ jobs:
 
       - name: Build iOS app
         run: |
-          cd apps/ios
           xcodebuild build \
+            -project apps/ios/MindFriendApp.xcodeproj \
             -scheme MindFriendApp \
             -configuration Debug \
             -destination 'generic/platform=iOS' \
