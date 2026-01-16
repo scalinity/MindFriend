@@ -102,6 +102,19 @@ final class AppState: ObservableObject {
         // Keep absenceSummary for AI context until next session
     }
 
+    // MARK: - Simple Celebration Toast
+    @Published var celebrationTitle: String = ""
+    @Published var celebrationSubtitle: String = ""
+    @Published var celebrationIcon: String = ""
+    @Published var showSimpleCelebration: Bool = false
+
+    func showCelebration(title: String, subtitle: String, icon: String) {
+        self.celebrationTitle = title
+        self.celebrationSubtitle = subtitle
+        self.celebrationIcon = icon
+        self.showSimpleCelebration = true
+    }
+
     // MARK: - Celebration Methods
 
     private let maxPendingCelebrations = 10
@@ -124,6 +137,7 @@ final class AppState: ObservableObject {
 
 enum MainTab: String, CaseIterable {
     case home
+    case programs
     case chat
     case circles
     case profile
@@ -131,6 +145,7 @@ enum MainTab: String, CaseIterable {
     var title: String {
         switch self {
         case .home: return "Home"
+        case .programs: return "Programs"
         case .chat: return "Chat"
         case .circles: return "Circles"
         case .profile: return "Profile"
@@ -140,6 +155,7 @@ enum MainTab: String, CaseIterable {
     var icon: String {
         switch self {
         case .home: return "house.fill"
+        case .programs: return "book.fill"
         case .chat: return "bubble.left.and.bubble.right.fill"
         case .circles: return "person.3.fill"
         case .profile: return "person.fill"

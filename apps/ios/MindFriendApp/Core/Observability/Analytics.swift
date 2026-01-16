@@ -120,6 +120,11 @@ enum AnalyticsEvent: String {
     case pushPermissionGranted = "push_permission_granted"
     case pushPermissionDenied = "push_permission_denied"
 
+    // Live Sessions
+    case liveSessionJoined = "live_session_joined"
+    case liveSessionLeft = "live_session_left"
+    case liveSessionCompleted = "live_session_completed"
+
     // Re-engagement
     case reengagementAbsenceChecked = "reengagement_absence_checked"
     case reengagementEventLogged = "reengagement_event_logged"
@@ -129,6 +134,18 @@ enum AnalyticsEvent: String {
     case welcomeBackDismissed = "welcome_back_dismissed"
     case welcomeBackFreshStartChosen = "welcome_back_fresh_start_chosen"
     case welcomeBackContinueChosen = "welcome_back_continue_chosen"
+
+    // Structured Programs
+    case programViewed = "program_viewed"
+    case programEnrolled = "program_enrolled"
+    case programDayStarted = "program_day_started"
+    case programDayCompleted = "program_day_completed"
+    case programCompleted = "program_completed"
+    case programPaused = "program_paused"
+    case programResumed = "program_resumed"
+    case programAbandoned = "program_abandoned"
+    case programDaySkipped = "program_day_skipped"
+    case certificateShared = "certificate_shared"
 }
 
 /// User properties for segmentation

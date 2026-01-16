@@ -10,6 +10,7 @@ enum CelebrationType: String, Codable, CaseIterable {
     case badgeUnlock = "badge_unlock"
     case questMilestone = "quest_milestone"
     case exerciseMilestone = "exercise_milestone"
+    case programComplete = "program_complete"
 
     /// Colors used for confetti animation based on celebration type
     var confettiColors: [Color] {
@@ -19,6 +20,7 @@ enum CelebrationType: String, Codable, CaseIterable {
         case .badgeUnlock: return [.green, .yellow, .blue]
         case .questMilestone: return [.blue, .cyan, .white]
         case .exerciseMilestone: return [.green, .mint, .cyan]
+        case .programComplete: return [.purple, .pink, .yellow]
         }
     }
 
@@ -30,6 +32,7 @@ enum CelebrationType: String, Codable, CaseIterable {
         case .badgeUnlock: return "trophy.fill"
         case .questMilestone: return "checkmark.seal.fill"
         case .exerciseMilestone: return "figure.mind.and.body"
+        case .programComplete: return "checkmark.seal.fill"
         }
     }
 
@@ -41,6 +44,7 @@ enum CelebrationType: String, Codable, CaseIterable {
         case .badgeUnlock: return "Badge Unlocked"
         case .questMilestone: return "Quest Milestone"
         case .exerciseMilestone: return "Exercise Milestone"
+        case .programComplete: return "Program Completed"
         }
     }
 }
@@ -86,6 +90,8 @@ struct CelebrationEvent: Identifiable, Codable, Equatable {
             return "\(value) Quests!"
         case .exerciseMilestone:
             return "\(value) Exercises!"
+        case .programComplete:
+            return "Program Complete!"
         }
     }
 
@@ -102,6 +108,8 @@ struct CelebrationEvent: Identifiable, Codable, Equatable {
             return "You've completed \(value) quests. Keep going!"
         case .exerciseMilestone:
             return "\(value) exercises completed. Your dedication shows!"
+        case .programComplete:
+            return "You completed a \(value)-day program. Incredible dedication!"
         }
     }
 
@@ -118,6 +126,8 @@ struct CelebrationEvent: Identifiable, Codable, Equatable {
             return "Completed \(value) wellness quests! 💪"
         case .exerciseMilestone:
             return "Finished \(value) exercises on MindFriend! 🧘"
+        case .programComplete:
+            return "Completed a \(value)-day wellness program on MindFriend! 🎓"
         }
     }
 
