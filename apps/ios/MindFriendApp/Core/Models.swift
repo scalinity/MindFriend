@@ -2643,3 +2643,1208 @@ struct HomeContext: Codable, Equatable {
         recommendedExerciseIds: []
     )
 }
+
+// MARK: - Proactive Intelligence
+
+/// User engagement state classification for proactive outreach
+enum EngagementState: String, Codable, CaseIterable {
+    case highlyActive = "HIGHLY_ACTIVE"
+    case active = "ACTIVE"
+    case moderate = "MODERATE"
+    case drifting = "DRIFTING"
+    case lapsed = "LAPSED"
+    case hibernating = "HIBERNATING"
+
+    var displayName: String {
+        switch self {
+        case .highlyActive: return "Highly Active"
+        case .active: return "Active"
+        case .moderate: return "Moderate"
+        case .drifting: return "Drifting"
+        case .lapsed: return "Lapsed"
+        case .hibernating: return "Hibernating"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .highlyActive: return "Multiple daily interactions"
+        case .active: return "Regular daily engagement"
+        case .moderate: return "Consistent but less frequent"
+        case .drifting: return "Starting to disengage"
+        case .lapsed: return "Been away for a while"
+        case .hibernating: return "Extended absence"
+        }
+    }
+
+    /// Whether proactive outreach is appropriate for this state
+    var shouldReceiveProactive: Bool {
+        switch self {
+        case .highlyActive, .active:
+            return false // They're already engaged
+        case .moderate, .drifting, .lapsed, .hibernating:
+            return true
+        }
+    }
+}
+
+/// Trigger types for proactive outreach
+enum ProactiveTriggerType: String, Codable, CaseIterable {
+    case moodDecline = "mood_decline"
+    case streakRisk = "streak_risk"
+    case milestoneApproach = "milestone_approach"
+    case reengagement = "reengagement"
+    case patternInsight = "pattern_insight"
+
+    var displayName: String {
+        switch self {
+        case .moodDecline: return "Mood Support"
+        case .streakRisk: return "Streak Reminder"
+        case .milestoneApproach: return "Milestone Alert"
+        case .reengagement: return "Check-in"
+        case .patternInsight: return "Pattern Insight"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .moodDecline: return "Supportive check-in when mood drops"
+        case .streakRisk: return "Reminder when streak is at risk"
+        case .milestoneApproach: return "Celebration of upcoming milestones"
+        case .reengagement: return "Gentle nudge to return after absence"
+        case .patternInsight: return "Insights about detected patterns"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .moodDecline: return "heart.fill"
+        case .streakRisk: return "flame.fill"
+        case .milestoneApproach: return "trophy.fill"
+        case .reengagement: return "hand.wave.fill"
+        case .patternInsight: return "lightbulb.fill"
+        }
+    }
+
+    /// Priority level (lower = higher priority)
+    var priority: Int {
+        switch self {
+        case .moodDecline: return 1
+        case .streakRisk: return 2
+        case .milestoneApproach: return 3
+        case .reengagement: return 4
+        case .patternInsight: return 5
+        }
+    }
+}
+
+/// Status of a proactive message
+enum ProactiveMessageStatus: String, Codable {
+    case scheduled
+    case sent
+    case read
+    case engaged
+    case ignored
+    case expired
+}
+
+/// Delivery channel for proactive messages
+enum ProactiveDeliveryChannel: String, Codable {
+    case push
+    case inApp = "in_app"
+    case email
+}
+
+/// A proactive message sent to a user
+struct ProactiveMessage: Codable, Identifiable, Equatable {
+    let id: String
+    let userId: String
+    let triggerType: ProactiveTriggerType
+    let messageContent: String
+    let deliveryChannel: ProactiveDeliveryChannel
+    let scheduledFor: Date
+    var sentAt: Date?
+    var readAt: Date?
+    var engagedAt: Date?
+    var status: ProactiveMessageStatus
+    let metadata: [String: AnyCodable]?
+    let createdAt: Date
+
+    /// Whether the user has interacted with this message
+    var wasEngaged: Bool {
+        engagedAt != nil
+    }
+
+    /// Whether the message was seen
+    var wasRead: Bool {
+        readAt != nil
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case triggerType = "trigger_type"
+        case messageContent = "message_content"
+        case deliveryChannel = "delivery_channel"
+        case scheduledFor = "scheduled_for"
+        case sentAt = "sent_at"
+        case readAt = "read_at"
+        case engagedAt = "engaged_at"
+        case status
+        case metadata
+        case createdAt = "created_at"
+    }
+}
+
+/// Pattern types detected in user behavior
+enum PatternType: String, Codable, CaseIterable {
+    case dayOfWeek = "day_of_week"
+    case exerciseCorrelation = "exercise_correlation"
+    case questPreference = "quest_preference"
+
+    var displayName: String {
+        switch self {
+        case .dayOfWeek: return "Weekly Rhythm"
+        case .exerciseCorrelation: return "Exercise Impact"
+        case .questPreference: return "Quest Preference"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .dayOfWeek: return "Mood patterns by day of week"
+        case .exerciseCorrelation: return "How exercise affects your mood"
+        case .questPreference: return "Types of quests you enjoy most"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .dayOfWeek: return "calendar"
+        case .exerciseCorrelation: return "figure.run"
+        case .questPreference: return "star.fill"
+        }
+    }
+}
+
+/// A detected behavioral pattern for a user
+struct UserPattern: Codable, Identifiable, Equatable {
+    let id: String
+    let userId: String
+    let patternType: PatternType
+    let patternKey: String
+    let patternData: [String: AnyCodable]
+    let confidence: Double
+    let firstDetectedAt: Date
+    let lastConfirmedAt: Date
+    var timesSurfaced: Int
+    var userAcknowledged: Bool
+    var isActive: Bool
+    let createdAt: Date
+
+    /// Whether this pattern has high confidence
+    var isHighConfidence: Bool {
+        confidence >= 0.7
+    }
+
+    /// Whether this pattern should be surfaced to the user
+    var shouldSurface: Bool {
+        isActive && isHighConfidence && !userAcknowledged
+    }
+
+    /// Human-readable insight message based on pattern data
+    var insightMessage: String? {
+        switch patternType {
+        case .dayOfWeek:
+            guard let delta = patternData["delta"]?.value as? Double else { return nil }
+            let dayName = patternKey.components(separatedBy: "_").first ?? "that day"
+            let trend = patternKey.contains("dip") ? "dip" : "peak"
+            if trend == "dip" {
+                return "Your mood tends to dip on \(dayName)s (about \(String(format: "%.1f", abs(delta))) points lower than average)."
+            } else {
+                return "Your mood tends to peak on \(dayName)s (about \(String(format: "%.1f", abs(delta))) points higher than average)!"
+            }
+
+        case .exerciseCorrelation:
+            guard let exerciseAvg = patternData["exercise_day_avg"]?.value as? Double,
+                  let nonExerciseAvg = patternData["non_exercise_day_avg"]?.value as? Double else { return nil }
+            let delta = exerciseAvg - nonExerciseAvg
+            return "On days you exercise, your mood averages \(String(format: "%.1f", exerciseAvg)) compared to \(String(format: "%.1f", nonExerciseAvg)) on rest days. That's a +\(String(format: "%.1f", delta)) improvement!"
+
+        case .questPreference:
+            guard let questType = patternData["quest_type"]?.value as? String,
+                  let rate = patternData["completion_rate"]?.value as? Double else { return nil }
+            return "You complete \(questType) quests \(Int(rate * 100))% of the time. We'll try to offer more of these!"
+        }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case patternType = "pattern_type"
+        case patternKey = "pattern_key"
+        case patternData = "pattern_data"
+        case confidence
+        case firstDetectedAt = "first_detected_at"
+        case lastConfirmedAt = "last_confirmed_at"
+        case timesSurfaced = "times_surfaced"
+        case userAcknowledged = "user_acknowledged"
+        case isActive = "is_active"
+        case createdAt = "created_at"
+    }
+}
+
+/// User's engagement state record from the database
+struct UserEngagementState: Codable, Identifiable, Equatable {
+    let id: String
+    let userId: String
+    let currentState: EngagementState
+    let stateStartedAt: Date
+    let lastActivityAt: Date
+    var lastProactiveAt: Date?
+    var proactiveMessageCount: Int
+    var proactiveEngageCount: Int
+    var proactiveIgnoreCount: Int
+    var moodDeclineDetected: Bool
+    var consecutiveLowMoodDays: Int
+    let updatedAt: Date
+
+    /// Whether the user is responding well to proactive messages
+    var proactiveEngagementRate: Double {
+        guard proactiveMessageCount > 0 else { return 0 }
+        return Double(proactiveEngageCount) / Double(proactiveMessageCount)
+    }
+
+    /// Whether we should back off from proactive messages
+    var shouldBackOff: Bool {
+        proactiveIgnoreCount >= 3
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case currentState = "current_state"
+        case stateStartedAt = "state_started_at"
+        case lastActivityAt = "last_activity_at"
+        case lastProactiveAt = "last_proactive_at"
+        case proactiveMessageCount = "proactive_message_count"
+        case proactiveEngageCount = "proactive_engage_count"
+        case proactiveIgnoreCount = "proactive_ignore_count"
+        case moodDeclineDetected = "mood_decline_detected"
+        case consecutiveLowMoodDays = "consecutive_low_mood_days"
+        case updatedAt = "updated_at"
+    }
+}
+
+/// Proactive Intelligence settings for a user (extension of UserSettings)
+struct ProactiveSettings: Codable, Equatable {
+    var proactiveEnabled: Bool
+    var proactiveMaxDaily: Int
+    var proactiveTypesEnabled: [ProactiveTriggerType]
+    var calendarIntegrationEnabled: Bool
+    var weatherInsightsEnabled: Bool
+
+    /// Default settings for new users
+    static let `default` = ProactiveSettings(
+        proactiveEnabled: true,
+        proactiveMaxDaily: 2,
+        proactiveTypesEnabled: ProactiveTriggerType.allCases,
+        calendarIntegrationEnabled: false,
+        weatherInsightsEnabled: false
+    )
+
+    enum CodingKeys: String, CodingKey {
+        case proactiveEnabled = "proactive_enabled"
+        case proactiveMaxDaily = "proactive_max_daily"
+        case proactiveTypesEnabled = "proactive_types_enabled"
+        case calendarIntegrationEnabled = "calendar_integration_enabled"
+        case weatherInsightsEnabled = "weather_insights_enabled"
+    }
+
+    init(proactiveEnabled: Bool = true,
+         proactiveMaxDaily: Int = 2,
+         proactiveTypesEnabled: [ProactiveTriggerType] = ProactiveTriggerType.allCases,
+         calendarIntegrationEnabled: Bool = false,
+         weatherInsightsEnabled: Bool = false) {
+        self.proactiveEnabled = proactiveEnabled
+        self.proactiveMaxDaily = proactiveMaxDaily
+        self.proactiveTypesEnabled = proactiveTypesEnabled
+        self.calendarIntegrationEnabled = calendarIntegrationEnabled
+        self.weatherInsightsEnabled = weatherInsightsEnabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        proactiveEnabled = try container.decodeIfPresent(Bool.self, forKey: .proactiveEnabled) ?? true
+        proactiveMaxDaily = try container.decodeIfPresent(Int.self, forKey: .proactiveMaxDaily) ?? 2
+        calendarIntegrationEnabled = try container.decodeIfPresent(Bool.self, forKey: .calendarIntegrationEnabled) ?? false
+        weatherInsightsEnabled = try container.decodeIfPresent(Bool.self, forKey: .weatherInsightsEnabled) ?? false
+
+        // Handle proactive_types_enabled which comes as string array from database
+        if let typesArray = try container.decodeIfPresent([String].self, forKey: .proactiveTypesEnabled) {
+            proactiveTypesEnabled = typesArray.compactMap { ProactiveTriggerType(rawValue: $0) }
+        } else {
+            proactiveTypesEnabled = ProactiveTriggerType.allCases
+        }
+    }
+}
+
+/// Type-erased Codable wrapper for dictionary values
+struct AnyCodable: Codable, Equatable {
+    let value: Any
+
+    init(_ value: Any) {
+        self.value = value
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+
+        if container.decodeNil() {
+            value = NSNull()
+        } else if let bool = try? container.decode(Bool.self) {
+            value = bool
+        } else if let int = try? container.decode(Int.self) {
+            value = int
+        } else if let double = try? container.decode(Double.self) {
+            value = double
+        } else if let string = try? container.decode(String.self) {
+            value = string
+        } else if let array = try? container.decode([AnyCodable].self) {
+            value = array.map { $0.value }
+        } else if let dict = try? container.decode([String: AnyCodable].self) {
+            value = dict.mapValues { $0.value }
+        } else {
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unable to decode AnyCodable")
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+
+        switch value {
+        case is NSNull:
+            try container.encodeNil()
+        case let bool as Bool:
+            try container.encode(bool)
+        case let int as Int:
+            try container.encode(int)
+        case let double as Double:
+            try container.encode(double)
+        case let string as String:
+            try container.encode(string)
+        case let array as [Any]:
+            try container.encode(array.map { AnyCodable($0) })
+        case let dict as [String: Any]:
+            try container.encode(dict.mapValues { AnyCodable($0) })
+        default:
+            throw EncodingError.invalidValue(value, EncodingError.Context(codingPath: container.codingPath, debugDescription: "Unable to encode AnyCodable"))
+        }
+    }
+
+    static func == (lhs: AnyCodable, rhs: AnyCodable) -> Bool {
+        switch (lhs.value, rhs.value) {
+        case is (NSNull, NSNull):
+            return true
+        case let (l as Bool, r as Bool):
+            return l == r
+        case let (l as Int, r as Int):
+            return l == r
+        case let (l as Double, r as Double):
+            return l == r
+        case let (l as String, r as String):
+            return l == r
+        default:
+            return false
+        }
+    }
+}
+
+// MARK: - Live Experiences
+
+/// Represents a scheduled live session (e.g., daily group meditation)
+struct LiveSession: Codable, Identifiable, Equatable {
+    let id: String
+    let title: String
+    let description: String?
+    let sessionType: SessionType
+    let scheduledStart: Date
+    let scheduledEnd: Date
+    let audioUrl: String?
+    var participantCount: Int?
+
+    /// Whether the session is currently live
+    var isLive: Bool {
+        let now = Date()
+        return now >= scheduledStart && now <= scheduledEnd
+    }
+
+    /// Whether the session hasn't started yet
+    var isUpcoming: Bool {
+        Date() < scheduledStart
+    }
+
+    /// Human-readable time until session starts
+    var startsIn: String? {
+        guard isUpcoming else { return nil }
+        let interval = scheduledStart.timeIntervalSinceNow
+        if interval < 60 { return "Starting now" }
+        if interval < 3600 { return "In \(Int(interval / 60)) min" }
+        return "In \(Int(interval / 3600))h"
+    }
+
+    /// Duration of the session in minutes
+    var durationMinutes: Int {
+        Int(scheduledEnd.timeIntervalSince(scheduledStart) / 60)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, description
+        case sessionType = "session_type"
+        case scheduledStart = "scheduled_start"
+        case scheduledEnd = "scheduled_end"
+        case audioUrl = "audio_url"
+        case participantCount = "participant_count"
+    }
+}
+
+/// Types of live sessions
+enum SessionType: String, Codable, CaseIterable {
+    case breathing
+    case meditation
+    case bodyScan = "body_scan"
+
+    var displayName: String {
+        switch self {
+        case .breathing: return "Breathing"
+        case .meditation: return "Meditation"
+        case .bodyScan: return "Body Scan"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .breathing: return "wind"
+        case .meditation: return "brain.head.profile"
+        case .bodyScan: return "figure.stand"
+        }
+    }
+}
+
+/// Database representation of live session for Supabase queries
+struct DBLiveSession: Codable {
+    let id: String
+    let title: String
+    let description: String?
+    let sessionType: String
+    let scheduledStart: Date
+    let scheduledEnd: Date
+    let audioUrl: String?
+    let isActive: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, description
+        case sessionType = "session_type"
+        case scheduledStart = "scheduled_start"
+        case scheduledEnd = "scheduled_end"
+        case audioUrl = "audio_url"
+        case isActive = "is_active"
+    }
+
+    func toLiveSession() -> LiveSession {
+        LiveSession(
+            id: id,
+            title: title,
+            description: description,
+            sessionType: SessionType(rawValue: sessionType) ?? .breathing,
+            scheduledStart: scheduledStart,
+            scheduledEnd: scheduledEnd,
+            audioUrl: audioUrl,
+            participantCount: nil
+        )
+    }
+}
+
+/// Represents a live room within a circle
+struct CircleLiveRoom: Codable, Identifiable, Equatable {
+    let id: String
+    let circleId: String
+    let createdBy: String
+    let activityType: String
+    let exerciseId: String?
+    let title: String?
+    let durationMinutes: Int
+    let startedAt: Date
+    let endsAt: Date
+    var endedAt: Date?
+    let status: RoomStatus
+    var participants: [RoomParticipant]?
+
+    // Joined data for display
+    var circleName: String?
+    var creatorName: String?
+
+    /// Whether the room is still active
+    var isActive: Bool {
+        status == .active && Date() < endsAt
+    }
+
+    /// Seconds remaining until room ends
+    var timeRemaining: TimeInterval {
+        max(0, endsAt.timeIntervalSinceNow)
+    }
+
+    /// Formatted time remaining (e.g., "4:32")
+    var timeRemainingFormatted: String {
+        let minutes = Int(timeRemaining / 60)
+        let seconds = Int(timeRemaining.truncatingRemainder(dividingBy: 60))
+        return String(format: "%d:%02d", minutes, seconds)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case circleId = "circle_id"
+        case createdBy = "created_by"
+        case activityType = "activity_type"
+        case exerciseId = "exercise_id"
+        case title
+        case durationMinutes = "duration_minutes"
+        case startedAt = "started_at"
+        case endsAt = "ends_at"
+        case endedAt = "ended_at"
+        case status
+        case participants
+        case circleName = "circle_name"
+        case creatorName = "creator_name"
+    }
+}
+
+/// Status of a live room
+enum RoomStatus: String, Codable {
+    case active
+    case completed
+    case cancelled
+}
+
+/// Represents a participant in a circle live room
+struct RoomParticipant: Codable, Identifiable, Equatable {
+    let id: String
+    let roomId: String
+    let userId: String
+    let joinedAt: Date
+    var leftAt: Date?
+    var completed: Bool
+
+    // Joined data
+    var displayName: String?
+    var isOnline: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case roomId = "room_id"
+        case userId = "user_id"
+        case joinedAt = "joined_at"
+        case leftAt = "left_at"
+        case completed
+        case displayName = "display_name"
+        case isOnline = "is_online"
+    }
+}
+
+/// Database representation of circle live room
+struct DBCircleLiveRoom: Codable {
+    let id: String
+    let circleId: String
+    let createdBy: String
+    let activityType: String
+    let exerciseId: String?
+    let title: String?
+    let durationMinutes: Int
+    let startedAt: Date
+    let endsAt: Date
+    var endedAt: Date?
+    let status: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case circleId = "circle_id"
+        case createdBy = "created_by"
+        case activityType = "activity_type"
+        case exerciseId = "exercise_id"
+        case title
+        case durationMinutes = "duration_minutes"
+        case startedAt = "started_at"
+        case endsAt = "ends_at"
+        case endedAt = "ended_at"
+        case status
+    }
+
+    func toCircleLiveRoom() -> CircleLiveRoom {
+        CircleLiveRoom(
+            id: id,
+            circleId: circleId,
+            createdBy: createdBy,
+            activityType: activityType,
+            exerciseId: exerciseId,
+            title: title,
+            durationMinutes: durationMinutes,
+            startedAt: startedAt,
+            endsAt: endsAt,
+            endedAt: endedAt,
+            status: RoomStatus(rawValue: status) ?? .active,
+            participants: nil,
+            circleName: nil,
+            creatorName: nil
+        )
+    }
+}
+
+/// Represents a buddy accountability window
+struct BuddyQuestWindow: Codable, Identifiable, Equatable {
+    let id: String
+    let userId: String
+    let buddyRelationshipId: String
+    let windowStartLocal: String  // "07:00:00"
+    let windowEndLocal: String    // "08:00:00"
+    let isActive: Bool
+
+    /// Whether the window is currently open based on local time
+    var isCurrentlyOpen: Bool {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        let now = formatter.string(from: Date())
+        return now >= windowStartLocal && now <= windowEndLocal
+    }
+
+    /// Formatted window display (e.g., "7:00 AM - 8:00 AM")
+    var windowDisplay: String {
+        let inputFormatter = DateFormatter()
+        inputFormatter.dateFormat = "HH:mm:ss"
+
+        let outputFormatter = DateFormatter()
+        outputFormatter.dateFormat = "h:mm a"
+
+        if let startDate = inputFormatter.date(from: windowStartLocal),
+           let endDate = inputFormatter.date(from: windowEndLocal) {
+            return "\(outputFormatter.string(from: startDate)) - \(outputFormatter.string(from: endDate))"
+        }
+        return "\(windowStartLocal) - \(windowEndLocal)"
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case buddyRelationshipId = "buddy_relationship_id"
+        case windowStartLocal = "window_start_local"
+        case windowEndLocal = "window_end_local"
+        case isActive = "is_active"
+    }
+}
+
+/// Represents user presence status
+struct UserPresence: Codable, Equatable {
+    let userId: String
+    var status: PresenceStatus
+    var lastSeenAt: Date
+    var currentActivity: String?
+
+    // Joined data
+    var displayName: String?
+
+    /// Whether user is currently online (seen within last 2 minutes)
+    var isOnline: Bool {
+        status == .online && Date().timeIntervalSince(lastSeenAt) < 120
+    }
+
+    /// Whether user was active recently (within last 15 minutes)
+    var isRecentlyActive: Bool {
+        Date().timeIntervalSince(lastSeenAt) < 900
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case status
+        case lastSeenAt = "last_seen_at"
+        case currentActivity = "current_activity"
+        case displayName = "display_name"
+    }
+}
+
+/// Presence status values
+enum PresenceStatus: String, Codable {
+    case online
+    case away
+    case offline
+}
+
+/// Database representation of user presence
+struct DBUserPresence: Codable {
+    let userId: String
+    let status: String
+    let lastSeenAt: Date
+    let currentActivity: String?
+
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case status
+        case lastSeenAt = "last_seen_at"
+        case currentActivity = "current_activity"
+    }
+
+    func toPresence() -> UserPresence {
+        UserPresence(
+            userId: userId,
+            status: PresenceStatus(rawValue: status) ?? .offline,
+            lastSeenAt: lastSeenAt,
+            currentActivity: currentActivity,
+            displayName: nil
+        )
+    }
+}
+
+/// Result from joining a live session
+struct JoinSessionResult: Codable {
+    let session: LiveSession
+    let participantCount: Int
+    let audioUrl: String?
+
+    enum CodingKeys: String, CodingKey {
+        case session
+        case participantCount = "participant_count"
+        case audioUrl = "audio_url"
+    }
+}
+
+/// Result from completing a live session
+struct CompleteSessionResult: Codable {
+    let success: Bool
+    let xpAwarded: Int
+
+    enum CodingKeys: String, CodingKey {
+        case success
+        case xpAwarded = "xp_awarded"
+    }
+}
+
+/// Live session event types for Realtime subscriptions
+enum LiveSessionEvent {
+    case participantJoined(count: Int)
+    case participantLeft(count: Int)
+    case reaction(emoji: String)
+    case sessionEnding(secondsRemaining: Int)
+    case sessionEnded
+}
+
+/// Circle room event types for Realtime subscriptions
+enum CircleRoomEvent {
+    case memberJoined(userId: String, displayName: String)
+    case memberLeft(userId: String)
+    case encouragement(fromUserId: String, emoji: String)
+    case timerSync(secondsRemaining: Int)
+    case roomEnded
+}
+
+// MARK: - Creative Expression Models
+
+/// Types of creative works
+enum CreativeWorkType: String, Codable, CaseIterable {
+    case aiArt = "ai_art"
+    case drawing
+    case voiceJournal = "voice_journal"
+    case collage
+
+    var displayName: String {
+        switch self {
+        case .aiArt: return "AI Art"
+        case .drawing: return "Drawing"
+        case .voiceJournal: return "Voice Journal"
+        case .collage: return "Collage"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .aiArt: return "sparkles"
+        case .drawing: return "paintbrush.pointed.fill"
+        case .voiceJournal: return "waveform"
+        case .collage: return "square.grid.2x2.fill"
+        }
+    }
+}
+
+/// Art generation styles
+enum ArtStyle: String, Codable, CaseIterable {
+    case watercolor
+    case abstract
+    case serene
+    case vibrant
+    case dreamy
+    case minimalist
+    case expressive
+
+    var displayName: String {
+        switch self {
+        case .watercolor: return "Watercolor"
+        case .abstract: return "Abstract"
+        case .serene: return "Serene"
+        case .vibrant: return "Vibrant"
+        case .dreamy: return "Dreamy"
+        case .minimalist: return "Minimalist"
+        case .expressive: return "Expressive"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .watercolor: return "Soft, flowing colors with delicate brushstrokes"
+        case .abstract: return "Bold shapes and colors, modern aesthetic"
+        case .serene: return "Peaceful scenes with calming atmosphere"
+        case .vibrant: return "Bright, energetic colors full of joy"
+        case .dreamy: return "Ethereal and magical qualities"
+        case .minimalist: return "Clean lines and simple composition"
+        case .expressive: return "Bold, emotional brushwork"
+        }
+    }
+}
+
+/// Transcription processing status
+enum TranscriptionStatus: String, Codable {
+    case pending
+    case processing
+    case completed
+    case failed
+}
+
+/// A creative work created by the user
+struct CreativeWork: Identifiable, Codable, Equatable {
+    let id: String
+    let userId: String
+    let workType: CreativeWorkType
+    var title: String?
+    var description: String?
+    let storagePath: String?
+    let generationPrompt: String?
+    let artStyle: ArtStyle?
+    let durationSeconds: Int?
+    let transcription: String?
+    let transcriptionStatus: TranscriptionStatus?
+    var moodScore: Int?
+    var moodTags: [String]?
+    var isFavorite: Bool
+    var isSharedToCircle: Bool
+    let createdAt: Date
+    let updatedAt: Date
+
+    /// Full URL for the creative work image/audio
+    var mediaUrl: URL? {
+        guard let path = storagePath else { return nil }
+        // Construct Supabase storage URL
+        return URL(string: "\(SupabaseConfig.projectURL.absoluteString)/storage/v1/object/public/creative-works/\(path)")
+    }
+
+    /// Duration formatted as mm:ss
+    var formattedDuration: String? {
+        guard let seconds = durationSeconds else { return nil }
+        let mins = seconds / 60
+        let secs = seconds % 60
+        return String(format: "%d:%02d", mins, secs)
+    }
+}
+
+/// Emotion scores from voice journal analysis
+struct EmotionScores: Codable, Equatable {
+    var joy: Double
+    var sadness: Double
+    var anger: Double
+    var fear: Double
+    var surprise: Double
+    var trust: Double
+    var anticipation: Double
+    var disgust: Double
+
+    init(
+        joy: Double = 0,
+        sadness: Double = 0,
+        anger: Double = 0,
+        fear: Double = 0,
+        surprise: Double = 0,
+        trust: Double = 0,
+        anticipation: Double = 0,
+        disgust: Double = 0
+    ) {
+        self.joy = joy
+        self.sadness = sadness
+        self.anger = anger
+        self.fear = fear
+        self.surprise = surprise
+        self.trust = trust
+        self.anticipation = anticipation
+        self.disgust = disgust
+    }
+
+    /// Returns the dominant emotion
+    var dominantEmotion: String {
+        let emotions: [(String, Double)] = [
+            ("joy", joy),
+            ("sadness", sadness),
+            ("anger", anger),
+            ("fear", fear),
+            ("surprise", surprise),
+            ("trust", trust),
+            ("anticipation", anticipation),
+            ("disgust", disgust)
+        ]
+        return emotions.max(by: { $0.1 < $1.1 })?.0 ?? "neutral"
+    }
+}
+
+/// Tone analysis levels
+enum ToneLevel: String, Codable {
+    case low, medium, high
+}
+
+enum TonePace: String, Codable {
+    case slow, moderate, fast
+}
+
+enum ToneConfidence: String, Codable {
+    case uncertain, neutral, confident
+}
+
+enum ToneIntensity: String, Codable {
+    case subdued, moderate, intense
+}
+
+/// Tone analysis from voice journal
+struct ToneAnalysis: Codable, Equatable {
+    var energy: ToneLevel
+    var pace: TonePace
+    var confidence: ToneConfidence
+    var emotionalIntensity: ToneIntensity
+
+    init(
+        energy: ToneLevel = .medium,
+        pace: TonePace = .moderate,
+        confidence: ToneConfidence = .neutral,
+        emotionalIntensity: ToneIntensity = .moderate
+    ) {
+        self.energy = energy
+        self.pace = pace
+        self.confidence = confidence
+        self.emotionalIntensity = emotionalIntensity
+    }
+}
+
+/// Voice journal analysis result
+struct VoiceJournalAnalysis: Identifiable, Codable, Equatable {
+    let id: String
+    let creativeWorkId: String
+    let fullTranscription: String?
+    let overallSentiment: Double
+    let emotions: EmotionScores
+    let toneAnalysis: ToneAnalysis
+    let keyThemes: [String]
+    let keyQuotes: [String]
+    let aiSummary: String?
+    let reflectionPrompts: [String]
+    let processedAt: Date?
+
+    /// Sentiment as a descriptive string
+    var sentimentDescription: String {
+        if overallSentiment > 0.3 { return "Positive" }
+        if overallSentiment < -0.3 { return "Difficult" }
+        return "Balanced"
+    }
+}
+
+/// Creative exercise types
+enum CreativeExerciseType: String, Codable, CaseIterable {
+    case drawing
+    case collage
+    case voice
+    case aiArt = "ai_art"
+    case mixed
+
+    var displayName: String {
+        switch self {
+        case .drawing: return "Drawing"
+        case .collage: return "Collage"
+        case .voice: return "Voice"
+        case .aiArt: return "AI Art"
+        case .mixed: return "Mixed"
+        }
+    }
+}
+
+/// Creative exercise categories
+enum CreativeExerciseCategory: String, Codable, CaseIterable {
+    case emotionProcessing = "emotion_processing"
+    case gratitude
+    case selfDiscovery = "self_discovery"
+    case stressRelief = "stress_relief"
+
+    var displayName: String {
+        switch self {
+        case .emotionProcessing: return "Emotion Processing"
+        case .gratitude: return "Gratitude"
+        case .selfDiscovery: return "Self Discovery"
+        case .stressRelief: return "Stress Relief"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .emotionProcessing: return "heart.text.square.fill"
+        case .gratitude: return "heart.fill"
+        case .selfDiscovery: return "person.fill.questionmark"
+        case .stressRelief: return "leaf.fill"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .emotionProcessing: return .blue
+        case .gratitude: return .pink
+        case .selfDiscovery: return .purple
+        case .stressRelief: return .green
+        }
+    }
+}
+
+/// Exercise difficulty levels
+enum ExerciseDifficulty: String, Codable, CaseIterable {
+    case beginner
+    case intermediate
+    case advanced
+
+    var displayName: String {
+        rawValue.capitalized
+    }
+}
+
+/// A creative exercise/prompt
+struct CreativeExercise: Identifiable, Codable, Equatable {
+    let id: String
+    let title: String
+    let description: String
+    let instructions: String
+    let exerciseType: CreativeExerciseType
+    let category: CreativeExerciseCategory
+    let difficulty: ExerciseDifficulty
+    let estimatedMinutes: Int
+    let promptImageUrl: String?
+    let isPremium: Bool
+}
+
+/// Creative quota information
+struct CreativeQuota: Codable, Equatable {
+    let aiArtCount: Int
+    let aiArtLimit: Int
+    let voiceMinutesUsed: Int
+    let voiceMinutesLimit: Int
+    let isPremium: Bool
+
+    var aiArtRemaining: Int {
+        max(0, aiArtLimit - aiArtCount)
+    }
+
+    var voiceMinutesRemaining: Int {
+        max(0, voiceMinutesLimit - voiceMinutesUsed)
+    }
+
+    var aiArtQuotaExceeded: Bool {
+        aiArtCount >= aiArtLimit
+    }
+
+    var voiceQuotaExceeded: Bool {
+        voiceMinutesUsed >= voiceMinutesLimit
+    }
+}
+
+/// Drawing stroke for canvas
+struct DrawingStroke: Codable, Equatable, Identifiable {
+    let id: UUID
+    var points: [CGPoint]
+    var color: String // Hex color
+    var lineWidth: CGFloat
+
+    init(id: UUID = UUID(), points: [CGPoint] = [], color: String = "#000000", lineWidth: CGFloat = 3) {
+        self.id = id
+        self.points = points
+        self.color = color
+        self.lineWidth = lineWidth
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, points, color, lineWidth
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        color = try container.decode(String.self, forKey: .color)
+        lineWidth = try container.decode(CGFloat.self, forKey: .lineWidth)
+
+        // Decode points as array of arrays
+        let pointArrays = try container.decode([[CGFloat]].self, forKey: .points)
+        points = pointArrays.compactMap { arr in
+            guard arr.count == 2 else { return nil }
+            return CGPoint(x: arr[0], y: arr[1])
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(color, forKey: .color)
+        try container.encode(lineWidth, forKey: .lineWidth)
+        try container.encode(points.map { [$0.x, $0.y] }, forKey: .points)
+    }
+}
+
+/// AI Art generation request
+struct GenerateArtRequest: Codable {
+    let prompt: String
+    let style: String?
+    let moodScore: Int?
+    let moodTags: [String]?
+}
+
+/// AI Art generation response
+struct GenerateArtResponse: Codable {
+    let success: Bool
+    let generationId: String?
+    let creativeWorkId: String?
+    let imageUrl: String?
+    let prompt: String?
+    let enhancedPrompt: String?
+    let style: String?
+    let error: String?
+    let quotaExceeded: Bool?
+}
+
+/// Voice journal analysis request
+struct AnalyzeVoiceRequest: Codable {
+    let creativeWorkId: String
+    let audioUrl: String?
+    let durationSeconds: Int
+}
+
+/// Voice journal analysis response
+struct AnalyzeVoiceResponse: Codable {
+    let success: Bool
+    let creativeWorkId: String?
+    let analysis: VoiceAnalysisResult?
+    let error: String?
+    let quotaExceeded: Bool?
+}
+
+struct VoiceAnalysisResult: Codable {
+    let sentiment: Double
+    let emotions: EmotionScores
+    let toneAnalysis: ToneAnalysis
+    let keyThemes: [String]
+    let keyQuotes: [String]
+    let summary: String
+    let reflectionPrompts: [String]
+}

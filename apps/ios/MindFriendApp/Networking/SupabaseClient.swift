@@ -92,6 +92,46 @@ enum Tables {
     // Credibility signals
     static let testimonials = "testimonials"
     static let methodologyInfo = "methodology_info"
+
+    // Proactive Intelligence
+    static let userEngagementStates = "user_engagement_states"
+    static let userPatterns = "user_patterns"
+    static let proactiveMessages = "proactive_messages"
+
+    // Structured Programs
+    static let programs = "programs"
+    static let programDays = "program_days"
+    static let programEnrollments = "program_enrollments"
+    static let programDayProgress = "program_day_progress"
+    static let programCertificates = "program_certificates"
+
+    // Live Experiences
+    static let liveSessions = "live_sessions"
+    static let liveSessionParticipants = "live_session_participants"
+    static let circleLiveRooms = "circle_live_rooms"
+    static let circleRoomParticipants = "circle_room_participants"
+    static let buddyQuestWindows = "buddy_quest_windows"
+    static let buddyWindowEvents = "buddy_window_events"
+    static let userPresence = "user_presence"
+
+    // Creative Expression
+    static let creativeWorks = "creative_works"
+    static let voiceJournalAnalysis = "voice_journal_analysis"
+    static let aiArtGenerations = "ai_art_generations"
+    static let drawingSessions = "drawing_sessions"
+    static let creativeExercises = "creative_exercises"
+    static let creativeExerciseCompletions = "creative_exercise_completions"
+    static let musicMoodEntries = "music_mood_entries"
+    static let creativeQuotaUsage = "creative_quota_usage"
+
+    // Biometric Intelligence
+    static let healthkitConnections = "healthkit_connections"
+    static let biometricDailySummaries = "biometric_daily_summaries"
+    static let biometricWorkouts = "biometric_workouts"
+    static let biometricInsights = "biometric_insights"
+    static let biometricBaselines = "biometric_baselines"
+    static let biometricAlerts = "biometric_alerts"
+    static let moodBiometricCorrelations = "mood_biometric_correlations"
 }
 
 // MARK: - Database Models (matching Supabase schema)
@@ -972,6 +1012,426 @@ struct DBEventProgressResult: Codable {
         case newProgress = "new_progress"
         case targetCount = "target_count"
         case justCompleted = "just_completed"
+    }
+}
+
+// MARK: - Proactive Intelligence Database Models
+
+/// User engagement state from `user_engagement_states` table
+struct DBUserEngagementState: Codable {
+    let userId: UUID
+    let currentState: String
+    let stateStartedAt: Date?
+    let lastActivityAt: Date?
+    let lastProactiveAt: Date?
+    let proactiveMessageCount: Int?
+    let proactiveEngageCount: Int?
+    let proactiveIgnoreCount: Int?
+    let moodDeclineDetected: Bool?
+    let consecutiveLowMoodDays: Int?
+    let createdAt: Date?
+    let updatedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case currentState = "current_state"
+        case stateStartedAt = "state_started_at"
+        case lastActivityAt = "last_activity_at"
+        case lastProactiveAt = "last_proactive_at"
+        case proactiveMessageCount = "proactive_message_count"
+        case proactiveEngageCount = "proactive_engage_count"
+        case proactiveIgnoreCount = "proactive_ignore_count"
+        case moodDeclineDetected = "mood_decline_detected"
+        case consecutiveLowMoodDays = "consecutive_low_mood_days"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+
+    func toModel() -> UserEngagementState {
+        UserEngagementState(
+            id: userId.uuidString,
+            userId: userId.uuidString,
+            currentState: EngagementState(rawValue: currentState) ?? .active,
+            stateStartedAt: stateStartedAt ?? Date(),
+            lastActivityAt: lastActivityAt ?? Date(),
+            lastProactiveAt: lastProactiveAt,
+            proactiveMessageCount: proactiveMessageCount ?? 0,
+            proactiveEngageCount: proactiveEngageCount ?? 0,
+            proactiveIgnoreCount: proactiveIgnoreCount ?? 0,
+            moodDeclineDetected: moodDeclineDetected ?? false,
+            consecutiveLowMoodDays: consecutiveLowMoodDays ?? 0,
+            updatedAt: updatedAt ?? Date()
+        )
+    }
+}
+
+/// User pattern from `user_patterns` table
+struct DBUserPattern: Codable {
+    let id: UUID
+    let userId: UUID
+    let patternType: String
+    let patternKey: String
+    let patternData: [String: AnyCodable]?
+    let confidence: Double
+    let firstDetectedAt: Date?
+    let lastConfirmedAt: Date?
+    let timesSurfaced: Int?
+    let userAcknowledged: Bool?
+    let isActive: Bool?
+    let createdAt: Date?
+    let updatedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case patternType = "pattern_type"
+        case patternKey = "pattern_key"
+        case patternData = "pattern_data"
+        case confidence
+        case firstDetectedAt = "first_detected_at"
+        case lastConfirmedAt = "last_confirmed_at"
+        case timesSurfaced = "times_surfaced"
+        case userAcknowledged = "user_acknowledged"
+        case isActive = "is_active"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+
+    func toModel() -> UserPattern {
+        UserPattern(
+            id: id.uuidString,
+            userId: userId.uuidString,
+            patternType: PatternType(rawValue: patternType) ?? .dayOfWeek,
+            patternKey: patternKey,
+            patternData: patternData ?? [:],
+            confidence: confidence,
+            firstDetectedAt: firstDetectedAt ?? Date(),
+            lastConfirmedAt: lastConfirmedAt ?? Date(),
+            timesSurfaced: timesSurfaced ?? 0,
+            userAcknowledged: userAcknowledged ?? false,
+            isActive: isActive ?? true,
+            createdAt: createdAt ?? Date()
+        )
+    }
+}
+
+/// Proactive message from `proactive_messages` table
+struct DBProactiveMessage: Codable {
+    let id: UUID
+    let userId: UUID
+    let triggerType: String
+    let messageContent: String
+    let deliveryChannel: String?
+    let scheduledFor: Date?
+    let sentAt: Date?
+    let readAt: Date?
+    let engagedAt: Date?
+    let status: String?
+    let metadata: [String: AnyCodable]?
+    let createdAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case triggerType = "trigger_type"
+        case messageContent = "message_content"
+        case deliveryChannel = "delivery_channel"
+        case scheduledFor = "scheduled_for"
+        case sentAt = "sent_at"
+        case readAt = "read_at"
+        case engagedAt = "engaged_at"
+        case status
+        case metadata
+        case createdAt = "created_at"
+    }
+
+    func toModel() -> ProactiveMessage {
+        ProactiveMessage(
+            id: id.uuidString,
+            userId: userId.uuidString,
+            triggerType: ProactiveTriggerType(rawValue: triggerType) ?? .reengagement,
+            messageContent: messageContent,
+            deliveryChannel: ProactiveDeliveryChannel(rawValue: deliveryChannel ?? "in_app") ?? .inApp,
+            scheduledFor: scheduledFor ?? Date(),
+            sentAt: sentAt,
+            readAt: readAt,
+            engagedAt: engagedAt,
+            status: ProactiveMessageStatus(rawValue: status ?? "scheduled") ?? .scheduled,
+            metadata: metadata,
+            createdAt: createdAt ?? Date()
+        )
+    }
+}
+
+/// Proactive settings (partial view of user_settings for proactive fields)
+struct DBProactiveSettings: Codable {
+    let proactiveEnabled: Bool?
+    let proactiveMaxDaily: Int?
+    let proactiveTypesEnabled: [String]?
+    let calendarIntegrationEnabled: Bool?
+    let weatherInsightsEnabled: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case proactiveEnabled = "proactive_enabled"
+        case proactiveMaxDaily = "proactive_max_daily"
+        case proactiveTypesEnabled = "proactive_types_enabled"
+        case calendarIntegrationEnabled = "calendar_integration_enabled"
+        case weatherInsightsEnabled = "weather_insights_enabled"
+    }
+
+    func toModel() -> ProactiveSettings {
+        let enabledTypes: [ProactiveTriggerType] = (proactiveTypesEnabled ?? []).compactMap {
+            ProactiveTriggerType(rawValue: $0)
+        }
+        return ProactiveSettings(
+            proactiveEnabled: proactiveEnabled ?? true,
+            proactiveMaxDaily: proactiveMaxDaily ?? 2,
+            proactiveTypesEnabled: enabledTypes.isEmpty ? ProactiveTriggerType.allCases : enabledTypes,
+            calendarIntegrationEnabled: calendarIntegrationEnabled ?? false,
+            weatherInsightsEnabled: weatherInsightsEnabled ?? false
+        )
+    }
+}
+
+// MARK: - Creative Expression Database Models
+
+/// Creative work from `creative_works` table
+struct DBCreativeWork: Codable {
+    let id: UUID
+    let userId: UUID
+    let workType: String
+    let title: String?
+    let description: String?
+    let storagePath: String?
+    let generationPrompt: String?
+    let artStyle: String?
+    let generationModel: String?
+    let generationParams: [String: AnyCodable]?
+    let durationSeconds: Int?
+    let transcription: String?
+    let transcriptionStatus: String?
+    let canvasData: [String: AnyCodable]?
+    let moodScore: Int?
+    let moodTags: [String]?
+    let emotionsDetected: [String: AnyCodable]?
+    let isFavorite: Bool
+    let isSharedToCircle: Bool
+    let circlePostId: UUID?
+    let createdAt: Date
+    let updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case workType = "work_type"
+        case title, description
+        case storagePath = "storage_path"
+        case generationPrompt = "generation_prompt"
+        case artStyle = "art_style"
+        case generationModel = "generation_model"
+        case generationParams = "generation_params"
+        case durationSeconds = "duration_seconds"
+        case transcription
+        case transcriptionStatus = "transcription_status"
+        case canvasData = "canvas_data"
+        case moodScore = "mood_score"
+        case moodTags = "mood_tags"
+        case emotionsDetected = "emotions_detected"
+        case isFavorite = "is_favorite"
+        case isSharedToCircle = "is_shared_to_circle"
+        case circlePostId = "circle_post_id"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+
+    func toModel() -> CreativeWork {
+        CreativeWork(
+            id: id.uuidString,
+            userId: userId.uuidString,
+            workType: CreativeWorkType(rawValue: workType) ?? .aiArt,
+            title: title,
+            description: description,
+            storagePath: storagePath,
+            generationPrompt: generationPrompt,
+            artStyle: artStyle != nil ? ArtStyle(rawValue: artStyle!) : nil,
+            durationSeconds: durationSeconds,
+            transcription: transcription,
+            transcriptionStatus: transcriptionStatus != nil ? TranscriptionStatus(rawValue: transcriptionStatus!) : nil,
+            moodScore: moodScore,
+            moodTags: moodTags,
+            isFavorite: isFavorite,
+            isSharedToCircle: isSharedToCircle,
+            createdAt: createdAt,
+            updatedAt: updatedAt
+        )
+    }
+}
+
+/// Voice journal analysis from `voice_journal_analysis` table
+struct DBVoiceJournalAnalysis: Codable {
+    let id: UUID
+    let creativeWorkId: UUID
+    let fullTranscription: String?
+    let wordTimestamps: [String: AnyCodable]?
+    let overallSentiment: Double?
+    let emotions: [String: AnyCodable]?
+    let toneAnalysis: [String: AnyCodable]?
+    let keyThemes: [String]?
+    let keyQuotes: [String]?
+    let aiSummary: String?
+    let reflectionPrompts: [String]?
+    let analysisModel: String?
+    let processedAt: Date?
+    let createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case creativeWorkId = "creative_work_id"
+        case fullTranscription = "full_transcription"
+        case wordTimestamps = "word_timestamps"
+        case overallSentiment = "overall_sentiment"
+        case emotions
+        case toneAnalysis = "tone_analysis"
+        case keyThemes = "key_themes"
+        case keyQuotes = "key_quotes"
+        case aiSummary = "ai_summary"
+        case reflectionPrompts = "reflection_prompts"
+        case analysisModel = "analysis_model"
+        case processedAt = "processed_at"
+        case createdAt = "created_at"
+    }
+
+    func toModel() -> VoiceJournalAnalysis {
+        VoiceJournalAnalysis(
+            id: id.uuidString,
+            creativeWorkId: creativeWorkId.uuidString,
+            fullTranscription: fullTranscription,
+            overallSentiment: overallSentiment ?? 0,
+            emotions: parseEmotions(emotions),
+            toneAnalysis: parseToneAnalysis(toneAnalysis),
+            keyThemes: keyThemes ?? [],
+            keyQuotes: keyQuotes ?? [],
+            aiSummary: aiSummary,
+            reflectionPrompts: reflectionPrompts ?? [],
+            processedAt: processedAt
+        )
+    }
+
+    private func parseEmotions(_ data: [String: AnyCodable]?) -> EmotionScores {
+        guard let data = data else {
+            return EmotionScores()
+        }
+        return EmotionScores(
+            joy: (data["joy"]?.value as? Double) ?? 0,
+            sadness: (data["sadness"]?.value as? Double) ?? 0,
+            anger: (data["anger"]?.value as? Double) ?? 0,
+            fear: (data["fear"]?.value as? Double) ?? 0,
+            surprise: (data["surprise"]?.value as? Double) ?? 0,
+            trust: (data["trust"]?.value as? Double) ?? 0,
+            anticipation: (data["anticipation"]?.value as? Double) ?? 0,
+            disgust: (data["disgust"]?.value as? Double) ?? 0
+        )
+    }
+
+    private func parseToneAnalysis(_ data: [String: AnyCodable]?) -> ToneAnalysis {
+        guard let data = data else {
+            return ToneAnalysis()
+        }
+        return ToneAnalysis(
+            energy: ToneLevel(rawValue: (data["energy"]?.value as? String) ?? "medium") ?? .medium,
+            pace: TonePace(rawValue: (data["pace"]?.value as? String) ?? "moderate") ?? .moderate,
+            confidence: ToneConfidence(rawValue: (data["confidence"]?.value as? String) ?? "neutral") ?? .neutral,
+            emotionalIntensity: ToneIntensity(rawValue: (data["emotional_intensity"]?.value as? String) ?? "moderate") ?? .moderate
+        )
+    }
+}
+
+/// Creative exercise from `creative_exercises` table
+struct DBCreativeExercise: Codable {
+    let id: UUID
+    let title: String
+    let description: String
+    let instructions: String
+    let exerciseType: String
+    let category: String
+    let difficulty: String
+    let estimatedMinutes: Int
+    let promptImageUrl: String?
+    let exampleWorks: [String: AnyCodable]?
+    let isPremium: Bool
+    let isActive: Bool
+    let createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, description, instructions, category, difficulty
+        case exerciseType = "exercise_type"
+        case estimatedMinutes = "estimated_minutes"
+        case promptImageUrl = "prompt_image_url"
+        case exampleWorks = "example_works"
+        case isPremium = "is_premium"
+        case isActive = "is_active"
+        case createdAt = "created_at"
+    }
+
+    func toModel() -> CreativeExercise {
+        CreativeExercise(
+            id: id.uuidString,
+            title: title,
+            description: description,
+            instructions: instructions,
+            exerciseType: CreativeExerciseType(rawValue: exerciseType) ?? .drawing,
+            category: CreativeExerciseCategory(rawValue: category) ?? .emotionProcessing,
+            difficulty: ExerciseDifficulty(rawValue: difficulty) ?? .beginner,
+            estimatedMinutes: estimatedMinutes,
+            promptImageUrl: promptImageUrl,
+            isPremium: isPremium
+        )
+    }
+}
+
+/// Drawing session from `drawing_sessions` table
+struct DBDrawingSession: Codable {
+    let id: UUID
+    let userId: UUID
+    let creativeWorkId: UUID?
+    let canvasWidth: Int
+    let canvasHeight: Int
+    let backgroundColor: String?
+    let strokes: [String: AnyCodable]
+    let durationSeconds: Int?
+    let strokeCount: Int?
+    let createdAt: Date
+    let updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case creativeWorkId = "creative_work_id"
+        case canvasWidth = "canvas_width"
+        case canvasHeight = "canvas_height"
+        case backgroundColor = "background_color"
+        case strokes
+        case durationSeconds = "duration_seconds"
+        case strokeCount = "stroke_count"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+}
+
+/// Creative quota usage from `creative_quota_usage` table
+struct DBCreativeQuotaUsage: Codable {
+    let id: UUID
+    let userId: UUID
+    let date: String
+    let aiArtCount: Int
+    let voiceMinutesUsed: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case date
+        case aiArtCount = "ai_art_count"
+        case voiceMinutesUsed = "voice_minutes_used"
     }
 }
 
