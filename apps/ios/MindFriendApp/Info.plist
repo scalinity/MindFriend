@@ -51,6 +51,10 @@
 	<string>MindFriend uses the camera to let you add photos to your journal entries and profile.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>MindFriend uses Face ID to securely unlock your private journal and mood data.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>MindFriend reads your health data (sleep, heart rate, activity) to provide personalized insights about how your physical wellness affects your mood and mental health.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>MindFriend does not write to your health data, but this permission is required by iOS.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright 2024 MindFriend. All rights reserved.</string>
 	<key>NSMicrophoneUsageDescription</key>

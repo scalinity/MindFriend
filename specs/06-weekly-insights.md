@@ -721,7 +721,7 @@ Be warm, supportive, and specific. Avoid generic platitudes.
 Return JSON: {"insight": "...", "recommendations": [{"title": "...", "reason": "..."}]}`;
 
   const response = await aiClient.chat.completions.create({
-    model: "grok-3-mini-fast",
+    model: "grok-4-1-fast-non-reasoning-fast",
     messages: [{ role: "user", content: prompt }],
     max_tokens: 300,
     temperature: 0.7,

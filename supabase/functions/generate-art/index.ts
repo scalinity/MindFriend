@@ -6,15 +6,13 @@ import {
   createClient,
   SupabaseClient,
 } from "https://esm.sh/@supabase/supabase-js@2";
-import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { decode as base64Decode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { checkRateLimit, getRateLimitHeaders } from "../_shared/ratelimit.ts";
 
 // Security constants - OpenAI gpt-image-1 supports up to 32000 chars, but we keep it reasonable
 const MAX_PROMPT_LENGTH = 1000;
-const UUID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const API_TIMEOUT_MS = 60000; // 60 second timeout for OpenAI API
 
 // Art style presets with their prompts
 const STYLE_PRESETS: Record<string, { name: string; enhancer: string }> = {
@@ -115,7 +113,7 @@ serve(async (req) => {
       supabaseAdmin,
       user.id,
       "generate-art",
-      5,
+      { windowMs: 60 * 1000, maxRequests: 5 },
     );
     if (!rateLimitResult.allowed) {
       return new Response(
@@ -171,6 +169,20 @@ serve(async (req) => {
       );
     }
 
+    // Validate and sanitize optional fields
+    const validMoodScore =
+      typeof moodScore === "number" &&
+      !isNaN(moodScore) &&
+      moodScore >= 1 &&
+      moodScore <= 10
+        ? moodScore
+        : null;
+    const validMoodTags = Array.isArray(moodTags)
+      ? moodTags
+          .filter((t): t is string => typeof t === "string" && t.length <= 50)
+          .slice(0, 10)
+      : null;
+
     // Check quota
     const { data: quotaData, error: quotaError } =
       await supabaseAdmin.rpc("get_creative_quota");
@@ -206,10 +218,10 @@ serve(async (req) => {
     }
 
     // Add mood context if provided
-    if (moodScore) {
-      if (moodScore >= 7) {
+    if (validMoodScore) {
+      if (validMoodScore >= 7) {
         enhancedPrompt += ", uplifting joyful mood";
-      } else if (moodScore <= 3) {
+      } else if (validMoodScore <= 3) {
         enhancedPrompt += ", gentle soothing calming atmosphere";
       }
     }
@@ -262,23 +274,32 @@ serve(async (req) => {
     try {
       // OpenAI Images API - gpt-image-1-mini returns base64 encoded images
       // Reference: https://platform.openai.com/docs/api-reference/images/create
-      const openaiResponse = await fetch(
-        "https://api.openai.com/v1/images/generations",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${openaiApiKey}`,
-            "Content-Type": "application/json",
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+
+      let openaiResponse: Response;
+      try {
+        openaiResponse = await fetch(
+          "https://api.openai.com/v1/images/generations",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${openaiApiKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "gpt-image-1-mini",
+              prompt: enhancedPrompt,
+              n: 1,
+              size: "1024x1024",
+              quality: "medium",
+            }),
+            signal: controller.signal,
           },
-          body: JSON.stringify({
-            model: "gpt-image-1-mini",
-            prompt: enhancedPrompt,
-            n: 1,
-            size: "1024x1024",
-            quality: "medium",
-          }),
-        },
-      );
+        );
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       if (!openaiResponse.ok) {
         const errorText = await openaiResponse.text();
@@ -367,14 +388,31 @@ serve(async (req) => {
           art_style: style || null,
           generation_model: "gpt-image-1-mini",
           generation_params: { enhanced_prompt: enhancedPrompt },
-          mood_score: moodScore || null,
-          mood_tags: moodTags || null,
+          mood_score: validMoodScore,
+          mood_tags: validMoodTags,
         })
         .select("id")
         .single();
 
-      if (workError) {
-        console.error("Work creation error:", workError);
+      if (workError || !creativeWork) {
+        console.error(
+          "Work creation error:",
+          workError?.message || "No data returned",
+        );
+        await updateGenerationStatus(
+          supabaseAdmin,
+          generationRecord.id,
+          "failed",
+          "Failed to create creative work record",
+        );
+        return new Response(
+          JSON.stringify({
+            error: "Failed to save generated art",
+            generationId: generationRecord.id,
+            imageUrl: finalImageUrl, // Provide URL for potential recovery
+          }),
+          { status: 500, headers: responseHeaders },
+        );
       }
 
       // Update generation record
