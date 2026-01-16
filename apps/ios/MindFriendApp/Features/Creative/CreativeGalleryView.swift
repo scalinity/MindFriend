@@ -177,7 +177,7 @@ struct CreativeGalleryView: View {
 
     private func shareURL(for work: CreativeWork) -> URL? {
         guard let path = work.storagePath,
-              let baseURL = URL(string: SupabaseConfig.supabaseURL) else {
+              let baseURL = URL(string: SupabaseConfig.projectURL.absoluteString) else {
             return nil
         }
         return baseURL.appendingPathComponent("storage/v1/object/public/creative-works/\(path)")
@@ -297,7 +297,7 @@ struct GalleryThumbnailView: View {
     }
 
     private func storageURL(for path: String) -> URL? {
-        guard let baseURL = URL(string: SupabaseConfig.supabaseURL) else { return nil }
+        guard let baseURL = URL(string: SupabaseConfig.projectURL.absoluteString) else { return nil }
         return baseURL.appendingPathComponent("storage/v1/object/public/creative-works/\(path)")
     }
 
@@ -527,7 +527,7 @@ struct CreativeWorkDetailView: View {
                 }
 
                 if let style = localWork.artStyle {
-                    Label(style.capitalized, systemImage: "paintbrush")
+                    Label(style.displayName, systemImage: "paintbrush")
                 }
             }
             .font(.caption)
@@ -565,12 +565,12 @@ struct CreativeWorkDetailView: View {
                     .font(.subheadline)
             }
 
-            if let themes = analysis.keyThemes, !themes.isEmpty {
+            if !analysis.keyThemes.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Key Themes")
                         .font(.caption.bold())
                     FlowLayout(spacing: 8) {
-                        ForEach(themes, id: \.self) { theme in
+                        ForEach(analysis.keyThemes, id: \.self) { theme in
                             Text(theme)
                                 .font(.caption)
                                 .padding(.horizontal, 10)
@@ -582,11 +582,11 @@ struct CreativeWorkDetailView: View {
                 }
             }
 
-            if let prompts = analysis.reflectionPrompts, !prompts.isEmpty {
+            if !analysis.reflectionPrompts.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Reflection Prompts")
                         .font(.caption.bold())
-                    ForEach(prompts, id: \.self) { prompt in
+                    ForEach(analysis.reflectionPrompts, id: \.self) { prompt in
                         HStack(alignment: .top, spacing: 8) {
                             Image(systemName: "lightbulb")
                                 .font(.caption)
@@ -633,7 +633,7 @@ struct CreativeWorkDetailView: View {
     }
 
     private func storageURL(for path: String) -> URL? {
-        guard let baseURL = URL(string: SupabaseConfig.supabaseURL) else { return nil }
+        guard let baseURL = URL(string: SupabaseConfig.projectURL.absoluteString) else { return nil }
         return baseURL.appendingPathComponent("storage/v1/object/public/creative-works/\(path)")
     }
 

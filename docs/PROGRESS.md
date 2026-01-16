@@ -35,6 +35,70 @@ Any additional context, blockers, or follow-ups.
 
 ---
 
+## [2026-01-16] Live Group Experiences Feature
+
+**Type:** Feature
+**Status:** Complete
+
+### Summary
+
+Implemented live group session experiences allowing users to join real-time guided sessions with live chat, reactions, and participant presence tracking using Supabase Realtime.
+
+### Changes
+
+#### Database Layer
+
+- **File:** `supabase/migrations/20260220000000_live_experiences.sql` — Created live experiences tables: `live_sessions`, `live_session_participants`, `session_messages`, `session_reactions`, `facilitators` with indexes and RLS policies; handles session states (scheduled, live, ended, cancelled) and participant presence
+
+#### Edge Functions
+
+- **File:** `supabase/functions/live-session-manager/index.ts` — Session management endpoint handling create, join, leave, heartbeat, send-message, send-reaction, and end-session operations; enforces participant limits and facilitator permissions
+
+#### iOS Models
+
+- **File:** `apps/ios/MindFriendApp/Core/Models.swift` — Added live session models: `LiveSession`, `SessionParticipant`, `SessionMessage`, `SessionReaction`, `Facilitator`, `SessionType`, `SessionStatus`, `ParticipantRole`, `ParticipantStatus`
+
+#### iOS Services
+
+- **File:** `apps/ios/MindFriendApp/Networking/Services/LiveService.swift` — Full service with Supabase Realtime subscriptions for session state, participants, messages, and reactions; implements heartbeat timer for presence, supports joining/leaving sessions, sending messages and reactions
+
+#### iOS Views
+
+- **File:** `apps/ios/MindFriendApp/Features/Live/LiveSessionsListView.swift` — Browse upcoming and live sessions with filtering by session type, displays participant counts and session status
+- **File:** `apps/ios/MindFriendApp/Features/Live/SessionDetailView.swift` — Session info display with facilitator details, schedule, and join CTA
+- **File:** `apps/ios/MindFriendApp/Features/Live/ActiveSessionView.swift` — Active session UI with participant avatars, live chat feed, reaction bar with emoji picker, and leave button
+- **File:** `apps/ios/MindFriendApp/Features/Live/ParticipantsView.swift` — Participant list showing who's in the session with roles and status
+
+#### Navigation Integration
+
+- **File:** `apps/ios/MindFriendApp/App/DependencyContainer.swift` — Added `liveService` lazy property
+- **File:** `apps/ios/MindFriendApp/Features/Home/HomeView.swift` — Added "Live" quick action button linking to LiveSessionsListView
+
+#### Build Fixes
+
+- **File:** `project.pbxproj` — Fixed Creative files (CreativeGalleryView, DrawingCanvasView, VoiceJournalRecorderView) being in wrong build phase
+- **File:** `apps/ios/MindFriendApp/Core/Models.swift` — Added `DrawingTool` enum, `CreativeExerciseType.icon`, `EmotionScores.asDictionary`, DrawingStroke `tool`/`opacity` properties
+- **File:** `apps/ios/MindFriendApp/Features/Creative/CreativeGalleryView.swift` — Fixed SupabaseConfig, style.displayName, non-optional array bindings
+- **File:** `apps/ios/MindFriendApp/Features/Creative/VoiceJournalRecorderView.swift` — Fixed non-optional property bindings
+- **File:** `apps/ios/MindFriendApp/Features/Creative/DrawingCanvasView.swift` — Fixed FilterChip label parameter, removed duplicate DrawingTool enum
+
+### Testing
+
+- [ ] Unit tests added/updated
+- [ ] Integration tests pass
+- [x] Manual verification done (build succeeded, database migration structure verified)
+
+### Notes
+
+- Uses Supabase Realtime for live presence and messaging
+- Session types: guided_meditation, group_therapy, peer_support, creative_circle, facilitated_chat
+- Heartbeat mechanism keeps participant presence updated (30-second intervals)
+- Supports up to configurable max_participants per session
+- Facilitators have special permissions to manage sessions
+- Reaction bar supports emoji reactions with 2-second auto-dismiss
+
+---
+
 ## [2026-01-16] Creative Expression Feature
 
 **Type:** Feature
