@@ -450,65 +450,61 @@ struct VoiceJournalAnalysisView: View {
         }
 
         // Sentiment
-        if let sentiment = analysis.overallSentiment {
-            VStack(alignment: .leading, spacing: 8) {
-                Label("Sentiment", systemImage: "face.smiling")
-                    .font(.headline)
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Sentiment", systemImage: "face.smiling")
+                .font(.headline)
 
-                HStack {
-                    Text("Negative")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            HStack {
+                Text("Negative")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
-                    GeometryReader { geometry in
-                        ZStack(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(Color(.systemGray4))
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(Color(.systemGray4))
 
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(sentimentColor(sentiment))
-                                .frame(width: geometry.size.width * CGFloat((sentiment + 1) / 2))
-                        }
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(sentimentColor(analysis.overallSentiment))
+                            .frame(width: geometry.size.width * CGFloat((analysis.overallSentiment + 1) / 2))
                     }
-                    .frame(height: 8)
-
-                    Text("Positive")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
+                .frame(height: 8)
+
+                Text("Positive")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            .padding()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.secondarySystemBackground))
-            .cornerRadius(12)
         }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(12)
 
         // Emotions
-        if let emotions = analysis.emotions {
-            VStack(alignment: .leading, spacing: 12) {
-                Label("Emotions Detected", systemImage: "heart")
-                    .font(.headline)
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Emotions Detected", systemImage: "heart")
+                .font(.headline)
 
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: 8) {
-                    ForEach(Array(emotions.asDictionary.sorted(by: { $0.value > $1.value })), id: \.key) { emotion, value in
-                        EmotionBadge(emotion: emotion, value: value)
-                    }
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: 8) {
+                ForEach(Array(analysis.emotions.asDictionary.sorted(by: { $0.value > $1.value })), id: \.key) { emotion, value in
+                    EmotionBadge(emotion: emotion, value: value)
                 }
             }
-            .padding()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.secondarySystemBackground))
-            .cornerRadius(12)
         }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(12)
 
         // Key Themes
-        if let themes = analysis.keyThemes, !themes.isEmpty {
+        if !analysis.keyThemes.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 Label("Key Themes", systemImage: "tag")
                     .font(.headline)
 
                 FlowLayout(spacing: 8) {
-                    ForEach(themes, id: \.self) { theme in
+                    ForEach(analysis.keyThemes, id: \.self) { theme in
                         Text(theme)
                             .font(.caption)
                             .padding(.horizontal, 12)
@@ -525,12 +521,12 @@ struct VoiceJournalAnalysisView: View {
         }
 
         // Reflection Prompts
-        if let prompts = analysis.reflectionPrompts, !prompts.isEmpty {
+        if !analysis.reflectionPrompts.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
                 Label("Reflection Prompts", systemImage: "lightbulb")
                     .font(.headline)
 
-                ForEach(prompts, id: \.self) { prompt in
+                ForEach(analysis.reflectionPrompts, id: \.self) { prompt in
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "circle.fill")
                             .font(.system(size: 6))

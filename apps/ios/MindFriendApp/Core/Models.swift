@@ -3505,6 +3505,18 @@ enum ArtStyle: String, Codable, CaseIterable {
         case .expressive: return "Bold, emotional brushwork"
         }
     }
+
+    var icon: String {
+        switch self {
+        case .watercolor: return "drop.fill"
+        case .abstract: return "square.on.circle"
+        case .serene: return "leaf.fill"
+        case .vibrant: return "sparkles"
+        case .dreamy: return "cloud.fill"
+        case .minimalist: return "square"
+        case .expressive: return "paintbrush.fill"
+        }
+    }
 }
 
 /// Transcription processing status
@@ -3596,6 +3608,20 @@ struct EmotionScores: Codable, Equatable {
         ]
         return emotions.max(by: { $0.1 < $1.1 })?.0 ?? "neutral"
     }
+
+    /// Returns all emotions as a dictionary
+    var asDictionary: [String: Double] {
+        [
+            "joy": joy,
+            "sadness": sadness,
+            "anger": anger,
+            "fear": fear,
+            "surprise": surprise,
+            "trust": trust,
+            "anticipation": anticipation,
+            "disgust": disgust
+        ]
+    }
 }
 
 /// Tone analysis levels
@@ -3672,6 +3698,16 @@ enum CreativeExerciseType: String, Codable, CaseIterable {
         case .voice: return "Voice"
         case .aiArt: return "AI Art"
         case .mixed: return "Mixed"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .drawing: return "paintbrush.pointed.fill"
+        case .collage: return "square.grid.2x2.fill"
+        case .voice: return "waveform"
+        case .aiArt: return "sparkles"
+        case .mixed: return "paintpalette.fill"
         }
     }
 }
@@ -3761,22 +3797,47 @@ struct CreativeQuota: Codable, Equatable {
     }
 }
 
+/// Drawing tool types
+enum DrawingTool: String, CaseIterable, Codable {
+    case pen
+    case marker
+    case watercolor
+    case eraser
+
+    var displayName: String {
+        rawValue.capitalized
+    }
+
+    var icon: String {
+        switch self {
+        case .pen: return "pencil"
+        case .marker: return "highlighter"
+        case .watercolor: return "paintbrush"
+        case .eraser: return "eraser"
+        }
+    }
+}
+
 /// Drawing stroke for canvas
 struct DrawingStroke: Codable, Equatable, Identifiable {
     let id: UUID
     var points: [CGPoint]
     var color: String // Hex color
     var lineWidth: CGFloat
+    var tool: DrawingTool
+    var opacity: Double
 
-    init(id: UUID = UUID(), points: [CGPoint] = [], color: String = "#000000", lineWidth: CGFloat = 3) {
+    init(id: UUID = UUID(), points: [CGPoint] = [], color: String = "#000000", lineWidth: CGFloat = 3, tool: DrawingTool = .pen, opacity: Double = 1.0) {
         self.id = id
         self.points = points
         self.color = color
         self.lineWidth = lineWidth
+        self.tool = tool
+        self.opacity = opacity
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, points, color, lineWidth
+        case id, points, color, lineWidth, tool, opacity
     }
 
     init(from decoder: Decoder) throws {
@@ -3784,6 +3845,8 @@ struct DrawingStroke: Codable, Equatable, Identifiable {
         id = try container.decode(UUID.self, forKey: .id)
         color = try container.decode(String.self, forKey: .color)
         lineWidth = try container.decode(CGFloat.self, forKey: .lineWidth)
+        tool = try container.decodeIfPresent(DrawingTool.self, forKey: .tool) ?? .pen
+        opacity = try container.decodeIfPresent(Double.self, forKey: .opacity) ?? 1.0
 
         // Decode points as array of arrays
         let pointArrays = try container.decode([[CGFloat]].self, forKey: .points)
@@ -3798,6 +3861,8 @@ struct DrawingStroke: Codable, Equatable, Identifiable {
         try container.encode(id, forKey: .id)
         try container.encode(color, forKey: .color)
         try container.encode(lineWidth, forKey: .lineWidth)
+        try container.encode(tool, forKey: .tool)
+        try container.encode(opacity, forKey: .opacity)
         try container.encode(points.map { [$0.x, $0.y] }, forKey: .points)
     }
 }
