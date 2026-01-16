@@ -1,0 +1,33 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  # Check Supabase Functions TypeScript
+  functions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: "18"
+
+      - name: Install dependencies
+        run: cd supabase && npm install
+
+      - name: Lint
+        run: cd supabase && npm run lint
+
+      - name: Type check
+        run: cd supabase && npm run build
+
+  # Check iOS app builds (basic)
+  ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Build iOS app
+        run: |
+          cd apps/ios/MindFriendApp
+          xcodebuild -scheme MindFriendApp -configuration Debug -derivedDataPath build
