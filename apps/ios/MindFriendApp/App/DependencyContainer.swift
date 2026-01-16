@@ -41,6 +41,10 @@ final class DependencyContainer: ObservableObject {
         PersonalizationService(supabase: supabaseClient)
     }()
 
+    lazy var accessibilityService: AccessibilityService = {
+        AccessibilityService(supabase: supabaseClient)
+    }()
+
     // TODO: Add CreatorService and FamilyService to Xcode project target
     // These services exist on disk but need to be added to the project's pbxproj file
     // lazy var creatorService: CreatorService = {
