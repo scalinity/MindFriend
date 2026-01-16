@@ -11,6 +11,13 @@ struct PaywallView: View {
     @State private var error: Error?
     @State private var showError = false
 
+    // Spec 15: Business Model features
+    @State private var promoCode = ""
+    @State private var validatedPromo: PromoCode?
+    @State private var isValidatingPromo = false
+    @State private var showGiftSheet = false
+    @State private var showHSAInfo = false
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -53,6 +60,41 @@ struct PaywallView: View {
                     }
                     .padding(.horizontal)
 
+                    // Spec 15: HSA/FSA Badge (link to info)
+                    Button {
+                        showHSAInfo = true
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "heart.text.square.fill")
+                                .foregroundStyle(.blue)
+
+                            Text("HSA/FSA Eligible")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+
+                            Spacer()
+
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding()
+                        .background(Color.blue.opacity(0.05))
+                        .cornerRadius(8)
+                        .foregroundStyle(.primary)
+                    }
+                    .padding(.horizontal)
+                    .accessibilityLabel("HSA/FSA eligibility information button")
+
+                    // Spec 15: Promo Code Field
+                    PromoCodeField(
+                        billingService: container.billingService,
+                        code: $promoCode,
+                        validatedPromo: $validatedPromo,
+                        isValidating: $isValidatingPromo
+                    )
+                    .padding(.horizontal)
+
                     // Subscribe button
                     Button {
                         purchase()
@@ -72,6 +114,25 @@ struct PaywallView: View {
                     .cornerRadius(12)
                     .disabled(selectedProduct == nil || isPurchasing)
                     .padding(.horizontal)
+                    .accessibilityLabel("Subscribe now button")
+
+                    // Spec 15: Gift Purchase Button
+                    Button {
+                        showGiftSheet = true
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "gift.fill")
+                            Text("Give as Gift")
+                                .fontWeight(.semibold)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.pink.opacity(0.1))
+                        .foregroundStyle(Color.pink)
+                        .cornerRadius(12)
+                    }
+                    .padding(.horizontal)
+                    .accessibilityLabel("Give subscription as gift button")
 
                     // Restore
                     Button("Restore Purchases") {
@@ -79,6 +140,7 @@ struct PaywallView: View {
                     }
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .accessibilityLabel("Restore purchases button")
 
                     // Terms
                     Text("Subscription automatically renews unless cancelled at least 24 hours before the end of the current period. Manage subscriptions in Settings.")
@@ -110,6 +172,14 @@ struct PaywallView: View {
             } message: { error in
                 Text(error.localizedDescription)
             }
+            // Spec 15: Gift Purchase Sheet
+            .sheet(isPresented: $showGiftSheet) {
+                GiftPurchaseSheet()
+            }
+            // Spec 15: HSA/FSA Info Sheet
+            .sheet(isPresented: $showHSAInfo) {
+                HSAFSAInfoView()
+            }
         }
     }
 
@@ -119,7 +189,11 @@ struct PaywallView: View {
         isPurchasing = true
         Task {
             do {
-                try await container.billingService.purchase(product)
+                // Spec 15: Pass validated promo code if available
+                try await container.billingService.purchase(
+                    product,
+                    promoCode: validatedPromo?.code
+                )
                 await MainActor.run {
                     appState.updateEntitlements(.premium)
                     dismiss()
