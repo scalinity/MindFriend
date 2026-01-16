@@ -123,7 +123,7 @@ struct ArtGeneratorView: View {
                 Text("Mood Tags (optional)")
                     .font(.headline)
 
-                FlowLayout(spacing: 8) {
+                ArtFlowLayout(spacing: 8) {
                     ForEach(moodTags, id: \.self) { tag in
                         MoodTagButton(
                             tag: tag,
@@ -290,9 +290,8 @@ struct ArtGeneratorView: View {
 
             generatedWork = work
 
-            if let path = work.storagePath,
-               let baseURL = URL(string: SupabaseConfig.supabaseURL) {
-                generatedImageURL = baseURL.appendingPathComponent("storage/v1/object/public/creative-works/\(path)")
+            if let path = work.storagePath {
+                generatedImageURL = SupabaseConfig.projectURL.appendingPathComponent("storage/v1/object/public/creative-works/\(path)")
             }
 
             // Update quota display
@@ -300,7 +299,7 @@ struct ArtGeneratorView: View {
                 quotaRemaining = quota.aiArtLimit - quota.aiArtCount
             }
         } catch CreativeError.quotaExceeded {
-            error = "You've reached your daily limit. Upgrade to premium for more."
+            error = "You've used your free daily AI art generation. Upgrade to MindFriend Premium for 20 generations per day!"
             appState.showPaywall = true
         } catch {
             self.error = error.localizedDescription
@@ -377,16 +376,16 @@ struct MoodTagButton: View {
 
 // MARK: - Flow Layout
 
-struct FlowLayout: Layout {
+private struct ArtFlowLayout: Layout {
     var spacing: CGFloat = 8
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let result = FlowLayoutResult(in: proposal.width ?? 0, subviews: subviews, spacing: spacing)
+        let result = ArtFlowLayoutResult(in: proposal.width ?? 0, subviews: subviews, spacing: spacing)
         return result.size
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let result = FlowLayoutResult(in: bounds.width, subviews: subviews, spacing: spacing)
+        let result = ArtFlowLayoutResult(in: bounds.width, subviews: subviews, spacing: spacing)
         for (index, subview) in subviews.enumerated() {
             subview.place(
                 at: CGPoint(
@@ -398,7 +397,7 @@ struct FlowLayout: Layout {
         }
     }
 
-    struct FlowLayoutResult {
+    struct ArtFlowLayoutResult {
         var size: CGSize = .zero
         var positions: [CGPoint] = []
 
