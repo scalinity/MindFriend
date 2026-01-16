@@ -50,7 +50,7 @@ struct WelcomeBackView: View {
         )
         .overlay {
             if showConfetti {
-                ConfettiView()
+                WelcomeBackConfettiView()
             }
         }
         .onAppear {
@@ -287,15 +287,15 @@ struct WelcomeBackView: View {
     }
 }
 
-// MARK: - Confetti View
+// MARK: - Welcome Back Confetti View (renamed to avoid conflict with CelebrationView.ConfettiView)
 
-private struct ConfettiView: View {
+private struct WelcomeBackConfettiView: View {
     @State private var animate = false
 
     var body: some View {
         GeometryReader { geometry in
             ForEach(0..<30, id: \.self) { index in
-                ConfettiPiece(
+                WelcomeBackConfettiPiece(
                     color: confettiColors[index % confettiColors.count],
                     size: CGFloat.random(in: 8...16),
                     startX: CGFloat.random(in: 0...geometry.size.width),
@@ -311,7 +311,7 @@ private struct ConfettiView: View {
     }
 }
 
-private struct ConfettiPiece: View {
+private struct WelcomeBackConfettiPiece: View {
     let color: Color
     let size: CGFloat
     let startX: CGFloat
