@@ -137,15 +137,8 @@ final class NotificationManager: NSObject, ObservableObject {
             return
         }
 
-        let deviceModel = UIDevice.current.model
-        let osVersion = UIDevice.current.systemVersion
-
         do {
-            try await container.supabaseDataService.registerDevice(
-                apnsToken: token,
-                deviceModel: deviceModel,
-                osVersion: osVersion
-            )
+            try await container.supabaseDataService.registerDevice(apnsToken: token)
 
             Analytics.shared.track(.featureUsed, properties: [
                 "feature": "push_notifications",

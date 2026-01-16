@@ -11,12 +11,19 @@ enum QuestLoadingState {
 struct HomeView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
+    @Environment(\.scenePhase) private var scenePhase
     @State private var questState: QuestLoadingState = .loading
     @State private var isRefreshing = false
     @State private var userLevel: UserLevel?
     @State private var activeEvent: SeasonalEvent?
     @State private var eventParticipation: EventParticipation?
     @State private var weeklyInsight: WeeklySummary?
+    // Streak shield state
+    @State private var shieldStatus: StreakShieldStatus?
+    @State private var showRecoveryQuest = false
+    @State private var recoveryQuestData: (attemptId: String, quest: StartRecoveryResult.RecoveryQuestInfo)?
+    @State private var lastLoadTime: Date?
+    @State private var hasCheckedReengagement = false
 
     var body: some View {
         NavigationStack {
@@ -49,10 +56,16 @@ struct HomeView: View {
                     // Today's quest - with proper state handling
                     questCard
 
-                    // Streak
-                    StreakCard(
+                    // Streak with shields
+                    StreakCardWithShields(
                         currentStreak: appState.currentStreak,
-                        longestStreak: appState.currentUser?.stats.longestStreakDays ?? 0
+                        longestStreak: appState.currentUser?.stats.longestStreakDays ?? 0,
+                        shieldsRemaining: shieldStatus?.shieldsRemaining ?? appState.currentUser?.stats.streakShieldsRemaining ?? 1,
+                        shieldsMax: shieldStatus?.shieldsMax ?? appState.currentUser?.stats.streakShieldsMax ?? 1,
+                        recoveryAvailable: shieldStatus?.recoveryQuestAvailable ?? false,
+                        streakBeforeBreak: shieldStatus?.streakBeforeBreak,
+                        recoveryExpiresAt: shieldStatus?.recoveryQuestExpiresAt,
+                        onStartRecovery: startRecoveryQuest
                     )
 
                     // Weekly Insights
@@ -82,6 +95,53 @@ struct HomeView: View {
             }
             .task {
                 await loadData()
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                // Refresh data when app returns to foreground to prevent stale state
+                if newPhase == .active {
+                    // Only refresh if it's been more than 30 seconds since last load
+                    let shouldRefresh = lastLoadTime == nil ||
+                        Date().timeIntervalSince(lastLoadTime!) > 30
+                    if shouldRefresh {
+                        Task { await loadData() }
+                    }
+                }
+            }
+            .sheet(isPresented: $showRecoveryQuest) {
+                if let data = recoveryQuestData {
+                    RecoveryQuestView(
+                        streakToRecover: shieldStatus?.streakBeforeBreak ?? 0,
+                        attemptId: data.attemptId,
+                        quest: data.quest
+                    )
+                }
+            }
+        }
+    }
+
+    // MARK: - Recovery Quest
+
+    private func startRecoveryQuest() {
+        Task {
+            do {
+                let result = try await container.supabaseDataService.startRecoveryQuest()
+
+                if result.success, let quest = result.quest {
+                    await MainActor.run {
+                        recoveryQuestData = (attemptId: result.attemptId ?? "", quest: quest)
+                        showRecoveryQuest = true
+                    }
+
+                    // Track analytics
+                    Analytics.shared.track(.recoveryQuestStarted, properties: [
+                        "streak_to_recover": shieldStatus?.streakBeforeBreak ?? 0,
+                        "quest_id": quest.id
+                    ])
+                } else {
+                    appState.showError(.apiError(result.error ?? "Failed to start recovery quest"))
+                }
+            } catch {
+                appState.showError(.apiError("Failed to start recovery: \(error.localizedDescription)"))
             }
         }
     }
@@ -121,7 +181,50 @@ struct HomeView: View {
             // Check and reset weekly XP if needed (fire-and-forget, don't block)
             Task { _ = try? await container.supabaseDataService.resetWeeklyXPIfNeeded() }
 
+            // Check for re-engagement (only once per session)
+            if !hasCheckedReengagement {
+                hasCheckedReengagement = true
+                await checkReengagement()
+            }
+
+            // Check streak protection status first (handles shield usage/recovery availability)
+            let protectionResult = try? await container.supabaseDataService.checkStreakProtection()
+
+            // Handle streak protection events
+            if let protection = protectionResult {
+                if protection.streakProtected {
+                    // Shield was just used - track analytics
+                    // Note: shieldsRemaining and newStreak are non-optional Int
+                    Analytics.shared.track(.streakShieldUsed, properties: [
+                        "shields_remaining": protection.shieldsRemaining,
+                        "streak_protected": protection.newStreak
+                    ])
+                }
+                if protection.recoveryAvailable {
+                    // Recovery became available - track analytics
+                    Analytics.shared.track(.recoveryQuestOffered, properties: [
+                        "streak_to_recover": protection.streakBeforeBreak ?? 0
+                    ])
+                }
+
+                // Use protection result to build shield status, avoiding duplicate API call
+                // Use defaults for fields not returned by protection check
+                shieldStatus = StreakShieldStatus(
+                    shieldsRemaining: protection.shieldsRemaining,
+                    shieldsMax: protection.shieldsMax,
+                    shieldsResetAt: nil,  // Not returned from protection check
+                    lastShieldUsedAt: nil,  // Not returned from protection check
+                    recoveryQuestAvailable: protection.recoveryAvailable,
+                    recoveryQuestExpiresAt: protection.recoveryExpiresAt,
+                    streakBeforeBreak: protection.streakBeforeBreak,
+                    recoveryAttemptsRemaining: protection.recoveryAvailable ? 1 : 0,  // Assume 1 if available
+                    recoveryAttemptsMax: 1,  // Default to 1, premium upgrade handled elsewhere
+                    currentStreak: protection.newStreak
+                )
+            }
+
             // Parallelize independent API calls for better performance
+            // Note: Shield status is populated from protection check above to avoid duplicate call
             async let questTask = container.supabaseDataService.getTodayQuest()
             async let profileTask = container.supabaseAuthService.fetchProfile()
             async let eventsTask = container.supabaseDataService.getActiveEvents()
@@ -137,6 +240,9 @@ struct HomeView: View {
             let levelResult = UserLevel.from(stats: profileResult.stats)
 
             await MainActor.run {
+                // Track load time for stale state prevention
+                lastLoadTime = Date()
+
                 // Update quest state
                 if let quest = questResult {
                     questState = .loaded(quest)
@@ -161,10 +267,33 @@ struct HomeView: View {
 
                 // Set weekly insight
                 weeklyInsight = insightResult
+
+                // Shield status is set from protection check above
             }
         } catch {
             print("HomeView loadData error: \(error)")
             questState = .error(error.localizedDescription)
+        }
+    }
+
+    // MARK: - Re-engagement Check
+
+    private func checkReengagement() async {
+        do {
+            // Record session start and get absence info
+            let sessionResult = try await container.supabaseDataService.recordSessionStart()
+
+            // If user is returning after 3+ days, fetch detailed absence summary
+            if sessionResult.isReturning {
+                if let absenceSummary = try await container.supabaseDataService.checkUserAbsence() {
+                    await MainActor.run {
+                        appState.showWelcomeBackModal(summary: absenceSummary)
+                    }
+                }
+            }
+        } catch {
+            // Don't fail the whole load if re-engagement check fails
+            print("Re-engagement check error: \(error)")
         }
     }
 
@@ -330,58 +459,84 @@ struct TodayMoodCard: View {
 
 struct QuestCard: View {
     let quest: Quest
+    @State private var showQuestChoice = false
+    @State private var showQuestDetail = false
+
+    private var questCardContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label("Today's Quest", systemImage: "star.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(.orange)
+
+                Spacer()
+
+                if quest.status == .completed {
+                    Label("Done", systemImage: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                } else {
+                    // Show "Choose" hint for quest choice
+                    Label("Choose", systemImage: "arrow.right.circle")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+            }
+
+            Text(quest.template.title)
+                .font(.headline)
+                .foregroundStyle(.primary)
+
+            Text(quest.template.description)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+
+            HStack {
+                Label("\(quest.template.estimatedMinutes) min", systemImage: "clock")
+                Spacer()
+                Image(systemName: quest.template.type.icon)
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        .padding()
+        .background(
+            LinearGradient(
+                colors: [.orange.opacity(0.1), .yellow.opacity(0.1)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .cornerRadius(16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+        )
+    }
 
     var body: some View {
-        NavigationLink {
-            QuestDetailView(quest: quest)
-        } label: {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Label("Today's Quest", systemImage: "star.fill")
-                        .font(.subheadline)
-                        .foregroundStyle(.orange)
-
-                    Spacer()
-
-                    if quest.status == .completed {
-                        Label("Done", systemImage: "checkmark.circle.fill")
-                            .font(.caption)
-                            .foregroundStyle(.green)
-                    }
+        Group {
+            if quest.status == .completed {
+                // Completed quests go directly to detail view
+                NavigationLink {
+                    QuestDetailView(quest: quest)
+                } label: {
+                    questCardContent
                 }
-
-                Text(quest.template.title)
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-
-                Text(quest.template.description)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-
-                HStack {
-                    Label("\(quest.template.estimatedMinutes) min", systemImage: "clock")
-                    Spacer()
-                    Image(systemName: quest.template.type.icon)
+            } else {
+                // Assigned quests show the choice sheet first
+                Button {
+                    showQuestChoice = true
+                } label: {
+                    questCardContent
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
             }
-            .padding()
-            .background(
-                LinearGradient(
-                    colors: [.orange.opacity(0.1), .yellow.opacity(0.1)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .cornerRadius(16)
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.orange.opacity(0.3), lineWidth: 1)
-            )
         }
         .buttonStyle(.plain)
+        .sheet(isPresented: $showQuestChoice) {
+            QuestChoiceView()
+        }
     }
 }
 
