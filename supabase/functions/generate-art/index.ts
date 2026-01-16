@@ -1,16 +1,18 @@
 // MindFriend Generate Art Edge Function
-// Handles AI art generation with quota enforcement
+// Handles AI art generation with quota enforcement using OpenAI gpt-image-1-mini
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import {
   createClient,
   SupabaseClient,
 } from "https://esm.sh/@supabase/supabase-js@2";
+import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
+import { decode as base64Decode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { checkRateLimit, getRateLimitHeaders } from "../_shared/ratelimit.ts";
 
-// Security constants
-const MAX_PROMPT_LENGTH = 500;
+// Security constants - OpenAI gpt-image-1 supports up to 32000 chars, but we keep it reasonable
+const MAX_PROMPT_LENGTH = 1000;
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -188,7 +190,7 @@ serve(async (req) => {
           error: "Daily limit reached",
           message: quota.is_premium
             ? "You've used all 20 of today's AI art generations."
-            : "Free tier allows 3 AI art generations per day. Upgrade to premium for 20 per day.",
+            : "You've used your free daily AI art generation. Upgrade to MindFriend Premium for 20 generations per day!",
           quotaExceeded: true,
         }),
         { status: 429, headers: responseHeaders },
@@ -220,7 +222,7 @@ serve(async (req) => {
         user_prompt: prompt,
         enhanced_prompt: enhancedPrompt,
         style_preset: style || null,
-        model_used: "grok-2-image",
+        model_used: "gpt-image-1-mini",
         generation_status: "processing",
         is_premium_generation: quota?.is_premium || false,
       })
@@ -238,9 +240,10 @@ serve(async (req) => {
       );
     }
 
-    // Call Grok image generation API
-    const xaiApiKey = Deno.env.get("XAI_API_KEY");
-    if (!xaiApiKey) {
+    // Call OpenAI image generation API (gpt-image-1-mini)
+    // Docs: https://platform.openai.com/docs/guides/images
+    const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
+    if (!openaiApiKey) {
       await updateGenerationStatus(
         supabaseAdmin,
         generationRecord.id,
@@ -257,26 +260,29 @@ serve(async (req) => {
     }
 
     try {
-      const xaiResponse = await fetch(
-        "https://api.x.ai/v1/images/generations",
+      // OpenAI Images API - gpt-image-1-mini returns base64 encoded images
+      // Reference: https://platform.openai.com/docs/api-reference/images/create
+      const openaiResponse = await fetch(
+        "https://api.openai.com/v1/images/generations",
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${xaiApiKey}`,
+            Authorization: `Bearer ${openaiApiKey}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
+            model: "gpt-image-1-mini",
             prompt: enhancedPrompt,
-            model: "grok-2-image",
             n: 1,
             size: "1024x1024",
+            quality: "medium",
           }),
         },
       );
 
-      if (!xaiResponse.ok) {
-        const errorText = await xaiResponse.text();
-        console.error("XAI API error:", errorText);
+      if (!openaiResponse.ok) {
+        const errorText = await openaiResponse.text();
+        console.error("OpenAI API error:", errorText);
         await updateGenerationStatus(
           supabaseAdmin,
           generationRecord.id,
@@ -292,10 +298,12 @@ serve(async (req) => {
         );
       }
 
-      const xaiData = await xaiResponse.json();
-      const imageUrl = xaiData.data?.[0]?.url;
+      const openaiData = await openaiResponse.json();
 
-      if (!imageUrl) {
+      // GPT image models return base64 encoded images in b64_json field
+      const imageBase64 = openaiData.data?.[0]?.b64_json;
+
+      if (!imageBase64) {
         await updateGenerationStatus(
           supabaseAdmin,
           generationRecord.id,
@@ -311,13 +319,12 @@ serve(async (req) => {
         );
       }
 
-      // Download image and upload to Supabase Storage
-      const imageResponse = await fetch(imageUrl);
-      const imageBlob = await imageResponse.blob();
-      const imageBuffer = await imageBlob.arrayBuffer();
+      // Decode base64 to binary for storage upload
+      const imageBuffer = base64Decode(imageBase64);
 
       const storagePath = `${user.id}/ai-art/${generationRecord.id}.png`;
 
+      // Upload to Supabase Storage
       const { error: uploadError } = await supabaseAdmin.storage
         .from("creative-works")
         .upload(storagePath, imageBuffer, {
@@ -327,7 +334,19 @@ serve(async (req) => {
 
       if (uploadError) {
         console.error("Upload error:", uploadError);
-        // Still save the external URL if upload fails
+        await updateGenerationStatus(
+          supabaseAdmin,
+          generationRecord.id,
+          "failed",
+          "Failed to store image",
+        );
+        return new Response(
+          JSON.stringify({
+            error: "Failed to store generated image",
+            generationId: generationRecord.id,
+          }),
+          { status: 500, headers: responseHeaders },
+        );
       }
 
       // Get public URL
@@ -335,7 +354,7 @@ serve(async (req) => {
         .from("creative-works")
         .getPublicUrl(storagePath);
 
-      const finalImageUrl = uploadError ? imageUrl : publicUrlData.publicUrl;
+      const finalImageUrl = publicUrlData.publicUrl;
 
       // Create creative work entry
       const { data: creativeWork, error: workError } = await supabaseAdmin
@@ -346,7 +365,7 @@ serve(async (req) => {
           storage_path: storagePath,
           generation_prompt: prompt,
           art_style: style || null,
-          generation_model: "grok-2-image",
+          generation_model: "gpt-image-1-mini",
           generation_params: { enhanced_prompt: enhancedPrompt },
           mood_score: moodScore || null,
           mood_tags: moodTags || null,
