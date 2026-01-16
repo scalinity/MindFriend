@@ -311,7 +311,7 @@ Be empathetic and supportive in your analysis. Focus on understanding and valida
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "grok-3-mini",
+          model: "grok-4-1-fast-non-reasoning",
           messages: [
             {
               role: "system",
@@ -387,7 +387,7 @@ Be empathetic and supportive in your analysis. Focus on understanding and valida
           key_quotes: analysis.key_quotes || [],
           ai_summary: analysis.ai_summary,
           reflection_prompts: analysis.reflection_prompts,
-          analysis_model: "grok-3-mini",
+          analysis_model: "grok-4-1-fast-non-reasoning",
           processed_at: new Date().toISOString(),
         });
 

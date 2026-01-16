@@ -40,8 +40,8 @@ struct InviteBuddySheet: View {
 
                     // Stats row
                     HStack(spacing: 24) {
-                        StatBadge(value: "3x", label: "more likely\nto succeed")
-                        StatBadge(value: "+100", label: "XP for\nboth of you")
+                        BuddyStatBadge(value: "3x", label: "more likely\nto succeed")
+                        BuddyStatBadge(value: "+100", label: "XP for\nboth of you")
                     }
                     .padding(.vertical, 8)
 
@@ -187,7 +187,7 @@ struct InviteBuddySheet: View {
 
 // MARK: - Supporting Views
 
-struct StatBadge: View {
+private struct BuddyStatBadge: View {
     let value: String
     let label: String
 
