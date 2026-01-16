@@ -3,7 +3,7 @@ import StoreKit
 import Supabase
 import OSLog
 
-/// Service for billing and subscriptions - uses Supabase Edge Functions
+/// Service for managing subscriptions, promotions, gifts, and HSA/FSA integrations
 @MainActor
 final class BillingService: ObservableObject {
     private let authService: SupabaseAuthService
@@ -14,6 +14,17 @@ final class BillingService: ObservableObject {
     @Published private(set) var subscription: Subscription?
     @Published private(set) var familyGroup: FamilyGroup?
     @Published private(set) var familyMembers: [FamilyMember] = []
+
+    // Business Model features
+    @Published private(set) var availablePlans: [SubscriptionPlan] = []
+    @Published private(set) var validatedPromoCode: PromoCode?
+    @Published private(set) var activeGift: GiftSubscription?
+    @Published private(set) var hsaRecord: HSAFSARecord?
+
+    @Published var isValidatingPromo = false
+    @Published var isPurchasingGift = false
+    @Published var isRedeemingGift = false
+    @Published var isGeneratingHSAReceipt = false
 
     private var transactionListener: Task<Void, Never>?
 
@@ -38,8 +49,8 @@ final class BillingService: ObservableObject {
     static let productPlanTypes: [String: PlanType] = [
         "com.mindfriend.premium.monthly": .individual,
         "com.mindfriend.premium.yearly": .individual,
-        "com.mindfriend.couples.monthly": .couples,
-        "com.mindfriend.couples.annual": .couples,
+        "com.mindfriend.couples.monthly": .individual,
+        "com.mindfriend.couples.annual": .individual,
         "com.mindfriend.family.monthly": .family,
         "com.mindfriend.family.annual": .family
     ]
@@ -47,11 +58,11 @@ final class BillingService: ObservableObject {
     // Map product IDs to billing periods
     static let productBillingPeriods: [String: BillingPeriod] = [
         "com.mindfriend.premium.monthly": .monthly,
-        "com.mindfriend.premium.yearly": .annual,
+        "com.mindfriend.premium.yearly": .yearly,
         "com.mindfriend.couples.monthly": .monthly,
-        "com.mindfriend.couples.annual": .annual,
+        "com.mindfriend.couples.annual": .yearly,
         "com.mindfriend.family.monthly": .monthly,
-        "com.mindfriend.family.annual": .annual
+        "com.mindfriend.family.annual": .yearly
     ]
 
     init(authService: SupabaseAuthService) {
@@ -116,9 +127,81 @@ final class BillingService: ObservableObject {
         }
     }
 
+    // MARK: - Available Plans
+
+    /// Load all available subscription plans from database
+    func loadAvailablePlans() async throws {
+        struct DBPlan: Codable {
+            let id: String
+            let name: String
+            let description: String?
+            let priceCents: Int
+            let currency: String
+            let billingPeriod: String
+            let billingPeriodMonths: Int?
+            let planType: String
+            let maxSeats: Int?
+            let features: PlanFeatures
+            let aiChatLimit: Int?
+            let exerciseLimit: Int?
+            let appStoreProductId: String?
+            let isActive: Bool
+            let isVisible: Bool
+
+            enum CodingKeys: String, CodingKey {
+                case id, name, description, currency, features
+                case priceCents = "price_cents"
+                case billingPeriod = "billing_period"
+                case billingPeriodMonths = "billing_period_months"
+                case planType = "plan_type"
+                case maxSeats = "max_seats"
+                case aiChatLimit = "ai_chat_limit"
+                case exerciseLimit = "exercise_limit"
+                case appStoreProductId = "app_store_product_id"
+                case isActive = "is_active"
+                case isVisible = "is_visible"
+            }
+        }
+
+        let plans: [DBPlan] = try await supabase
+            .from("subscription_plans")
+            .select()
+            .eq("is_active", value: true)
+            .eq("is_visible", value: true)
+            .order("price_cents", ascending: true)
+            .execute()
+            .value
+
+        availablePlans = plans.compactMap { dbPlan in
+            guard let billingPeriod = BillingPeriod(rawValue: dbPlan.billingPeriod),
+                  let planType = PlanType(rawValue: dbPlan.planType),
+                  let id = UUID(uuidString: dbPlan.id) else {
+                return nil
+            }
+
+            return SubscriptionPlan(
+                id: id,
+                name: dbPlan.name,
+                description: dbPlan.description,
+                priceCents: dbPlan.priceCents,
+                currency: dbPlan.currency,
+                billingPeriod: billingPeriod,
+                billingPeriodMonths: dbPlan.billingPeriodMonths,
+                planType: planType,
+                maxSeats: dbPlan.maxSeats,
+                features: dbPlan.features,
+                aiChatLimit: dbPlan.aiChatLimit,
+                exerciseLimit: dbPlan.exerciseLimit,
+                appStoreProductId: dbPlan.appStoreProductId,
+                isActive: dbPlan.isActive,
+                isVisible: dbPlan.isVisible
+            )
+        }
+    }
+
     // MARK: - Purchase
 
-    func purchase(_ product: Product) async throws {
+    func purchase(_ product: Product, promoCode: String? = nil) async throws {
         isPurchasing = true
         defer { isPurchasing = false }
 
@@ -127,7 +210,7 @@ final class BillingService: ObservableObject {
         switch result {
         case .success(let verification):
             let transaction = try checkVerified(verification)
-            try await submitTransaction(transaction, jwsRepresentation: verification.jwsRepresentation)
+            try await submitTransaction(transaction, jwsRepresentation: verification.jwsRepresentation, promoCode: promoCode)
             await transaction.finish()
 
         case .pending:
@@ -476,6 +559,195 @@ final class BillingService: ObservableObject {
         return familyGroup?.adminUserId == currentUserId.uuidString
     }
 
+    // MARK: - Promo Codes
+
+    /// Validate a promo code and fetch its details
+    func validatePromoCode(_ code: String) async throws -> PromoCode {
+        isValidatingPromo = true
+        defer { isValidatingPromo = false }
+
+        let response: PromoCode = try await supabase
+            .from("promo_codes")
+            .select()
+            .eq("code", value: code.uppercased())
+            .eq("is_active", value: true)
+            .single()
+            .execute()
+            .value
+
+        guard response.isValid else {
+            throw BillingError.invalidPromoCode
+        }
+
+        validatedPromoCode = response
+        return response
+    }
+
+    /// Clear the currently validated promo code
+    func clearValidatedPromoCode() {
+        validatedPromoCode = nil
+    }
+
+    // MARK: - Gift Subscriptions
+
+    /// Purchase a subscription as a gift
+    func purchaseGift(plan: SubscriptionPlan, recipient: GiftRecipient) async throws -> GiftSubscription {
+        isPurchasingGift = true
+        defer { isPurchasingGift = false }
+
+        struct CreateGiftRequest: Encodable {
+            let planId: String
+            let recipientEmail: String
+            let recipientName: String?
+            let personalMessage: String?
+            let deliveryDate: String
+            let paymentMethodId: String
+
+            enum CodingKeys: String, CodingKey {
+                case planId = "plan_id"
+                case recipientEmail = "recipient_email"
+                case recipientName = "recipient_name"
+                case personalMessage = "personal_message"
+                case deliveryDate = "delivery_date"
+                case paymentMethodId = "payment_method_id"
+            }
+        }
+
+        let formatter = ISO8601DateFormatter()
+        let request = CreateGiftRequest(
+            planId: plan.id.uuidString,
+            recipientEmail: recipient.email,
+            recipientName: recipient.name,
+            personalMessage: recipient.message,
+            deliveryDate: formatter.string(from: recipient.deliveryDate),
+            paymentMethodId: recipient.paymentMethodId
+        )
+
+        let response = try await supabase.functions.invoke(
+            "create-gift",
+            options: .init(body: request)
+        )
+
+        let result = try JSONDecoder().decode(GiftPurchaseResponse.self, from: response.data)
+        activeGift = result.gift
+        return result.gift
+    }
+
+    /// Redeem a gift subscription using the redemption code
+    func redeemGift(code: String) async throws {
+        isRedeemingGift = true
+        defer { isRedeemingGift = false }
+
+        struct RedeemGiftRequest: Encodable {
+            let redemptionCode: String
+
+            enum CodingKeys: String, CodingKey {
+                case redemptionCode = "redemption_code"
+            }
+        }
+
+        let response = try await supabase.functions.invoke(
+            "redeem-gift",
+            options: .init(body: RedeemGiftRequest(redemptionCode: code))
+        )
+
+        // Verify success
+        let result = try JSONDecoder().decode(GiftRedeemResponse.self, from: response.data)
+        if !result.success {
+            throw BillingError.giftRedemptionFailed
+        }
+
+        // Refresh subscription to reflect redeemed gift
+        try await refreshEntitlements()
+    }
+
+    // MARK: - HSA/FSA
+
+    /// Load HSA/FSA record for current user's subscription
+    func loadHSARecord() async throws {
+        guard let userId = authService.userId else { return }
+
+        do {
+            let records: [HSAFSARecord] = try await supabase
+                .from("hsa_fsa_records")
+                .select()
+                .eq("user_id", value: userId)
+                .order("created_at", ascending: false)
+                .limit(1)
+                .execute()
+                .value
+
+            hsaRecord = records.first
+        } catch {
+            Log.billing.error("Failed to load HSA/FSA record: \(error)")
+        }
+    }
+
+    /// Generate an HSA/FSA compliant receipt for the current subscription
+    func generateHSAReceipt() async throws -> URL {
+        isGeneratingHSAReceipt = true
+        defer { isGeneratingHSAReceipt = false }
+
+        guard let subscriptionId = subscription?.id else {
+            throw BillingError.noActiveSubscription
+        }
+
+        struct GenerateReceiptRequest: Encodable {
+            let subscriptionId: String
+
+            enum CodingKeys: String, CodingKey {
+                case subscriptionId = "subscription_id"
+            }
+        }
+
+        let response = try await supabase.functions.invoke(
+            "generate-hsa-receipt",
+            options: .init(body: GenerateReceiptRequest(subscriptionId: subscriptionId.uuidString))
+        )
+
+        let result = try JSONDecoder().decode(HSAReceiptResponse.self, from: response.data)
+
+        guard result.success, let url = URL(string: result.receiptUrl) else {
+            throw BillingError.hsaReceiptGenerationFailed
+        }
+
+        // Update local HSA record
+        await loadHSARecord()
+
+        return url
+    }
+
+    /// Generate a Letter of Medical Necessity for HSA/FSA reimbursement
+    func generateLetterOfMedicalNecessity() async throws -> URL {
+        guard let subscriptionId = subscription?.id else {
+            throw BillingError.noActiveSubscription
+        }
+
+        struct GenerateLOMNRequest: Encodable {
+            let subscriptionId: String
+
+            enum CodingKeys: String, CodingKey {
+                case subscriptionId = "subscription_id"
+            }
+        }
+
+        let response = try await supabase.functions.invoke(
+            "generate-lomn",
+            options: .init(body: GenerateLOMNRequest(subscriptionId: subscriptionId.uuidString))
+        )
+
+        let result = try JSONDecoder().decode(LOmnResponse.self, from: response.data)
+
+        guard result.success, let url = URL(string: result.lomnUrl) else {
+            throw BillingError.lomnGenerationFailed
+        }
+
+        // Update local HSA record
+        await loadHSARecord()
+
+        return url
+    }
+
     // MARK: - Private
 
     private func startTransactionListener() {
@@ -502,18 +774,27 @@ final class BillingService: ObservableObject {
         }
     }
 
-    private func submitTransaction(_ transaction: Transaction, jwsRepresentation: String) async throws {
+    private func submitTransaction(_ transaction: Transaction, jwsRepresentation: String, promoCode: String? = nil) async throws {
         // Use the JWS representation from VerificationResult for server-side verification
-        // StoreKit 2's jwsRepresentation contains the Apple-signed transaction
-        let signedTransaction = jwsRepresentation
+        struct VerifyPurchaseRequest: Encodable {
+            let signedTransaction: String
+            let environment: String
+            let promoCode: String?
 
-        // Call verify-purchase Edge Function with signed transaction
+            enum CodingKeys: String, CodingKey {
+                case signedTransaction
+                case environment
+                case promoCode = "promo_code"
+            }
+        }
+
         let _: VerifyPurchaseResponse = try await supabase.functions.invoke(
             "verify-purchase",
-            options: .init(body: [
-                "signedTransaction": signedTransaction,
-                "environment": transaction.environment == .sandbox ? "sandbox" : "production"
-            ])
+            options: .init(body: VerifyPurchaseRequest(
+                signedTransaction: jwsRepresentation,
+                environment: transaction.environment == .sandbox ? "sandbox" : "production",
+                promoCode: promoCode
+            ))
         )
 
         // Refresh entitlements after successful transaction
@@ -521,7 +802,16 @@ final class BillingService: ObservableObject {
     }
 }
 
-// NOTE: VerifyPurchaseResponse is defined in Models.swift (extended version with family plan fields)
+// MARK: - Gift Recipient
+
+/// Information needed to purchase a gift subscription
+struct GiftRecipient {
+    let email: String
+    let name: String?
+    let message: String?
+    let deliveryDate: Date
+    let paymentMethodId: String
+}
 
 // MARK: - Billing Error
 
@@ -536,6 +826,11 @@ enum BillingError: Error, LocalizedError, Equatable {
     case inviteExpired
     case inviteFailed(String)
     case notFamilyAdmin
+    case invalidPromoCode
+    case giftRedemptionFailed
+    case noActiveSubscription
+    case hsaReceiptGenerationFailed
+    case lomnGenerationFailed
 
     var errorDescription: String? {
         switch self {
@@ -559,7 +854,38 @@ enum BillingError: Error, LocalizedError, Equatable {
             return message
         case .notFamilyAdmin:
             return "Only the plan admin can perform this action"
+        case .invalidPromoCode:
+            return "This promo code is invalid or expired"
+        case .giftRedemptionFailed:
+            return "Failed to redeem gift subscription"
+        case .noActiveSubscription:
+            return "No active subscription found"
+        case .hsaReceiptGenerationFailed:
+            return "Failed to generate HSA/FSA receipt"
+        case .lomnGenerationFailed:
+            return "Failed to generate Letter of Medical Necessity"
         }
+    }
+}
+
+// MARK: - Response Types
+
+/// Response from gift redemption Edge Function
+struct GiftRedeemResponse: Codable {
+    let success: Bool
+    let message: String?
+}
+
+/// Response from generate-lomn Edge Function
+struct LOmnResponse: Codable {
+    let success: Bool
+    let lomnUrl: String
+    let lomnNumber: String
+
+    enum CodingKeys: String, CodingKey {
+        case success
+        case lomnUrl = "lomn_url"
+        case lomnNumber = "lomn_number"
     }
 }
 
