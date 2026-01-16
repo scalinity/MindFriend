@@ -35,6 +35,11 @@ struct MainTabView: View {
         .sheet(isPresented: $appState.showPaywall) {
             SubscriptionView()
         }
+        .sheet(isPresented: $appState.showWelcomeBack) {
+            if let summary = appState.absenceSummary {
+                WelcomeBackView(absenceSummary: summary)
+            }
+        }
         .alert(
             appState.globalError?.title ?? "Error",
             isPresented: $appState.showError,

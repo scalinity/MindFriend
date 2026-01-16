@@ -2,6 +2,10 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
+// UUID v4 validation regex
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req.headers.get("Origin"));
 
@@ -37,18 +41,25 @@ serve(async (req) => {
       });
     }
 
-    const {
-      session_id,
-      duration_seconds,
-      messages_count,
-      was_quota_limited,
-    } = await req.json();
+    const { session_id, duration_seconds, messages_count, was_quota_limited } =
+      await req.json();
 
     if (!session_id) {
       return new Response(JSON.stringify({ error: "Missing session_id" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // Validate session_id is a valid UUID to prevent SQL injection
+    if (typeof session_id !== "string" || !UUID_REGEX.test(session_id)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid session_id format" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     // Verify session belongs to user

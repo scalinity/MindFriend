@@ -27,33 +27,35 @@ final class ChatService: ObservableObject {
 
     /// Send a message and get AI response via Edge Function
     func sendMessage(conversationId: String, content: String) async throws -> SendMessageResponse {
-        // First, add the user's message to the local list immediately
-        let userMessage = Message(
-            id: UUID().uuidString,
-            role: .user,
-            content: content,
-            createdAt: Date(),
-            blocked: false
-        )
-
         // Call Edge Function which saves both messages and returns AI response
         let response = try await dataService.sendMessage(
             conversationId: conversationId,
             content: content
         )
 
-        // Calculate quota remaining
+        // Create user message with server-provided ID for consistency
+        let userMessage = Message(
+            id: response.userMessageId ?? UUID().uuidString,  // Use server ID, fallback for safety
+            role: .user,
+            content: content,
+            createdAt: Date(),
+            blocked: false
+        )
+
+        // Calculate quota remaining - use Int.max for unlimited (safer than sentinel -1)
         let quotaRemaining: Int
         if let limit = response.quotaLimit, limit > 0, let used = response.quotaUsed {
             quotaRemaining = max(0, limit - used)
         } else {
-            quotaRemaining = -1 // Unlimited (premium)
+            quotaRemaining = Int.max // Unlimited (premium)
         }
 
         return SendMessageResponse(
             userMessage: userMessage,
             assistantMessage: response.message,
             quotaRemaining: quotaRemaining,
+            quotaUsed: response.quotaUsed,       // Pass through for UI syncing
+            quotaLimit: response.quotaLimit,     // Pass through for UI syncing
             crisisDetected: response.isCrisisResponse,
             conversationTitle: response.conversationTitle
         )

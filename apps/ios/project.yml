@@ -39,8 +39,6 @@ targets:
     dependencies:
       - package: GoogleSignIn
         product: GoogleSignIn
-      - package: GoogleSignIn
-        product: GoogleSignInSwift
       - package: Sentry
         product: Sentry
       - package: Supabase

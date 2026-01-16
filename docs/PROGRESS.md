@@ -35,6 +35,88 @@ Any additional context, blockers, or follow-ups.
 
 ---
 
+## [2026-01-16] Production Quest Library Expansion
+
+**Type:** Feature
+**Status:** Complete
+
+### Summary
+
+Expanded quest library from 10 to 68 templates with 25 quick variants, enabling meaningful variety for the Quest Choice feature.
+
+### Changes
+
+- **File:** `supabase/migrations/20260214000000_quest_library_expansion.sql` — Added 58 new quest templates across 6 categories with 25 quick variants
+
+### Final Quest Distribution
+
+| Category    | Count  | Premium      |
+| ----------- | ------ | ------------ |
+| mindfulness | 11     | 2            |
+| gratitude   | 11     | 2            |
+| social      | 12     | 2            |
+| physical    | 11     | 2            |
+| creative    | 11     | 2            |
+| reflection  | 12     | 2            |
+| **Total**   | **68** | **12 (18%)** |
+
+**Quick Variants:** 25 total (2-3 min, 50% XP)
+
+### Testing
+
+- [x] Migration applied successfully
+- [x] iOS build succeeded
+- [x] 146 unit tests pass (0 failures)
+
+### Notes
+
+- Quest content designed with evidence-based wellness practices
+- Friendly, inclusive language following MindFriend tone guidelines
+- Quick variants enable streak maintenance on busy days
+
+---
+
+## [2026-01-15] Dynamic Quest Difficulty & Choice Feature
+
+**Type:** Feature
+**Status:** Complete
+
+### Summary
+
+Implemented Quest Choice feature allowing users to select from multiple quest options (Recommended, Quick version, Different focus), reroll quests, and have preferences learned over time.
+
+### Changes
+
+- **File:** `supabase/migrations/20260212000000_quest_choice.sql` — Database schema for quest alternatives, quick variants, preferences, and reroll tracking with RLS policies
+- **File:** `apps/ios/MindFriendApp/Core/Models.swift` — Added QuestAlternatives, QuestQuickVariant, QuestPreference models; updated Quest with Hashable conformance, isQuickVariant, xpMultiplier
+- **File:** `apps/ios/MindFriendApp/Networking/Services/SupabaseDataService.swift` — Added getTodayQuestAlternatives(), selectQuestVariant(), rerollQuest(), updateQuestPreference(), getQuestPreferences() methods
+- **File:** `apps/ios/MindFriendApp/Features/Quests/QuestChoiceView.swift` — NEW: Complete UI for quest selection with QuestOptionCard, QuickVariantCard, RerollButton components
+- **File:** `apps/ios/MindFriendApp/Features/Home/HomeView.swift` — Modified QuestCard to show QuestChoiceView for assigned quests via sheet
+- **File:** `apps/ios/MindFriendApp/Core/Observability/Analytics.swift` — Added quest choice analytics events
+- **File:** `supabase/functions/assign-quest/index.ts` — Updated with preference weighting using get_weighted_quest_for_user RPC
+
+### Database Functions Created
+
+- `get_weighted_quest_for_user(p_user_id, p_exclude_category)` — Weighted random selection based on preferences
+- `generate_quest_alternatives(p_user_id, p_date)` — Creates quest alternatives with primary, quick variant, and alt quest
+- `reroll_quest(p_user_id, p_alternatives_id)` — Handles reroll with daily limits (1 free, unlimited premium)
+- `update_quest_preference(p_user_id, p_quest_category, p_completed, p_rating)` — Tracks user preferences over time
+- `select_quest_variant(p_user_id, p_alternatives_id, p_selected_variant)` — Records user's quest selection
+
+### Testing
+
+- [x] Unit tests pass (146 tests, 0 failures)
+- [x] Integration tests pass
+- [ ] Manual verification done
+
+### Notes
+
+- Quick variants offer 50% XP but still count toward streak
+- Preference weights update based on completed/skipped ratio and ratings
+- Edge Function deployed with preference weighting fallback to random selection
+
+---
+
 ## [2026-01-14] Audit Remediation - All Fixes Executed
 
 **Type:** Bugfix / Security / Refactor
@@ -46,46 +128,46 @@ Executed ALL fixes from the comprehensive codebase audit across 4 phases: Critic
 
 ### Remediation Summary
 
-| Severity | Count | Files Modified |
-|----------|-------|----------------|
-| 🔴 Critical | 1 | `SupabaseClient.swift`, `Info.plist`, `Debug.xcconfig.sample`, `Release.xcconfig.sample` |
-| 🟠 High | 4 | `SupabaseAuthServiceTests.swift`, `ChatViewModelTests.swift`, `Logger.swift`, `SupabaseAuthService.swift`, `SupabaseDataService.swift`, `BillingService.swift`, `NotificationManager.swift`, `QuestDetailView.swift`, `ChatView.swift`, `20260201000000_audit_fixes.sql`, `logger.ts`, `delete-account/index.ts`, `verify-purchase/index.ts` |
-| 🟡 Medium | 6 | `delete-account/index.ts`, `voice-token/index.ts`, `errors.ts`, `chat/index.ts` |
-| 🟢 Low | 3 | `Constants.swift`, `cors.ts` |
+| Severity    | Count | Files Modified                                                                                                                                                                                                                                                                                                                               |
+| ----------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 🔴 Critical | 1     | `SupabaseClient.swift`, `Info.plist`, `Debug.xcconfig.sample`, `Release.xcconfig.sample`                                                                                                                                                                                                                                                     |
+| 🟠 High     | 4     | `SupabaseAuthServiceTests.swift`, `ChatViewModelTests.swift`, `Logger.swift`, `SupabaseAuthService.swift`, `SupabaseDataService.swift`, `BillingService.swift`, `NotificationManager.swift`, `QuestDetailView.swift`, `ChatView.swift`, `20260201000000_audit_fixes.sql`, `logger.ts`, `delete-account/index.ts`, `verify-purchase/index.ts` |
+| 🟡 Medium   | 6     | `delete-account/index.ts`, `voice-token/index.ts`, `errors.ts`, `chat/index.ts`                                                                                                                                                                                                                                                              |
+| 🟢 Low      | 3     | `Constants.swift`, `cors.ts`                                                                                                                                                                                                                                                                                                                 |
 
 ### Phase 1: Critical Fixes
 
-| ID | Issue | Fix Applied |
-|----|-------|-------------|
-| C1 | Hardcoded Supabase credentials | Moved to Info.plist with xcconfig substitution, DEBUG fallback for dev |
+| ID  | Issue                          | Fix Applied                                                            |
+| --- | ------------------------------ | ---------------------------------------------------------------------- |
+| C1  | Hardcoded Supabase credentials | Moved to Info.plist with xcconfig substitution, DEBUG fallback for dev |
 
 ### Phase 2: High Priority Fixes
 
-| ID | Issue | Fix Applied |
-|----|-------|-------------|
-| H1 | Minimal test coverage | Added `SupabaseAuthServiceTests.swift` (10 tests) + `ChatViewModelTests.swift` (18 tests) |
-| H2 | Excessive print() logging | Created `Logger.swift` with OSLog, updated 6 files to use structured logging |
-| H3 | user_badges undocumented | Added SQL COMMENT documenting service-role-only design |
-| H4 | Edge Function console.log | Created `logger.ts`, updated `delete-account` and `verify-purchase` functions |
+| ID  | Issue                     | Fix Applied                                                                               |
+| --- | ------------------------- | ----------------------------------------------------------------------------------------- |
+| H1  | Minimal test coverage     | Added `SupabaseAuthServiceTests.swift` (10 tests) + `ChatViewModelTests.swift` (18 tests) |
+| H2  | Excessive print() logging | Created `Logger.swift` with OSLog, updated 6 files to use structured logging              |
+| H3  | user_badges undocumented  | Added SQL COMMENT documenting service-role-only design                                    |
+| H4  | Edge Function console.log | Created `logger.ts`, updated `delete-account` and `verify-purchase` functions             |
 
 ### Phase 3: Medium Priority Fixes
 
-| ID | Issue | Fix Applied |
-|----|-------|-------------|
-| M1 | ChatView retain cycle | REVIEWED: Swift Task pattern is safe, documented as no-action |
-| M3 | Redundant query in delete-account | Removed dead code block |
-| M4 | Missing voice-token rate limit | Added 5 req/min rate limiting with proper headers |
-| M5 | Inconsistent error responses | Created `errors.ts` with standardized error response format |
-| M7 | Missing notification_history index | Added GIN index on metadata column |
-| M8 | Prompt injection partial | Applied `sanitizeForPrompt()` to main chat flow and history |
+| ID  | Issue                              | Fix Applied                                                   |
+| --- | ---------------------------------- | ------------------------------------------------------------- |
+| M1  | ChatView retain cycle              | REVIEWED: Swift Task pattern is safe, documented as no-action |
+| M3  | Redundant query in delete-account  | Removed dead code block                                       |
+| M4  | Missing voice-token rate limit     | Added 5 req/min rate limiting with proper headers             |
+| M5  | Inconsistent error responses       | Created `errors.ts` with standardized error response format   |
+| M7  | Missing notification_history index | Added GIN index on metadata column                            |
+| M8  | Prompt injection partial           | Applied `sanitizeForPrompt()` to main chat flow and history   |
 
 ### Phase 4: Low Priority Fixes
 
-| ID | Issue | Fix Applied |
-|----|-------|-------------|
-| L1 | Deprecated column undocumented | Added SQL COMMENT on `trigger_content` column |
-| L2 | Magic numbers scattered | Created `Constants.swift` with centralized config values |
-| L6 | Missing Content-Type validation | Added `validateContentType()` helper to `cors.ts` |
+| ID  | Issue                           | Fix Applied                                              |
+| --- | ------------------------------- | -------------------------------------------------------- |
+| L1  | Deprecated column undocumented  | Added SQL COMMENT on `trigger_content` column            |
+| L2  | Magic numbers scattered         | Created `Constants.swift` with centralized config values |
+| L6  | Missing Content-Type validation | Added `validateContentType()` helper to `cors.ts`        |
 
 ### Tests Added
 
@@ -128,12 +210,12 @@ Conducted forensic-level audit of the MindFriend codebase covering architecture,
 
 ### Findings Summary
 
-| Severity | Count |
-|----------|-------|
-| 🔴 Critical | 1 |
-| 🟠 High | 4 |
-| 🟡 Medium | 8 |
-| 🟢 Low | 6 |
+| Severity                 | Count      |
+| ------------------------ | ---------- |
+| 🔴 Critical              | 1          |
+| 🟠 High                  | 4          |
+| 🟡 Medium                | 8          |
+| 🟢 Low                   | 6          |
 | **Overall Health Score** | **78/100** |
 
 ### Critical Issues
