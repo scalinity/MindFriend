@@ -34,15 +34,19 @@ enum FontSizePreference: String, Codable, CaseIterable {
 }
 
 enum ColorBlindMode: String, Codable, CaseIterable {
+    case none
     case protanopia // Red-blind
     case deuteranopia // Green-blind
     case tritanopia // Blue-blind
+    case achromasia // Complete color blindness
 
     var displayName: String {
         switch self {
+        case .none: return "None"
         case .protanopia: return "Protanopia (Red-Blind)"
         case .deuteranopia: return "Deuteranopia (Green-Blind)"
         case .tritanopia: return "Tritanopia (Blue-Blind)"
+        case .achromasia: return "Achromasia (Complete)"
         }
     }
 }
@@ -229,10 +233,10 @@ struct AccessibilityPreferences: Codable, Equatable {
         AccessibilityPreferences(
             id: UUID(),
             userId: UUID(),
-            preferredFontSize: .system,
+            preferredFontSize: FontSizePreference.system,
             highContrastEnabled: false,
             reducedTransparencyEnabled: false,
-            colorBlindMode: nil,
+            colorBlindMode: ColorBlindMode.none,
             reduceMotionEnabled: false,
             autoPlayVideos: true,
             animationSpeed: 1.0,
@@ -247,8 +251,8 @@ struct AccessibilityPreferences: Codable, Equatable {
             visualAlertsEnabled: false,
             preferredLanguage: "en",
             preferredRegion: nil,
-            dateFormat: .system,
-            timeFormat: .system,
+            dateFormat: DateFormatPreference.system,
+            timeFormat: TimeFormatPreference.system,
             createdAt: Date(),
             updatedAt: Date()
         )

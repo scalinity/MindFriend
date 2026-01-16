@@ -10,6 +10,14 @@
 		00EE7C42BC23C3C719CD3C9F /* AccessibilityHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58AC3779493347E53EC5C762 /* AccessibilityHelpers.swift */; };
 		ASVC02BC23C3C719CD3C9F /* AccessibilityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = ASVC02493347E53EC5C762 /* AccessibilityService.swift */; };
 		ASMD02BC23C3C719CD3C9F /* AccessibilityModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = ASMD02493347E53EC5C762 /* AccessibilityModels.swift */; };
+		ACSV02BC23C3C719CD3C9F /* AccessibilitySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACSV02493347E53EC5C762 /* AccessibilitySettingsView.swift */; };
+		CAPV02BC23C3C719CD3C9F /* CaptionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAPV02493347E53EC5C762 /* CaptionsView.swift */; };
+		TRNV02BC23C3C719CD3C9F /* TranscriptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = TRNV02493347E53EC5C762 /* TranscriptView.swift */; };
+		LANGV02BC23C3C719CD3C9F /* LanguageSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = LANGV02493347E53EC5C762 /* LanguageSettingsView.swift */; };
+		TXTV02BC23C3C719CD3C9F /* TextSizeSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = TXTV02493347E53EC5C762 /* TextSizeSettingsView.swift */; };
+		VISV02BC23C3C719CD3C9F /* VisualAccessibilityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = VISV02493347E53EC5C762 /* VisualAccessibilityView.swift */; };
+		SLVW02BC23C3C719CD3C9F /* SignLanguageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SLVW02493347E53EC5C762 /* SignLanguageView.swift */; };
+		AFBV02BC23C3C719CD3C9F /* AccessibilityFeedbackView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFBV02493347E53EC5C762 /* AccessibilityFeedbackView.swift */; };
 		10F822CF68E88F0D2C1ED0A1 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CF8C702A16D26304471B516 /* HomeView.swift */; };
 		1D9648B788FA1CE3F884D6C2 /* CrashReporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 979CA4C9C16981D7D441806F /* CrashReporter.swift */; };
 		51469850038B79FAAEFEDE8B /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 696C905684F7F4ED064A764D /* SignInView.swift */; };
@@ -257,6 +265,14 @@
 		PRSCPV01493347E53EC5C762 /* CategoryPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryPickerView.swift; sourceTree = "<group>"; };
 		ASVC02493347E53EC5C762 /* AccessibilityService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityService.swift; sourceTree = "<group>"; };
 		ASMD02493347E53EC5C762 /* AccessibilityModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityModels.swift; sourceTree = "<group>"; };
+		ACSV02493347E53EC5C762 /* AccessibilitySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilitySettingsView.swift; sourceTree = "<group>"; };
+		CAPV02493347E53EC5C762 /* CaptionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptionsView.swift; sourceTree = "<group>"; };
+		TRNV02493347E53EC5C762 /* TranscriptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptView.swift; sourceTree = "<group>"; };
+		LANGV02493347E53EC5C762 /* LanguageSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageSettingsView.swift; sourceTree = "<group>"; };
+		TXTV02493347E53EC5C762 /* TextSizeSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextSizeSettingsView.swift; sourceTree = "<group>"; };
+		VISV02493347E53EC5C762 /* VisualAccessibilityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualAccessibilityView.swift; sourceTree = "<group>"; };
+		SLVW02493347E53EC5C762 /* SignLanguageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignLanguageView.swift; sourceTree = "<group>"; };
+		AFBV02493347E53EC5C762 /* AccessibilityFeedbackView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityFeedbackView.swift; sourceTree = "<group>"; };
 	/* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -523,6 +539,14 @@
 				58AC3779493347E53EC5C762 /* AccessibilityHelpers.swift */,
 				ASVC02493347E53EC5C762 /* AccessibilityService.swift */,
 				ASMD02493347E53EC5C762 /* AccessibilityModels.swift */,
+			ACSV02493347E53EC5C762 /* AccessibilitySettingsView.swift */,
+			CAPV02493347E53EC5C762 /* CaptionsView.swift */,
+			TRNV02493347E53EC5C762 /* TranscriptView.swift */,
+			LANGV02493347E53EC5C762 /* LanguageSettingsView.swift */,
+			TXTV02493347E53EC5C762 /* TextSizeSettingsView.swift */,
+			VISV02493347E53EC5C762 /* VisualAccessibilityView.swift */,
+			SLVW02493347E53EC5C762 /* SignLanguageView.swift */,
+			AFBV02493347E53EC5C762 /* AccessibilityFeedbackView.swift */,
 			);
 			path = Accessibility;
 			sourceTree = "<group>";
@@ -854,6 +878,14 @@
 				00EE7C42BC23C3C719CD3C9F /* AccessibilityHelpers.swift in Sources */,
 				ASVC02BC23C3C719CD3C9F /* AccessibilityService.swift in Sources */,
 				ASMD02BC23C3C719CD3C9F /* AccessibilityModels.swift in Sources */,
+				ACSV02BC23C3C719CD3C9F /* AccessibilitySettingsView.swift in Sources */,
+				CAPV02BC23C3C719CD3C9F /* CaptionsView.swift in Sources */,
+				TRNV02BC23C3C719CD3C9F /* TranscriptView.swift in Sources */,
+				LANGV02BC23C3C719CD3C9F /* LanguageSettingsView.swift in Sources */,
+				TXTV02BC23C3C719CD3C9F /* TextSizeSettingsView.swift in Sources */,
+				VISV02BC23C3C719CD3C9F /* VisualAccessibilityView.swift in Sources */,
+				SLVW02BC23C3C719CD3C9F /* SignLanguageView.swift in Sources */,
+				AFBV02BC23C3C719CD3C9F /* AccessibilityFeedbackView.swift in Sources */,
 				72C7488CC7539553EDEBBD66 /* Analytics.swift in Sources */,
 				LVLUP001BC23C3C719CD3C9F /* LevelUpCelebration.swift in Sources */,
 				LVLPV01BC23C3C719CD3C9F /* LevelProgressView.swift in Sources */,
