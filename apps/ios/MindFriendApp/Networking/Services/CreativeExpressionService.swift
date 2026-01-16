@@ -553,7 +553,7 @@ enum CreativeError: LocalizedError {
         case .notAuthenticated:
             return "Please sign in to use creative features."
         case .quotaExceeded:
-            return "You've reached your daily limit. Upgrade to premium for more."
+            return "You've used your free daily AI art generation. Upgrade to MindFriend Premium for 20 generations per day!"
         case .quotaNotAvailable:
             return "Unable to check quota. Please try again."
         case .generationFailed(let message):
