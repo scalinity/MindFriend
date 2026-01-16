@@ -2130,7 +2130,7 @@ final class SupabaseDataService: ObservableObject {
     // MARK: - Data Export
 
     func exportUserData() async throws -> UserDataExport {
-        let userId = try userId
+        let currentUserId = try userId
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
 
@@ -2138,7 +2138,7 @@ final class SupabaseDataService: ObservableObject {
         let profile: DBProfile = try await supabase
             .from(Tables.profiles)
             .select()
-            .eq("id", value: userId)
+            .eq("id", value: currentUserId)
             .single()
             .execute()
             .value
@@ -2150,7 +2150,7 @@ final class SupabaseDataService: ObservableObject {
         let moods: [DBMood] = try await supabase
             .from(Tables.moods)
             .select()
-            .eq("user_id", value: userId)
+            .eq("user_id", value: currentUserId)
             .order("created_at", ascending: false)
             .execute()
             .value
@@ -2159,7 +2159,7 @@ final class SupabaseDataService: ObservableObject {
         let quests: [DBQuestWithTemplate] = try await supabase
             .from(Tables.quests)
             .select("*, quest_templates(*)")
-            .eq("user_id", value: userId)
+            .eq("user_id", value: currentUserId)
             .order("assigned_at", ascending: false)
             .execute()
             .value
@@ -2168,7 +2168,7 @@ final class SupabaseDataService: ObservableObject {
         let conversations: [DBConversation] = try await supabase
             .from(Tables.conversations)
             .select()
-            .eq("user_id", value: userId)
+            .eq("user_id", value: currentUserId)
             .order("created_at", ascending: false)
             .execute()
             .value
@@ -2201,7 +2201,7 @@ final class SupabaseDataService: ObservableObject {
         let memberships: [DBCircleMembership] = try await supabase
             .from(Tables.circleMembers)
             .select("*, circles(*)")
-            .eq("user_id", value: userId)
+            .eq("user_id", value: currentUserId)
             .execute()
             .value
 
@@ -2209,7 +2209,7 @@ final class SupabaseDataService: ObservableObject {
         let sessions: [DBExerciseSessionForExport] = try await supabase
             .from(Tables.exerciseSessions)
             .select("*, exercises(*)")
-            .eq("user_id", value: userId)
+            .eq("user_id", value: currentUserId)
             .order("completed_at", ascending: false)
             .execute()
             .value
@@ -2218,7 +2218,7 @@ final class SupabaseDataService: ObservableObject {
         let subscription: DBSubscriptionForExport? = try? await supabase
             .from(Tables.subscriptions)
             .select()
-            .eq("user_id", value: userId)
+            .eq("user_id", value: currentUserId)
             .single()
             .execute()
             .value
@@ -2227,7 +2227,7 @@ final class SupabaseDataService: ObservableObject {
         let crisisEvents: [DBCrisisEventForExport] = try await supabase
             .from(Tables.crisisEvents)
             .select("id, user_id, trigger_content, detected_at")
-            .eq("user_id", value: userId)
+            .eq("user_id", value: currentUserId)
             .order("detected_at", ascending: false)
             .execute()
             .value
@@ -2235,7 +2235,7 @@ final class SupabaseDataService: ObservableObject {
         return UserDataExport(
             exportedAt: formatter.string(from: Date()),
             user: UserDataExport.UserExportData(
-                id: userId.uuidString,
+                id: currentUserId.uuidString,
                 handle: profile.handle ?? "",
                 displayName: profile.displayName ?? "User",
                 email: profile.email,
@@ -2812,6 +2812,163 @@ final class SupabaseDataService: ObservableObject {
 
         context += "Do not mention specific day counts. Focus on the present moment and supporting their wellness journey."
         return context
+    }
+
+    // MARK: - Proactive Intelligence
+
+    /// Get the user's current engagement state
+    func getEngagementState() async throws -> UserEngagementState? {
+        let currentUserId = try userId
+
+        let states: [DBUserEngagementState] = try await supabase
+            .from(Tables.userEngagementStates)
+            .select()
+            .eq("user_id", value: currentUserId)
+            .limit(1)
+            .execute()
+            .value
+
+        return states.first?.toModel()
+    }
+
+    /// Get detected patterns for the user
+    func getUserPatterns(activeOnly: Bool = true) async throws -> [UserPattern] {
+        let currentUserId = try userId
+
+        var query = supabase
+            .from(Tables.userPatterns)
+            .select()
+            .eq("user_id", value: currentUserId)
+
+        if activeOnly {
+            query = query.eq("is_active", value: true)
+        }
+
+        let patterns: [DBUserPattern] = try await query
+            .order("confidence", ascending: false)
+            .execute()
+            .value
+
+        return patterns.map { $0.toModel() }
+    }
+
+    /// Get high-confidence patterns that should be surfaced to the user
+    func getSurfaceablePatterns() async throws -> [UserPattern] {
+        let currentUserId = try userId
+
+        let patterns: [DBUserPattern] = try await supabase
+            .from(Tables.userPatterns)
+            .select()
+            .eq("user_id", value: currentUserId)
+            .eq("is_active", value: true)
+            .eq("user_acknowledged", value: false)
+            .gte("confidence", value: 0.7)
+            .order("confidence", ascending: false)
+            .execute()
+            .value
+
+        return patterns.map { $0.toModel() }
+    }
+
+    /// Acknowledge a pattern (mark as seen by user)
+    func acknowledgePattern(patternId: String) async throws {
+        let currentUserId = try userId
+
+        try await supabase
+            .rpc("acknowledge_pattern", params: [
+                "p_user_id": currentUserId.uuidString,
+                "p_pattern_id": patternId
+            ])
+            .execute()
+    }
+
+    /// Get proactive messages for the user
+    func getProactiveMessages(status: ProactiveMessageStatus? = nil, limit: Int = 20) async throws -> [ProactiveMessage] {
+        let currentUserId = try userId
+
+        var query = supabase
+            .from(Tables.proactiveMessages)
+            .select()
+            .eq("user_id", value: currentUserId)
+
+        if let status = status {
+            query = query.eq("status", value: status.rawValue)
+        }
+
+        let messages: [DBProactiveMessage] = try await query
+            .order("created_at", ascending: false)
+            .limit(limit)
+            .execute()
+            .value
+
+        return messages.map { $0.toModel() }
+    }
+
+    /// Record engagement with a proactive message
+    func recordProactiveEngagement(messageId: String, engaged: Bool) async throws {
+        let currentUserId = try userId
+
+        let params: [String: AnyEncodable] = [
+            "p_user_id": AnyEncodable(currentUserId.uuidString),
+            "p_message_id": AnyEncodable(messageId),
+            "p_engaged": AnyEncodable(engaged)
+        ]
+
+        try await supabase
+            .rpc("record_proactive_engagement", params: params)
+            .execute()
+    }
+
+    /// Get the user's proactive settings
+    func getProactiveSettings() async throws -> ProactiveSettings {
+        let currentUserId = try userId
+
+        let settings: [DBProactiveSettings] = try await supabase
+            .from(Tables.userSettings)
+            .select("proactive_enabled, proactive_max_daily, proactive_types_enabled, calendar_integration_enabled, weather_insights_enabled")
+            .eq("user_id", value: currentUserId)
+            .limit(1)
+            .execute()
+            .value
+
+        return settings.first?.toModel() ?? ProactiveSettings.default
+    }
+
+    /// Update the user's proactive settings
+    func updateProactiveSettings(_ settings: ProactiveSettings) async throws {
+        let currentUserId = try userId
+
+        let typesEnabled = settings.proactiveTypesEnabled.map { $0.rawValue }
+
+        let updates: [String: AnyEncodable] = [
+            "proactive_enabled": AnyEncodable(settings.proactiveEnabled),
+            "proactive_max_daily": AnyEncodable(settings.proactiveMaxDaily),
+            "proactive_types_enabled": AnyEncodable(typesEnabled),
+            "calendar_integration_enabled": AnyEncodable(settings.calendarIntegrationEnabled),
+            "weather_insights_enabled": AnyEncodable(settings.weatherInsightsEnabled)
+        ]
+
+        try await supabase
+            .from(Tables.userSettings)
+            .update(updates)
+            .eq("user_id", value: currentUserId)
+            .execute()
+    }
+
+    /// Toggle a specific proactive trigger type
+    func toggleProactiveTriggerType(_ triggerType: ProactiveTriggerType, enabled: Bool) async throws {
+        let currentSettings = try await getProactiveSettings()
+        var typesEnabled = currentSettings.proactiveTypesEnabled
+
+        if enabled && !typesEnabled.contains(triggerType) {
+            typesEnabled.append(triggerType)
+        } else if !enabled {
+            typesEnabled.removeAll { $0 == triggerType }
+        }
+
+        var newSettings = currentSettings
+        newSettings.proactiveTypesEnabled = typesEnabled
+        try await updateProactiveSettings(newSettings)
     }
 
     // MARK: - Helpers
@@ -3643,4 +3800,329 @@ extension ISO8601DateFormatter {
         formatter.formatOptions = [.withFullDate]
         return formatter
     }()
+}
+
+// MARK: - Structured Programs
+
+extension SupabaseDataService {
+
+    // MARK: - Programs
+
+    /// Fetch all active programs
+    func getPrograms() async throws -> [Program] {
+        let response: [DBProgram] = try await supabase
+            .from(Tables.programs)
+            .select()
+            .eq("is_active", value: true)
+            .order("sort_order")
+            .execute()
+            .value
+
+        return response.map { $0.toProgram() }
+    }
+
+    /// Fetch all days for a program
+    func getProgramDays(programId: String) async throws -> [ProgramDay] {
+        let response: [DBProgramDay] = try await supabase
+            .from(Tables.programDays)
+            .select()
+            .eq("program_id", value: programId)
+            .order("day_number")
+            .execute()
+            .value
+
+        return response.map { $0.toProgramDay() }
+    }
+
+    /// Fetch a specific program day
+    func getProgramDay(programId: String, dayNumber: Int) async throws -> ProgramDay? {
+        let response: [DBProgramDay] = try await supabase
+            .from(Tables.programDays)
+            .select()
+            .eq("program_id", value: programId)
+            .eq("day_number", value: dayNumber)
+            .limit(1)
+            .execute()
+            .value
+
+        return response.first?.toProgramDay()
+    }
+
+    // MARK: - Enrollments
+
+    /// Get user's active enrollment (only one allowed at a time)
+    func getActiveEnrollment() async throws -> ProgramEnrollment? {
+        let currentUserId = try userId
+
+        let response: [DBProgramEnrollment] = try await supabase
+            .from(Tables.programEnrollments)
+            .select("*, programs(*)")
+            .eq("user_id", value: currentUserId)
+            .eq("status", value: "active")
+            .limit(1)
+            .execute()
+            .value
+
+        return response.first?.toEnrollment()
+    }
+
+    /// Get user's enrollment for a specific program (active or paused)
+    func getEnrollment(programId: String) async throws -> ProgramEnrollment? {
+        let currentUserId = try userId
+
+        let response: [DBProgramEnrollment] = try await supabase
+            .from(Tables.programEnrollments)
+            .select("*, programs(*)")
+            .eq("user_id", value: currentUserId)
+            .eq("program_id", value: programId)
+            .in("status", values: ["active", "paused"])
+            .limit(1)
+            .execute()
+            .value
+
+        return response.first?.toEnrollment()
+    }
+
+    /// Get all user enrollments (all statuses)
+    func getAllEnrollments() async throws -> [ProgramEnrollment] {
+        let currentUserId = try userId
+
+        let response: [DBProgramEnrollment] = try await supabase
+            .from(Tables.programEnrollments)
+            .select("*, programs(*)")
+            .eq("user_id", value: currentUserId)
+            .order("started_at", ascending: false)
+            .execute()
+            .value
+
+        return response.map { $0.toEnrollment() }
+    }
+
+    /// Enroll in a program (uses RPC for business logic)
+    /// Note: RPC function uses auth.uid() internally for security
+    func enrollInProgram(programId: String, preferredTime: String = "09:00:00") async throws -> ProgramEnrollment {
+        // Call RPC function - it uses auth.uid() internally for IDOR protection
+        let result: UUID = try await supabase.rpc(
+            "enroll_in_program",
+            params: [
+                "p_program_id": programId,
+                "p_preferred_time": preferredTime
+            ]
+        ).execute().value
+
+        // Fetch the created enrollment with program data
+        let enrollment: [DBProgramEnrollment] = try await supabase
+            .from(Tables.programEnrollments)
+            .select("*, programs(*)")
+            .eq("id", value: result.uuidString)
+            .limit(1)
+            .execute()
+            .value
+
+        guard let created = enrollment.first else {
+            throw DataError.operationFailed("Failed to fetch created enrollment")
+        }
+
+        Analytics.shared.track(.programEnrolled, properties: [
+            "program_id": programId
+        ])
+
+        return created.toEnrollment()
+    }
+
+    /// Pause an enrollment
+    func pauseEnrollment(_ enrollmentId: String) async throws {
+        try await supabase.rpc(
+            "pause_enrollment",
+            params: ["p_enrollment_id": enrollmentId]
+        ).execute()
+
+        Analytics.shared.track(.programPaused, properties: [
+            "enrollment_id": enrollmentId
+        ])
+    }
+
+    /// Resume a paused enrollment
+    func resumeEnrollment(_ enrollmentId: String) async throws {
+        try await supabase.rpc(
+            "resume_enrollment",
+            params: ["p_enrollment_id": enrollmentId]
+        ).execute()
+
+        Analytics.shared.track(.programResumed, properties: [
+            "enrollment_id": enrollmentId
+        ])
+    }
+
+    /// Abandon an enrollment
+    func abandonEnrollment(_ enrollmentId: String) async throws {
+        try await supabase.rpc(
+            "abandon_enrollment",
+            params: ["p_enrollment_id": enrollmentId]
+        ).execute()
+
+        Analytics.shared.track(.programAbandoned, properties: [
+            "enrollment_id": enrollmentId
+        ])
+    }
+
+    // MARK: - Day Progress
+
+    /// Get progress for a specific day
+    func getDayProgress(enrollmentId: String, dayNumber: Int) async throws -> ProgramDayProgress? {
+        let response: [DBProgramDayProgress] = try await supabase
+            .from(Tables.programDayProgress)
+            .select()
+            .eq("enrollment_id", value: enrollmentId)
+            .eq("day_number", value: dayNumber)
+            .limit(1)
+            .execute()
+            .value
+
+        return response.first?.toDayProgress()
+    }
+
+    /// Get all day progress for an enrollment
+    func getAllDayProgress(enrollmentId: String) async throws -> [ProgramDayProgress] {
+        let response: [DBProgramDayProgress] = try await supabase
+            .from(Tables.programDayProgress)
+            .select()
+            .eq("enrollment_id", value: enrollmentId)
+            .order("day_number")
+            .execute()
+            .value
+
+        return response.map { $0.toDayProgress() }
+    }
+
+    /// Complete a program day (uses RPC for business logic)
+    func completeProgramDay(
+        enrollmentId: String,
+        dayNumber: Int,
+        contentCompleted: [String: Bool],
+        reflectionResponse: String? = nil,
+        applyReport: String? = nil,
+        moodBefore: Int? = nil,
+        moodAfter: Int? = nil
+    ) async throws -> CompleteProgramDayResult {
+        // Encode content completed as JSON
+        let contentData = try JSONEncoder().encode(contentCompleted)
+        let contentJson = String(data: contentData, encoding: .utf8) ?? "{}"
+
+        let params: [String: AnyEncodable] = [
+            "p_enrollment_id": AnyEncodable(enrollmentId),
+            "p_day_number": AnyEncodable(dayNumber),
+            "p_content_completed": AnyEncodable(contentJson),
+            "p_reflection_response": AnyEncodable(reflectionResponse),
+            "p_apply_report": AnyEncodable(applyReport),
+            "p_mood_before": AnyEncodable(moodBefore),
+            "p_mood_after": AnyEncodable(moodAfter)
+        ]
+        let result: CompleteProgramDayResult = try await supabase.rpc(
+            "complete_program_day",
+            params: params
+        ).execute().value
+
+        Analytics.shared.track(.programDayCompleted, properties: [
+            "enrollment_id": enrollmentId,
+            "day_number": dayNumber,
+            "program_complete": result.programComplete
+        ])
+
+        return result
+    }
+
+    /// Skip a program day (uses RPC for business logic)
+    func skipProgramDay(
+        enrollmentId: String,
+        dayNumber: Int,
+        reason: String? = nil
+    ) async throws -> SkipProgramDayResult {
+        let skipParams: [String: AnyEncodable] = [
+            "p_enrollment_id": AnyEncodable(enrollmentId),
+            "p_day_number": AnyEncodable(dayNumber),
+            "p_reason": AnyEncodable(reason)
+        ]
+        let result: SkipProgramDayResult = try await supabase.rpc(
+            "skip_program_day",
+            params: skipParams
+        ).execute().value
+
+        Analytics.shared.track(.programDaySkipped, properties: [
+            "enrollment_id": enrollmentId,
+            "day_number": dayNumber,
+            "skips_remaining": result.skipsRemaining
+        ])
+
+        return result
+    }
+
+    // MARK: - Certificates
+
+    /// Get all user's program certificates
+    func getCertificates() async throws -> [ProgramCertificate] {
+        let currentUserId = try userId
+
+        let response: [DBProgramCertificate] = try await supabase
+            .from(Tables.programCertificates)
+            .select("*, programs(*)")
+            .eq("user_id", value: currentUserId)
+            .order("issued_at", ascending: false)
+            .execute()
+            .value
+
+        return response.map { $0.toCertificate() }
+    }
+
+    /// Get certificate by ID
+    func getCertificate(id: String) async throws -> ProgramCertificate? {
+        let response: [DBProgramCertificate] = try await supabase
+            .from(Tables.programCertificates)
+            .select("*, programs(*)")
+            .eq("id", value: id)
+            .limit(1)
+            .execute()
+            .value
+
+        return response.first?.toCertificate()
+    }
+
+    /// Mark certificate as shared to circle
+    func shareCertificateToCircle(certificateId: String) async throws {
+        try await supabase
+            .from(Tables.programCertificates)
+            .update(["shared_to_circle": true])
+            .eq("id", value: certificateId)
+            .execute()
+
+        Analytics.shared.track(.certificateShared, properties: [
+            "certificate_id": certificateId,
+            "channel": "circle"
+        ])
+    }
+
+    /// Mark certificate as shared externally
+    func shareCertificateExternally(certificateId: String) async throws {
+        try await supabase
+            .from(Tables.programCertificates)
+            .update(["shared_externally": true])
+            .eq("id", value: certificateId)
+            .execute()
+
+        Analytics.shared.track(.certificateShared, properties: [
+            "certificate_id": certificateId,
+            "channel": "external"
+        ])
+    }
+
+    // MARK: - Stats
+
+    /// Get user's program stats
+    func getUserProgramStats() async throws -> UserProgramStats {
+        let result: UserProgramStats = try await supabase.rpc(
+            "get_user_program_stats"
+        ).execute().value
+
+        return result
+    }
 }

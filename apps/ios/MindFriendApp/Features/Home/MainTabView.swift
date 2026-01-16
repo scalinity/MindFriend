@@ -11,6 +11,12 @@ struct MainTabView: View {
                 }
                 .tag(MainTab.home)
 
+            ProgramsLibraryView()
+                .tabItem {
+                    Label(MainTab.programs.title, systemImage: MainTab.programs.icon)
+                }
+                .tag(MainTab.programs)
+
             ChatListView()
                 .tabItem {
                     Label(MainTab.chat.title, systemImage: MainTab.chat.icon)

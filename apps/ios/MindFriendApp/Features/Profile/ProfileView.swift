@@ -53,11 +53,11 @@ struct ProfileView: View {
                 // Stats
                 Section("Stats") {
                     HStack {
-                        StatItem(value: "\(appState.currentUser?.stats.currentStreakDays ?? 0)", label: "Streak")
+                        ProfileStatItem(value: "\(appState.currentUser?.stats.currentStreakDays ?? 0)", label: "Streak")
                         Divider()
-                        StatItem(value: "\(appState.currentUser?.stats.totalQuestsCompleted ?? 0)", label: "Quests")
+                        ProfileStatItem(value: "\(appState.currentUser?.stats.totalQuestsCompleted ?? 0)", label: "Quests")
                         Divider()
-                        StatItem(value: "\(appState.currentUser?.badges.count ?? 0)", label: "Badges")
+                        ProfileStatItem(value: "\(appState.currentUser?.badges.count ?? 0)", label: "Badges")
                     }
                     .padding(.vertical, 8)
                 }
@@ -74,6 +74,12 @@ struct ProfileView: View {
                         BadgesView()
                     } label: {
                         Label("Badges", systemImage: "star.fill")
+                    }
+
+                    NavigationLink {
+                        CertificatesListView()
+                    } label: {
+                        Label("Certificates", systemImage: "checkmark.seal.fill")
                     }
                 }
 
@@ -101,6 +107,12 @@ struct ProfileView: View {
                         MemorySettingsView()
                     } label: {
                         Label("AI Memory", systemImage: "brain.head.profile")
+                    }
+
+                    NavigationLink {
+                        ProactiveSettingsView()
+                    } label: {
+                        Label("Proactive Check-ins", systemImage: "sparkles")
                     }
 
                     NavigationLink {
@@ -256,7 +268,7 @@ struct ProfileView: View {
     }
 }
 
-struct StatItem: View {
+private struct ProfileStatItem: View {
     let value: String
     let label: String
 
