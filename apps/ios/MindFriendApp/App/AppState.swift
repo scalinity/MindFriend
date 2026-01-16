@@ -140,6 +140,7 @@ enum MainTab: String, CaseIterable {
     case programs
     case chat
     case circles
+    case personalization
     case profile
 
     var title: String {
@@ -148,6 +149,7 @@ enum MainTab: String, CaseIterable {
         case .programs: return "Programs"
         case .chat: return "Chat"
         case .circles: return "Circles"
+        case .personalization: return "For You"
         case .profile: return "Profile"
         }
     }
@@ -158,6 +160,7 @@ enum MainTab: String, CaseIterable {
         case .programs: return "book.fill"
         case .chat: return "bubble.left.and.bubble.right.fill"
         case .circles: return "person.3.fill"
+        case .personalization: return "sparkles"
         case .profile: return "person.fill"
         }
     }
