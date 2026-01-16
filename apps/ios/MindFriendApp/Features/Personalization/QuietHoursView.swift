@@ -3,7 +3,7 @@
 
 import SwiftUI
 
-struct QuietHoursView: View {
+struct SmartQuietHoursView: View {
     @EnvironmentObject private var container: DependencyContainer
     @State private var startTime: Date = Date()
     @State private var endTime: Date = Date()
@@ -121,7 +121,7 @@ struct QuietHoursView: View {
 
 #Preview {
     NavigationStack {
-        QuietHoursView()
+        SmartQuietHoursView()
             .environmentObject(DependencyContainer())
     }
 }

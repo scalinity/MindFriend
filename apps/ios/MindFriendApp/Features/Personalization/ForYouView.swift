@@ -154,7 +154,7 @@ struct ForYouView: View {
             }
 
             if let insight = personalizationService.insights.first {
-                InsightCardCompact(insight: insight)
+                PersonalizedInsightCardCompact(insight: insight)
             }
         }
     }
@@ -312,9 +312,9 @@ struct RecommendationCard: View {
     }
 }
 
-// MARK: - Compact Insight Card
+// MARK: - Compact Personalized Insight Card
 
-struct InsightCardCompact: View {
+struct PersonalizedInsightCardCompact: View {
     let insight: DBPersonalizedInsight
 
     var body: some View {
