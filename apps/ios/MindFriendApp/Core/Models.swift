@@ -70,6 +70,14 @@ struct UserStats: Codable, Equatable {
     var level: Int
     var levelTitle: String
     var lastXpResetWeek: String?
+    // Streak shield properties (added for streak recovery feature)
+    var streakShieldsRemaining: Int?
+    var streakShieldsMax: Int?
+    var recoveryQuestAvailable: Bool?
+    var recoveryQuestExpiresAt: Date?
+    var streakBeforeBreak: Int?
+    var recoveryAttemptsRemaining: Int?
+    var recoveryAttemptsMax: Int?
 
     init(
         currentStreakDays: Int = 0,
@@ -80,7 +88,14 @@ struct UserStats: Codable, Equatable {
         xpThisWeek: Int = 0,
         level: Int = 1,
         levelTitle: String = "Beginner",
-        lastXpResetWeek: String? = nil
+        lastXpResetWeek: String? = nil,
+        streakShieldsRemaining: Int? = 1,
+        streakShieldsMax: Int? = 1,
+        recoveryQuestAvailable: Bool? = false,
+        recoveryQuestExpiresAt: Date? = nil,
+        streakBeforeBreak: Int? = nil,
+        recoveryAttemptsRemaining: Int? = 1,
+        recoveryAttemptsMax: Int? = 1
     ) {
         self.currentStreakDays = currentStreakDays
         self.longestStreakDays = longestStreakDays
@@ -91,7 +106,199 @@ struct UserStats: Codable, Equatable {
         self.level = level
         self.levelTitle = levelTitle
         self.lastXpResetWeek = lastXpResetWeek
+        self.streakShieldsRemaining = streakShieldsRemaining
+        self.streakShieldsMax = streakShieldsMax
+        self.recoveryQuestAvailable = recoveryQuestAvailable
+        self.recoveryQuestExpiresAt = recoveryQuestExpiresAt
+        self.streakBeforeBreak = streakBeforeBreak
+        self.recoveryAttemptsRemaining = recoveryAttemptsRemaining
+        self.recoveryAttemptsMax = recoveryAttemptsMax
     }
+
+    enum CodingKeys: String, CodingKey {
+        case currentStreakDays = "current_streak_days"
+        case longestStreakDays = "longest_streak_days"
+        case totalQuestsCompleted = "total_quests_completed"
+        case totalExercisesCompleted = "total_exercises_completed"
+        case xpTotal = "xp_total"
+        case xpThisWeek = "xp_this_week"
+        case level
+        case levelTitle = "level_title"
+        case lastXpResetWeek = "last_xp_reset_week"
+        case streakShieldsRemaining = "streak_shields_remaining"
+        case streakShieldsMax = "streak_shields_max"
+        case recoveryQuestAvailable = "recovery_quest_available"
+        case recoveryQuestExpiresAt = "recovery_quest_expires_at"
+        case streakBeforeBreak = "streak_before_break"
+        case recoveryAttemptsRemaining = "recovery_attempts_remaining"
+        case recoveryAttemptsMax = "recovery_attempts_max"
+    }
+}
+
+// MARK: - Streak Shield Status
+
+/// Represents the current state of a user's streak shields and recovery quest availability
+struct StreakShieldStatus: Codable, Equatable {
+    let shieldsRemaining: Int
+    let shieldsMax: Int
+    let shieldsResetAt: Date?
+    let lastShieldUsedAt: Date?
+    let recoveryQuestAvailable: Bool
+    let recoveryQuestExpiresAt: Date?
+    let streakBeforeBreak: Int?
+    let recoveryAttemptsRemaining: Int
+    let recoveryAttemptsMax: Int
+    let currentStreak: Int
+
+    /// Number of shields used this week
+    var shieldsUsedThisWeek: Int {
+        shieldsMax - shieldsRemaining
+    }
+
+    /// Whether user has any shields left
+    var hasShieldsRemaining: Bool {
+        shieldsRemaining > 0
+    }
+
+    /// Whether user can attempt recovery
+    var canAttemptRecovery: Bool {
+        recoveryQuestAvailable && recoveryAttemptsRemaining > 0
+    }
+
+    /// Time remaining until recovery expires
+    var recoveryTimeRemaining: TimeInterval? {
+        guard recoveryQuestAvailable, let expiresAt = recoveryQuestExpiresAt else { return nil }
+        return expiresAt.timeIntervalSince(Date())
+    }
+
+    /// Formatted time until next shield reset
+    var nextResetFormatted: String? {
+        guard let resetAt = shieldsResetAt else { return nil }
+        // Calculate next Monday at 05:00 UTC
+        let calendar = Calendar.current
+        let nextMonday = calendar.nextDate(
+            after: resetAt,
+            matching: DateComponents(hour: 5, minute: 0, weekday: 2),
+            matchingPolicy: .nextTime
+        ) ?? resetAt.addingTimeInterval(7 * 24 * 60 * 60)
+
+        let days = calendar.dateComponents([.day], from: Date(), to: nextMonday).day ?? 0
+        if days == 0 { return "Today" }
+        if days == 1 { return "Tomorrow" }
+        return "\(days) days"
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case shieldsRemaining = "shields_remaining"
+        case shieldsMax = "shields_max"
+        case shieldsResetAt = "shields_reset_at"
+        case lastShieldUsedAt = "last_shield_used_at"
+        case recoveryQuestAvailable = "recovery_quest_available"
+        case recoveryQuestExpiresAt = "recovery_quest_expires_at"
+        case streakBeforeBreak = "streak_before_break"
+        case recoveryAttemptsRemaining = "recovery_attempts_remaining"
+        case recoveryAttemptsMax = "recovery_attempts_max"
+        case currentStreak = "current_streak"
+    }
+}
+
+// MARK: - Recovery Quest
+
+/// Status of a recovery quest attempt
+enum RecoveryStatus: String, Codable {
+    case pending
+    case inProgress = "in_progress"
+    case completed
+    case expired
+    case failed
+}
+
+/// Represents a recovery quest attempt
+struct RecoveryQuestAttempt: Identifiable, Codable, Equatable {
+    let id: String
+    let userId: String
+    let streakToRecover: Int
+    let questTemplateId: String?
+    let attemptNumber: Int
+    let startedAt: Date
+    var completedAt: Date?
+    var expiredAt: Date?
+    var status: RecoveryStatus
+
+    /// Associated quest template (loaded separately)
+    var questTemplate: QuestTemplate?
+
+    /// Time remaining before attempt expires
+    var timeRemaining: TimeInterval? {
+        guard status == .pending || status == .inProgress else { return nil }
+        guard let expiresAt = expiredAt else { return nil }
+        return expiresAt.timeIntervalSince(Date())
+    }
+
+    /// Whether the attempt has expired
+    var isExpired: Bool {
+        guard let expiresAt = expiredAt else { return false }
+        return Date() > expiresAt
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case streakToRecover = "streak_to_recover"
+        case questTemplateId = "quest_template_id"
+        case attemptNumber = "attempt_number"
+        case startedAt = "started_at"
+        case completedAt = "completed_at"
+        case expiredAt = "expired_at"
+        case status
+        case questTemplate = "quest_templates"
+    }
+}
+
+/// Result from check_protection action
+struct StreakProtectionResult: Codable {
+    let success: Bool
+    let streakProtected: Bool
+    let newStreak: Int
+    let shieldsRemaining: Int
+    let shieldsMax: Int
+    let recoveryAvailable: Bool
+    let streakBeforeBreak: Int?
+    let recoveryExpiresAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case success
+        case streakProtected = "streak_protected"
+        case newStreak = "new_streak"
+        case shieldsRemaining = "shields_remaining"
+        case shieldsMax = "shields_max"
+        case recoveryAvailable = "recovery_available"
+        case streakBeforeBreak = "streak_before_break"
+        case recoveryExpiresAt = "recovery_expires_at"
+    }
+}
+
+/// Result from start_recovery action
+struct StartRecoveryResult: Codable {
+    let success: Bool
+    let attemptId: String?
+    let quest: RecoveryQuestInfo?
+    let error: String?
+
+    struct RecoveryQuestInfo: Codable {
+        let id: String
+        let title: String
+        let description: String
+        let estimatedMinutes: Int
+        let instructions: [String]?
+    }
+}
+
+/// Result from complete_recovery action
+struct CompleteRecoveryResult: Codable {
+    let success: Bool
+    let restoredStreak: Int?
+    let error: String?
 }
 
 struct Entitlements: Codable, Equatable {
@@ -684,13 +891,21 @@ struct Badge: Codable, Identifiable, Equatable {
 
 // MARK: - Quest
 
-struct Quest: Codable, Identifiable, Equatable {
+struct Quest: Codable, Identifiable, Equatable, Hashable {
     let id: String
     let localDate: String
     var status: QuestStatus
     let assignedAt: Date
     var completedAt: Date?
     let template: QuestTemplate
+
+    // Quest Choice feature properties
+    var isQuickVariant: Bool = false
+    var xpMultiplier: Double = 1.0
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
 }
 
 struct QuestTemplate: Codable, Equatable {
@@ -702,6 +917,36 @@ struct QuestTemplate: Codable, Equatable {
     let difficulty: String
     let tags: [String]
     let instructions: [QuestInstruction]
+    var category: QuestType?  // Quest Choice feature: category for preference tracking
+
+    enum CodingKeys: String, CodingKey {
+        case id, type, title, description, estimatedMinutes, difficulty, tags, instructions, category
+    }
+
+    init(id: String, type: QuestType, title: String, description: String, estimatedMinutes: Int, difficulty: String, tags: [String], instructions: [QuestInstruction], category: QuestType? = nil) {
+        self.id = id
+        self.type = type
+        self.title = title
+        self.description = description
+        self.estimatedMinutes = estimatedMinutes
+        self.difficulty = difficulty
+        self.tags = tags
+        self.instructions = instructions
+        self.category = category ?? type  // Default to type if category not specified
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        type = try container.decode(QuestType.self, forKey: .type)
+        title = try container.decode(String.self, forKey: .title)
+        description = try container.decode(String.self, forKey: .description)
+        estimatedMinutes = try container.decode(Int.self, forKey: .estimatedMinutes)
+        difficulty = try container.decode(String.self, forKey: .difficulty)
+        tags = try container.decode([String].self, forKey: .tags)
+        instructions = try container.decode([QuestInstruction].self, forKey: .instructions)
+        category = try container.decodeIfPresent(QuestType.self, forKey: .category) ?? type
+    }
 }
 
 struct QuestInstruction: Codable, Equatable {
@@ -763,6 +1008,113 @@ struct QuestCompletion: Codable {
     let completedAt: Date?
     let streakDays: Int
     let badgesEarned: [Badge]
+}
+
+// MARK: - Quest Alternatives (Quest Choice Feature)
+
+/// Represents the daily quest alternatives offered to a user
+struct QuestAlternatives: Codable, Identifiable, Equatable {
+    let id: UUID
+    let userId: UUID
+    let questDate: Date
+    let primaryQuestId: UUID
+    let quickVariantId: UUID?
+    let altQuestId: UUID?
+    let rerollsUsed: Int
+    let rerollsMax: Int
+    let selectedVariant: SelectedVariant
+    let createdAt: Date?
+
+    // Joined template data (populated when fetching)
+    var primaryQuest: QuestTemplate?
+    var quickVariant: QuestQuickVariant?
+    var altQuest: QuestTemplate?
+
+    enum SelectedVariant: String, Codable {
+        case primary
+        case quick
+        case alt
+        case reroll
+    }
+
+    var rerollsRemaining: Int {
+        max(0, rerollsMax - rerollsUsed)
+    }
+
+    var canReroll: Bool {
+        rerollsRemaining > 0 || rerollsMax == 999 // Premium unlimited
+    }
+
+    var isPremiumUnlimited: Bool {
+        rerollsMax == 999
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case questDate = "quest_date"
+        case primaryQuestId = "primary_quest_id"
+        case quickVariantId = "quick_variant_id"
+        case altQuestId = "alt_quest_id"
+        case rerollsUsed = "rerolls_used"
+        case rerollsMax = "rerolls_max"
+        case selectedVariant = "selected_variant"
+        case createdAt = "created_at"
+        case primaryQuest = "primary_quest_template"
+        case quickVariant = "quest_quick_variant"
+        case altQuest = "alt_quest_template"
+    }
+}
+
+/// A shortened version of a quest (2-3 minutes, 50% XP)
+struct QuestQuickVariant: Identifiable, Codable, Equatable {
+    let id: UUID
+    let parentTemplateId: UUID
+    let title: String
+    let description: String
+    let steps: [QuestInstruction]
+    let estimatedMinutes: Int
+    let xpMultiplier: Double
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case parentTemplateId = "parent_template_id"
+        case title, description, steps
+        case estimatedMinutes = "estimated_minutes"
+        case xpMultiplier = "xp_multiplier"
+    }
+}
+
+/// Tracks user preferences for quest categories (for smart recommendations)
+struct QuestPreference: Codable, Equatable {
+    let userId: UUID
+    let questCategory: String
+    let completionCount: Int
+    let skipCount: Int
+    let totalRatingSum: Int
+    let ratingCount: Int
+    let lastCompletedAt: Date?
+
+    var avgRating: Double? {
+        guard ratingCount > 0 else { return nil }
+        return Double(totalRatingSum) / Double(ratingCount)
+    }
+
+    var preferenceScore: Double {
+        let completionRate = Double(completionCount) / Double(max(1, completionCount + skipCount))
+        let ratingScore = (avgRating ?? 3.0) / 5.0
+        return (completionRate * 0.7) + (ratingScore * 0.3)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case questCategory = "quest_category"
+        case completionCount = "completion_count"
+        case skipCount = "skip_count"
+        case totalRatingSum = "total_rating_sum"
+        case ratingCount = "rating_count"
+        case lastCompletedAt = "last_completed_at"
+    }
 }
 
 // MARK: - Mood
@@ -942,6 +1294,8 @@ struct SendMessageResponse: Codable {
     let userMessage: Message
     let assistantMessage: Message
     let quotaRemaining: Int
+    let quotaUsed: Int?      // Server-authoritative: sync UI from this
+    let quotaLimit: Int?     // Server-authoritative: limit value
     let crisisDetected: Bool?
     let conversationTitle: String?
 }
@@ -1653,11 +2007,233 @@ struct RefreshTokenRequest: Codable {
 struct UserDataExport: Codable {
     let exportedAt: String
     let user: UserExportData
+    let settings: SettingsExportData?
+    let moods: [MoodExportData]
+    let quests: [QuestExportData]
+    let conversations: [ConversationExportData]
+    let circles: [CircleExportData]
+    let exerciseSessions: [ExerciseSessionExportData]
 
     struct UserExportData: Codable {
         let id: String
         let handle: String
         let displayName: String
         let email: String?
+        let timezone: String?
+        let createdAt: String?
+    }
+
+    struct SettingsExportData: Codable {
+        let notificationsEnabled: Bool?
+        let quietHoursStart: String?
+        let quietHoursEnd: String?
+        let privacyMode: Bool?
+        let aiTone: String?
+    }
+
+    struct MoodExportData: Codable {
+        let date: String
+        let moodScore: Int
+        let anxietyScore: Int?
+        let energyScore: Int?
+        let notes: String?
+        let tags: [String]?
+    }
+
+    struct QuestExportData: Codable {
+        let id: String
+        let title: String
+        let assignedAt: String
+        let completedAt: String?
+        let status: String
+    }
+
+    struct ConversationExportData: Codable {
+        let id: String
+        let title: String?
+        let createdAt: String
+        let messages: [MessageExportData]
+    }
+
+    struct MessageExportData: Codable {
+        let role: String
+        let content: String
+        let createdAt: String
+    }
+
+    struct CircleExportData: Codable {
+        let id: String
+        let name: String
+        let role: String
+        let joinedAt: String
+    }
+
+    struct ExerciseSessionExportData: Codable {
+        let exerciseName: String
+        let exerciseType: String
+        let completedAt: String
+        let durationSeconds: Int?
+    }
+}
+
+// MARK: - Re-engagement
+
+/// Tier classification for user absence duration
+enum LapseTier: String, Codable, CaseIterable {
+    case active = "active"
+    case briefBreak = "brief_break"
+    case extendedBreak = "extended_break"
+    case longAbsence = "long_absence"
+    case hiatus = "hiatus"
+
+    /// Warm welcome message for the tier
+    var welcomeMessage: String {
+        switch self {
+        case .active:
+            return ""
+        case .briefBreak:
+            return "Good to see you!"
+        case .extendedBreak:
+            return "Welcome back! We missed you."
+        case .longAbsence:
+            return "It's great to have you back."
+        case .hiatus:
+            return "Welcome back, friend. We're glad you're here."
+        }
+    }
+
+    /// Supportive sub-message for the tier
+    var subMessage: String {
+        switch self {
+        case .active:
+            return ""
+        case .briefBreak:
+            return "Ready to continue your wellness journey?"
+        case .extendedBreak:
+            return "Life gets busy sometimes. No judgment here."
+        case .longAbsence:
+            return "Whatever brought you back, we're here for you."
+        case .hiatus:
+            return "Every moment is a chance for a fresh start. Your progress is still saved."
+        }
+    }
+
+    /// Whether to show the Fresh Start option
+    var showFreshStart: Bool {
+        switch self {
+        case .active, .briefBreak:
+            return false
+        case .extendedBreak, .longAbsence, .hiatus:
+            return true
+        }
+    }
+
+    /// Whether this tier should trigger the welcome back modal
+    var shouldShowWelcomeBack: Bool {
+        self != .active
+    }
+
+    /// Minimum days for this tier
+    var minimumDays: Int {
+        switch self {
+        case .active: return 0
+        case .briefBreak: return 3
+        case .extendedBreak: return 7
+        case .longAbsence: return 14
+        case .hiatus: return 30
+        }
+    }
+}
+
+/// Summary of what the user missed while away
+struct AbsenceSummary: Codable, Equatable {
+    let absenceDays: Int
+    let lapseTier: LapseTier
+    let hugsReceived: Int
+    let circlePosts: Int
+    let friendMilestones: [FriendMilestone]
+
+    /// Nested type for friend milestone info
+    struct FriendMilestone: Codable, Equatable, Identifiable {
+        let name: String
+        let milestone: String
+        let isStreak: Bool
+
+        var id: String { "\(name)-\(milestone)" }
+
+        enum CodingKeys: String, CodingKey {
+            case name
+            case milestone
+            case isStreak = "isStreak"
+        }
+    }
+
+    /// Whether there's any activity to show
+    var hasActivity: Bool {
+        hugsReceived > 0 || circlePosts > 0 || !friendMilestones.isEmpty
+    }
+
+    /// Whether this absence warrants showing the welcome back modal
+    var shouldShowWelcomeBack: Bool {
+        absenceDays >= 3
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case absenceDays = "absence_days"
+        case lapseTier = "lapse_tier"
+        case hugsReceived = "hugs_received"
+        case circlePosts = "circle_posts"
+        case friendMilestones = "friend_milestones"
+    }
+}
+
+/// Types of re-engagement events for analytics and tracking
+enum ReengagementEventType: String, Codable {
+    case welcomeBackShown = "welcome_back_shown"
+    case welcomeBackDismissed = "welcome_back_dismissed"
+    case freshStartChosen = "fresh_start_chosen"
+    case continueChosen = "continue_chosen"
+    case notificationSent = "notification_sent"
+    case notificationOpened = "notification_opened"
+}
+
+/// A re-engagement event for logging
+struct ReengagementEvent: Codable {
+    let userId: UUID
+    let eventType: ReengagementEventType
+    let absenceDays: Int
+    let metadata: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case eventType = "event_type"
+        case absenceDays = "absence_days"
+        case metadata
+    }
+}
+
+/// Result from recording a session start
+struct SessionStartResult: Codable {
+    let previousAbsenceDays: Int
+    let lapseTier: LapseTier
+    let isReturning: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case previousAbsenceDays = "previous_absence_days"
+        case lapseTier = "lapse_tier"
+        case isReturning = "is_returning"
+    }
+}
+
+/// Result from performing a fresh start
+struct FreshStartResult: Codable {
+    let success: Bool
+    let newStreak: Int
+    let freshStartBonus: Int
+
+    enum CodingKeys: String, CodingKey {
+        case success
+        case newStreak = "new_streak"
+        case freshStartBonus = "fresh_start_bonus"
     }
 }

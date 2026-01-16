@@ -153,10 +153,14 @@ struct ChatView: View {
                 messages.append(response.userMessage)
                 messages.append(response.assistantMessage)
 
-                // Update quota tracking (skip for premium users)
-                if appState.entitlements.tier != .premium {
-                    appState.entitlements.dailyAiUsed += 1
-                    showQuotaWarning = response.quotaRemaining <= quotaWarningThreshold
+                // Update quota tracking from server (authoritative source)
+                if appState.entitlements.tier != .premium, let serverUsed = response.quotaUsed {
+                    // Sync from server-provided value (not local increment)
+                    appState.entitlements.dailyAiUsed = serverUsed
+                    // Only show warning if not unlimited (Int.max) and near limit
+                    showQuotaWarning = response.quotaRemaining < Int.max && response.quotaRemaining <= quotaWarningThreshold
+                } else {
+                    showQuotaWarning = false
                 }
 
                 // Update title if generated

@@ -9,7 +9,7 @@ struct PrivacyBanner: View {
                 .foregroundColor(.green)
 
             VStack(alignment: .leading, spacing: 8) {
-                PrivacyPoint(icon: "lock.fill", text: "End-to-end encryption for sensitive data")
+                PrivacyPoint(icon: "lock.fill", text: "Encrypted in transit and at rest")
                 PrivacyPoint(icon: "eye.slash.fill", text: "We never sell your personal information")
                 PrivacyPoint(icon: "arrow.down.doc.fill", text: "Export your data anytime")
                 PrivacyPoint(icon: "trash.fill", text: "Delete your account and data permanently")
@@ -19,7 +19,7 @@ struct PrivacyBanner: View {
         .background(Color.green.opacity(0.1))
         .cornerRadius(12)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Your Privacy Matters. End-to-end encryption for sensitive data. We never sell your personal information. Export your data anytime. Delete your account and data permanently.")
+        .accessibilityLabel("Your Privacy Matters. Encrypted in transit and at rest. We never sell your personal information. Export your data anytime. Delete your account and data permanently.")
     }
 }
 

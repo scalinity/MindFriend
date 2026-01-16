@@ -1,17 +1,59 @@
 // MindFriend Assign Quest Edge Function
-// Handles daily quest assignment and streak milestone detection
+// Handles daily quest assignment, streak milestone detection, and streak recovery
 // Triggered by cron job or directly
-// See: specs/03-circle-virality.md
+// See: specs/03-circle-virality.md, specs/10-streak-recovery.md
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import {
   createClient,
   SupabaseClient,
 } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCorsHeaders, corsHeaders } from "../_shared/cors.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 // Streak milestones that trigger circle posts
 const STREAK_MILESTONES = [7, 14, 30, 60, 100, 365];
+
+// Constants for performance and reliability
+const CRON_BATCH_SIZE = 50; // Process users in parallel batches
+const OPERATION_TIMEOUT_MS = 25000; // 25s timeout per operation
+
+/**
+ * Creates a promise that rejects after the specified timeout
+ */
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  operation: string,
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(
+        new Error(`Operation '${operation}' timed out after ${timeoutMs}ms`),
+      );
+    }, timeoutMs);
+
+    promise
+      .then((result) => {
+        clearTimeout(timeoutId);
+        resolve(result);
+      })
+      .catch((error) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      });
+  });
+}
+
+/**
+ * Splits an array into chunks of specified size
+ */
+function chunkArray<T>(array: T[], chunkSize: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < array.length; i += chunkSize) {
+    chunks.push(array.slice(i, i + chunkSize));
+  }
+  return chunks;
+}
 
 interface QuestTemplate {
   id: string;
@@ -21,12 +63,44 @@ interface QuestTemplate {
   estimated_minutes: number;
   difficulty: string;
   tags: string[];
+  instructions?: unknown;
 }
 
 interface UserStats {
   current_streak_days: number;
   longest_streak_days: number;
   last_quest_date: string | null;
+  streak_shields_remaining?: number;
+  streak_shields_max?: number;
+  recovery_quest_available?: boolean;
+  recovery_quest_expires_at?: string;
+  streak_before_break?: number;
+}
+
+interface StreakProtectionResult {
+  streak_protected: boolean;
+  new_streak: number;
+  shields_remaining: number;
+  recovery_available: boolean;
+  streak_before_break: number | null;
+  recovery_expires_at: string | null;
+}
+
+interface RecoveryQuestResult {
+  success: boolean;
+  attempt_id: string | null;
+  quest_template_id: string | null;
+  quest_title: string | null;
+  quest_description: string | null;
+  quest_estimated_minutes: number | null;
+  quest_instructions: unknown | null;
+  error_message: string | null;
+}
+
+interface RecoveryCompleteResult {
+  success: boolean;
+  restored_streak: number;
+  error_message: string | null;
 }
 
 // Get current date in user's timezone (or UTC if not set)
@@ -97,6 +171,7 @@ async function postStreakMilestone(
 }
 
 // Assign quest to a single user
+// Uses preference-weighted selection if user has quest preferences data
 async function assignQuestToUser(
   supabase: SupabaseClient,
   userId: string,
@@ -128,23 +203,46 @@ async function assignQuestToUser(
       .single(),
   ]);
 
-  // Get a random quest template (can be enhanced to consider wellness_focus)
-  const { data: templates } = await supabase
-    .from("quest_templates")
-    .select("*")
-    .limit(10);
+  // Try preference-weighted quest selection first (Quest Choice feature)
+  let templateId: string | null = null;
 
-  if (!templates?.length) {
-    return { assigned: false, reason: "no_templates" };
+  try {
+    const { data: weightedResult } = await supabase.rpc(
+      "get_weighted_quest_for_user",
+      {
+        p_user_id: userId,
+        p_exclude_category: null,
+      },
+    );
+
+    if (weightedResult) {
+      templateId = weightedResult;
+    }
+  } catch (err) {
+    console.log(
+      `Weighted selection not available for user ${userId}, falling back to random`,
+    );
   }
 
-  // Random selection (could be weighted by user preferences later)
-  const template = templates[Math.floor(Math.random() * templates.length)];
+  // Fallback to random selection if weighted selection fails or returns null
+  if (!templateId) {
+    const { data: templates } = await supabase
+      .from("quest_templates")
+      .select("id")
+      .eq("is_active", true)
+      .limit(10);
+
+    if (!templates?.length) {
+      return { assigned: false, reason: "no_templates" };
+    }
+
+    templateId = templates[Math.floor(Math.random() * templates.length)].id;
+  }
 
   // Assign the quest
   const { error } = await supabase.from("quests").insert({
     user_id: userId,
-    template_id: template.id,
+    template_id: templateId,
     local_date: localDate,
     status: "assigned",
   });
@@ -155,6 +253,124 @@ async function assignQuestToUser(
   }
 
   return { assigned: true };
+}
+
+// Check and apply streak protection (shields or recovery)
+async function checkStreakProtection(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<{
+  result: StreakProtectionResult | null;
+  notificationType: "shield_used" | "recovery_available" | null;
+}> {
+  try {
+    const rpcPromise = supabase.rpc("check_streak_protection", {
+      p_user_id: userId,
+    }) as Promise<{
+      data: StreakProtectionResult[] | null;
+      error: Error | null;
+    }>;
+
+    const { data, error } = await withTimeout(
+      rpcPromise,
+      OPERATION_TIMEOUT_MS,
+      "check_streak_protection",
+    );
+
+    if (error || !data?.length) {
+      console.error("Error checking streak protection:", error);
+      return { result: null, notificationType: null };
+    }
+
+    const result = data[0];
+    let notificationType: "shield_used" | "recovery_available" | null = null;
+
+    if (result.streak_protected) {
+      notificationType = "shield_used";
+    } else if (result.recovery_available) {
+      notificationType = "recovery_available";
+    }
+
+    return { result, notificationType };
+  } catch (error) {
+    console.error("Streak protection check failed:", error);
+    return { result: null, notificationType: null };
+  }
+}
+
+// Send streak protection notification
+async function sendStreakNotification(
+  supabase: SupabaseClient,
+  userId: string,
+  type: "shield_used" | "recovery_available",
+  data: {
+    streak?: number;
+    shieldsRemaining?: number;
+    shieldsMax?: number;
+    streakToRecover?: number;
+  },
+): Promise<void> {
+  try {
+    await supabase.functions.invoke("send-notification", {
+      body: {
+        type,
+        recipientId: userId,
+        data,
+      },
+    });
+    console.log(`Sent ${type} notification to user ${userId}`);
+  } catch (error) {
+    console.error(`Failed to send ${type} notification:`, error);
+  }
+}
+
+// Start a recovery quest
+async function startRecoveryQuest(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<RecoveryQuestResult> {
+  const { data, error } = (await supabase.rpc("start_recovery_quest", {
+    p_user_id: userId,
+  })) as { data: RecoveryQuestResult[] | null; error: Error | null };
+
+  if (error || !data?.length) {
+    console.error("Error starting recovery quest:", error);
+    return {
+      success: false,
+      attempt_id: null,
+      quest_template_id: null,
+      quest_title: null,
+      quest_description: null,
+      quest_estimated_minutes: null,
+      quest_instructions: null,
+      error_message: error?.message || "Failed to start recovery quest",
+    };
+  }
+
+  return data[0];
+}
+
+// Complete a recovery quest
+async function completeRecoveryQuest(
+  supabase: SupabaseClient,
+  userId: string,
+  attemptId: string,
+): Promise<RecoveryCompleteResult> {
+  const { data, error } = (await supabase.rpc("complete_recovery_quest", {
+    p_user_id: userId,
+    p_attempt_id: attemptId,
+  })) as { data: RecoveryCompleteResult[] | null; error: Error | null };
+
+  if (error || !data?.length) {
+    console.error("Error completing recovery quest:", error);
+    return {
+      success: false,
+      restored_streak: 0,
+      error_message: error?.message || "Failed to complete recovery quest",
+    };
+  }
+
+  return data[0];
 }
 
 // Update user stats after quest completion
@@ -202,16 +418,16 @@ async function updateStreakAndCheckMilestone(
 }
 
 serve(async (req) => {
-  // Handle CORS preflight
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
-
   const origin = req.headers.get("Origin");
   const headers = {
     ...getCorsHeaders(origin),
     "Content-Type": "application/json",
   };
+
+  // Handle CORS preflight
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: getCorsHeaders(origin) });
+  }
 
   try {
     // Initialize Supabase client with service role
@@ -228,10 +444,24 @@ serve(async (req) => {
     if (cronSecret && cronSecret === expectedSecret) {
       console.log("Processing daily quest assignment (cron)");
 
-      // Get all users with their timezones
-      const { data: users } = await supabaseAdmin
+      // Get all users with their timezones - with timeout
+      const fetchUsersPromise = supabaseAdmin
         .from("profiles")
         .select("id, timezone");
+
+      const { data: users, error: fetchError } = await withTimeout(
+        fetchUsersPromise,
+        OPERATION_TIMEOUT_MS,
+        "fetch_users",
+      );
+
+      if (fetchError) {
+        console.error("Error fetching users:", fetchError);
+        return new Response(
+          JSON.stringify({ success: false, error: fetchError.message }),
+          { status: 500, headers },
+        );
+      }
 
       if (!users?.length) {
         return new Response(JSON.stringify({ success: true, processed: 0 }), {
@@ -242,23 +472,46 @@ serve(async (req) => {
 
       let assigned = 0;
       let skipped = 0;
+      let errors = 0;
 
-      for (const user of users) {
-        const localDate = getLocalDate(user.timezone || "UTC");
-        const result = await assignQuestToUser(
-          supabaseAdmin,
-          user.id,
-          localDate,
-        );
-        if (result.assigned) {
-          assigned++;
-        } else {
-          skipped++;
+      // Process users in parallel batches for better performance
+      const userBatches = chunkArray(users, CRON_BATCH_SIZE);
+
+      for (const batch of userBatches) {
+        const batchPromises = batch.map(async (user) => {
+          try {
+            const localDate = getLocalDate(user.timezone || "UTC");
+            return await assignQuestToUser(supabaseAdmin, user.id, localDate);
+          } catch (error) {
+            console.error(`Error assigning quest to user ${user.id}:`, error);
+            return { assigned: false, reason: "error" };
+          }
+        });
+
+        const batchResults = await Promise.allSettled(batchPromises);
+
+        for (const result of batchResults) {
+          if (result.status === "fulfilled") {
+            if (result.value.assigned) {
+              assigned++;
+            } else if (result.value.reason === "error") {
+              errors++;
+            } else {
+              skipped++;
+            }
+          } else {
+            errors++;
+            console.error("Quest assignment failed:", result.reason);
+          }
         }
       }
 
+      console.log(
+        `Cron complete: ${assigned} assigned, ${skipped} skipped, ${errors} errors`,
+      );
+
       return new Response(
-        JSON.stringify({ success: true, assigned, skipped }),
+        JSON.stringify({ success: true, assigned, skipped, errors }),
         { status: 200, headers },
       );
     }
@@ -302,6 +555,136 @@ serve(async (req) => {
       // Assign quest to current user
       const result = await assignQuestToUser(supabaseAdmin, user.id, localDate);
       return new Response(JSON.stringify(result), { status: 200, headers });
+    }
+
+    if (action === "check_protection") {
+      // Check streak protection status and apply shield/recovery if needed
+      const { result: protectionResult, notificationType } =
+        await checkStreakProtection(supabaseAdmin, user.id);
+
+      if (!protectionResult) {
+        return new Response(
+          JSON.stringify({ error: "Failed to check streak protection" }),
+          { status: 500, headers },
+        );
+      }
+
+      // Send notification if streak was protected or recovery is available
+      if (notificationType) {
+        // Get user stats for notification data
+        const { data: stats } = await supabaseAdmin
+          .from("user_stats")
+          .select("streak_shields_remaining, streak_shields_max")
+          .eq("user_id", user.id)
+          .single();
+
+        if (notificationType === "shield_used") {
+          await sendStreakNotification(supabaseAdmin, user.id, "shield_used", {
+            streak: protectionResult.new_streak,
+            shieldsRemaining: stats?.streak_shields_remaining ?? 0,
+            shieldsMax: stats?.streak_shields_max ?? 1,
+          });
+        } else if (notificationType === "recovery_available") {
+          await sendStreakNotification(
+            supabaseAdmin,
+            user.id,
+            "recovery_available",
+            {
+              streakToRecover: protectionResult.streak_before_break ?? 0,
+            },
+          );
+        }
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          ...protectionResult,
+        }),
+        { status: 200, headers },
+      );
+    }
+
+    if (action === "start_recovery") {
+      // Start a recovery quest
+      const result = await startRecoveryQuest(supabaseAdmin, user.id);
+
+      if (!result.success) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: result.error_message,
+          }),
+          { status: 400, headers },
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          attemptId: result.attempt_id,
+          quest: {
+            id: result.quest_template_id,
+            title: result.quest_title,
+            description: result.quest_description,
+            estimatedMinutes: result.quest_estimated_minutes,
+            instructions: result.quest_instructions,
+          },
+        }),
+        { status: 200, headers },
+      );
+    }
+
+    if (action === "complete_recovery") {
+      // Complete a recovery quest and restore streak
+      const attemptId = body.attemptId;
+      if (!attemptId) {
+        return new Response(JSON.stringify({ error: "Missing attemptId" }), {
+          status: 400,
+          headers,
+        });
+      }
+
+      const result = await completeRecoveryQuest(
+        supabaseAdmin,
+        user.id,
+        attemptId,
+      );
+
+      if (!result.success) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: result.error_message,
+          }),
+          { status: 400, headers },
+        );
+      }
+
+      // Check for streak milestone after recovery
+      if (STREAK_MILESTONES.includes(result.restored_streak)) {
+        const { data: userProfile } = await supabaseAdmin
+          .from("profiles")
+          .select("display_name")
+          .eq("id", user.id)
+          .single();
+
+        const displayName = userProfile?.display_name || "Someone";
+        await postStreakMilestone(
+          supabaseAdmin,
+          user.id,
+          result.restored_streak,
+          displayName,
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          restoredStreak: result.restored_streak,
+        }),
+        { status: 200, headers },
+      );
     }
 
     if (action === "complete") {

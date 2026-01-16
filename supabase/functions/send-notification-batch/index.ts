@@ -5,10 +5,20 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCorsHeaders, corsHeaders } from "../_shared/cors.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { checkRateLimit, getRateLimitHeaders } from "../_shared/ratelimit.ts";
+import { createLogger } from "../_shared/logger.ts";
+
+const log = createLogger("send-notification-batch");
 
 // Max recipients per batch request
 const MAX_BATCH_SIZE = 50;
+
+// Rate limit: 10 batch requests per minute per user
+const BATCH_RATE_LIMIT = {
+  windowMs: 60 * 1000,
+  maxRequests: 10,
+};
 
 type NotificationType =
   | "circle_activity"
@@ -38,16 +48,16 @@ interface BatchResult {
 }
 
 serve(async (req) => {
-  // Handle CORS preflight
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
-
   const origin = req.headers.get("Origin");
   const headers = {
     ...getCorsHeaders(origin),
     "Content-Type": "application/json",
   };
+
+  // Handle CORS preflight
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: getCorsHeaders(origin) });
+  }
 
   try {
     const supabaseAdmin = createClient(
@@ -76,6 +86,31 @@ serve(async (req) => {
       });
     }
 
+    // Rate limiting check
+    const rateLimitResult = await checkRateLimit(
+      supabaseAdmin,
+      user.id,
+      "notification-batch",
+      BATCH_RATE_LIMIT,
+    );
+
+    if (!rateLimitResult.allowed) {
+      log.warn("Rate limit exceeded", { userId: user.id.slice(0, 8) });
+      return new Response(
+        JSON.stringify({
+          error: "Too many requests",
+          retryAfter: rateLimitResult.retryAfter,
+        }),
+        {
+          status: 429,
+          headers: {
+            ...headers,
+            ...getRateLimitHeaders(rateLimitResult),
+          },
+        },
+      );
+    }
+
     // Parse and validate request
     const body: BatchNotificationRequest = await req.json();
 
@@ -100,6 +135,30 @@ serve(async (req) => {
         }),
         { status: 400, headers },
       );
+    }
+
+    // For circle_activity notifications, validate sender is a member of the circle
+    if (body.type === "circle_activity" && body.data?.circleId) {
+      const { data: membership, error: membershipError } = await supabaseAdmin
+        .from("circle_members")
+        .select("id")
+        .eq("circle_id", body.data.circleId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (membershipError || !membership) {
+        log.warn("Circle membership validation failed", {
+          userId: user.id.slice(0, 8),
+          circleId: body.data.circleId.slice(0, 8),
+        });
+        return new Response(
+          JSON.stringify({
+            error: "Not authorized to send notifications for this circle",
+            code: "NOT_CIRCLE_MEMBER",
+          }),
+          { status: 403, headers },
+        );
+      }
     }
 
     // Call send-notification for each recipient in parallel
@@ -141,7 +200,10 @@ serve(async (req) => {
           reason: result.reason,
         };
       } catch (err) {
-        console.error(`Error sending to ${recipientId}:`, err);
+        log.error("Error sending notification", {
+          recipientId: recipientId.slice(0, 8),
+          error: err instanceof Error ? err.message : "Unknown",
+        });
         return {
           recipientId,
           success: false,
@@ -169,9 +231,7 @@ serve(async (req) => {
     const skipped = results.filter((r) => r.skipped).length;
     const failed = results.filter((r) => !r.success && !r.skipped).length;
 
-    console.log(
-      `Batch notification: ${sent} sent, ${skipped} skipped, ${failed} failed`,
-    );
+    log.info("Batch notification complete", { sent, skipped, failed });
 
     return new Response(
       JSON.stringify({
@@ -184,7 +244,9 @@ serve(async (req) => {
       { status: 200, headers },
     );
   } catch (error) {
-    console.error("Batch notification error:", error);
+    log.error("Batch notification error", {
+      error: error instanceof Error ? error.message : "Unknown",
+    });
     return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500,
       headers,

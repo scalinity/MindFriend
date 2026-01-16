@@ -18,7 +18,6 @@
 		61072C4F4C2CA090E0693617 /* ChatListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F23129ED1C5F32293E113DF /* ChatListView.swift */; };
 		68D87E1C574A556BB7B8B4B2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CFEC0910E4AFE443A36B1686 /* Assets.xcassets */; };
 		6AB643243D2B2A4AB70C2BCE /* CirclesListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5924F3CB5CA60B6DD68C1459 /* CirclesListView.swift */; };
-		706F2FEACC925BD6887B56BB /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 217D47AA6A7948FD8E2FB18B /* GoogleSignInSwift */; };
 		72C7488CC7539553EDEBBD66 /* Analytics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61268AE19EEFC21688B5A4CE /* Analytics.swift */; };
 		8351314356B11AB2DC04C248 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 955787D5047932A68D162322 /* Supabase */; };
 		87D1E2B75C3B225E6E8926BE /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = FD60B14EB159EE48E6267895 /* GoogleSignIn */; };
@@ -37,6 +36,7 @@
 		B91CF16BEA9D3E21EEEA7F23 /* ModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3AD861AAF4425ADED3B7DC1 /* ModelsTests.swift */; };
 		BADGV01BC23C3C719CD3C9F /* BadgesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BADGV02493347E53EC5C762 /* BadgesView.swift */; };
 		BB05FADB0C212D3022B64E51 /* QuestDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56417E06D522B4D73DEA20E7 /* QuestDetailView.swift */; };
+		QCVIEW01BC23C3C719CD3C9F /* QuestChoiceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = QCVIEW02493347E53EC5C762 /* QuestChoiceView.swift */; };
 		C1D2E3F405162738495A6B7C /* VoiceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F405162738495A6B7D /* VoiceSettingsView.swift */; };
 		C3ABF18229E400C20B9AB78A /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = 7A72FA6A11C7BA5D56CFD12A /* Sentry */; };
 		C486D3A26A0E2ACEF2D481E3 /* ChatService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29B370B3E929A0284493AB83 /* ChatService.swift */; };
@@ -115,6 +115,7 @@
 		39A519521BAC54826AC65757 /* MindFriendAppTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MindFriendAppTests.swift; sourceTree = "<group>"; };
 		4F92EBA52F3CBBB5C750E324 /* ExerciseLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseLibraryView.swift; sourceTree = "<group>"; };
 		56417E06D522B4D73DEA20E7 /* QuestDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestDetailView.swift; sourceTree = "<group>"; };
+		QCVIEW02493347E53EC5C762 /* QuestChoiceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestChoiceView.swift; sourceTree = "<group>"; };
 		58AC3779493347E53EC5C762 /* AccessibilityHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityHelpers.swift; sourceTree = "<group>"; };
 		590C1A661399CE9EC2A66F1C /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		5924F3CB5CA60B6DD68C1459 /* CirclesListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CirclesListView.swift; sourceTree = "<group>"; };
@@ -186,7 +187,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				87D1E2B75C3B225E6E8926BE /* GoogleSignIn in Frameworks */,
-				706F2FEACC925BD6887B56BB /* GoogleSignInSwift in Frameworks */,
 				C3ABF18229E400C20B9AB78A /* Sentry in Frameworks */,
 				8351314356B11AB2DC04C248 /* Supabase in Frameworks */,
 			);
@@ -369,6 +369,7 @@
 		9D4A124EED8A5F97E3CEDD16 /* Quests */ = {
 			isa = PBXGroup;
 			children = (
+				QCVIEW02493347E53EC5C762 /* QuestChoiceView.swift */,
 				56417E06D522B4D73DEA20E7 /* QuestDetailView.swift */,
 				A1291YV6YVZ7OPRWA1ZF5GXW /* RecoveryQuestView.swift */,
 			);
@@ -570,7 +571,6 @@
 			name = MindFriendApp;
 			packageProductDependencies = (
 				FD60B14EB159EE48E6267895 /* GoogleSignIn */,
-				217D47AA6A7948FD8E2FB18B /* GoogleSignInSwift */,
 				7A72FA6A11C7BA5D56CFD12A /* Sentry */,
 				955787D5047932A68D162322 /* Supabase */,
 			);
@@ -714,6 +714,7 @@
 				C1D2E3F405162738495A6B7C /* VoiceSettingsView.swift in Sources */,
 				M3M0RY5FCBCE702B474FE38F /* MemorySettingsView.swift in Sources */,
 				BB05FADB0C212D3022B64E51 /* QuestDetailView.swift in Sources */,
+				QCVIEW01BC23C3C719CD3C9F /* QuestChoiceView.swift in Sources */,
 				51469850038B79FAAEFEDE8B /* SignInView.swift in Sources */,
 				5EA99C5F974AED3B959DEDD9 /* SupabaseAuthService.swift in Sources */,
 				8EDE2AFDFD48327004543A74 /* SupabaseClient.swift in Sources */,
@@ -1071,11 +1072,6 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		217D47AA6A7948FD8E2FB18B /* GoogleSignInSwift */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 927CE705CDFCAF30998EEC7C /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
-			productName = GoogleSignInSwift;
-		};
 		7A72FA6A11C7BA5D56CFD12A /* Sentry */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 037D9C3CC1A62D1C60BE7523 /* XCRemoteSwiftPackageReference "sentry-cocoa" */;

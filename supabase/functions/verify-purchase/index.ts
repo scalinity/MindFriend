@@ -16,11 +16,16 @@ import {
 
 const log = createLogger("verify-purchase");
 
-// Apple's StoreKit JWS verification endpoints
+// Apple's StoreKit JWS verification endpoints (NOT appleid.apple.com!)
 const STOREKIT_JWKS = {
-  production: "https://appleid.apple.com/auth/keys",
-  sandbox: "https://appleid.apple.com/auth/keys",
+  production:
+    "https://api.storekit.itunes.apple.com/inApps/v1/environment/Production/publickeys",
+  sandbox:
+    "https://api.storekit.itunes.apple.com/inApps/v1/environment/Sandbox/publickeys",
 } as const;
+
+// Expected bundle ID for validation
+const EXPECTED_BUNDLE_ID = "com.mindfriend.app";
 
 interface VerifyRequest {
   signedTransaction: string; // StoreKit 2 JWS from Transaction.jwsRepresentation
@@ -144,6 +149,25 @@ serve(async (req) => {
         productId: transactionPayload.productId,
         environment: transactionPayload.environment,
       });
+
+      // Validate bundle ID to prevent cross-app attacks
+      if (transactionPayload.bundleId !== EXPECTED_BUNDLE_ID) {
+        log.warn("Bundle ID mismatch", {
+          expected: EXPECTED_BUNDLE_ID,
+          received: transactionPayload.bundleId,
+        });
+        return new Response(
+          JSON.stringify({
+            error: "Invalid bundle ID",
+            code: "BUNDLE_ID_MISMATCH",
+            valid: false,
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
     } catch (jwsError) {
       log.error("JWS verification failed", { error: String(jwsError) });
       return new Response(
@@ -177,25 +201,75 @@ serve(async (req) => {
       );
     }
 
-    // Idempotency check - return existing subscription if already processed
+    // Check for existing subscription with same original transaction
     const { data: existingSubscription } = await supabaseAdmin
       .from("subscriptions")
       .select("*")
       .eq("original_transaction_id", originalTransactionId)
       .single();
 
-    if (existingSubscription && existingSubscription.status === "active") {
-      // Already processed this transaction
+    // Handle renewals and duplicates
+    if (existingSubscription) {
+      const currentTransactionId = transactionPayload.transactionId;
+      const lastTransactionId = existingSubscription.last_transaction_id;
+
+      // True duplicate - same exact transaction already processed
+      if (lastTransactionId === currentTransactionId) {
+        return new Response(
+          JSON.stringify({
+            valid: true,
+            productId: existingSubscription.product_id,
+            planType: existingSubscription.plan_type,
+            billingPeriod: existingSubscription.billing_period,
+            expiresAt: existingSubscription.expires_at,
+            familyId: existingSubscription.family_id,
+            message: "Transaction already processed (idempotent)",
+            idempotent: true,
+          }),
+          {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      // Renewal - same original transaction but new transaction ID
+      // Update expiry and transaction ID
+      const newExpiresAt = expiresDate
+        ? new Date(expiresDate)
+        : calculateExpiryDate(
+            getPlanDetails(existingSubscription.product_id).billingPeriod,
+          );
+
+      const { error: renewalError } = await supabaseAdmin
+        .from("subscriptions")
+        .update({
+          last_transaction_id: currentTransactionId,
+          expires_at: newExpiresAt.toISOString(),
+          status: "active",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existingSubscription.id);
+
+      if (renewalError) {
+        log.error("Renewal update failed", { error: renewalError.message });
+      } else {
+        log.info("Subscription renewed", {
+          userId: user.id,
+          transactionId: currentTransactionId,
+          newExpiry: newExpiresAt.toISOString(),
+        });
+      }
+
       return new Response(
         JSON.stringify({
           valid: true,
           productId: existingSubscription.product_id,
           planType: existingSubscription.plan_type,
           billingPeriod: existingSubscription.billing_period,
-          expiresAt: existingSubscription.expires_at,
+          expiresAt: newExpiresAt.toISOString(),
           familyId: existingSubscription.family_id,
-          message: "Subscription already active (idempotent)",
-          idempotent: true,
+          message: "Subscription renewed successfully",
+          renewed: true,
         }),
         {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -310,11 +384,23 @@ serve(async (req) => {
       })
       .eq("id", user.id);
 
+    // Update user_stats with premium streak shield entitlements
+    await supabaseAdmin
+      .from("user_stats")
+      .update({
+        streak_shields_max: 3, // Premium: 3 shields per week (vs 1 for free)
+        recovery_attempts_max: 2, // Premium: 2 recovery attempts per break (vs 1 for free)
+      })
+      .eq("user_id", user.id);
+
+    log.info("Updated premium streak shield entitlements", { userId: user.id });
+
     // Create or update subscription record
     const subscriptionData = {
       user_id: user.id,
       product_id: productId,
       original_transaction_id: originalTransactionId,
+      last_transaction_id: transactionPayload.transactionId, // Track for renewal detection
       status: "active" as const,
       plan_type: planDetails.planType,
       billing_period: planDetails.billingPeriod,

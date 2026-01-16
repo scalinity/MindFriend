@@ -2,6 +2,9 @@ import Foundation
 import Supabase
 import OSLog
 
+// NOTE: SupabaseError was removed in newer supabase-swift releases; keep a local alias for compatibility.
+typealias SupabaseError = Error
+
 // MARK: - API Errors
 
 enum APIError: LocalizedError {
@@ -187,6 +190,246 @@ final class SupabaseDataService: ObservableObject {
             .execute()
 
         Analytics.shared.track(.questSkipped, properties: ["quest_id": id])
+    }
+
+    // MARK: - Quest Alternatives (Quest Choice Feature)
+
+    /// Get today's quest alternatives, generating them if needed
+    /// Returns primary quest, quick variant, and alternative quest options
+    func getTodayQuestAlternatives() async throws -> QuestAlternatives {
+        let today = ISO8601DateFormatter.dateOnly.string(from: Date())
+        let currentUserId = try userId
+
+        // First, try to generate/get alternatives via RPC
+        let results: [QuestAlternatives] = try await supabase
+            .rpc("generate_quest_alternatives", params: [
+                "p_user_id": currentUserId.uuidString,
+                "p_date": today
+            ])
+            .execute()
+            .value
+
+        guard var alternatives = results.first else {
+            throw DataError.operationFailed("No quest alternatives available")
+        }
+
+        // Fetch the related quest templates to populate the joined data
+        if let primaryId = alternatives.primaryQuestId as UUID? {
+            let templates: [QuestTemplate] = try await supabase
+                .from(Tables.questTemplates)
+                .select()
+                .eq("id", value: primaryId)
+                .execute()
+                .value
+            alternatives.primaryQuest = templates.first
+        }
+
+        if let quickId = alternatives.quickVariantId {
+            let variants: [QuestQuickVariant] = try await supabase
+                .from("quest_quick_variants")
+                .select()
+                .eq("id", value: quickId)
+                .execute()
+                .value
+            alternatives.quickVariant = variants.first
+        }
+
+        if let altId = alternatives.altQuestId {
+            let templates: [QuestTemplate] = try await supabase
+                .from(Tables.questTemplates)
+                .select()
+                .eq("id", value: altId)
+                .execute()
+                .value
+            alternatives.altQuest = templates.first
+        }
+
+        return alternatives
+    }
+
+    /// Select a quest variant (primary, quick, or alt)
+    func selectQuestVariant(_ variant: QuestAlternatives.SelectedVariant, alternativesId: UUID) async throws {
+        try await supabase
+            .from("quest_alternatives")
+            .update(["selected_variant": variant.rawValue])
+            .eq("id", value: alternativesId)
+            .eq("user_id", value: try userId)
+            .execute()
+
+        Analytics.shared.track(.questVariantSelected, properties: [
+            "variant": variant.rawValue,
+            "alternatives_id": alternativesId.uuidString
+        ])
+    }
+
+    /// Reroll the quest to get a new primary quest
+    /// Returns updated alternatives with new primary quest
+    func rerollQuest(alternativesId: UUID) async throws -> QuestAlternatives {
+        let currentUserId = try userId
+
+        let results: [QuestAlternatives] = try await supabase
+            .rpc("reroll_quest", params: [
+                "p_user_id": currentUserId.uuidString,
+                "p_alternatives_id": alternativesId.uuidString
+            ])
+            .execute()
+            .value
+
+        guard var alternatives = results.first else {
+            throw DataError.operationFailed("Reroll failed - no alternatives returned")
+        }
+
+        // Fetch the new primary quest template
+        if let primaryId = alternatives.primaryQuestId as UUID? {
+            let templates: [QuestTemplate] = try await supabase
+                .from(Tables.questTemplates)
+                .select()
+                .eq("id", value: primaryId)
+                .execute()
+                .value
+            alternatives.primaryQuest = templates.first
+        }
+
+        // Fetch quick variant if available
+        if let quickId = alternatives.quickVariantId {
+            let variants: [QuestQuickVariant] = try await supabase
+                .from("quest_quick_variants")
+                .select()
+                .eq("id", value: quickId)
+                .execute()
+                .value
+            alternatives.quickVariant = variants.first
+        }
+
+        Analytics.shared.track(.questRerolled, properties: [
+            "alternatives_id": alternativesId.uuidString,
+            "rerolls_used": alternatives.rerollsUsed
+        ])
+
+        return alternatives
+    }
+
+    /// Update quest preference after completion or skip
+    /// This helps the system learn user preferences for smarter recommendations
+    func updateQuestPreference(category: String, completed: Bool, rating: Int? = nil) async throws {
+        let currentUserId = try userId
+
+        // Build params with proper types for Supabase RPC
+        var params: [String: AnyEncodable] = [
+            "p_user_id": AnyEncodable(currentUserId.uuidString),
+            "p_quest_category": AnyEncodable(category),
+            "p_completed": AnyEncodable(completed)
+        ]
+
+        if let rating = rating {
+            params["p_rating"] = AnyEncodable(rating)
+        } else {
+            params["p_rating"] = AnyEncodable(nil as Int?)
+        }
+
+        try await supabase
+            .rpc("update_quest_preference", params: params)
+            .execute()
+    }
+
+    /// Get user's quest preferences for all categories
+    func getQuestPreferences() async throws -> [QuestPreference] {
+        let preferences: [QuestPreference] = try await supabase
+            .from("user_quest_preferences")
+            .select()
+            .eq("user_id", value: try userId)
+            .execute()
+            .value
+
+        return preferences
+    }
+
+    // MARK: - Streak Shields & Recovery
+
+    /// Get current shield status from user_stats via RPC
+    func getShieldStatus() async throws -> StreakShieldStatus {
+        let result: [StreakShieldStatus] = try await supabase
+            .rpc("get_shield_status", params: ["p_user_id": try userId])
+            .execute()
+            .value
+
+        guard let status = result.first else {
+            throw APIError.badRequest("Shield status not found")
+        }
+
+        return status
+    }
+
+    /// Check streak protection and apply shield or enable recovery if needed
+    /// Call this on app open/foreground to check if streak needs protection
+    func checkStreakProtection() async throws -> StreakProtectionResult {
+        let result: StreakProtectionResult = try await supabase.functions.invoke(
+            "assign-quest",
+            options: .init(body: ["action": "check_protection"])
+        )
+
+        if result.streakProtected {
+            Analytics.shared.track(.streakShieldUsed, properties: [
+                "new_streak": result.newStreak,
+                "shields_remaining": result.shieldsRemaining
+            ])
+        } else if result.recoveryAvailable {
+            Analytics.shared.track(.recoveryQuestOffered, properties: [
+                "streak_before_break": result.streakBeforeBreak ?? 0
+            ])
+        }
+
+        return result
+    }
+
+    /// Start a recovery quest to restore a broken streak
+    func startRecoveryQuest() async throws -> StartRecoveryResult {
+        let result: StartRecoveryResult = try await supabase.functions.invoke(
+            "assign-quest",
+            options: .init(body: ["action": "start_recovery"])
+        )
+
+        if result.success {
+            Analytics.shared.track(.recoveryQuestStarted, properties: [
+                "attempt_id": result.attemptId ?? ""
+            ])
+        }
+
+        return result
+    }
+
+    /// Complete a recovery quest and restore the streak
+    func completeRecoveryQuest(attemptId: String) async throws -> CompleteRecoveryResult {
+        let result: CompleteRecoveryResult = try await supabase.functions.invoke(
+            "assign-quest",
+            options: .init(body: [
+                "action": "complete_recovery",
+                "attemptId": attemptId
+            ])
+        )
+
+        if result.success, let restoredStreak = result.restoredStreak {
+            Analytics.shared.track(.recoveryQuestCompleted, properties: [
+                "restored_streak": restoredStreak
+            ])
+        }
+
+        return result
+    }
+
+    /// Get active recovery quest attempt (if any)
+    func getActiveRecoveryQuest() async throws -> RecoveryQuestAttempt? {
+        let attempts: [RecoveryQuestAttempt] = try await supabase
+            .from("recovery_quest_attempts")
+            .select("*, quest_templates(*)")
+            .eq("user_id", value: try userId)
+            .in("status", values: ["pending", "in_progress"])
+            .order("started_at", ascending: false)
+            .limit(1)
+            .execute()
+            .value
+
+        return attempts.first
     }
 
     // MARK: - Exercises
@@ -564,7 +807,8 @@ final class SupabaseDataService: ObservableObject {
             isCrisisResponse: chatResponse.isCrisisResponse ?? false,
             quotaUsed: chatResponse.quotaUsed,
             quotaLimit: chatResponse.quotaLimit,
-            conversationTitle: chatResponse.conversationTitle
+            conversationTitle: chatResponse.conversationTitle,
+            userMessageId: chatResponse.userMessageId
         )
     }
 
@@ -963,14 +1207,18 @@ final class SupabaseDataService: ObservableObject {
             .execute()
 
         // Trigger notification via edge function
-        try? await supabase.functions.invoke(
-            "send-notification",
-            options: .init(body: [
-                "type": "hug",
-                "recipientId": recipientId,
+        // Note: senderId and circleId must be nested in "data" per API contract
+        let hugNotificationBody: [String: AnyEncodable] = [
+            "type": AnyEncodable("hug"),
+            "recipientId": AnyEncodable(recipientId),
+            "data": AnyEncodable([
                 "senderId": try userId.uuidString,
                 "circleId": circleId
             ])
+        ]
+        _ = try? await supabase.functions.invoke(
+            "send-notification",
+            options: .init(body: hugNotificationBody)
         )
 
         Analytics.shared.track(.hugSent)
@@ -1439,20 +1687,18 @@ final class SupabaseDataService: ObservableObject {
 
     // MARK: - Device Registration
 
-    func registerDevice(apnsToken: String, deviceModel: String, osVersion: String) async throws {
+    func registerDevice(apnsToken: String) async throws {
         let device = DBDevice(
             id: nil,
             userId: try userId,
-            apnsToken: apnsToken,
-            deviceModel: deviceModel,
-            osVersion: osVersion,
-            createdAt: nil,
-            updatedAt: nil
+            token: apnsToken,
+            platform: "ios",
+            createdAt: nil
         )
 
         try await supabase
             .from(Tables.pushTokens)
-            .upsert(device, onConflict: "user_id,apns_token")
+            .upsert(device, onConflict: "user_id,token")
             .execute()
     }
 
@@ -1675,8 +1921,10 @@ final class SupabaseDataService: ObservableObject {
 
     func exportUserData() async throws -> UserDataExport {
         let userId = try userId
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
 
-        // Fetch all user data
+        // Fetch profile
         let profile: DBProfile = try await supabase
             .from(Tables.profiles)
             .select()
@@ -1685,6 +1933,10 @@ final class SupabaseDataService: ObservableObject {
             .execute()
             .value
 
+        // Settings are embedded in profile (DBProfile has all settings fields)
+        // No need for separate fetch
+
+        // Fetch moods
         let moods: [DBMood] = try await supabase
             .from(Tables.moods)
             .select()
@@ -1693,6 +1945,16 @@ final class SupabaseDataService: ObservableObject {
             .execute()
             .value
 
+        // Fetch quests with template info for export
+        let quests: [DBQuestWithTemplate] = try await supabase
+            .from(Tables.quests)
+            .select("*, quest_templates(*)")
+            .eq("user_id", value: userId)
+            .order("assigned_at", ascending: false)
+            .execute()
+            .value
+
+        // Fetch conversations with messages
         let conversations: [DBConversation] = try await supabase
             .from(Tables.conversations)
             .select()
@@ -1701,8 +1963,46 @@ final class SupabaseDataService: ObservableObject {
             .execute()
             .value
 
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
+        var conversationExports: [UserDataExport.ConversationExportData] = []
+        for conv in conversations {
+            let messages: [DBMessage] = try await supabase
+                .from(Tables.messages)
+                .select()
+                .eq("conversation_id", value: conv.id ?? UUID())
+                .order("created_at", ascending: true)
+                .execute()
+                .value
+
+            conversationExports.append(UserDataExport.ConversationExportData(
+                id: conv.id?.uuidString ?? "",
+                title: conv.title,
+                createdAt: conv.createdAt.map { formatter.string(from: $0) } ?? "",
+                messages: messages.map { msg in
+                    UserDataExport.MessageExportData(
+                        role: msg.role,
+                        content: msg.content,
+                        createdAt: msg.createdAt.map { formatter.string(from: $0) } ?? ""
+                    )
+                }
+            ))
+        }
+
+        // Fetch circle memberships
+        let memberships: [DBCircleMembership] = try await supabase
+            .from(Tables.circleMembers)
+            .select("*, circles(*)")
+            .eq("user_id", value: userId)
+            .execute()
+            .value
+
+        // Fetch exercise sessions with exercise details
+        let sessions: [DBExerciseSessionForExport] = try await supabase
+            .from(Tables.exerciseSessions)
+            .select("*, exercises(*)")
+            .eq("user_id", value: userId)
+            .order("completed_at", ascending: false)
+            .execute()
+            .value
 
         return UserDataExport(
             exportedAt: formatter.string(from: Date()),
@@ -1710,8 +2010,53 @@ final class SupabaseDataService: ObservableObject {
                 id: userId.uuidString,
                 handle: profile.handle ?? "",
                 displayName: profile.displayName ?? "User",
-                email: profile.email
-            )
+                email: profile.email,
+                timezone: profile.timezone,
+                createdAt: formatter.string(from: profile.createdAt)
+            ),
+            settings: UserDataExport.SettingsExportData(
+                notificationsEnabled: profile.remindersEnabled,
+                quietHoursStart: profile.quietHoursStartLocal,
+                quietHoursEnd: profile.quietHoursEndLocal,
+                privacyMode: profile.privacyMode == "strict",  // Convert String to Bool
+                aiTone: profile.aiTone
+            ),
+            moods: moods.map { m in
+                UserDataExport.MoodExportData(
+                    date: m.localDate,
+                    moodScore: m.moodScore,
+                    anxietyScore: m.anxietyScore,
+                    energyScore: m.energyScore,
+                    notes: m.note,  // DBMood uses 'note' singular
+                    tags: nil       // Tags not stored in DB, export as nil
+                )
+            },
+            quests: quests.map { q in
+                UserDataExport.QuestExportData(
+                    id: q.id.uuidString,
+                    title: q.questTemplates?.title ?? "Unknown Quest",
+                    assignedAt: q.assignedAt.map { formatter.string(from: $0) } ?? "",
+                    completedAt: q.completedAt.map { formatter.string(from: $0) },
+                    status: q.status
+                )
+            },
+            conversations: conversationExports,
+            circles: memberships.map { m in
+                UserDataExport.CircleExportData(
+                    id: m.circleId.uuidString,
+                    name: m.circles?.name ?? "Unknown Circle",
+                    role: m.role ?? "member",
+                    joinedAt: m.joinedAt.map { formatter.string(from: $0) } ?? ""
+                )
+            },
+            exerciseSessions: sessions.map { s in
+                UserDataExport.ExerciseSessionExportData(
+                    exerciseName: s.exercises?.title ?? "Unknown Exercise",
+                    exerciseType: s.exercises?.type ?? "unknown",
+                    completedAt: s.completedAt.map { formatter.string(from: $0) } ?? "",
+                    durationSeconds: s.exercises?.durationSeconds ?? 0
+                )
+            }
         )
     }
 
@@ -2033,6 +2378,196 @@ final class SupabaseDataService: ObservableObject {
         return result
     }
 
+    // MARK: - Re-engagement
+
+    /// Check user absence and get activity summary since last session
+    /// Returns nil if user is active (less than 3 days absent)
+    func checkUserAbsence() async throws -> AbsenceSummary? {
+        let currentUserId = try userId
+
+        struct AbsenceResult: Decodable {
+            let absenceDays: Int
+            let lapseTier: String
+            let hugsReceived: Int
+            let circlePosts: Int
+            let friendMilestones: [AbsenceSummary.FriendMilestone]
+
+            enum CodingKeys: String, CodingKey {
+                case absenceDays = "absence_days"
+                case lapseTier = "lapse_tier"
+                case hugsReceived = "hugs_received"
+                case circlePosts = "circle_posts"
+                case friendMilestones = "friend_milestones"
+            }
+        }
+
+        let results: [AbsenceResult] = try await supabase
+            .rpc("calculate_user_absence", params: [
+                "p_user_id": AnyEncodable(currentUserId)
+            ])
+            .execute()
+            .value
+
+        guard let result = results.first else { return nil }
+
+        // Only return if user has been absent 3+ days
+        guard result.absenceDays >= 3 else { return nil }
+
+        guard let tier = LapseTier(rawValue: result.lapseTier) else {
+            return nil
+        }
+
+        let summary = AbsenceSummary(
+            absenceDays: result.absenceDays,
+            lapseTier: tier,
+            hugsReceived: result.hugsReceived,
+            circlePosts: result.circlePosts,
+            friendMilestones: result.friendMilestones
+        )
+
+        Analytics.shared.track(.reengagementAbsenceChecked, properties: [
+            "absence_days": result.absenceDays,
+            "lapse_tier": result.lapseTier,
+            "hugs_received": result.hugsReceived,
+            "circle_posts": result.circlePosts
+        ])
+
+        return summary
+    }
+
+    /// Record session start and get previous absence info
+    /// Should be called when user opens the app
+    func recordSessionStart() async throws -> SessionStartResult {
+        let currentUserId = try userId
+
+        struct SessionResult: Decodable {
+            let previousAbsenceDays: Int
+            let lapseTier: String
+            let isReturning: Bool
+
+            enum CodingKeys: String, CodingKey {
+                case previousAbsenceDays = "previous_absence_days"
+                case lapseTier = "lapse_tier"
+                case isReturning = "is_returning"
+            }
+        }
+
+        let results: [SessionResult] = try await supabase
+            .rpc("record_session_start", params: [
+                "p_user_id": AnyEncodable(currentUserId)
+            ])
+            .execute()
+            .value
+
+        guard let result = results.first else {
+            throw DataError.operationFailed("Session start recording failed")
+        }
+
+        let tier = LapseTier(rawValue: result.lapseTier) ?? .active
+
+        Analytics.shared.track(.sessionStarted, properties: [
+            "previous_absence_days": result.previousAbsenceDays,
+            "lapse_tier": result.lapseTier,
+            "is_returning": result.isReturning
+        ])
+
+        return SessionStartResult(
+            previousAbsenceDays: result.previousAbsenceDays,
+            lapseTier: tier,
+            isReturning: result.isReturning
+        )
+    }
+
+    /// Log a re-engagement event for analytics
+    func logReengagementEvent(
+        type: ReengagementEventType,
+        absenceDays: Int,
+        metadata: [String: Any] = [:]
+    ) async throws {
+        let currentUserId = try userId
+
+        // Convert metadata to JSONB-compatible format
+        let jsonMetadata = try JSONSerialization.data(withJSONObject: metadata)
+        let metadataString = String(data: jsonMetadata, encoding: .utf8) ?? "{}"
+
+        try await supabase
+            .from("reengagement_events")
+            .insert([
+                "user_id": AnyEncodable(currentUserId),
+                "event_type": AnyEncodable(type.rawValue),
+                "absence_days": AnyEncodable(absenceDays),
+                "metadata": AnyEncodable(metadataString)
+            ])
+            .execute()
+
+        Analytics.shared.track(.reengagementEventLogged, properties: [
+            "event_type": type.rawValue,
+            "absence_days": absenceDays
+        ])
+    }
+
+    /// Perform fresh start - resets visible streak but preserves history
+    /// User starts at Day 2 as a bonus for coming back
+    func performFreshStart() async throws -> FreshStartResult {
+        let currentUserId = try userId
+
+        struct FreshResult: Decodable {
+            let success: Bool
+            let newStreak: Int
+            let freshStartBonus: Int
+
+            enum CodingKeys: String, CodingKey {
+                case success
+                case newStreak = "new_streak"
+                case freshStartBonus = "fresh_start_bonus"
+            }
+        }
+
+        let results: [FreshResult] = try await supabase
+            .rpc("perform_fresh_start", params: [
+                "p_user_id": AnyEncodable(currentUserId)
+            ])
+            .execute()
+            .value
+
+        guard let result = results.first, result.success else {
+            throw DataError.operationFailed("Fresh start failed")
+        }
+
+        Analytics.shared.track(.freshStartPerformed, properties: [
+            "new_streak": result.newStreak,
+            "fresh_start_bonus": result.freshStartBonus
+        ])
+
+        return FreshStartResult(
+            success: result.success,
+            newStreak: result.newStreak,
+            freshStartBonus: result.freshStartBonus
+        )
+    }
+
+    /// Get AI context for re-engagement acknowledgment in chat
+    /// Returns context string to inject into AI system prompt
+    func getReengagementAIContext(absenceDays: Int, lapseTier: LapseTier) -> String {
+        var context = "The user is returning after \(absenceDays) days away. "
+
+        switch lapseTier {
+        case .active:
+            return "" // No special context needed
+        case .briefBreak:
+            context += "They took a brief break (3-6 days). Welcome them back warmly but don't make a big deal of it. "
+        case .extendedBreak:
+            context += "They've been away for about a week (7-13 days). Acknowledge their return positively and gently check in on how they're doing. "
+        case .longAbsence:
+            context += "They've been away for a while (14-29 days). Be especially warm and supportive. Don't ask why they were away - focus on being glad they're back. "
+        case .hiatus:
+            context += "They're returning after a long hiatus (30+ days). This is a significant return - be very welcoming and supportive. Help them ease back in without pressure. "
+        }
+
+        context += "Do not mention specific day counts. Focus on the present moment and supporting their wellness journey."
+        return context
+    }
+
     // MARK: - Helpers
 
     private func generateInviteCode() -> String {
@@ -2075,20 +2610,16 @@ struct DBExerciseSession: Codable {
 struct DBDevice: Codable {
     let id: UUID?
     let userId: UUID
-    let apnsToken: String
-    let deviceModel: String?
-    let osVersion: String?
+    let token: String
+    let platform: String
     let createdAt: Date?
-    let updatedAt: Date?
 
     enum CodingKeys: String, CodingKey {
         case id
         case userId = "user_id"
-        case apnsToken = "apns_token"
-        case deviceModel = "device_model"
-        case osVersion = "os_version"
+        case token
+        case platform
         case createdAt = "created_at"
-        case updatedAt = "updated_at"
     }
 }
 
@@ -2409,6 +2940,7 @@ struct ChatFunctionResponse: Codable {
     let quotaUsed: Int?
     let quotaLimit: Int?
     let conversationTitle: String?
+    let userMessageId: String?  // Server-provided ID for consistency
 }
 
 struct ChatFunctionMessage: Codable {
@@ -2426,10 +2958,78 @@ struct ChatResponse {
     let quotaUsed: Int?
     let quotaLimit: Int?
     let conversationTitle: String?
+    let userMessageId: String?  // Server-provided ID for the user message
 
     var isQuotaExceeded: Bool {
         guard let used = quotaUsed, let limit = quotaLimit, limit > 0 else { return false }
         return used >= limit
+    }
+}
+
+// MARK: - Export DB Models
+
+/// Circle membership with nested circle info for data export
+struct DBCircleMembership: Codable {
+    let id: UUID?
+    let circleId: UUID
+    let userId: UUID
+    let role: String?
+    let joinedAt: Date?
+    let circles: DBCircleForExport?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case circleId = "circle_id"
+        case userId = "user_id"
+        case role
+        case joinedAt = "joined_at"
+        case circles
+    }
+}
+
+/// Simplified circle for export (matches Supabase select * on circles)
+struct DBCircleForExport: Codable {
+    let id: UUID?
+    let name: String
+    let description: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, description
+    }
+}
+
+/// Exercise session with nested exercise info for data export
+struct DBExerciseSessionForExport: Codable {
+    let id: UUID?
+    let userId: UUID
+    let exerciseId: UUID
+    let startedAt: Date?
+    let completedAt: Date?
+    let rating: Int?
+    let note: String?
+    let exercises: DBExerciseForExport?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case exerciseId = "exercise_id"
+        case startedAt = "started_at"
+        case completedAt = "completed_at"
+        case rating, note
+        case exercises
+    }
+}
+
+/// Simplified exercise for export
+struct DBExerciseForExport: Codable {
+    let id: UUID?
+    let title: String
+    let type: String
+    let durationSeconds: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, type
+        case durationSeconds = "duration_seconds"
     }
 }
 

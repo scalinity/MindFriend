@@ -21,6 +21,18 @@ enum AnalyticsEvent: String {
     case questCompleted = "quest_completed"
     case questSkipped = "quest_skipped"
 
+    // Streak Recovery
+    case streakShieldUsed = "streak_shield_used"
+    case recoveryQuestOffered = "recovery_quest_offered"
+    case recoveryQuestStarted = "recovery_quest_started"
+    case recoveryQuestCompleted = "recovery_quest_completed"
+
+    // Quest Choice
+    case questVariantSelected = "quest_variant_selected"
+    case questRerolled = "quest_rerolled"
+    case questQuickVersionSelected = "quest_quick_version_selected"
+    case questAlternativeSelected = "quest_alternative_selected"
+
     // Mood Tracking
     case moodLogged = "mood_logged"
     case moodHistoryViewed = "mood_history_viewed"
@@ -95,6 +107,16 @@ enum AnalyticsEvent: String {
     case notificationReceived = "notification_received"
     case pushPermissionGranted = "push_permission_granted"
     case pushPermissionDenied = "push_permission_denied"
+
+    // Re-engagement
+    case reengagementAbsenceChecked = "reengagement_absence_checked"
+    case reengagementEventLogged = "reengagement_event_logged"
+    case sessionStarted = "session_started"
+    case freshStartPerformed = "fresh_start_performed"
+    case welcomeBackShown = "welcome_back_shown"
+    case welcomeBackDismissed = "welcome_back_dismissed"
+    case welcomeBackFreshStartChosen = "welcome_back_fresh_start_chosen"
+    case welcomeBackContinueChosen = "welcome_back_continue_chosen"
 }
 
 /// User properties for segmentation

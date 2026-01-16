@@ -34,6 +34,10 @@ final class AppState: ObservableObject {
     @Published var levelUpLevel: Int = 0
     @Published var levelUpTitle: String = ""
 
+    // MARK: - Re-engagement
+    @Published var showWelcomeBack: Bool = false
+    @Published var absenceSummary: AbsenceSummary?
+
     // MARK: - Error Handling
     @Published var globalError: AppError?
     @Published var showError: Bool = false
@@ -83,6 +87,16 @@ final class AppState: ObservableObject {
 
     func dismissLevelUp() {
         self.showLevelUp = false
+    }
+
+    func showWelcomeBackModal(summary: AbsenceSummary) {
+        self.absenceSummary = summary
+        self.showWelcomeBack = true
+    }
+
+    func dismissWelcomeBack() {
+        self.showWelcomeBack = false
+        // Keep absenceSummary for AI context until next session
     }
 }
 

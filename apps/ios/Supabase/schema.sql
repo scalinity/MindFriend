@@ -1,4 +1,13 @@
--- MindFriend Database Schema for Supabase
+-- ⚠️ LEGACY FILE - DO NOT USE FOR PRODUCTION
+-- This file is kept for historical reference only.
+--
+-- CANONICAL SOURCE OF TRUTH: supabase/migrations/
+-- Use `supabase db push` to apply migrations.
+--
+-- This file may be out of date and is not maintained.
+-- Last known sync: 2026-01-12
+--
+-- MindFriend Database Schema for Supabase (LEGACY)
 -- Run this in the Supabase SQL Editor (SQL Editor → New Query → Paste → Run)
 
 -- ============================================
