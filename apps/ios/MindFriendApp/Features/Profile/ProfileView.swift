@@ -74,16 +74,17 @@ struct ProfileView: View {
                 }
 
                 // Creator Studio
-                if container.creatorService.creatorProfile != nil {
-                    Section("Creator Studio") {
-                        NavigationLink {
-                            CreatorDashboardView()
-                                .environmentObject(container.creatorService)
-                        } label: {
-                            Label("Creator Studio", systemImage: "sparkles")
-                        }
-                    }
-                }
+                // TODO: Uncomment when CreatorService is integrated (Spec 13)
+                // if container.creatorService.creatorProfile != nil {
+                //     Section("Creator Studio") {
+                //         NavigationLink {
+                //             CreatorDashboardView()
+                //                 .environmentObject(container.creatorService)
+                //         } label: {
+                //             Label("Creator Studio", systemImage: "sparkles")
+                //         }
+                //     }
+                // }
 
                 // Settings
                 Section("Settings") {
