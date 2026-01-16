@@ -115,6 +115,10 @@ struct MindFriendApp: App {
             if let code = pathComponents.first {
                 handleBuddyInvite(code: code)
             }
+        case "micro":
+            // Navigate to micro-moments
+            appState.selectedTab = .home
+            // TODO: Navigate to micro-moments hub via state
         default:
             break
         }
@@ -143,6 +147,10 @@ struct MindFriendApp: App {
         case .buddy(let code):
             // Handle buddy invite
             handleBuddyInvite(code: code)
+        case .micro(let templateId):
+            // Navigate to micro-moments
+            appState.selectedTab = .home
+            print("[DeepLink] Navigate to micro-moments: \(templateId ?? "hub")")
         case .none:
             break
         }

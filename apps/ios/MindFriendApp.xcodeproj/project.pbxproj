@@ -109,7 +109,9 @@
 		CRGAL01BC23C3C719CD3C9F /* CreativeGalleryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CRGAL01493347E53EC5C762 /* CreativeGalleryView.swift */; };
 		DRWCV01BC23C3C719CD3C9F /* DrawingCanvasView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DRWCV01493347E53EC5C762 /* DrawingCanvasView.swift */; };
 		VJRCV01BC23C3C719CD3C9F /* VoiceJournalRecorderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = VJRCV01493347E53EC5C762 /* VoiceJournalRecorderView.swift */; };
-/* End PBXBuildFile section */
+		33AFBC4DE3A74C26AE988F84 /* PersonalizationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26FCB1C4877346F08793DAE3 /* PersonalizationModels.swift */; };
+		74C7A829F4C44BCBA697AB32 /* PersonalizationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93C47D8F62EA47E0B6701625 /* PersonalizationService.swift */; };
+	/* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
 		7D15D183DAD839CB46975823 /* PBXContainerItemProxy */ = {
@@ -235,7 +237,9 @@
 		CRGAL01493347E53EC5C762 /* CreativeGalleryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreativeGalleryView.swift; sourceTree = "<group>"; };
 		DRWCV01493347E53EC5C762 /* DrawingCanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrawingCanvasView.swift; sourceTree = "<group>"; };
 		VJRCV01493347E53EC5C762 /* VoiceJournalRecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceJournalRecorderView.swift; sourceTree = "<group>"; };
-/* End PBXFileReference section */
+		26FCB1C4877346F08793DAE3 /* PersonalizationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalizationModels.swift; sourceTree = "<group>"; };
+		93C47D8F62EA47E0B6701625 /* PersonalizationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Services/PersonalizationService.swift"; sourceTree = "<group>"; };
+	/* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		6402F7403C47F6D25B5BF55F /* Frameworks */ = {
@@ -591,7 +595,8 @@
 				CELMD01493347E53EC5C762 /* CelebrationModels.swift */,
 				PRGMD01493347E53EC5C762 /* ProgramModels.swift */,
 				BIOMD01493347E53EC5C762 /* BiometricModels.swift */,
-			);
+				26FCB1C4877346F08793DAE3 /* PersonalizationModels.swift */,
+				93C47D8F62EA47E0B6701625 /* PersonalizationService.swift */,);
 			path = Core;
 			sourceTree = "<group>";
 		};
@@ -901,6 +906,8 @@
 				PRGDY01BC23C3C719CD3C9F /* ProgramDayView.swift in Sources */,
 				ENRLS01BC23C3C719CD3C9F /* EnrollmentSheet.swift in Sources */,
 				CERTV01BC23C3C719CD3C9F /* CertificateView.swift in Sources */,
+				33AFBC4DE3A74C26AE988F84 /* PersonalizationModels.swift in Sources */,
+				74C7A829F4C44BCBA697AB32 /* PersonalizationService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

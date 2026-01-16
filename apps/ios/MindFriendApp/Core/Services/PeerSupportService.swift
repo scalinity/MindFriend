@@ -25,6 +25,7 @@ final class PeerSupportService: ObservableObject {
 
     private let supabase: SupabaseClient
     private var sessionChannel: RealtimeChannelV2?
+    private var subscriptionTask: Task<Void, Never>?
 
     // MARK: - Initialization
 
@@ -33,6 +34,7 @@ final class PeerSupportService: ObservableObject {
     }
 
     deinit {
+        subscriptionTask?.cancel()
         Task { [sessionChannel] in
             await sessionChannel?.unsubscribe()
         }
@@ -325,6 +327,8 @@ final class PeerSupportService: ObservableObject {
 
     /// Subscribe to realtime messages for a session
     func subscribeToSessionMessages(sessionId: UUID) async {
+        // Cancel any existing subscription
+        subscriptionTask?.cancel()
         await sessionChannel?.unsubscribe()
 
         let channel = supabase.realtimeV2.channel("session:\(sessionId)")
@@ -338,11 +342,18 @@ final class PeerSupportService: ObservableObject {
 
         await channel.subscribe()
 
-        Task {
+        // Store task so it can be cancelled
+        subscriptionTask = Task {
             for await insertion in insertions {
+                // Check for cancellation before processing
+                if Task.isCancelled { break }
+
                 if let message = try? insertion.decodeRecord(as: DBSupportMessage.self, decoder: JSONDecoder()) {
                     await MainActor.run {
-                        self.currentSessionMessages.append(message)
+                        // Check cancellation again before UI update
+                        if !Task.isCancelled {
+                            self.currentSessionMessages.append(message)
+                        }
                     }
                 }
             }
@@ -353,6 +364,8 @@ final class PeerSupportService: ObservableObject {
 
     /// Unsubscribe from session messages
     func unsubscribeFromSessionMessages() async {
+        subscriptionTask?.cancel()
+        subscriptionTask = nil
         await sessionChannel?.unsubscribe()
         sessionChannel = nil
         currentSessionMessages = []
@@ -371,6 +384,11 @@ final class PeerSupportService: ObservableObject {
     ) async throws {
         guard let userId = supabase.auth.currentUser?.id else {
             throw PeerSupportError.notAuthenticated
+        }
+
+        // Validate rating is within acceptable range
+        guard (1...5).contains(rating) else {
+            throw PeerSupportError.invalidRating
         }
 
         let feedback: [String: AnyEncodable] = [
@@ -709,6 +727,10 @@ enum PeerSupportError: LocalizedError {
     case sessionNotFound
     case joinRoomFailed
     case matchFailed(String)
+    case invalidRating
+    case invalidTopicSelection
+    case rateLimit
+    case networkError(Error)
 
     var errorDescription: String? {
         switch self {
@@ -720,6 +742,14 @@ enum PeerSupportError: LocalizedError {
             return "Failed to join the anonymous room."
         case .matchFailed(let reason):
             return "Failed to find a match: \(reason)"
+        case .invalidRating:
+            return "Rating must be between 1 and 5."
+        case .invalidTopicSelection:
+            return "Please select at least one topic."
+        case .rateLimit:
+            return "You're sending requests too quickly. Please wait and try again."
+        case .networkError(let error):
+            return "Network error: \(error.localizedDescription)"
         }
     }
 }

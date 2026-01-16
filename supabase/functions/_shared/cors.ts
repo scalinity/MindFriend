@@ -7,29 +7,92 @@ const ALLOWED_ORIGINS = [
   "ionic://localhost", // Ionic apps
   "http://localhost:3000", // Local development
   "http://localhost:5173", // Vite dev server
+  "https://getmindfriend.app", // Production website
 ];
 
 export function getCorsHeaders(origin: string | null): Record<string, string> {
   // Allow requests without Origin header (native mobile apps)
   // Or from explicitly allowed origins
-  const allowedOrigin =
-    !origin || ALLOWED_ORIGINS.includes(origin) ? origin || "*" : "null";
+  // SECURITY: Do NOT allow arbitrary origins - only whitelisted ones
+  let allowedOrigin: string;
+
+  if (!origin) {
+    // No origin = native mobile app or server-to-server
+    // Allow but don't reflect back wildcard
+    allowedOrigin = "null";
+  } else if (ALLOWED_ORIGINS.includes(origin)) {
+    // Whitelisted origin - reflect it back
+    allowedOrigin = origin;
+  } else {
+    // Unknown origin - reject with null
+    allowedOrigin = "null";
+  }
 
   return {
     "Access-Control-Allow-Origin": allowedOrigin,
     "Access-Control-Allow-Headers":
       "authorization, x-client-info, apikey, content-type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Max-Age": "86400", // Cache preflight for 24 hours
     "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "X-XSS-Protection": "1; mode=block",
+  };
+}
+
+// Rate limiting helper - tracks requests by IP or user
+const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
+
+export function checkRateLimit(
+  identifier: string,
+  maxRequests: number = 60,
+  windowMs: number = 60000, // 1 minute window
+): { allowed: boolean; remaining: number; resetIn: number } {
+  const now = Date.now();
+  const entry = rateLimitStore.get(identifier);
+
+  if (!entry || now > entry.resetAt) {
+    // New window
+    rateLimitStore.set(identifier, { count: 1, resetAt: now + windowMs });
+    return { allowed: true, remaining: maxRequests - 1, resetIn: windowMs };
+  }
+
+  if (entry.count >= maxRequests) {
+    // Rate limited
+    return {
+      allowed: false,
+      remaining: 0,
+      resetIn: entry.resetAt - now,
+    };
+  }
+
+  // Increment count
+  entry.count++;
+  return {
+    allowed: true,
+    remaining: maxRequests - entry.count,
+    resetIn: entry.resetAt - now,
+  };
+}
+
+export function getRateLimitHeaders(
+  remaining: number,
+  resetIn: number,
+): Record<string, string> {
+  return {
+    "X-RateLimit-Remaining": String(remaining),
+    "X-RateLimit-Reset": String(Math.ceil(resetIn / 1000)),
   };
 }
 
 // Legacy export for backward compatibility - prefer getCorsHeaders()
+// NOTE: This should only be used for internal/cron functions that don't need CORS
 export const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": "null",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "X-Content-Type-Options": "nosniff",
 };
 
 /**
@@ -38,7 +101,7 @@ export const corsHeaders = {
  */
 export function validateContentType(
   req: Request,
-  corsHeaders: Record<string, string>
+  corsHeaders: Record<string, string>,
 ): Response | null {
   // Skip validation for OPTIONS (preflight) and GET requests
   if (req.method === "OPTIONS" || req.method === "GET") {
@@ -63,7 +126,7 @@ export function validateContentType(
       {
         status: 415, // Unsupported Media Type
         headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      },
     );
   }
 
