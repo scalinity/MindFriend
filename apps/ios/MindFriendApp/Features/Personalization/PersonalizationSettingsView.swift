@@ -135,7 +135,7 @@ struct PersonalizationSettingsView: View {
             }
 
             NavigationLink {
-                QuietHoursView()
+                SmartQuietHoursView()
                     .environmentObject(container)
             } label: {
                 HStack {
