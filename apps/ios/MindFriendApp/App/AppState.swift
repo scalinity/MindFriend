@@ -38,6 +38,9 @@ final class AppState: ObservableObject {
     @Published var showWelcomeBack: Bool = false
     @Published var absenceSummary: AbsenceSummary?
 
+    // MARK: - Celebrations
+    @Published var pendingCelebrations: [CelebrationEvent] = []
+
     // MARK: - Error Handling
     @Published var globalError: AppError?
     @Published var showError: Bool = false
@@ -97,6 +100,23 @@ final class AppState: ObservableObject {
     func dismissWelcomeBack() {
         self.showWelcomeBack = false
         // Keep absenceSummary for AI context until next session
+    }
+
+    // MARK: - Celebration Methods
+
+    private let maxPendingCelebrations = 10
+
+    func addCelebrations(_ celebrations: [CelebrationEvent]) {
+        // Filter out any that were already shown (have shownAt)
+        let newCelebrations = celebrations.filter { $0.shownAt == nil }
+        // Limit queue size to prevent memory issues or overwhelming UX
+        let spaceAvailable = maxPendingCelebrations - pendingCelebrations.count
+        let toAdd = Array(newCelebrations.prefix(max(0, spaceAvailable)))
+        self.pendingCelebrations.append(contentsOf: toAdd)
+    }
+
+    func removeCelebration(id: UUID) {
+        self.pendingCelebrations.removeAll { $0.id == id }
     }
 }
 
