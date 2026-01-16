@@ -12,7 +12,7 @@ SELECT DISTINCT
     id,
     18,
     'adult',
-    CASE WHEN category = 'journaling' THEN true ELSE false END,
+    CASE WHEN type = 'journaling' THEN true ELSE false END,
     CASE
         WHEN duration_seconds <= 180 THEN 'simple'
         WHEN duration_seconds <= 420 THEN 'moderate'
@@ -26,7 +26,7 @@ UPDATE content_age_ratings
 SET minimum_age = 4, rating_category = 'all_ages', contains_heavy_topics = false, complexity_level = 'simple'
 WHERE content_type = 'exercise' AND content_id IN (
     SELECT id FROM exercises WHERE
-        category = 'breathing' AND
+        type = 'breathing' AND
         title NOT IN ('4-7-8 Relaxing Breath - Advanced', 'Wim Hof Method')
 );
 
@@ -35,7 +35,7 @@ UPDATE content_age_ratings
 SET minimum_age = 4, rating_category = 'all_ages', contains_heavy_topics = false, complexity_level = 'simple'
 WHERE content_type = 'exercise' AND content_id IN (
     SELECT id FROM exercises WHERE
-        category = 'grounding' AND
+        type = 'grounding' AND
         (title LIKE '%Senses%' OR title LIKE '%Feet%' OR title LIKE '%Object%') AND
         duration_seconds <= 300
 );
@@ -45,7 +45,7 @@ UPDATE content_age_ratings
 SET minimum_age = 6, rating_category = 'kids', contains_heavy_topics = false, complexity_level = 'simple'
 WHERE content_type = 'exercise' AND content_id IN (
     SELECT id FROM exercises WHERE
-        category = 'movement' AND
+        type = 'movement' AND
         duration_seconds <= 300 AND
         title NOT LIKE '%Advanced%' AND
         title NOT LIKE '%Complex%'
@@ -56,7 +56,7 @@ UPDATE content_age_ratings
 SET minimum_age = 6, rating_category = 'kids', contains_heavy_topics = false, complexity_level = 'simple'
 WHERE content_type = 'exercise' AND content_id IN (
     SELECT id FROM exercises WHERE
-        category = 'meditation' AND
+        type = 'meditation' AND
         duration_seconds <= 300 AND
         (title LIKE '%Breath%' OR title LIKE '%Basic%' OR title LIKE '%Simple%' OR title LIKE '%Children%')
 );
@@ -66,7 +66,7 @@ UPDATE content_age_ratings
 SET minimum_age = 13, rating_category = 'teen', contains_heavy_topics = false, complexity_level = 'moderate'
 WHERE content_type = 'exercise' AND content_id IN (
     SELECT id FROM exercises WHERE
-        category IN ('meditation', 'journaling') AND
+        type IN ('meditation', 'journaling') AND
         duration_seconds BETWEEN 300 AND 600
 );
 
