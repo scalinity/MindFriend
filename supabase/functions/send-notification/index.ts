@@ -4,7 +4,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCorsHeaders, corsHeaders } from "../_shared/cors.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 import {
   sendAPNs,
   buildAPNsPayload,
@@ -159,16 +159,16 @@ function getQuietHoursEndTime(
 }
 
 serve(async (req) => {
-  // Handle CORS preflight
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
-
   const origin = req.headers.get("Origin");
   const headers = {
     ...getCorsHeaders(origin),
     "Content-Type": "application/json",
   };
+
+  // Handle CORS preflight
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: getCorsHeaders(origin) });
+  }
 
   try {
     // Initialize Supabase client with service role
@@ -218,6 +218,11 @@ serve(async (req) => {
     // Parse request body
     const body: NotificationRequest = await req.json();
 
+    // Default data to empty object if not provided
+    if (!body.data) {
+      body.data = {};
+    }
+
     if (!body.type || !body.recipientId) {
       return new Response(
         JSON.stringify({ error: "Missing type or recipientId" }),
@@ -232,6 +237,13 @@ serve(async (req) => {
       "streak_risk",
       "weekly_summary",
       "challenge",
+      "shield_used",
+      "shield_reset",
+      "recovery_available",
+      "reengagement_gentle",
+      "reengagement_social",
+      "reengagement_progress",
+      "reengagement_fresh_start",
     ];
     if (!validTypes.includes(body.type)) {
       return new Response(

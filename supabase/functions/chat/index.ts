@@ -3,7 +3,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCorsHeaders, corsHeaders } from "../_shared/cors.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 import {
   detectCrisis,
   getMatchedCrisisKeyword,
@@ -44,9 +44,13 @@ interface Message {
 }
 
 serve(async (req) => {
+  // Get origin first for consistent CORS handling
+  const origin = req.headers.get("Origin");
+  const baseCorsHeaders = getCorsHeaders(origin);
+
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: baseCorsHeaders });
   }
 
   try {
@@ -61,7 +65,7 @@ serve(async (req) => {
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Missing authorization" }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -74,7 +78,7 @@ serve(async (req) => {
     if (authError || !user) {
       return new Response(JSON.stringify({ error: "Invalid token" }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -95,7 +99,7 @@ serve(async (req) => {
         {
           status: 429,
           headers: {
-            ...corsHeaders,
+            ...baseCorsHeaders,
             "Content-Type": "application/json",
             ...getRateLimitHeaders(rateLimitResult),
           },
@@ -103,10 +107,9 @@ serve(async (req) => {
       );
     }
 
-    // Get origin for CORS
-    const origin = req.headers.get("Origin");
+    // Use base CORS headers with additional response headers
     const responseHeaders = {
-      ...getCorsHeaders(origin),
+      ...baseCorsHeaders,
       "Content-Type": "application/json",
       ...getRateLimitHeaders(rateLimitResult),
     };
@@ -209,6 +212,18 @@ serve(async (req) => {
       );
     }
 
+    // Fetch user settings for privacy_mode and ai_tone
+    const { data: userSettings } = await supabaseAdmin
+      .from("user_settings")
+      .select("privacy_mode, ai_tone")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    // Privacy mode: when enabled, don't store/use memories
+    const privacyModeEnabled = userSettings?.privacy_mode === true;
+    // AI tone: default to 'supportive' if not set
+    const aiTone = userSettings?.ai_tone || "supportive";
+
     const now = new Date();
     const isPremium = profile.subscription_tier === "premium";
 
@@ -305,39 +320,97 @@ serve(async (req) => {
       .order("created_at", { ascending: true })
       .limit(20); // Last 20 messages for context
 
-    // Fetch relevant memories for context injection (ordered by confidence per spec)
-    const { data: memories } = await supabaseAdmin
-      .from("memory_fragments")
-      .select("fragment_type, key, value, confidence")
-      .eq("user_id", user.id)
-      .or(`expires_at.is.null,expires_at.gt.${now.toISOString()}`)
-      .order("confidence", { ascending: false })
-      .limit(10);
-
-    // Build memory context string for system prompt (format: key: value)
+    // Fetch relevant memories for context injection ONLY if privacy mode is OFF
     let memoryContext = "";
-    if (memories && memories.length > 0) {
-      const grouped: Record<string, string[]> = {};
-      for (const mem of memories) {
-        if (!grouped[mem.fragment_type]) grouped[mem.fragment_type] = [];
-        // Format as "key: value" for cleaner display
-        grouped[mem.fragment_type].push(`${mem.key}: ${mem.value}`);
-      }
+    if (!privacyModeEnabled) {
+      const { data: memories } = await supabaseAdmin
+        .from("memory_fragments")
+        .select("fragment_type, key, value, confidence")
+        .eq("user_id", user.id)
+        .or(`expires_at.is.null,expires_at.gt.${now.toISOString()}`)
+        .order("confidence", { ascending: false })
+        .limit(10);
 
-      memoryContext = "\n\n## What you know about this user:\n";
-      if (grouped.person)
-        memoryContext += `- People in their life: ${grouped.person.join(", ")}\n`;
-      if (grouped.fact)
-        memoryContext += `- Facts about them: ${grouped.fact.join(", ")}\n`;
-      if (grouped.preference)
-        memoryContext += `- Their preferences: ${grouped.preference.join(", ")}\n`;
-      if (grouped.event)
-        memoryContext += `- Upcoming/recent events: ${grouped.event.join(", ")}\n`;
-      memoryContext +=
-        "\nUse this context naturally in conversation when relevant. Reference past events or details to show you remember and care.";
+      // Build memory context string for system prompt (format: key: value)
+      if (memories && memories.length > 0) {
+        const grouped: Record<string, string[]> = {};
+        for (const mem of memories) {
+          if (!grouped[mem.fragment_type]) grouped[mem.fragment_type] = [];
+          // Format as "key: value" for cleaner display
+          grouped[mem.fragment_type].push(`${mem.key}: ${mem.value}`);
+        }
+
+        memoryContext = "\n\n## What you know about this user:\n";
+        if (grouped.person)
+          memoryContext += `- People in their life: ${grouped.person.join(", ")}\n`;
+        if (grouped.fact)
+          memoryContext += `- Facts about them: ${grouped.fact.join(", ")}\n`;
+        if (grouped.preference)
+          memoryContext += `- Their preferences: ${grouped.preference.join(", ")}\n`;
+        if (grouped.event)
+          memoryContext += `- Upcoming/recent events: ${grouped.event.join(", ")}\n`;
+        memoryContext +=
+          "\nUse this context naturally in conversation when relevant. Reference past events or details to show you remember and care.";
+      }
     }
 
-    const enhancedSystemPrompt = SYSTEM_PROMPT + memoryContext;
+    // Fetch re-engagement context (for returning users after absence)
+    let reengagementContext = "";
+    const { data: profileExtended } = await supabaseAdmin
+      .from("profiles")
+      .select("last_absence_days")
+      .eq("id", user.id)
+      .single();
+
+    if (
+      profileExtended?.last_absence_days &&
+      profileExtended.last_absence_days >= 3
+    ) {
+      const days = profileExtended.last_absence_days;
+      reengagementContext = "\n\n## Important context - Returning user:\n";
+      reengagementContext += `The user is returning after ${days} days away. `;
+
+      if (days >= 30) {
+        reengagementContext +=
+          "This is a significant return after a long hiatus. Be very welcoming and supportive. Help them ease back in without any pressure. ";
+      } else if (days >= 14) {
+        reengagementContext +=
+          "They've been away for a while. Be especially warm and supportive. Don't ask why they were away - focus on being glad they're back. ";
+      } else if (days >= 7) {
+        reengagementContext +=
+          "They've been away for about a week. Acknowledge their return positively and gently check in on how they're doing. ";
+      } else {
+        reengagementContext +=
+          "They took a brief break. Welcome them back warmly but don't make a big deal of it. ";
+      }
+      reengagementContext +=
+        "Do not mention specific day counts. Focus on the present moment and supporting their wellness journey.";
+    }
+
+    // Build AI tone instruction based on user preference
+    let toneInstruction = "";
+    switch (aiTone) {
+      case "gentle":
+        toneInstruction =
+          "\n\n## Tone preference:\nUse an extra gentle, soft, and comforting tone. Be especially delicate with feedback and focus on nurturing support.";
+        break;
+      case "direct":
+        toneInstruction =
+          "\n\n## Tone preference:\nBe clear and straightforward. The user prefers honest, practical advice without excessive softening.";
+        break;
+      case "motivational":
+        toneInstruction =
+          "\n\n## Tone preference:\nBe encouraging and energizing. Use motivational language and help the user see their potential.";
+        break;
+      case "supportive":
+      default:
+        toneInstruction =
+          "\n\n## Tone preference:\nUse a warm, balanced, supportive tone that validates feelings while offering practical guidance.";
+        break;
+    }
+
+    const enhancedSystemPrompt =
+      SYSTEM_PROMPT + toneInstruction + memoryContext + reengagementContext;
 
     // Sanitize user content to prevent prompt injection attacks
     // This removes role impersonation attempts and prompt manipulation patterns
@@ -354,12 +427,16 @@ serve(async (req) => {
       { role: "user", content: sanitizedContent },
     ];
 
-    // Save user message first
-    await supabaseAdmin.from("messages").insert({
-      conversation_id: conversationId,
-      role: "user",
-      content: trimmedContent,
-    });
+    // Save user message first and capture the ID
+    const { data: userMessage } = await supabaseAdmin
+      .from("messages")
+      .insert({
+        conversation_id: conversationId,
+        role: "user",
+        content: trimmedContent,
+      })
+      .select("id")
+      .single();
 
     // Call xAI (Grok)
     const xaiKey = Deno.env.get("XAI_API_KEY");
@@ -462,15 +539,17 @@ serve(async (req) => {
 
     // Note: Quota was already incremented atomically at the start of the function
 
-    // Extract memories in background (non-blocking)
-    extractMemories(
-      supabaseAdmin,
-      user.id,
-      conversationId,
-      trimmedContent,
-      assistantContent,
-      xaiKey,
-    ).catch((err) => console.error("Memory extraction failed:", err));
+    // Extract memories in background ONLY if privacy mode is OFF
+    if (!privacyModeEnabled) {
+      extractMemories(
+        supabaseAdmin,
+        user.id,
+        conversationId,
+        trimmedContent,
+        assistantContent,
+        xaiKey,
+      ).catch((err) => console.error("Memory extraction failed:", err));
+    }
 
     return new Response(
       JSON.stringify({
@@ -481,6 +560,7 @@ serve(async (req) => {
           createdAt: now.toISOString(),
           blocked: false,
         },
+        userMessageId: userMessage?.id, // Return DB-generated ID for consistency
         quotaUsed: quotaUsed,
         quotaLimit: quotaLimit,
         conversationTitle: conversationTitle,
@@ -495,7 +575,7 @@ serve(async (req) => {
     );
     return new Response(
       JSON.stringify({ error: "An unexpected error occurred" }),
-      { status: 500, headers: corsHeaders },
+      { status: 500, headers: baseCorsHeaders },
     );
   }
 });

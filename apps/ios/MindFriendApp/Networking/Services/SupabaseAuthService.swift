@@ -71,6 +71,10 @@ final class SupabaseAuthService: ObservableObject {
                     Log.auth.debug("User updated")
                 case .passwordRecovery:
                     break
+                case .mfaChallengeVerified:
+                    Log.auth.debug("MFA challenge verified")
+                case .userDeleted:
+                    Log.auth.info("User deleted")
                 @unknown default:
                     break
                 }

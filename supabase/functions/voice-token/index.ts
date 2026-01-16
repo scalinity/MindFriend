@@ -38,8 +38,6 @@ serve(async (req) => {
 
     // Authenticate user
     const authHeader = req.headers.get("Authorization");
-    console.log("Auth header present:", !!authHeader);
-    console.log("Auth header prefix:", authHeader?.substring(0, 50));
 
     if (!authHeader) {
       return errorResponse(
@@ -51,7 +49,6 @@ serve(async (req) => {
     }
 
     const token = authHeader.replace("Bearer ", "");
-    console.log("Token prefix:", token.substring(0, 50));
     const {
       data: { user },
       error: authError,
@@ -105,7 +102,7 @@ serve(async (req) => {
     );
 
     if (quotaError) {
-      console.error("Quota check error:", quotaError);
+      log.error("Quota check error", { error: quotaError.message });
       return errorResponse(
         corsHeaders,
         "Failed to check voice quota",
@@ -180,18 +177,19 @@ serve(async (req) => {
     );
 
     if (!xaiResponse.ok) {
-      const errorText = await xaiResponse.text();
-      console.error("xAI token error:", xaiResponse.status, errorText);
+      log.error("xAI token request failed", {
+        status: xaiResponse.status,
+        statusText: xaiResponse.statusText,
+      });
       return errorResponse(
         corsHeaders,
-        `Failed to initialize voice session: ${xaiResponse.status}`,
+        "Failed to initialize voice session",
         "XAI_ERROR",
         502,
       );
     }
 
     const xaiData = await xaiResponse.json();
-    console.log("xAI response:", JSON.stringify(xaiData));
 
     // Extract token - xAI returns { value: "...", expires_at: ... } directly
     const voiceToken =
@@ -199,10 +197,14 @@ serve(async (req) => {
     const expiresAt = xaiData.expires_at || xaiData.client_secret?.expires_at;
 
     if (!voiceToken) {
-      console.error("No token in xAI response:", xaiData);
+      log.error("No token in xAI response", {
+        hasValue: !!xaiData?.value,
+        hasClientSecret: !!xaiData?.client_secret,
+        keys: Object.keys(xaiData || {}),
+      });
       return errorResponse(
         corsHeaders,
-        `Invalid response from voice service: ${JSON.stringify(xaiData).substring(0, 200)}`,
+        "Invalid response from voice service",
         "XAI_ERROR",
         502,
       );
@@ -218,7 +220,7 @@ serve(async (req) => {
     );
 
     if (sessionError) {
-      console.error("Session creation error:", sessionError);
+      log.error("Session creation error", { error: sessionError.message });
     }
 
     const response: VoiceTokenResponse = {
@@ -235,7 +237,9 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
-    console.error("Voice token error:", error);
+    log.error("Voice token error", {
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
     return errorResponse(
       corsHeaders,
       error instanceof Error ? error.message : "Unknown error",
