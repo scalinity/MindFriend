@@ -387,6 +387,8 @@ extension NotificationDeepLink: CustomStringConvertible {
             return "settings"
         case .insights:
             return "insights"
+        case .buddy(let code):
+            return "buddy(\(code))"
         case .none:
             return "none"
         }
