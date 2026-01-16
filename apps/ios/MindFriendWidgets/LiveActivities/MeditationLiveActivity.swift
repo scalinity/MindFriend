@@ -218,11 +218,15 @@ struct StopMeditationIntent: AppIntent {
 // MARK: - Activity Manager
 
 @MainActor
-public final class MeditationActivityManager: @unchecked Sendable {
+public final class MeditationActivityManager {
     public static let shared = MeditationActivityManager()
 
     private var currentActivity: Activity<MeditationActivityAttributes>?
     private var timer: Timer?
+
+    deinit {
+        timer?.invalidate()
+    }
 
     public func startActivity(title: String, type: String, durationSeconds: Int) async {
         let attributes = MeditationActivityAttributes(
