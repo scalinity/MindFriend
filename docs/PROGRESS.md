@@ -4,6 +4,135 @@
 
 ---
 
+## [2026-01-16] Audio Content Library - Phase 5-6 Views & Testing
+
+**Type:** Feature
+**Status:** In Progress
+
+### Summary
+
+Completed iOS Views (Phase 5) and Testing (Phase 6) for Audio Content Library. Created AudioLibraryView for content discovery, AudioPlayerView for playback, AudioLibraryViewModel for state management, and AudioContentService for API integration. Added unit tests for core services. Ready for Phase 7 finalization.
+
+### Changes
+
+#### Phase 5: iOS Views ✅
+
+- **File:** `apps/ios/MindFriendApp/Features/Audio/AudioLibraryView.swift`
+  - Main discovery interface with featured tracks carousel
+  - Category filtering (All, Meditation, Sleep Story, Soundscape, etc.)
+  - Search functionality with real-time filtering
+  - Recently played section
+  - Audio track cards (160pt width) and list items
+  - Error handling and loading states
+  - Supports deep linking to player via sheet presentation
+
+- **File:** `apps/ios/MindFriendApp/Features/Audio/AudioPlayerView.swift`
+  - Full-screen immersive player with gradient background
+  - Cover art display with async image loading
+  - Playback controls: play/pause, skip ±15s, progress seek
+  - Progress bar with time display (elapsed / remaining)
+  - Sleep timer menu with 5 duration options + fade-out visualization
+  - Playback speed control (placeholder for future implementation)
+  - Favorite toggle with heart icon
+  - Narrator info sheet with bio and voice details
+  - Lock screen controls integration
+  - Accessibility labels and VoiceOver support
+
+- **File:** `apps/ios/MindFriendApp/Features/Audio/AudioLibraryViewModel.swift`
+  - @MainActor ViewModel managing library state
+  - Properties: allTracks, featuredTracks, recentlyPlayed, userCompletionCount
+  - `loadContent()` async method: fetches tracks, featured, recently played, user stats
+  - Track action methods: playTrack(), toggleFavorite(), isFavorite()
+  - Error handling with user-facing messages
+
+- **File:** `apps/ios/MindFriendApp/Core/Services/AudioContentService.swift`
+  - Comprehensive Supabase API client for audio content
+  - Methods:
+    - Track queries: fetchAllTracks(), fetchTracksByCategory(), fetchFeaturedTracks(), searchTracks(), fetchTrack()
+    - Recommendations: getRecommendations() with context/mood/category filtering
+    - Playback: recordPlaybackStart(), recordPlaybackComplete(), fetchRecentlyPlayed()
+    - Favorites: fetchFavoriteTracks(), addFavorite(), removeFavorite()
+    - Ratings: rateTrack(), getTrackRating()
+    - Collections: fetchCollections(), fetchCollection()
+    - Statistics: getUserStatistics()
+  - Error types: trackNotFound, collectionNotFound, notAuthenticated, invalidResponse, invalidRating
+  - Models: AudioCollection, AudioStatistics
+
+- **File:** `apps/ios/MindFriendApp/App/DependencyContainer.swift` (Updated)
+  - Added lazy properties: audioPlayerService, audioContentService
+  - Integrated with existing service architecture
+
+#### Phase 6: Testing & Unit Tests ✅
+
+- **File:** `apps/ios/MindFriendApp/Tests/AudioPlayerServiceTests.swift`
+  - Test cases:
+    - Playback control: play(), pause(), togglePlayPause()
+    - Seeking: seek(), seekForward(), seekBackward() with bounds checking
+    - Stop functionality and state clearing
+    - Sleep timer: setSleepTimer(), cancelSleepTimer(), endOfTrack handling
+    - Favorites: isFavorite(), toggleFavorite(), add/remove logic
+    - Offline cache: downloadForOffline(), removeOfflineDownload()
+  - Mock setup and teardown
+  - Helper for creating mock AudioTrack objects
+
+- **File:** `apps/ios/MindFriendApp/Tests/AudioContentServiceTests.swift`
+  - Test cases:
+    - Track fetching: fetchAllTracks(), activeTrackFiltering
+    - Category filtering: fetchTracksByCategory()
+    - Featured tracks: fetchFeaturedTracks(), limit enforcement
+    - Search: searchTracks() with title matching
+    - Ratings: validation of 1-5 range, rejection of invalid ratings
+  - Mock Supabase client with mockTracks property
+  - Helper for creating mock DBAudioTrack objects with customizable properties
+
+### Testing Coverage
+
+- [x] Unit tests for AudioPlayerService (playback, sleep timer, favorites, cache)
+- [x] Unit tests for AudioContentService (track fetch, search, ratings, favorites)
+- [ ] AudioLibraryViewModel unit tests (mock service, data loading)
+- [ ] Integration tests for views + services
+- [ ] UI tests with XCUITest
+- [ ] Manual E2E testing (network/offline/premium scenarios)
+
+### Integration Notes
+
+**View Hierarchy:**
+
+```
+TabView (main app navigation)
+  ├── AudioLibraryView
+  │   └── [sheet] AudioPlayerView
+  │       ├── Full-screen player
+  │       ├── Sleep timer menu
+  │       └── Narrator info sheet
+```
+
+**Service Flow:**
+
+1. AudioLibraryView loads via AudioLibraryViewModel
+2. ViewModel calls AudioContentService.fetchAllTracks()
+3. User selects track → AudioPlayerView displayed
+4. AudioPlayerView uses AudioPlayerService for playback
+5. Playback events recorded via AudioContentService.recordPlaybackStart/Complete()
+
+### Blockers / TODOs
+
+- [ ] Playback speed control needs AVPlayer rate implementation
+- [ ] Narrator info sheet requires avatar image optimization
+- [ ] Search pagination for large result sets
+- [ ] Recent plays sorting (most recent first)
+- [ ] Supabase Storage bucket configuration for audio files
+- [ ] Sample audio files for E2E testing
+
+### Deferred to Phase 7
+
+- Full build verification (`xcodebuild`)
+- Complete test suite execution with coverage reporting
+- Performance profiling for large track libraries
+- Final git commit with all phases complete
+
+---
+
 ## [2026-01-16] Audio Content Library - Phase 1-4 Infrastructure
 
 **Type:** Feature
