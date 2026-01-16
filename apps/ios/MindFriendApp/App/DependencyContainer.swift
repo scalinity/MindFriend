@@ -41,6 +41,10 @@ final class DependencyContainer: ObservableObject {
         PersonalizationService(supabase: supabaseClient)
     }()
 
+    lazy var creatorService: CreatorService = {
+        CreatorService(supabase: supabaseClient)
+    }()
+
     // MARK: - Incomplete Feature Services (TODO: Add when features are ready)
     // lazy var microMomentsService: MicroMomentsService
     // lazy var peerSupportService: PeerSupportService
