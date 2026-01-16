@@ -41,9 +41,15 @@ final class DependencyContainer: ObservableObject {
         PersonalizationService(supabase: supabaseClient)
     }()
 
-    lazy var creatorService: CreatorService = {
-        CreatorService(supabase: supabaseClient)
-    }()
+    // TODO: Add CreatorService and FamilyService to Xcode project target
+    // These services exist on disk but need to be added to the project's pbxproj file
+    // lazy var creatorService: CreatorService = {
+    //     CreatorService(supabase: supabaseClient)
+    // }()
+    //
+    // lazy var familyService: FamilyService = {
+    //     FamilyService(supabase: supabaseClient)
+    // }()
 
     // MARK: - Incomplete Feature Services (TODO: Add when features are ready)
     // lazy var microMomentsService: MicroMomentsService
