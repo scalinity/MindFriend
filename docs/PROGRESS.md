@@ -4,6 +4,55 @@
 
 ---
 
+## [2026-01-16] Migration Deployment & Schema Fixes
+
+**Type:** Bugfix | DevOps
+**Status:** ✅ Complete
+
+### Summary
+
+Fixed critical migration deployment errors preventing Family Wellness (Spec 11) features from being applied to remote Supabase database. Resolved 4 constraint/column naming conflicts and implemented defensive migration patterns.
+
+### Issues Resolved
+
+1. **Constraint Naming Conflict** (unique_content_rating)
+   - Both content_creators and content_age_ratings tables attempted to use same constraint name
+   - Fix: Renamed to `unique_content_age_rating` in family_wellness_schema.sql:327
+
+2. **Column Reference Errors** (content_kind → type, category → type)
+   - Seed migration referenced non-existent column names
+   - Discovery: Exercises table uses `type` column (breathing/meditation/grounding/journaling/movement)
+   - Fix: Updated all 6 column references in seed migration
+
+3. **Duration Column Validation** (duration_seconds)
+   - Migration failed on column existence even though column present in schema
+   - Root Cause: PostgreSQL validates column references at parse time before DO block conditional executes
+   - Fix: Added explicit `EXISTS` checks for duration_seconds column in all 5 DO blocks
+
+### Changes
+
+- **File:** `supabase/migrations/20260116100000_family_wellness_schema.sql` — Renamed constraint to `unique_content_age_rating`
+- **File:** `supabase/migrations/20260116100300_content_age_ratings_seed.sql` — Added column existence checks:
+  - All exercise INSERT/UPDATE statements wrapped in DO blocks with `IF EXISTS ... AND EXISTS (column_name)` checks
+  - All together_templates INSERT statements wrapped in defensive blocks
+  - Applied COALESCE() for safe null handling throughout
+  - Migration now deploys successfully: `Finished supabase db push.`
+
+### Testing
+
+- [x] `supabase db push --include-all` completes without errors
+- [x] content_age_ratings table populated with 45+ exercise and template entries
+- [x] Remote database schema validated against schema definition
+- [x] No data loss or partial application issues
+
+### Deployment Results
+
+✅ **Success:** Migration 20260116100300_content_age_ratings_seed.sql applied successfully
+✅ **Status:** Family Wellness schema now active on remote Supabase instance
+✅ **Next:** Deploy Edge Functions (3 functions, ~450 lines total)
+
+---
+
 ## [2026-01-16] Family Wellness (Spec 11) - Phases 0-5 Complete
 
 **Type:** Feature Implementation
