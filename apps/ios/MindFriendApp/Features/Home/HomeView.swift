@@ -24,13 +24,36 @@ struct HomeView: View {
     @State private var recoveryQuestData: (attemptId: String, quest: StartRecoveryResult.RecoveryQuestInfo)?
     @State private var lastLoadTime: Date?
     @State private var hasCheckedReengagement = false
+    // Mood-adaptive home context
+    @State private var homeContext: HomeContext?
+    // Buddy widget data
+    @State private var buddyWidgetData: BuddyWidgetData?
+    @State private var showInviteBuddySheet = false
+
+    /// Background color adapts to mood context
+    private var adaptiveBackgroundColor: Color {
+        homeContext?.moodContext.backgroundColor ?? Color(uiColor: .systemBackground)
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
-                    // Greeting
-                    GreetingHeader(userName: appState.currentUser?.displayName ?? "Friend")
+                    // Adaptive greeting with time-of-day context
+                    AdaptiveGreetingHeader(
+                        userName: appState.currentUser?.displayName ?? "Friend",
+                        timeOfDay: homeContext?.timeOfDay ?? .current
+                    )
+
+                    // Supportive message (mood-adaptive)
+                    if let message = homeContext?.supportiveMessage {
+                        SupportiveMessageCard(
+                            message: message,
+                            moodContext: homeContext?.moodContext ?? .neutral,
+                            showCrisisSupport: homeContext?.shouldShowCrisisSupport ?? false,
+                            onCrisisTap: { appState.showCrisisResources = true }
+                        )
+                    }
 
                     // Level progress
                     if let level = userLevel {
@@ -46,11 +69,16 @@ struct HomeView: View {
                         )
                     }
 
-                    // Mood check-in prompt
+                    // Mood check-in prompt (adapted based on time)
                     if let mood = appState.todayMood {
                         TodayMoodCard(mood: mood)
                     } else {
-                        MoodPromptCard()
+                        AdaptiveMoodPromptCard(timeOfDay: homeContext?.timeOfDay ?? .current)
+                    }
+
+                    // Contextual quick actions (mood-adaptive)
+                    if let actions = homeContext?.recommendedActions, !actions.isEmpty {
+                        ContextualActionsRow(actions: actions)
                     }
 
                     // Today's quest - with proper state handling
@@ -68,24 +96,43 @@ struct HomeView: View {
                         onStartRecovery: startRecoveryQuest
                     )
 
+                    // Buddy widget or invite prompt
+                    if let buddyData = buddyWidgetData {
+                        BuddyWidget(
+                            buddyData: buddyData,
+                            onSendEncouragement: sendBuddyEncouragement
+                        )
+                    } else {
+                        InviteBuddyPrompt(onTap: { showInviteBuddySheet = true })
+                    }
+
                     // Weekly Insights
                     InsightsPreviewCard(insight: weeklyInsight)
 
-                    // Quick actions
+                    // Standard quick actions (fallback)
                     QuickActionsSection()
 
                     Spacer(minLength: 32)
                 }
                 .padding()
             }
+            .background(adaptiveBackgroundColor)
             .navigationTitle("Home")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
+                    // Crisis button becomes more prominent when needed
                     Button {
                         appState.showCrisisResources = true
                     } label: {
-                        Image(systemName: "heart.text.square.fill")
-                            .foregroundStyle(.red)
+                        if homeContext?.shouldShowCrisisSupport == true {
+                            // Pulsing indicator when crisis support is recommended
+                            Image(systemName: "heart.text.square.fill")
+                                .foregroundStyle(.red)
+                                .symbolEffect(.pulse, options: .repeating)
+                        } else {
+                            Image(systemName: "heart.text.square.fill")
+                                .foregroundStyle(.red)
+                        }
                     }
                     .accessibilityLabel("Crisis Resources")
                 }
@@ -115,6 +162,37 @@ struct HomeView: View {
                         quest: data.quest
                     )
                 }
+            }
+            .sheet(isPresented: $showInviteBuddySheet) {
+                InviteBuddySheet()
+            }
+        }
+    }
+
+    // MARK: - Buddy Encouragement
+
+    private func sendBuddyEncouragement() {
+        guard let buddyData = buddyWidgetData else { return }
+
+        Task {
+            do {
+                try await container.supabaseDataService.sendEncouragement(
+                    to: buddyData.buddyId,
+                    relationshipId: buddyData.relationshipId,
+                    type: .encouragement
+                )
+
+                // Refresh buddy data to show updated status
+                let newBuddyData = try await container.supabaseDataService.getBuddyWidgetData()
+                await MainActor.run {
+                    buddyWidgetData = newBuddyData
+                }
+
+                Analytics.shared.track(.buddyEncouragementSent, properties: [
+                    "relationship_id": buddyData.relationshipId
+                ])
+            } catch {
+                appState.showError(.apiError("Could not send encouragement"))
             }
         }
     }
@@ -230,10 +308,13 @@ struct HomeView: View {
             async let eventsTask = container.supabaseDataService.getActiveEvents()
             async let participationTask = container.supabaseDataService.getEventParticipation()
             async let insightTask = container.supabaseDataService.getWeeklySummary()
+            async let homeContextTask = container.supabaseDataService.getHomeContext()
+            async let buddyTask = container.supabaseDataService.getBuddyWidgetData()
+            async let celebrationsTask = container.supabaseDataService.getPendingCelebrations()
 
             // Await all results concurrently
-            let (questResult, profileResult, events, participation, insightResult) = try await (
-                questTask, profileTask, eventsTask, participationTask, insightTask
+            let (questResult, profileResult, events, participation, insightResult, contextResult, buddyResult, pendingCelebrations) = try await (
+                questTask, profileTask, eventsTask, participationTask, insightTask, homeContextTask, buddyTask, celebrationsTask
             )
 
             // Compute level info from profile
@@ -267,6 +348,17 @@ struct HomeView: View {
 
                 // Set weekly insight
                 weeklyInsight = insightResult
+
+                // Set mood-adaptive home context
+                homeContext = contextResult
+
+                // Set buddy widget data
+                buddyWidgetData = buddyResult
+
+                // Queue any pending celebrations
+                if !pendingCelebrations.isEmpty {
+                    appState.addCelebrations(pendingCelebrations)
+                }
 
                 // Shield status is set from protection check above
             }
@@ -401,7 +493,7 @@ struct MoodPromptCard: View {
                     .foregroundStyle(Color.accentColor)
             }
             .padding()
-            .background(Color(.secondarySystemBackground))
+            .background(Color(uiColor: .secondarySystemBackground))
             .cornerRadius(16)
         }
         .buttonStyle(.plain)
@@ -452,7 +544,7 @@ struct TodayMoodCard: View {
             }
         }
         .padding()
-        .background(Color(.secondarySystemBackground))
+        .background(Color(uiColor: .secondarySystemBackground))
         .cornerRadius(16)
     }
 }
@@ -550,7 +642,7 @@ struct QuestLoadingCard: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 40)
-        .background(Color(.secondarySystemBackground))
+        .background(Color(uiColor: .secondarySystemBackground))
         .cornerRadius(16)
     }
 }
@@ -584,7 +676,7 @@ struct QuestEmptyCard: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 32)
-        .background(Color(.secondarySystemBackground))
+        .background(Color(uiColor: .secondarySystemBackground))
         .cornerRadius(16)
     }
 }
@@ -620,7 +712,7 @@ struct QuestErrorCard: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 32)
-        .background(Color(.secondarySystemBackground))
+        .background(Color(uiColor: .secondarySystemBackground))
         .cornerRadius(16)
     }
 }
@@ -653,7 +745,7 @@ struct StreakCard: View {
             }
         }
         .padding()
-        .background(Color(.secondarySystemBackground))
+        .background(Color(uiColor: .secondarySystemBackground))
         .cornerRadius(16)
     }
 }
@@ -760,7 +852,7 @@ struct InsightsPreviewCard: View {
             }
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.secondarySystemBackground))
+            .background(Color(uiColor: .secondarySystemBackground))
             .cornerRadius(16)
         }
         .buttonStyle(.plain)
@@ -786,6 +878,345 @@ struct QuickActionButton: View {
         .padding(.vertical, 16)
         .background(color.opacity(0.1))
         .cornerRadius(12)
+    }
+}
+
+// MARK: - Mood-Adaptive Components
+
+/// Enhanced greeting header with time-of-day context and icon
+struct AdaptiveGreetingHeader: View {
+    let userName: String
+    let timeOfDay: TimeOfDay
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(timeOfDay.greeting + ",")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+
+                Text(userName)
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+
+                Text(timeOfDay.subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            // Time-appropriate icon
+            Image(systemName: timeOfDay.icon)
+                .font(.title)
+                .foregroundStyle(iconColor)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var iconColor: Color {
+        switch timeOfDay {
+        case .morning: return .yellow
+        case .afternoon: return .orange
+        case .evening: return .purple
+        case .night: return .indigo
+        }
+    }
+}
+
+/// Supportive message card shown based on mood context
+struct SupportiveMessageCard: View {
+    let message: String
+    let moodContext: MoodContext
+    let showCrisisSupport: Bool
+    let onCrisisTap: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: moodContext == .high ? "sparkles" : "heart.fill")
+                    .foregroundStyle(moodContext.accentColor)
+
+                Text(message)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+            }
+
+            if showCrisisSupport {
+                Button(action: onCrisisTap) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "hand.raised.fill")
+                        Text("Need extra support?")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                    }
+                    .foregroundStyle(.blue)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(moodContext.accentColor.opacity(0.1))
+        .cornerRadius(12)
+    }
+}
+
+/// Adaptive mood prompt that changes based on time of day
+struct AdaptiveMoodPromptCard: View {
+    let timeOfDay: TimeOfDay
+
+    private var promptText: String {
+        switch timeOfDay {
+        case .morning: return "How are you feeling this morning?"
+        case .afternoon: return "How's your afternoon going?"
+        case .evening: return "How was your day?"
+        case .night: return "How are you feeling tonight?"
+        }
+    }
+
+    private var subtitleText: String {
+        switch timeOfDay {
+        case .morning: return "Start your day with a check-in"
+        case .afternoon: return "A quick check-in helps track your journey"
+        case .evening: return "Reflect on how you've been feeling"
+        case .night: return "Log your mood before winding down"
+        }
+    }
+
+    var body: some View {
+        NavigationLink {
+            MoodCheckInView()
+        } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(promptText)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+
+                    Text(subtitleText)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Image(systemName: "plus.circle.fill")
+                    .font(.title)
+                    .foregroundStyle(Color.accentColor)
+            }
+            .padding()
+            .background(Color(uiColor: .secondarySystemBackground))
+            .cornerRadius(16)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// Contextual quick actions row based on mood and activity
+struct ContextualActionsRow: View {
+    let actions: [RecommendedAction]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Suggested for you")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 12) {
+                ForEach(Array(actions.prefix(3))) { action in
+                    ContextualActionButton(action: action)
+                }
+            }
+        }
+    }
+}
+
+/// Individual contextual action button
+struct ContextualActionButton: View {
+    let action: RecommendedAction
+
+    var body: some View {
+        NavigationLink {
+            destinationView
+        } label: {
+            VStack(spacing: 8) {
+                Image(systemName: action.icon)
+                    .font(.title2)
+                    .foregroundStyle(Color.accentColor)
+
+                Text(action.title)
+                    .font(.caption)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(Color(uiColor: .secondarySystemBackground))
+            .cornerRadius(12)
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var destinationView: some View {
+        switch action.type {
+        case .exercise, .breathing:
+            ExerciseLibraryView()
+        case .chat:
+            ChatListView()
+        case .circle:
+            CirclesListView()
+        case .quest:
+            QuestChoiceView()
+        case .journal:
+            ExerciseLibraryView() // Filtered to journaling exercises
+        case .celebrate, .share:
+            CirclesListView() // Go to circles to share
+        }
+    }
+}
+
+// MARK: - Buddy Widget
+
+struct BuddyWidget: View {
+    let buddyData: BuddyWidgetData
+    let onSendEncouragement: () -> Void
+
+    @State private var showEncouragementSent = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Header
+            HStack {
+                Image(systemName: "person.2.fill")
+                    .foregroundStyle(.tint)
+                Text("Your Buddy")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                Spacer()
+            }
+
+            // Buddy info
+            HStack(spacing: 12) {
+                // Avatar placeholder
+                Circle()
+                    .fill(Color.accentColor.opacity(0.2))
+                    .frame(width: 48, height: 48)
+                    .overlay(
+                        Text(String(buddyData.buddyName.prefix(1)))
+                            .font(.title2)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(Color.accentColor)
+                    )
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(buddyData.buddyName)
+                        .font(.headline)
+
+                    // Status
+                    HStack(spacing: 4) {
+                        Image(systemName: buddyData.statusIcon)
+                            .font(.caption)
+                            .foregroundStyle(buddyData.statusColor)
+
+                        Text(buddyData.statusMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Spacer()
+
+                // Buddy streak
+                HStack(spacing: 2) {
+                    Image(systemName: "flame.fill")
+                        .foregroundStyle(.orange)
+                    Text("\(buddyData.buddyStreak)")
+                        .fontWeight(.semibold)
+                }
+                .font(.subheadline)
+            }
+
+            // Action button
+            Button {
+                showEncouragementSent = true
+                onSendEncouragement()
+            } label: {
+                HStack {
+                    Image(systemName: "hand.wave.fill")
+                    Text(buddyData.needsCheckIn ? "Check in on them" : "Send encouragement")
+                }
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(Color.accentColor.opacity(0.1))
+                .foregroundStyle(Color.accentColor)
+                .cornerRadius(8)
+            }
+            .disabled(showEncouragementSent)
+        }
+        .padding()
+        .background(Color(uiColor: .secondarySystemBackground))
+        .cornerRadius(16)
+        .overlay(
+            Group {
+                if showEncouragementSent {
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.green, lineWidth: 2)
+                }
+            }
+        )
+        .onChange(of: showEncouragementSent) { _, newValue in
+            if newValue {
+                // Reset after 2 seconds
+                Task {
+                    try? await Task.sleep(for: .seconds(2))
+                    await MainActor.run {
+                        showEncouragementSent = false
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Invite Buddy Prompt
+
+struct InviteBuddyPrompt: View {
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                Image(systemName: "person.badge.plus.fill")
+                    .font(.title2)
+                    .foregroundStyle(.tint)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Invite a Wellness Buddy")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.primary)
+
+                    Text("3x more likely to reach goals together!")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding()
+            .background(Color(uiColor: .secondarySystemBackground))
+            .cornerRadius(16)
+        }
+        .buttonStyle(.plain)
     }
 }
 
