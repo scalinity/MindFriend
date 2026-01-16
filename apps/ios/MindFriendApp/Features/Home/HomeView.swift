@@ -758,6 +758,26 @@ struct QuickActionsSection: View {
 
             HStack(spacing: 12) {
                 NavigationLink {
+                    LiveSessionsView()
+                } label: {
+                    QuickActionButton(
+                        icon: "person.3.sequence.fill",
+                        title: "Live",
+                        color: .red
+                    )
+                }
+
+                NavigationLink {
+                    CreativeHubView()
+                } label: {
+                    QuickActionButton(
+                        icon: "paintpalette.fill",
+                        title: "Create",
+                        color: .pink
+                    )
+                }
+
+                NavigationLink {
                     ExerciseLibraryView()
                 } label: {
                     QuickActionButton(
@@ -772,11 +792,14 @@ struct QuickActionsSection: View {
                 } label: {
                     QuickActionButton(
                         icon: "chart.line.uptrend.xyaxis",
-                        title: "Mood History",
+                        title: "Mood",
                         color: .blue
                     )
                 }
+            }
 
+            // Second row
+            HStack(spacing: 12) {
                 NavigationLink {
                     BadgesView()
                 } label: {
@@ -786,6 +809,10 @@ struct QuickActionsSection: View {
                         color: .yellow
                     )
                 }
+
+                Spacer()
+                Spacer()
+                Spacer()
             }
         }
     }

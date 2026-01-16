@@ -29,6 +29,14 @@ final class DependencyContainer: ObservableObject {
         GrokVoiceService(supabase: supabaseClient)
     }()
 
+    lazy var liveService: LiveService = {
+        LiveService()
+    }()
+
+    lazy var creativeExpressionService: CreativeExpressionService = {
+        CreativeExpressionService()
+    }()
+
     // MARK: - Initialization
 
     init() {

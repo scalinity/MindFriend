@@ -1,0 +1,433 @@
+import SwiftUI
+
+struct ArtGeneratorView: View {
+    @EnvironmentObject var appState: AppState
+    @EnvironmentObject var container: DependencyContainer
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var prompt = ""
+    @State private var selectedStyle: ArtStyle = .watercolor
+    @State private var moodScore: Int = 5
+    @State private var selectedMoodTags: Set<String> = []
+    @State private var isGenerating = false
+    @State private var generatedWork: CreativeWork?
+    @State private var generatedImageURL: URL?
+    @State private var quotaRemaining: Int?
+    @State private var error: String?
+
+    private let moodTags = ["happy", "sad", "calm", "anxious", "hopeful", "grateful", "peaceful", "energetic"]
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 24) {
+                    if let imageURL = generatedImageURL {
+                        generatedImageView(url: imageURL)
+                    } else {
+                        promptInputSection
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("Create AI Art")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
+                if generatedImageURL != nil {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Done") { dismiss() }
+                    }
+                }
+            }
+            .alert("Error", isPresented: .constant(error != nil)) {
+                Button("OK") { error = nil }
+            } message: {
+                if let error = error {
+                    Text(error)
+                }
+            }
+        }
+    }
+
+    // MARK: - Prompt Input Section
+
+    private var promptInputSection: some View {
+        VStack(spacing: 24) {
+            // Prompt Input
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Describe your feeling or mood")
+                    .font(.headline)
+
+                Text("The AI will create unique artwork representing your emotions")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                TextField("e.g., A peaceful moment of clarity after a storm...", text: $prompt, axis: .vertical)
+                    .textFieldStyle(.roundedBorder)
+                    .lineLimit(3...6)
+            }
+
+            // Style Selection
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Art Style")
+                    .font(.headline)
+
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: 12) {
+                    ForEach(ArtStyle.allCases, id: \.self) { style in
+                        StyleOptionButton(
+                            style: style,
+                            isSelected: selectedStyle == style
+                        ) {
+                            selectedStyle = style
+                        }
+                    }
+                }
+            }
+
+            // Mood Score Slider
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Current Mood")
+                        .font(.headline)
+                    Spacer()
+                    Text("\(moodScore)/10")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                Slider(
+                    value: Binding(
+                        get: { Double(moodScore) },
+                        set: { moodScore = Int($0) }
+                    ),
+                    in: 1...10,
+                    step: 1
+                )
+                .tint(moodColor)
+
+                HStack {
+                    Text("Low")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("High")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            // Mood Tags
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Mood Tags (optional)")
+                    .font(.headline)
+
+                FlowLayout(spacing: 8) {
+                    ForEach(moodTags, id: \.self) { tag in
+                        MoodTagButton(
+                            tag: tag,
+                            isSelected: selectedMoodTags.contains(tag)
+                        ) {
+                            if selectedMoodTags.contains(tag) {
+                                selectedMoodTags.remove(tag)
+                            } else {
+                                selectedMoodTags.insert(tag)
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(minLength: 20)
+
+            // Generate Button
+            Button {
+                Task { await generateArt() }
+            } label: {
+                HStack {
+                    if isGenerating {
+                        ProgressView()
+                            .tint(.white)
+                    } else {
+                        Image(systemName: "wand.and.stars")
+                    }
+                    Text(isGenerating ? "Creating..." : "Generate Art")
+                }
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(prompt.isEmpty || isGenerating ? Color.gray : Color.accentColor)
+                .foregroundStyle(.white)
+                .cornerRadius(12)
+            }
+            .disabled(prompt.isEmpty || isGenerating)
+
+            if let quota = quotaRemaining {
+                Text("\(quota) generations remaining today")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    // MARK: - Generated Image View
+
+    private func generatedImageView(url: URL) -> some View {
+        VStack(spacing: 20) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .shadow(radius: 8)
+                case .failure:
+                    failedImageView
+                case .empty:
+                    ProgressView()
+                        .frame(height: 300)
+                @unknown default:
+                    failedImageView
+                }
+            }
+            .frame(maxHeight: 400)
+
+            Text("\"\(prompt)\"")
+                .font(.subheadline)
+                .italic()
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+
+            HStack(spacing: 4) {
+                Image(systemName: selectedStyle.icon)
+                Text(selectedStyle.displayName)
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            // Action Buttons
+            HStack(spacing: 16) {
+                Button {
+                    generatedImageURL = nil
+                    generatedWork = nil
+                    prompt = ""
+                } label: {
+                    Label("Create Another", systemImage: "arrow.counterclockwise")
+                        .font(.subheadline)
+                }
+                .buttonStyle(.bordered)
+
+                ShareLink(item: url) {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                        .font(.subheadline)
+                }
+                .buttonStyle(.bordered)
+
+                if let work = generatedWork {
+                    Button {
+                        Task { await toggleFavorite(work: work) }
+                    } label: {
+                        Label(
+                            work.isFavorite ? "Favorited" : "Favorite",
+                            systemImage: work.isFavorite ? "heart.fill" : "heart"
+                        )
+                        .font(.subheadline)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(work.isFavorite ? .red : nil)
+                }
+            }
+
+            if let quota = quotaRemaining {
+                Text("\(quota) generations remaining today")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var failedImageView: some View {
+        Rectangle()
+            .fill(Color(.secondarySystemBackground))
+            .frame(height: 300)
+            .overlay {
+                VStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.largeTitle)
+                    Text("Failed to load image")
+                        .font(.caption)
+                }
+                .foregroundStyle(.secondary)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    private var moodColor: Color {
+        switch moodScore {
+        case 1...3: return .red
+        case 4...6: return .orange
+        case 7...10: return .green
+        default: return .blue
+        }
+    }
+
+    // MARK: - Actions
+
+    private func generateArt() async {
+        isGenerating = true
+        error = nil
+
+        do {
+            let work = try await container.creativeExpressionService.generateArt(
+                prompt: prompt,
+                style: selectedStyle,
+                moodScore: moodScore,
+                moodTags: Array(selectedMoodTags)
+            )
+
+            generatedWork = work
+
+            if let path = work.storagePath,
+               let baseURL = URL(string: SupabaseConfig.supabaseURL) {
+                generatedImageURL = baseURL.appendingPathComponent("storage/v1/object/public/creative-works/\(path)")
+            }
+
+            // Update quota display
+            if let quota = try? await container.creativeExpressionService.fetchQuota() {
+                quotaRemaining = quota.aiArtLimit - quota.aiArtCount
+            }
+        } catch CreativeError.quotaExceeded {
+            error = "You've reached your daily limit. Upgrade to premium for more."
+            appState.showPaywall = true
+        } catch {
+            self.error = error.localizedDescription
+        }
+
+        isGenerating = false
+    }
+
+    private func toggleFavorite(work: CreativeWork) async {
+        do {
+            let newStatus = try await container.creativeExpressionService.toggleFavorite(workId: work.id)
+            generatedWork?.isFavorite = newStatus
+        } catch {
+            print("Toggle favorite error: \(error)")
+        }
+    }
+}
+
+// MARK: - Style Option Button
+
+struct StyleOptionButton: View {
+    let style: ArtStyle
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Image(systemName: style.icon)
+                    .font(.title2)
+                    .frame(height: 30)
+
+                Text(style.displayName)
+                    .font(.caption)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(isSelected ? Color.accentColor.opacity(0.2) : Color(.secondarySystemBackground))
+            .cornerRadius(12)
+            .overlay {
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(style.displayName) style")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+// MARK: - Mood Tag Button
+
+struct MoodTagButton: View {
+    let tag: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(tag.capitalized)
+                .font(.caption)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(isSelected ? Color.accentColor : Color(.secondarySystemBackground))
+                .foregroundStyle(isSelected ? .white : .primary)
+                .cornerRadius(16)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(tag)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+// MARK: - Flow Layout
+
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let result = FlowLayoutResult(in: proposal.width ?? 0, subviews: subviews, spacing: spacing)
+        return result.size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let result = FlowLayoutResult(in: bounds.width, subviews: subviews, spacing: spacing)
+        for (index, subview) in subviews.enumerated() {
+            subview.place(
+                at: CGPoint(
+                    x: bounds.minX + result.positions[index].x,
+                    y: bounds.minY + result.positions[index].y
+                ),
+                proposal: .unspecified
+            )
+        }
+    }
+
+    struct FlowLayoutResult {
+        var size: CGSize = .zero
+        var positions: [CGPoint] = []
+
+        init(in maxWidth: CGFloat, subviews: Subviews, spacing: CGFloat) {
+            var x: CGFloat = 0
+            var y: CGFloat = 0
+            var maxHeight: CGFloat = 0
+
+            for subview in subviews {
+                let size = subview.sizeThatFits(.unspecified)
+
+                if x + size.width > maxWidth, x > 0 {
+                    x = 0
+                    y += maxHeight + spacing
+                    maxHeight = 0
+                }
+
+                positions.append(CGPoint(x: x, y: y))
+                maxHeight = max(maxHeight, size.height)
+                x += size.width + spacing
+            }
+
+            self.size = CGSize(width: maxWidth, height: y + maxHeight)
+        }
+    }
+}
+
+#Preview {
+    ArtGeneratorView()
+        .environmentObject(AppState())
+        .environmentObject(DependencyContainer())
+}
