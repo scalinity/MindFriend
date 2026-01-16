@@ -106,6 +106,25 @@ final class SupabaseDataService: ObservableObject {
         return try await getMoods(from: from, to: to)
     }
 
+    // MARK: - Home Context (Mood-Adaptive Home)
+
+    /// Get personalized home context for the adaptive home screen
+    /// Returns mood trends, recommended actions, supportive messages, and crisis indicators
+    /// Note: The RPC uses auth.uid() internally for security - no user_id parameter needed
+    func getHomeContext() async throws -> HomeContext {
+        // Validate authentication
+        _ = try userId
+
+        // Call the RPC that calculates all home context data
+        // The function uses auth.uid() internally for IDOR protection
+        let result: HomeContext = try await supabase
+            .rpc("get_home_context")
+            .execute()
+            .value
+
+        return result
+    }
+
     // MARK: - Quests
 
     func getTodayQuest() async throws -> Quest? {
@@ -748,7 +767,8 @@ final class SupabaseDataService: ObservableObject {
             throw APIError.badRequest("Session expired. Please sign in again.")
         }
 
-        Log.data.debug("[Data] Using access token: \(refreshedToken.prefix(20))...")
+        // SECURITY FIX #008: Don't log access token content - even partial tokens are secrets
+        Log.data.debug("[Data] Using valid access token for chat request")
 
         // Call the chat Edge Function with explicit auth header
         let chatResponse: ChatFunctionResponse
@@ -1655,6 +1675,182 @@ final class SupabaseDataService: ObservableObject {
         }
     }
 
+    // MARK: - Buddy System
+
+    /// Create a buddy invite during onboarding or from home screen
+    func createBuddyInvite(contact: String, method: BuddyRelationship.InviteMethod) async throws -> BuddyRelationship {
+        // Generate unique invite code via RPC
+        let codeResults: [String] = try await supabase
+            .rpc("generate_buddy_code")
+            .execute()
+            .value
+
+        guard let inviteCode = codeResults.first else {
+            throw DataError.custom("Failed to generate invite code")
+        }
+
+        let insertData: [String: AnyEncodable] = [
+            "inviter_id": AnyEncodable(try userId),
+            "invite_code": AnyEncodable(inviteCode),
+            "invite_method": AnyEncodable(method.rawValue),
+            "invitee_contact": AnyEncodable(contact),
+            "status": AnyEncodable("pending"),
+            "expires_at": AnyEncodable(Date().addingTimeInterval(30 * 24 * 60 * 60)) // 30 days
+        ]
+
+        let result: DBBuddyRelationship = try await supabase
+            .from("buddy_relationships")
+            .insert(insertData)
+            .select()
+            .single()
+            .execute()
+            .value
+
+        // Send invite via edge function
+        do {
+            try await supabase.functions.invoke("send-buddy-invite", options: .init(body: [
+                "relationshipId": result.id?.uuidString ?? "",
+                "contact": contact,
+                "method": method.rawValue
+            ]))
+        } catch {
+            Log.data.warning("[Data] Failed to send buddy invite: \(error)")
+            // Don't fail - invite is created, just not sent
+        }
+
+        Analytics.shared.track(.buddyInviteSent, properties: [
+            "method": method.rawValue
+        ])
+
+        return result.toBuddyRelationship()
+    }
+
+    /// Accept a buddy invite using the invite code
+    func acceptBuddyInvite(code: String) async throws -> BuddyRelationship {
+        let currentUserId = try userId
+        let results: [DBBuddyRelationship] = try await supabase
+            .rpc("accept_buddy_invite", params: [
+                "p_invite_code": AnyEncodable(code.uppercased()),
+                "p_user_id": AnyEncodable(currentUserId)
+            ])
+            .execute()
+            .value
+
+        guard let relationship = results.first else {
+            throw DataError.custom("Invalid or expired invite code")
+        }
+
+        Analytics.shared.track(.buddyInviteAccepted)
+
+        return relationship.toBuddyRelationship()
+    }
+
+    /// Get all buddy relationships for current user (active only)
+    func getBuddyRelationships() async throws -> [BuddyRelationship] {
+        let currentUserId = try userId
+
+        let relationships: [DBBuddyRelationshipWithProfiles] = try await supabase
+            .from("buddy_relationships")
+            .select("*, inviter:profiles!inviter_id(id, display_name, current_streak_days), invitee:profiles!invitee_id(id, display_name, current_streak_days)")
+            .or("inviter_id.eq.\(currentUserId),invitee_id.eq.\(currentUserId)")
+            .eq("status", value: "accepted")
+            .execute()
+            .value
+
+        return relationships.map { $0.toBuddyRelationship() }
+    }
+
+    /// Get buddy widget data for home screen
+    func getBuddyWidgetData() async throws -> BuddyWidgetData? {
+        let results: [DBBuddyWidgetData] = try await supabase
+            .rpc("get_buddy_widget_data", params: [
+                "p_user_id": try userId
+            ])
+            .execute()
+            .value
+
+        guard let data = results.first, data.buddyId != nil else {
+            return nil
+        }
+
+        return BuddyWidgetData(
+            buddyName: data.buddyName ?? "Buddy",
+            buddyStreak: data.buddyStreak ?? 0,
+            buddyId: data.buddyId?.uuidString ?? "",
+            relationshipId: data.relationshipId?.uuidString ?? "",
+            hasCompletedToday: data.hasCompletedToday ?? false,
+            needsCheckIn: data.needsCheckIn ?? false,
+            lastEncouragementId: data.lastEncouragementId?.uuidString,
+            lastEncouragementType: data.lastEncouragementType,
+            lastEncouragementAt: data.lastEncouragementAt
+        )
+    }
+
+    /// Send encouragement to buddy
+    func sendEncouragement(to buddyId: String, relationshipId: String, type: BuddyEncouragement.MessageType) async throws {
+        guard let buddyUUID = UUID(uuidString: buddyId),
+              let relationshipUUID = UUID(uuidString: relationshipId) else {
+            throw DataError.invalidId
+        }
+
+        let insertData: [String: AnyEncodable] = [
+            "buddy_relationship_id": AnyEncodable(relationshipUUID),
+            "sender_id": AnyEncodable(try userId),
+            "recipient_id": AnyEncodable(buddyUUID),
+            "message_type": AnyEncodable(type.rawValue)
+        ]
+
+        try await supabase
+            .from("buddy_encouragements")
+            .insert(insertData)
+            .execute()
+
+        // Notify buddy via push notification
+        do {
+            try await supabase.functions.invoke("send-notification", options: .init(body: [
+                "type": AnyEncodable("buddy_encouragement"),
+                "recipientId": AnyEncodable(buddyId),
+                "data": AnyEncodable(["messageType": type.rawValue])
+            ]))
+        } catch {
+            Log.data.warning("[Data] Failed to send encouragement notification: \(error)")
+        }
+
+        Analytics.shared.track(.buddyEncouragementSent, properties: [
+            "type": type.rawValue
+        ])
+    }
+
+    /// Mark encouragement as seen
+    func markEncouragementSeen(id: String) async throws {
+        guard let encouragementUUID = UUID(uuidString: id) else {
+            throw DataError.invalidId
+        }
+
+        try await supabase
+            .from("buddy_encouragements")
+            .update(["seen_at": AnyEncodable(Date())])
+            .eq("id", value: encouragementUUID)
+            .execute()
+    }
+
+    /// Get pending (unaccepted) buddy invites sent by current user
+    func getPendingBuddyInvites() async throws -> [BuddyRelationship] {
+        let currentUserId = try userId
+
+        let relationships: [DBBuddyRelationship] = try await supabase
+            .from("buddy_relationships")
+            .select()
+            .eq("inviter_id", value: currentUserId)
+            .eq("status", value: "pending")
+            .gt("expires_at", value: Date().ISO8601Format())
+            .order("invited_at", ascending: false)
+            .execute()
+            .value
+
+        return relationships.map { $0.toBuddyRelationship() }
+    }
+
     // MARK: - Crisis Resources
 
     func getCrisisResources(country: String? = nil) async throws -> [CrisisResource] {
@@ -1915,6 +2111,20 @@ final class SupabaseDataService: ObservableObject {
             .value
 
         return summaries.first?.toWeeklySummary()
+    }
+
+    /// Generate weekly insight on-demand for the current user
+    /// Calls the generate-weekly-summary Edge Function which will calculate
+    /// stats, detect patterns, and generate AI insights
+    func generateWeeklyInsight() async throws -> WeeklySummary? {
+        // Invoke the Edge Function - it will use the user's JWT to identify them
+        _ = try await supabase.functions.invoke(
+            "generate-weekly-summary",
+            options: .init(method: .post)
+        )
+
+        // After successful generation, fetch the newly created summary
+        return try await getWeeklySummary()
     }
 
     // MARK: - Data Export
@@ -2584,6 +2794,145 @@ final class SupabaseDataService: ObservableObject {
                errorString.contains("unique") ||
                errorString.contains("duplicate key")
     }
+
+    // MARK: - Celebrations
+
+    /// Get pending celebrations that haven't been shown to the user yet
+    func getPendingCelebrations() async throws -> [CelebrationEvent] {
+        let currentUserId = try userId
+
+        let pending: [PendingCelebration] = try await supabase
+            .rpc("get_pending_celebrations", params: ["p_user_id": currentUserId])
+            .execute()
+            .value
+
+        return pending.map { $0.toCelebrationEvent(userId: currentUserId) }
+    }
+
+    /// Mark a celebration as shown to the user
+    func markCelebrationShown(celebrationId: UUID) async throws {
+        try await supabase
+            .rpc("mark_celebration_shown", params: ["p_celebration_id": celebrationId])
+            .execute()
+    }
+
+    /// Share a celebration to the user's circles
+    /// Returns the circle post ID if successful
+    func shareCelebrationToCircles(celebrationId: UUID) async throws -> UUID? {
+        struct ShareResult: Codable {
+            let shareToCircles: UUID?
+
+            enum CodingKeys: String, CodingKey {
+                case shareToCircles = "share_celebration_to_circles"
+            }
+        }
+
+        let result: UUID? = try await supabase
+            .rpc("share_celebration_to_circles", params: ["p_celebration_id": celebrationId])
+            .execute()
+            .value
+
+        if result != nil {
+            Analytics.shared.track(.celebrationSharedToCircle)
+        }
+
+        return result
+    }
+
+    /// Mark a celebration as shared externally (social media, etc.)
+    func markCelebrationSharedExternally(celebrationId: UUID) async throws {
+        try await supabase
+            .from("celebration_events")
+            .update(["shared_externally": true])
+            .eq("id", value: celebrationId)
+            .eq("user_id", value: try userId)
+            .execute()
+
+        Analytics.shared.track(.celebrationSharedExternally)
+    }
+
+    /// Add a reaction to a celebration
+    func addCelebrationReaction(celebrationId: UUID, emoji: String) async throws {
+        let currentUserId = try userId
+
+        try await supabase
+            .from("celebration_reactions")
+            .upsert([
+                "celebration_event_id": AnyEncodable(celebrationId),
+                "reactor_user_id": AnyEncodable(currentUserId),
+                "emoji": AnyEncodable(emoji)
+            ], onConflict: "celebration_event_id,reactor_user_id")
+            .execute()
+
+        Analytics.shared.track(.celebrationReactionAdded)
+    }
+
+    /// Remove a reaction from a celebration
+    func removeCelebrationReaction(celebrationId: UUID) async throws {
+        try await supabase
+            .from("celebration_reactions")
+            .delete()
+            .eq("celebration_event_id", value: celebrationId)
+            .eq("reactor_user_id", value: try userId)
+            .execute()
+    }
+
+    /// Get reaction summary for a celebration
+    func getCelebrationReactions(celebrationId: UUID) async throws -> [CelebrationReactionSummary] {
+        try await supabase
+            .rpc("get_celebration_reactions", params: ["p_celebration_id": celebrationId])
+            .execute()
+            .value
+    }
+
+    /// Check and trigger milestone celebrations based on current stats
+    /// Call this after quest completion, exercise completion, level up, or badge unlock
+    func checkMilestoneTriggers(
+        streak: Int? = nil,
+        questCount: Int? = nil,
+        exerciseCount: Int? = nil,
+        newLevel: Int? = nil,
+        badgeId: UUID? = nil
+    ) async throws -> [MilestoneTriggerResult] {
+        let currentUserId = try userId
+
+        var params: [String: AnyEncodable] = [
+            "p_user_id": AnyEncodable(currentUserId)
+        ]
+
+        if let streak = streak {
+            params["p_streak"] = AnyEncodable(streak)
+        }
+        if let questCount = questCount {
+            params["p_quest_count"] = AnyEncodable(questCount)
+        }
+        if let exerciseCount = exerciseCount {
+            params["p_exercise_count"] = AnyEncodable(exerciseCount)
+        }
+        if let newLevel = newLevel {
+            params["p_new_level"] = AnyEncodable(newLevel)
+        }
+        if let badgeId = badgeId {
+            params["p_badge_id"] = AnyEncodable(badgeId)
+        }
+
+        let results: [MilestoneTriggerResult] = try await supabase
+            .rpc("check_milestone_triggers", params: params)
+            .execute()
+            .value
+
+        return results
+    }
+
+    /// Get share card templates
+    func getShareCardTemplates() async throws -> [ShareCardTemplate] {
+        try await supabase
+            .from("share_card_templates")
+            .select()
+            .eq("is_active", value: true)
+            .execute()
+            .value
+    }
 }
 
 // MARK: - Supporting Types
@@ -2844,6 +3193,148 @@ struct DBCircleInvite: Codable {
         case sentAt = "sent_at"
         case acceptedAt = "accepted_at"
         case reminderSentAt = "reminder_sent_at"
+    }
+}
+
+// MARK: - Buddy System DB Models
+
+struct DBBuddyRelationship: Codable {
+    let id: UUID?
+    let inviterId: UUID
+    let inviteeId: UUID?
+    let inviteCode: String
+    let inviteMethod: String?
+    let inviteeContact: String?
+    let status: String
+    let invitedAt: Date?
+    let acceptedAt: Date?
+    let buddyCircleId: UUID?
+    let expiresAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case inviterId = "inviter_id"
+        case inviteeId = "invitee_id"
+        case inviteCode = "invite_code"
+        case inviteMethod = "invite_method"
+        case inviteeContact = "invitee_contact"
+        case status
+        case invitedAt = "invited_at"
+        case acceptedAt = "accepted_at"
+        case buddyCircleId = "buddy_circle_id"
+        case expiresAt = "expires_at"
+    }
+
+    func toBuddyRelationship() -> BuddyRelationship {
+        BuddyRelationship(
+            id: id?.uuidString ?? UUID().uuidString,
+            inviterId: inviterId.uuidString,
+            inviteeId: inviteeId?.uuidString,
+            inviteCode: inviteCode,
+            inviteMethod: inviteMethod.flatMap { BuddyRelationship.InviteMethod(rawValue: $0) },
+            inviteeContact: inviteeContact,
+            status: BuddyRelationship.BuddyStatus(rawValue: status) ?? .pending,
+            invitedAt: invitedAt ?? Date(),
+            acceptedAt: acceptedAt,
+            buddyCircleId: buddyCircleId?.uuidString,
+            expiresAt: expiresAt ?? Date().addingTimeInterval(30 * 24 * 60 * 60),
+            inviter: nil,
+            invitee: nil
+        )
+    }
+}
+
+struct DBBuddyProfile: Codable {
+    let id: UUID
+    let displayName: String?
+    let currentStreakDays: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case displayName = "display_name"
+        case currentStreakDays = "current_streak_days"
+    }
+
+    func toBuddyProfile() -> BuddyProfile {
+        BuddyProfile(
+            id: id.uuidString,
+            displayName: displayName ?? "User",
+            currentStreakDays: currentStreakDays
+        )
+    }
+}
+
+struct DBBuddyRelationshipWithProfiles: Codable {
+    let id: UUID?
+    let inviterId: UUID
+    let inviteeId: UUID?
+    let inviteCode: String
+    let inviteMethod: String?
+    let inviteeContact: String?
+    let status: String
+    let invitedAt: Date?
+    let acceptedAt: Date?
+    let buddyCircleId: UUID?
+    let expiresAt: Date?
+    let inviter: DBBuddyProfile?
+    let invitee: DBBuddyProfile?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case inviterId = "inviter_id"
+        case inviteeId = "invitee_id"
+        case inviteCode = "invite_code"
+        case inviteMethod = "invite_method"
+        case inviteeContact = "invitee_contact"
+        case status
+        case invitedAt = "invited_at"
+        case acceptedAt = "accepted_at"
+        case buddyCircleId = "buddy_circle_id"
+        case expiresAt = "expires_at"
+        case inviter
+        case invitee
+    }
+
+    func toBuddyRelationship() -> BuddyRelationship {
+        BuddyRelationship(
+            id: id?.uuidString ?? UUID().uuidString,
+            inviterId: inviterId.uuidString,
+            inviteeId: inviteeId?.uuidString,
+            inviteCode: inviteCode,
+            inviteMethod: inviteMethod.flatMap { BuddyRelationship.InviteMethod(rawValue: $0) },
+            inviteeContact: inviteeContact,
+            status: BuddyRelationship.BuddyStatus(rawValue: status) ?? .pending,
+            invitedAt: invitedAt ?? Date(),
+            acceptedAt: acceptedAt,
+            buddyCircleId: buddyCircleId?.uuidString,
+            expiresAt: expiresAt ?? Date().addingTimeInterval(30 * 24 * 60 * 60),
+            inviter: inviter?.toBuddyProfile(),
+            invitee: invitee?.toBuddyProfile()
+        )
+    }
+}
+
+struct DBBuddyWidgetData: Codable {
+    let buddyName: String?
+    let buddyStreak: Int?
+    let buddyId: UUID?
+    let relationshipId: UUID?
+    let hasCompletedToday: Bool?
+    let needsCheckIn: Bool?
+    let lastEncouragementId: UUID?
+    let lastEncouragementType: String?
+    let lastEncouragementAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case buddyName = "buddy_name"
+        case buddyStreak = "buddy_streak"
+        case buddyId = "buddy_id"
+        case relationshipId = "relationship_id"
+        case hasCompletedToday = "has_completed_today"
+        case needsCheckIn = "needs_check_in"
+        case lastEncouragementId = "last_encouragement_id"
+        case lastEncouragementType = "last_encouragement_type"
+        case lastEncouragementAt = "last_encouragement_at"
     }
 }
 
