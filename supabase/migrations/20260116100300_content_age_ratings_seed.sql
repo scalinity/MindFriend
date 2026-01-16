@@ -12,7 +12,7 @@ SELECT DISTINCT
     id,
     18,
     'adult',
-    CASE WHEN content_kind IN ('text', 'journaling') THEN true ELSE false END,
+    CASE WHEN category = 'journaling' THEN true ELSE false END,
     CASE
         WHEN duration_seconds <= 180 THEN 'simple'
         WHEN duration_seconds <= 420 THEN 'moderate'
