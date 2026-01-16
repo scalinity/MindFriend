@@ -1486,6 +1486,201 @@ struct ReactionSummary: Equatable {
     let userReacted: Bool
 }
 
+// MARK: - Buddy System
+
+/// A buddy relationship from the onboarding invite flow
+struct BuddyRelationship: Codable, Identifiable, Equatable {
+    let id: String
+    let inviterId: String
+    let inviteeId: String?
+    let inviteCode: String
+    let inviteMethod: InviteMethod?
+    let inviteeContact: String?
+    var status: BuddyStatus
+    let invitedAt: Date
+    var acceptedAt: Date?
+    let buddyCircleId: String?
+    let expiresAt: Date
+
+    // Joined data from profiles
+    var inviter: BuddyProfile?
+    var invitee: BuddyProfile?
+
+    /// Get the buddy (the other person in the relationship)
+    func buddy(currentUserId: String) -> BuddyProfile? {
+        if inviterId == currentUserId {
+            return invitee
+        } else {
+            return inviter
+        }
+    }
+
+    /// Check if this relationship is active
+    var isActive: Bool {
+        status == .accepted
+    }
+
+    /// Check if this invite has expired
+    var isExpired: Bool {
+        status == .pending && Date() > expiresAt
+    }
+
+    enum InviteMethod: String, Codable {
+        case sms
+        case email
+        case link
+    }
+
+    enum BuddyStatus: String, Codable {
+        case pending
+        case accepted
+        case declined
+        case expired
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case inviterId = "inviter_id"
+        case inviteeId = "invitee_id"
+        case inviteCode = "invite_code"
+        case inviteMethod = "invite_method"
+        case inviteeContact = "invitee_contact"
+        case status
+        case invitedAt = "invited_at"
+        case acceptedAt = "accepted_at"
+        case buddyCircleId = "buddy_circle_id"
+        case expiresAt = "expires_at"
+        case inviter
+        case invitee
+    }
+}
+
+/// Lightweight profile for buddy display
+struct BuddyProfile: Codable, Equatable {
+    let id: String
+    let displayName: String
+    let currentStreakDays: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case displayName = "display_name"
+        case currentStreakDays = "current_streak_days"
+    }
+}
+
+/// An encouragement message between buddies
+struct BuddyEncouragement: Codable, Identifiable, Equatable {
+    let id: String
+    let buddyRelationshipId: String
+    let senderId: String
+    let recipientId: String
+    let messageType: MessageType
+    let message: String?
+    let seenAt: Date?
+    let createdAt: Date
+
+    var senderName: String?
+
+    /// Display message (uses default if custom message is nil)
+    var displayMessage: String {
+        message ?? defaultMessage
+    }
+
+    /// Default message based on type
+    var defaultMessage: String {
+        switch messageType {
+        case .encouragement: return "You've got this!"
+        case .celebration: return "Amazing work!"
+        case .checkIn: return "Hey, checking in on you!"
+        }
+    }
+
+    /// Emoji for the message type
+    var emoji: String {
+        switch messageType {
+        case .encouragement: return "💪"
+        case .celebration: return "🎉"
+        case .checkIn: return "💙"
+        }
+    }
+
+    enum MessageType: String, Codable {
+        case encouragement
+        case celebration
+        case checkIn = "check_in"
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case buddyRelationshipId = "buddy_relationship_id"
+        case senderId = "sender_id"
+        case recipientId = "recipient_id"
+        case messageType = "message_type"
+        case message
+        case seenAt = "seen_at"
+        case createdAt = "created_at"
+        case senderName
+    }
+}
+
+/// Data for the buddy widget on home screen
+struct BuddyWidgetData: Codable, Equatable {
+    let buddyName: String
+    let buddyStreak: Int
+    let buddyId: String
+    let relationshipId: String
+    let hasCompletedToday: Bool
+    let needsCheckIn: Bool
+    let lastEncouragementId: String?
+    let lastEncouragementType: String?
+    let lastEncouragementAt: Date?
+
+    /// Status message for display
+    var statusMessage: String {
+        if hasCompletedToday {
+            return "Completed today's quest!"
+        } else if needsCheckIn {
+            return "Hasn't checked in recently"
+        } else {
+            return "\(buddyStreak) day streak"
+        }
+    }
+
+    /// Status icon name
+    var statusIcon: String {
+        if hasCompletedToday {
+            return "checkmark.circle.fill"
+        } else if needsCheckIn {
+            return "exclamationmark.circle.fill"
+        } else {
+            return "flame.fill"
+        }
+    }
+
+    /// Status color
+    var statusColor: Color {
+        if hasCompletedToday {
+            return .green
+        } else if needsCheckIn {
+            return .orange
+        } else {
+            return .orange
+        }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case buddyName = "buddy_name"
+        case buddyStreak = "buddy_streak"
+        case buddyId = "buddy_id"
+        case relationshipId = "relationship_id"
+        case hasCompletedToday = "has_completed_today"
+        case needsCheckIn = "needs_check_in"
+        case lastEncouragementId = "last_encouragement_id"
+        case lastEncouragementType = "last_encouragement_type"
+        case lastEncouragementAt = "last_encouragement_at"
+    }
+}
+
 // MARK: - Exercise
 
 struct Exercise: Codable, Identifiable, Equatable {
@@ -2236,4 +2431,196 @@ struct FreshStartResult: Codable {
         case newStreak = "new_streak"
         case freshStartBonus = "fresh_start_bonus"
     }
+}
+
+// MARK: - Mood-Adaptive Home Experience
+
+/// Time of day categories for contextual content
+enum TimeOfDay: String, Codable, CaseIterable {
+    case morning
+    case afternoon
+    case evening
+    case night
+
+    /// Returns the current time of day based on system time
+    static var current: TimeOfDay {
+        let hour = Calendar.current.component(.hour, from: Date())
+        switch hour {
+        case 5..<12: return .morning
+        case 12..<17: return .afternoon
+        case 17..<21: return .evening
+        default: return .night
+        }
+    }
+
+    /// Greeting text for this time of day
+    var greeting: String {
+        switch self {
+        case .morning: return "Good morning"
+        case .afternoon: return "Good afternoon"
+        case .evening: return "Good evening"
+        case .night: return "Hello"
+        }
+    }
+
+    /// Subtitle text encouraging engagement
+    var subtitle: String {
+        switch self {
+        case .morning: return "Ready to start your day?"
+        case .afternoon: return "How's your day going?"
+        case .evening: return "Time to wind down"
+        case .night: return "Rest well tonight"
+        }
+    }
+
+    /// SF Symbol icon for this time of day
+    var icon: String {
+        switch self {
+        case .morning: return "sun.max.fill"
+        case .afternoon: return "sun.min.fill"
+        case .evening: return "sunset.fill"
+        case .night: return "moon.stars.fill"
+        }
+    }
+
+    /// Suggested activity type for this time of day
+    var suggestedActivityType: String {
+        switch self {
+        case .morning: return "energizing"
+        case .afternoon: return "focusing"
+        case .evening: return "calming"
+        case .night: return "sleep"
+        }
+    }
+}
+
+/// Mood context categories based on mood score
+enum MoodContext: String, Codable {
+    case low      // Mood score 1-2
+    case neutral  // Mood score 3
+    case high     // Mood score 4-5
+
+    /// Initialize from a mood score (1-5)
+    init(score: Int) {
+        switch score {
+        case 1...2: self = .low
+        case 3: self = .neutral
+        default: self = .high
+        }
+    }
+
+    /// Background color for this mood context
+    var backgroundColor: Color {
+        switch self {
+        case .low: return Color.blue.opacity(0.05)
+        case .neutral: return Color(uiColor: .systemBackground)
+        case .high: return Color.green.opacity(0.05)
+        }
+    }
+
+    /// Accent color for this mood context
+    var accentColor: Color {
+        switch self {
+        case .low: return .blue
+        case .neutral: return .purple
+        case .high: return .green
+        }
+    }
+
+    /// Default supportive message for this mood context
+    var defaultMessage: String? {
+        switch self {
+        case .low: return "It's okay to have tough days. We're here for you."
+        case .neutral: return nil
+        case .high: return "Wonderful! Your positive energy is inspiring."
+        }
+    }
+}
+
+/// Recommended action for the home screen quick actions
+struct RecommendedAction: Codable, Identifiable, Equatable {
+    let type: ActionType
+    let title: String
+    let icon: String
+    let priority: Int
+
+    var id: String { type.rawValue }
+
+    enum ActionType: String, Codable {
+        case exercise
+        case chat
+        case circle
+        case quest
+        case breathing
+        case journal
+        case celebrate
+        case share
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case type, title, icon, priority
+    }
+}
+
+/// Home context containing all personalization data for the home screen
+struct HomeContext: Codable, Equatable {
+    let todayMood: Int?
+    let moodTrend: String?
+    let consecutiveLowMoodDays: Int
+    let daysSinceExercise: Int
+    let daysSinceCircleCheckin: Int
+    let questCompletedToday: Bool
+    let moodContextValue: String?
+    let showCrisisSupport: Bool
+    let supportiveMessage: String?
+    let recommendedActions: [RecommendedAction]
+    let recommendedExerciseIds: [UUID]
+
+    /// Computed mood context from the raw value
+    var moodContext: MoodContext {
+        if let value = moodContextValue {
+            return MoodContext(rawValue: value) ?? .neutral
+        }
+        guard let mood = todayMood else { return .neutral }
+        return MoodContext(score: mood)
+    }
+
+    /// Time of day (calculated client-side)
+    var timeOfDay: TimeOfDay {
+        TimeOfDay.current
+    }
+
+    /// Whether we should prominently show crisis resources
+    var shouldShowCrisisSupport: Bool {
+        showCrisisSupport || consecutiveLowMoodDays >= 2 || (todayMood ?? 3) <= 1
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case todayMood = "today_mood"
+        case moodTrend = "mood_trend"
+        case consecutiveLowMoodDays = "consecutive_low_mood_days"
+        case daysSinceExercise = "days_since_exercise"
+        case daysSinceCircleCheckin = "days_since_circle_checkin"
+        case questCompletedToday = "quest_completed_today"
+        case moodContextValue = "mood_context"
+        case showCrisisSupport = "show_crisis_support"
+        case supportiveMessage = "supportive_message"
+        case recommendedActions = "recommended_actions"
+        case recommendedExerciseIds = "recommended_exercise_ids"
+    }
+
+    /// Default context when no data is available
+    static let `default` = HomeContext(
+        todayMood: nil,
+        moodTrend: nil,
+        consecutiveLowMoodDays: 0,
+        daysSinceExercise: 0,
+        daysSinceCircleCheckin: 0,
+        questCompletedToday: false,
+        moodContextValue: "neutral",
+        showCrisisSupport: false,
+        supportiveMessage: nil,
+        recommendedActions: [],
+        recommendedExerciseIds: []
+    )
 }

@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		BUDDY02BC23C3C719CD3C9F /* InviteBuddySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BUDDY01493347E53EC5C762 /* InviteBuddySheet.swift */; };
 		00EE7C42BC23C3C719CD3C9F /* AccessibilityHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58AC3779493347E53EC5C762 /* AccessibilityHelpers.swift */; };
 		10F822CF68E88F0D2C1ED0A1 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CF8C702A16D26304471B516 /* HomeView.swift */; };
 		1D9648B788FA1CE3F884D6C2 /* CrashReporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 979CA4C9C16981D7D441806F /* CrashReporter.swift */; };
@@ -81,6 +82,14 @@
 		WLCBK02BC23C3C719CD3C9F /* WelcomeBackView.swift in Sources */ = {isa = PBXBuildFile; fileRef = WLCBK01493347E53EC5C762 /* WelcomeBackView.swift */; };
 		VSMT002BC23C3C719CD3C9F /* VoiceStateMachineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = VSMT001493347E53EC5C762 /* VoiceStateMachineTests.swift */; };
 		WYMCD02BC23C3C719CD3C9F /* WhatYouMissedCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = WYMCD01493347E53EC5C762 /* WhatYouMissedCard.swift */; };
+		CELBV01BC23C3C719CD3C9F /* CelebrationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CELBV01493347E53EC5C762 /* CelebrationView.swift */; };
+		CELSH01BC23C3C719CD3C9F /* ShareCardSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CELSH01493347E53EC5C762 /* ShareCardSheet.swift */; };
+		CELRB01BC23C3C719CD3C9F /* CelebrationReactionsBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = CELRB01493347E53EC5C762 /* CelebrationReactionsBar.swift */; };
+		CELMD01BC23C3C719CD3C9F /* CelebrationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CELMD01493347E53EC5C762 /* CelebrationModels.swift */; };
+		INVBS01BC23C3C719CD3C9F /* InviteBuddySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = INVBS01493347E53EC5C762 /* InviteBuddySheet.swift */; };
+		CELEB01BC23C3C719CD3C9F /* CelebrationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CELEB01493347E53EC5C762 /* CelebrationView.swift */; };
+		CELEB02BC23C3C719CD3C9F /* CelebrationReactionsBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = CELEB02493347E53EC5C762 /* CelebrationReactionsBar.swift */; };
+		CELEB03BC23C3C719CD3C9F /* ShareCardSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CELEB03493347E53EC5C762 /* ShareCardSheet.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -101,6 +110,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		BUDDY01493347E53EC5C762 /* InviteBuddySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteBuddySheet.swift; sourceTree = "<group>"; };
 		017A1CC530067B1B048F2E75 /* MindFriendApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MindFriendApp.swift; sourceTree = "<group>"; };
 		02F723822B9E7EEAACBBD352 /* MoodHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoodHistoryView.swift; sourceTree = "<group>"; };
 		036621370DFAC7E7A6611883 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -179,6 +189,11 @@
 		WLCBK01493347E53EC5C762 /* WelcomeBackView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeBackView.swift; sourceTree = "<group>"; };
 		VSMT001493347E53EC5C762 /* VoiceStateMachineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceStateMachineTests.swift; sourceTree = "<group>"; };
 		WYMCD01493347E53EC5C762 /* WhatYouMissedCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatYouMissedCard.swift; sourceTree = "<group>"; };
+		CELBV01493347E53EC5C762 /* CelebrationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CelebrationView.swift; sourceTree = "<group>"; };
+		CELSH01493347E53EC5C762 /* ShareCardSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareCardSheet.swift; sourceTree = "<group>"; };
+		CELRB01493347E53EC5C762 /* CelebrationReactionsBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CelebrationReactionsBar.swift; sourceTree = "<group>"; };
+		CELMD01493347E53EC5C762 /* CelebrationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CelebrationModels.swift; sourceTree = "<group>"; };
+		INVBS01493347E53EC5C762 /* InviteBuddySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteBuddySheet.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -243,6 +258,8 @@
 			children = (
 				A99FA53A908DEE1FE882CA7E /* Auth */,
 				BADGV03493347E53EC5C762 /* Badges */,
+				BUDDYGRP001493347E53EC5C762 /* Buddy */,
+				CELEBGRP001493347E53EC5C762 /* Celebration */,
 				E00C280E8109CA17427D29A9 /* Chat */,
 				68BB88C0FC1F5951399C46B9 /* Circles */,
 				8303D01A99DCA35C35FD8A51 /* Crisis */,
@@ -265,6 +282,24 @@
 			children = (
 			);
 			path = Extensions;
+			sourceTree = "<group>";
+		};
+		BUDDYGRP001493347E53EC5C762 /* Buddy */ = {
+			isa = PBXGroup;
+			children = (
+				INVBS01493347E53EC5C762 /* InviteBuddySheet.swift */,
+			);
+			path = Buddy;
+			sourceTree = "<group>";
+		};
+		CELEBGRP001493347E53EC5C762 /* Celebration */ = {
+			isa = PBXGroup;
+			children = (
+				CELBV01493347E53EC5C762 /* CelebrationView.swift */,
+				CELSH01493347E53EC5C762 /* ShareCardSheet.swift */,
+				CELRB01493347E53EC5C762 /* CelebrationReactionsBar.swift */,
+			);
+			path = Celebration;
 			sourceTree = "<group>";
 		};
 		4ABFD909D4F5EA0B08EDA25B /* Paywall */ = {
@@ -481,6 +516,7 @@
 				8E548C5CC1A91C74F13CA751 /* Utilities */,
 				CONST01493347E53EC5C762 /* Constants.swift */,
 				590C1A661399CE9EC2A66F1C /* Models.swift */,
+				CELMD01493347E53EC5C762 /* CelebrationModels.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -533,6 +569,24 @@
 				VCSM001493347E53EC5C762 /* VoiceStateMachine.swift */,
 			);
 			path = VoiceMode;
+			sourceTree = "<group>";
+		};
+		BUDDY00GRP493347E53EC5C762 /* Buddy */ = {
+			isa = PBXGroup;
+			children = (
+				BUDDY01493347E53EC5C762 /* InviteBuddySheet.swift */,
+			);
+			path = Buddy;
+			sourceTree = "<group>";
+		};
+		CELEB00GRP493347E53EC5C762 /* Celebration */ = {
+			isa = PBXGroup;
+			children = (
+				CELEB01493347E53EC5C762 /* CelebrationView.swift */,
+				CELEB02493347E53EC5C762 /* CelebrationReactionsBar.swift */,
+				CELEB03493347E53EC5C762 /* ShareCardSheet.swift */,
+			);
+			path = Celebration;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -736,6 +790,11 @@
 				VCSM002BC23C3C719CD3C9F /* VoiceStateMachine.swift in Sources */,
 				WLCBK02BC23C3C719CD3C9F /* WelcomeBackView.swift in Sources */,
 				WYMCD02BC23C3C719CD3C9F /* WhatYouMissedCard.swift in Sources */,
+				CELBV01BC23C3C719CD3C9F /* CelebrationView.swift in Sources */,
+				CELSH01BC23C3C719CD3C9F /* ShareCardSheet.swift in Sources */,
+				CELRB01BC23C3C719CD3C9F /* CelebrationReactionsBar.swift in Sources */,
+				CELMD01BC23C3C719CD3C9F /* CelebrationModels.swift in Sources */,
+				INVBS01BC23C3C719CD3C9F /* InviteBuddySheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
