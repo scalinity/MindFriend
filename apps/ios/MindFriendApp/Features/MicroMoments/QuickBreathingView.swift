@@ -10,6 +10,7 @@ struct QuickBreathingView: View {
     @State private var breathCount = 0
     @State private var isActive = false
     @State private var startTime: Date?
+    @State private var breathingTask: Task<Void, Never>?
 
     private let totalBreaths = 3
     private let inhaleDuration = 4.0
@@ -101,6 +102,7 @@ struct QuickBreathingView: View {
 
             // Close button
             Button("Close") {
+                breathingTask?.cancel()
                 dismiss()
             }
             .buttonStyle(.bordered)
@@ -108,57 +110,91 @@ struct QuickBreathingView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(.systemBackground))
+        .onDisappear {
+            breathingTask?.cancel()
+            breathingTask = nil
+        }
     }
 
     private func startBreathing() {
         isActive = true
         breathCount = 0
         startTime = Date()
-        performBreathCycle()
+
+        // Cancel any existing task
+        breathingTask?.cancel()
+
+        // Start new breathing task
+        breathingTask = Task {
+            await performBreathCycleAsync()
+        }
     }
 
-    private func performBreathCycle() {
-        guard breathCount < totalBreaths else {
-            completeExercise()
-            return
-        }
+    private func performBreathCycleAsync() async {
+        while breathCount < totalBreaths {
+            // Check for cancellation
+            guard !Task.isCancelled else { return }
 
-        // Inhale
-        phase = .inhale
-        triggerHaptic(.inhale)
+            // Inhale
+            await MainActor.run {
+                phase = .inhale
+                triggerHaptic(.inhale)
+                withAnimation(.easeInOut(duration: inhaleDuration)) {
+                    circleScale = 1.0
+                }
+            }
 
-        withAnimation(.easeInOut(duration: inhaleDuration)) {
-            circleScale = 1.0
-        }
+            // Wait for inhale duration
+            do {
+                try await Task.sleep(nanoseconds: UInt64(inhaleDuration * 1_000_000_000))
+            } catch {
+                return // Task was cancelled
+            }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + inhaleDuration) {
+            // Check for cancellation
+            guard !Task.isCancelled else { return }
+
             // Exhale
-            phase = .exhale
-            triggerHaptic(.exhale)
-
-            withAnimation(.easeInOut(duration: exhaleDuration)) {
-                circleScale = 0.5
+            await MainActor.run {
+                phase = .exhale
+                triggerHaptic(.exhale)
+                withAnimation(.easeInOut(duration: exhaleDuration)) {
+                    circleScale = 0.5
+                }
             }
 
-            DispatchQueue.main.asyncAfter(deadline: .now() + exhaleDuration) {
+            // Wait for exhale duration
+            do {
+                try await Task.sleep(nanoseconds: UInt64(exhaleDuration * 1_000_000_000))
+            } catch {
+                return // Task was cancelled
+            }
+
+            // Increment breath count
+            await MainActor.run {
                 breathCount += 1
-                performBreathCycle()
             }
+        }
+
+        // Complete exercise if not cancelled
+        if !Task.isCancelled {
+            await completeExerciseAsync()
         }
     }
 
-    private func completeExercise() {
-        phase = .complete
-        triggerHaptic(.complete)
+    private func completeExerciseAsync() async {
+        await MainActor.run {
+            phase = .complete
+            triggerHaptic(.complete)
+        }
 
         let endTime = Date()
         let duration = Int(endTime.timeIntervalSince(startTime ?? endTime))
 
         // Record completion if callback provided
         if let onComplete = onComplete {
-            // Use the "3-breath-reset" template ID - this matches seed data
             let completion = MicroCompletionData(
-                templateId: "3-breath-reset",
+                templateId: quickBreathingTemplateId,
                 triggerSource: .manual,
                 context: nil,
                 startedAt: startTime ?? endTime,
@@ -169,9 +205,22 @@ struct QuickBreathingView: View {
             onComplete(completion)
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            dismiss()
+        // Wait before dismissing
+        do {
+            try await Task.sleep(nanoseconds: 2_000_000_000)
+            await MainActor.run {
+                dismiss()
+            }
+        } catch {
+            // Task was cancelled, don't dismiss
         }
+    }
+
+    /// Template ID for the quick breathing exercise - matches seed data
+    private var quickBreathingTemplateId: String {
+        // This ID should match the "3-breath-reset" template in the database
+        // Using a computed property allows for future lookup if needed
+        "3-breath-reset"
     }
 
     private func triggerHaptic(_ type: HapticType) {
