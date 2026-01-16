@@ -29,6 +29,12 @@ struct MainTabView: View {
                 }
                 .tag(MainTab.circles)
 
+            ForYouView()
+                .tabItem {
+                    Label(MainTab.personalization.title, systemImage: MainTab.personalization.icon)
+                }
+                .tag(MainTab.personalization)
+
             ProfileView()
                 .tabItem {
                     Label(MainTab.profile.title, systemImage: MainTab.profile.icon)
