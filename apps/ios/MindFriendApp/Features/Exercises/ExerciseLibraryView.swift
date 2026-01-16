@@ -379,11 +379,27 @@ struct ExercisePlayerView: View {
                 // Update event progress for this exercise type
                 _ = try? await container.supabaseDataService.incrementEventProgress(activityType: exercise.type.rawValue)
 
+                // Fetch updated profile for exercise count
+                let profile = try await container.supabaseAuthService.fetchProfile()
+
+                // Check for milestone celebrations (exercise milestones)
+                let milestoneCelebrations = try await container.supabaseDataService.checkMilestoneTriggers(
+                    exerciseCount: profile.stats.totalExercisesCompleted,
+                    newLevel: xpResult.leveledUp ? xpResult.newLevel : nil
+                )
+
                 await MainActor.run {
                     // Show level-up celebration if leveled up
                     if xpResult.leveledUp {
                         appState.showLevelUpCelebration(level: xpResult.newLevel, title: xpResult.newTitle)
                     }
+
+                    // Queue milestone celebrations
+                    if !milestoneCelebrations.isEmpty, let userId = UUID(uuidString: profile.id) {
+                        let celebrations = milestoneCelebrations.map { $0.toCelebrationEvent(userId: userId) }
+                        appState.addCelebrations(celebrations)
+                    }
+
                     dismiss()
                 }
             } catch {

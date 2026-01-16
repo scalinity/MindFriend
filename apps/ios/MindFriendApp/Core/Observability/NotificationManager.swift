@@ -26,6 +26,7 @@ enum NotificationDeepLink {
     case mood
     case settings
     case insights
+    case buddy(code: String)
     case none
 }
 
@@ -114,7 +115,12 @@ final class NotificationManager: NSObject, ObservableObject {
         let tokenString = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
         self.deviceToken = tokenString
 
-        Log.notifications.debug("[Notifications] Device token: \(tokenString)")
+        // PRIVACY FIX #009: Redact device token in logs - only show prefix in DEBUG builds
+        #if DEBUG
+        Log.notifications.debug("[Notifications] Device token (first 8): \(tokenString.prefix(8))...")
+        #else
+        Log.notifications.debug("[Notifications] Device token registered")
+        #endif
 
         // Register with backend
         Task {
@@ -285,6 +291,11 @@ final class NotificationManager: NSObject, ObservableObject {
 
         case "settings":
             return .settings
+
+        case "buddy":
+            if let code = pathComponents.first {
+                return .buddy(code: code)
+            }
 
         default:
             break

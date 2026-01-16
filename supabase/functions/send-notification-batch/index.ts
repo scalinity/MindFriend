@@ -161,38 +161,84 @@ serve(async (req) => {
       }
     }
 
-    // Call send-notification for each recipient in parallel
-    // Using the internal Edge Function invoke (which bypasses rate limiting for service calls)
+    // SECURITY FIX #002: Filter recipients to only valid circle members
+    const CIRCLE_SCOPED_TYPES: NotificationType[] = [
+      "circle_activity",
+      "hug",
+      "challenge",
+    ];
+    if (body.data?.circleId && CIRCLE_SCOPED_TYPES.includes(body.type)) {
+      const { data: validMembers } = await supabaseAdmin
+        .from("circle_members")
+        .select("user_id")
+        .eq("circle_id", body.data.circleId)
+        .in("user_id", body.recipientIds);
+
+      const validSet = new Set((validMembers || []).map((m) => m.user_id));
+      const filteredIds = body.recipientIds.filter((id) => validSet.has(id));
+
+      if (filteredIds.length === 0) {
+        log.info("No valid recipients in circle", {
+          circleId: body.data.circleId.slice(0, 8),
+          requestedCount: body.recipientIds.length,
+        });
+        return new Response(
+          JSON.stringify({
+            success: true,
+            results: [],
+            sent: 0,
+            reason: "no_valid_recipients",
+          }),
+          { status: 200, headers },
+        );
+      }
+
+      // Update to only include valid members
+      body.recipientIds = filteredIds;
+    }
+
+    // SECURITY FIX #002: Forward user JWT to send-notification (don't use service role bypass)
+    const fnUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/send-notification`;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
     const results: BatchResult[] = [];
     const sendPromises = body.recipientIds.map(async (recipientId) => {
       try {
-        const response = await supabaseAdmin.functions.invoke(
-          "send-notification",
-          {
-            body: {
-              type: body.type,
-              recipientId,
-              data: {
-                ...body.data,
-                senderId: user.id, // Always set sender from authenticated user
-              },
-            },
+        // Use direct fetch with USER JWT to ensure per-user rate limiting is enforced
+        const response = await fetch(fnUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            // Forward USER JWT for per-user rate limiting
+            Authorization: authHeader,
+            // apikey required by Supabase gateway
+            apikey: serviceRoleKey,
           },
-        );
+          body: JSON.stringify({
+            type: body.type,
+            recipientId,
+            data: {
+              ...body.data,
+              senderId: user.id, // Always set sender from authenticated user
+            },
+          }),
+        });
 
-        if (response.error) {
+        const result = (await response.json()) as {
+          success?: boolean;
+          skipped?: boolean;
+          reason?: string;
+          error?: string;
+        };
+
+        if (!response.ok || result.error) {
           return {
             recipientId,
             success: false,
-            reason: response.error.message,
+            reason: result.error || `HTTP ${response.status}`,
           };
         }
 
-        const result = response.data as {
-          success: boolean;
-          skipped?: boolean;
-          reason?: string;
-        };
         return {
           recipientId,
           success: result.success && !result.skipped,

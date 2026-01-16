@@ -62,6 +62,11 @@ enum AnalyticsEvent: String {
     case reactionAdded = "reaction_added"
     case inviteSent = "invite_sent"
 
+    // Buddy System
+    case buddyInviteSent = "buddy_invite_sent"
+    case buddyInviteAccepted = "buddy_invite_accepted"
+    case buddyEncouragementSent = "buddy_encouragement_sent"
+
     // Billing
     case paywallViewed = "paywall_viewed"
     case purchaseStarted = "purchase_started"
@@ -100,6 +105,13 @@ enum AnalyticsEvent: String {
     case eventCompleted = "event_completed"
     case weeklyXPReset = "weekly_xp_reset"
     case skillLevelUp = "skill_level_up"
+
+    // Celebrations
+    case celebrationShown = "celebration_shown"
+    case celebrationDismissed = "celebration_dismissed"
+    case celebrationSharedToCircle = "celebration_shared_to_circle"
+    case celebrationSharedExternally = "celebration_shared_externally"
+    case celebrationReactionAdded = "celebration_reaction_added"
 
     // Notifications
     case notificationSettingsUpdated = "notification_settings_updated"

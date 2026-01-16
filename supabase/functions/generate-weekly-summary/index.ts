@@ -66,13 +66,39 @@ serve(async (req) => {
     "Content-Type": "application/json",
   };
 
-  // Require cron secret or service role key
+  // Check for cron/service role auth
   const expectedCronSecret = Deno.env.get("CRON_SECRET") || "";
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  const isCronOrServiceRole = isAuthorizedCronRequest(
+    req.headers,
+    expectedCronSecret,
+    serviceRoleKey,
+  );
 
-  if (
-    !isAuthorizedCronRequest(req.headers, expectedCronSecret, serviceRoleKey)
-  ) {
+  // Check for user JWT auth (for on-demand generation)
+  let authenticatedUserId: string | null = null;
+  const authHeader = req.headers.get("Authorization");
+
+  if (!isCronOrServiceRole && authHeader?.startsWith("Bearer ")) {
+    // Try to authenticate as a regular user using service role client
+    const supabaseAuth = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    const token = authHeader.replace("Bearer ", "");
+    const {
+      data: { user },
+      error: authError,
+    } = await supabaseAuth.auth.getUser(token);
+
+    if (!authError && user) {
+      authenticatedUserId = user.id;
+    }
+  }
+
+  // Must be either cron/service role OR authenticated user
+  if (!isCronOrServiceRole && !authenticatedUserId) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
       headers,
@@ -80,7 +106,7 @@ serve(async (req) => {
   }
 
   try {
-    // Initialize Supabase client with service role
+    // Initialize Supabase client with service role for data operations
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -89,7 +115,33 @@ serve(async (req) => {
     const xaiApiKey = Deno.env.get("XAI_API_KEY");
     const now = new Date();
 
-    // Check for manual trigger via query param
+    // If authenticated user, generate their own insight (on-demand)
+    if (authenticatedUserId) {
+      console.log(
+        `On-demand insight generation for user: ${authenticatedUserId}`,
+      );
+
+      const result = await processUserWithInsights(
+        supabaseAdmin,
+        authenticatedUserId,
+        now,
+        xaiApiKey,
+        false, // Don't send notification for on-demand triggers
+      );
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          onDemand: true,
+          userId: authenticatedUserId,
+          timestamp: now.toISOString(),
+          ...result,
+        }),
+        { status: 200, headers },
+      );
+    }
+
+    // Check for manual trigger via query param (cron/service role only)
     const url = new URL(req.url);
     const manualUserId = url.searchParams.get("user_id");
 

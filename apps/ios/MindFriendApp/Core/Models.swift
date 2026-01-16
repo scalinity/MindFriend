@@ -2208,6 +2208,9 @@ struct UserDataExport: Codable {
     let conversations: [ConversationExportData]
     let circles: [CircleExportData]
     let exerciseSessions: [ExerciseSessionExportData]
+    // EXE-010: Added subscription and crisis events to comprehensive export
+    let subscription: SubscriptionExportData?
+    let crisisEvents: [CrisisEventExportData]
 
     struct UserExportData: Codable {
         let id: String
@@ -2268,6 +2271,22 @@ struct UserDataExport: Codable {
         let exerciseType: String
         let completedAt: String
         let durationSeconds: Int?
+    }
+
+    /// EXE-010: Subscription data for comprehensive export
+    struct SubscriptionExportData: Codable {
+        let productId: String?
+        let planType: String?
+        let billingPeriod: String?
+        let status: String?
+        let expiresAt: String?
+        let createdAt: String?
+    }
+
+    /// EXE-010: Crisis event data for export (keyword + timestamp only, no content)
+    struct CrisisEventExportData: Codable {
+        let triggerKeyword: String?  // Only the matched keyword, not actual user content
+        let detectedAt: String
     }
 }
 

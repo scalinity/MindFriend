@@ -73,6 +73,10 @@ enum Tables {
 
     // Crisis
     static let crisisResources = "crisis_resources"
+    static let crisisEvents = "crisis_events"
+
+    // Subscriptions
+    static let subscriptions = "subscriptions"
 
     // Memory
     static let memoryFragments = "memory_fragments"
@@ -576,57 +580,49 @@ struct DBQuestTemplate: Codable {
     }
 }
 
-struct DBUserQuest: Codable {
-    let id: UUID?
-    let userId: UUID
-    let questTemplateId: UUID
-    let assignedDate: String
-    var status: String
-    var reflectionNote: String?
-    var rating: Int?
-    var completedAt: Date?
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case userId = "user_id"
-        case questTemplateId = "quest_template_id"
-        case assignedDate = "assigned_date"
-        case status
-        case reflectionNote = "reflection_note"
-        case rating
-        case completedAt = "completed_at"
-    }
-}
+// Note: DBUserQuest removed - quests now use RPC functions (assign_daily_quest, complete_quest)
+// and DBQuestWithTemplate struct for fetching active quests with template data
 
 struct DBExerciseInstruction: Codable {
     let step: Int
     let text: String
 }
 
+/// Exercise row matching actual schema (duration_seconds, premium_only)
 struct DBExercise: Codable {
     let id: UUID
     let title: String
     let description: String
     let type: String
-    let durationMinutes: Int
+    let durationSeconds: Int  // Schema uses duration_seconds, not duration_minutes
+    let contentKind: String
+    let contentText: String?
+    let audioUrl: String?
+    let premiumOnly: Bool  // Schema uses premium_only, not is_premium
     let instructions: [DBExerciseInstruction]?
-    let isPremium: Bool
 
-    // Credibility fields
+    // Credibility fields (from later migration)
     let evidenceBasis: String?
     let therapistReviewed: Bool?
     let reviewDate: String?
     let methodologyNote: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, title, description, type
-        case durationMinutes = "duration_minutes"
-        case instructions
-        case isPremium = "is_premium"
+        case id, title, description, type, instructions
+        case durationSeconds = "duration_seconds"
+        case contentKind = "content_kind"
+        case contentText = "content_text"
+        case audioUrl = "audio_url"
+        case premiumOnly = "premium_only"
         case evidenceBasis = "evidence_basis"
         case therapistReviewed = "therapist_reviewed"
         case reviewDate = "review_date"
         case methodologyNote = "methodology_note"
+    }
+
+    /// Convenience computed property for duration in minutes (for UI display)
+    var durationMinutes: Int {
+        durationSeconds / 60
     }
 }
 

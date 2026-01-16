@@ -116,14 +116,29 @@ struct QuestDetailView: View {
                 // Fetch updated profile to get new streak
                 let profile = try await container.supabaseAuthService.fetchProfile()
 
+                // Check for milestone celebrations
+                let milestoneCelebrations = try await container.supabaseDataService.checkMilestoneTriggers(
+                    streak: profile.stats.currentStreakDays,
+                    questCount: profile.stats.totalQuestsCompleted,
+                    exerciseCount: nil,
+                    newLevel: xpResult.leveledUp ? xpResult.newLevel : nil,
+                    badgeId: nil
+                )
+
                 await MainActor.run {
                     appState.currentStreak = profile.stats.currentStreakDays
                     appState.currentUser = profile
                     showReflection = false
 
-                    // Show level-up celebration if leveled up
+                    // Show level-up celebration if leveled up (legacy celebration for immediate feedback)
                     if xpResult.leveledUp {
                         appState.showLevelUpCelebration(level: xpResult.newLevel, title: xpResult.newTitle)
+                    }
+
+                    // Queue milestone celebrations (shown after level-up if both occur)
+                    if !milestoneCelebrations.isEmpty, let userId = UUID(uuidString: profile.id) {
+                        let celebrations = milestoneCelebrations.map { $0.toCelebrationEvent(userId: userId) }
+                        appState.addCelebrations(celebrations)
                     }
 
                     // Create completion result for display
