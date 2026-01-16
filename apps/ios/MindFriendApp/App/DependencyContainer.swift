@@ -37,6 +37,24 @@ final class DependencyContainer: ObservableObject {
         CreativeExpressionService()
     }()
 
+    lazy var microMomentsService: MicroMomentsService = {
+        MicroMomentsService(supabase: supabaseClient)
+    }()
+
+    lazy var peerSupportService: PeerSupportService = {
+        PeerSupportService(supabase: supabaseClient)
+    }()
+
+    // MARK: - Audio Services
+
+    lazy var audioPlayerService: AudioPlayerService = {
+        AudioPlayerService(supabase: supabaseClient)
+    }()
+
+    lazy var audioContentService: AudioContentService = {
+        AudioContentService(supabase: supabaseClient)
+    }()
+
     // MARK: - Initialization
 
     init() {
