@@ -63,6 +63,9 @@ struct MicroMomentPlayerView: View {
             .sheet(isPresented: $showCompletionSheet) {
                 completionSheet
             }
+            .onDisappear {
+                stopTimer()
+            }
         }
     }
 
@@ -435,6 +438,10 @@ struct MicroMomentPlayerView: View {
                 if currentStep != index {
                     currentStep = index
                     triggerHaptic(.light)
+                    // Sync breathing animation with step change
+                    if template.animationType == .breathingCircle || template.animationType == nil {
+                        animateBreathingForCurrentStep()
+                    }
                 }
                 return
             }

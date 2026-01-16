@@ -1,5 +1,26 @@
 import SwiftUI
 
+/// Filter options for micro-moment exercises
+enum MicroMomentFilter: String, CaseIterable {
+    case all = "All"
+    case quick = "Quick (<30s)"
+    case calming = "Calming"
+    case energizing = "Energizing"
+
+    func matches(_ template: MicroMomentTemplate) -> Bool {
+        switch self {
+        case .all:
+            return true
+        case .quick:
+            return template.durationSeconds < 30
+        case .calming:
+            return template.energyEffect == .calming
+        case .energizing:
+            return template.energyEffect == .energizing
+        }
+    }
+}
+
 /// List view for browsing micro-moments by type
 struct MicroMomentListView: View {
     let type: MicroMomentType
@@ -9,6 +30,12 @@ struct MicroMomentListView: View {
     @State private var selectedTemplate: MicroMomentTemplate?
     @State private var isLoading = true
     @State private var errorMessage: String?
+    @State private var selectedFilter: MicroMomentFilter = .all
+
+    /// Templates filtered by the selected filter
+    private var filteredTemplates: [MicroMomentTemplate] {
+        templates.filter { selectedFilter.matches($0) }
+    }
 
     var body: some View {
         Group {
@@ -101,11 +128,31 @@ struct MicroMomentListView: View {
                 // Filters
                 filterSection
 
-                // Template cards
-                ForEach(templates) { template in
+                // Template cards (filtered)
+                ForEach(filteredTemplates) { template in
                     MicroMomentDetailCard(template: template) {
                         selectedTemplate = template
                     }
+                }
+
+                // Empty state when filter has no results
+                if filteredTemplates.isEmpty && !templates.isEmpty {
+                    VStack(spacing: 12) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.title)
+                            .foregroundStyle(.secondary)
+
+                        Text("No exercises match this filter")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+
+                        Button("Clear Filter") {
+                            selectedFilter = .all
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 32)
                 }
             }
             .padding()
@@ -126,9 +173,16 @@ struct MicroMomentListView: View {
                     .font(.title2)
                     .fontWeight(.bold)
 
-                Text("\(templates.count) exercises available")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                // Show filtered count if filter is active
+                if selectedFilter == .all {
+                    Text("\(templates.count) exercises available")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("\(filteredTemplates.count) of \(templates.count) exercises")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Spacer()
@@ -139,13 +193,16 @@ struct MicroMomentListView: View {
     private var filterSection: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                FilterChip(label: "All", isSelected: true) {}
-
-                FilterChip(label: "Quick (<30s)", isSelected: false) {}
-
-                FilterChip(label: "Calming", isSelected: false) {}
-
-                FilterChip(label: "Energizing", isSelected: false) {}
+                ForEach(MicroMomentFilter.allCases, id: \.self) { filter in
+                    FilterChip(
+                        label: filter.rawValue,
+                        isSelected: selectedFilter == filter
+                    ) {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            selectedFilter = filter
+                        }
+                    }
+                }
             }
         }
         .padding(.bottom, 8)

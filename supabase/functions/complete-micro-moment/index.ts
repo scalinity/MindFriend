@@ -166,30 +166,48 @@ serve(async (req) => {
     };
 
     // Check for new achievements to notify about
+    // An achievement is "new" if the user just hit the exact threshold for earning it
     const newAchievements: string[] = [];
+    const achievements = streakData.achievements_unlocked || [];
+
+    // First micro-moment ever
     if (
-      streakData.achievements_unlocked?.includes("first_micro") &&
-      streakData.total_micro_moments === 1
+      streakData.total_micro_moments === 1 &&
+      achievements.includes("first_micro")
     ) {
       newAchievements.push("first_micro");
     }
+
+    // 7-day streak (exact threshold - only on first reaching 7)
     if (
       streakData.current_streak === 7 &&
-      streakData.achievements_unlocked?.includes("week_streak")
+      achievements.includes("week_streak")
     ) {
       newAchievements.push("week_streak");
     }
+
+    // 30-day streak (exact threshold - only on first reaching 30)
     if (
       streakData.current_streak === 30 &&
-      streakData.achievements_unlocked?.includes("month_streak")
+      achievements.includes("month_streak")
     ) {
       newAchievements.push("month_streak");
     }
+
+    // 100 micro-moments milestone
     if (
       streakData.total_micro_moments === 100 &&
-      streakData.achievements_unlocked?.includes("micro_century")
+      achievements.includes("micro_century")
     ) {
       newAchievements.push("micro_century");
+    }
+
+    // 50 micro-moments milestone
+    if (
+      streakData.total_micro_moments === 50 &&
+      achievements.includes("micro_half_century")
+    ) {
+      newAchievements.push("micro_half_century");
     }
 
     return new Response(

@@ -40,35 +40,45 @@ final class MicroMomentsService: ObservableObject {
         async let checkInsTask = fetchRecentCheckIns()
         async let prefsTask = fetchDeliveryPreferences()
 
+        // Track if any critical fetch failed
+        var criticalFailure = false
+        var lastError: Error?
+
         // Await all tasks, handling errors gracefully
         do {
             templates = try await templatesTask
         } catch {
             print("Failed to fetch templates: \(error)")
+            criticalFailure = true
+            lastError = error
         }
 
         do {
             suggestions = try await suggestionsTask
         } catch {
             print("Failed to fetch suggestions: \(error)")
+            // Suggestions failure is non-critical
         }
 
         do {
             streak = try await streakTask
         } catch {
             print("Failed to fetch streak: \(error)")
+            // Streak failure is non-critical
         }
 
         do {
             recentCompletions = try await completionsTask
         } catch {
             print("Failed to fetch completions: \(error)")
+            // Completions failure is non-critical
         }
 
         do {
             recentCheckIns = try await checkInsTask
         } catch {
             print("Failed to fetch check-ins: \(error)")
+            // Check-ins failure is non-critical
         }
 
         do {
@@ -77,6 +87,12 @@ final class MicroMomentsService: ObservableObject {
             }
         } catch {
             print("Failed to fetch preferences: \(error)")
+            // Preferences failure is non-critical
+        }
+
+        // Set error state if critical data failed to load
+        if criticalFailure, let lastError = lastError {
+            self.error = lastError.localizedDescription
         }
 
         isLoading = false
@@ -299,11 +315,13 @@ final class MicroMomentsService: ObservableObject {
             let moodCheckIns = dayCheckIns.filter { $0.type == .mood }
             let energyCheckIns = dayCheckIns.filter { $0.type == .energy }
 
-            let moodAvg = moodCheckIns.compactMap { $0.valueNumeric }
-                .isEmpty ? nil : Double(moodCheckIns.compactMap { $0.valueNumeric }.reduce(0, +)) / Double(moodCheckIns.count)
+            // Calculate mood average - divide by count of check-ins WITH values, not total count
+            let moodValues = moodCheckIns.compactMap { $0.valueNumeric }
+            let moodAvg: Double? = moodValues.isEmpty ? nil : Double(moodValues.reduce(0, +)) / Double(moodValues.count)
 
-            let energyAvg = energyCheckIns.compactMap { $0.valueNumeric }
-                .isEmpty ? nil : Double(energyCheckIns.compactMap { $0.valueNumeric }.reduce(0, +)) / Double(energyCheckIns.count)
+            // Calculate energy average - divide by count of check-ins WITH values, not total count
+            let energyValues = energyCheckIns.compactMap { $0.valueNumeric }
+            let energyAvg: Double? = energyValues.isEmpty ? nil : Double(energyValues.reduce(0, +)) / Double(energyValues.count)
 
             return CheckInTrend(
                 date: date,
