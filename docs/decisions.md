@@ -149,7 +149,7 @@ Schema aligned with spec:
 
 Memory flow:
 
-1. **Extraction** - After each user message, grok-3-mini-fast extracts key/value facts
+1. **Extraction** - After each user message, grok-4-1-fast-non-reasoning-fast extracts key/value facts
 2. **Injection** - Top 10 memories (by confidence) injected into system prompt
 3. **Management** - iOS MemorySettingsView allows viewing/deleting memories
 

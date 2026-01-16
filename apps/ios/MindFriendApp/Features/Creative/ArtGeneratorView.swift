@@ -41,7 +41,10 @@ struct ArtGeneratorView: View {
                     }
                 }
             }
-            .alert("Error", isPresented: .constant(error != nil)) {
+            .alert("Error", isPresented: Binding(
+                get: { error != nil },
+                set: { if !$0 { error = nil } }
+            )) {
                 Button("OK") { error = nil }
             } message: {
                 if let error = error {
@@ -106,6 +109,9 @@ struct ArtGeneratorView: View {
                     step: 1
                 )
                 .tint(moodColor)
+                .accessibilityLabel("Current mood level")
+                .accessibilityValue("\(moodScore) out of 10, \(moodAccessibilityDescription)")
+                .accessibilityHint("Adjust to set how you're feeling right now")
 
                 HStack {
                     Text("Low")
@@ -271,6 +277,17 @@ struct ArtGeneratorView: View {
         case 4...6: return .orange
         case 7...10: return .green
         default: return .blue
+        }
+    }
+
+    private var moodAccessibilityDescription: String {
+        switch moodScore {
+        case 1...2: return "very low mood"
+        case 3...4: return "low mood"
+        case 5...6: return "neutral mood"
+        case 7...8: return "good mood"
+        case 9...10: return "great mood"
+        default: return "mood level"
         }
     }
 

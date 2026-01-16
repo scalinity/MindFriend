@@ -535,7 +535,7 @@ serve(async (req) => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: "grok-3-mini-fast",
+            model: "grok-4-1-fast-non-reasoning-fast",
             messages: [
               {
                 role: "system",
@@ -691,7 +691,7 @@ Return ONLY valid JSON array, no explanation. Example: [{"type": "person", "key"
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "grok-3-mini-fast",
+        model: "grok-4-1-fast-non-reasoning-fast",
         messages: [
           {
             role: "system",

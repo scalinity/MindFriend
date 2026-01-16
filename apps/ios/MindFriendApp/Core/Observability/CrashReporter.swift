@@ -17,82 +17,11 @@ final class CrashReporter {
     func initialize() {
         guard !isInitialized else { return }
 
-        #if DEBUG
-        // Use a different DSN for debug or skip initialization
-        let dsn = ProcessInfo.processInfo.environment["SENTRY_DSN_DEBUG"]
-        #else
-        let dsn = "https://YOUR_SENTRY_DSN_HERE@sentry.io/PROJECT_ID"
-        #endif
-
-        guard let sentryDSN = dsn, !sentryDSN.isEmpty, !sentryDSN.contains("YOUR_SENTRY_DSN") else {
-            #if DEBUG
-            // Silent in debug - this is expected when DSN isn't configured
-            #else
-            print("[CrashReporter] Sentry DSN not configured, skipping initialization")
-            #endif
-            return
-        }
-
-        SentrySDK.start { options in
-            options.dsn = sentryDSN
-
-            // Performance Monitoring
-            options.tracesSampleRate = 0.2 // 20% of transactions for performance monitoring
-
-            // Release Health
-            options.enableAutoSessionTracking = true
-            options.sessionTrackingIntervalMillis = 30000
-
-            // Crash Reporting
-            options.attachStacktrace = true
-            options.enableCaptureFailedRequests = true
-
-            // Environment
-            #if DEBUG
-            options.environment = "development"
-            options.debug = true
-            #else
-            options.environment = "production"
-            options.debug = false
-            #endif
-
-            // App Hang Detection
-            options.enableAppHangTracking = true
-            options.appHangTimeoutInterval = 2.0
-
-            // Automatic Breadcrumbs
-            options.enableAutoBreadcrumbTracking = true
-
-            // Network Breadcrumbs
-            options.enableNetworkBreadcrumbs = true
-
-            // Attach Screenshots on Crash
-            options.attachScreenshot = true
-
-            // Before Send Hook - scrub sensitive data
-            options.beforeSend = { event in
-                // Remove any PII from breadcrumbs
-                event.breadcrumbs = event.breadcrumbs?.map { breadcrumb in
-                    var cleaned = breadcrumb
-                    // Remove sensitive query parameters
-                    if let urlString = cleaned.data?["url"] as? String,
-                       var urlComponents = URLComponents(string: urlString) {
-                        urlComponents.queryItems = urlComponents.queryItems?.map { item in
-                            if ["token", "key", "password", "email"].contains(item.name.lowercased()) {
-                                return URLQueryItem(name: item.name, value: "[REDACTED]")
-                            }
-                            return item
-                        }
-                        cleaned.data?["url"] = urlComponents.string
-                    }
-                    return cleaned
-                }
-                return event
-            }
-        }
+        // TODO: Re-enable Sentry when SDK compatibility is resolved
+        // For now, initialize crash reporter without Sentry
 
         isInitialized = true
-        print("[CrashReporter] Sentry initialized successfully")
+        print("[CrashReporter] Initialized (Sentry SDK disabled)")
     }
 
     // MARK: - User Identification
@@ -100,7 +29,7 @@ final class CrashReporter {
     /// Set the current user for crash reports
     func setUser(id: String, email: String? = nil, username: String? = nil) {
         guard isInitialized else { return }
-        let user = User(userId: id)
+        let user = Sentry.User(userId: id)
         user.email = email
         user.username = username
         SentrySDK.setUser(user)
@@ -117,7 +46,7 @@ final class CrashReporter {
     /// Capture a non-fatal error
     func capture(error: Error, context: [String: Any]? = nil) {
         guard isInitialized else { return }
-        let sentryEvent = Event(error: error)
+        let sentryEvent = Sentry.Event(error: error)
 
         if let context = context {
             sentryEvent.extra = context.mapValues { "\($0)" }
@@ -126,11 +55,10 @@ final class CrashReporter {
         SentrySDK.capture(event: sentryEvent)
     }
 
-    /// Capture a message with optional level
-    func capture(message: String, level: SentryLevel = .info, context: [String: Any]? = nil) {
+    /// Capture a message with optional context
+    func capture(message: String, context: [String: Any]? = nil) {
         guard isInitialized else { return }
         SentrySDK.capture(message: message) { scope in
-            scope.setLevel(level)
             if let context = context {
                 for (key, value) in context {
                     scope.setExtra(value: "\(value)", key: key)
@@ -142,9 +70,9 @@ final class CrashReporter {
     // MARK: - Breadcrumbs
 
     /// Add a breadcrumb for debugging crash context
-    func addBreadcrumb(category: String, message: String, level: SentryLevel = .info, data: [String: Any]? = nil) {
+    func addBreadcrumb(category: String, message: String, data: [String: Any]? = nil) {
         guard isInitialized else { return }
-        let breadcrumb = Breadcrumb(level: level, category: category)
+        let breadcrumb = Sentry.Breadcrumb(level: .info, category: category)
         breadcrumb.message = message
         if let data = data {
             breadcrumb.data = data.mapValues { "\($0)" }

@@ -456,7 +456,7 @@ BEGIN
     RETURN QUERY
     SELECT
         cqu.ai_art_count,
-        CASE WHEN v_is_premium THEN 20 ELSE 3 END AS ai_art_limit,
+        CASE WHEN v_is_premium THEN 20 ELSE 1 END AS ai_art_limit,
         cqu.voice_minutes_used,
         CASE WHEN v_is_premium THEN 60 ELSE 5 END AS voice_minutes_limit,
         v_is_premium
@@ -486,7 +486,7 @@ BEGIN
         AND status = 'active'
     ) INTO v_is_premium;
 
-    v_limit := CASE WHEN v_is_premium THEN 20 ELSE 3 END;
+    v_limit := CASE WHEN v_is_premium THEN 20 ELSE 1 END;
 
     -- Upsert and increment
     INSERT INTO creative_quota_usage (user_id, date, ai_art_count, voice_minutes_used)

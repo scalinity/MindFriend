@@ -29,7 +29,7 @@ export interface InsightContext {
 }
 
 const XAI_API_URL = "https://api.x.ai/v1/chat/completions";
-const MODEL = "grok-3-mini-fast";
+const MODEL = "grok-4-1-fast-non-reasoning-fast";
 
 // Fallback insights when AI is unavailable or data is insufficient
 const FALLBACK_INSIGHTS: Record<string, AIInsightResult> = {

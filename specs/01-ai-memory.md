@@ -333,7 +333,7 @@ Only extract clear, specific facts. Ignore vague statements. Return [] if nothin
 
   try {
     const extraction = await aiClient.chat.completions.create({
-      model: "grok-3-mini-fast",
+      model: "grok-4-1-fast-non-reasoning-fast",
       messages: [{ role: "user", content: extractionPrompt }],
       max_tokens: 500,
       temperature: 0.3,

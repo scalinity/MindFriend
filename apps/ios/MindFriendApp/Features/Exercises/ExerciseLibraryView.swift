@@ -25,14 +25,14 @@ struct ExerciseLibraryView: View {
                 // Type filter
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 12) {
-                        FilterChip(
+                        ExerciseFilterChip(
                             title: "All",
                             isSelected: selectedType == nil,
                             action: { selectedType = nil }
                         )
 
                         ForEach(ExerciseType.allCases, id: \.self) { type in
-                            FilterChip(
+                            ExerciseFilterChip(
                                 title: type.rawValue.capitalized,
                                 icon: type.icon,
                                 isSelected: selectedType == type,
@@ -115,7 +115,7 @@ struct ExerciseLibraryView: View {
     }
 }
 
-struct FilterChip: View {
+private struct ExerciseFilterChip: View {
     let title: String
     var icon: String?
     let isSelected: Bool

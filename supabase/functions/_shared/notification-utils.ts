@@ -14,7 +14,13 @@ export type NotificationType =
   | "reengagement_gentle"
   | "reengagement_social"
   | "reengagement_progress"
-  | "reengagement_fresh_start";
+  | "reengagement_fresh_start"
+  // Proactive Intelligence types
+  | "proactive_mood_decline"
+  | "proactive_streak_risk"
+  | "proactive_milestone"
+  | "proactive_reengagement"
+  | "proactive_pattern_insight";
 
 // Map notification types to user settings columns
 export const TYPE_TO_SETTING: Record<NotificationType, string> = {
@@ -30,6 +36,12 @@ export const TYPE_TO_SETTING: Record<NotificationType, string> = {
   reengagement_social: "reminders_enabled",
   reengagement_progress: "reminders_enabled",
   reengagement_fresh_start: "reminders_enabled",
+  // Proactive Intelligence - uses proactive_enabled setting
+  proactive_mood_decline: "proactive_enabled",
+  proactive_streak_risk: "proactive_enabled",
+  proactive_milestone: "proactive_enabled",
+  proactive_reengagement: "proactive_enabled",
+  proactive_pattern_insight: "proactive_enabled",
 };
 
 export interface NotificationContent {
@@ -61,6 +73,13 @@ export interface NotificationData {
   absenceDays?: number;
   hugsReceived?: number;
   circlePosts?: number;
+  // Proactive Intelligence fields
+  avgMood?: number;
+  consecutiveLowDays?: number;
+  milestone?: number;
+  daysInactive?: number;
+  patternType?: string;
+  patternInsight?: string;
 }
 
 // Build notification content based on type
@@ -184,6 +203,62 @@ export function buildNotificationContent(
         title: "A fresh start awaits ✨",
         body: "Sometimes we all need a reset. Start fresh with a Day 2 bonus when you return.",
         deepLink: "mindfriend://home",
+      };
+    }
+
+    // Proactive Intelligence notifications
+    case "proactive_mood_decline": {
+      const name = data.displayName || "there";
+      return {
+        title: "Checking in 💙",
+        body: `Hey ${name}, I noticed things have been tough lately. No pressure—just wanted you to know I'm here.`,
+        deepLink: "mindfriend://chat",
+      };
+    }
+
+    case "proactive_streak_risk": {
+      const streak = data.streak || 0;
+      const name = data.displayName || "there";
+      return {
+        title: `${streak}-day streak 🔥`,
+        body: `Hey ${name}, you're on a ${streak}-day streak! Today's quest is ready whenever you are. 💪`,
+        deepLink: "mindfriend://quest",
+      };
+    }
+
+    case "proactive_milestone": {
+      const milestone = data.milestone || 7;
+      const name = data.displayName || "there";
+      return {
+        title: "Almost there! 🎉",
+        body: `${name}, you're just 1 day away from a ${milestone}-day streak! You've got this!`,
+        deepLink: "mindfriend://quest",
+      };
+    }
+
+    case "proactive_reengagement": {
+      const days = data.daysInactive || 3;
+      const name = data.displayName || "there";
+      const messages = [
+        `Hey ${name}, it's been a few days. No judgment—life happens. I'm here when you're ready.`,
+        `${name}, just wanted to say hi. Your wellness journey is still here waiting.`,
+        `${name}, we've missed you! A quick 2-minute breathing exercise is ready when you are.`,
+      ];
+      return {
+        title: "Welcome back 💛",
+        body: messages[Math.min(Math.floor(days / 7), messages.length - 1)],
+        deepLink: "mindfriend://home",
+      };
+    }
+
+    case "proactive_pattern_insight": {
+      const insight =
+        data.patternInsight ||
+        "We've noticed an interesting pattern in your data.";
+      return {
+        title: "New Insight 💡",
+        body: insight,
+        deepLink: "mindfriend://insights",
       };
     }
 
