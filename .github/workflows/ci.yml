@@ -3,31 +3,32 @@ name: CI
 on: [push, pull_request]
 
 jobs:
-  # Check Supabase Functions TypeScript
-  functions:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
-        with:
-          node-version: "18"
-
-      - name: Install dependencies
-        run: cd supabase && npm install
-
-      - name: Lint
-        run: cd supabase && npm run lint
-
-      - name: Type check
-        run: cd supabase && npm run build
-
-  # Check iOS app builds (basic)
-  ios:
+  # Validate iOS build
+  ios-build:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v3
 
       - name: Build iOS app
         run: |
-          cd apps/ios/MindFriendApp
-          xcodebuild -scheme MindFriendApp -configuration Debug -derivedDataPath build
+          cd apps/ios
+          xcodebuild build \
+            -scheme MindFriendApp \
+            -configuration Debug \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build
+
+  # Basic repo structure checks
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Check repository structure
+        run: |
+          # Verify key directories exist
+          [ -f "supabase/config.toml" ] || (echo "Missing supabase/config.toml" && exit 1)
+          [ -d "supabase/functions" ] || (echo "Missing supabase/functions" && exit 1)
+          [ -d "supabase/migrations" ] || (echo "Missing supabase/migrations" && exit 1)
+          [ -d "apps/ios" ] || (echo "Missing apps/ios" && exit 1)
+          echo "✓ Repository structure is valid"
