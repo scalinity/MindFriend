@@ -4,6 +4,70 @@
 
 ---
 
+## [2026-01-16] Peer Support Feature (Spec 06) - Complete Implementation
+
+**Type:** Feature
+**Status:** ✅ Complete - Verified & Deployed
+
+### Summary
+
+Implemented the Peer Support feature enabling users to connect with trained peer listeners for real-time text-based support sessions. Includes listener training system, session matching, safety monitoring, and mentorship program.
+
+### Database (Migration: 20260307000000_peer_support.sql)
+
+- **listeners** - Certified peer listeners with status, rating, session stats
+- **listener_training_progress** - Training module completion tracking
+- **listener_availability** - Weekly availability schedules (timezone-aware)
+- **support_sessions** - Session records with status, mood tracking, safety flags
+- **session_feedback** - Post-session ratings and qualitative feedback
+- **support_queue** - Async matching queue with expiration
+- **peer_mentorships** - Listener-to-mentor relationships
+- **mentorship_checkins** - Scheduled and completed check-ins
+
+### Edge Functions
+
+- **match-support-session** - Connects seekers with available listeners
+  - Atomic matching via `claim_listener_for_session` RPC (row-level locking)
+  - Rate limiting: 5 requests/minute per user
+  - Topic/language/gender preference filtering
+  - Queue-based async matching with estimated wait times
+
+- **monitor-session-safety** - Cron-based safety monitoring
+  - Detects crisis indicators and stale sessions
+  - Auto-escalates high-risk sessions
+  - Strict service role key validation (P0 auth fix)
+
+### iOS Implementation
+
+- **PeerSupportModels.swift** - Complete model definitions for all peer support entities
+- **PeerSupportService.swift** - Full-featured service with:
+  - Listener registration and training
+  - Session matching and real-time updates
+  - Feedback submission and rating
+  - Mentorship check-ins
+- **PeerSupportHubView.swift** - Main entry point with role-based UI
+- **RequestSupportSheet.swift** - Session request form with preferences
+
+### Security Fixes Applied (P0/P1)
+
+| Issue                                 | Fix                                                                   |
+| ------------------------------------- | --------------------------------------------------------------------- |
+| Auth bypass in monitor-session-safety | Strict service role key validation                                    |
+| Race condition in listener matching   | Atomic `claim_listener_for_session` RPC with `FOR UPDATE SKIP LOCKED` |
+| Anonymous mode identity leakage       | `get_session_for_listener` RPC hides seeker_id when anonymous         |
+| Missing rate limiting                 | Added 5 req/min per user on match-support-session                     |
+| Wildcard CORS                         | Hardened to whitelist-only with security headers                      |
+
+### Verification
+
+- [x] iOS build succeeds
+- [x] Database migration applied
+- [x] Edge functions deployed
+- [x] RLS policies enforce data isolation
+- [x] Rate limiting active
+
+---
+
 ## [2026-01-16] Smart Personalization (Spec 10) - Build Success & Naming Conflicts Resolved
 
 **Type:** Bug Fix / Integration
