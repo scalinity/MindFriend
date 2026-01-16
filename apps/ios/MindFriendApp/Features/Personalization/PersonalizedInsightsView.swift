@@ -23,7 +23,7 @@ struct PersonalizedInsightsView: View {
                         .accessibilityLabel("Loading insights")
                 } else {
                     ForEach(personalizationService.insights) { insight in
-                        InsightCard(insight: insight)
+                        PersonalizedInsightCard(insight: insight)
                             .environmentObject(container)
                     }
                 }
@@ -87,9 +87,9 @@ struct PersonalizedInsightsView: View {
     }
 }
 
-// MARK: - Insight Card
+// MARK: - Personalized Insight Card
 
-struct InsightCard: View {
+struct PersonalizedInsightCard: View {
     let insight: DBPersonalizedInsight
     @EnvironmentObject private var container: DependencyContainer
 
