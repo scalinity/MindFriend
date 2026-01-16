@@ -9,14 +9,22 @@ struct WeeklyInsightsView: View {
     @State private var currentInsight: WeeklySummary?
     @State private var pastInsights: [WeeklySummary] = []
     @State private var isLoading = true
+    @State private var isGenerating = false
     @State private var error: String?
 
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
-                if isLoading {
-                    ProgressView()
-                        .frame(height: 200)
+                if isLoading || isGenerating {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                        if isGenerating {
+                            Text("Generating your insights...")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .frame(height: 200)
                 } else if let insight = currentInsight {
                     CurrentWeekCard(insight: insight)
                     MoodChartCard(insight: insight)
@@ -54,7 +62,24 @@ struct WeeklyInsightsView: View {
         error = nil
 
         do {
+            // First, try to fetch existing insights
             currentInsight = try await container.supabaseDataService.getWeeklySummary()
+
+            // If no current insight exists, auto-generate one
+            if currentInsight == nil {
+                isLoading = false
+                isGenerating = true
+
+                do {
+                    currentInsight = try await container.supabaseDataService.generateWeeklyInsight()
+                } catch {
+                    // If generation fails, continue with empty state
+                    print("Failed to generate weekly insight: \(error)")
+                }
+
+                isGenerating = false
+            }
+
             let history = try await container.supabaseDataService.getInsightsHistory(limit: 12)
 
             // Remove current week from history if present

@@ -215,6 +215,14 @@ serve(async (req) => {
       }
     }
 
+    // SECURITY FIX #001: Enforce authentication - reject unauthenticated calls
+    if (!callerId) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers,
+      });
+    }
+
     // Parse request body
     const body: NotificationRequest = await req.json();
 
@@ -250,6 +258,53 @@ serve(async (req) => {
         JSON.stringify({ error: "Invalid notification type" }),
         { status: 400, headers },
       );
+    }
+
+    // SECURITY FIX #001: Restrict user-initiated notifications to safe types
+    const USER_ALLOWED_TYPES: NotificationType[] = [
+      "circle_activity",
+      "hug",
+      "challenge",
+    ];
+    if (
+      callerId !== "service_role" &&
+      !USER_ALLOWED_TYPES.includes(body.type)
+    ) {
+      return new Response(
+        JSON.stringify({ error: "Forbidden notification type" }),
+        { status: 403, headers },
+      );
+    }
+
+    // SECURITY FIX #001: Force senderId to authenticated caller (prevent spoofing)
+    if (callerId !== "service_role") {
+      body.data.senderId = callerId;
+    }
+
+    // SECURITY FIX #001: Validate circle membership for circle-scoped notifications
+    if (callerId !== "service_role" && USER_ALLOWED_TYPES.includes(body.type)) {
+      const circleId = body.data.circleId;
+      if (!circleId) {
+        return new Response(
+          JSON.stringify({ error: "Missing circleId for circle notification" }),
+          { status: 400, headers },
+        );
+      }
+
+      // Verify BOTH sender and recipient are members of the circle
+      const { data: members } = await supabaseAdmin
+        .from("circle_members")
+        .select("user_id")
+        .eq("circle_id", circleId)
+        .in("user_id", [callerId, body.recipientId]);
+
+      const memberSet = new Set((members || []).map((m) => m.user_id));
+      if (!memberSet.has(callerId) || !memberSet.has(body.recipientId)) {
+        return new Response(
+          JSON.stringify({ error: "Not authorized for this circle" }),
+          { status: 403, headers },
+        );
+      }
     }
 
     // Check rate limit for recipient (skip for service role calls like cron jobs)

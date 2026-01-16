@@ -16,12 +16,11 @@ import {
 
 const log = createLogger("verify-purchase");
 
-// Apple's StoreKit JWS verification endpoints (NOT appleid.apple.com!)
+// SECURITY FIX #003: Apple's canonical StoreKit JWS verification endpoints
 const STOREKIT_JWKS = {
-  production:
-    "https://api.storekit.itunes.apple.com/inApps/v1/environment/Production/publickeys",
+  production: "https://api.storekit.itunes.apple.com/inApps/v1/jwsPublicKeys",
   sandbox:
-    "https://api.storekit.itunes.apple.com/inApps/v1/environment/Sandbox/publickeys",
+    "https://api.storekit-sandbox.itunes.apple.com/inApps/v1/jwsPublicKeys",
 } as const;
 
 // Expected bundle ID for validation
@@ -126,40 +125,47 @@ serve(async (req) => {
       );
     }
 
-    // Determine environment for JWS verification
-    const env: "sandbox" | "production" =
-      environment === "sandbox" ? "sandbox" : "production";
-
-    // Verify the JWS signature using Apple's public keys
-    let transactionPayload: AppleTransactionPayload;
-    try {
-      // Create a JWKS client for Apple's keys
+    // SECURITY FIX #003: Two-pass JWS verification - try production first, then sandbox
+    // This removes the need to trust client-provided environment
+    async function verifyJWSWithEnv(
+      signed: string,
+      env: keyof typeof STOREKIT_JWKS,
+    ): Promise<AppleTransactionPayload> {
       const jwks = createRemoteJWKSet(new URL(STOREKIT_JWKS[env]));
-
-      // Verify the JWS signature
-      const { payload } = await jwtVerify(signedTransaction, jwks, {
+      const { payload } = await jwtVerify(signed, jwks, {
         // Apple's StoreKit JWS doesn't have standard issuer/audience claims
         // The signature verification itself is the key security check
       });
+      return payload as unknown as AppleTransactionPayload;
+    }
 
-      transactionPayload = payload as unknown as AppleTransactionPayload;
+    let transactionPayload: AppleTransactionPayload;
+    let verifiedEnvironment: "production" | "sandbox" = "production";
 
-      log.info("JWS verification successful", {
-        transactionId: transactionPayload.transactionId,
-        productId: transactionPayload.productId,
-        environment: transactionPayload.environment,
-      });
-
-      // Validate bundle ID to prevent cross-app attacks
-      if (transactionPayload.bundleId !== EXPECTED_BUNDLE_ID) {
-        log.warn("Bundle ID mismatch", {
-          expected: EXPECTED_BUNDLE_ID,
-          received: transactionPayload.bundleId,
+    try {
+      // Try production keys first
+      transactionPayload = await verifyJWSWithEnv(
+        signedTransaction,
+        "production",
+      );
+    } catch (prodError) {
+      // Fall back to sandbox keys
+      try {
+        transactionPayload = await verifyJWSWithEnv(
+          signedTransaction,
+          "sandbox",
+        );
+        verifiedEnvironment = "sandbox";
+        log.info("Transaction verified against sandbox keys");
+      } catch (sandboxError) {
+        log.error("JWS verification failed for both environments", {
+          prodError: String(prodError),
+          sandboxError: String(sandboxError),
         });
         return new Response(
           JSON.stringify({
-            error: "Invalid bundle ID",
-            code: "BUNDLE_ID_MISMATCH",
+            error: "Invalid transaction signature",
+            code: "JWS_VERIFICATION_FAILED",
             valid: false,
           }),
           {
@@ -168,12 +174,25 @@ serve(async (req) => {
           },
         );
       }
-    } catch (jwsError) {
-      log.error("JWS verification failed", { error: String(jwsError) });
+    }
+
+    log.info("JWS verification successful", {
+      transactionId: transactionPayload.transactionId,
+      productId: transactionPayload.productId,
+      environment: transactionPayload.environment,
+      verifiedAgainst: verifiedEnvironment,
+    });
+
+    // Validate bundle ID to prevent cross-app attacks
+    if (transactionPayload.bundleId !== EXPECTED_BUNDLE_ID) {
+      log.warn("Bundle ID mismatch", {
+        expected: EXPECTED_BUNDLE_ID,
+        received: transactionPayload.bundleId,
+      });
       return new Response(
         JSON.stringify({
-          error: "Invalid transaction signature",
-          code: "JWS_VERIFICATION_FAILED",
+          error: "Invalid bundle ID",
+          code: "BUNDLE_ID_MISMATCH",
           valid: false,
         }),
         {
@@ -201,12 +220,43 @@ serve(async (req) => {
       );
     }
 
-    // Check for existing subscription with same original transaction
-    const { data: existingSubscription } = await supabaseAdmin
-      .from("subscriptions")
-      .select("*")
-      .eq("original_transaction_id", originalTransactionId)
-      .single();
+    // SECURITY FIX #003: Use maybeSingle to handle missing/duplicate gracefully
+    const { data: existingSubscription, error: lookupError } =
+      await supabaseAdmin
+        .from("subscriptions")
+        .select("*")
+        .eq("original_transaction_id", originalTransactionId)
+        .maybeSingle();
+
+    if (lookupError) {
+      log.error("Subscription lookup failed", { code: lookupError.code });
+      return new Response(
+        JSON.stringify({ valid: false, error: "Lookup failed" }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    // SECURITY FIX #003: Cross-account binding check
+    if (existingSubscription && existingSubscription.user_id !== user.id) {
+      log.warn("Cross-account transaction claim attempt", {
+        existingUserId: existingSubscription.user_id.slice(0, 8),
+        attemptingUserId: user.id.slice(0, 8),
+      });
+      return new Response(
+        JSON.stringify({
+          valid: false,
+          code: "TRANSACTION_ALREADY_CLAIMED",
+          error: "This purchase is already linked to another account.",
+        }),
+        {
+          status: 409,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
 
     // Handle renewals and duplicates
     if (existingSubscription) {

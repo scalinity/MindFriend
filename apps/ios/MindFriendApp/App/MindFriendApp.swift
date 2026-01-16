@@ -10,6 +10,11 @@ struct MindFriendApp: App {
     @StateObject private var container = DependencyContainer()
     @StateObject private var notificationManager = NotificationManager.shared
 
+    /// Pending buddy invite code to process after authentication
+    @State private var pendingBuddyCode: String?
+    @State private var showBuddyAcceptedAlert = false
+    @State private var buddyAcceptedMessage = ""
+
     var body: some Scene {
         WindowGroup {
             RootView()
@@ -72,6 +77,17 @@ struct MindFriendApp: App {
                         handleDeepLink(url)
                     }
                 }
+                .alert("Welcome, Buddy!", isPresented: $showBuddyAcceptedAlert) {
+                    Button("OK", role: .cancel) { }
+                } message: {
+                    Text(buddyAcceptedMessage)
+                }
+                .onChange(of: appState.authState) { _, newState in
+                    // Process pending buddy invite after authentication
+                    if case .authenticated = newState {
+                        processPendingBuddyInvite()
+                    }
+                }
         }
     }
 
@@ -79,7 +95,7 @@ struct MindFriendApp: App {
         guard url.scheme == "mindfriend" else { return }
 
         // Parse deep link and navigate
-        // Example: mindfriend://quest/123, mindfriend://chat/456
+        // Example: mindfriend://quest/123, mindfriend://chat/456, mindfriend://buddy/ABC123
         switch url.host {
         case "quest":
             // Navigate to quest
@@ -93,6 +109,12 @@ struct MindFriendApp: App {
         case "mood":
             // Navigate to mood tracking
             break
+        case "buddy":
+            // Handle buddy invite
+            let pathComponents = url.pathComponents.filter { $0 != "/" }
+            if let code = pathComponents.first {
+                handleBuddyInvite(code: code)
+            }
         default:
             break
         }
@@ -102,7 +124,7 @@ struct MindFriendApp: App {
         switch deepLink {
         case .quest(let id):
             // Navigate to quest with id
-            print("[DeepLink] Navigate to quest: \(id)")
+            print("[DeepLink] Navigate to quest: \(id ?? "nil")")
         case .chat(let conversationId):
             // Navigate to chat
             print("[DeepLink] Navigate to chat: \(conversationId)")
@@ -118,8 +140,65 @@ struct MindFriendApp: App {
         case .insights:
             // Navigate to insights/weekly summary
             print("[DeepLink] Navigate to insights")
+        case .buddy(let code):
+            // Handle buddy invite
+            handleBuddyInvite(code: code)
         case .none:
             break
+        }
+    }
+
+    // MARK: - Buddy Invite Handling
+
+    private func handleBuddyInvite(code: String) {
+        // Check if user is authenticated
+        guard case .authenticated = appState.authState else {
+            // Store the code to process after authentication
+            pendingBuddyCode = code
+            print("[DeepLink] Stored buddy code for after auth: \(code)")
+            return
+        }
+
+        // Accept the buddy invite
+        Task {
+            await acceptBuddyInvite(code: code)
+        }
+    }
+
+    private func acceptBuddyInvite(code: String) async {
+        do {
+            let relationship = try await container.supabaseDataService.acceptBuddyInvite(code: code)
+
+            await MainActor.run {
+                // Show success message
+                if let inviterName = relationship.inviter?.displayName {
+                    buddyAcceptedMessage = "You're now wellness buddies with \(inviterName)! You can see each other's streaks and send encouragement."
+                } else {
+                    buddyAcceptedMessage = "You're now connected with your wellness buddy! You can see each other's streaks and send encouragement."
+                }
+                showBuddyAcceptedAlert = true
+            }
+
+            Analytics.shared.track(.buddyInviteAccepted, properties: [
+                "invite_code": code,
+                "relationship_id": relationship.id
+            ])
+        } catch {
+            await MainActor.run {
+                buddyAcceptedMessage = "Could not accept buddy invite. The invite may have expired or already been used."
+                showBuddyAcceptedAlert = true
+            }
+            error.report(context: ["action": "accept_buddy_invite", "code": code])
+        }
+    }
+
+    /// Process any pending buddy invite after user authenticates
+    func processPendingBuddyInvite() {
+        guard let code = pendingBuddyCode else { return }
+        pendingBuddyCode = nil
+
+        Task {
+            await acceptBuddyInvite(code: code)
         }
     }
 }

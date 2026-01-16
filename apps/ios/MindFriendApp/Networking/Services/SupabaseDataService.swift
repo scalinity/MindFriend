@@ -473,10 +473,10 @@ final class SupabaseDataService: ObservableObject {
                 type: ExerciseType(rawValue: exercise.type) ?? .breathing,
                 title: exercise.title,
                 description: exercise.description,
-                durationSeconds: exercise.durationMinutes * 60,
-                contentKind: .text,
-                contentText: nil,
-                audioUrl: nil,
+                durationSeconds: exercise.durationSeconds,  // Now directly from schema
+                contentKind: ContentKind(rawValue: exercise.contentKind) ?? .text,
+                contentText: exercise.contentText,
+                audioUrl: exercise.audioUrl,
                 evidenceBasis: exercise.evidenceBasis.flatMap { EvidenceBasis(rawValue: $0) },
                 therapistReviewed: exercise.therapistReviewed,
                 reviewDate: exercise.reviewDate,
@@ -2214,6 +2214,24 @@ final class SupabaseDataService: ObservableObject {
             .execute()
             .value
 
+        // EXE-010: Fetch subscription data
+        let subscription: DBSubscriptionForExport? = try? await supabase
+            .from(Tables.subscriptions)
+            .select()
+            .eq("user_id", value: userId)
+            .single()
+            .execute()
+            .value
+
+        // EXE-010: Fetch crisis events (keyword + timestamp only, no actual content for privacy)
+        let crisisEvents: [DBCrisisEventForExport] = try await supabase
+            .from(Tables.crisisEvents)
+            .select("id, user_id, trigger_content, detected_at")
+            .eq("user_id", value: userId)
+            .order("detected_at", ascending: false)
+            .execute()
+            .value
+
         return UserDataExport(
             exportedAt: formatter.string(from: Date()),
             user: UserDataExport.UserExportData(
@@ -2265,6 +2283,24 @@ final class SupabaseDataService: ObservableObject {
                     exerciseType: s.exercises?.type ?? "unknown",
                     completedAt: s.completedAt.map { formatter.string(from: $0) } ?? "",
                     durationSeconds: s.exercises?.durationSeconds ?? 0
+                )
+            },
+            // EXE-010: Include subscription data in export
+            subscription: subscription.map { s in
+                UserDataExport.SubscriptionExportData(
+                    productId: s.productId,
+                    planType: s.planType,
+                    billingPeriod: s.billingPeriod,
+                    status: s.status,
+                    expiresAt: s.expiresAt.map { formatter.string(from: $0) },
+                    createdAt: s.createdAt.map { formatter.string(from: $0) }
+                )
+            },
+            // EXE-010: Include crisis events in export (keyword + timestamp only for privacy)
+            crisisEvents: crisisEvents.map { e in
+                UserDataExport.CrisisEventExportData(
+                    triggerKeyword: e.triggerContent,
+                    detectedAt: e.detectedAt.map { formatter.string(from: $0) } ?? ""
                 )
             }
         )
@@ -3521,6 +3557,44 @@ struct DBExerciseForExport: Codable {
     enum CodingKeys: String, CodingKey {
         case id, title, type
         case durationSeconds = "duration_seconds"
+    }
+}
+
+/// EXE-010: Subscription data for comprehensive export
+struct DBSubscriptionForExport: Codable {
+    let id: UUID?
+    let userId: UUID
+    let productId: String?
+    let planType: String?
+    let billingPeriod: String?
+    let status: String?
+    let expiresAt: Date?
+    let createdAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case productId = "product_id"
+        case planType = "plan_type"
+        case billingPeriod = "billing_period"
+        case status
+        case expiresAt = "expires_at"
+        case createdAt = "created_at"
+    }
+}
+
+/// EXE-010: Crisis event for export (keyword + timestamp only, no content for privacy)
+struct DBCrisisEventForExport: Codable {
+    let id: UUID?
+    let userId: UUID
+    let triggerContent: String?  // Only the matched keyword, not actual user content
+    let detectedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case triggerContent = "trigger_content"
+        case detectedAt = "detected_at"
     }
 }
 

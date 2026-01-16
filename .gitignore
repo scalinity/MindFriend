@@ -86,3 +86,12 @@ supabase/.temp/
 *.tmp
 *.temp
 .cache/
+
+# Work-in-progress docs
+CodeRemediationPlan_v*.md
+CodeRemediationV*.md
+MindFriend_*_Changes.md
+
+# Work-in-progress docs and migrations
+docs/specs/
+logo.png

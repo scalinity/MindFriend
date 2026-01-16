@@ -219,10 +219,20 @@ serve(async (req) => {
       .eq("user_id", user.id)
       .maybeSingle();
 
-    // Privacy mode: when enabled, don't store/use memories
-    const privacyModeEnabled = userSettings?.privacy_mode === true;
-    // AI tone: default to 'supportive' if not set
-    const aiTone = userSettings?.ai_tone || "supportive";
+    // PRIVACY FIX #005: Schema uses TEXT ('standard' | 'enhanced'), not boolean
+    const privacyMode = (userSettings?.privacy_mode || "standard") as
+      | "standard"
+      | "enhanced";
+    const privacyModeEnabled = privacyMode === "enhanced";
+
+    // PRIVACY FIX #005: Normalize schema values (friendly|professional) to code values (supportive|direct)
+    const aiToneRaw = (userSettings?.ai_tone || "friendly") as string;
+    const aiTone =
+      aiToneRaw === "friendly"
+        ? "supportive"
+        : aiToneRaw === "professional"
+          ? "direct"
+          : aiToneRaw; // gentle and motivational map directly
 
     const now = new Date();
     const isPremium = profile.subscription_tier === "premium";
@@ -273,12 +283,16 @@ serve(async (req) => {
         detected_at: now.toISOString(),
       });
 
-      // Save user message
-      await supabaseAdmin.from("messages").insert({
-        conversation_id: conversationId,
-        role: "user",
-        content: trimmedContent,
-      });
+      // Save user message with full select to get all fields
+      const { data: crisisUserMessage } = await supabaseAdmin
+        .from("messages")
+        .insert({
+          conversation_id: conversationId,
+          role: "user",
+          content: trimmedContent,
+        })
+        .select()
+        .single();
 
       // Save crisis response
       const { data: crisisMessage } = await supabaseAdmin
@@ -299,11 +313,27 @@ serve(async (req) => {
 
       return new Response(
         JSON.stringify({
+          // EXE-007: Return full message objects for both user and assistant
+          userMessage: {
+            id: crisisUserMessage?.id,
+            role: "user",
+            content: trimmedContent,
+            createdAt: crisisUserMessage?.created_at || now.toISOString(),
+            blocked: false,
+          },
+          assistantMessage: {
+            id: crisisMessage?.id,
+            role: "assistant",
+            content: CRISIS_RESPONSE,
+            createdAt: crisisMessage?.created_at || now.toISOString(),
+            blocked: true,
+          },
+          // Legacy field for backward compatibility
           message: {
             id: crisisMessage?.id,
             role: "assistant",
             content: CRISIS_RESPONSE,
-            createdAt: now.toISOString(),
+            createdAt: crisisMessage?.created_at || now.toISOString(),
             blocked: true,
           },
           isCrisisResponse: true,
@@ -427,7 +457,7 @@ serve(async (req) => {
       { role: "user", content: sanitizedContent },
     ];
 
-    // Save user message first and capture the ID
+    // Save user message first and capture all fields for response
     const { data: userMessage } = await supabaseAdmin
       .from("messages")
       .insert({
@@ -435,7 +465,7 @@ serve(async (req) => {
         role: "user",
         content: trimmedContent,
       })
-      .select("id")
+      .select()
       .single();
 
     // Call xAI (Grok)
@@ -553,14 +583,30 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({
+        // EXE-007: Return full message objects for both user and assistant
+        userMessage: {
+          id: userMessage?.id,
+          role: "user",
+          content: trimmedContent,
+          createdAt: userMessage?.created_at || now.toISOString(),
+          blocked: false,
+        },
+        assistantMessage: {
+          id: assistantMessage?.id,
+          role: "assistant",
+          content: assistantContent,
+          createdAt: assistantMessage?.created_at || now.toISOString(),
+          blocked: false,
+        },
+        // Legacy field for backward compatibility during transition
         message: {
           id: assistantMessage?.id,
           role: "assistant",
           content: assistantContent,
-          createdAt: now.toISOString(),
+          createdAt: assistantMessage?.created_at || now.toISOString(),
           blocked: false,
         },
-        userMessageId: userMessage?.id, // Return DB-generated ID for consistency
+        userMessageId: userMessage?.id, // Legacy field for backward compatibility
         quotaUsed: quotaUsed,
         quotaLimit: quotaLimit,
         conversationTitle: conversationTitle,

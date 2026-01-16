@@ -15,7 +15,8 @@ struct OnboardingFlow: View {
     enum OnboardingStep: Int, CaseIterable {
         case quiz = 0
         case aiGreeting = 1
-        case complete = 2
+        case buddyInvite = 2
+        case complete = 3
 
         var progress: Double {
             Double(self.rawValue + 1) / Double(OnboardingStep.allCases.count)
@@ -44,7 +45,13 @@ struct OnboardingFlow: View {
                 case .aiGreeting:
                     OnboardingAIGreetingView(
                         wellnessFocus: selectedFocus ?? .general,
-                        onComplete: { completeOnboarding(focus: selectedFocus ?? .general, skippedQuiz: false) }
+                        onComplete: advanceToBuddyInvite
+                    )
+
+                case .buddyInvite:
+                    OnboardingBuddyInviteView(
+                        onContinue: { completeOnboarding(focus: selectedFocus ?? .general, skippedQuiz: false) },
+                        onSkip: { completeOnboarding(focus: selectedFocus ?? .general, skippedQuiz: false) }
                     )
 
                 case .complete:
@@ -74,6 +81,15 @@ struct OnboardingFlow: View {
         withAnimation {
             currentStep = .aiGreeting
         }
+    }
+
+    private func advanceToBuddyInvite() {
+        withAnimation {
+            currentStep = .buddyInvite
+        }
+        Analytics.shared.track(.onboardingStepCompleted, properties: [
+            "step": "ai_greeting"
+        ])
     }
 
     private func completeOnboarding(focus: WellnessFocus, skippedQuiz: Bool) {
@@ -459,6 +475,192 @@ struct OnboardingTypingIndicator: View {
             Spacer()
         }
         .onAppear { animating = true }
+    }
+}
+
+// MARK: - Buddy Invite View
+
+struct OnboardingBuddyInviteView: View {
+    @EnvironmentObject var container: DependencyContainer
+
+    let onContinue: () -> Void
+    let onSkip: () -> Void
+
+    @State private var contactMethod: BuddyRelationship.InviteMethod = .sms
+    @State private var contact = ""
+    @State private var isSending = false
+    @State private var showSuccess = false
+    @State private var inviteCode: String?
+    @State private var showError = false
+    @State private var errorMessage = ""
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 24) {
+                Spacer(minLength: 40)
+
+                // Icon
+                Image(systemName: "person.2.fill")
+                    .font(.system(size: 60))
+                    .foregroundStyle(.tint)
+                    .padding(.bottom, 8)
+                    .accessibilityHidden(true)
+
+                // Header
+                VStack(spacing: 12) {
+                    Text("Invite a Wellness Buddy")
+                        .font(.title)
+                        .fontWeight(.bold)
+                        .multilineTextAlignment(.center)
+
+                    Text("People with an accountability partner are **3x more likely** to reach their wellness goals!")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.horizontal, 32)
+
+                // Method picker
+                Picker("Contact Method", selection: $contactMethod) {
+                    Text("Text Message").tag(BuddyRelationship.InviteMethod.sms)
+                    Text("Email").tag(BuddyRelationship.InviteMethod.email)
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 24)
+
+                // Contact input
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(contactMethod == .sms ? "Phone Number" : "Email Address")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    TextField(
+                        contactMethod == .sms ? "Enter phone number" : "Enter email address",
+                        text: $contact
+                    )
+                    .textFieldStyle(.plain)
+                    .keyboardType(contactMethod == .sms ? .phonePad : .emailAddress)
+                    .textContentType(contactMethod == .sms ? .telephoneNumber : .emailAddress)
+                    .autocapitalization(.none)
+                    .padding()
+                    .background(Color(.secondarySystemBackground))
+                    .cornerRadius(12)
+                    .accessibilityLabel(contactMethod == .sms ? "Phone number input" : "Email address input")
+                }
+                .padding(.horizontal, 24)
+
+                // Benefits
+                VStack(alignment: .leading, spacing: 12) {
+                    BuddyBenefitRow(icon: "flame.fill", text: "See each other's streaks")
+                    BuddyBenefitRow(icon: "hand.thumbsup.fill", text: "Send encouragement")
+                    BuddyBenefitRow(icon: "gift.fill", text: "Both earn bonus XP")
+                }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 8)
+
+                Spacer(minLength: 24)
+
+                // Actions
+                VStack(spacing: 12) {
+                    Button(action: sendInvite) {
+                        HStack {
+                            if isSending {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .padding(.trailing, 4)
+                            }
+                            Text(isSending ? "Sending..." : "Send Invite")
+                                .font(.headline)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(canSend ? Color.accentColor : Color.secondary.opacity(0.3))
+                        .foregroundStyle(.white)
+                        .cornerRadius(12)
+                    }
+                    .disabled(!canSend)
+                    .accessibilityLabel("Send invite")
+                    .accessibilityHint(canSend ? "Send an invite to your buddy" : "Enter a valid contact first")
+
+                    Button("Skip for now", action: onSkip)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("Skip buddy invite")
+                        .accessibilityHint("Continue without inviting a buddy")
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 32)
+            }
+        }
+        .alert("Invite Sent!", isPresented: $showSuccess) {
+            Button("Continue", action: onContinue)
+        } message: {
+            if let code = inviteCode {
+                Text("Your buddy will receive an invitation. Share this code if needed: **\(code)**")
+            } else {
+                Text("Your buddy will receive an invitation to join you!")
+            }
+        }
+        .alert("Unable to Send", isPresented: $showError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(errorMessage)
+        }
+    }
+
+    private var canSend: Bool {
+        !contact.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSending
+    }
+
+    private func sendInvite() {
+        guard canSend else { return }
+        isSending = true
+
+        Task {
+            do {
+                let trimmedContact = contact.trimmingCharacters(in: .whitespacesAndNewlines)
+                let relationship = try await container.supabaseDataService.createBuddyInvite(
+                    contact: trimmedContact,
+                    method: contactMethod
+                )
+
+                await MainActor.run {
+                    isSending = false
+                    inviteCode = relationship.inviteCode
+                    showSuccess = true
+                }
+
+                Analytics.shared.track(.buddyInviteSent, properties: [
+                    "method": contactMethod.rawValue,
+                    "source": "onboarding"
+                ])
+            } catch {
+                await MainActor.run {
+                    isSending = false
+                    errorMessage = "Could not send invite. Please check the contact and try again."
+                    showError = true
+                }
+                error.report(context: ["action": "send_buddy_invite", "source": "onboarding"])
+            }
+        }
+    }
+}
+
+// MARK: - Buddy Benefit Row
+
+struct BuddyBenefitRow: View {
+    let icon: String
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .foregroundStyle(.tint)
+                .frame(width: 24)
+                .accessibilityHidden(true)
+            Text(text)
+                .font(.subheadline)
+        }
     }
 }
 
