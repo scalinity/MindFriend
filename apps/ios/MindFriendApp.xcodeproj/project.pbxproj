@@ -111,6 +111,13 @@
 		VJRCV01BC23C3C719CD3C9F /* VoiceJournalRecorderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = VJRCV01493347E53EC5C762 /* VoiceJournalRecorderView.swift */; };
 		33AFBC4DE3A74C26AE988F84 /* PersonalizationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26FCB1C4877346F08793DAE3 /* PersonalizationModels.swift */; };
 		74C7A829F4C44BCBA697AB32 /* PersonalizationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93C47D8F62EA47E0B6701625 /* PersonalizationService.swift */; };
+		PRSYOV02BC23C3C719CD3C9F /* ForYouView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PRSYOV01493347E53EC5C762 /* ForYouView.swift */; };
+		PRSIOV02BC23C3C719CD3C9F /* PersonalizedInsightsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PRSIOV01493347E53EC5C762 /* PersonalizedInsightsView.swift */; };
+		PRSSV02BC23C3C719CD3C9F /* PersonalizationSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PRSSV01493347E53EC5C762 /* PersonalizationSettingsView.swift */; };
+		PRSQHV02BC23C3C719CD3C9F /* QuietHoursView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PRSQHV01493347E53EC5C762 /* QuietHoursView.swift */; };
+		PRSSGV02BC23C3C719CD3C9F /* ScheduleSuggestionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PRSSGV01493347E53EC5C762 /* ScheduleSuggestionsView.swift */; };
+		PRSCTV02BC23C3C719CD3C9F /* ContentTypePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PRSCTV01493347E53EC5C762 /* ContentTypePickerView.swift */; };
+		PRSCPV02BC23C3C719CD3C9F /* CategoryPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PRSCPV01493347E53EC5C762 /* CategoryPickerView.swift */; };
 	/* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -239,6 +246,13 @@
 		VJRCV01493347E53EC5C762 /* VoiceJournalRecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceJournalRecorderView.swift; sourceTree = "<group>"; };
 		26FCB1C4877346F08793DAE3 /* PersonalizationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalizationModels.swift; sourceTree = "<group>"; };
 		93C47D8F62EA47E0B6701625 /* PersonalizationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Services/PersonalizationService.swift"; sourceTree = "<group>"; };
+		PRSYOV01493347E53EC5C762 /* ForYouView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForYouView.swift; sourceTree = "<group>"; };
+		PRSIOV01493347E53EC5C762 /* PersonalizedInsightsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalizedInsightsView.swift; sourceTree = "<group>"; };
+		PRSSV01493347E53EC5C762 /* PersonalizationSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalizationSettingsView.swift; sourceTree = "<group>"; };
+		PRSQHV01493347E53EC5C762 /* QuietHoursView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuietHoursView.swift; sourceTree = "<group>"; };
+		PRSSGV01493347E53EC5C762 /* ScheduleSuggestionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleSuggestionsView.swift; sourceTree = "<group>"; };
+		PRSCTV01493347E53EC5C762 /* ContentTypePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentTypePickerView.swift; sourceTree = "<group>"; };
+		PRSCPV01493347E53EC5C762 /* CategoryPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryPickerView.swift; sourceTree = "<group>"; };
 	/* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -317,6 +331,7 @@
 				A9D4D14B7938A1FA200DF64E /* Onboarding */,
 				4ABFD909D4F5EA0B08EDA25B /* Paywall */,
 				B7F9B81AB73CD4C7005F5FFD /* Profile */,
+				PRSGRP01493347E53EC5C762 /* Personalization */,
 				PROG003493347E53EC5C762 /* Progression */,
 				9D4A124EED8A5F97E3CEDD16 /* Quests */,
 				VCMDGRP001493347E53EC5C762 /* VoiceMode */,
@@ -474,6 +489,20 @@
 				C1D2E3F405162738495A6B7D /* VoiceSettingsView.swift */,
 			);
 			path = Profile;
+			sourceTree = "<group>";
+		};
+		PRSGRP01493347E53EC5C762 /* Personalization */ = {
+			isa = PBXGroup;
+			children = (
+				PRSYOV01493347E53EC5C762 /* ForYouView.swift */,
+				PRSIOV01493347E53EC5C762 /* PersonalizedInsightsView.swift */,
+				PRSSV01493347E53EC5C762 /* PersonalizationSettingsView.swift */,
+				PRSQHV01493347E53EC5C762 /* QuietHoursView.swift */,
+				PRSSGV01493347E53EC5C762 /* ScheduleSuggestionsView.swift */,
+				PRSCTV01493347E53EC5C762 /* ContentTypePickerView.swift */,
+				PRSCPV01493347E53EC5C762 /* CategoryPickerView.swift */,
+			);
+			path = Personalization;
 			sourceTree = "<group>";
 		};
 		BADGV03493347E53EC5C762 /* Badges */ = {
@@ -908,6 +937,13 @@
 				CERTV01BC23C3C719CD3C9F /* CertificateView.swift in Sources */,
 				33AFBC4DE3A74C26AE988F84 /* PersonalizationModels.swift in Sources */,
 				74C7A829F4C44BCBA697AB32 /* PersonalizationService.swift in Sources */,
+			PRSYOV02BC23C3C719CD3C9F /* ForYouView.swift in Sources */,
+			PRSIOV02BC23C3C719CD3C9F /* PersonalizedInsightsView.swift in Sources */,
+			PRSSV02BC23C3C719CD3C9F /* PersonalizationSettingsView.swift in Sources */,
+			PRSQHV02BC23C3C719CD3C9F /* QuietHoursView.swift in Sources */,
+			PRSSGV02BC23C3C719CD3C9F /* ScheduleSuggestionsView.swift in Sources */,
+			PRSCTV02BC23C3C719CD3C9F /* ContentTypePickerView.swift in Sources */,
+			PRSCPV02BC23C3C719CD3C9F /* CategoryPickerView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
