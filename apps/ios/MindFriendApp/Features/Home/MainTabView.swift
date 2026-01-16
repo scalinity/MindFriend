@@ -54,6 +54,8 @@ struct MainTabView: View {
             level: appState.levelUpLevel,
             title: appState.levelUpTitle
         )
+        // TODO: Add Celebration folder files to Xcode project to enable
+        // .celebrationOverlay(pending: $appState.pendingCelebrations)
     }
 }
 

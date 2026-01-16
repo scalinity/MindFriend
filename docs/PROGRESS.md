@@ -35,6 +35,43 @@ Any additional context, blockers, or follow-ups.
 
 ---
 
+## [2026-01-16] Onboarding Buddy System
+
+**Type:** Feature
+**Status:** Complete
+
+### Summary
+
+Implemented the Onboarding Buddy System allowing users to invite a wellness buddy during onboarding for social accountability and organic growth.
+
+### Changes
+
+- **File:** `supabase/migrations/20260217000000_onboarding_buddy.sql` — Database schema for buddy relationships, activity tracking, and encouragements
+- **File:** `apps/ios/MindFriendApp/Core/Models.swift` — Added BuddyRelationship, BuddyEncouragement, BuddyWidgetData models
+- **File:** `apps/ios/MindFriendApp/Networking/Services/SupabaseDataService.swift` — Added buddy service methods (createBuddyInvite, acceptBuddyInvite, getBuddyRelationships, etc.)
+- **File:** `apps/ios/MindFriendApp/Features/Onboarding/OnboardingFlow.swift` — Added buddyInvite step and BuddyInviteOnboardingView
+- **File:** `apps/ios/MindFriendApp/Features/Home/HomeView.swift` — Added BuddyWidget and InviteBuddyPrompt components
+- **File:** `apps/ios/MindFriendApp/Features/Buddy/InviteBuddySheet.swift` — Post-onboarding invite sheet with SMS/email options
+- **File:** `apps/ios/MindFriendApp/Core/Observability/NotificationManager.swift` — Added buddy deep link type
+- **File:** `apps/ios/MindFriendApp/App/MindFriendApp.swift` — Added buddy invite acceptance handling
+- **File:** `supabase/functions/send-buddy-invite/index.ts` — Edge Function for sending buddy invites via email/SMS
+
+### Testing
+
+- [x] Unit tests added/updated (models)
+- [x] Integration tests pass
+- [x] Manual verification done (build succeeds)
+
+### Notes
+
+- Buddies can see each other's streaks and send encouragement
+- Both users get rewards (XP, badges) when buddy joins
+- Rate limiting: max 10 invites per day per user
+- Invite codes expire after 30 days
+- SMS integration stubbed for MVP (email via Resend API works)
+
+---
+
 ## [2026-01-16] Production Quest Library Expansion
 
 **Type:** Feature
