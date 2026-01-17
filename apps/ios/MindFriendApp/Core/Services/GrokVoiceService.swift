@@ -318,12 +318,14 @@ final class GrokVoiceService: ObservableObject {
             }
 
             // Create converter from native format to xAI's expected format (24kHz Int16)
-            let targetFormat = AVAudioFormat(
+            guard let targetFormat = AVAudioFormat(
                 commonFormat: .pcmFormatInt16,
                 sampleRate: sampleRate,
                 channels: 1,
                 interleaved: true
-            )!
+            ) else {
+                throw VoiceError.audioSessionFailed("Failed to create target audio format")
+            }
             #if DEBUG
             print("[Voice] Target format: sampleRate=\(targetFormat.sampleRate), channels=\(targetFormat.channelCount)")
             #endif
@@ -488,10 +490,12 @@ final class GrokVoiceService: ObservableObject {
             switch error {
             case .httpError(let code, let data):
                 #if DEBUG
-                print("[VoiceToken] HTTP error \(code): \(String(data: data, encoding: .utf8) ?? "nil")")
+                // Only log HTTP status code, not response body which may contain PII
+                print("[VoiceToken] HTTP error status: \(code)")
                 #endif
                 if let errorResponse = try? JSONDecoder().decode(VoiceErrorResponse.self, from: data) {
                     #if DEBUG
+                    // Log parsed error code (safe - known structure)
                     print("[VoiceToken] Error code: \(errorResponse.code)")
                     #endif
                     if errorResponse.code == "QUOTA_EXCEEDED" {
@@ -516,7 +520,9 @@ final class GrokVoiceService: ObservableObject {
     }
 
     private func connectWebSocket(token: String) async throws {
-        let url = URL(string: "wss://api.x.ai/v1/realtime")!
+        guard let url = URL(string: "wss://api.x.ai/v1/realtime") else {
+            throw VoiceError.connectionFailed("Invalid WebSocket URL")
+        }
         #if DEBUG
         print("[Voice] Connecting to WebSocket...")
         #endif

@@ -90,7 +90,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         CrashReporter.shared.addBreadcrumb(
             category: "deeplink",
             message: "Received deep link",
-            data: ["url": url.absoluteString]
+            data: ["url": CrashReporter.sanitizeURL(url)]
         )
 
         Analytics.shared.track(.featureUsed, properties: [
