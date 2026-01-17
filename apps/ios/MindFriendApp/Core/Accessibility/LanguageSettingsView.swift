@@ -6,6 +6,9 @@ import SwiftUI
 struct LanguageSettingsView: View {
     @State private var selectedLanguage = "en"
     @State private var selectedRegion = "US"
+    @State private var dateFormatEnabled = true
+    @State private var timeFormatEnabled = true
+    @State private var numberFormatEnabled = true
 
     let languages = [
         ("en", "English"),
@@ -56,10 +59,13 @@ struct LanguageSettingsView: View {
                     .foregroundColor(.secondary)
             }
 
-            Section("Features") {
-                Toggle("Date Format: \(DateFormatter().locale?.identifier ?? "Auto")", isOn: .constant(true))
-                Toggle("Time Format: 24h", isOn: .constant(true))
-                Toggle("Number Format: Regional", isOn: .constant(true))
+            Section("Format Settings") {
+                Toggle("Use Regional Date Format", isOn: $dateFormatEnabled)
+                    .accessibilityLabel("Use Regional Date Format")
+                Toggle("Use Regional Time Format", isOn: $timeFormatEnabled)
+                    .accessibilityLabel("Use Regional Time Format")
+                Toggle("Use Regional Number Format", isOn: $numberFormatEnabled)
+                    .accessibilityLabel("Use Regional Number Format")
             }
         }
         .navigationTitle("Language")
