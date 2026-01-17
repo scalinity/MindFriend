@@ -44,6 +44,10 @@ DerivedData/
 *.dSYM.zip
 *.dSYM
 
+# Build configuration (NEVER commit xcconfig files with secrets)
+# Debug.xcconfig and Release.xcconfig contain Supabase credentials
+*.xcconfig
+
 # Swift Package Manager
 Package.resolved
 .swiftpm/
