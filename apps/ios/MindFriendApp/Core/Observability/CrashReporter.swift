@@ -7,28 +7,76 @@ final class CrashReporter {
     static let shared = CrashReporter()
 
     private(set) var isInitialized = false
+    
+    /// Whether Sentry is fully configured (DSN available)
+    private var isSentryEnabled = false
 
     private init() {}
 
     // MARK: - Configuration
 
-    /// Initialize Sentry with the provided DSN
+    /// Initialize Sentry with the provided DSN from Info.plist
     /// Call this early in app launch (before any UI is shown)
     func initialize() {
         guard !isInitialized else { return }
 
-        // TODO: Re-enable Sentry when SDK compatibility is resolved
-        // For now, initialize crash reporter without Sentry
+        // Load DSN from Info.plist (set via xcconfig for different environments)
+        guard let dsn = Bundle.main.object(forInfoDictionaryKey: "SENTRY_DSN") as? String,
+              !dsn.isEmpty,
+              !dsn.contains("$(") else {
+            // DSN not configured - run without crash reporting
+            isInitialized = true
+            isSentryEnabled = false
+            #if DEBUG
+            print("[CrashReporter] Sentry DSN not configured, crash reporting disabled")
+            #endif
+            return
+        }
+
+        // Start Sentry SDK
+        SentrySDK.start { options in
+            options.dsn = dsn
+            options.debug = false
+            
+            // Performance monitoring
+            options.tracesSampleRate = 0.2  // 20% of transactions
+            
+            // Session tracking
+            options.enableAutoSessionTracking = true
+            options.sessionTrackingIntervalMillis = 30000  // 30 seconds
+            
+            // Breadcrumbs
+            options.maxBreadcrumbs = 100
+            options.enableAutoBreadcrumbTracking = true
+            
+            // Attach screenshots and view hierarchy on crash
+            options.attachScreenshot = true
+            options.attachViewHierarchy = true
+            
+            // Environment from build config
+            #if DEBUG
+            options.environment = "development"
+            #else
+            options.environment = "production"
+            #endif
+            
+            // App version
+            if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
+               let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String {
+                options.releaseName = "com.mindfriend.app@\(version)+\(build)"
+            }
+        }
 
         isInitialized = true
-        print("[CrashReporter] Initialized (Sentry SDK disabled)")
+        isSentryEnabled = true
     }
+
 
     // MARK: - User Identification
 
     /// Set the current user for crash reports
     func setUser(id: String, email: String? = nil, username: String? = nil) {
-        guard isInitialized else { return }
+        guard isSentryEnabled else { return }
         let user = Sentry.User(userId: id)
         user.email = email
         user.username = username
@@ -37,7 +85,7 @@ final class CrashReporter {
 
     /// Clear user information (call on logout)
     func clearUser() {
-        guard isInitialized else { return }
+        guard isSentryEnabled else { return }
         SentrySDK.setUser(nil)
     }
 
@@ -45,7 +93,7 @@ final class CrashReporter {
 
     /// Capture a non-fatal error
     func capture(error: Error, context: [String: Any]? = nil) {
-        guard isInitialized else { return }
+        guard isSentryEnabled else { return }
         let sentryEvent = Sentry.Event(error: error)
 
         if let context = context {
@@ -57,7 +105,7 @@ final class CrashReporter {
 
     /// Capture a message with optional context
     func capture(message: String, context: [String: Any]? = nil) {
-        guard isInitialized else { return }
+        guard isSentryEnabled else { return }
         SentrySDK.capture(message: message) { scope in
             if let context = context {
                 for (key, value) in context {
@@ -71,7 +119,7 @@ final class CrashReporter {
 
     /// Add a breadcrumb for debugging crash context
     func addBreadcrumb(category: String, message: String, data: [String: Any]? = nil) {
-        guard isInitialized else { return }
+        guard isSentryEnabled else { return }
         let breadcrumb = Sentry.Breadcrumb(level: .info, category: category)
         breadcrumb.message = message
         if let data = data {
@@ -102,7 +150,7 @@ final class CrashReporter {
 
     /// Start a transaction for performance monitoring
     func startTransaction(name: String, operation: String) -> (any Span)? {
-        guard isInitialized else { return nil }
+        guard isSentryEnabled else { return nil }
         return SentrySDK.startTransaction(name: name, operation: operation)
     }
 
@@ -124,7 +172,7 @@ final class CrashReporter {
 
     /// Set a tag that will be attached to all future events
     func setTag(key: String, value: String) {
-        guard isInitialized else { return }
+        guard isSentryEnabled else { return }
         SentrySDK.configureScope { scope in
             scope.setTag(value: value, key: key)
         }
@@ -132,7 +180,7 @@ final class CrashReporter {
 
     /// Set extra context data
     func setContext(key: String, value: [String: Any]) {
-        guard isInitialized else { return }
+        guard isSentryEnabled else { return }
         SentrySDK.configureScope { scope in
             scope.setContext(value: value, key: key)
         }
