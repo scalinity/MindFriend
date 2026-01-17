@@ -623,11 +623,11 @@ final class SupabaseDataService: ObservableObject {
             .eq("id", value: sessionUUID)
             .execute()
 
-        // Update stats
+        // Update stats (FIX: use user_stats table which has total_exercises_completed, not profiles)
         try await supabase
-            .from(Tables.profiles)
+            .from(Tables.userStats)
             .update(["total_exercises_completed": AnyEncodable("total_exercises_completed + 1")])
-            .eq("id", value: try userId)
+            .eq("user_id", value: try userId)
             .execute()
 
         Analytics.shared.track(.exerciseCompleted, properties: [
@@ -1281,7 +1281,7 @@ final class SupabaseDataService: ObservableObject {
             throw DataError.invalidId
         }
 
-        let endsAt = Calendar.current.date(byAdding: .hour, value: 24, to: Date())!
+        let endsAt = Calendar.current.date(byAdding: .hour, value: 24, to: Date()) ?? Date().addingTimeInterval(24 * 3600)
 
         var insertData: [String: AnyEncodable] = [
             "circle_id": AnyEncodable(circleUUID),
