@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { errorResponse } from "../_shared/error-handler.ts";
 
 interface RecommendationRequest {
   context?: string; // 'morning', 'evening', 'night', 'focus', 'relax'
@@ -133,10 +134,7 @@ serve(async (req) => {
       .limit(limit * 3);
 
     if (error) {
-      return new Response(JSON.stringify({ error: error.message }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return errorResponse(error, { operation: "getAudioTracks" }, 400);
     }
 
     // Score and rank tracks
