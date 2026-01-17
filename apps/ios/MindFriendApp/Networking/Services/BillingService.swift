@@ -49,8 +49,8 @@ final class BillingService: ObservableObject {
     static let productPlanTypes: [String: PlanType] = [
         "com.mindfriend.premium.monthly": .individual,
         "com.mindfriend.premium.yearly": .individual,
-        "com.mindfriend.couples.monthly": .individual,
-        "com.mindfriend.couples.annual": .individual,
+        "com.mindfriend.couples.monthly": .couples,
+        "com.mindfriend.couples.annual": .couples,
         "com.mindfriend.family.monthly": .family,
         "com.mindfriend.family.annual": .family
     ]
@@ -623,12 +623,10 @@ final class BillingService: ObservableObject {
             paymentMethodId: recipient.paymentMethodId
         )
 
-        let response = try await supabase.functions.invoke(
+        let result: GiftPurchaseResponse = try await supabase.functions.invoke(
             "create-gift",
             options: .init(body: request)
         )
-
-        let result = try JSONDecoder().decode(GiftPurchaseResponse.self, from: response.data)
         activeGift = result.gift
         return result.gift
     }
@@ -646,13 +644,11 @@ final class BillingService: ObservableObject {
             }
         }
 
-        let response = try await supabase.functions.invoke(
+        // Verify success
+        let result: GiftRedeemResponse = try await supabase.functions.invoke(
             "redeem-gift",
             options: .init(body: RedeemGiftRequest(redemptionCode: code))
         )
-
-        // Verify success
-        let result = try JSONDecoder().decode(GiftRedeemResponse.self, from: response.data)
         if !result.success {
             throw BillingError.giftRedemptionFailed
         }
@@ -700,19 +696,17 @@ final class BillingService: ObservableObject {
             }
         }
 
-        let response = try await supabase.functions.invoke(
+        let result: HSAReceiptResponse = try await supabase.functions.invoke(
             "generate-hsa-receipt",
-            options: .init(body: GenerateReceiptRequest(subscriptionId: subscriptionId.uuidString))
+            options: .init(body: GenerateReceiptRequest(subscriptionId: subscriptionId))
         )
-
-        let result = try JSONDecoder().decode(HSAReceiptResponse.self, from: response.data)
 
         guard result.success, let url = URL(string: result.receiptUrl) else {
             throw BillingError.hsaReceiptGenerationFailed
         }
 
         // Update local HSA record
-        await loadHSARecord()
+        try await loadHSARecord()
 
         return url
     }
@@ -731,19 +725,17 @@ final class BillingService: ObservableObject {
             }
         }
 
-        let response = try await supabase.functions.invoke(
+        let result: LOmnResponse = try await supabase.functions.invoke(
             "generate-lomn",
-            options: .init(body: GenerateLOMNRequest(subscriptionId: subscriptionId.uuidString))
+            options: .init(body: GenerateLOMNRequest(subscriptionId: subscriptionId))
         )
-
-        let result = try JSONDecoder().decode(LOmnResponse.self, from: response.data)
 
         guard result.success, let url = URL(string: result.lomnUrl) else {
             throw BillingError.lomnGenerationFailed
         }
 
         // Update local HSA record
-        await loadHSARecord()
+        try await loadHSARecord()
 
         return url
     }
