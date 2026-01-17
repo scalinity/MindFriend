@@ -4,6 +4,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { createLogger } from "../_shared/logger.ts";
+import { handleError, errorResponse } from "../_shared/error-handler.ts";
 
 const log = createLogger("delete-account");
 
@@ -86,27 +87,63 @@ Deno.serve(async (req) => {
     // 5. Handle family memberships (remove from groups, not delete groups)
     await supabaseAdmin.from("family_members").delete().eq("user_id", userId);
 
-    // 6. Transfer ownership of circles user owns to no-one (or delete them)
-    // Deleting circles will cascade to circle_members, circle_posts
-    await supabaseAdmin.from("circles").delete().eq("owner_id", userId);
+    // 6. Transfer ownership of circles user owns to another member
+    // This preserves circle content for remaining members
+    const { data: ownedCircles } = await supabaseAdmin
+      .from("circles")
+      .select("id")
+      .eq("owner_id", userId);
+
+    for (const circle of ownedCircles || []) {
+      // Find another member to transfer ownership to
+      const { data: nextOwner } = await supabaseAdmin
+        .from("circle_members")
+        .select("user_id")
+        .eq("circle_id", circle.id)
+        .neq("user_id", userId)
+        .order("joined_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (nextOwner) {
+        // Transfer ownership to the next oldest member
+        await supabaseAdmin
+          .from("circles")
+          .update({ owner_id: nextOwner.user_id })
+          .eq("id", circle.id);
+
+        // Update their role to owner
+        await supabaseAdmin
+          .from("circle_members")
+          .update({ role: "owner" })
+          .eq("circle_id", circle.id)
+          .eq("user_id", nextOwner.user_id);
+
+        log.info("Transferred circle ownership", {
+          circleId: circle.id,
+          newOwnerId: nextOwner.user_id.slice(0, 8),
+        });
+      } else {
+        // No other members - delete the empty circle
+        await supabaseAdmin.from("circles").delete().eq("id", circle.id);
+        log.info("Deleted empty circle", { circleId: circle.id });
+      }
+    }
+
+    // Remove user from circles they're a member of (not owner)
+    await supabaseAdmin.from("circle_members").delete().eq("user_id", userId);
 
     // 7. Delete the auth user - this cascades to profiles and most other data
     const { error: deleteAuthError } =
       await supabaseAdmin.auth.admin.deleteUser(userId);
 
     if (deleteAuthError) {
-      log.error("Error deleting auth user", {
-        errorMessage: deleteAuthError.message,
-      });
-      return new Response(
-        JSON.stringify({
-          error: "Failed to delete account",
-          details: deleteAuthError.message,
-        }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
+      // Log error server-side, return generic message to client
+      return errorResponse(
+        deleteAuthError,
+        { operation: "deleteUser" },
+        500,
+        corsHeaders,
       );
     }
 
@@ -123,16 +160,11 @@ Deno.serve(async (req) => {
       },
     );
   } catch (error) {
-    log.error("Delete account error", { error: String(error) });
-    return new Response(
-      JSON.stringify({
-        error: "Internal server error",
-        details: String(error),
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
+    return errorResponse(
+      error,
+      { operation: "deleteAccount" },
+      500,
+      corsHeaders,
     );
   }
 });
