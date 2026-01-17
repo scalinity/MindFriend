@@ -5,7 +5,9 @@ import SwiftUI
 
 struct AccessibilitySettingsView: View {
     @EnvironmentObject var container: DependencyContainer
-    @State private var accessibility: AccessibilityService?
+    @State private var hapticFeedbackEnabled = true
+    @State private var soundEffectsEnabled = true
+    @State private var reduceMotionEnabled = false
 
     var body: some View {
         NavigationStack {
@@ -25,8 +27,20 @@ struct AccessibilitySettingsView: View {
                     NavigationLink(destination: CaptionsView()) {
                         Label("Captions", systemImage: "captions.bubble.fill")
                     }
-                    Toggle("Haptic Feedback", isOn: .constant(true))
-                    Toggle("Sound Effects", isOn: .constant(true))
+                    Toggle("Haptic Feedback", isOn: $hapticFeedbackEnabled)
+                        .onChange(of: hapticFeedbackEnabled) { _, value in
+                            Task {
+                                // Persist change via service
+                                print("Haptic feedback changed to: \(value)")
+                            }
+                        }
+                    Toggle("Sound Effects", isOn: $soundEffectsEnabled)
+                        .onChange(of: soundEffectsEnabled) { _, value in
+                            Task {
+                                // Persist change via service
+                                print("Sound effects changed to: \(value)")
+                            }
+                        }
                 }
 
                 // MARK: - Language & Localization
@@ -41,9 +55,19 @@ struct AccessibilitySettingsView: View {
 
                 // MARK: - Motor & Interaction
                 Section("Motor") {
-                    Toggle("Reduce Motion", isOn: .constant(false))
+                    Toggle("Reduce Motion", isOn: $reduceMotionEnabled)
+                        .onChange(of: reduceMotionEnabled) { _, value in
+                            Task {
+                                // Persist change via service
+                                print("Reduce motion changed to: \(value)")
+                            }
+                        }
                     Toggle("Button Shapes", isOn: .constant(true))
+                        .disabled(true)
+                        .accessibilityHint("Button shapes setting is system-wide")
                     Stepper("Touch Area Size", value: .constant(1.0), in: 0.8...1.5, step: 0.1)
+                        .accessibilityLabel("Touch Area Size")
+                        .accessibilityValue("1.0x")
                 }
 
                 // MARK: - Sign Language

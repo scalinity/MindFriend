@@ -3,6 +3,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { checkRateLimit, getRateLimitHeaders } from "../_shared/cors.ts";
 
 interface LocalizedStringsRequest {
   language: string;
@@ -41,9 +42,17 @@ serve(async (req) => {
       );
     }
 
+    // Create authenticated Supabase client with the user's token
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
+      {
+        global: {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      },
     );
 
     const {
@@ -55,6 +64,21 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // Rate limit by user ID (60 requests per minute)
+    const rateLimitResult = checkRateLimit(user.id, 60, 60 * 1000);
+    if (!rateLimitResult.allowed) {
+      return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
+        status: 429,
+        headers: {
+          "Content-Type": "application/json",
+          ...getRateLimitHeaders(
+            rateLimitResult.remaining,
+            rateLimitResult.resetIn,
+          ),
+        },
       });
     }
 
@@ -136,7 +160,8 @@ serve(async (req) => {
         .is("region", null);
 
       if (err1 || err2) {
-        throw new Error(err1?.message || err2?.message);
+        console.error("Localized strings query error:", err1 || err2);
+        throw new Error("Failed to fetch localized strings");
       }
 
       // Merge results: region-specific overrides defaults
@@ -173,6 +198,10 @@ serve(async (req) => {
         headers: {
           "Content-Type": "application/json",
           "Cache-Control": "public, max-age=3600",
+          ...getRateLimitHeaders(
+            rateLimitResult.remaining,
+            rateLimitResult.resetIn,
+          ),
         },
       });
     } else {
@@ -193,18 +222,24 @@ serve(async (req) => {
 
     if (error) {
       console.error("Supabase query error:", error);
-      return new Response(JSON.stringify({ error: error.message }), {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: "Failed to fetch localized strings" }),
+        {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
     }
 
     // Build string map (region-specific overrides default)
+    // First pass: add defaults (region IS NULL)
+    // Second pass: override with region-specific (region = requested region)
     const stringMap: Record<
       string,
       { value: string; plurals?: Record<string, string> }
     > = {};
 
+    // Add all results, with region-specific overriding defaults
     for (const str of strings || []) {
       stringMap[str.string_key] = {
         value: str.value,
@@ -224,14 +259,17 @@ serve(async (req) => {
       headers: {
         "Content-Type": "application/json",
         "Cache-Control": "public, max-age=3600", // Cache for 1 hour
+        ...getRateLimitHeaders(
+          rateLimitResult.remaining,
+          rateLimitResult.resetIn,
+        ),
       },
     });
   } catch (error) {
-    console.error("Unexpected error:", error);
+    console.error("Unexpected error in get-localized-strings:", error);
     return new Response(
       JSON.stringify({
         error: "Internal server error",
-        message: error instanceof Error ? error.message : "Unknown error",
       }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );

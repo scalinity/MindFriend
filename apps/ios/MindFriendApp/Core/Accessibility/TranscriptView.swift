@@ -9,7 +9,6 @@ struct TranscriptView: View {
         Transcript(id: UUID(), title: "Meditation Guide", duration: "10:00", type: "Video"),
         Transcript(id: UUID(), title: "Exercise Tutorial", duration: "5:45", type: "Video")
     ]
-    @State private var selectedTranscript: Transcript?
     @State private var searchText = ""
 
     var filteredTranscripts: [Transcript] {

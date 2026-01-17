@@ -3,6 +3,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { checkRateLimit, getRateLimitHeaders } from "../_shared/cors.ts";
 
 interface CaptionsRequest {
   contentType: string;
@@ -40,9 +41,17 @@ serve(async (req) => {
       );
     }
 
+    // Create authenticated Supabase client with the user's token
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
+      {
+        global: {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      },
     );
 
     const {
@@ -54,6 +63,21 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // Rate limit by user ID (60 requests per minute)
+    const rateLimitResult = checkRateLimit(user.id, 60, 60 * 1000);
+    if (!rateLimitResult.allowed) {
+      return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
+        status: 429,
+        headers: {
+          "Content-Type": "application/json",
+          ...getRateLimitHeaders(
+            rateLimitResult.remaining,
+            rateLimitResult.resetIn,
+          ),
+        },
       });
     }
 
@@ -146,13 +170,14 @@ serve(async (req) => {
 
     // If still not found, return 404 with available: false
     if (!captions || error) {
+      // Log error server-side but don't leak details to client
+      console.error("Caption fetch error:", error);
       return new Response(
         JSON.stringify({
           available: false,
-          error: "Captions not available for this content",
         }),
         {
-          status: 404,
+          status: 200,
           headers: { "Content-Type": "application/json" },
         },
       );
@@ -174,14 +199,17 @@ serve(async (req) => {
       headers: {
         "Content-Type": "application/json",
         "Cache-Control": "public, max-age=86400", // Cache for 24 hours
+        ...getRateLimitHeaders(
+          rateLimitResult.remaining,
+          rateLimitResult.resetIn,
+        ),
       },
     });
   } catch (error) {
-    console.error("Unexpected error:", error);
+    console.error("Unexpected error in get-captions:", error);
     return new Response(
       JSON.stringify({
         error: "Internal server error",
-        message: error instanceof Error ? error.message : "Unknown error",
       }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
