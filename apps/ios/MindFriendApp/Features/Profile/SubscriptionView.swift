@@ -208,7 +208,7 @@ struct SubscriptionView: View {
                     BillingPeriodCard(
                         period: period,
                         isSelected: selectedBillingPeriod == period,
-                        showSavings: period == .annual,
+                        showSavings: period == .yearly,
                         onSelect: { selectedBillingPeriod = period }
                     )
                 }
@@ -238,7 +238,7 @@ struct SubscriptionView: View {
                                 .font(.title2)
                                 .fontWeight(.bold)
 
-                            if selectedBillingPeriod == .annual {
+                            if selectedBillingPeriod == .yearly {
                                 Text(monthlyEquivalent(for: product))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
@@ -247,7 +247,7 @@ struct SubscriptionView: View {
                     }
                 }
 
-                if selectedBillingPeriod == .annual {
+                if selectedBillingPeriod == .yearly {
                     HStack {
                         Image(systemName: "tag.fill")
                             .foregroundStyle(.green)
@@ -719,6 +719,8 @@ extension PlanType {
         case .individual: return "person.fill"
         case .couples: return "heart.fill"
         case .family: return "person.3.fill"
+        case .enterprise: return "building.2.fill"
+        case .gift: return "gift.fill"
         }
     }
 
@@ -727,6 +729,8 @@ extension PlanType {
         case .individual: return "For personal use"
         case .couples: return "For 2 people"
         case .family: return "For up to 6 people"
+        case .enterprise: return "For organizations"
+        case .gift: return "Gift a subscription"
         }
     }
 }
