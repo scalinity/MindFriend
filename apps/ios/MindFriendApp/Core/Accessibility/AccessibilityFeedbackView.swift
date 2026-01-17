@@ -30,6 +30,8 @@ struct AccessibilityFeedbackView: View {
                         Text("Other").tag("other")
                     }
                     .pickerStyle(.menu)
+                    .accessibilityLabel("Feedback Type")
+                    .accessibilityHint("Select the type of feedback you want to provide")
                 }
 
                 Section("Affected Feature") {
@@ -43,6 +45,8 @@ struct AccessibilityFeedbackView: View {
                         Text("General/Other").tag("other")
                     }
                     .pickerStyle(.menu)
+                    .accessibilityLabel("Affected Feature")
+                    .accessibilityHint("Select which feature your feedback is about")
                 }
 
                 if feedbackType == "bug_report" {
@@ -86,7 +90,7 @@ struct AccessibilityFeedbackView: View {
                         Text("Submit Feedback")
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.primary)
+                    .buttonStyle(.borderedProminent)
                     .disabled(!isFormValid)
                 }
             }

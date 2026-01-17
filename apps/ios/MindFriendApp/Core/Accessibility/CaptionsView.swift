@@ -23,6 +23,9 @@ struct CaptionsView: View {
                         Text("German").tag("de")
                     }
                     .pickerStyle(.menu)
+                    .onChange(of: captionLanguage) { _, language in
+                        print("Caption language changed to: \(language)")
+                    }
                 }
             }
 
@@ -31,14 +34,28 @@ struct CaptionsView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Label("Size: \(String(format: "%.0f", captionSize * 100))%", systemImage: "textformat.size")
                         Slider(value: $captionSize, in: 0.75...1.5, step: 0.25)
+                            .accessibilityLabel("Caption Size")
+                            .accessibilityValue("\(String(format: "%.0f", captionSize * 100))%")
+                            .onChange(of: captionSize) { _, size in
+                                print("Caption size changed to: \(size)")
+                            }
                     }
 
                     Toggle("Background", isOn: $captionBackground)
+                        .accessibilityLabel("Caption Background")
+                        .onChange(of: captionBackground) { _, enabled in
+                            print("Caption background changed to: \(enabled)")
+                        }
 
                     if captionBackground {
                         VStack(alignment: .leading, spacing: 8) {
                             Label("Background Opacity", systemImage: "square.fill.on.square")
                             Slider(value: $captionOpacity, in: 0.3...1.0, step: 0.1)
+                                .accessibilityLabel("Background Opacity")
+                                .accessibilityValue("\(String(format: "%.0f", captionOpacity * 100))%")
+                                .onChange(of: captionOpacity) { _, opacity in
+                                    print("Caption opacity changed to: \(opacity)")
+                                }
                         }
                     }
                 }

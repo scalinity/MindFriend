@@ -20,12 +20,20 @@ struct VisualAccessibilityView: View {
                     Text("Achromasia (Complete)").tag(ColorBlindMode.achromasia)
                 }
                 .pickerStyle(.menu)
+                .accessibilityLabel("Color Blind Mode")
+                .accessibilityHint("Select your color vision type for optimized color scheme")
             }
 
             Section("Contrast & Display") {
                 Toggle("Increase Contrast", isOn: $increaseContrast)
+                    .accessibilityLabel("Increase Contrast")
+                    .accessibilityHint("Increases the contrast between text and backgrounds")
                 Toggle("Reduce Transparency", isOn: $reduceTransparency)
+                    .accessibilityLabel("Reduce Transparency")
+                    .accessibilityHint("Removes translucent elements for clearer visibility")
                 Toggle("Bold Text", isOn: $boldText)
+                    .accessibilityLabel("Bold Text")
+                    .accessibilityHint("Makes text appear bolder and easier to read")
             }
 
             Section("Preview") {
@@ -35,7 +43,7 @@ struct VisualAccessibilityView: View {
                         Text("Primary Button")
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.primary)
+                    .buttonStyle(.borderedProminent)
 
                     // Secondary button preview
                     Button(action: {}) {
