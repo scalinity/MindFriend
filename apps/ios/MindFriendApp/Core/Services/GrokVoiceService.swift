@@ -2,6 +2,7 @@ import Foundation
 import AVFoundation
 import Combine
 import Supabase
+import OSLog
 
 /// Service for real-time voice conversations using Grok Voice Agent API
 @MainActor
@@ -159,7 +160,7 @@ final class GrokVoiceService: ObservableObject {
 
             // Wait for session.created event from the server
             #if DEBUG
-            print("[Voice] Waiting for session.created event...")
+            Log.voice.debug("[Voice] Waiting for session.created event...")
             #endif
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
                 sessionCreatedContinuation = continuation
@@ -179,7 +180,7 @@ final class GrokVoiceService: ObservableObject {
 
             // Wait for session.updated confirmation
             #if DEBUG
-            print("[Voice] Waiting for session.updated...")
+            Log.voice.debug("[Voice] Waiting for session.updated...")
             #endif
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
                 sessionUpdatedContinuation = continuation
@@ -198,7 +199,7 @@ final class GrokVoiceService: ObservableObject {
             sessionStartTime = Date()
             messageCount = 0
             #if DEBUG
-            print("[Voice] Connection complete, ready for audio")
+            Log.voice.debug("[Voice] Connection complete, ready for audio")
             #endif
 
             // Start live usage timer for non-premium users
@@ -257,18 +258,18 @@ final class GrokVoiceService: ObservableObject {
     /// Start listening for voice input
     func startListening() throws {
         #if DEBUG
-        print("[Voice] startListening called, connectionState: \(connectionState)")
+        Log.voice.debug("[Voice] startListening called, connectionState: \(connectionState)")
         #endif
         guard connectionState.isConnected else {
             #if DEBUG
-            print("[Voice] Not connected, cannot start listening")
+            Log.voice.debug("[Voice] Not connected, cannot start listening")
             #endif
             throw VoiceError.notConnected
         }
 
         guard !isListening else {
             #if DEBUG
-            print("[Voice] Already listening, skipping")
+            Log.voice.debug("[Voice] Already listening, skipping")
             #endif
             return
         }
@@ -278,8 +279,8 @@ final class GrokVoiceService: ObservableObject {
 
             #if DEBUG
             // Check current permission status
-            print("[Voice] Record permission: \(audioSession.recordPermission.rawValue)")
-            print("[Voice] Current route: \(audioSession.currentRoute.inputs.map { $0.portName })")
+            Log.voice.debug("[Voice] Record permission: \(audioSession.recordPermission.rawValue)")
+            Log.voice.debug("[Voice] Current route: \(audioSession.currentRoute.inputs.map { $0.portName })")
             #endif
 
             // Use .videoRecording mode for natural audio levels (no AGC compression)
@@ -291,9 +292,9 @@ final class GrokVoiceService: ObservableObject {
             )
             try audioSession.setActive(true)
             #if DEBUG
-            print("[Voice] Audio session configured for playAndRecord")
-            print("[Voice] Audio session isOtherAudioPlaying: \(audioSession.isOtherAudioPlaying)")
-            print("[Voice] Audio route after activation: \(audioSession.currentRoute.inputs.map { $0.portName })")
+            Log.voice.debug("[Voice] Audio session configured for playAndRecord")
+            Log.voice.debug("[Voice] Audio session isOtherAudioPlaying: \(audioSession.isOtherAudioPlaying)")
+            Log.voice.debug("[Voice] Audio route after activation: \(audioSession.currentRoute.inputs.map { $0.portName })")
             #endif
 
             let inputNode = recordingEngine.inputNode
@@ -301,18 +302,18 @@ final class GrokVoiceService: ObservableObject {
             // Force refresh the input node format
             let hardwareFormat = inputNode.inputFormat(forBus: 0)
             #if DEBUG
-            print("[Voice] Hardware input format: sampleRate=\(hardwareFormat.sampleRate), channels=\(hardwareFormat.channelCount)")
+            Log.voice.debug("[Voice] Hardware input format: sampleRate=\(hardwareFormat.sampleRate), channels=\(hardwareFormat.channelCount)")
             #endif
 
             let nativeFormat = inputNode.outputFormat(forBus: 0)
             #if DEBUG
-            print("[Voice] Native output format: sampleRate=\(nativeFormat.sampleRate), channels=\(nativeFormat.channelCount), format=\(nativeFormat.commonFormat.rawValue)")
+            Log.voice.debug("[Voice] Native output format: sampleRate=\(nativeFormat.sampleRate), channels=\(nativeFormat.channelCount), format=\(nativeFormat.commonFormat.rawValue)")
             #endif
 
             // Check if format is valid
             guard nativeFormat.sampleRate > 0 && nativeFormat.channelCount > 0 else {
                 #if DEBUG
-                print("[Voice] ERROR: Invalid audio format!")
+                Log.voice.debug("[Voice] ERROR: Invalid audio format!")
                 #endif
                 throw VoiceError.audioSessionFailed("Invalid audio format - no input available")
             }
@@ -327,15 +328,15 @@ final class GrokVoiceService: ObservableObject {
                 throw VoiceError.audioSessionFailed("Failed to create target audio format")
             }
             #if DEBUG
-            print("[Voice] Target format: sampleRate=\(targetFormat.sampleRate), channels=\(targetFormat.channelCount)")
+            Log.voice.debug("[Voice] Target format: sampleRate=\(targetFormat.sampleRate), channels=\(targetFormat.channelCount)")
             #endif
 
             let converter = AVAudioConverter(from: nativeFormat, to: targetFormat)
             #if DEBUG
             if converter == nil {
-                print("[Voice] WARNING: Failed to create audio converter!")
+                Log.voice.debug("[Voice] WARNING: Failed to create audio converter!")
             } else {
-                print("[Voice] Audio converter created successfully")
+                Log.voice.debug("[Voice] Audio converter created successfully")
             }
             #endif
 
@@ -350,30 +351,30 @@ final class GrokVoiceService: ObservableObject {
                 self?.audioTapBufferCount += 1
                 #if DEBUG
                 if self?.audioTapBufferCount == 1 || (self?.audioTapBufferCount ?? 0) % 50 == 0 {
-                    print("[Voice] Audio tap buffer #\(self?.audioTapBufferCount ?? 0), frames: \(buffer.frameLength), time: \(time.sampleTime)")
+                    Log.voice.debug("[Voice] Audio tap buffer #\(self?.audioTapBufferCount ?? 0), frames: \(buffer.frameLength), time: \(time.sampleTime)")
                 }
                 #endif
                 self?.processAndConvertAudioBuffer(buffer, converter: converter, targetFormat: targetFormat)
             }
             #if DEBUG
-            print("[Voice] Audio tap installed on input node")
+            Log.voice.debug("[Voice] Audio tap installed on input node")
             #endif
 
             recordingEngine.prepare()
             try recordingEngine.start()
             #if DEBUG
-            print("[Voice] Recording engine started, isRunning: \(recordingEngine.isRunning)")
-            print("[Voice] Input node isVoiceProcessingEnabled: \(inputNode.isVoiceProcessingEnabled)")
+            Log.voice.debug("[Voice] Recording engine started, isRunning: \(recordingEngine.isRunning)")
+            Log.voice.debug("[Voice] Input node isVoiceProcessingEnabled: \(inputNode.isVoiceProcessingEnabled)")
             #endif
 
             isListening = true
             audioTapBufferCount = 0
             #if DEBUG
-            print("[Voice] Now listening for audio input")
+            Log.voice.debug("[Voice] Now listening for audio input")
             #endif
         } catch {
             #if DEBUG
-            print("[Voice] startListening error: \(error)")
+            Log.voice.debug("[Voice] startListening error: \(error)")
             #endif
             throw VoiceError.audioSessionFailed(error.localizedDescription)
         }
@@ -384,20 +385,20 @@ final class GrokVoiceService: ObservableObject {
     func stopListeningAndRespond() {
         guard connectionState.isConnected else {
             #if DEBUG
-            print("[Voice] Not connected, cannot send")
+            Log.voice.debug("[Voice] Not connected, cannot send")
             #endif
             return
         }
 
         guard !isWaitingForResponse else {
             #if DEBUG
-            print("[Voice] Already waiting for response, ignoring")
+            Log.voice.debug("[Voice] Already waiting for response, ignoring")
             #endif
             return
         }
 
         #if DEBUG
-        print("[Voice] Force commit (turn \(messageCount + 1))...")
+        Log.voice.debug("[Voice] Force commit (turn \(messageCount + 1))...")
         #endif
         isWaitingForResponse = true
         transcribedText = ""
@@ -419,7 +420,7 @@ final class GrokVoiceService: ObservableObject {
 
         isListening = false
         #if DEBUG
-        print("[Voice] Stopped listening (muted)")
+        Log.voice.debug("[Voice] Stopped listening (muted)")
         #endif
     }
 
@@ -465,13 +466,13 @@ final class GrokVoiceService: ObservableObject {
         do {
             // Refresh session to ensure we have a valid token
             #if DEBUG
-            print("[VoiceToken] Refreshing session...")
+            Log.voice.debug("[VoiceToken] Refreshing session...")
             #endif
             _ = try await supabase.auth.refreshSession()
 
             // Use the global supabase client which should now have the refreshed session
             #if DEBUG
-            print("[VoiceToken] Calling voice-token function...")
+            Log.voice.debug("[VoiceToken] Calling voice-token function...")
             #endif
 
             // Use typed response - SDK will decode automatically
@@ -480,23 +481,23 @@ final class GrokVoiceService: ObservableObject {
                 options: FunctionInvokeOptions()
             )
             #if DEBUG
-            print("[VoiceToken] Got token for voice successfully (token redacted from logs)")
+            Log.voice.debug("[VoiceToken] Got token for voice successfully (token redacted from logs)")
             #endif
             return tokenResponse
         } catch let error as FunctionsError {
             #if DEBUG
-            print("[VoiceToken] FunctionsError: \(error)")
+            Log.voice.debug("[VoiceToken] FunctionsError: \(error)")
             #endif
             switch error {
             case .httpError(let code, let data):
                 #if DEBUG
                 // Only log HTTP status code, not response body which may contain PII
-                print("[VoiceToken] HTTP error status: \(code)")
+                Log.voice.debug("[VoiceToken] HTTP error status: \(code)")
                 #endif
                 if let errorResponse = try? JSONDecoder().decode(VoiceErrorResponse.self, from: data) {
                     #if DEBUG
                     // Log parsed error code (safe - known structure)
-                    print("[VoiceToken] Error code: \(errorResponse.code)")
+                    Log.voice.debug("[VoiceToken] Error code: \(errorResponse.code)")
                     #endif
                     if errorResponse.code == "QUOTA_EXCEEDED" {
                         throw VoiceError.quotaExceeded
@@ -513,7 +514,7 @@ final class GrokVoiceService: ObservableObject {
             throw error
         } catch {
             #if DEBUG
-            print("[VoiceToken] Unknown error: \(error)")
+            Log.voice.debug("[VoiceToken] Unknown error: \(error)")
             #endif
             throw VoiceError.tokenGenerationFailed
         }
@@ -524,7 +525,7 @@ final class GrokVoiceService: ObservableObject {
             throw VoiceError.connectionFailed("Invalid WebSocket URL")
         }
         #if DEBUG
-        print("[Voice] Connecting to WebSocket...")
+        Log.voice.debug("[Voice] Connecting to WebSocket...")
         #endif
 
         var request = URLRequest(url: url)
@@ -539,7 +540,7 @@ final class GrokVoiceService: ObservableObject {
         webSocket = urlSession?.webSocketTask(with: request)
         webSocket?.resume()
         #if DEBUG
-        print("[Voice] WebSocket task resumed, starting message receiver...")
+        Log.voice.debug("[Voice] WebSocket task resumed, starting message receiver...")
         #endif
 
         receiveMessages()
@@ -547,7 +548,7 @@ final class GrokVoiceService: ObservableObject {
 
     private func configureSession() async throws {
         #if DEBUG
-        print("[Voice] Configuring session with voice: \(currentVoice.rawValue)")
+        Log.voice.debug("[Voice] Configuring session with voice: \(currentVoice.rawValue)")
         #endif
 
         // xAI Grok Voice API session configuration
@@ -575,7 +576,7 @@ final class GrokVoiceService: ObservableObject {
         #if DEBUG
         if let jsonData = try? JSONSerialization.data(withJSONObject: config, options: .prettyPrinted),
            let jsonStr = String(data: jsonData, encoding: .utf8) {
-            print("[Voice] Session config: \(jsonStr)")
+            Log.voice.debug("[Voice] Session config: \(jsonStr)")
         }
         #endif
 
@@ -593,11 +594,11 @@ final class GrokVoiceService: ObservableObject {
                 #if DEBUG
                 switch message {
                 case .string(let text):
-                    print("[Voice] WS received string message (\(text.count) chars)")
+                    Log.voice.debug("[Voice] WS received string message (\(text.count) chars)")
                 case .data(let data):
-                    print("[Voice] WS received data message (\(data.count) bytes)")
+                    Log.voice.debug("[Voice] WS received data message (\(data.count) bytes)")
                 @unknown default:
-                    print("[Voice] WS received unknown message type")
+                    Log.voice.debug("[Voice] WS received unknown message type")
                 }
                 #endif
                 Task { @MainActor in
@@ -606,7 +607,7 @@ final class GrokVoiceService: ObservableObject {
                 self.receiveMessages()
             case .failure(let error):
                 #if DEBUG
-                print("[Voice] WS receive error: \(error.localizedDescription)")
+                Log.voice.debug("[Voice] WS receive error: \(error.localizedDescription)")
                 #endif
                 Task { @MainActor in
                     self.stopListening()
@@ -621,21 +622,21 @@ final class GrokVoiceService: ObservableObject {
         case .string(let text):
             guard let data = text.data(using: .utf8) else {
                 #if DEBUG
-                print("[Voice] Failed to convert message to data")
+                Log.voice.debug("[Voice] Failed to convert message to data")
                 #endif
                 return
             }
 
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                 #if DEBUG
-                print("[Voice] Failed to parse JSON: \(String(text.prefix(200)))")
+                Log.voice.debug("[Voice] Failed to parse JSON: \(String(text.prefix(200)))")
                 #endif
                 return
             }
 
             guard let type = json["type"] as? String else {
                 #if DEBUG
-                print("[Voice] No 'type' in message: \(String(text.prefix(200)))")
+                Log.voice.debug("[Voice] No 'type' in message: \(String(text.prefix(200)))")
                 #endif
                 return
             }
@@ -644,14 +645,14 @@ final class GrokVoiceService: ObservableObject {
         case .data(let data):
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                 #if DEBUG
-                print("[Voice] Failed to parse binary JSON")
+                Log.voice.debug("[Voice] Failed to parse binary JSON")
                 #endif
                 return
             }
 
             guard let type = json["type"] as? String else {
                 #if DEBUG
-                print("[Voice] No 'type' in binary message")
+                Log.voice.debug("[Voice] No 'type' in binary message")
                 #endif
                 return
             }
@@ -659,7 +660,7 @@ final class GrokVoiceService: ObservableObject {
             handleEvent(type: type, json: json)
         @unknown default:
             #if DEBUG
-            print("[Voice] Unknown message format")
+            Log.voice.debug("[Voice] Unknown message format")
             #endif
             break
         }
@@ -668,13 +669,13 @@ final class GrokVoiceService: ObservableObject {
     private func handleEvent(type: String, json: [String: Any]) {
         #if DEBUG
         // Log all events for debugging
-        print("[Voice] Received event: \(type)")
+        Log.voice.debug("[Voice] Received event: \(type)")
         #endif
 
         switch type {
         case "session.created", "conversation.created":
             #if DEBUG
-            print("[Voice] Session/conversation created successfully")
+            Log.voice.debug("[Voice] Session/conversation created successfully")
             #endif
             // Cancel timeout task and resume continuation
             sessionCreatedTimeoutTask?.cancel()
@@ -686,7 +687,7 @@ final class GrokVoiceService: ObservableObject {
 
         case "session.updated":
             #if DEBUG
-            print("[Voice] Session updated")
+            Log.voice.debug("[Voice] Session updated")
             #endif
             // Cancel timeout task and resume continuation
             sessionUpdatedTimeoutTask?.cancel()
@@ -702,13 +703,13 @@ final class GrokVoiceService: ObservableObject {
 
         case "input_audio_buffer.speech_started":
             #if DEBUG
-            print("[Voice] VAD detected speech start")
+            Log.voice.debug("[Voice] VAD detected speech start")
             #endif
             isUserSpeaking = true
             // User started speaking - implement barge-in
             if isSpeaking || isPlayingAudio {
                 #if DEBUG
-                print("[Voice] Barge-in: stopping AI playback")
+                Log.voice.debug("[Voice] Barge-in: stopping AI playback")
                 #endif
                 stopPlayback()
             }
@@ -716,7 +717,7 @@ final class GrokVoiceService: ObservableObject {
 
         case "input_audio_buffer.speech_stopped":
             #if DEBUG
-            print("[Voice] VAD detected speech stop - server will auto-commit and respond")
+            Log.voice.debug("[Voice] VAD detected speech stop - server will auto-commit and respond")
             #endif
             isUserSpeaking = false
             // With server_vad + create_response: true, the server will:
@@ -728,9 +729,9 @@ final class GrokVoiceService: ObservableObject {
             #if DEBUG
             // Log details for debugging multi-turn issues
             if let itemId = json["item_id"] as? String {
-                print("[Voice] Audio buffer committed, item_id: \(itemId)")
+                Log.voice.debug("[Voice] Audio buffer committed, item_id: \(itemId)")
             } else {
-                print("[Voice] Audio buffer committed (no item_id in response)")
+                Log.voice.debug("[Voice] Audio buffer committed (no item_id in response)")
             }
             #endif
 
@@ -739,29 +740,29 @@ final class GrokVoiceService: ObservableObject {
             if let item = json["item"] as? [String: Any],
                let itemId = item["id"] as? String,
                let role = item["role"] as? String {
-                print("[Voice] Conversation item created: id=\(itemId), role=\(role)")
+                Log.voice.debug("[Voice] Conversation item created: id=\(itemId), role=\(role)")
             } else {
-                print("[Voice] Conversation item created")
+                Log.voice.debug("[Voice] Conversation item created")
             }
             #endif
 
         case "response.created":
             #if DEBUG
-            print("[Voice] Response started (turn \(messageCount + 1))")
+            Log.voice.debug("[Voice] Response started (turn \(messageCount + 1))")
             #endif
             isWaitingForResponse = true
             isSpeaking = true
 
         case "response.output_item.added":
             #if DEBUG
-            print("[Voice] Output item added")
+            Log.voice.debug("[Voice] Output item added")
             #endif
 
         case "response.audio.delta", "response.output_audio.delta":
             if let delta = json["delta"] as? String,
                let audioData = Data(base64Encoded: delta) {
                 #if DEBUG
-                print("[Voice] Received audio delta: \(audioData.count) bytes")
+                Log.voice.debug("[Voice] Received audio delta: \(audioData.count) bytes")
                 #endif
                 queueAudioPlayback(audioData)
             }
@@ -769,7 +770,7 @@ final class GrokVoiceService: ObservableObject {
         case "response.audio_transcript.delta", "response.output_audio_transcript.delta":
             if let delta = json["delta"] as? String {
                 #if DEBUG
-                print("[Voice] Transcript delta: \(delta)")
+                Log.voice.debug("[Voice] Transcript delta: \(delta)")
                 #endif
                 transcribedText += delta
             }
@@ -777,14 +778,14 @@ final class GrokVoiceService: ObservableObject {
         case "response.text.delta":
             if let delta = json["delta"] as? String {
                 #if DEBUG
-                print("[Voice] Text delta: \(delta)")
+                Log.voice.debug("[Voice] Text delta: \(delta)")
                 #endif
                 transcribedText += delta
             }
 
         case "response.done":
             #if DEBUG
-            print("[Voice] Response complete (turn \(messageCount + 1))")
+            Log.voice.debug("[Voice] Response complete (turn \(messageCount + 1))")
             #endif
             messageCount += 1
             isSpeaking = false
@@ -801,13 +802,13 @@ final class GrokVoiceService: ObservableObject {
                     waitCount += 1
                     if waitCount > 100 { // Max 10 seconds
                         #if DEBUG
-                        print("[Voice] Playback wait timeout")
+                        Log.voice.debug("[Voice] Playback wait timeout")
                         #endif
                         break
                     }
                 }
                 #if DEBUG
-                print("[Voice] Playback finished after \(waitCount * 100)ms, ready for next turn")
+                Log.voice.debug("[Voice] Playback finished after \(waitCount * 100)ms, ready for next turn")
                 #endif
 
                 // If we're not listening (e.g., due to audio session switch), restart
@@ -815,11 +816,11 @@ final class GrokVoiceService: ObservableObject {
                     do {
                         try self.startListening()
                         #if DEBUG
-                        print("[Voice] Restarted listening after playback")
+                        Log.voice.debug("[Voice] Restarted listening after playback")
                         #endif
                     } catch {
                         #if DEBUG
-                        print("[Voice] Failed to restart listening: \(error)")
+                        Log.voice.debug("[Voice] Failed to restart listening: \(error)")
                         #endif
                     }
                 }
@@ -837,7 +838,7 @@ final class GrokVoiceService: ObservableObject {
 
         case "response.audio.done", "response.text.done":
             #if DEBUG
-            print("[Voice] Audio/text stream done")
+            Log.voice.debug("[Voice] Audio/text stream done")
             #endif
 
         case "error":
@@ -849,14 +850,14 @@ final class GrokVoiceService: ObservableObject {
                 let message = error["message"] as? String ?? "Unknown error"
                 let code = error["code"] as? String ?? "unknown"
                 #if DEBUG
-                print("[Voice] Error: \(code) - \(message)")
+                Log.voice.debug("[Voice] Error: \(code) - \(message)")
                 #endif
                 errorMessage = message
             } else {
                 // Sometimes error is at root level
                 let message = json["message"] as? String ?? "Unknown error"
                 #if DEBUG
-                print("[Voice] Error: \(message)")
+                Log.voice.debug("[Voice] Error: \(message)")
                 #endif
                 errorMessage = message
             }
@@ -869,10 +870,10 @@ final class GrokVoiceService: ObservableObject {
         default:
             #if DEBUG
             // Log ALL unknown events to discover xAI's actual event names
-            print("[Voice] Unhandled event type: \(type)")
+            Log.voice.debug("[Voice] Unhandled event type: \(type)")
             if let jsonData = try? JSONSerialization.data(withJSONObject: json, options: .prettyPrinted),
                let jsonStr = String(data: jsonData, encoding: .utf8) {
-                print("[Voice] Event data: \(String(jsonStr.prefix(1000)))")
+                Log.voice.debug("[Voice] Event data: \(String(jsonStr.prefix(1000)))")
             }
             #endif
         }
@@ -882,7 +883,7 @@ final class GrokVoiceService: ObservableObject {
         guard let data = try? JSONSerialization.data(withJSONObject: message),
               let string = String(data: data, encoding: .utf8) else {
             #if DEBUG
-            print("[Voice] Failed to serialize message")
+            Log.voice.debug("[Voice] Failed to serialize message")
             #endif
             return
         }
@@ -900,7 +901,7 @@ final class GrokVoiceService: ObservableObject {
         // Log non-audio messages
         #if DEBUG
         if messageType != "input_audio_buffer.append" {
-            print("[Voice] Sending: \(messageType)")
+            Log.voice.debug("[Voice] Sending: \(messageType)")
         }
         #endif
 
@@ -909,7 +910,7 @@ final class GrokVoiceService: ObservableObject {
             self?.pendingSendCount -= 1
             if let error = error {
                 #if DEBUG
-                print("[Voice] WebSocket send error: \(error)")
+                Log.voice.debug("[Voice] WebSocket send error: \(error)")
                 #endif
             }
         }
@@ -919,7 +920,7 @@ final class GrokVoiceService: ObservableObject {
         guard let data = try? JSONSerialization.data(withJSONObject: message),
               let string = String(data: data, encoding: .utf8) else {
             #if DEBUG
-            print("[Voice] Failed to serialize message")
+            Log.voice.debug("[Voice] Failed to serialize message")
             #endif
             completion(false)
             return
@@ -928,14 +929,14 @@ final class GrokVoiceService: ObservableObject {
         #if DEBUG
         // Log non-audio messages
         if let type = message["type"] as? String, type != "input_audio_buffer.append" {
-            print("[Voice] Sending: \(type)")
+            Log.voice.debug("[Voice] Sending: \(type)")
         }
         #endif
 
         webSocket?.send(.string(string)) { error in
             if let error = error {
                 #if DEBUG
-                print("[Voice] WebSocket send error: \(error)")
+                Log.voice.debug("[Voice] WebSocket send error: \(error)")
                 #endif
                 completion(false)
             } else {
@@ -956,7 +957,7 @@ final class GrokVoiceService: ObservableObject {
         // Guard against division by zero
         guard buffer.format.sampleRate > 0 else {
             #if DEBUG
-            print("[Voice] Invalid buffer sample rate: 0")
+            Log.voice.debug("[Voice] Invalid buffer sample rate: 0")
             #endif
             return
         }
@@ -967,7 +968,7 @@ final class GrokVoiceService: ObservableObject {
 
         guard outputFrameCapacity > 0, let outputBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: outputFrameCapacity) else {
             #if DEBUG
-            print("[Voice] Failed to create output buffer")
+            Log.voice.debug("[Voice] Failed to create output buffer")
             #endif
             return
         }
@@ -989,7 +990,7 @@ final class GrokVoiceService: ObservableObject {
 
         if let error = error {
             #if DEBUG
-            print("[Voice] Conversion error: \(error)")
+            Log.voice.debug("[Voice] Conversion error: \(error)")
             #endif
             return
         }
@@ -1007,7 +1008,7 @@ final class GrokVoiceService: ObservableObject {
     private func processAudioBuffer(_ buffer: AVAudioPCMBuffer) {
         guard let channelData = buffer.int16ChannelData else {
             #if DEBUG
-            print("[Voice] No int16 channel data in buffer")
+            Log.voice.debug("[Voice] No int16 channel data in buffer")
             #endif
             return
         }
@@ -1015,7 +1016,7 @@ final class GrokVoiceService: ObservableObject {
         let frameCount = Int(buffer.frameLength)
         guard frameCount > 0 else {
             #if DEBUG
-            print("[Voice] Buffer has 0 frames")
+            Log.voice.debug("[Voice] Buffer has 0 frames")
             #endif
             return
         }
@@ -1056,7 +1057,7 @@ final class GrokVoiceService: ObservableObject {
         audioSendCount += 1
         #if DEBUG
         if audioSendCount % 50 == 1 {
-            print("[Voice] Sending audio chunk #\(audioSendCount), size: \(amplifiedData.count) bytes, RMS: \(String(format: "%.1f", rmsDb))dB, peak: \(maxSample), gain: \(audioGain)x")
+            Log.voice.debug("[Voice] Sending audio chunk #\(audioSendCount), size: \(amplifiedData.count) bytes, RMS: \(String(format: "%.1f", rmsDb))dB, peak: \(maxSample), gain: \(audioGain)x")
         }
         #endif
 
@@ -1124,7 +1125,7 @@ final class GrokVoiceService: ObservableObject {
         if playbackBuffer.count >= maxPlaybackBufferSize {
             playbackBuffer.removeFirst()
             #if DEBUG
-            print("[Voice] Warning: Playback buffer overflow, dropping oldest chunk")
+            Log.voice.debug("[Voice] Warning: Playback buffer overflow, dropping oldest chunk")
             #endif
         }
 
@@ -1138,7 +1139,7 @@ final class GrokVoiceService: ObservableObject {
             // Wait for minimum buffers before starting to prevent stuttering
             if playbackBuffer.count >= minBuffersBeforePlay {
                 #if DEBUG
-                print("[Voice] Starting playback with \(playbackBuffer.count) buffered chunks")
+                Log.voice.debug("[Voice] Starting playback with \(playbackBuffer.count) buffered chunks")
                 #endif
                 playNextAudioChunk()
             }
@@ -1177,7 +1178,7 @@ final class GrokVoiceService: ObservableObject {
             }
         }
         #if DEBUG
-        print("[Voice] Scheduled late chunk: \(audioData.count) bytes")
+        Log.voice.debug("[Voice] Scheduled late chunk: \(audioData.count) bytes")
         #endif
     }
 
@@ -1203,7 +1204,7 @@ final class GrokVoiceService: ObservableObject {
         // Start player FIRST before scheduling buffers
         if !isPlayerPlaying {
             #if DEBUG
-            print("[Voice] Starting playback - playback engine running: \(playbackEngine.isRunning)")
+            Log.voice.debug("[Voice] Starting playback - playback engine running: \(playbackEngine.isRunning)")
             #endif
 
             // Ensure playback engine is running
@@ -1214,11 +1215,11 @@ final class GrokVoiceService: ObservableObject {
                     playbackEngine.prepare()
                     try playbackEngine.start()
                     #if DEBUG
-                    print("[Voice] Playback engine started")
+                    Log.voice.debug("[Voice] Playback engine started")
                     #endif
                 } catch {
                     #if DEBUG
-                    print("[Voice] Playback engine start error: \(error)")
+                    Log.voice.debug("[Voice] Playback engine start error: \(error)")
                     #endif
                     return
                 }
@@ -1261,7 +1262,7 @@ final class GrokVoiceService: ObservableObject {
         }
 
         #if DEBUG
-        print("[Voice] Scheduled \(scheduledCount) audio buffers")
+        Log.voice.debug("[Voice] Scheduled \(scheduledCount) audio buffers")
         #endif
     }
 
@@ -1272,7 +1273,7 @@ final class GrokVoiceService: ObservableObject {
         } else {
             // All done
             #if DEBUG
-            print("[Voice] Playback complete")
+            Log.voice.debug("[Voice] Playback complete")
             #endif
             isPlayingAudio = false
             isSpeaking = false
@@ -1368,7 +1369,7 @@ final class GrokVoiceService: ObservableObject {
             )
         } catch {
             #if DEBUG
-            print("Failed to end session: \(error)")
+            Log.voice.debug("Failed to end session: \(error)")
             #endif
         }
     }
