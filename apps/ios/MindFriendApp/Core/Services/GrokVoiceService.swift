@@ -480,7 +480,7 @@ final class GrokVoiceService: ObservableObject {
                 options: FunctionInvokeOptions()
             )
             #if DEBUG
-            print("[VoiceToken] Got token for voice: \(tokenResponse.voice)")
+            print("[VoiceToken] Got token for voice successfully (token redacted from logs)")
             #endif
             return tokenResponse
         } catch let error as FunctionsError {
