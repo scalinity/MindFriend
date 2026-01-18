@@ -64,7 +64,12 @@ struct ProfileView: View {
 
                 // Progress
                 Section("Progress") {
-                    // TODO: AchievementsView and achievementService coming in future release
+                    NavigationLink {
+                        AchievementsView()
+                            .environmentObject(container.achievementService)
+                    } label: {
+                        Label("Achievements", systemImage: "trophy.fill")
+                    }
 
                     NavigationLink {
                         CertificatesListView()
@@ -255,7 +260,7 @@ struct ProfileView: View {
             do {
                 try await container.supabaseAuthService.signOut()
             } catch {
-                print("Logout error: \(error)")
+                Log.auth.error("Logout error", error: error)
             }
             await MainActor.run {
                 appState.setUnauthenticated()
@@ -799,7 +804,7 @@ struct DataExportView: View {
             do {
                 let data = try await container.supabaseDataService.exportUserData()
                 // In real app, would share the data file
-                print("Exported: \(data)")
+                Log.data.info("Exported: \(String(describing: data), privacy: .private)")
             } catch {
                 await MainActor.run {
                     appState.showError(.apiError(error.localizedDescription))
@@ -921,7 +926,13 @@ struct EditProfileView: View {
             }
             .onAppear {
                 displayName = appState.currentUser?.displayName ?? ""
-                handle = appState.currentUser?.handle ?? ""
+                let currentHandle = appState.currentUser?.handle ?? ""
+                handle = currentHandle
+                
+                // If there's an existing handle, mark it as valid initially
+                if !currentHandle.isEmpty {
+                    handleValidation = .valid
+                }
             }
             .interactiveDismissDisabled(isSaving)
         }

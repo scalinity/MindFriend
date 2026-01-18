@@ -2,10 +2,17 @@ import SwiftUI
 import Combine
 import Supabase
 
+// MARK: - Global Supabase Client Reference
+// We capture the global `supabase` constant here BEFORE defining DependencyContainer,
+// which has a computed property also named `supabase`. This avoids shadowing issues.
+private let _globalSupabaseClient: SupabaseClient = supabase
+
 /// Dependency injection container for all app services
 @MainActor
 final class DependencyContainer: ObservableObject {
-    private(set) lazy var supabaseClient: SupabaseClient = supabase
+    /// Reference to the global Supabase client (defined in SupabaseClient.swift)
+    /// Captured via _globalSupabaseClient to avoid circular reference issues.
+    let supabaseClient: SupabaseClient = _globalSupabaseClient
 
     // MARK: - Supabase Services
     lazy var supabaseAuthService: SupabaseAuthService = {
@@ -25,9 +32,10 @@ final class DependencyContainer: ObservableObject {
         BillingService(authService: supabaseAuthService)
     }()
 
-    lazy var grokVoiceService: GrokVoiceService = {
-        GrokVoiceService(supabase: supabaseClient)
-    }()
+    // TODO: Fix GrokVoiceService compilation errors (inputNode, isPlayerPlaying references)
+    // lazy var grokVoiceService: GrokVoiceService = {
+    //     GrokVoiceService(supabase: self.supabaseClient)
+    // }()
 
     lazy var liveService: LiveService = {
         LiveService()
@@ -38,11 +46,15 @@ final class DependencyContainer: ObservableObject {
     }()
 
     lazy var personalizationService: PersonalizationService = {
-        PersonalizationService(supabase: supabaseClient)
+        PersonalizationService(supabase: self.supabaseClient)
     }()
 
     lazy var accessibilityService: AccessibilityService = {
-        AccessibilityService(supabase: supabaseClient)
+        AccessibilityService(supabase: self.supabaseClient)
+    }()
+
+    lazy var achievementService: AchievementService = {
+        AchievementService(supabase: self.supabaseClient)
     }()
 
     // TODO: Add CreatorService and FamilyService to Xcode project target
@@ -58,7 +70,6 @@ final class DependencyContainer: ObservableObject {
     // MARK: - Incomplete Feature Services (TODO: Add when features are ready)
     // lazy var microMomentsService: MicroMomentsService
     // lazy var peerSupportService: PeerSupportService
-    // lazy var achievementService: AchievementService
     // lazy var audioPlayerService: AudioPlayerService
     // lazy var audioContentService: AudioContentService
 
@@ -69,10 +80,11 @@ final class DependencyContainer: ObservableObject {
     /// Shared singleton instance for the app
     static let shared = DependencyContainer()
 
-    /// Convenience accessor for Supabase client
+    /// Convenience accessor for Supabase client (alias for supabaseClient)
     var supabase: SupabaseClient { supabaseClient }
 
     // MARK: - Preview Support
+
 
     /// Preview instance for SwiftUI previews
     static var preview: DependencyContainer {
