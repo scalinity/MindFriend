@@ -779,6 +779,51 @@ enum PrivacyMode: String, Codable, CaseIterable {
     }
 }
 
+// MARK: - App Theme
+
+enum AppTheme: String, CaseIterable, Identifiable {
+    case system
+    case light
+    case dark
+
+    /// UserDefaults key for theme storage
+    static let storageKey = "selectedTheme"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .system: return "System"
+        case .light: return "Light"
+        case .dark: return "Dark"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .system: return "circle.lefthalf.filled"
+        case .light: return "sun.max.fill"
+        case .dark: return "moon.fill"
+        }
+    }
+
+    var iconColor: Color {
+        switch self {
+        case .system: return .secondary
+        case .light: return .orange
+        case .dark: return .indigo
+        }
+    }
+
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
+}
+
 // MARK: - Wellness Focus
 
 enum WellnessFocus: String, Codable, CaseIterable {
@@ -3937,7 +3982,7 @@ struct VoiceAnalysisResult: Codable {
 // MARK: - Subscription Plan
 
 /// A subscription plan offering from MindFriend
-struct SubscriptionPlan: Codable, Identifiable, Equatable {
+struct SubscriptionPlan: Codable, Identifiable, Equatable, Hashable {
     let id: UUID
     let name: String
     let description: String?
@@ -4061,7 +4106,7 @@ struct SubscriptionPlan: Codable, Identifiable, Equatable {
 // MARK: - Plan Features
 
 /// Feature set for a subscription plan
-struct PlanFeatures: Codable, Equatable {
+struct PlanFeatures: Codable, Equatable, Hashable {
     let unlimitedChat: Bool
     let unlimitedExercises: Bool
     let premiumContent: Bool

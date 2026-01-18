@@ -41,12 +41,12 @@ final class ModelsTests: XCTestCase {
             },
             "badges": []
         }
-        """.data(using: .utf8)!
+        """
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
-        let profile = try decoder.decode(UserProfile.self, from: json)
+        let profile = try decoder.decode(UserProfile.self, from: jsonData(from: json))
 
         XCTAssertEqual(profile.id, "user-123")
         XCTAssertEqual(profile.handle, "testuser")
@@ -603,12 +603,12 @@ final class ModelsTests: XCTestCase {
             "created_at": "2024-01-01T00:00:00Z",
             "updated_at": "2024-01-15T10:00:00Z"
         }
-        """.data(using: .utf8)!
+        """
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
-        let row = try decoder.decode(DBProfileRow.self, from: json)
+        let row = try decoder.decode(DBProfileRow.self, from: jsonData(from: json))
 
         XCTAssertEqual(row.id.uuidString.lowercased(), "550e8400-e29b-41d4-a716-446655440000")
         XCTAssertEqual(row.handle, "testuser")
@@ -636,12 +636,12 @@ final class ModelsTests: XCTestCase {
             "ai_tone": "friendly",
             "privacy_mode": "standard"
         }
-        """.data(using: .utf8)!
+        """
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
-        let row = try decoder.decode(DBUserSettingsRow.self, from: json)
+        let row = try decoder.decode(DBUserSettingsRow.self, from: jsonData(from: json))
 
         XCTAssertEqual(row.dailyQuestTimeLocal, "09:00")
         XCTAssertEqual(row.quietHoursStartLocal, "22:00")
@@ -668,12 +668,12 @@ final class ModelsTests: XCTestCase {
             "last_xp_reset_week": "2024-01-08",
             "updated_at": "2024-01-15T10:00:00Z"
         }
-        """.data(using: .utf8)!
+        """
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
-        let row = try decoder.decode(DBUserStatsRow.self, from: json)
+        let row = try decoder.decode(DBUserStatsRow.self, from: jsonData(from: json))
 
         XCTAssertEqual(row.currentStreakDays, 7)
         XCTAssertEqual(row.longestStreakDays, 15)
@@ -701,16 +701,87 @@ final class ModelsTests: XCTestCase {
             "last_xp_reset_week": null,
             "updated_at": "2024-01-15T10:00:00Z"
         }
-        """.data(using: .utf8)!
+        """
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
-        let row = try decoder.decode(DBUserStatsRow.self, from: json)
+        let row = try decoder.decode(DBUserStatsRow.self, from: jsonData(from: json))
 
         XCTAssertEqual(row.currentStreakDays, 0)
         XCTAssertEqual(row.level, 1)
         XCTAssertEqual(row.levelTitle, "Beginner")
         XCTAssertNil(row.lastXpResetWeek)
+    }
+
+    // MARK: - AppTheme Tests
+
+    func testAppThemeCaseIterable() {
+        // Should have exactly 3 theme options
+        XCTAssertEqual(AppTheme.allCases.count, 3)
+        XCTAssertTrue(AppTheme.allCases.contains(.system))
+        XCTAssertTrue(AppTheme.allCases.contains(.light))
+        XCTAssertTrue(AppTheme.allCases.contains(.dark))
+    }
+
+    func testAppThemeIdentifiable() {
+        // Each theme should have a unique id based on rawValue
+        XCTAssertEqual(AppTheme.system.id, "system")
+        XCTAssertEqual(AppTheme.light.id, "light")
+        XCTAssertEqual(AppTheme.dark.id, "dark")
+    }
+
+    func testAppThemeStorageKey() {
+        // Storage key should be consistent
+        XCTAssertEqual(AppTheme.storageKey, "selectedTheme")
+    }
+
+    func testAppThemeRawValues() {
+        XCTAssertEqual(AppTheme.system.rawValue, "system")
+        XCTAssertEqual(AppTheme.light.rawValue, "light")
+        XCTAssertEqual(AppTheme.dark.rawValue, "dark")
+    }
+
+    func testAppThemeDisplayNames() {
+        XCTAssertEqual(AppTheme.system.displayName, "System")
+        XCTAssertEqual(AppTheme.light.displayName, "Light")
+        XCTAssertEqual(AppTheme.dark.displayName, "Dark")
+    }
+
+    func testAppThemeIcons() {
+        XCTAssertEqual(AppTheme.system.icon, "circle.lefthalf.filled")
+        XCTAssertEqual(AppTheme.light.icon, "sun.max.fill")
+        XCTAssertEqual(AppTheme.dark.icon, "moon.fill")
+    }
+
+    func testAppThemeIconColors() {
+        // Verify icon colors are set (non-crash test)
+        for theme in AppTheme.allCases {
+            _ = theme.iconColor
+        }
+    }
+
+    func testAppThemeColorScheme() {
+        // System returns nil (follows device setting)
+        XCTAssertNil(AppTheme.system.colorScheme)
+
+        // Light returns .light
+        XCTAssertEqual(AppTheme.light.colorScheme, .light)
+
+        // Dark returns .dark
+        XCTAssertEqual(AppTheme.dark.colorScheme, .dark)
+    }
+
+    func testAppThemeRawRepresentable() {
+        // Test encoding/decoding via RawRepresentable
+        let theme = AppTheme.dark
+        let rawValue = theme.rawValue
+
+        let decoded = AppTheme(rawValue: rawValue)
+        XCTAssertEqual(decoded, theme)
+
+        // Invalid raw value returns nil
+        let invalid = AppTheme(rawValue: "invalid")
+        XCTAssertNil(invalid)
     }
 }

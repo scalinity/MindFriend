@@ -113,6 +113,12 @@ struct ProfileView: View {
                     }
 
                     NavigationLink {
+                        AppearanceSettingsView()
+                    } label: {
+                        Label("Appearance", systemImage: "circle.lefthalf.filled")
+                    }
+
+                    NavigationLink {
                         ProactiveSettingsView()
                     } label: {
                         Label("Proactive Check-ins", systemImage: "sparkles")

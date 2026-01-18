@@ -18,6 +18,7 @@
 		VISV02BC23C3C719CD3C9F /* VisualAccessibilityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = VISV02493347E53EC5C762 /* VisualAccessibilityView.swift */; };
 		SLVW02BC23C3C719CD3C9F /* SignLanguageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SLVW02493347E53EC5C762 /* SignLanguageView.swift */; };
 		AFBV02BC23C3C719CD3C9F /* AccessibilityFeedbackView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFBV02493347E53EC5C762 /* AccessibilityFeedbackView.swift */; };
+		APPST01BC23C3C719CD3C9F /* AppearanceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = APPST01493347E53EC5C762 /* AppearanceSettingsView.swift */; };
 		10F822CF68E88F0D2C1ED0A1 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CF8C702A16D26304471B516 /* HomeView.swift */; };
 		1D9648B788FA1CE3F884D6C2 /* CrashReporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 979CA4C9C16981D7D441806F /* CrashReporter.swift */; };
 		51469850038B79FAAEFEDE8B /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 696C905684F7F4ED064A764D /* SignInView.swift */; };
@@ -54,6 +55,7 @@
 		BIOSV01BC23C3C719CD3C9F /* BiometricsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BIOSV01493347E53EC5C762 /* BiometricsSettingsView.swift */; };
 		C1D2E3F405162738495A6B7C /* VoiceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F405162738495A6B7D /* VoiceSettingsView.swift */; };
 		C3ABF18229E400C20B9AB78A /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = 7A72FA6A11C7BA5D56CFD12A /* Sentry */; };
+		SENTRYSWIFTUI001 /* SentrySwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = SENTRYSWIFTUI002 /* SentrySwiftUI */; };
 		C486D3A26A0E2ACEF2D481E3 /* ChatService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29B370B3E929A0284493AB83 /* ChatService.swift */; };
 		C7DEAB17670F693A69D83D63 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AD19E2219C48E7E03F76B460 /* PrivacyInfo.xcprivacy */; };
 		CELBV01BC23C3C719CD3C9F /* CelebrationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CELBV01493347E53EC5C762 /* CelebrationView.swift */; };
@@ -107,6 +109,11 @@
 		SKLTV01BC23C3C719CD3C9F /* SkillTreeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SKLTV02493347E53EC5C762 /* SkillTreeView.swift */; };
 		SNDHG001BC23C3C719CD3C9F /* SendHugButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = SNDHG002493347E53EC5C762 /* SendHugButton.swift */; };
 		SUBSC01BC23C3C719CD3C9F /* SubscriptionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SUBSC01493347E53EC5C762 /* SubscriptionView.swift */; };
+		PROMO01BC23C3C719CD3C9F /* PromoCodeField.swift in Sources */ = {isa = PBXBuildFile; fileRef = PROMO01493347E53EC5C762 /* PromoCodeField.swift */; };
+		GIFTP01BC23C3C719CD3C9F /* GiftPurchaseSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = GIFTP01493347E53EC5C762 /* GiftPurchaseSheet.swift */; };
+		HSAFS01BC23C3C719CD3C9F /* HSAFSAInfoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = HSAFS01493347E53EC5C762 /* HSAFSAInfoView.swift */; };
+		FTCMP01BC23C3C719CD3C9F /* FeatureComparisonView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FTCMP01493347E53EC5C762 /* FeatureComparisonView.swift */; };
+		PLNCD01BC23C3C719CD3C9F /* PlanCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = PLNCD01493347E53EC5C762 /* PlanCard.swift */; };
 		TSTCR01BC23C3C719CD3C9F /* TestimonialsCarousel.swift in Sources */ = {isa = PBXBuildFile; fileRef = TSTCR02493347E53EC5C762 /* TestimonialsCarousel.swift */; };
 		VCMDV02BC23C3C719CD3C9F /* VoiceModeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = VCMDV01493347E53EC5C762 /* VoiceModeView.swift */; };
 		VCSM002BC23C3C719CD3C9F /* VoiceStateMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = VCSM001493347E53EC5C762 /* VoiceStateMachine.swift */; };
@@ -163,6 +170,7 @@
 		4F92EBA52F3CBBB5C750E324 /* ExerciseLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseLibraryView.swift; sourceTree = "<group>"; };
 		56417E06D522B4D73DEA20E7 /* QuestDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestDetailView.swift; sourceTree = "<group>"; };
 		58AC3779493347E53EC5C762 /* AccessibilityHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityHelpers.swift; sourceTree = "<group>"; };
+		APPST01493347E53EC5C762 /* AppearanceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearanceSettingsView.swift; sourceTree = "<group>"; };
 		590C1A661399CE9EC2A66F1C /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		5924F3CB5CA60B6DD68C1459 /* CirclesListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CirclesListView.swift; sourceTree = "<group>"; };
 		5B5FF0F998DCDDD1C2D7DC06 /* PaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallView.swift; sourceTree = "<group>"; };
@@ -243,6 +251,11 @@
 		SKLTV02493347E53EC5C762 /* SkillTreeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkillTreeView.swift; sourceTree = "<group>"; };
 		SNDHG002493347E53EC5C762 /* SendHugButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendHugButton.swift; sourceTree = "<group>"; };
 		SUBSC01493347E53EC5C762 /* SubscriptionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionView.swift; sourceTree = "<group>"; };
+		PROMO01493347E53EC5C762 /* PromoCodeField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromoCodeField.swift; sourceTree = "<group>"; };
+		GIFTP01493347E53EC5C762 /* GiftPurchaseSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GiftPurchaseSheet.swift; sourceTree = "<group>"; };
+		HSAFS01493347E53EC5C762 /* HSAFSAInfoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HSAFSAInfoView.swift; sourceTree = "<group>"; };
+		FTCMP01493347E53EC5C762 /* FeatureComparisonView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureComparisonView.swift; sourceTree = "<group>"; };
+		PLNCD01493347E53EC5C762 /* PlanCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanCard.swift; sourceTree = "<group>"; };
 		TSTCR02493347E53EC5C762 /* TestimonialsCarousel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestimonialsCarousel.swift; sourceTree = "<group>"; };
 		VCMDV01493347E53EC5C762 /* VoiceModeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceModeView.swift; sourceTree = "<group>"; };
 		VCSM001493347E53EC5C762 /* VoiceStateMachine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceStateMachine.swift; sourceTree = "<group>"; };
@@ -282,6 +295,7 @@
 			files = (
 				87D1E2B75C3B225E6E8926BE /* GoogleSignIn in Frameworks */,
 				C3ABF18229E400C20B9AB78A /* Sentry in Frameworks */,
+				SENTRYSWIFTUI001 /* SentrySwiftUI in Frameworks */,
 				8351314356B11AB2DC04C248 /* Supabase in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -359,8 +373,21 @@
 				BIOGRP01493347E53EC5C762 /* Biometrics */,
 				CRTVGRP01493347E53EC5C762 /* Creative */,
 				LIVEGRP01493347E53EC5C762 /* LiveSessions */,
+				SUBSCGRP01493347E53EC5C762 /* Subscription */,
 			);
 			path = Features;
+			sourceTree = "<group>";
+		};
+		SUBSCGRP01493347E53EC5C762 /* Subscription */ = {
+			isa = PBXGroup;
+			children = (
+				PROMO01493347E53EC5C762 /* PromoCodeField.swift */,
+				GIFTP01493347E53EC5C762 /* GiftPurchaseSheet.swift */,
+				HSAFS01493347E53EC5C762 /* HSAFSAInfoView.swift */,
+				FTCMP01493347E53EC5C762 /* FeatureComparisonView.swift */,
+				PLNCD01493347E53EC5C762 /* PlanCard.swift */,
+			);
+			path = Subscription;
 			sourceTree = "<group>";
 		};
 		3EE683BCB5BF2C0266169127 /* Extensions */ = {
@@ -499,6 +526,7 @@
 		B7F9B81AB73CD4C7005F5FFD /* Profile */ = {
 			isa = PBXGroup;
 			children = (
+				APPST01493347E53EC5C762 /* AppearanceSettingsView.swift */,
 				MSET1N381F4DC447434793A6 /* MemorySettingsView.swift */,
 				C01FD89BD82D62E6FECE438B /* OurApproachView.swift */,
 				PRVBN02493347E53EC5C762 /* PrivacyBanner.swift */,
@@ -768,6 +796,7 @@
 			packageProductDependencies = (
 				FD60B14EB159EE48E6267895 /* GoogleSignIn */,
 				7A72FA6A11C7BA5D56CFD12A /* Sentry */,
+				SENTRYSWIFTUI002 /* SentrySwiftUI */,
 				955787D5047932A68D162322 /* Supabase */,
 			);
 			productName = MindFriendApp;
@@ -886,6 +915,7 @@
 				VISV02BC23C3C719CD3C9F /* VisualAccessibilityView.swift in Sources */,
 				SLVW02BC23C3C719CD3C9F /* SignLanguageView.swift in Sources */,
 				AFBV02BC23C3C719CD3C9F /* AccessibilityFeedbackView.swift in Sources */,
+				APPST01BC23C3C719CD3C9F /* AppearanceSettingsView.swift in Sources */,
 				72C7488CC7539553EDEBBD66 /* Analytics.swift in Sources */,
 				LVLUP001BC23C3C719CD3C9F /* LevelUpCelebration.swift in Sources */,
 				LVLPV01BC23C3C719CD3C9F /* LevelProgressView.swift in Sources */,
@@ -942,6 +972,11 @@
 				LOG001BC23C3C719CD3C9F /* Logger.swift in Sources */,
 				CONST01BC23C3C719CD3C9F /* Constants.swift in Sources */,
 				SUBSC01BC23C3C719CD3C9F /* SubscriptionView.swift in Sources */,
+				PROMO01BC23C3C719CD3C9F /* PromoCodeField.swift in Sources */,
+				GIFTP01BC23C3C719CD3C9F /* GiftPurchaseSheet.swift in Sources */,
+				HSAFS01BC23C3C719CD3C9F /* HSAFSAInfoView.swift in Sources */,
+				FTCMP01BC23C3C719CD3C9F /* FeatureComparisonView.swift in Sources */,
+				PLNCD01BC23C3C719CD3C9F /* PlanCard.swift in Sources */,
 				FAMMG01BC23C3C719CD3C9F /* FamilyManagementView.swift in Sources */,
 				AUDLV02BC23C3C719CD3C9F /* AudioLevelMeter.swift in Sources */,
 				ORBVW02BC23C3C719CD3C9F /* OrbView.swift in Sources */,
@@ -1326,6 +1361,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 037D9C3CC1A62D1C60BE7523 /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
 			productName = Sentry;
+		};
+		SENTRYSWIFTUI002 /* SentrySwiftUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 037D9C3CC1A62D1C60BE7523 /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
+			productName = SentrySwiftUI;
 		};
 		955787D5047932A68D162322 /* Supabase */ = {
 			isa = XCSwiftPackageProductDependency;
