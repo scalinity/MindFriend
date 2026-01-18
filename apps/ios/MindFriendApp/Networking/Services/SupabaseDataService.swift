@@ -4019,7 +4019,7 @@ extension SupabaseDataService {
             "p_mood_after": AnyEncodable(moodAfter)
         ]
 
-        try await supabase.rpc(
+        _ = try await supabase.rpc(
             "save_program_day_progress",
             params: params
         ).execute()
