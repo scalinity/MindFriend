@@ -10,7 +10,7 @@ final class GrokVoiceService: ObservableObject {
 
     // MARK: - Connection State
 
-    enum ConnectionState: Equatable {
+    enum ConnectionState: Equatable, CustomStringConvertible {
         case disconnected
         case connecting
         case connected
@@ -20,6 +20,16 @@ final class GrokVoiceService: ObservableObject {
         var isConnected: Bool {
             if case .connected = self { return true }
             return false
+        }
+
+        var description: String {
+            switch self {
+            case .disconnected: return "disconnected"
+            case .connecting: return "connecting"
+            case .connected: return "connected"
+            case .reconnecting: return "reconnecting"
+            case .error(let message): return "error(\(message))"
+            }
         }
     }
 
@@ -62,7 +72,9 @@ final class GrokVoiceService: ObservableObject {
     private var audioFormat: AVAudioFormat?
     private var playbackBuffer: [Data] = []
     private var isPlayingAudio = false
+    private var isPlayerPlaying = false  // Tracks if AVAudioPlayerNode is currently playing
     private var audioTapBufferCount = 0
+    private var inputNode: AVAudioInputNode?  // Keep reference for cleanup in error handler
 
     // Session tracking
     private var sessionId: String?
@@ -82,6 +94,16 @@ final class GrokVoiceService: ObservableObject {
 
     // Playback buffer limits
     private let maxPlaybackBufferSize = 50  // ~5 seconds at typical chunk rate
+
+    // Echo suppression - track when playback ends to add cooldown
+    private var lastPlaybackEndTime: Date?
+    private let echoCooldownSeconds: TimeInterval = 0.8  // 800ms cooldown after playback
+
+    // Reconnection logic
+    private var reconnectAttempts = 0
+    private let maxReconnectAttempts = 5
+    private var reconnectTask: Task<Void, Never>?
+    private var shouldReconnect = false  // Flag to control reconnection behavior
 
     // Audio level smoothing for orb visualization
     private var previousMicLevel: Float = 0
@@ -142,6 +164,10 @@ final class GrokVoiceService: ObservableObject {
             return
         }
 
+        // Enable reconnection and reset attempt counter
+        shouldReconnect = true
+        reconnectAttempts = 0
+
         connectionState = .connecting
 
         do {
@@ -166,9 +192,10 @@ final class GrokVoiceService: ObservableObject {
                 sessionCreatedContinuation = continuation
 
                 // Set timeout for session creation - store task to cancel if event arrives
-                sessionCreatedTimeoutTask = Task {
+                sessionCreatedTimeoutTask = Task { @MainActor [weak self] in
                     try? await Task.sleep(nanoseconds: 10_000_000_000) // 10 seconds
-                    if !Task.isCancelled, let cont = self.sessionCreatedContinuation {
+                    guard let self, !Task.isCancelled else { return }
+                    if let cont = self.sessionCreatedContinuation {
                         self.sessionCreatedContinuation = nil
                         cont.resume(throwing: VoiceError.connectionTimeout)
                     }
@@ -186,9 +213,10 @@ final class GrokVoiceService: ObservableObject {
                 sessionUpdatedContinuation = continuation
 
                 // Set timeout - store task to cancel if event arrives
-                sessionUpdatedTimeoutTask = Task {
+                sessionUpdatedTimeoutTask = Task { @MainActor [weak self] in
                     try? await Task.sleep(nanoseconds: 10_000_000_000)
-                    if !Task.isCancelled, let cont = self.sessionUpdatedContinuation {
+                    guard let self, !Task.isCancelled else { return }
+                    if let cont = self.sessionUpdatedContinuation {
                         self.sessionUpdatedContinuation = nil
                         cont.resume(throwing: VoiceError.connectionTimeout)
                     }
@@ -217,6 +245,12 @@ final class GrokVoiceService: ObservableObject {
 
     /// Disconnect from voice service
     func disconnect() async {
+        // Disable reconnection
+        shouldReconnect = false
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        reconnectAttempts = 0
+
         stopListening()
         stopPlayback()
         stopUsageTimer()
@@ -253,12 +287,68 @@ final class GrokVoiceService: ObservableObject {
         audioSendCount = 0
         isWaitingForResponse = false
         pendingSendCount = 0
+        lastPlaybackEndTime = nil
+    }
+
+    /// Attempt to reconnect with exponential backoff
+    private func attemptReconnect() {
+        // Cancel any existing reconnect task
+        reconnectTask?.cancel()
+
+        guard shouldReconnect, reconnectAttempts < maxReconnectAttempts else {
+            if reconnectAttempts >= maxReconnectAttempts {
+                #if DEBUG
+                Log.voice.error("[Voice] Max reconnect attempts reached, giving up")
+                #endif
+                connectionState = .error("Connection lost - max retries exceeded")
+                shouldReconnect = false
+            }
+            return
+        }
+
+        reconnectAttempts += 1
+        let delay = min(pow(2.0, Double(reconnectAttempts - 1)), 30.0)  // Exponential backoff, max 30s
+
+        #if DEBUG
+        Log.voice.debug("[Voice] Reconnect attempt \(self.reconnectAttempts)/\(self.maxReconnectAttempts) in \(delay)s")
+        #endif
+
+        connectionState = .reconnecting
+
+        reconnectTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+
+            guard let self, !Task.isCancelled, self.shouldReconnect else { return }
+
+            do {
+                #if DEBUG
+                Log.voice.debug("[Voice] Attempting reconnect...")
+                #endif
+
+                // Re-establish connection
+                try await self.connect()
+
+                // Success! Reset reconnect counter
+                self.reconnectAttempts = 0
+
+                #if DEBUG
+                Log.voice.debug("[Voice] Reconnection successful")
+                #endif
+            } catch {
+                #if DEBUG
+                Log.voice.error("[Voice] Reconnect failed: \(error.localizedDescription)")
+                #endif
+
+                // Try again with next backoff
+                self.attemptReconnect()
+            }
+        }
     }
 
     /// Start listening for voice input
     func startListening() throws {
         #if DEBUG
-        Log.voice.debug("[Voice] startListening called, connectionState: \(connectionState)")
+        Log.voice.debug("[Voice] startListening called, connectionState: \(self.connectionState)")
         #endif
         guard connectionState.isConnected else {
             #if DEBUG
@@ -279,7 +369,7 @@ final class GrokVoiceService: ObservableObject {
 
             #if DEBUG
             // Check current permission status
-            Log.voice.debug("[Voice] Record permission: \(audioSession.recordPermission.rawValue)")
+            Log.voice.debug("[Voice] Record permission: \(AVAudioApplication.shared.recordPermission.rawValue)")
             Log.voice.debug("[Voice] Current route: \(audioSession.currentRoute.inputs.map { $0.portName })")
             #endif
 
@@ -288,7 +378,7 @@ final class GrokVoiceService: ObservableObject {
             try audioSession.setCategory(
                 .playAndRecord,
                 mode: .videoRecording,
-                options: [.defaultToSpeaker, .allowBluetooth]
+                options: [.defaultToSpeaker, .allowBluetoothA2DP]
             )
             try audioSession.setActive(true)
             #if DEBUG
@@ -297,15 +387,16 @@ final class GrokVoiceService: ObservableObject {
             Log.voice.debug("[Voice] Audio route after activation: \(audioSession.currentRoute.inputs.map { $0.portName })")
             #endif
 
-            let inputNode = recordingEngine.inputNode
+            // Store reference for cleanup in error handler
+            self.inputNode = recordingEngine.inputNode
 
             // Force refresh the input node format
-            let hardwareFormat = inputNode.inputFormat(forBus: 0)
+            let hardwareFormat = inputNode!.inputFormat(forBus: 0)
             #if DEBUG
             Log.voice.debug("[Voice] Hardware input format: sampleRate=\(hardwareFormat.sampleRate), channels=\(hardwareFormat.channelCount)")
             #endif
 
-            let nativeFormat = inputNode.outputFormat(forBus: 0)
+            let nativeFormat = inputNode!.outputFormat(forBus: 0)
             #if DEBUG
             Log.voice.debug("[Voice] Native output format: sampleRate=\(nativeFormat.sampleRate), channels=\(nativeFormat.channelCount), format=\(nativeFormat.commonFormat.rawValue)")
             #endif
@@ -341,20 +432,27 @@ final class GrokVoiceService: ObservableObject {
             #endif
 
             // Remove any existing tap first
-            inputNode.removeTap(onBus: 0)
+            inputNode?.removeTap(onBus: 0)
 
-            inputNode.installTap(
+            inputNode?.installTap(
                 onBus: 0,
                 bufferSize: 4096,
                 format: nativeFormat
             ) { [weak self] buffer, time in
-                self?.audioTapBufferCount += 1
-                #if DEBUG
-                if self?.audioTapBufferCount == 1 || (self?.audioTapBufferCount ?? 0) % 50 == 0 {
-                    Log.voice.debug("[Voice] Audio tap buffer #\(self?.audioTapBufferCount ?? 0), frames: \(buffer.frameLength), time: \(time.sampleTime)")
+                guard let self = self else { return }
+
+                // Safely access MainActor state from audio thread
+                Task { @MainActor in
+                    self.audioTapBufferCount += 1
+                    #if DEBUG
+                    if self.audioTapBufferCount == 1 || self.audioTapBufferCount % 50 == 0 {
+                        Log.voice.debug("[Voice] Audio tap buffer #\(self.audioTapBufferCount), frames: \(buffer.frameLength), time: \(time.sampleTime)")
+                    }
+                    #endif
+
+                    // Process audio on MainActor to avoid data races
+                    self.processAndConvertAudioBuffer(buffer, converter: converter, targetFormat: targetFormat)
                 }
-                #endif
-                self?.processAndConvertAudioBuffer(buffer, converter: converter, targetFormat: targetFormat)
             }
             #if DEBUG
             Log.voice.debug("[Voice] Audio tap installed on input node")
@@ -363,8 +461,8 @@ final class GrokVoiceService: ObservableObject {
             recordingEngine.prepare()
             try recordingEngine.start()
             #if DEBUG
-            Log.voice.debug("[Voice] Recording engine started, isRunning: \(recordingEngine.isRunning)")
-            Log.voice.debug("[Voice] Input node isVoiceProcessingEnabled: \(inputNode.isVoiceProcessingEnabled)")
+            Log.voice.debug("[Voice] Recording engine started, isRunning: \(self.recordingEngine.isRunning)")
+            Log.voice.debug("[Voice] Input node isVoiceProcessingEnabled: \(self.inputNode?.isVoiceProcessingEnabled ?? false)")
             #endif
 
             isListening = true
@@ -374,8 +472,19 @@ final class GrokVoiceService: ObservableObject {
             #endif
         } catch {
             #if DEBUG
-            Log.voice.debug("[Voice] startListening error: \(error)")
+            Log.voice.error("[Voice] startListening error: \(error), cleaning up audio resources")
             #endif
+
+            // Clean up audio tap to prevent resource leak
+            inputNode?.removeTap(onBus: 0)
+
+            // Ensure engine is stopped
+            if recordingEngine.isRunning {
+                recordingEngine.stop()
+            }
+
+            isListening = false
+
             throw VoiceError.audioSessionFailed(error.localizedDescription)
         }
     }
@@ -398,7 +507,7 @@ final class GrokVoiceService: ObservableObject {
         }
 
         #if DEBUG
-        Log.voice.debug("[Voice] Force commit (turn \(messageCount + 1))...")
+        Log.voice.debug("[Voice] Force commit (turn \(self.messageCount + 1))...")
         #endif
         isWaitingForResponse = true
         transcribedText = ""
@@ -411,12 +520,19 @@ final class GrokVoiceService: ObservableObject {
         // Audio capture continues for the next turn
     }
 
+    /// Interrupt assistant playback immediately for barge-in.
+    func interruptPlayback() {
+        stopPlayback()
+        isWaitingForResponse = false
+    }
+
     /// Just stop listening without requesting response (for muting)
     func stopListening() {
         guard isListening else { return }
 
-        recordingEngine.inputNode.removeTap(onBus: 0)
+        inputNode?.removeTap(onBus: 0)
         recordingEngine.stop()
+        inputNode = nil  // Release reference
 
         isListening = false
         #if DEBUG
@@ -442,15 +558,15 @@ final class GrokVoiceService: ObservableObject {
     // MARK: - Private Methods - Connection
 
     private func requestMicrophonePermission() async throws {
-        let audioSession = AVAudioSession.sharedInstance()
-        switch audioSession.recordPermission {
+        let audioApp = AVAudioApplication.shared
+        switch audioApp.recordPermission {
         case .granted:
             return
         case .denied:
             throw VoiceError.microphonePermissionDenied
         case .undetermined:
             let granted = await withCheckedContinuation { continuation in
-                audioSession.requestRecordPermission { granted in
+                AVAudioApplication.requestRecordPermission { granted in
                     continuation.resume(returning: granted)
                 }
             }
@@ -468,7 +584,25 @@ final class GrokVoiceService: ObservableObject {
             #if DEBUG
             Log.voice.debug("[VoiceToken] Refreshing session...")
             #endif
-            _ = try await supabase.auth.refreshSession()
+
+            // First try to get the current session
+            let currentSession = try? await supabase.auth.session
+            #if DEBUG
+            if let current = currentSession {
+                Log.voice.debug("[VoiceToken] Current session exists, user: \(current.user.id)")
+                Log.voice.debug("[VoiceToken] Token expires at: \(current.expiresAt ?? 0)")
+            } else {
+                Log.voice.debug("[VoiceToken] No current session found")
+            }
+            #endif
+
+            // Always refresh to get a fresh token
+            let session = try await supabase.auth.refreshSession()
+            #if DEBUG
+            Log.voice.debug("[VoiceToken] Session refreshed successfully, user: \(session.user.id)")
+            Log.voice.debug("[VoiceToken] New token expires at: \(session.expiresAt ?? 0)")
+            Log.voice.debug("[VoiceToken] Access token retrieved (redacted), length: \(session.accessToken.count)")
+            #endif
 
             // Use the global supabase client which should now have the refreshed session
             #if DEBUG
@@ -476,9 +610,18 @@ final class GrokVoiceService: ObservableObject {
             #endif
 
             // Use typed response - SDK will decode automatically
+            // SDK should include auth header automatically after session refresh
+            // But we explicitly pass it to ensure the refreshed token is used
+            let authHeader = "Bearer \(session.accessToken)"
+            #if DEBUG
+            Log.voice.debug("[VoiceToken] Auth header constructed successfully")
+            #endif
+
             let tokenResponse: VoiceTokenResponse = try await supabase.functions.invoke(
                 "voice-token",
-                options: FunctionInvokeOptions()
+                options: FunctionInvokeOptions(
+                    headers: ["Authorization": authHeader]
+                )
             )
             #if DEBUG
             Log.voice.debug("[VoiceToken] Got token for voice successfully (token redacted from logs)")
@@ -491,21 +634,29 @@ final class GrokVoiceService: ObservableObject {
             switch error {
             case .httpError(let code, let data):
                 #if DEBUG
-                // Only log HTTP status code, not response body which may contain PII
                 Log.voice.debug("[VoiceToken] HTTP error status: \(code)")
                 #endif
-                if let errorResponse = try? JSONDecoder().decode(VoiceErrorResponse.self, from: data) {
-                    #if DEBUG
-                    // Log parsed error code (safe - known structure)
-                    Log.voice.debug("[VoiceToken] Error code: \(errorResponse.code)")
-                    #endif
-                    if errorResponse.code == "QUOTA_EXCEEDED" {
-                        throw VoiceError.quotaExceeded
-                    }
-                    if errorResponse.code == "UNAUTHORIZED" {
-                        throw VoiceError.notAuthorized
-                    }
+
+                // Try to decode the error response
+                let errorResponse = try? JSONDecoder().decode(VoiceErrorResponse.self, from: data)
+                #if DEBUG
+                if let errorResponse = errorResponse {
+                    Log.voice.debug("[VoiceToken] Error code: \(errorResponse.code), message: \(errorResponse.error)")
                 }
+                #endif
+
+                // Handle specific error codes
+                if errorResponse?.code == "QUOTA_EXCEEDED" || code == 403 {
+                    // 403 Forbidden typically means quota exceeded for this endpoint
+                    throw VoiceError.quotaExceeded
+                }
+                if errorResponse?.code == "UNAUTHORIZED" || code == 401 {
+                    throw VoiceError.notAuthorized
+                }
+                if errorResponse?.code == "RATE_LIMITED" || code == 429 {
+                    throw VoiceError.networkUnavailable
+                }
+
                 throw VoiceError.tokenGenerationFailed
             case .relayError:
                 throw VoiceError.networkUnavailable
@@ -548,7 +699,7 @@ final class GrokVoiceService: ObservableObject {
 
     private func configureSession() async throws {
         #if DEBUG
-        Log.voice.debug("[Voice] Configuring session with voice: \(currentVoice.rawValue)")
+        Log.voice.debug("[Voice] Configuring session with voice: \(self.currentVoice.rawValue)")
         #endif
 
         // xAI Grok Voice API session configuration
@@ -585,33 +736,37 @@ final class GrokVoiceService: ObservableObject {
 
     // MARK: - Private Methods - WebSocket
 
-    private func receiveMessages() {
-        webSocket?.receive { [weak self] result in
-            guard let self = self else { return }
+    private nonisolated func receiveMessages() {
+        Task { @MainActor in
+            let socket = self.webSocket
+            socket?.receive { [weak self] result in
+                guard let self = self else { return }
 
-            switch result {
-            case .success(let message):
-                #if DEBUG
-                switch message {
-                case .string(let text):
-                    Log.voice.debug("[Voice] WS received string message (\(text.count) chars)")
-                case .data(let data):
-                    Log.voice.debug("[Voice] WS received data message (\(data.count) bytes)")
-                @unknown default:
-                    Log.voice.debug("[Voice] WS received unknown message type")
-                }
-                #endif
-                Task { @MainActor in
-                    self.handleWebSocketMessage(message)
-                }
-                self.receiveMessages()
-            case .failure(let error):
-                #if DEBUG
-                Log.voice.debug("[Voice] WS receive error: \(error.localizedDescription)")
-                #endif
-                Task { @MainActor in
-                    self.stopListening()
-                    self.connectionState = .error("Connection lost")
+                switch result {
+                case .success(let message):
+                    #if DEBUG
+                    switch message {
+                    case .string(let text):
+                        Log.voice.debug("[Voice] WS received string message (\(text.count) chars)")
+                    case .data(let data):
+                        Log.voice.debug("[Voice] WS received data message (\(data.count) bytes)")
+                    @unknown default:
+                        Log.voice.debug("[Voice] WS received unknown message type")
+                    }
+                    #endif
+                    Task { @MainActor in
+                        self.handleWebSocketMessage(message)
+                    }
+                    self.receiveMessages()
+                case .failure(let error):
+                    #if DEBUG
+                    Log.voice.error("[Voice] WebSocket error: \(error.localizedDescription)")
+                    #endif
+                    Task { @MainActor in
+                        self.stopListening()
+                        // Attempt automatic reconnection
+                        self.attemptReconnect()
+                    }
                 }
             }
         }
@@ -748,7 +903,7 @@ final class GrokVoiceService: ObservableObject {
 
         case "response.created":
             #if DEBUG
-            Log.voice.debug("[Voice] Response started (turn \(messageCount + 1))")
+            Log.voice.debug("[Voice] Response started (turn \(self.messageCount + 1))")
             #endif
             isWaitingForResponse = true
             isSpeaking = true
@@ -785,10 +940,12 @@ final class GrokVoiceService: ObservableObject {
 
         case "response.done":
             #if DEBUG
-            Log.voice.debug("[Voice] Response complete (turn \(messageCount + 1))")
+            Log.voice.debug("[Voice] Response complete (turn \(self.messageCount + 1))")
             #endif
-            messageCount += 1
-            isSpeaking = false
+            self.messageCount += 1
+            // NOTE: Do NOT set isSpeaking = false here!
+            // Audio buffers are still playing. isSpeaking is set to false
+            // only when playback actually completes in onPlaybackChunkComplete()
             isWaitingForResponse = false
 
             // With server_vad, we keep listening continuously
@@ -907,7 +1064,9 @@ final class GrokVoiceService: ObservableObject {
 
         pendingSendCount += 1
         webSocket?.send(.string(string)) { [weak self] error in
-            self?.pendingSendCount -= 1
+            Task { @MainActor in
+                self?.pendingSendCount -= 1
+            }
             if let error = error {
                 #if DEBUG
                 Log.voice.debug("[Voice] WebSocket send error: \(error)")
@@ -974,14 +1133,19 @@ final class GrokVoiceService: ObservableObject {
         }
 
         var error: NSError?
-        var hasProvidedData = false
+
+        // Use a class to hold mutable state that can be safely captured
+        final class InputState: @unchecked Sendable {
+            var hasProvidedData = false
+        }
+        let inputState = InputState()
 
         let inputBlock: AVAudioConverterInputBlock = { _, outStatus in
-            if hasProvidedData {
+            if inputState.hasProvidedData {
                 outStatus.pointee = .noDataNow
                 return nil
             }
-            hasProvidedData = true
+            inputState.hasProvidedData = true
             outStatus.pointee = .haveData
             return buffer
         }
@@ -1006,6 +1170,21 @@ final class GrokVoiceService: ObservableObject {
     private let audioGain: Float = 3.0
 
     private func processAudioBuffer(_ buffer: AVAudioPCMBuffer) {
+        // Skip sending audio when AI is speaking to prevent feedback loop
+        // The speaker output gets picked up by the microphone and triggers VAD
+        if isSpeaking || isPlayingAudio {
+            return
+        }
+
+        // Echo suppression cooldown: wait after playback ends before sending audio
+        // This prevents the mic from picking up lingering echo from the speaker
+        if let lastEnd = lastPlaybackEndTime {
+            let timeSincePlaybackEnd = Date().timeIntervalSince(lastEnd)
+            if timeSincePlaybackEnd < echoCooldownSeconds {
+                return
+            }
+        }
+
         guard let channelData = buffer.int16ChannelData else {
             #if DEBUG
             Log.voice.debug("[Voice] No int16 channel data in buffer")
@@ -1057,7 +1236,7 @@ final class GrokVoiceService: ObservableObject {
         audioSendCount += 1
         #if DEBUG
         if audioSendCount % 50 == 1 {
-            Log.voice.debug("[Voice] Sending audio chunk #\(audioSendCount), size: \(amplifiedData.count) bytes, RMS: \(String(format: "%.1f", rmsDb))dB, peak: \(maxSample), gain: \(audioGain)x")
+            Log.voice.debug("[Voice] Sending audio chunk #\(self.audioSendCount), size: \(amplifiedData.count) bytes, RMS: \(String(format: "%.1f", rmsDb))dB, peak: \(maxSample), gain: \(self.audioGain)x")
         }
         #endif
 
@@ -1139,7 +1318,7 @@ final class GrokVoiceService: ObservableObject {
             // Wait for minimum buffers before starting to prevent stuttering
             if playbackBuffer.count >= minBuffersBeforePlay {
                 #if DEBUG
-                Log.voice.debug("[Voice] Starting playback with \(playbackBuffer.count) buffered chunks")
+                Log.voice.debug("[Voice] Starting playback with \(self.playbackBuffer.count) buffered chunks")
                 #endif
                 playNextAudioChunk()
             }
@@ -1182,8 +1361,6 @@ final class GrokVoiceService: ObservableObject {
         #endif
     }
 
-    private var isPlayerPlaying = false
-
     private func playNextAudioChunk() {
         guard let player = audioPlayer,
               let format = audioFormat else {
@@ -1204,7 +1381,7 @@ final class GrokVoiceService: ObservableObject {
         // Start player FIRST before scheduling buffers
         if !isPlayerPlaying {
             #if DEBUG
-            Log.voice.debug("[Voice] Starting playback - playback engine running: \(playbackEngine.isRunning)")
+            Log.voice.debug("[Voice] Starting playback - playback engine running: \(self.playbackEngine.isRunning)")
             #endif
 
             // Ensure playback engine is running
@@ -1219,8 +1396,15 @@ final class GrokVoiceService: ObservableObject {
                     #endif
                 } catch {
                     #if DEBUG
-                    Log.voice.debug("[Voice] Playback engine start error: \(error)")
+                    Log.voice.error("[Voice] Playback engine start error: \(error), cleaning up")
                     #endif
+                    
+                    // Clean up state to prevent resource leak
+                    playbackBuffer.removeAll()
+                    isPlayingAudio = false
+                    isSpeaking = false
+                    isPlayerPlaying = false
+                    
                     return
                 }
             }
@@ -1271,10 +1455,11 @@ final class GrokVoiceService: ObservableObject {
         if !playbackBuffer.isEmpty {
             playNextAudioChunk()
         } else {
-            // All done
+            // All done - record end time for echo suppression cooldown
             #if DEBUG
-            Log.voice.debug("[Voice] Playback complete")
+            Log.voice.debug("[Voice] Playback complete, starting \(self.echoCooldownSeconds)s echo cooldown")
             #endif
+            lastPlaybackEndTime = Date()
             isPlayingAudio = false
             isSpeaking = false
             isPlayerPlaying = false
