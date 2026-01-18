@@ -186,7 +186,7 @@ struct ProgramDayView: View {
     }
 
     private func saveProgress() async {
-        guard let progress = progress else { return }
+        guard progress != nil else { return }
         
         do {
             let contentDict = Dictionary(uniqueKeysWithValues:
