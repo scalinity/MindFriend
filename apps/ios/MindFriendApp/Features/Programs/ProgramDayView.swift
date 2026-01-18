@@ -182,6 +182,29 @@ struct ProgramDayView: View {
 
     private func completeContent(_ content: ProgramDayContent) {
         completedContent.insert(content.type.rawValue)
+        Task { await saveProgress() }
+    }
+
+    private func saveProgress() async {
+        guard let progress = progress else { return }
+        
+        do {
+            let contentDict = Dictionary(uniqueKeysWithValues:
+                completedContent.map { ($0, true) }
+            )
+            
+            try await container.supabaseDataService.saveProgramDayProgress(
+                enrollmentId: enrollment.id,
+                dayNumber: enrollment.currentDay,
+                contentCompleted: contentDict,
+                reflectionResponse: reflectionText.isEmpty ? nil : reflectionText,
+                applyReport: applyText.isEmpty ? nil : applyText,
+                moodBefore: moodBefore
+            )
+        } catch {
+            // Log error but don't interrupt user for background saves
+            print("Failed to save progress: \(error)")
+        }
     }
 
     private func completeDay() async {

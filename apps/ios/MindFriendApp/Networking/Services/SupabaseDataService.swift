@@ -2073,7 +2073,7 @@ final class SupabaseDataService: ObservableObject {
             .from("weekly_summaries")
             .select()
             .eq("user_id", value: try userId)
-            .eq("week_start", value: weekStartStr)
+            .eq("week_start::text", value: weekStartStr)
             .limit(1)
             .execute()
             .value
@@ -2105,7 +2105,7 @@ final class SupabaseDataService: ObservableObject {
             .from("weekly_summaries")
             .select()
             .eq("user_id", value: try userId)
-            .eq("week_start", value: weekStart)
+            .eq("week_start::text", value: weekStart)
             .limit(1)
             .execute()
             .value
@@ -3993,6 +3993,36 @@ extension SupabaseDataService {
             .value
 
         return response.map { $0.toDayProgress() }
+    }
+
+    /// Save partial program day progress without completing it
+    func saveProgramDayProgress(
+        enrollmentId: String,
+        dayNumber: Int,
+        contentCompleted: [String: Bool],
+        reflectionResponse: String? = nil,
+        applyReport: String? = nil,
+        moodBefore: Int? = nil,
+        moodAfter: Int? = nil
+    ) async throws {
+        // Encode content completed as JSON
+        let contentData = try JSONEncoder().encode(contentCompleted)
+        let contentJson = String(data: contentData, encoding: .utf8) ?? "{}"
+
+        let params: [String: AnyEncodable] = [
+            "p_enrollment_id": AnyEncodable(enrollmentId),
+            "p_day_number": AnyEncodable(dayNumber),
+            "p_content_completed": AnyEncodable(contentJson),
+            "p_reflection_response": AnyEncodable(reflectionResponse),
+            "p_apply_report": AnyEncodable(applyReport),
+            "p_mood_before": AnyEncodable(moodBefore),
+            "p_mood_after": AnyEncodable(moodAfter)
+        ]
+
+        let _: Any = try await supabase.rpc(
+            "save_program_day_progress",
+            params: params
+        ).execute().value
     }
 
     /// Complete a program day (uses RPC for business logic)
