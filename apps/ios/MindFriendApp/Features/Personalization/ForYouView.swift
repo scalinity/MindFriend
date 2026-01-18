@@ -9,58 +9,124 @@ struct ForYouView: View {
     @State private var isLoading = true
     @State private var error: String?
     @State private var currentMood: String?
+    @State private var anxietyLevel: AnxietyLevel = .calm
+    @State private var energyLevel: EnergyLevel = .moderate
 
     private var personalizationService: PersonalizationService {
         container.personalizationService
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                // Quick Mood Check
-                if currentMood == nil {
-                    moodCheckSection
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 24) {
+                    // Quick Mood Check
+                    if currentMood == nil {
+                        moodCheckSection
+                    } else {
+                        // Anxiety and Energy Levels
+                        anxietyEnergySection
+                    }
+
+                    // Personalized Recommendations
+                    if isLoading {
+                        ProgressView("Loading personalized recommendations...")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 40)
+                            .accessibilityLabel("Loading recommendations")
+                    } else if let error {
+                        errorView(error)
+                    } else if recommendations.isEmpty {
+                        emptyStateView
+                    } else {
+                        recommendationsSection
+                    }
+
+                    // Quick Insights Preview
+                    if !personalizationService.insights.isEmpty {
+                        insightsPreviewSection
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("For You")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button(action: {
+                        Task { await loadRecommendations() }
+                    }, label: {
+                        Image(systemName: "arrow.clockwise")
+                    })
+                    .disabled(isLoading)
+                    .accessibilityLabel("Refresh recommendations")
+                }
+            }
+            .refreshable {
+                await loadRecommendations()
+            }
+            .task {
+                await loadRecommendations()
+            }
+        }
+    }
+
+    // MARK: - Anxiety & Energy Section
+
+    private var anxietyEnergySection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 16) {
+                // Anxiety Level
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Anxiety", systemImage: "brain.head.profile")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+
+                    HStack(spacing: 6) {
+                        ForEach(AnxietyLevel.allCases, id: \.self) { level in
+                            Button {
+                                withAnimation {
+                                    anxietyLevel = level
+                                }
+                                Task { await loadRecommendations() }
+                            } label: {
+                                Image(systemName: level.icon)
+                                    .foregroundStyle(anxietyLevel == level ? level.color : .gray)
+                                    .font(.caption)
+                            }
+                            .accessibilityLabel("Anxiety: \(level.displayName)")
+                        }
+                    }
                 }
 
-                // Personalized Recommendations
-                if isLoading {
-                    ProgressView("Loading personalized recommendations...")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 40)
-                        .accessibilityLabel("Loading recommendations")
-                } else if let error {
-                    errorView(error)
-                } else if recommendations.isEmpty {
-                    emptyStateView
-                } else {
-                    recommendationsSection
-                }
+                Spacer()
 
-                // Quick Insights Preview
-                if !personalizationService.insights.isEmpty {
-                    insightsPreviewSection
+                // Energy Level
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Energy", systemImage: "bolt.fill")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+
+                    HStack(spacing: 6) {
+                        ForEach(EnergyLevel.allCases, id: \.self) { level in
+                            Button {
+                                withAnimation {
+                                    energyLevel = level
+                                }
+                                Task { await loadRecommendations() }
+                            } label: {
+                                Image(systemName: level.icon)
+                                    .foregroundStyle(energyLevel == level ? level.color : .gray)
+                                    .font(.caption)
+                            }
+                            .accessibilityLabel("Energy: \(level.displayName)")
+                        }
+                    }
                 }
             }
             .padding()
-        }
-        .navigationTitle("For You")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button(action: {
-                    Task { await loadRecommendations() }
-                }, label: {
-                    Image(systemName: "arrow.clockwise")
-                })
-                .disabled(isLoading)
-                .accessibilityLabel("Refresh recommendations")
-            }
-        }
-        .refreshable {
-            await loadRecommendations()
-        }
-        .task {
-            await loadRecommendations()
+            .background(Color(.secondarySystemGroupedBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
         }
     }
 
@@ -215,6 +281,8 @@ struct ForYouView: View {
         do {
             var context = RecommendationContext.current
             context.currentMood = currentMood
+            context.anxietyLevel = anxietyLevel
+            context.energyLevel = energyLevel
 
             recommendations = try await personalizationService.getRecommendations(
                 contentType: "exercise",
@@ -321,9 +389,9 @@ struct PersonalizedInsightCardCompact: View {
         HStack(spacing: 12) {
             Image(systemName: insight.icon)
                 .font(.title2)
-                .foregroundStyle(Color(insight.color))
+                .foregroundStyle(insight.color)
                 .frame(width: 40, height: 40)
-                .background(Color(insight.color).opacity(0.1))
+                .background(insight.color.opacity(0.1))
                 .clipShape(RoundedRectangle(cornerRadius: 8))
 
             VStack(alignment: .leading, spacing: 4) {
@@ -350,8 +418,6 @@ struct PersonalizedInsightCardCompact: View {
 }
 
 #Preview {
-    NavigationStack {
-        ForYouView()
-            .environmentObject(DependencyContainer())
-    }
+    ForYouView()
+        .environmentObject(DependencyContainer())
 }

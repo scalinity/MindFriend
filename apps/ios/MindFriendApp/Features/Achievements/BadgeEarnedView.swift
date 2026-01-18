@@ -4,7 +4,7 @@
 import SwiftUI
 
 struct BadgeEarnedView: View {
-    let badge: Badge
+    let badge: AchievementBadge
     let onDismiss: () -> Void
 
     @State private var showContent = false
@@ -136,7 +136,7 @@ struct BadgeEarnedView: View {
 struct BadgeEarnedModifier: ViewModifier {
     @EnvironmentObject private var achievementService: AchievementService
 
-    @State private var currentBadge: Badge?
+    @State private var currentBadge: AchievementBadge?
     @State private var showingCelebration = false
 
     func body(content: Content) -> some View {
@@ -178,23 +178,36 @@ extension View {
 
 #Preview {
     BadgeEarnedView(
-        badge: Badge(from: DBBadge(
+        badge: AchievementBadge(from: DBBadge(
             id: UUID(),
             slug: "first-quest",
             name: "First Steps",
             description: "Complete your first quest",
             iconUrl: "",
+            backgroundColor: nil,
+            animationType: nil,
             category: "getting_started",
+            subcategory: nil,
             tier: "bronze",
+            tierOrder: 1,
+            parentBadgeId: nil,
             requirementType: "count",
             requirementConfig: [:],
+            progressTrackable: true,
+            progressMetric: nil,
             rarity: "common",
-            xpReward: 50,
             isSecret: false,
+            revealHint: nil,
+            isSeasonal: false,
+            seasonId: nil,
+            availableFrom: nil,
+            availableUntil: nil,
+            xpReward: 50,
+            unlockContent: nil,
+            totalEarners: 1000,
             isActive: true,
             sortOrder: 1,
-            earnedByCount: 1000,
-            createdAt: Date()
+            createdAt: "2024-01-01T00:00:00Z"
         )),
         onDismiss: {}
     )

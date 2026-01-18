@@ -4,12 +4,40 @@
 import Foundation
 import Supabase
 
+// MARK: - Request Types
+
+private struct AwardXPRequest: Encodable {
+    let source: String
+    let baseAmount: Int
+    let sourceId: String?
+    let description: String?
+    let skillTreeId: String?
+}
+
+private struct EmptyRequest: Encodable {}
+
+private struct StreakShieldUpdate: Encodable {
+    let shields_available: Int
+    let shields_used_this_week: Int
+    let last_shield_used_date: String
+    let recovery_available: Bool
+    let recovery_deadline: String
+}
+
+private struct NotifiedUpdate: Encodable {
+    let notified_at_90: Bool
+}
+
+private struct ShowcasedUpdate: Encodable {
+    let is_showcased: Bool
+}
+
 @MainActor
 final class AchievementService: ObservableObject {
     // MARK: - Published State
 
     @Published private(set) var userExperience: UserExperience?
-    @Published private(set) var badges: [Badge] = []
+    @Published private(set) var badges: [AchievementBadge] = []
     @Published private(set) var userBadgeProgress: [UserBadgeProgress] = []
     @Published private(set) var skillTrees: [SkillTree] = []
     @Published private(set) var userSkillProgress: [UserSkillProgress] = []
@@ -17,7 +45,7 @@ final class AchievementService: ObservableObject {
     @Published private(set) var currentSeason: Season?
     @Published private(set) var weeklyChallenges: [WeeklyChallenge] = []
     @Published private(set) var userChallengeProgress: [UserChallengeProgress] = []
-    @Published private(set) var newlyEarnedBadges: [Badge] = []
+    @Published private(set) var newlyEarnedBadges: [AchievementBadge] = []
 
     @Published private(set) var isLoading = false
     @Published private(set) var error: Error?
@@ -51,25 +79,32 @@ final class AchievementService: ObservableObject {
     }
 
     func awardXP(source: XPSource, amount: Int, sourceId: UUID? = nil, description: String? = nil, skillTreeId: UUID? = nil) async throws -> AwardXPResponse {
-        var body: [String: Any] = [
-            "source": source.rawValue,
-            "baseAmount": amount
-        ]
+        struct AwardXPRequest: Encodable {
+            let source: String
+            let baseAmount: Int
+            let sourceId: String?
+            let description: String?
+            let skillTreeId: String?
 
-        if let sourceId = sourceId {
-            body["sourceId"] = sourceId.uuidString
+            enum CodingKeys: String, CodingKey {
+                case source
+                case baseAmount = "base_amount"
+                case sourceId = "source_id"
+                case description
+                case skillTreeId = "skill_tree_id"
+            }
         }
 
-        if let description = description {
-            body["description"] = description
-        }
-
-        if let skillTreeId = skillTreeId {
-            body["skillTreeId"] = skillTreeId.uuidString
-        }
+        let request = AwardXPRequest(
+            source: source.rawValue,
+            baseAmount: amount,
+            sourceId: sourceId?.uuidString,
+            description: description,
+            skillTreeId: skillTreeId?.uuidString
+        )
 
         let response: AwardXPResponse = try await supabase.functions
-            .invoke("award-xp", options: .init(body: body))
+            .invoke("award-xp", options: .init(body: request))
 
         // Reload user experience after awarding XP
         try await loadUserExperience()
@@ -88,7 +123,7 @@ final class AchievementService: ObservableObject {
             .execute()
             .value
 
-        self.badges = dbBadges.map { Badge(from: $0) }
+        self.badges = dbBadges.map { AchievementBadge(from: $0) }
     }
 
     func loadUserBadgeProgress() async throws {
@@ -118,8 +153,9 @@ final class AchievementService: ObservableObject {
     }
 
     func checkBadgeProgress() async throws -> CheckBadgeProgressResponse {
+        // Empty request body for this endpoint
         let response: CheckBadgeProgressResponse = try await supabase.functions
-            .invoke("check-badge-progress", options: .init(body: [:]))
+            .invoke("check-badge-progress", options: FunctionInvokeOptions())
 
         // Track newly earned badges for UI celebration
         if !response.newlyEarned.isEmpty {
@@ -141,7 +177,7 @@ final class AchievementService: ObservableObject {
         // Mark as notified at 90% (which we use as the "seen" indicator)
         try await supabase
             .from("user_badges_v2")
-            .update(["notified_at_90": true])
+            .update(NotifiedUpdate(notified_at_90: true))
             .eq("user_id", value: userId)
             .eq("badge_id", value: badgeId)
             .execute()
@@ -164,7 +200,7 @@ final class AchievementService: ObservableObject {
         // Use is_showcased column (maps to isFavorite in UI)
         try await supabase
             .from("user_badges_v2")
-            .update(["is_showcased": isFavorite])
+            .update(ShowcasedUpdate(is_showcased: isFavorite))
             .eq("user_id", value: userId)
             .eq("badge_id", value: badgeId)
             .execute()
@@ -256,15 +292,17 @@ final class AchievementService: ObservableObject {
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
 
+        let updates = StreakShieldUpdate(
+            shields_available: streak.shieldsRemaining - 1,
+            shields_used_this_week: streak.shieldsUsedThisWeek + 1,
+            last_shield_used_date: dateFormatter.string(from: Date()),
+            recovery_available: true,
+            recovery_deadline: ISO8601DateFormatter().string(from: Calendar.current.date(byAdding: .day, value: 1, to: Date())!)
+        )
+
         try await supabase
             .from("user_streaks_v2")
-            .update([
-                "shields_available": streak.shieldsRemaining - 1,
-                "shields_used_this_week": streak.shieldsUsedThisWeek + 1,
-                "last_shield_used_date": dateFormatter.string(from: Date()),
-                "recovery_available": true,
-                "recovery_deadline": ISO8601DateFormatter().string(from: Calendar.current.date(byAdding: .day, value: 1, to: Date())!)
-            ])
+            .update(updates)
             .eq("user_id", value: userId)
             .eq("streak_type", value: streakType.rawValue)
             .execute()
@@ -397,7 +435,7 @@ final class AchievementService: ObservableObject {
         streaks.first { $0.streakType == .quest }
     }
 
-    func badgesInCategory(_ category: BadgeCategory) -> [Badge] {
+    func badgesInCategory(_ category: BadgeCategory) -> [AchievementBadge] {
         badges.filter { $0.category == category }
     }
 

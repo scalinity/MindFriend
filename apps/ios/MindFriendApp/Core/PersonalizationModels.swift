@@ -329,12 +329,12 @@ struct DBPersonalizedInsight: Codable, Identifiable {
         }
     }
 
-    var color: String {
+    var color: Color {
         switch insightCategoryEnum {
-        case .mood: return "blue"
-        case .activity: return "green"
-        case .progress: return "purple"
-        case .habit: return "orange"
+        case .mood: return .blue
+        case .activity: return .green
+        case .progress: return .purple
+        case .habit: return .orange
         }
     }
 }
@@ -453,6 +453,30 @@ struct RecommendationContext: Codable {
     var timeOfDay: String?
     var recentActivity: String?
 
+    // MARK: - New: Anxiety and Energy Levels
+    var anxietyLevel: AnxietyLevel?
+    var energyLevel: EnergyLevel?
+
+    // MARK: - New: Biometric Context
+    var restingHeartRate: Int?
+    var hrvScore: Double?
+    var sleepQualityScore: Double?
+    var sleepDurationHours: Double?
+    var recentActivityMinutes: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case currentMood
+        case timeOfDay
+        case recentActivity
+        case anxietyLevel
+        case energyLevel
+        case restingHeartRate
+        case hrvScore
+        case sleepQualityScore
+        case sleepDurationHours
+        case recentActivityMinutes
+    }
+
     static var current: RecommendationContext {
         let hour = Calendar.current.component(.hour, from: Date())
         let timeOfDay: String
@@ -465,6 +489,86 @@ struct RecommendationContext: Codable {
         }
 
         return RecommendationContext(timeOfDay: timeOfDay)
+    }
+}
+
+// MARK: - Anxiety Level Enum
+
+enum AnxietyLevel: String, Codable, CaseIterable {
+    case calm
+    case mild
+    case moderate
+    case elevated
+    case high
+
+    var displayName: String {
+        switch self {
+        case .calm: return "Calm"
+        case .mild: return "Mild"
+        case .moderate: return "Moderate"
+        case .elevated: return "Elevated"
+        case .high: return "High"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .calm: return "leaf.fill"
+        case .mild: return "dot.circle.fill"
+        case .moderate: return "exclamationmark.circle.fill"
+        case .elevated: return "exclamationmark.triangle.fill"
+        case .high: return "exclamationmark.circle.fill"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .calm: return .green
+        case .mild: return .blue
+        case .moderate: return .yellow
+        case .elevated: return .orange
+        case .high: return .red
+        }
+    }
+}
+
+// MARK: - Energy Level Enum
+
+enum EnergyLevel: String, Codable, CaseIterable {
+    case veryLow
+    case low
+    case moderate
+    case high
+    case veryHigh
+
+    var displayName: String {
+        switch self {
+        case .veryLow: return "Very Low"
+        case .low: return "Low"
+        case .moderate: return "Moderate"
+        case .high: return "High"
+        case .veryHigh: return "Very High"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .veryLow: return "battery.0.bar"
+        case .low: return "battery.25"
+        case .moderate: return "battery.50"
+        case .high: return "battery.75"
+        case .veryHigh: return "battery.100"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .veryLow: return .red
+        case .low: return .orange
+        case .moderate: return .yellow
+        case .high: return .green
+        case .veryHigh: return .green
+        }
     }
 }
 

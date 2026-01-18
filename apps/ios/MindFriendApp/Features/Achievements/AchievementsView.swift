@@ -125,20 +125,20 @@ struct XPProgressView: View {
 
                     // Daily/Weekly Stats
                     HStack(spacing: 16) {
-                        StatBadge(
+                        AchievementStatBadge(
                             label: "Today",
                             value: "\(experience?.dailyXp ?? 0) XP",
                             color: .green
                         )
 
-                        StatBadge(
+                        AchievementStatBadge(
                             label: "This Week",
                             value: "\(experience?.weeklyXp ?? 0) XP",
                             color: .blue
                         )
 
                         if let multiplier = experience?.xpMultiplier, multiplier > 1.0 {
-                            StatBadge(
+                            AchievementStatBadge(
                                 label: "Bonus",
                                 value: String(format: "%.1fx", multiplier),
                                 color: .orange
@@ -155,7 +155,7 @@ struct XPProgressView: View {
     }
 }
 
-struct StatBadge: View {
+struct AchievementStatBadge: View {
     let label: String
     let value: String
     let color: Color
@@ -185,7 +185,7 @@ struct BadgeCollectionView: View {
         Array(Set(achievementService.badges.map { $0.category })).sorted { $0.displayName < $1.displayName }
     }
 
-    private var displayedBadges: [Badge] {
+    private var displayedBadges: [AchievementBadge] {
         if let category = selectedCategory {
             return achievementService.badgesInCategory(category)
         }
@@ -250,7 +250,7 @@ struct BadgeCollectionView: View {
             }
             .padding(.horizontal)
         }
-        .navigationDestination(for: Badge.self) { badge in
+        .navigationDestination(for: AchievementBadge.self) { badge in
             BadgeDetailView(badge: badge)
         }
     }
@@ -300,7 +300,7 @@ struct BadgeStatView: View {
 }
 
 struct BadgeGridItem: View {
-    let badge: Badge
+    let badge: AchievementBadge
     let progress: UserBadgeProgress?
 
     private var isEarned: Bool {
@@ -367,7 +367,7 @@ struct BadgeGridItem: View {
 struct BadgeDetailView: View {
     @EnvironmentObject private var achievementService: AchievementService
 
-    let badge: Badge
+    let badge: AchievementBadge
 
     private var progress: UserBadgeProgress? {
         achievementService.progressForBadge(badge.id)
@@ -715,7 +715,7 @@ struct StreaksListView: View {
     var body: some View {
         VStack(spacing: 16) {
             ForEach(achievementService.streaks) { streak in
-                StreakCard(streak: streak)
+                AchievementStreakCard(streak: streak)
             }
 
             if achievementService.streaks.isEmpty {
@@ -730,7 +730,7 @@ struct StreaksListView: View {
     }
 }
 
-struct StreakCard: View {
+struct AchievementStreakCard: View {
     @EnvironmentObject private var achievementService: AchievementService
 
     let streak: UserStreak
