@@ -10,6 +10,9 @@ struct MindFriendApp: App {
     @StateObject private var container = DependencyContainer()
     @StateObject private var notificationManager = NotificationManager.shared
 
+    /// Selected app theme (persisted to UserDefaults)
+    @AppStorage(AppTheme.storageKey) private var selectedTheme: AppTheme = .system
+
     /// Pending buddy invite code to process after authentication
     @State private var pendingBuddyCode: String?
     @State private var showBuddyAcceptedAlert = false
@@ -21,26 +24,46 @@ struct MindFriendApp: App {
                 .environmentObject(appState)
                 .environmentObject(container)
                 .environmentObject(notificationManager)
+                .preferredColorScheme(selectedTheme.colorScheme)
                 .task {
                     // Configure notification manager with container for device registration
                     notificationManager.configure(container: container)
 
-                    // Restore Supabase session
-                    let hasSession = await container.supabaseAuthService.restoreSession()
+                    // OPTIMIZATION 1: Load cached auth state immediately to skip splash
+                    if let cachedProfile = container.supabaseAuthService.getCachedProfile() {
+                        if cachedProfile.needsOnboarding {
+                            appState.requireOnboarding()
+                        } else {
+                            // Show UI immediately with cached data
+                            appState.setAuthenticatedFromCache(user: cachedProfile)
 
-                    // Check notification authorization
-                    await notificationManager.checkAuthorizationStatus()
+                            // Set user context for crash reporting (from cache)
+                            CrashReporter.shared.setUser(
+                                id: cachedProfile.id,
+                                email: cachedProfile.email,
+                                username: cachedProfile.handle
+                            )
+                            Analytics.shared.identify(userId: cachedProfile.id)
+                        }
+                    }
 
-                    // Update auth state based on session status
+                    // OPTIMIZATION 2: Parallelize network calls
+                    async let sessionTask = container.supabaseAuthService.restoreSession()
+                    async let notificationTask: () = notificationManager.checkAuthorizationStatus()
+
+                    // Wait for both to complete in parallel
+                    let hasSession = await sessionTask
+                    _ = await notificationTask
+
+                    // OPTIMIZATION 3: Update from network if needed
                     if hasSession {
-                        // Try to fetch user profile
-                        do {
-                            let profile = try await container.supabaseAuthService.fetchProfile()
-
+                        // Fetch fresh profile (uses cache if valid, otherwise network)
+                        if let profile = await container.supabaseAuthService.fetchProfileWithCache() {
                             // Check if user needs onboarding
                             if profile.needsOnboarding {
                                 appState.requireOnboarding()
                             } else {
+                                // Update with verified network data
                                 appState.setAuthenticated(user: profile)
                             }
 
@@ -52,13 +75,18 @@ struct MindFriendApp: App {
                             )
                             Analytics.shared.identify(userId: profile.id)
                             Analytics.shared.setUserProperty(.subscriptionTier, value: profile.entitlements.tier.rawValue)
-                        } catch {
-                            // Session invalid, go to sign in
-                            appState.setUnauthenticated()
-                            error.report(context: ["action": "restore_session"])
+                        } else {
+                            // Could not fetch profile, session may be invalid
+                            if !appState.isUsingCachedData {
+                                // Only sign out if we weren't already showing cached data
+                                appState.setUnauthenticated()
+                            }
+                            // If using cached data, keep showing it - user can use app offline
                         }
                     } else {
+                        // No session - if we showed cached data, clear it now
                         appState.setUnauthenticated()
+                        container.supabaseAuthService.clearCachedProfile()
                     }
                 }
                 .onOpenURL { url in
