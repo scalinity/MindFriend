@@ -4019,10 +4019,10 @@ extension SupabaseDataService {
             "p_mood_after": AnyEncodable(moodAfter)
         ]
 
-        let _: Any = try await supabase.rpc(
+        try await supabase.rpc(
             "save_program_day_progress",
             params: params
-        ).execute().value
+        ).execute()
     }
 
     /// Complete a program day (uses RPC for business logic)
