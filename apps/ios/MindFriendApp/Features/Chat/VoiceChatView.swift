@@ -4,47 +4,66 @@ import Supabase
 struct VoiceChatView: View {
     @StateObject private var voiceService: GrokVoiceService
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @EnvironmentObject private var container: DependencyContainer
 
+    @State private var stateMachine = VoiceStateMachine()
     @State private var showSettings = false
     @State private var showUpgradeSheet = false
     @State private var errorMessage: String?
     @State private var showError = false
+    @State private var targetConversationId: String?
+    @State private var assistantTranscriptSegments: [String] = []
+    @State private var assistantTranscriptBaseline = ""
+    @State private var assistantTranscriptInProgress = ""
+    @State private var didPersistTranscript = false
+    
+    // Coordinator to handle voice service events
+    @StateObject private var voiceCoordinator: VoiceCoordinator
 
-    private let onSwitchToText: () -> Void
-
-    init(supabase: SupabaseClient, onSwitchToText: @escaping () -> Void) {
+    init(supabase: SupabaseClient, conversationId: String? = nil) {
         _voiceService = StateObject(wrappedValue: GrokVoiceService(supabase: supabase))
-        self.onSwitchToText = onSwitchToText
+        _voiceCoordinator = StateObject(wrappedValue: VoiceCoordinator())
+        _targetConversationId = State(initialValue: conversationId)
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            if !voiceService.isPremium {
-                usageBar
-            }
+        GeometryReader { geometry in
+            ZStack {
+                backgroundGradient
 
-            connectionStatus
+                VStack(spacing: 0) {
+                    topBar
+                        .padding(.top, geometry.safeAreaInsets.top > 0 ? 0 : 16)
 
-            Spacer()
+                    if !voiceService.isPremium {
+                        usageBar
+                            .padding(.top, 8)
+                    }
 
-            voiceVisualization
+                    Spacer()
 
-            Spacer()
+                    if stateMachine.captionsEnabled {
+                        captionsView
+                            .padding(.horizontal, 24)
+                            .padding(.bottom, 20)
+                    }
 
-            voiceControls
-        }
-        .background(Color(.systemBackground))
-        .navigationTitle("Voice Mode")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                    showSettings = true
-                } label: {
-                    Image(systemName: "gearshape")
+                    orbSection(size: min(geometry.size.width * 0.56, 300))
+
+                    Spacer()
+
+                    statusView
+                        .padding(.bottom, 24)
+
+                    bottomControls
+                        .padding(.horizontal, 32)
+                        .padding(.bottom, geometry.safeAreaInsets.bottom > 0 ? 28 : 40)
                 }
             }
         }
+        .ignoresSafeArea()
+        .preferredColorScheme(.dark)
         .sheet(isPresented: $showSettings) {
             VoiceSettingsView(voiceService: voiceService)
         }
@@ -53,8 +72,7 @@ struct VoiceChatView: View {
         }
         .alert("Voice Error", isPresented: $showError) {
             Button("OK", role: .cancel) {}
-            if errorMessage?.localizedCaseInsensitiveContains("quota") == true ||
-                errorMessage?.localizedCaseInsensitiveContains("premium") == true {
+            if shouldShowUpgradeButton {
                 Button("Upgrade") {
                     showUpgradeSheet = true
                 }
@@ -63,21 +81,102 @@ struct VoiceChatView: View {
             Text(errorMessage ?? "An error occurred")
         }
         .task {
-            await connectVoice()
+            // Configure coordinator callbacks
+            voiceCoordinator.onStateEvent = { event in
+                _ = stateMachine.send(event)
+            }
+            voiceService.delegate = voiceCoordinator
+
+            // Set up coordinator callbacks
+            voiceCoordinator.onError = { message in
+                errorMessage = message
+                showError = true
+            }
+
+            voiceCoordinator.onQuotaExceeded = {
+                showUpgradeSheet = true
+            }
+
+            voiceCoordinator.onTranscriptUpdate = { text in
+                if voiceService.isSpeaking {
+                    assistantTranscriptInProgress = trimmedTranscript(
+                        from: text,
+                        baseline: assistantTranscriptBaseline
+                    )
+                }
+            }
+
+            voiceCoordinator.onAssistantSpeechStart = { baselineTranscript in
+                assistantTranscriptBaseline = baselineTranscript
+                assistantTranscriptInProgress = ""
+            }
+
+            voiceCoordinator.onAssistantSpeechEnd = {
+                captureAssistantTranscriptIfNeeded()
+            }
+            
+            await startVoiceSession()
         }
         .onDisappear {
             Task {
-                await voiceService.disconnect()
+                await endVoiceSession()
             }
         }
-        .onChange(of: voiceService.connectionState) { _, newState in
-            // Show paywall when quota is exhausted
-            if case .error(let message) = newState,
-               message.localizedCaseInsensitiveContains("quota") {
-                errorMessage = "You've used all your free voice minutes for today."
-                showUpgradeSheet = true
+    }
+
+    // MARK: - Background
+
+    private var backgroundGradient: some View {
+        LinearGradient(
+            colors: [
+                Color(red: 0.05, green: 0.05, blue: 0.12),
+                Color(red: 0.08, green: 0.08, blue: 0.18),
+                Color(red: 0.05, green: 0.05, blue: 0.12),
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .ignoresSafeArea()
+    }
+
+    // MARK: - Top Bar
+
+    private var topBar: some View {
+        HStack {
+            Spacer()
+
+            Button {
+                _ = stateMachine.send(.toggleCaptions)
+            } label: {
+                Image(systemName: stateMachine.captionsEnabled ? "captions.bubble.fill" : "captions.bubble")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(stateMachine.captionsEnabled ? .white : .white.opacity(0.5))
+                    .frame(width: 44, height: 44)
+                    .background(Color.white.opacity(stateMachine.captionsEnabled ? 0.2 : 0.1))
+                    .clipShape(Circle())
             }
+            .accessibilityLabel(stateMachine.captionsEnabled ? "Hide captions" : "Show captions")
+
+            Button {
+                showSettings = true
+            } label: {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(voiceColor(voiceService.currentVoice))
+                        .frame(width: 10, height: 10)
+                    Text(voiceService.currentVoice.displayName)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.8))
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(Color.white.opacity(0.1))
+                .clipShape(Capsule())
+            }
+            .accessibilityLabel("Voice: \(voiceService.currentVoice.displayName). Tap to change.")
         }
+        .padding(.horizontal, 20)
+        .padding(.top, 12)
     }
 
     // MARK: - Usage Bar
@@ -94,19 +193,20 @@ struct VoiceChatView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            .foregroundStyle(.white.opacity(0.7))
 
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     Capsule()
-                        .fill(Color(.systemGray5))
-                        .frame(height: 6)
+                        .fill(Color.white.opacity(0.15))
+                        .frame(height: 4)
 
                     Capsule()
                         .fill(usageBarColor)
-                        .frame(width: geometry.size.width * usagePercentage, height: 6)
+                        .frame(width: geometry.size.width * usagePercentage, height: 4)
                 }
             }
-            .frame(height: 6)
+            .frame(height: 4)
 
             if usagePercentage >= 0.8 {
                 Button {
@@ -122,8 +222,11 @@ struct VoiceChatView: View {
                 }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
+        .padding(.horizontal, 24)
+        .padding(.vertical, 12)
+        .background(Color.white.opacity(0.05))
+        .cornerRadius(12)
+        .padding(.horizontal, 20)
     }
 
     private var usagePercentage: Double {
@@ -135,37 +238,102 @@ struct VoiceChatView: View {
     private var usageBarColor: Color {
         if usagePercentage >= 0.95 { return .red }
         if usagePercentage >= 0.8 { return .orange }
-        return .accentColor
+        return .blue
     }
 
-    // MARK: - Connection Status
+    // MARK: - Captions
 
-    private var connectionStatus: some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(statusColor)
-                .frame(width: 8, height: 8)
-
-            Text(statusText)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+    private var captionsView: some View {
+        VStack(spacing: 12) {
+            if !voiceService.transcribedText.isEmpty {
+                Text(voiceService.transcribedText)
+                    .font(.body)
+                    .foregroundStyle(.white.opacity(0.9))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color.white.opacity(0.1))
+                    )
+                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
+            }
         }
-        .padding(.vertical, 8)
+        .animation(.spring(response: 0.3), value: voiceService.transcribedText)
+        .frame(minHeight: 60)
     }
 
-    private var statusColor: Color {
-        switch voiceService.connectionState {
-        case .connected: return .green
-        case .connecting, .reconnecting: return .orange
-        case .disconnected: return .gray
-        case .error: return .red
+    // MARK: - Orb
+
+    private func orbSection(size: CGFloat) -> some View {
+        let config = OrbView.Configuration(
+            state: stateMachine.state,
+            micLevel: voiceService.micLevel,
+            playbackLevel: voiceService.playbackLevel,
+            reducedMotion: reduceMotion
+        )
+
+        return OrbContainerView(config: config, size: size) {
+            handleOrbTap()
+        }
+        .shadow(color: orbShadowColor.opacity(0.4), radius: 40, x: 0, y: 20)
+        .animation(.spring(response: 0.4), value: stateMachine.state)
+    }
+
+    private var orbShadowColor: Color {
+        switch stateMachine.state.orbColor {
+        case .userSpeaking:
+            return .green
+        case .aiSpeaking:
+            return .blue
+        case .thinking:
+            return .purple
+        case .ready:
+            return .blue.opacity(0.6)
+        case .error:
+            return .red
+        default:
+            return .gray
         }
     }
 
-    private var statusText: String {
+    // MARK: - Status
+
+    private var statusView: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(connectionStatusColor)
+                    .frame(width: 8, height: 8)
+
+                Text(connectionStatusText)
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.6))
+            }
+
+            Text(stateMachine.state.statusText)
+                .font(.title3.weight(.medium))
+                .foregroundStyle(.white.opacity(0.9))
+        }
+    }
+
+    private var connectionStatusColor: Color {
         switch voiceService.connectionState {
         case .connected:
-            return "Connected • \(voiceService.currentVoice.displayName)"
+            return .green
+        case .connecting, .reconnecting:
+            return .orange
+        case .disconnected:
+            return .gray
+        case .error:
+            return .red
+        }
+    }
+
+    private var connectionStatusText: String {
+        switch voiceService.connectionState {
+        case .connected:
+            return "Connected"
         case .connecting:
             return "Connecting..."
         case .reconnecting:
@@ -177,199 +345,225 @@ struct VoiceChatView: View {
         }
     }
 
-    // MARK: - Voice Visualization
+    // MARK: - Controls
 
-    private var voiceVisualization: some View {
-        VStack(spacing: 24) {
-            if !voiceService.transcribedText.isEmpty {
-                Text(voiceService.transcribedText)
-                    .font(.body)
-                    .multilineTextAlignment(.center)
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(Color(.tertiarySystemBackground))
-                    .cornerRadius(16)
-                    .padding(.horizontal, 24)
-                    .transition(.opacity.combined(with: .scale))
-            }
-
-            ZStack {
-                // Outer pulse rings - animate when user speaking or AI speaking
-                if voiceService.isUserSpeaking || voiceService.isSpeaking {
-                    Circle()
-                        .fill(orbColor.opacity(0.2))
-                        .frame(width: 180, height: 180)
-                        .scaleEffect(1.3)
-                        .animation(
-                            .easeInOut(duration: voiceService.isUserSpeaking ? 0.5 : 1.0)
-                                .repeatForever(autoreverses: true),
-                            value: voiceService.isUserSpeaking || voiceService.isSpeaking
-                        )
-
-                    Circle()
-                        .fill(orbColor.opacity(0.1))
-                        .frame(width: 220, height: 220)
-                        .scaleEffect(1.4)
-                        .animation(
-                            .easeInOut(duration: voiceService.isUserSpeaking ? 0.6 : 1.2)
-                                .repeatForever(autoreverses: true),
-                            value: voiceService.isUserSpeaking || voiceService.isSpeaking
-                        )
-                } else if voiceService.isListening {
-                    // Subtle pulse when listening but not speaking
-                    Circle()
-                        .fill(orbColor.opacity(0.1))
-                        .frame(width: 160, height: 160)
-                        .scaleEffect(1.1)
-                        .animation(
-                            .easeInOut(duration: 2.0).repeatForever(autoreverses: true),
-                            value: voiceService.isListening
-                        )
+    private var bottomControls: some View {
+        HStack {
+            Button {
+                _ = stateMachine.send(.toggleMute)
+                if stateMachine.isMuted {
+                    voiceService.stopListening()
+                } else {
+                    do {
+                        try voiceService.startListening()
+                    } catch {
+                        errorMessage = error.localizedDescription
+                        showError = true
+                    }
                 }
-
-                // Main orb
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [orbColor, orbColor.opacity(0.7)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
+            } label: {
+                Image(systemName: stateMachine.isMuted ? "mic.slash.fill" : "mic.fill")
+                    .font(.system(size: 24, weight: .medium))
+                    .foregroundStyle(stateMachine.isMuted ? .red : .white)
+                    .frame(width: 60, height: 60)
+                    .background(
+                        Circle()
+                            .fill(stateMachine.isMuted ? Color.red.opacity(0.2) : Color.white.opacity(0.15))
                     )
-                    .frame(width: 140, height: 140)
-                    .shadow(color: orbColor.opacity(0.4), radius: 20, x: 0, y: 10)
-                    .scaleEffect(voiceService.isUserSpeaking ? 1.05 : 1.0)
-                    .animation(.spring(response: 0.2), value: voiceService.isUserSpeaking)
-
-                Image(systemName: orbIcon)
-                    .font(.system(size: 48, weight: .medium))
-                    .foregroundStyle(.white)
             }
-            .animation(.spring(response: 0.3), value: voiceService.isListening)
-            .animation(.spring(response: 0.3), value: voiceService.isSpeaking)
-            .animation(.spring(response: 0.2), value: voiceService.isUserSpeaking)
+            .accessibilityLabel(stateMachine.isMuted ? "Unmute microphone" : "Mute microphone")
 
-            Text(voiceStatusText)
-                .font(.title3.weight(.medium))
-                .foregroundStyle(.secondary)
-        }
-    }
+            Spacer()
 
-    private var orbColor: Color {
-        if voiceService.isUserSpeaking {
-            return .green // User is speaking - green for "active"
-        } else if voiceService.isSpeaking {
-            return .accentColor // AI is responding
-        } else if voiceService.isListening {
-            return .orange // Ready and listening
-        } else {
-            return Color(.systemGray3)
-        }
-    }
-
-    private var orbIcon: String {
-        if voiceService.isUserSpeaking {
-            return "waveform" // User speaking
-        } else if voiceService.isSpeaking {
-            return "speaker.wave.2.fill" // AI speaking
-        } else if voiceService.isListening {
-            return "ear" // Listening for speech
-        } else {
-            return "mic.fill"
-        }
-    }
-
-    private var voiceStatusText: String {
-        switch voiceService.connectionState {
-        case .connected:
-            if voiceService.isUserSpeaking {
-                return "Listening..."
-            } else if voiceService.isSpeaking {
-                return "\(voiceService.currentVoice.displayName) is speaking..."
-            } else if voiceService.isListening {
-                return "Start talking anytime"
-            } else {
-                return "Initializing..."
-            }
-        case .connecting:
-            return "Connecting..."
-        case .reconnecting:
-            return "Reconnecting..."
-        case .disconnected:
-            return "Disconnected"
-        case .error:
-            return "Connection error"
-        }
-    }
-
-    // MARK: - Voice Controls
-
-    private var voiceControls: some View {
-        HStack(spacing: 48) {
-            // End call button
             Button {
                 Task {
-                    await voiceService.disconnect()
+                    await endVoiceSession()
                     dismiss()
                 }
             } label: {
                 Image(systemName: "phone.down.fill")
-                    .font(.system(size: 22))
+                    .font(.system(size: 28, weight: .medium))
                     .foregroundStyle(.white)
-                    .frame(width: 56, height: 56)
-                    .background(Color.red)
-                    .clipShape(Circle())
+                    .frame(width: 72, height: 72)
+                    .background(
+                        Circle()
+                            .fill(Color.red)
+                    )
+                    .shadow(color: .red.opacity(0.4), radius: 15, x: 0, y: 8)
             }
-
-            // Center button - Force send (for edge cases when VAD doesn't trigger)
-            // With server VAD, this is optional - conversation flows automatically
-            Button {
-                voiceService.stopListeningAndRespond()
-            } label: {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 28))
-                    .foregroundStyle(.white)
-                    .frame(width: 80, height: 80)
-                    .background(voiceService.isUserSpeaking ? Color.green : Color.accentColor.opacity(0.6))
-                    .clipShape(Circle())
-                    .shadow(color: Color.accentColor.opacity(0.3), radius: 10, x: 0, y: 5)
-            }
-            .disabled(!voiceService.connectionState.isConnected || voiceService.isSpeaking)
-            .opacity(voiceService.connectionState.isConnected && !voiceService.isSpeaking ? 1.0 : 0.5)
-
-            // Switch to text button
-            Button {
-                Task {
-                    await voiceService.disconnect()
-                    dismiss()
-                }
-                onSwitchToText()
-            } label: {
-                Image(systemName: "keyboard")
-                    .font(.system(size: 22))
-                    .foregroundStyle(Color.accentColor)
-                    .frame(width: 56, height: 56)
-                    .background(Color(.tertiarySystemBackground))
-                    .clipShape(Circle())
-            }
+            .accessibilityLabel("End voice session")
         }
-        .padding(.bottom, 48)
     }
 
     // MARK: - Actions
 
-    private func connectVoice() async {
+    private func startVoiceSession() async {
+        _ = stateMachine.send(.tapStart)
+        _ = stateMachine.send(.micPermissionGranted)
+
         do {
             try await voiceService.connect()
+            _ = stateMachine.send(.connected)
         } catch let error as VoiceError {
-            errorMessage = error.localizedDescription
-            showError = true
-
-            if case .quotaExceeded = error {
-                showUpgradeSheet = true
-            }
+            handleVoiceError(error)
         } catch {
             errorMessage = error.localizedDescription
+            showError = true
+            _ = stateMachine.send(.serverError(error.localizedDescription))
+        }
+    }
+
+    private func endVoiceSession() async {
+        _ = stateMachine.send(.tapEnd)
+        captureAssistantTranscriptIfNeeded()
+        let transcriptText = buildTranscriptText()
+        await voiceService.disconnect()
+        await persistTranscriptIfNeeded(transcriptText)
+    }
+
+    private func handleOrbTap() {
+        switch stateMachine.state {
+        case .speaking, .thinking, .processing:
+            _ = stateMachine.send(.tapInterrupt)
+            voiceService.interruptPlayback()
+        case .idle, .error:
+            Task {
+                await startVoiceSession()
+            }
+        default:
+            break
+        }
+    }
+
+    private func handleVoiceError(_ error: VoiceError) {
+        errorMessage = error.localizedDescription
+        showError = true
+
+        switch error {
+        case .quotaExceeded:
+            _ = stateMachine.send(.quotaExceeded)
+            showUpgradeSheet = true
+        case .microphonePermissionDenied:
+            _ = stateMachine.send(.micPermissionDenied)
+        default:
+            _ = stateMachine.send(.serverError(error.localizedDescription))
+        }
+    }
+
+    private func updateStateMachineFromService(_ connectionState: GrokVoiceService.ConnectionState) {
+        switch connectionState {
+        case .connected:
+            _ = stateMachine.send(.connected)
+        case .connecting:
+            break
+        case .reconnecting, .disconnected:
+            _ = stateMachine.send(.disconnected)
+        case .error(let message):
+            _ = stateMachine.send(.serverError(message))
+            errorMessage = message
+            if message.lowercased().contains("quota") {
+                showUpgradeSheet = true
+            }
+        }
+    }
+
+    private func handleUserSpeechChange(_ isSpeaking: Bool) {
+        if isSpeaking {
+            _ = stateMachine.send(.speechStart)
+        } else {
+            _ = stateMachine.send(.speechEnd)
+            _ = stateMachine.send(.serverThinking)
+        }
+    }
+
+    private func handleAssistantSpeechChange(_ isSpeaking: Bool) {
+        if isSpeaking {
+            assistantTranscriptBaseline = voiceService.transcribedText
+            assistantTranscriptInProgress = ""
+            _ = stateMachine.send(.serverAudioChunk(Data()))
+        } else {
+            captureAssistantTranscriptIfNeeded()
+            _ = stateMachine.send(.audioPlaybackFinished)
+        }
+    }
+
+    private func handleTranscriptUpdate(_ newText: String) {
+        guard voiceService.isSpeaking else { return }
+        assistantTranscriptInProgress = trimmedTranscript(from: newText, baseline: assistantTranscriptBaseline)
+    }
+
+    private func captureAssistantTranscriptIfNeeded() {
+        let fallback = trimmedTranscript(from: voiceService.transcribedText, baseline: assistantTranscriptBaseline)
+        let candidate = assistantTranscriptInProgress.isEmpty ? fallback : assistantTranscriptInProgress
+        let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty, assistantTranscriptSegments.last != trimmed {
+            assistantTranscriptSegments.append(trimmed)
+        }
+        assistantTranscriptInProgress = ""
+        assistantTranscriptBaseline = ""
+    }
+
+    private func trimmedTranscript(from text: String, baseline: String) -> String {
+        let rawText = text
+        guard !rawText.isEmpty else { return "" }
+        if !baseline.isEmpty, rawText.hasPrefix(baseline) {
+            let startIndex = rawText.index(rawText.startIndex, offsetBy: baseline.count)
+            return String(rawText[startIndex...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var shouldShowUpgradeButton: Bool {
+        errorMessage?.lowercased().contains("quota") == true ||
+        errorMessage?.lowercased().contains("premium") == true
+    }
+
+    private func voiceColor(_ voice: GrokVoice) -> Color {
+        switch voice {
+        case .ara: return .pink
+        case .rex: return .blue
+        case .sal: return .purple
+        case .eve: return .orange
+        case .leo: return .green
+        }
+    }
+
+    private func buildTranscriptText() -> String {
+        var segments = assistantTranscriptSegments
+        let pending = trimmedTranscript(from: assistantTranscriptInProgress, baseline: "")
+        if !pending.isEmpty, segments.last != pending {
+            segments.append(pending)
+        }
+        let cleaned = segments
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !cleaned.isEmpty else { return "" }
+        if cleaned.count == 1 {
+            return cleaned[0]
+        }
+        let body = cleaned.joined(separator: "\n\n")
+        return "Voice session transcript:\n\n\(body)"
+    }
+
+    private func persistTranscriptIfNeeded(_ transcriptText: String) async {
+        guard !didPersistTranscript else { return }
+        didPersistTranscript = true
+        let trimmed = transcriptText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        do {
+            if targetConversationId == nil {
+                let conversation = try await container.chatService.createConversation()
+                targetConversationId = conversation.id
+            }
+            guard let conversationId = targetConversationId else { return }
+            _ = try await container.chatService.insertMessage(
+                conversationId: conversationId,
+                role: .assistant,
+                content: trimmed
+            )
+        } catch {
+            errorMessage = "Couldn't save transcript. \(error.localizedDescription)"
             showError = true
         }
     }

@@ -42,7 +42,7 @@ struct TestimonialsCarousel: View {
         do {
             testimonials = try await container.supabaseDataService.getTestimonials()
         } catch {
-            print("[TestimonialsCarousel] Failed to load testimonials: \(error)")
+            Log.ui.error("Failed to load testimonials", error: error)
             testimonials = []
         }
     }

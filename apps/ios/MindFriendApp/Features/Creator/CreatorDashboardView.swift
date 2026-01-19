@@ -117,7 +117,7 @@ struct CreatorDashboardView: View {
                 try await creatorService.loadCreatorProfile()
             } catch {
                 // Profile loading failed - show onboarding instead
-                print("Failed to load creator profile: \(error)")
+                Log.creative.error("Failed to load creator profile", error: error)
             }
         }
     }
@@ -215,7 +215,7 @@ struct ContentListView: View {
             do {
                 try await creatorService.loadMyContent()
             } catch {
-                print("Failed to load content: \(error)")
+                Log.creative.error("Failed to load content", error: error)
             }
         }
     }
@@ -282,7 +282,7 @@ struct EarningsView: View {
             do {
                 try await creatorService.loadEarnings()
             } catch {
-                print("Failed to load earnings: \(error)")
+                Log.creative.error("Failed to load earnings", error: error)
             }
         }
     }

@@ -97,30 +97,6 @@ final class AccessibilityService: ObservableObject {
         return captions.captions ?? []
     }
 
-    func subscribeToPreferenceChanges() async -> AsyncStream<AccessibilityPreferences> {
-        return AsyncStream { continuation in
-            // Subscribe to preferences table changes via Realtime
-            let channel = supabase.channel("preferences:user:\(supabase.auth.currentUser?.id.uuidString ?? "")")
-
-            let subscription = channel
-                .onPostgresChange(
-                    event: .update,
-                    schema: "public",
-                    table: "accessibility_preferences"
-                ) { payload in
-                    // Update published preferences
-                    if let data = payload.new as? [String: Any] {
-                        // Parse and update preferences
-                        print("Preferences updated: \(data)")
-                    }
-                }
-
-            Task {
-                try? await channel.subscribe()
-            }
-        }
-    }
-
     func getCaptionCuesForTimestamp(_ timestamp: TimeInterval, in captions: [CaptionCue]) -> CaptionCue? {
         return captions.first { cue in
             cue.startTime <= timestamp && timestamp < cue.endTime
@@ -217,19 +193,21 @@ final class AccessibilityService: ObservableObject {
             throw AccessibilityError.invalidFeedback("User not authenticated")
         }
 
-        var feedbackToSubmit = feedback
+        // Create feedback submission model
+        let feedbackSubmission = AccessibilityFeedbackSubmission(
+            userId: userId.uuidString,
+            category: feedback.category.rawValue,
+            screenName: feedback.screenName,
+            elementIdentifier: feedback.elementIdentifier,
+            issueType: feedback.issueType.rawValue,
+            description: feedback.description,
+            assistiveTechUsed: feedback.assistiveTechUsed.map { $0.rawValue }.joined(separator: ",")
+        )
+
         // Ensure the feedback is associated with current user (server will validate via RLS)
         _ = try await supabase
             .from("accessibility_feedback")
-            .insert([
-                "user_id": userId.uuidString,
-                "category": feedbackToSubmit.category.rawValue,
-                "screen_name": feedbackToSubmit.screenName,
-                "element_identifier": feedbackToSubmit.elementIdentifier,
-                "issue_type": feedbackToSubmit.issueType.rawValue,
-                "description": feedbackToSubmit.description,
-                "assistive_tech_used": feedbackToSubmit.assistiveTechUsed.map { $0.rawValue }
-            ])
+            .insert(feedbackSubmission)
             .execute()
     }
 

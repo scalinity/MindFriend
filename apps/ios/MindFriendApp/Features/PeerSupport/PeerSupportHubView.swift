@@ -708,7 +708,7 @@ struct ShareWisdomSheet: View {
                 )
                 dismiss()
             } catch {
-                print("Failed to submit wisdom: \(error)")
+                Log.social.error("Failed to submit wisdom", error: error)
             }
             isSubmitting = false
         }
@@ -746,7 +746,7 @@ struct GratitudeWallView: View {
             do {
                 gratitudeItems = try await service.fetchPublicGratitude()
             } catch {
-                print("Failed to fetch gratitude: \(error)")
+                Log.social.error("Failed to fetch gratitude", error: error)
             }
             isLoading = false
         }
@@ -858,7 +858,7 @@ struct CommunityWisdomView: View {
         do {
             wisdom = try await service.fetchCommunityWisdom(category: selectedCategory)
         } catch {
-            print("Failed to fetch wisdom: \(error)")
+            Log.social.error("Failed to fetch wisdom", error: error)
         }
         isLoading = false
     }

@@ -97,7 +97,7 @@ struct TogetherSessionsView: View {
             sessions = try await sessionsTask
             templates = try await templatesTask
         } catch {
-            print("Failed to load data: \(error)")
+            Log.family.error("Failed to load data", error: error)
         }
     }
 }

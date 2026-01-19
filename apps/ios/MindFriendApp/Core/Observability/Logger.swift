@@ -44,8 +44,26 @@ enum Log {
     /// Quest and exercise logs
     static let quests = Logger(subsystem: subsystem, category: "Quests")
     
+    /// Creative tools and art generation logs
+    static let creative = Logger(subsystem: subsystem, category: "Creative")
+    
+    /// Family and circle logs
+    static let family = Logger(subsystem: subsystem, category: "Family")
+    
+    /// Biometrics and health data logs
+    static let biometrics = Logger(subsystem: subsystem, category: "Biometrics")
+    
+    /// Social and community logs
+    static let social = Logger(subsystem: subsystem, category: "Social")
+    
+    /// Media playback and recording logs
+    static let media = Logger(subsystem: subsystem, category: "Media")
+    
     /// General app logs
     static let general = Logger(subsystem: subsystem, category: "General")
+    
+    /// Crash reporting logs
+    static let crash = Logger(subsystem: subsystem, category: "Crash")
     
     // MARK: - Private
     
@@ -68,24 +86,52 @@ enum Log {
         general.warning("⚠️ \(message, privacy: .public)")
     }
     
-    /// Log an error message
-    static func error(_ message: String, error: Error? = nil) {
+    /// Log an error message (also reports to Sentry)
+    static func error(_ message: String, error: Error? = nil, file: String = #file, function: String = #function, line: Int = #line) {
         if let error = error {
             general.error("❌ \(message, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            CrashReporter.shared.capture(error: error, context: ["message": message, "file": file, "function": function, "line": line])
         } else {
             general.error("❌ \(message, privacy: .public)")
+            CrashReporter.shared.capture(message: message, context: ["file": file, "function": function, "line": line])
         }
     }
     
-    /// Log a fault (critical error)
-    static func fault(_ message: String) {
+    /// Log a fault (critical error, also reports to Sentry)
+    static func fault(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
         general.fault("🔥 \(message, privacy: .public)")
+        CrashReporter.shared.capture(message: "FAULT: \(message)", context: ["file": file, "function": function, "line": line])
     }
 }
 
-// MARK: - Logger Extension for Privacy-Safe User IDs
+// MARK: - Logger Extension for Privacy-Safe User IDs and Sentry Integration
 
 extension Logger {
+    /// Log an error message to OSLog and report it to Sentry
+    /// This overload matches the signature used throughout the app: Log.category.error("Message", error: error)
+    func error(_ message: String, error: Error? = nil, file: String = #file, function: String = #function, line: Int = #line) {
+        // 1. Log to System Console (OSLog)
+        if let error = error {
+            self.error("\(message, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        } else {
+            self.error("\(message, privacy: .public)")
+        }
+        
+        // 2. Report to Sentry
+        let context: [String: Any] = [
+            "message": message,
+            "file": file, 
+            "function": function, 
+            "line": line
+        ]
+        
+        if let error = error {
+            CrashReporter.shared.capture(error: error, context: context)
+        } else {
+            CrashReporter.shared.capture(message: message, context: context)
+        }
+    }
+
     /// Log a message with a private user ID (redacted in logs by default)
     func userAction(_ message: String, userId: String) {
         self.info("\(message, privacy: .public) [user: \(userId, privacy: .private(mask: .hash))]")

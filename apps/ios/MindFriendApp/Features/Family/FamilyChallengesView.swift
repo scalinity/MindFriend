@@ -101,7 +101,7 @@ struct FamilyChallengesView: View {
         do {
             challenges = try await container.familyService.fetchChallenges()
         } catch {
-            print("Failed to load challenges: \(error)")
+            Log.family.error("Failed to load challenges", error: error)
         }
     }
 }

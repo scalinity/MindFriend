@@ -19,6 +19,21 @@ final class CreativeExpressionService: ObservableObject {
         // Uses global supabase client
     }
 
+    // MARK: - Private Helpers
+
+    /// Retrieves auth headers with access token for Edge Function calls
+    /// Uses refreshSession() to ensure token is fresh and valid
+    private func getAuthHeaders() async throws -> [String: String] {
+        // Ensure user is authenticated first for user-friendly error
+        guard supabase.auth.currentUser != nil else {
+            throw CreativeError.notAuthenticated
+        }
+
+        // Refresh session to ensure token is valid (not expired)
+        let session = try await supabase.auth.refreshSession()
+        return ["Authorization": "Bearer \(session.accessToken)"]
+    }
+
     // MARK: - Quota Management
 
     /// Fetch current creative quota for the user
@@ -62,7 +77,10 @@ final class CreativeExpressionService: ObservableObject {
 
         let response: GenerateArtResponse = try await supabase.functions.invoke(
             "generate-art",
-            options: .init(body: request)
+            options: .init(
+                headers: try await getAuthHeaders(),
+                body: request
+            )
         )
 
         if let error = response.error {
@@ -142,6 +160,9 @@ final class CreativeExpressionService: ObservableObject {
 
     /// Analyze a voice journal entry
     func analyzeVoiceJournal(workId: String, durationSeconds: Int) async throws -> VoiceJournalAnalysis {
+        isLoading = true
+        defer { isLoading = false }
+
         let request = AnalyzeVoiceRequest(
             creativeWorkId: workId,
             audioUrl: nil,
@@ -150,7 +171,10 @@ final class CreativeExpressionService: ObservableObject {
 
         let response: AnalyzeVoiceResponse = try await supabase.functions.invoke(
             "analyze-voice-journal",
-            options: .init(body: request)
+            options: .init(
+                headers: try await getAuthHeaders(),
+                body: request
+            )
         )
 
         if let error = response.error {

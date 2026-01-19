@@ -173,22 +173,25 @@ final class ConsoleAnalyticsProvider: AnalyticsProvider {
     func track(event: String, properties: [String: Any]?) {
         var message = "[Analytics] Event: \(event)"
         if let properties = properties, !properties.isEmpty {
-            let propsString = properties.map { "\($0.key)=\($0.value)" }.joined(separator: ", ")
+            let propsString = properties.map { key, value in
+                "\(key)=\(String(describing: value))"
+            }.joined(separator: ", ")
             message += " | Properties: \(propsString)"
         }
-        print(message)
+        Log.data.debug("\(message)")
     }
 
     func setUserProperty(name: String, value: Any) {
-        print("[Analytics] User Property: \(name) = \(value)")
+        let stringValue = String(describing: value)
+        Log.data.debug("[Analytics] User Property: \(name) = \(stringValue)")
     }
 
     func setUserId(_ userId: String?) {
-        print("[Analytics] User ID: \(userId ?? "nil")")
+        Log.data.debug("[Analytics] User ID: \(userId ?? "nil")")
     }
 
     func flush() {
-        print("[Analytics] Flushed")
+        Log.data.debug("[Analytics] Flushed")
     }
 }
 

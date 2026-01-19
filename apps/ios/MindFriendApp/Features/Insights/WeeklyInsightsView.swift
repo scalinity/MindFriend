@@ -74,7 +74,7 @@ struct WeeklyInsightsView: View {
                     currentInsight = try await container.supabaseDataService.generateWeeklyInsight()
                 } catch {
                     // If generation fails, continue with empty state
-                    print("Failed to generate weekly insight: \(error)")
+                    Log.data.error("Failed to generate weekly insight", error: error)
                 }
 
                 isGenerating = false

@@ -84,7 +84,7 @@ struct MethodologyInfoSheet: View {
             info = try await container.supabaseDataService.getMethodologyInfo(code: basis.rawValue)
         } catch {
             // Info is optional - we can still show basic info from the enum
-            print("[MethodologyInfoSheet] Failed to load methodology info: \(error)")
+            Log.ui.error("Failed to load methodology info", error: error)
         }
     }
 }

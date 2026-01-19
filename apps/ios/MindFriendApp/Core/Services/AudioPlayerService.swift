@@ -41,7 +41,7 @@ final class AudioPlayerService: NSObject, ObservableObject {
             try session.setCategory(.playback, mode: .default, options: [.duckOthers])
             try session.setActive(true, options: .notifyOthersOnDeactivation)
         } catch {
-            print("Audio session setup failed: \(error)")
+            Log.media.error("Audio session setup failed", error: error)
         }
     }
 
@@ -308,7 +308,7 @@ final class AudioPlayerService: NSObject, ObservableObject {
                 .invoke("record-playback", options: .init(body: body))
             currentSessionId = response["playbackSessionId"]
         } catch {
-            print("Failed to record playback start: \(error)")
+            Log.media.error("Failed to record playback start", error: error)
         }
     }
 
@@ -326,7 +326,7 @@ final class AudioPlayerService: NSObject, ObservableObject {
             let _: [String: String] = try await supabase.functions
                 .invoke("record-playback", options: .init(body: body))
         } catch {
-            print("Failed to record playback complete: \(error)")
+            Log.media.error("Failed to record playback complete", error: error)
         }
     }
 
@@ -393,7 +393,7 @@ final class AudioPlayerService: NSObject, ObservableObject {
                     self.favorites = Set(favs.map { $0.trackId })
                 }
             } catch {
-                print("Failed to load favorites: \(error)")
+                Log.media.error("Failed to load favorites", error: error)
             }
         }
     }

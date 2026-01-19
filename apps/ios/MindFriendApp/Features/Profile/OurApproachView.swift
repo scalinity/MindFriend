@@ -81,7 +81,7 @@ struct OurApproachView: View {
         do {
             methodologies = try await container.supabaseDataService.getAllMethodologies()
         } catch {
-            print("[OurApproachView] Failed to load methodologies: \(error)")
+            Log.ui.error("Failed to load methodologies", error: error)
             methodologies = []
         }
     }

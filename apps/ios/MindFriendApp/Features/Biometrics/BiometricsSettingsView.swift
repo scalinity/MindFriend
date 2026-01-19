@@ -172,7 +172,7 @@ struct BiometricsSettingsView: View {
                 syncFrequency = conn.syncFrequencyHours
             }
         } catch {
-            print("Failed to load settings: \(error)")
+            Log.biometrics.error("Failed to load settings", error: error)
         }
     }
 
@@ -190,7 +190,7 @@ struct BiometricsSettingsView: View {
                     .update(payload)
                     .execute()
             } catch {
-                print("Failed to save settings: \(error)")
+                Log.biometrics.error("Failed to save settings", error: error)
             }
         }
         dismiss()
@@ -210,7 +210,7 @@ struct BiometricsSettingsView: View {
 
                 await healthKit.checkAuthorizationStatus()
             } catch {
-                print("Failed to disconnect: \(error)")
+                Log.biometrics.error("Failed to disconnect", error: error)
             }
         }
         dismiss()

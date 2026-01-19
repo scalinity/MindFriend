@@ -60,4 +60,9 @@ final class ChatService: ObservableObject {
             conversationTitle: response.conversationTitle
         )
     }
+
+    /// Insert a message directly (used for voice transcripts and offline flows)
+    func insertMessage(conversationId: String, role: MessageRole, content: String) async throws -> Message {
+        try await dataService.insertMessage(conversationId: conversationId, role: role, content: content)
+    }
 }
