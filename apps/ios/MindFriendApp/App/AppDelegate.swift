@@ -107,6 +107,34 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         )
     }
 
+    // MARK: - Background URL Session (Offline Downloads)
+
+    /// Stores background completion handlers by session identifier
+    private var backgroundCompletionHandlers: [String: () -> Void] = [:]
+
+    func application(
+        _ application: UIApplication,
+        handleEventsForBackgroundURLSession identifier: String,
+        completionHandler: @escaping () -> Void
+    ) {
+        // Store the completion handler
+        backgroundCompletionHandlers[identifier] = completionHandler
+
+        // Pass to OfflineContentService for download completion handling
+        Task { @MainActor in
+            OfflineContentService.shared.setBackgroundCompletionHandler(completionHandler)
+        }
+    }
+
+    /// Call this when background URL session finishes
+    func urlSessionDidFinishEvents(forBackgroundURLSession identifier: String) {
+        DispatchQueue.main.async {
+            if let completionHandler = self.backgroundCompletionHandlers.removeValue(forKey: identifier) {
+                completionHandler()
+            }
+        }
+    }
+
     // MARK: - App Lifecycle
 
     func applicationDidBecomeActive(_ application: UIApplication) {

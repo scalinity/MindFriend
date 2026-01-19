@@ -24,9 +24,11 @@ public final class SharedDataStore: Sendable {
         static let weekMoods = "widget_week_moods"
         static let lastUpdated = "widget_last_updated"
         static let dailyQuote = "widget_daily_quote"
+        static let dailyQuest = "widget_daily_quest"
         static let quickActions = "widget_quick_actions"
         static let userPreferences = "widget_user_preferences"
         static let userName = "widget_user_name"
+        static let pendingQuestCompletions = "widget_pending_quest_completions"
     }
 
     // MARK: - Read Methods
@@ -67,6 +69,15 @@ public final class SharedDataStore: Sendable {
             return nil
         }
         return quote
+    }
+
+    public var dailyQuest: WidgetDailyQuest? {
+        guard let data = userDefaults?.data(forKey: Keys.dailyQuest),
+              let quest = try? JSONDecoder().decode(WidgetDailyQuest.self, from: data) else {
+            return nil
+        }
+        // Only return if it's today's quest
+        return quest.isToday ? quest : nil
     }
 
     public var quickActions: [WidgetQuickAction] {
@@ -125,6 +136,63 @@ public final class SharedDataStore: Sendable {
             updateTimestamp()
             reloadWidgets()
         }
+    }
+
+    public func updateDailyQuest(_ quest: WidgetDailyQuest) {
+        if let data = try? JSONEncoder().encode(quest) {
+            userDefaults?.set(data, forKey: Keys.dailyQuest)
+            updateTimestamp()
+            reloadWidgets()
+        }
+    }
+
+    public func markQuestCompleted(questId: String) {
+        guard let existingQuest = dailyQuest,
+              existingQuest.id == questId else {
+            return
+        }
+
+        let completedQuest = WidgetDailyQuest(
+            id: existingQuest.id,
+            title: existingQuest.title,
+            description: existingQuest.description,
+            category: existingQuest.category,
+            xpReward: existingQuest.xpReward,
+            isCompleted: true,
+            assignedDate: existingQuest.assignedDate
+        )
+        updateDailyQuest(completedQuest)
+
+        // Track for backend sync when main app opens
+        addPendingQuestCompletion(questId: questId)
+    }
+
+    // MARK: - Pending Quest Completions (for backend sync)
+
+    /// Quest completions made from widgets that need to be synced to backend
+    public var pendingQuestCompletions: [String] {
+        userDefaults?.stringArray(forKey: Keys.pendingQuestCompletions) ?? []
+    }
+
+    /// Add a quest completion that needs backend sync
+    private func addPendingQuestCompletion(questId: String) {
+        var pending = pendingQuestCompletions
+        if !pending.contains(questId) {
+            pending.append(questId)
+            userDefaults?.set(pending, forKey: Keys.pendingQuestCompletions)
+        }
+    }
+
+    /// Clear a pending quest completion after successful backend sync
+    public func clearPendingQuestCompletion(questId: String) {
+        var pending = pendingQuestCompletions
+        pending.removeAll { $0 == questId }
+        userDefaults?.set(pending, forKey: Keys.pendingQuestCompletions)
+    }
+
+    /// Clear all pending quest completions
+    public func clearAllPendingQuestCompletions() {
+        userDefaults?.set([String](), forKey: Keys.pendingQuestCompletions)
     }
 
     public func updateQuickActions(_ actions: [WidgetQuickAction]) {
