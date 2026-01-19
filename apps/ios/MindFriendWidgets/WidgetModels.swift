@@ -15,7 +15,7 @@ public struct WidgetDailyMood: Codable, Sendable {
     }
 
     public var dayOfWeek: String {
-        WidgetMoodHelper.dayOfWeekFormatter.string(from: date)
+        WidgetMoodHelper.makeDayOfWeekFormatter().string(from: date)
     }
 
     public var isToday: Bool {
@@ -33,6 +33,52 @@ public struct WidgetDailyQuote: Codable, Sendable {
         self.text = text
         self.author = author
         self.date = date
+    }
+}
+
+/// Daily quest for widget display
+public struct WidgetDailyQuest: Codable, Sendable {
+    public let id: String
+    public let title: String
+    public let description: String
+    public let category: String
+    public let xpReward: Int
+    public let isCompleted: Bool
+    public let assignedDate: Date
+
+    public init(
+        id: String,
+        title: String,
+        description: String,
+        category: String,
+        xpReward: Int,
+        isCompleted: Bool,
+        assignedDate: Date = Date()
+    ) {
+        self.id = id
+        self.title = title
+        self.description = description
+        self.category = category
+        self.xpReward = xpReward
+        self.isCompleted = isCompleted
+        self.assignedDate = assignedDate
+    }
+
+    public var categoryIcon: String {
+        switch category.lowercased() {
+        case "mindfulness": return "brain.head.profile"
+        case "gratitude": return "heart.fill"
+        case "connection": return "person.2.fill"
+        case "movement": return "figure.walk"
+        case "creativity": return "paintbrush.fill"
+        case "reflection": return "text.book.closed.fill"
+        case "self-care": return "sparkles"
+        default: return "star.fill"
+        }
+    }
+
+    public var isToday: Bool {
+        Calendar.current.isDateInToday(assignedDate)
     }
 }
 
@@ -88,11 +134,14 @@ public struct WidgetQuickAction: Codable, Identifiable, Sendable {
 
 /// Helper functions for mood display in widgets
 public enum WidgetMoodHelper {
-    public static let dayOfWeekFormatter: DateFormatter = {
+    /// Creates a thread-safe day-of-week formatter
+    /// DateFormatter is not thread-safe, so we create a new instance per use
+    /// to avoid crashes when accessed from widget timeline providers (background threads)
+    public static func makeDayOfWeekFormatter() -> DateFormatter {
         let formatter = DateFormatter()
         formatter.dateFormat = "E"
         return formatter
-    }()
+    }
 
     public static func emoji(for mood: String) -> String {
         switch mood.lowercased() {
@@ -175,7 +224,14 @@ public enum WidgetDeepLink {
     public static let chat = "mindfriend://chat"
     public static let progress = "mindfriend://progress"
 
+    public static let quest = "mindfriend://quest"
+    public static let quote = "mindfriend://quote"
+
     public static func exercise(id: String) -> String {
         return "mindfriend://exercise/\(id)"
+    }
+
+    public static func quest(id: String) -> String {
+        return "mindfriend://quest/\(id)"
     }
 }

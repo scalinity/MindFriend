@@ -9,5 +9,7 @@ struct MindFriendWidgets: WidgetBundle {
         MoodWidget()
         ProgressWidget()
         QuickActionsWidget()
+        QuestWidget()
+        QuoteWidget()
     }
 }

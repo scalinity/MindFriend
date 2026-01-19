@@ -150,6 +150,27 @@ final class AppState: ObservableObject {
     func removeCelebration(id: UUID) {
         self.pendingCelebrations.removeAll { $0.id == id }
     }
+
+    // MARK: - Widget Sync
+
+    /// Process pending quest completions made from widgets
+    /// Called when app becomes active to sync widget actions to backend
+    func processPendingWidgetSyncs(container: DependencyContainer) async {
+        let pendingCompletions = SharedDataStore.shared.pendingQuestCompletions
+        guard !pendingCompletions.isEmpty else { return }
+
+        for questId in pendingCompletions {
+            do {
+                // Sync quest completion to backend (widget completions don't include reflection/rating)
+                try await container.supabaseDataService.completeQuest(id: questId, reflectionNote: nil, rating: nil)
+                SharedDataStore.shared.clearPendingQuestCompletion(questId: questId)
+                Log.general.info("[WidgetSync] Synced quest completion: \(questId)")
+            } catch {
+                // Keep in pending queue if sync fails - will retry next time
+                Log.general.error("[WidgetSync] Failed to sync quest completion: \(questId), error: \(error)")
+            }
+        }
+    }
 }
 
 // MARK: - Main Tab
@@ -159,6 +180,7 @@ enum MainTab: String, CaseIterable {
     case programs
     case chat
     case circles
+    case sleep
     case personalization
     case profile
 
@@ -168,6 +190,7 @@ enum MainTab: String, CaseIterable {
         case .programs: return "Programs"
         case .chat: return "Chat"
         case .circles: return "Circles"
+        case .sleep: return "Sleep"
         case .personalization: return "For You"
         case .profile: return "Profile"
         }
@@ -179,6 +202,7 @@ enum MainTab: String, CaseIterable {
         case .programs: return "book.fill"
         case .chat: return "bubble.left.and.bubble.right.fill"
         case .circles: return "person.3.fill"
+        case .sleep: return "moon.fill"
         case .personalization: return "sparkles"
         case .profile: return "person.fill"
         }

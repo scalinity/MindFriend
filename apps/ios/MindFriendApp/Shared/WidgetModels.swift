@@ -38,6 +38,31 @@ public struct WidgetDailyQuote: Codable, Sendable {
     }
 }
 
+/// Daily quest for widget display
+public struct WidgetDailyQuest: Codable, Sendable {
+    public let id: String
+    public let title: String
+    public let description: String
+    public let category: String
+    public let xpReward: Int
+    public let isCompleted: Bool
+    public let assignedDate: Date
+
+    public init(id: String, title: String, description: String, category: String, xpReward: Int, isCompleted: Bool, assignedDate: Date = Date()) {
+        self.id = id
+        self.title = title
+        self.description = description
+        self.category = category
+        self.xpReward = xpReward
+        self.isCompleted = isCompleted
+        self.assignedDate = assignedDate
+    }
+
+    public var isToday: Bool {
+        Calendar.current.isDateInToday(assignedDate)
+    }
+}
+
 /// Quick action for widget buttons
 public struct WidgetQuickAction: Codable, Identifiable, Sendable {
     public let id: String

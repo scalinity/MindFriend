@@ -150,70 +150,212 @@ struct WatchBreathingView: View {
     var body: some View {
         VStack(spacing: 12) {
             ZStack {
+                // Outer breathing ring
                 Circle()
-                    .fill(Color.blue.opacity(0.3))
-                    .frame(width: viewModel.circleSize, height: viewModel.circleSize)
-                    .animation(.easeInOut(duration: viewModel.breathDuration), value: viewModel.circleSize)
+                    .stroke(viewModel.phaseColor.opacity(0.3), lineWidth: 8)
+                    .frame(width: 120, height: 120)
 
-                VStack(spacing: 2) {
+                // Animated breathing circle
+                Circle()
+                    .fill(viewModel.phaseColor.opacity(0.4))
+                    .frame(width: viewModel.circleSize, height: viewModel.circleSize)
+                    .animation(.easeInOut(duration: viewModel.currentPhaseDuration), value: viewModel.circleSize)
+
+                VStack(spacing: 4) {
                     Text(viewModel.instruction)
                         .font(.headline)
+                        .multilineTextAlignment(.center)
 
                     Text("\(viewModel.secondsRemaining)")
-                        .font(.title2)
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
                         .monospacedDigit()
+
+                    if viewModel.isActive {
+                        Text("Cycle \(viewModel.currentCycle)/\(viewModel.totalCycles)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 
-            Button("Done") {
-                viewModel.stop()
-                dismiss()
+            if !viewModel.isActive && !viewModel.isComplete {
+                Button("Start") {
+                    viewModel.startBreathing()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.blue)
+            } else if viewModel.isComplete {
+                VStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title)
+                        .foregroundStyle(.green)
+
+                    Text("Great job!")
+                        .font(.headline)
+
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .buttonStyle(.bordered)
+                }
+            } else {
+                Button("Stop") {
+                    viewModel.stop()
+                    dismiss()
+                }
+                .buttonStyle(.bordered)
+                .tint(.red)
             }
-            .padding()
         }
         .padding()
-        .onAppear {
-            viewModel.startBreathing()
-        }
+        .navigationTitle("4-7-8 Breathe")
         .onDisappear {
             viewModel.stop()
         }
     }
 }
 
-// MARK: - Breathing View Model
+// MARK: - Breathing View Model (4-7-8 Pattern with Haptics)
 
 @MainActor
 final class WatchBreathingViewModel: ObservableObject {
-    @Published var instruction = "Breathe In"
+    // MARK: - Published State
+
+    @Published var instruction = "Ready?"
     @Published var secondsRemaining = 4
-    @Published var circleSize: CGFloat = 80
+    @Published var circleSize: CGFloat = 60
+    @Published var isActive = false
+    @Published var isComplete = false
+    @Published var currentCycle = 1
+    @Published var currentPhase: BreathPhase = .ready
 
-    let breathDuration: Double = 4.0
+    // MARK: - Configuration
+
+    let totalCycles = 4
+    let inhaleDuration = 4   // 4 seconds
+    let holdDuration = 7     // 7 seconds
+    let exhaleDuration = 8   // 8 seconds
+
+    private let minCircleSize: CGFloat = 50
+    private let maxCircleSize: CGFloat = 110
+
+    // MARK: - Timer
+
     private var timer: Timer?
-    private var isInhaling = true
-    private var cycles = 0
-    private let maxCycles = 5
+    private let haptics = HapticManager.shared
 
-    func startBreathing() {
-        startCycle()
+    // MARK: - Breath Phase
+
+    enum BreathPhase {
+        case ready
+        case inhale
+        case hold
+        case exhale
+        case complete
     }
 
-    func stop() {
-        timer?.invalidate()
-        timer = nil
+    // MARK: - Computed Properties
+
+    var phaseColor: Color {
+        switch currentPhase {
+        case .ready: return .gray
+        case .inhale: return .blue
+        case .hold: return .purple
+        case .exhale: return .teal
+        case .complete: return .green
+        }
     }
+
+    var currentPhaseDuration: Double {
+        switch currentPhase {
+        case .inhale: return Double(inhaleDuration)
+        case .hold: return Double(holdDuration)
+        case .exhale: return Double(exhaleDuration)
+        default: return 1.0
+        }
+    }
+
+    // MARK: - Lifecycle
 
     deinit {
         timer?.invalidate()
     }
 
-    private func startCycle() {
-        isInhaling = true
-        instruction = "Breathe In"
-        circleSize = 140
-        secondsRemaining = Int(breathDuration)
+    // MARK: - Public Methods
 
+    func startBreathing() {
+        isActive = true
+        isComplete = false
+        currentCycle = 1
+        startInhale()
+    }
+
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+        isActive = false
+        currentPhase = .ready
+        instruction = "Ready?"
+        circleSize = minCircleSize
+    }
+
+    // MARK: - Phase Management
+
+    private func startInhale() {
+        currentPhase = .inhale
+        instruction = "Breathe In"
+        secondsRemaining = inhaleDuration
+        circleSize = maxCircleSize
+
+        haptics.playInhaleStart()
+        startTimer()
+    }
+
+    private func startHold() {
+        currentPhase = .hold
+        instruction = "Hold"
+        secondsRemaining = holdDuration
+        // Circle stays at max size during hold
+
+        haptics.playHoldStart()
+    }
+
+    private func startExhale() {
+        currentPhase = .exhale
+        instruction = "Breathe Out"
+        secondsRemaining = exhaleDuration
+        circleSize = minCircleSize
+
+        haptics.playExhaleStart()
+    }
+
+    private func completeCycle() {
+        haptics.playExhaleComplete()
+
+        if currentCycle >= totalCycles {
+            completeSession()
+        } else {
+            currentCycle += 1
+            startInhale()
+        }
+    }
+
+    private func completeSession() {
+        timer?.invalidate()
+        timer = nil
+        isActive = false
+        isComplete = true
+        currentPhase = .complete
+        instruction = "Complete!"
+        circleSize = maxCircleSize
+
+        haptics.playSessionComplete()
+    }
+
+    // MARK: - Timer
+
+    private func startTimer() {
+        timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.tick()
@@ -224,23 +366,37 @@ final class WatchBreathingViewModel: ObservableObject {
     private func tick() {
         secondsRemaining -= 1
 
+        // Play progress haptic at certain intervals
+        switch currentPhase {
+        case .inhale:
+            if secondsRemaining > 0 {
+                haptics.playInhaleProgress()
+            }
+        case .hold:
+            // Play subtle haptic at midpoint
+            if secondsRemaining == holdDuration / 2 {
+                haptics.playHoldProgress()
+            }
+        case .exhale:
+            // Subtle haptics during exhale
+            if secondsRemaining > 0 && secondsRemaining % 2 == 0 {
+                haptics.playClick()
+            }
+        default:
+            break
+        }
+
+        // Phase transitions
         if secondsRemaining <= 0 {
-            if isInhaling {
-                isInhaling = false
-                instruction = "Breathe Out"
-                circleSize = 80
-                secondsRemaining = Int(breathDuration)
-            } else {
-                cycles += 1
-                if cycles >= maxCycles {
-                    stop()
-                    instruction = "Complete"
-                } else {
-                    isInhaling = true
-                    instruction = "Breathe In"
-                    circleSize = 140
-                    secondsRemaining = Int(breathDuration)
-                }
+            switch currentPhase {
+            case .inhale:
+                startHold()
+            case .hold:
+                startExhale()
+            case .exhale:
+                completeCycle()
+            default:
+                break
             }
         }
     }

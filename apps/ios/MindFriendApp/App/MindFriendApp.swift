@@ -9,6 +9,7 @@ struct MindFriendApp: App {
     @StateObject private var appState = AppState()
     @StateObject private var container = DependencyContainer()
     @StateObject private var notificationManager = NotificationManager.shared
+    @StateObject private var deepLinkRouter = DeepLinkRouter.shared
 
     /// Selected app theme (persisted to UserDefaults)
     @AppStorage(AppTheme.storageKey) private var selectedTheme: AppTheme = .system
@@ -24,10 +25,14 @@ struct MindFriendApp: App {
                 .environmentObject(appState)
                 .environmentObject(container)
                 .environmentObject(notificationManager)
+                .environmentObject(deepLinkRouter)
                 .preferredColorScheme(selectedTheme.colorScheme)
                 .task {
                     // Configure notification manager with container for device registration
                     notificationManager.configure(container: container)
+
+                    // Configure offline services with sync handlers
+                    container.configureOfflineServices()
 
                     // OPTIMIZATION 1: Load cached auth state immediately to skip splash
                     if let cachedProfile = container.supabaseAuthService.getCachedProfile() {
@@ -65,6 +70,9 @@ struct MindFriendApp: App {
                             } else {
                                 // Update with verified network data
                                 appState.setAuthenticated(user: profile)
+
+                                // Sync any widget actions made while app was inactive
+                                await appState.processPendingWidgetSyncs(container: container)
                             }
 
                             // Set user context for crash reporting and analytics
@@ -122,34 +130,17 @@ struct MindFriendApp: App {
     private func handleDeepLink(_ url: URL) {
         guard url.scheme == "mindfriend" else { return }
 
-        // Parse deep link and navigate
-        // Example: mindfriend://quest/123, mindfriend://chat/456, mindfriend://buddy/ABC123
-        switch url.host {
-        case "quest":
-            // Navigate to quest
-            break
-        case "chat":
-            // Navigate to chat
-            break
-        case "circle":
-            // Navigate to circle
-            break
-        case "mood":
-            // Navigate to mood tracking
-            break
-        case "buddy":
-            // Handle buddy invite
-            let pathComponents = url.pathComponents.filter { $0 != "/" }
-            if let code = pathComponents.first {
-                handleBuddyInvite(code: code)
-            }
-        case "micro":
-            // Navigate to micro-moments
-            appState.selectedTab = .home
-            // TODO: Navigate to micro-moments hub via state
-        default:
-            break
+        // Parse the deep link using the router
+        guard let route = deepLinkRouter.parseURL(url) else { return }
+
+        // Handle buddy invites specially (requires authentication check)
+        if case .buddy(let code) = route {
+            handleBuddyInvite(code: code)
+            return
         }
+
+        // Let the router handle all other navigation
+        deepLinkRouter.handleRoute(route, appState: appState)
     }
 
     private func handleNotificationDeepLink(_ deepLink: NotificationDeepLink) {
@@ -179,6 +170,10 @@ struct MindFriendApp: App {
             // Navigate to micro-moments
             appState.selectedTab = .home
             Log.general.info("[DeepLink] Navigate to micro-moments: \(templateId ?? "hub")")
+        case .sleep(let contentId):
+            // Navigate to sleep tab
+            appState.selectedTab = .sleep
+            Log.general.info("[DeepLink] Navigate to sleep: \(contentId ?? "home")")
         case .none:
             break
         }
