@@ -32,6 +32,7 @@ public final class SharedDataStore: Sendable {
         static let dailyQuote = "widget_daily_quote"
         static let quickActions = "widget_quick_actions"
         static let userPreferences = "widget_user_preferences"
+        static let dailyQuest = "widget_daily_quest"
     }
 
     // MARK: - Read Methods
@@ -86,6 +87,16 @@ public final class SharedDataStore: Sendable {
             return WidgetQuickAction.defaults
         }
         return actions
+    }
+
+    public var dailyQuest: WidgetDailyQuest? {
+        guard let data = userDefaults?.data(forKey: Keys.dailyQuest),
+              let quest = try? JSONDecoder().decode(WidgetDailyQuest.self, from: data)
+        else {
+            return nil
+        }
+        // Only return quest if it's from today
+        return quest.isToday ? quest : nil
     }
 
     public var lastUpdated: Date? {
@@ -147,6 +158,30 @@ public final class SharedDataStore: Sendable {
         }
     }
 
+    /// Update daily quest
+    public func updateDailyQuest(_ quest: WidgetDailyQuest) {
+        if let data = try? JSONEncoder().encode(quest) {
+            userDefaults?.set(data, forKey: Keys.dailyQuest)
+            updateTimestamp()
+            reloadWidgets()
+        }
+    }
+
+    /// Mark daily quest as completed
+    public func markQuestCompleted(questId: String) {
+        guard let existingQuest = dailyQuest, existingQuest.id == questId else { return }
+        let completedQuest = WidgetDailyQuest(
+            id: existingQuest.id,
+            title: existingQuest.title,
+            description: existingQuest.description,
+            category: existingQuest.category,
+            xpReward: existingQuest.xpReward,
+            isCompleted: true,
+            assignedDate: existingQuest.assignedDate
+        )
+        updateDailyQuest(completedQuest)
+    }
+
     // MARK: - Helpers
 
     private func updateTimestamp() {
@@ -174,6 +209,7 @@ public final class SharedDataStore: Sendable {
         userDefaults?.removeObject(forKey: Keys.dailyQuote)
         userDefaults?.removeObject(forKey: Keys.quickActions)
         userDefaults?.removeObject(forKey: Keys.userPreferences)
+        userDefaults?.removeObject(forKey: Keys.dailyQuest)
         reloadWidgets()
     }
 }
