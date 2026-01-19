@@ -353,7 +353,7 @@ struct BiometricsDashboardView: View {
         do {
             todaySummary = try await healthKit.getTodaySummary()
         } catch {
-            print("Failed to load today summary: \(error)")
+            Log.biometrics.error("Failed to load today summary", error: error)
         }
     }
 
@@ -361,7 +361,7 @@ struct BiometricsDashboardView: View {
         do {
             recentSummaries = try await healthKit.getRecentSummaries(days: 7)
         } catch {
-            print("Failed to load recent summaries: \(error)")
+            Log.biometrics.error("Failed to load recent summaries", error: error)
         }
     }
 
@@ -369,7 +369,7 @@ struct BiometricsDashboardView: View {
         do {
             insights = try await healthKit.getInsights()
         } catch {
-            print("Failed to load insights: \(error)")
+            Log.biometrics.error("Failed to load insights", error: error)
         }
     }
 
@@ -377,7 +377,7 @@ struct BiometricsDashboardView: View {
         do {
             alerts = try await healthKit.getAlerts()
         } catch {
-            print("Failed to load alerts: \(error)")
+            Log.biometrics.error("Failed to load alerts", error: error)
         }
     }
 
@@ -385,7 +385,7 @@ struct BiometricsDashboardView: View {
         do {
             correlations = try await healthKit.getCorrelations()
         } catch {
-            print("Failed to load correlations: \(error)")
+            Log.biometrics.error("Failed to load correlations", error: error)
         }
     }
 }

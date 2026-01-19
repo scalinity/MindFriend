@@ -56,4 +56,7 @@ enabled = false
 
 # Edge Functions configuration
 [functions.chat]
-verify_jwt = false  # We handle auth in the function itself
+verify_jwt = true  # Verify JWT before function invocation (defense-in-depth)
+
+[functions.voice-token]
+verify_jwt = true  # Verify JWT before function invocation (defense-in-depth)

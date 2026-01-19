@@ -48,6 +48,19 @@ final class SupabaseAuthService: ObservableObject {
     @Published private(set) var currentUser: User?
     @Published private(set) var session: Session?
 
+    // MARK: - Caching Keys
+    private enum CacheKeys {
+        static let cachedProfile = "com.mindfriend.cachedProfile"
+        static let cachedAuthState = "com.mindfriend.cachedAuthState"
+        static let lastProfileFetch = "com.mindfriend.lastProfileFetch"
+    }
+
+    /// Minimum time before token expiry to trigger refresh (5 minutes)
+    private let tokenRefreshThreshold: TimeInterval = 5 * 60
+
+    /// Profile cache validity duration (1 hour)
+    private let profileCacheValidityDuration: TimeInterval = 60 * 60
+
     init() {
         // Listen for auth state changes
         Task {
@@ -92,32 +105,65 @@ final class SupabaseAuthService: ObservableObject {
         session?.user.id
     }
 
-    /// Restore existing session on app launch
+    /// Restore existing session on app launch (optimized - skips network refresh if token still valid)
     func restoreSession() async -> Bool {
         do {
             session = try await supabase.auth.session
             currentUser = session?.user
 
-            // If we have a session, try to refresh it to ensure it's valid
-            if session != nil {
+            guard let currentSession = session else {
+                Log.auth.debug("No existing session found")
+                clearCachedAuthState()
+                return false
+            }
+
+            // Check if token needs refreshing (only if expiring within threshold)
+            let needsRefresh = isTokenExpiringSoon(currentSession)
+
+            if needsRefresh {
+                Log.auth.debug("Token expiring soon, refreshing...")
                 do {
                     session = try await supabase.auth.refreshSession()
                     currentUser = session?.user
                     Log.auth.debug("Session refreshed successfully")
                 } catch {
                     Log.auth.warning("Session refresh failed: \(error.localizedDescription)")
-                    // Session is invalid, clear it
-                    session = nil
-                    currentUser = nil
-                    return false
+                    // Token might still work for a bit, don't clear immediately
+                    // Only clear if it's actually expired
+                    if isTokenExpired(currentSession) {
+                        session = nil
+                        currentUser = nil
+                        clearCachedAuthState()
+                        return false
+                    }
+                    // Keep using the old session for now
+                    Log.auth.debug("Using existing session despite refresh failure")
                 }
+            } else {
+                Log.auth.debug("Token still valid, skipping refresh")
             }
 
-            return session != nil
+            // Cache that we have a valid session
+            saveCachedAuthState(isAuthenticated: true)
+            return true
         } catch {
             Log.auth.debug("No existing session: \(error.localizedDescription)")
+            clearCachedAuthState()
             return false
         }
+    }
+
+    /// Check if token is expiring within the threshold
+    private func isTokenExpiringSoon(_ session: Session) -> Bool {
+        let expiresAt = Date(timeIntervalSince1970: TimeInterval(session.expiresAt ?? 0))
+        let timeUntilExpiry = expiresAt.timeIntervalSinceNow
+        return timeUntilExpiry < tokenRefreshThreshold
+    }
+
+    /// Check if token has actually expired
+    private func isTokenExpired(_ session: Session) -> Bool {
+        let expiresAt = Date(timeIntervalSince1970: TimeInterval(session.expiresAt ?? 0))
+        return expiresAt < Date()
     }
 
     /// Ensure we have a valid session, refreshing if needed
@@ -335,8 +381,77 @@ final class SupabaseAuthService: ObservableObject {
         try await supabase.auth.signOut()
         session = nil
         currentUser = nil
+        clearCachedAuthState()
+        clearCachedProfile()
         CrashReporter.shared.clearUser()
         Analytics.shared.reset()
+    }
+
+    // MARK: - Auth State Caching
+
+    /// Save cached auth state to UserDefaults
+    private func saveCachedAuthState(isAuthenticated: Bool) {
+        UserDefaults.standard.set(isAuthenticated, forKey: CacheKeys.cachedAuthState)
+    }
+
+    /// Clear cached auth state
+    private func clearCachedAuthState() {
+        UserDefaults.standard.removeObject(forKey: CacheKeys.cachedAuthState)
+    }
+
+    /// Get cached auth state (for instant UI on launch)
+    func getCachedAuthState() -> Bool {
+        UserDefaults.standard.bool(forKey: CacheKeys.cachedAuthState)
+    }
+
+    // MARK: - Profile Caching
+
+    /// Save profile to cache
+    private func cacheProfile(_ profile: UserProfile) {
+        do {
+            let data = try JSONEncoder().encode(profile)
+            UserDefaults.standard.set(data, forKey: CacheKeys.cachedProfile)
+            UserDefaults.standard.set(Date(), forKey: CacheKeys.lastProfileFetch)
+            Log.auth.debug("Profile cached successfully")
+        } catch {
+            Log.auth.warning("Failed to cache profile: \(error.localizedDescription)")
+        }
+    }
+
+    /// Clear cached profile
+    func clearCachedProfile() {
+        UserDefaults.standard.removeObject(forKey: CacheKeys.cachedProfile)
+        UserDefaults.standard.removeObject(forKey: CacheKeys.lastProfileFetch)
+    }
+
+    /// Get cached profile (returns nil if cache is invalid or expired)
+    func getCachedProfile() -> UserProfile? {
+        guard let data = UserDefaults.standard.data(forKey: CacheKeys.cachedProfile),
+              let lastFetch = UserDefaults.standard.object(forKey: CacheKeys.lastProfileFetch) as? Date else {
+            return nil
+        }
+
+        // Check if cache is still valid
+        let cacheAge = Date().timeIntervalSince(lastFetch)
+        guard cacheAge < profileCacheValidityDuration else {
+            Log.auth.debug("Profile cache expired (age: \(Int(cacheAge))s)")
+            return nil
+        }
+
+        do {
+            let profile = try JSONDecoder().decode(UserProfile.self, from: data)
+            Log.auth.debug("Loaded profile from cache (age: \(Int(cacheAge))s)")
+            return profile
+        } catch {
+            Log.auth.warning("Failed to decode cached profile: \(error.localizedDescription)")
+            clearCachedProfile()
+            return nil
+        }
+    }
+
+    /// Check if we have a valid cached profile
+    func hasCachedProfile() -> Bool {
+        getCachedProfile() != nil
     }
 
     // MARK: - Profile Management
@@ -373,12 +488,40 @@ final class SupabaseAuthService: ObservableObject {
 
         do {
             let (profile, settings, stats) = try await (profileTask, settingsTask, statsTask)
-            return profile.toUserProfile(settings: settings, stats: stats)
+            let userProfile = profile.toUserProfile(settings: settings, stats: stats)
+            // Cache the profile for faster startup next time
+            cacheProfile(userProfile)
+            return userProfile
         } catch {
             // If any table is missing data, the DB trigger may not have run yet.
             // Log the error but don't try to create rows here - let the trigger handle it.
             Log.auth.warning("Failed to fetch profile data: \(error.localizedDescription)")
             throw AuthError.userNotFound
+        }
+    }
+
+    /// Fetch profile with cache fallback - returns cached immediately, refreshes in background
+    func fetchProfileWithCache() async -> UserProfile? {
+        // First, try to get cached profile for instant return
+        if let cached = getCachedProfile() {
+            // Refresh in background (don't await)
+            Task {
+                do {
+                    _ = try await fetchProfile()
+                    Log.auth.debug("Profile refreshed in background")
+                } catch {
+                    Log.auth.warning("Background profile refresh failed: \(error.localizedDescription)")
+                }
+            }
+            return cached
+        }
+
+        // No cache, must fetch from network
+        do {
+            return try await fetchProfile()
+        } catch {
+            Log.auth.warning("Profile fetch failed: \(error.localizedDescription)")
+            return nil
         }
     }
 

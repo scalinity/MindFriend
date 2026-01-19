@@ -77,10 +77,10 @@ final class BusinessModelsTests: XCTestCase {
             "is_active": true,
             "is_visible": true
         }
-        """.data(using: .utf8)!
+        """
 
         let decoder = JSONDecoder()
-        let plan = try decoder.decode(SubscriptionPlan.self, from: json)
+        let plan = try decoder.decode(SubscriptionPlan.self, from: jsonData(from: json))
 
         XCTAssertEqual(plan.priceCents, 1999)
         XCTAssertEqual(plan.billingPeriodMonths, 1)
@@ -317,11 +317,11 @@ final class BusinessModelsTests: XCTestCase {
             "is_active": true,
             "campaign_name": "Summer Sale"
         }
-        """.data(using: .utf8)!
+        """
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        let promo = try decoder.decode(PromoCode.self, from: json)
+        let promo = try decoder.decode(PromoCode.self, from: jsonData(from: json))
 
         XCTAssertEqual(promo.code, "SAVE20")
         XCTAssertEqual(promo.discountType, .percent)
@@ -474,11 +474,11 @@ final class BusinessModelsTests: XCTestCase {
             "status": "pending",
             "expires_at": null
         }
-        """.data(using: .utf8)!
+        """
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        let gift = try decoder.decode(GiftSubscription.self, from: json)
+        let gift = try decoder.decode(GiftSubscription.self, from: jsonData(from: json))
 
         XCTAssertEqual(gift.recipientEmail, "recipient@example.com")
         XCTAssertEqual(gift.status, .pending)
@@ -586,11 +586,11 @@ final class BusinessModelsTests: XCTestCase {
             "receipt_url": "https://example.com/receipt.pdf",
             "receipt_amount_cents": 7999
         }
-        """.data(using: .utf8)!
+        """
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        let record = try decoder.decode(HSAFSARecord.self, from: json)
+        let record = try decoder.decode(HSAFSARecord.self, from: jsonData(from: json))
 
         XCTAssertTrue(record.isHSAEligible)
         XCTAssertTrue(record.isFSAEligible)
@@ -619,17 +619,17 @@ final class BusinessModelsTests: XCTestCase {
     }
 
     func testDiscountTypeCodable() throws {
-        let json = "[\"percent\", \"fixed\", \"trial_extension\"]".data(using: .utf8)!
+        let json = "[\"percent\", \"fixed\", \"trial_extension\"]"
         let decoder = JSONDecoder()
-        let types = try decoder.decode([DiscountType].self, from: json)
+        let types = try decoder.decode([DiscountType].self, from: jsonData(from: json))
 
         XCTAssertEqual(types, [.percent, .fixed, .trialExtension])
     }
 
     func testGiftStatusCodable() throws {
-        let json = "[\"pending\", \"delivered\", \"redeemed\", \"expired\", \"refunded\"]".data(using: .utf8)!
+        let json = "[\"pending\", \"delivered\", \"redeemed\", \"expired\", \"refunded\"]"
         let decoder = JSONDecoder()
-        let statuses = try decoder.decode([GiftStatus].self, from: json)
+        let statuses = try decoder.decode([GiftStatus].self, from: jsonData(from: json))
 
         XCTAssertEqual(statuses.count, 5)
         XCTAssertTrue(statuses.contains(.pending))

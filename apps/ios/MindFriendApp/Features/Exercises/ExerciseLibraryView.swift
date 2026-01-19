@@ -93,6 +93,7 @@ struct ExerciseLibraryView: View {
             .padding(.vertical)
         }
         .navigationTitle("Exercises")
+        // Load exercises on appear
         .task {
             await loadExercises()
         }
@@ -109,7 +110,7 @@ struct ExerciseLibraryView: View {
             exercises = try await exercisesTask
             skillProgress = try await skillsTask
         } catch {
-            print("ExerciseLibraryView loadExercises error: \(error)")
+            Log.quests.error("ExerciseLibraryView loadExercises error", error: error)
             appState.showError(.apiError(error.localizedDescription))
         }
     }
@@ -328,7 +329,7 @@ struct ExercisePlayerView: View {
         } catch {
             // Session tracking is optional - log for debugging but allow exercise to continue
             #if DEBUG
-            print("Failed to start exercise session: \(error.localizedDescription)")
+            Log.quests.error("Failed to start exercise session", error: error)
             #endif
         }
     }
@@ -405,7 +406,7 @@ struct ExercisePlayerView: View {
             } catch {
                 // Completion tracking failure shouldn't block user - log for debugging
                 #if DEBUG
-                print("Failed to record exercise completion: \(error.localizedDescription)")
+                Log.quests.error("Failed to record exercise completion", error: error)
                 #endif
                 await MainActor.run {
                     dismiss()

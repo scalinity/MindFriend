@@ -40,14 +40,34 @@ export function getCorsHeaders(origin: string | null): Record<string, string> {
   };
 }
 
-// Rate limiting helper - tracks requests by IP or user
+// Rate limiting helper - IN-MEMORY IMPLEMENTATION (DEPRECATED)
+// SECURITY WARNING: This in-memory rate limiter does NOT work across Edge Function instances.
+// Distributed requests can bypass rate limits. Use ratelimit.ts (database-backed) instead.
+// See: supabase/functions/_shared/ratelimit.ts
 const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
 
-export function checkRateLimit(
+/**
+ * @deprecated Use checkRateLimit from ratelimit.ts instead.
+ * This in-memory implementation does not work across Edge Function instances
+ * and should not be used in production code.
+ *
+ * Import from ratelimit.ts:
+ * import { checkRateLimit } from "./_shared/ratelimit.ts";
+ *
+ * @internal This function is exported only for backward compatibility.
+ * It will be removed in a future version.
+ */
+export function _deprecatedInMemoryRateLimit(
   identifier: string,
   maxRequests: number = 60,
   windowMs: number = 60000, // 1 minute window
 ): { allowed: boolean; remaining: number; resetIn: number } {
+  console.warn(
+    "⚠️ DEPRECATED: Using in-memory rate limiter from cors.ts. " +
+    "This does NOT work across Edge Function instances. " +
+    "Import checkRateLimit from _shared/ratelimit.ts (database-backed) instead.",
+  );
+
   const now = Date.now();
   const entry = rateLimitStore.get(identifier);
 

@@ -262,14 +262,13 @@ struct HSAFSAInfoView: View {
                 }
             }
             .task {
-                do {
-                    try await billingService.loadHSARecord()
-                } catch {
-                    print("Failed to load HSA record: \(error)")
-                }
-            }
-        }
-    }
+                            do {
+                                try await billingService.loadHSARecord()
+                            } catch {
+                                Log.billing.error("Failed to load HSA record", error: error)
+                            }
+                        }
+                    }    }
 
     private func generateReceipt() {
         isGeneratingReceipt = true

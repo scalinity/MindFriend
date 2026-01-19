@@ -14,6 +14,7 @@ struct ChatView: View {
     @State private var displayTitle: String = "Chat"
     @State private var sendTask: Task<Void, Never>?
     @FocusState private var isInputFocused: Bool
+    @State private var showVoiceMode = false
 
     private let quotaWarningThreshold = 3
 
@@ -58,6 +59,7 @@ struct ChatView: View {
             )
             .focused($isInputFocused)
         }
+        .sentryMaskChat()
         .navigationTitle(displayTitle)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
@@ -65,10 +67,8 @@ struct ChatView: View {
         }
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
-                NavigationLink {
-                    VoiceChatView(supabase: container.supabaseClient) {
-                        isInputFocused = true
-                    }
+                Button {
+                    showVoiceMode = true
                 } label: {
                     Image(systemName: "mic.fill")
                 }
@@ -85,12 +85,21 @@ struct ChatView: View {
                 .accessibilityHint("Opens crisis resources and hotlines")
             }
         }
-        .task {
-            await loadMessages()
+        .fullScreenCover(isPresented: $showVoiceMode, onDismiss: {
+            isInputFocused = true
+            Task {
+                await loadMessages()
+            }
+        }) {
+            VoiceChatView(supabase: container.supabaseClient, conversationId: conversation.id)
         }
         .onDisappear {
             // Cancel any in-flight send task when view disappears
             sendTask?.cancel()
+        }
+        // Load messages on appearance
+        .task {
+            await loadMessages()
         }
     }
 
@@ -133,7 +142,7 @@ struct ChatView: View {
         isSending = true
 
         // Store task reference for cancellation on view disappear
-        sendTask = Task {
+        sendTask = Task { @MainActor in
             defer { isSending = false }
 
             do {

@@ -22,133 +22,15 @@ struct PaywallView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 32) {
-                    // Header
-                    VStack(spacing: 16) {
-                        Image(systemName: "star.circle.fill")
-                            .font(.system(size: 80))
-                            .foregroundStyle(.yellow)
-
-                        Text("MindFriend Premium")
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
-
-                        Text("Unlock unlimited conversations and premium features")
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding(.top)
-
-                    // Benefits
-                    VStack(alignment: .leading, spacing: 16) {
-                        BenefitRow(icon: "infinity", title: "Unlimited AI Chat", description: "No daily message limits")
-                        BenefitRow(icon: "sparkles", title: "Priority Responses", description: "Faster AI response times")
-                        BenefitRow(icon: "chart.line.uptrend.xyaxis", title: "Advanced Analytics", description: "Detailed mood insights")
-                        BenefitRow(icon: "bell.badge.fill", title: "Smart Reminders", description: "Personalized nudges")
-                    }
-                    .padding(.horizontal)
-
-                    // Products
-                    VStack(spacing: 12) {
-                        ForEach(container.billingService.products, id: \.id) { product in
-                            ProductCard(
-                                product: product,
-                                isSelected: selectedProduct?.id == product.id,
-                                onSelect: { selectedProduct = product }
-                            )
-                        }
-                    }
-                    .padding(.horizontal)
-
-                    // Spec 15: HSA/FSA Badge (link to info)
-                    Button {
-                        showHSAInfo = true
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "heart.text.square.fill")
-                                .foregroundStyle(.blue)
-
-                            Text("HSA/FSA Eligible")
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-
-                            Spacer()
-
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding()
-                        .background(Color.blue.opacity(0.05))
-                        .cornerRadius(8)
-                        .foregroundStyle(.primary)
-                    }
-                    .padding(.horizontal)
-                    .accessibilityLabel("HSA/FSA eligibility information button")
-
-                    // Spec 15: Promo Code Field
-                    PromoCodeField(
-                        billingService: container.billingService,
-                        code: $promoCode,
-                        validatedPromo: $validatedPromo,
-                        isValidating: $isValidatingPromo
-                    )
-                    .padding(.horizontal)
-
-                    // Subscribe button
-                    Button {
-                        purchase()
-                    } label: {
-                        if isPurchasing {
-                            ProgressView()
-                                .tint(.white)
-                        } else {
-                            Text("Subscribe Now")
-                        }
-                    }
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(selectedProduct != nil ? Color.accentColor : Color.secondary)
-                    .foregroundStyle(.white)
-                    .cornerRadius(12)
-                    .disabled(selectedProduct == nil || isPurchasing)
-                    .padding(.horizontal)
-                    .accessibilityLabel("Subscribe now button")
-
-                    // Spec 15: Gift Purchase Button
-                    Button {
-                        showGiftSheet = true
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "gift.fill")
-                            Text("Give as Gift")
-                                .fontWeight(.semibold)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.pink.opacity(0.1))
-                        .foregroundStyle(Color.pink)
-                        .cornerRadius(12)
-                    }
-                    .padding(.horizontal)
-                    .accessibilityLabel("Give subscription as gift button")
-
-                    // Restore
-                    Button("Restore Purchases") {
-                        restorePurchases()
-                    }
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .accessibilityLabel("Restore purchases button")
-
-                    // Terms
-                    Text("Subscription automatically renews unless cancelled at least 24 hours before the end of the current period. Manage subscriptions in Settings.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-
+                    headerSection
+                    benefitsSection
+                    productsSection
+                    hsaFSASection
+                    promoCodeSection
+                    subscribeButton
+                    giftButton
+                    restoreButton
+                    termsSection
                     Spacer(minLength: 32)
                 }
             }
@@ -172,15 +54,151 @@ struct PaywallView: View {
             } message: { error in
                 Text(error.localizedDescription)
             }
-            // Spec 15: Gift Purchase Sheet
             .sheet(isPresented: $showGiftSheet) {
                 GiftPurchaseSheet()
             }
-            // Spec 15: HSA/FSA Info Sheet
             .sheet(isPresented: $showHSAInfo) {
                 HSAFSAInfoView()
             }
         }
+    }
+
+    // MARK: - View Components
+
+    private var headerSection: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "star.circle.fill")
+                .font(.system(size: 80))
+                .foregroundStyle(.yellow)
+
+            Text("MindFriend Premium")
+                .font(.largeTitle)
+                .fontWeight(.bold)
+
+            Text("Unlock unlimited conversations and premium features")
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.top)
+    }
+
+    private var benefitsSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            BenefitRow(icon: "infinity", title: "Unlimited AI Chat", description: "No daily message limits")
+            BenefitRow(icon: "sparkles", title: "Priority Responses", description: "Faster AI response times")
+            BenefitRow(icon: "chart.line.uptrend.xyaxis", title: "Advanced Analytics", description: "Detailed mood insights")
+            BenefitRow(icon: "bell.badge.fill", title: "Smart Reminders", description: "Personalized nudges")
+        }
+        .padding(.horizontal)
+    }
+
+    private var productsSection: some View {
+        VStack(spacing: 12) {
+            ForEach(container.billingService.products, id: \.id) { product in
+                ProductCard(
+                    product: product,
+                    isSelected: selectedProduct?.id == product.id,
+                    onSelect: { selectedProduct = product }
+                )
+            }
+        }
+        .padding(.horizontal)
+    }
+
+    private var hsaFSASection: some View {
+        Button {
+            showHSAInfo = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "heart.text.square.fill")
+                    .foregroundStyle(.blue)
+
+                Text("HSA/FSA Eligible")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding()
+            .background(Color.blue.opacity(0.05))
+            .cornerRadius(8)
+            .foregroundStyle(.primary)
+        }
+        .padding(.horizontal)
+        .accessibilityLabel("HSA/FSA eligibility information button")
+    }
+
+    private var promoCodeSection: some View {
+        PromoCodeField(
+            billingService: container.billingService,
+            code: $promoCode,
+            validatedPromo: $validatedPromo,
+            isValidating: $isValidatingPromo
+        )
+        .padding(.horizontal)
+    }
+
+    private var subscribeButton: some View {
+        Button {
+            purchase()
+        } label: {
+            if isPurchasing {
+                ProgressView()
+                    .tint(.white)
+            } else {
+                Text("Subscribe Now")
+            }
+        }
+        .font(.headline)
+        .frame(maxWidth: .infinity)
+        .padding()
+        .background(selectedProduct != nil ? Color.accentColor : Color.secondary)
+        .foregroundStyle(.white)
+        .cornerRadius(12)
+        .disabled(selectedProduct == nil || isPurchasing)
+        .padding(.horizontal)
+        .accessibilityLabel("Subscribe now button")
+    }
+
+    private var giftButton: some View {
+        Button {
+            showGiftSheet = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "gift.fill")
+                Text("Give as Gift")
+                    .fontWeight(.semibold)
+            }
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(Color.pink.opacity(0.1))
+            .foregroundStyle(Color.pink)
+            .cornerRadius(12)
+        }
+        .padding(.horizontal)
+        .accessibilityLabel("Give subscription as gift button")
+    }
+
+    private var restoreButton: some View {
+        Button("Restore Purchases") {
+            restorePurchases()
+        }
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+        .accessibilityLabel("Restore purchases button")
+    }
+
+    private var termsSection: some View {
+        Text("Subscription automatically renews unless cancelled at least 24 hours before the end of the current period. Manage subscriptions in Settings.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal)
     }
 
     private func purchase() {

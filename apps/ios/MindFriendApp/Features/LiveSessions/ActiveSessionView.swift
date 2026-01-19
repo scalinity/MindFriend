@@ -273,7 +273,7 @@ struct ActiveSessionView: View {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
-            print("Failed to setup audio session: \(error)")
+            Log.media.error("Failed to setup audio session", error: error)
         }
 
         // Auto-play
@@ -324,7 +324,7 @@ struct ActiveSessionView: View {
         do {
             try await liveService.sendReaction(emoji: emoji)
         } catch {
-            print("Failed to send reaction: \(error)")
+            Log.social.error("Failed to send reaction", error: error)
         }
     }
 

@@ -59,45 +59,45 @@ final class FamilyService: ObservableObject {
         do {
             familyGroup = try await familyTask
         } catch {
-            print("Failed to fetch family group: \(error)")
+            Log.family.error("Failed to fetch family group", error: error)
             self.error = "Failed to load family group"
         }
 
         do {
             familyMembers = try await membersTask
         } catch {
-            print("Failed to fetch family members: \(error)")
+            Log.family.error("Failed to fetch family members", error: error)
             self.error = "Failed to load family members"
         }
 
         do {
             challenges = try await challengesTask
         } catch {
-            print("Failed to fetch challenges: \(error)")
+            Log.family.error("Failed to fetch challenges", error: error)
         }
 
         do {
             challengeTemplates = try await templatesTask
         } catch {
-            print("Failed to fetch challenge templates: \(error)")
+            Log.family.error("Failed to fetch challenge templates", error: error)
         }
 
         do {
             togetherSessions = try await sessionsTask
         } catch {
-            print("Failed to fetch together sessions: \(error)")
+            Log.family.error("Failed to fetch together sessions", error: error)
         }
 
         do {
             familyAlerts = try await alertsTask
         } catch {
-            print("Failed to fetch family alerts: \(error)")
+            Log.family.error("Failed to fetch family alerts", error: error)
         }
 
         do {
             parentalConsents = try await consentsTask
         } catch {
-            print("Failed to fetch parental consents: \(error)")
+            Log.family.error("Failed to fetch parental consents", error: error)
         }
 
         isLoading = false

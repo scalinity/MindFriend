@@ -102,9 +102,9 @@ struct PersonalizedInsightCard: View {
             HStack {
                 Image(systemName: insight.icon)
                     .font(.title2)
-                    .foregroundStyle(Color(insight.color))
+                    .foregroundStyle(insight.color)
                     .frame(width: 40, height: 40)
-                    .background(Color(insight.color).opacity(0.1))
+                    .background(insight.color.opacity(0.1))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
 
                 VStack(alignment: .leading) {

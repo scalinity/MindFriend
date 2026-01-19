@@ -23,6 +23,21 @@ interface ErrorResponse {
   upgrade_required?: boolean;
 }
 
+/**
+ * Voice Token Edge Function
+ * 
+ * Generates ephemeral voice tokens for real-time voice conversations.
+ * Validates user authentication, checks quota, and creates session records.
+ * 
+ * Security:
+ * - Validates JWT before function invocation (verify_jwt=true in config.toml)
+ * - Uses service role key for database operations
+ * - Rate limited to 5 requests per minute per user
+ * - Tokens expire after 5 minutes
+ * 
+ * @returns VoiceTokenResponse with ephemeral token and session details
+ * @throws ErrorResponse with appropriate error code and HTTP status
+ */
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req.headers.get("Origin"));
 
@@ -31,15 +46,18 @@ serve(async (req) => {
   }
 
   try {
+    // Create admin client with service role for all operations
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Authenticate user
+    // Get auth header
     const authHeader = req.headers.get("Authorization");
+    log.info("Auth header present", { hasHeader: !!authHeader });
 
     if (!authHeader) {
+      log.warn("Missing authorization header");
       return errorResponse(
         corsHeaders,
         "Missing authorization header",
@@ -49,19 +67,31 @@ serve(async (req) => {
     }
 
     const token = authHeader.replace("Bearer ", "");
+    log.info("Token extracted", {
+      tokenLength: token.length,
+    });
+
+    // Validate user token using admin client
     const {
       data: { user },
       error: authError,
     } = await supabase.auth.getUser(token);
 
     if (authError || !user) {
+      log.warn("Auth validation failed", {
+        hasError: !!authError,
+        errorMessage: authError?.message,
+        hasUser: !!user,
+      });
       return errorResponse(
         corsHeaders,
-        "Invalid or expired token",
+        authError?.message || "Invalid or expired token",
         "UNAUTHORIZED",
         401,
       );
     }
+
+    log.info("User authenticated", { userId: user.id.slice(0, 8) });
 
     // Rate limiting check (5 requests per minute to prevent token farming)
     const rateLimitResult = await checkRateLimit(
@@ -95,12 +125,25 @@ serve(async (req) => {
       );
     }
 
-    // Check voice quota
-    const { data: minutesRemaining, error: quotaError } = await supabase.rpc(
-      "get_voice_minutes_remaining",
-      { p_user_id: user.id },
-    );
+    // Run independent database queries in parallel for better performance
+    const [quotaResult, subscriptionResult, settingsResult] = await Promise.all([
+      supabase.rpc("get_voice_minutes_remaining", { p_user_id: user.id }),
+      supabase
+        .from("subscriptions")
+        .select("status, expires_at")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .gt("expires_at", new Date().toISOString())
+        .maybeSingle(),
+      supabase
+        .from("voice_settings")
+        .select("preferred_voice")
+        .eq("user_id", user.id)
+        .maybeSingle(),
+    ]);
 
+    // Check quota
+    const { data: minutesRemaining, error: quotaError } = quotaResult;
     if (quotaError) {
       log.error("Quota check error", { error: quotaError.message });
       return errorResponse(
@@ -127,25 +170,10 @@ serve(async (req) => {
     }
 
     // Check premium status
-    const { data: subscription } = await supabase
-      .from("subscriptions")
-      .select("status, expires_at")
-      .eq("user_id", user.id)
-      .eq("status", "active")
-      .gt("expires_at", new Date().toISOString())
-      .maybeSingle();
-
-    const isPremium = !!subscription;
+    const isPremium = !!subscriptionResult.data;
 
     // Get user's voice preference
-    const { data: settings } = await supabase
-      .from("voice_settings")
-      .select("preferred_voice")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    // Determine voice (non-premium users locked to 'ara')
-    const preferredVoice = settings?.preferred_voice || "ara";
+    const preferredVoice = settingsResult.data?.preferred_voice || "ara";
     const voice = isPremium ? preferredVoice : "ara";
     const availableVoices = isPremium
       ? ["ara", "rex", "sal", "eve", "leo"]
@@ -162,19 +190,43 @@ serve(async (req) => {
       );
     }
 
-    const xaiResponse = await fetch(
-      "https://api.x.ai/v1/realtime/client_secrets",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${xaiApiKey}`,
-          "Content-Type": "application/json",
+    let xaiResponse: Response;
+    try {
+      xaiResponse = await fetch(
+        "https://api.x.ai/v1/realtime/client_secrets",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${xaiApiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            expires_after: { seconds: 300 }, // 5 minutes
+          }),
+          signal: AbortSignal.timeout(10000), // 10-second timeout
         },
-        body: JSON.stringify({
-          expires_after: { seconds: 300 }, // 5 minutes
-        }),
-      },
-    );
+      );
+    } catch (error) {
+      // Handle timeout or network errors
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      log.error("xAI API request failed", { error: errorMessage });
+      
+      if (errorMessage.includes("timeout") || errorMessage.includes("abort")) {
+        return errorResponse(
+          corsHeaders,
+          "Voice service timeout - please try again",
+          "XAI_TIMEOUT",
+          504,
+        );
+      }
+      
+      return errorResponse(
+        corsHeaders,
+        "Failed to initialize voice session",
+        "XAI_ERROR",
+        502,
+      );
+    }
 
     if (!xaiResponse.ok) {
       log.error("xAI token request failed", {
@@ -220,7 +272,28 @@ serve(async (req) => {
     );
 
     if (sessionError) {
-      log.error("Session creation error", { error: sessionError.message });
+      log.error("Session creation failed", { 
+        error: sessionError.message,
+        userId: user.id.slice(0, 8),
+      });
+      return errorResponse(
+        corsHeaders,
+        "Failed to create voice session",
+        "SESSION_ERROR",
+        500,
+      );
+    }
+
+    if (!sessionId) {
+      log.error("Session creation returned no ID", { 
+        userId: user.id.slice(0, 8),
+      });
+      return errorResponse(
+        corsHeaders,
+        "Failed to create voice session",
+        "SESSION_ERROR",
+        500,
+      );
     }
 
     const response: VoiceTokenResponse = {
@@ -230,7 +303,7 @@ serve(async (req) => {
       voice,
       is_premium: isPremium,
       available_voices: availableVoices,
-      session_id: sessionId || "",
+      session_id: sessionId,
     };
 
     return new Response(JSON.stringify(response), {
@@ -249,6 +322,15 @@ serve(async (req) => {
   }
 });
 
+/**
+ * Creates a standardized error response with CORS headers
+ * 
+ * @param corsHeaders - CORS headers for the response
+ * @param message - Human-readable error message
+ * @param code - Machine-readable error code (e.g., "UNAUTHORIZED", "QUOTA_EXCEEDED")
+ * @param status - HTTP status code
+ * @returns Response object with error details and appropriate headers
+ */
 function errorResponse(
   corsHeaders: Record<string, string>,
   message: string,

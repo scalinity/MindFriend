@@ -206,7 +206,7 @@ struct InlineReactionPicker: View {
         )
 
         InlineReactionPicker { emoji in
-            print("Selected: \(emoji)")
+            Log.social.debug("Selected: \(emoji.rawValue, privacy: .public)")
         }
     }
     .padding()

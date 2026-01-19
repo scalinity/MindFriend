@@ -16,6 +16,12 @@ final class AppState: ObservableObject {
     @Published var authState: AuthState = .unknown
     @Published var currentUser: UserProfile?
 
+    /// Whether the initial auth check has completed
+    @Published var hasCompletedInitialAuth: Bool = false
+
+    /// Whether we're using cached data (before network verification)
+    @Published var isUsingCachedData: Bool = false
+
     // MARK: - Entitlements
     @Published var entitlements: Entitlements = .free
 
@@ -51,6 +57,17 @@ final class AppState: ObservableObject {
         self.currentUser = user
         self.entitlements = user.entitlements
         self.authState = .authenticated
+        self.hasCompletedInitialAuth = true
+        self.isUsingCachedData = false
+    }
+
+    /// Set authenticated state with cached data (before network verification)
+    func setAuthenticatedFromCache(user: UserProfile) {
+        self.currentUser = user
+        self.entitlements = user.entitlements
+        self.authState = .authenticated
+        self.isUsingCachedData = true
+        // Don't set hasCompletedInitialAuth - that's for after network verification
     }
 
     func setUnauthenticated() {
@@ -60,6 +77,8 @@ final class AppState: ObservableObject {
         self.todayMood = nil
         self.currentStreak = 0
         self.authState = .unauthenticated
+        self.hasCompletedInitialAuth = true
+        self.isUsingCachedData = false
     }
 
     func requireOnboarding() {

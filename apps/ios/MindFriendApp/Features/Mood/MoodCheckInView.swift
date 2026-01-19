@@ -114,6 +114,7 @@ struct MoodCheckInView: View {
                 }
                 .padding()
             }
+            .sentryMaskMood()
             .navigationTitle("Mood Check-In")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -125,13 +126,14 @@ struct MoodCheckInView: View {
             }
             .onAppear {
                 if let mood = existingMood {
-                    moodScore = Double(mood.moodScore)
+                    // Clamp scores to valid range [1, 5] to prevent array index out of bounds
+                    moodScore = Double(max(1, min(5, mood.moodScore)))
                     if let anxiety = mood.anxietyScore {
-                        anxietyScore = Double(anxiety)
+                        anxietyScore = Double(max(1, min(5, anxiety)))
                         showAdvanced = true
                     }
                     if let energy = mood.energyScore {
-                        energyScore = Double(energy)
+                        energyScore = Double(max(1, min(5, energy)))
                         showAdvanced = true
                     }
                     if let existingNote = mood.note {
@@ -182,9 +184,14 @@ struct MoodCheckInView: View {
                     dismiss()
                 }
             } catch {
-                appState.showError(.apiError(error.localizedDescription))
+                await MainActor.run {
+                    appState.showError(.apiError(error.localizedDescription))
+                }
             }
-            isSaving = false
+
+            await MainActor.run {
+                isSaving = false
+            }
         }
     }
 }

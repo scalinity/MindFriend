@@ -133,6 +133,8 @@ struct VoiceJournalRecorderView: View {
                     .foregroundStyle(.secondary)
             }
             .padding()
+            .background(Color(.systemBackground))
+            .sentryMask()  // Voice journal content is highly sensitive PHI
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -233,7 +235,7 @@ class VoiceJournalRecorder: NSObject, ObservableObject {
         // Request permission
         let permission = await AVAudioApplication.requestRecordPermission()
         guard permission else {
-            print("Microphone permission denied")
+            Log.voice.error("Microphone permission denied")
             return
         }
 
@@ -243,7 +245,7 @@ class VoiceJournalRecorder: NSObject, ObservableObject {
             try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
             try session.setActive(true)
         } catch {
-            print("Audio session setup failed: \(error)")
+            Log.voice.error("Audio session setup failed", error: error)
             return
         }
 
@@ -284,7 +286,7 @@ class VoiceJournalRecorder: NSObject, ObservableObject {
                 }
             }
         } catch {
-            print("Recording failed to start: \(error)")
+            Log.voice.error("Recording failed to start", error: error)
         }
     }
 
@@ -319,7 +321,7 @@ class VoiceJournalRecorder: NSObject, ObservableObject {
             audioPlayer?.play()
             isPlaying = true
         } catch {
-            print("Playback failed: \(error)")
+            Log.voice.error("Playback failed", error: error)
         }
     }
 
@@ -420,6 +422,7 @@ struct VoiceJournalAnalysisView: View {
                 }
                 .padding()
             }
+            .sentryMask()  // Voice journal analysis contains highly sensitive PHI
             .navigationTitle("Voice Journal")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -576,7 +579,7 @@ struct VoiceJournalAnalysisView: View {
         do {
             analysis = try await container.creativeExpressionService.fetchVoiceAnalysis(workId: work.id)
         } catch {
-            print("Failed to load analysis: \(error)")
+            Log.creative.error("Failed to load analysis", error: error)
         }
     }
 }

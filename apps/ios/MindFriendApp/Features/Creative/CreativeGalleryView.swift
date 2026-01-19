@@ -150,7 +150,7 @@ struct CreativeGalleryView: View {
         do {
             works = try await container.creativeExpressionService.fetchGallery()
         } catch {
-            print("Failed to load gallery: \(error)")
+            Log.creative.error("Failed to load gallery", error: error)
         }
     }
 
@@ -161,7 +161,7 @@ struct CreativeGalleryView: View {
                 works[index].isFavorite = newStatus
             }
         } catch {
-            print("Failed to toggle favorite: \(error)")
+            Log.creative.error("Failed to toggle favorite", error: error)
         }
     }
 
@@ -170,7 +170,7 @@ struct CreativeGalleryView: View {
             try await container.creativeExpressionService.deleteWork(id: work.id)
             works.removeAll { $0.id == work.id }
         } catch {
-            print("Failed to delete work: \(error)")
+            Log.creative.error("Failed to delete work", error: error)
         }
         workToDelete = nil
     }
@@ -611,7 +611,7 @@ struct CreativeWorkDetailView: View {
             let newStatus = try await container.creativeExpressionService.toggleFavorite(workId: localWork.id)
             localWork.isFavorite = newStatus
         } catch {
-            print("Failed to toggle favorite: \(error)")
+            Log.creative.error("Failed to toggle favorite", error: error)
         }
     }
 
@@ -620,7 +620,7 @@ struct CreativeWorkDetailView: View {
             try await container.creativeExpressionService.deleteWork(id: localWork.id)
             dismiss()
         } catch {
-            print("Failed to delete work: \(error)")
+            Log.creative.error("Failed to delete work", error: error)
         }
     }
 
@@ -628,7 +628,7 @@ struct CreativeWorkDetailView: View {
         do {
             analysis = try await container.creativeExpressionService.fetchVoiceAnalysis(workId: localWork.id)
         } catch {
-            print("Failed to load analysis: \(error)")
+            Log.creative.error("Failed to load analysis", error: error)
         }
     }
 

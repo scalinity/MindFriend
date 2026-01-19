@@ -97,7 +97,11 @@ final class SupabaseDataService: ObservableObject {
     }
 
     func getMoodsForPast(days: Int) async throws -> [MoodEntry] {
-        let formatter = ISO8601DateFormatter.dateOnly
+        // Use local date formatter to match MoodCheckInView's date format
+        // This ensures consistency when comparing saved moods with query dates
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+
         let to = formatter.string(from: Date())
         guard let pastDate = Calendar.current.date(byAdding: .day, value: -days, to: Date()) else {
             return []
@@ -639,14 +643,19 @@ final class SupabaseDataService: ObservableObject {
     // MARK: - Conversations
 
     func getConversations() async throws -> [Conversation] {
+        Log.data.debug("[Data] getConversations: Starting...")
+        let uid = try userId
+        Log.data.debug("[Data] getConversations: Got userId=\(uid)")
+
         let conversations: [DBConversation] = try await supabase
             .from(Tables.conversations)
             .select()
-            .eq("user_id", value: try userId)
+            .eq("user_id", value: uid)
             .order("updated_at", ascending: false)
             .execute()
             .value
 
+        Log.data.debug("[Data] getConversations: Fetched \(conversations.count) conversations")
         return conversations.map { conv in
             Conversation(
                 id: conv.id?.uuidString ?? "",
@@ -832,8 +841,8 @@ final class SupabaseDataService: ObservableObject {
         )
     }
 
-    /// Legacy method for direct message insertion (without AI response)
-    func insertUserMessage(conversationId: String, content: String) async throws -> Message {
+    /// Direct message insertion (without AI response)
+    func insertMessage(conversationId: String, role: MessageRole, content: String) async throws -> Message {
         guard let convId = UUID(uuidString: conversationId) else {
             throw DataError.invalidId
         }
@@ -841,7 +850,7 @@ final class SupabaseDataService: ObservableObject {
         let message = DBMessage(
             id: nil,
             conversationId: convId,
-            role: "user",
+            role: role.rawValue,
             content: content,
             createdAt: nil
         )
@@ -856,11 +865,16 @@ final class SupabaseDataService: ObservableObject {
 
         return Message(
             id: result.id?.uuidString ?? "",
-            role: .user,
+            role: role,
             content: result.content,
             createdAt: result.createdAt ?? Date(),
             blocked: false
         )
+    }
+
+    /// Legacy method for direct user message insertion (without AI response)
+    func insertUserMessage(conversationId: String, content: String) async throws -> Message {
+        try await insertMessage(conversationId: conversationId, role: .user, content: content)
     }
 
     // MARK: - Circles
@@ -2073,7 +2087,7 @@ final class SupabaseDataService: ObservableObject {
             .from("weekly_summaries")
             .select()
             .eq("user_id", value: try userId)
-            .eq("week_start::text", value: weekStartStr)
+            .eq("week_start", value: weekStartStr)
             .limit(1)
             .execute()
             .value
@@ -2105,7 +2119,7 @@ final class SupabaseDataService: ObservableObject {
             .from("weekly_summaries")
             .select()
             .eq("user_id", value: try userId)
-            .eq("week_start::text", value: weekStart)
+            .eq("week_start", value: weekStart)
             .limit(1)
             .execute()
             .value
@@ -2117,10 +2131,16 @@ final class SupabaseDataService: ObservableObject {
     /// Calls the generate-weekly-summary Edge Function which will calculate
     /// stats, detect patterns, and generate AI insights
     func generateWeeklyInsight() async throws -> WeeklySummary? {
-        // Invoke the Edge Function - it will use the user's JWT to identify them
+        // Get valid session token for Edge Function auth
+        let session = try await supabase.auth.session
+
+        // Invoke the Edge Function with explicit auth header
         _ = try await supabase.functions.invoke(
             "generate-weekly-summary",
-            options: .init(method: .post)
+            options: .init(
+                method: .post,
+                headers: ["Authorization": "Bearer \(session.accessToken)"]
+            )
         )
 
         // After successful generation, fetch the newly created summary

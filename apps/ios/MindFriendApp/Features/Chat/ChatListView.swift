@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 struct ChatListView: View {
     @EnvironmentObject var appState: AppState
@@ -6,12 +7,38 @@ struct ChatListView: View {
     @State private var conversations: [Conversation] = []
     @State private var isLoading = true
     @State private var showNewChat = false
+    @State private var showVoiceChat = false
+    @State private var loadError: String?
 
     var body: some View {
         NavigationStack {
             Group {
                 if isLoading {
-                    ProgressView()
+                    VStack(spacing: 16) {
+                        ProgressView()
+                        Text("Loading conversations...")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else if let error = loadError {
+                    VStack(spacing: 16) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.largeTitle)
+                            .foregroundStyle(.secondary)
+                        Text("Couldn't load conversations")
+                            .font(.headline)
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                        Button("Try Again") {
+                            Task {
+                                await loadConversations()
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
                 } else if conversations.isEmpty {
                     EmptyConversationsView(showNewChat: $showNewChat)
                 } else {
@@ -39,7 +66,15 @@ struct ChatListView: View {
                     }
                 }
 
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button {
+                        showVoiceChat = true
+                    } label: {
+                        Image(systemName: "mic.fill")
+                    }
+                    .accessibilityLabel("Voice mode")
+                    .accessibilityHint("Start a voice conversation")
+
                     Button {
                         showNewChat = true
                     } label: {
@@ -47,27 +82,95 @@ struct ChatListView: View {
                     }
                 }
             }
-            .navigationDestination(isPresented: $showNewChat) {
+            .navigationDestination(isPresented: $showNewChat, destination: {
                 NewChatView()
+            })
+            .fullScreenCover(isPresented: $showVoiceChat, onDismiss: {
+                Task {
+                    await loadConversations()
+                }
+            }) {
+                VoiceChatView(supabase: container.supabaseClient)
             }
             .refreshable {
                 await loadConversations()
             }
-            .task {
-                await loadConversations()
-            }
+        }
+        .onAppear {
+            Log.chat.debug("[ChatList] View appeared")
+        }
+        // Load conversations on appearance
+        .task {
+            Log.chat.debug("[ChatList] task starting...")
+            await loadConversations()
+            Log.chat.debug("[ChatList] task completed")
         }
     }
 
     private func loadConversations() async {
-        isLoading = true
-        defer { isLoading = false }
+        Log.chat.debug("[ChatList] Starting to load conversations...")
+
+        // Only show loading indicator on initial load, not during refresh
+        let isInitialLoad = conversations.isEmpty && loadError == nil
+        if isInitialLoad {
+            isLoading = true
+        }
+        loadError = nil
+
+        defer {
+            if isInitialLoad {
+                isLoading = false
+            }
+            Log.chat.debug("[ChatList] Finished loading, isLoading=false")
+        }
 
         do {
-            conversations = try await container.chatService.getConversations()
+            // Check for cancellation before starting
+            try Task.checkCancellation()
+
+            // Add a timeout to prevent infinite waits
+            let result = try await withThrowingTaskGroup(of: [Conversation].self) { group in
+                group.addTask {
+                    try await self.container.chatService.getConversations()
+                }
+
+                group.addTask {
+                    try await Task.sleep(for: .seconds(30))
+                    throw ChatLoadError.timeout
+                }
+
+                // Return whichever finishes first
+                guard let first = try await group.next() else {
+                    throw ChatLoadError.cancelled
+                }
+                group.cancelAll()
+                return first
+            }
+
+            // Check for cancellation before updating UI
+            try Task.checkCancellation()
+
+            conversations = result
+            Log.chat.debug("[ChatList] Loaded \(result.count) conversations")
+        } catch is CancellationError {
+            // SwiftUI cancelled the task (e.g., user released pull-to-refresh early)
+            // This is normal behavior, not an error to show the user
+            Log.chat.debug("[ChatList] Task was cancelled by SwiftUI")
+        } catch ChatLoadError.timeout {
+            Log.chat.error("[ChatList] Request timed out after 30s")
+            loadError = "Request timed out. Please check your connection and try again."
+        } catch ChatLoadError.cancelled {
+            Log.chat.warning("[ChatList] Request was cancelled")
+            // Don't show error for internal cancellation either
         } catch {
-            appState.showError(.apiError(error.localizedDescription))
+            Log.chat.error("[ChatList] Error loading conversations: \(error.localizedDescription)")
+            loadError = error.localizedDescription
         }
+    }
+
+    private enum ChatLoadError: Error {
+        case timeout
+        case cancelled
     }
 
     private func deleteConversations(at offsets: IndexSet) {

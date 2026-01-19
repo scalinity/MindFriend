@@ -437,7 +437,7 @@ final class LiveService: ObservableObject {
         let currentUserId = try userId
 
         let now = Date()
-        let endsAt = Calendar.current.date(byAdding: .minute, value: durationMinutes, to: now)!
+        let endsAt = Calendar.current.date(byAdding: .minute, value: durationMinutes, to: now) ?? now.addingTimeInterval(TimeInterval(durationMinutes * 60))
 
         struct InsertRoom: Codable {
             let circleId: String

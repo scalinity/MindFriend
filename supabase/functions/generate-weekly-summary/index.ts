@@ -44,7 +44,21 @@ interface ExtendedWeeklyStats {
   quest_count: number;
   exercise_count: number;
   avg_mood: number | null;
+  avg_anxiety: number | null;
+  avg_energy: number | null;
   mood_trend: "improving" | "stable" | "declining" | "insufficient_data" | null;
+  anxiety_trend:
+    | "improving"
+    | "stable"
+    | "declining"
+    | "insufficient_data"
+    | null;
+  energy_trend:
+    | "improving"
+    | "stable"
+    | "declining"
+    | "insufficient_data"
+    | null;
   mood_min: number | null;
   mood_max: number | null;
   mood_by_day: Record<string, number>;
@@ -79,6 +93,10 @@ serve(async (req) => {
   let authenticatedUserId: string | null = null;
   const authHeader = req.headers.get("Authorization");
 
+  console.log(
+    `Auth check - isCronOrServiceRole: ${isCronOrServiceRole}, hasAuthHeader: ${!!authHeader}`,
+  );
+
   if (!isCronOrServiceRole && authHeader?.startsWith("Bearer ")) {
     // Try to authenticate as a regular user using service role client
     const supabaseAuth = createClient(
@@ -87,18 +105,28 @@ serve(async (req) => {
     );
 
     const token = authHeader.replace("Bearer ", "");
+    console.log(`Attempting to validate user token (length: ${token.length})`);
+
     const {
       data: { user },
       error: authError,
     } = await supabaseAuth.auth.getUser(token);
 
+    if (authError) {
+      console.error("Auth error validating user token:", authError.message);
+    }
+
     if (!authError && user) {
       authenticatedUserId = user.id;
+      console.log(`Authenticated user: ${user.id}`);
     }
   }
 
   // Must be either cron/service role OR authenticated user
   if (!isCronOrServiceRole && !authenticatedUserId) {
+    console.error(
+      `Unauthorized request - no valid cron/service role auth and no authenticated user`,
+    );
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
       headers,
@@ -271,8 +299,12 @@ async function processUserWithInsights(
   aiInsight?: AIInsightResult;
 }> {
   // Calculate week start (Monday of current week)
+  // getDay(): 0=Sunday, 1=Monday, ..., 6=Saturday
+  // For Sunday (0), go back 6 days; for Monday (1), go back 0 days; etc.
   const weekStart = new Date(now);
-  weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1);
+  const dayOfWeek = weekStart.getDay();
+  const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  weekStart.setDate(weekStart.getDate() - daysFromMonday);
   weekStart.setHours(0, 0, 0, 0);
   const weekStartStr = weekStart.toISOString().split("T")[0];
 
@@ -301,7 +333,11 @@ async function processUserWithInsights(
     quest_count: 0,
     exercise_count: 0,
     avg_mood: null,
+    avg_anxiety: null,
+    avg_energy: null,
     mood_trend: null,
+    anxiety_trend: null,
+    energy_trend: null,
     mood_min: null,
     mood_max: null,
     mood_by_day: {},
@@ -327,6 +363,20 @@ async function processUserWithInsights(
     },
   );
 
+  // Fetch recent mood notes from this week
+  const { data: moodNotes } = await supabase
+    .from("moods")
+    .select("note")
+    .eq("user_id", userId)
+    .gte("local_date", weekStartStr)
+    .not("note", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(10);
+
+  const recentNotes: string[] = (moodNotes || [])
+    .map((m: { note: string | null }) => m.note)
+    .filter((n): n is string => n !== null && n.trim().length > 0);
+
   // Detect patterns
   const patterns = detectPatterns(
     (moodData as MoodData[]) || [],
@@ -340,7 +390,11 @@ async function processUserWithInsights(
     userName: userProfile?.display_name || undefined,
     wellnessFocus: userProfile?.wellness_focus || undefined,
     avgMood: stats.avg_mood,
+    avgAnxiety: stats.avg_anxiety,
+    avgEnergy: stats.avg_energy,
     moodTrend: stats.mood_trend,
+    anxietyTrend: stats.anxiety_trend,
+    energyTrend: stats.energy_trend,
     questCount: stats.quest_count,
     exerciseCount: stats.exercise_count,
     exerciseMinutes: stats.exercise_minutes,
@@ -348,6 +402,7 @@ async function processUserWithInsights(
     circleCheckinCount: stats.circle_checkin_count,
     patterns,
     streakDays: userProfile?.current_streak_days || 0,
+    recentNotes,
   };
 
   const aiInsight = await generateAIInsight(insightContext, xaiApiKey);

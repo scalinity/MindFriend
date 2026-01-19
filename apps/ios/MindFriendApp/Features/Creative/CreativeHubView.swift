@@ -180,7 +180,7 @@ struct CreativeHubView: View {
             quota = try await quotaTask
             recentWorks = try await worksTask
         } catch {
-            print("CreativeHubView loadData error: \(error)")
+            Log.creative.error("CreativeHubView loadData error", error: error)
         }
     }
 }

@@ -156,29 +156,29 @@ struct MindFriendApp: App {
         switch deepLink {
         case .quest(let id):
             // Navigate to quest with id
-            print("[DeepLink] Navigate to quest: \(id ?? "nil")")
+            Log.general.info("[DeepLink] Navigate to quest: \(id ?? "nil")")
         case .chat(let conversationId):
             // Navigate to chat
-            print("[DeepLink] Navigate to chat: \(conversationId)")
+            Log.general.info("[DeepLink] Navigate to chat: \(conversationId)")
         case .circle(let id):
             // Navigate to circle
-            print("[DeepLink] Navigate to circle: \(id)")
+            Log.general.info("[DeepLink] Navigate to circle: \(id)")
         case .mood:
             // Navigate to mood tracking
-            print("[DeepLink] Navigate to mood")
+            Log.general.info("[DeepLink] Navigate to mood")
         case .settings:
             // Navigate to settings
-            print("[DeepLink] Navigate to settings")
+            Log.general.info("[DeepLink] Navigate to settings")
         case .insights:
             // Navigate to insights/weekly summary
-            print("[DeepLink] Navigate to insights")
+            Log.general.info("[DeepLink] Navigate to insights")
         case .buddy(let code):
             // Handle buddy invite
             handleBuddyInvite(code: code)
         case .micro(let templateId):
             // Navigate to micro-moments
             appState.selectedTab = .home
-            print("[DeepLink] Navigate to micro-moments: \(templateId ?? "hub")")
+            Log.general.info("[DeepLink] Navigate to micro-moments: \(templateId ?? "hub")")
         case .none:
             break
         }
@@ -191,7 +191,7 @@ struct MindFriendApp: App {
         guard case .authenticated = appState.authState else {
             // Store the code to process after authentication
             pendingBuddyCode = code
-            print("[DeepLink] Stored buddy code for after auth: \(code)")
+            Log.general.info("[DeepLink] Stored buddy code for after auth: \(code)")
             return
         }
 

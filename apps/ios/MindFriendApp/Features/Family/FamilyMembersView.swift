@@ -48,7 +48,7 @@ struct FamilyMembersView: View {
         do {
             members = try await container.familyService.fetchFamilyMembers()
         } catch {
-            print("Failed to load members: \(error)")
+            Log.family.error("Failed to load members", error: error)
         }
     }
 }
