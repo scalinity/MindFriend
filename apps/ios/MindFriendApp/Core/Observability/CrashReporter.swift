@@ -1,6 +1,7 @@
 import Foundation
 import Sentry
 import UIKit
+import OSLog
 
 /// Centralized crash reporting and error tracking using Sentry
 ///
@@ -16,11 +17,15 @@ import UIKit
 /// sensitive on-screen content (mood entries, crisis resources, chat conversations).
 final class CrashReporter {
     static let shared = CrashReporter()
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "app.mindfriend", category: "CrashReporter")
 
     private(set) var isInitialized = false
 
     /// Whether Sentry is fully configured (DSN available)
     private var isSentryEnabled = false
+
+    /// Public accessor to check if Sentry tracing is enabled
+    var isEnabled: Bool { isSentryEnabled }
 
     private init() {}
 
@@ -49,28 +54,58 @@ final class CrashReporter {
     // MARK: - Compiled Regex Patterns (Performance Optimization)
 
     /// Email pattern compiled once for reuse
-    private static let emailRegex = try! NSRegularExpression(
-        pattern: "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}",
-        options: []
-    )
+    private static let emailRegex: NSRegularExpression = {
+        if let regex = try? NSRegularExpression(
+            pattern: "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}",
+            options: []
+        ) {
+            return regex
+        } else {
+            // This should never happen as the pattern is hardcoded and valid
+            Log.crash.error("Failed to compile email regex - PII scrubbing may be incomplete")
+            // Fallback: regex that matches nothing (defensive programming)
+            return try! NSRegularExpression(pattern: "a^", options: [])
+        }
+    }()
 
     /// Invite code pattern compiled once for reuse
-    private static let inviteCodeRegex = try! NSRegularExpression(
-        pattern: "(invite[/_=])([A-Za-z0-9]{6,12})",
-        options: []
-    )
+    private static let inviteCodeRegex: NSRegularExpression = {
+        if let regex = try? NSRegularExpression(
+            pattern: "(invite[/_=])([A-Za-z0-9]{6,12})",
+            options: []
+        ) {
+            return regex
+        } else {
+            Log.crash.error("Failed to compile invite code regex - PII scrubbing may be incomplete")
+            return try! NSRegularExpression(pattern: "a^", options: [])
+        }
+    }()
 
     /// URL query parameter token pattern compiled once for reuse
-    private static let urlTokenRegex = try! NSRegularExpression(
-        pattern: "(token|access_token|code|key|secret)=([A-Za-z0-9._-]+)",
-        options: []
-    )
+    private static let urlTokenRegex: NSRegularExpression = {
+        if let regex = try? NSRegularExpression(
+            pattern: "(token|access_token|code|key|secret)=([A-Za-z0-9._-]+)",
+            options: []
+        ) {
+            return regex
+        } else {
+            Log.crash.error("Failed to compile URL token regex - PII scrubbing may be incomplete")
+            return try! NSRegularExpression(pattern: "a^", options: [])
+        }
+    }()
 
     /// Phone number pattern compiled once for reuse
-    private static let phoneRegex = try! NSRegularExpression(
-        pattern: "(\\+?1?[-.\\s]?)?(\\(?\\d{3}\\)?[-.\\s]?){2}\\d{4}",
-        options: []
-    )
+    private static let phoneRegex: NSRegularExpression = {
+        if let regex = try? NSRegularExpression(
+            pattern: "(\\+?1?[-.\\s]?)?(\\(?\\d{3}\\)?[-.\\s]?){2}\\d{4}",
+            options: []
+        ) {
+            return regex
+        } else {
+            Log.crash.error("Failed to compile phone regex - PII scrubbing may be incomplete")
+            return try! NSRegularExpression(pattern: "a^", options: [])
+        }
+    }()
 
     // MARK: - Configuration
 
@@ -87,7 +122,7 @@ final class CrashReporter {
             isInitialized = true
             isSentryEnabled = false
             #if DEBUG
-            print("[CrashReporter] Sentry DSN not configured, crash reporting disabled")
+            logger.warning("Sentry DSN not configured, crash reporting disabled")
             #endif
             return
         }
@@ -103,8 +138,55 @@ final class CrashReporter {
                 return Self.scrubPII(from: event)
             }
 
-            // Performance monitoring
-            options.tracesSampleRate = 0.2  // 20% of transactions
+            // MARK: - Structured Logging
+
+            // Enable Sentry structured logs for remote observability
+            options.enableLogs = true
+
+            // PRIVACY: PII scrubbing for logs - same rules as events
+            options.beforeSendLog = { log in
+                return Self.scrubPIIFromLog(log)
+            }
+
+            // MARK: - Performance Monitoring & Tracing
+
+            // Sample rate: 100% in debug, 25% in production for meaningful data
+            #if DEBUG
+            options.tracesSampleRate = 1.0
+            #else
+            options.tracesSampleRate = 0.25
+            #endif
+
+            // Enable automatic instrumentation features
+            options.enableAutoPerformanceTracing = true
+
+            // Network request tracing - tracks all HTTP requests
+            options.enableNetworkTracking = true
+            options.enableNetworkBreadcrumbs = true
+
+            // File I/O tracing - monitors NSData and NSFileManager operations
+            options.enableFileIOTracing = true
+
+            // Core Data tracing - tracks fetch and save operations
+            options.enableCoreDataTracing = true
+
+            // User interaction tracing - captures button taps and gestures
+            // Note: Limited SwiftUI support, but works for UIKit-backed views
+            options.enableUserInteractionTracing = true
+
+            // App start tracing - measures cold/warm start times
+            options.enablePreWarmedAppStartTracing = true
+
+            // Time to Full Display tracking for views
+            options.enableTimeToFullDisplayTracing = true
+
+            // Trace propagation targets - send trace headers to our backend
+            // This enables distributed tracing with Supabase Edge Functions
+            options.tracePropagationTargets = [
+                "supabase.co",
+                "supabase.in",
+                "localhost"
+            ]
 
             // Session tracking
             options.enableAutoSessionTracking = true
@@ -134,6 +216,31 @@ final class CrashReporter {
                let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String {
                 options.releaseName = "com.mindfriend.app@\(version)+\(build)"
             }
+
+            // Session Replay Configuration
+            // Enables visual recording of user sessions for debugging while maintaining strict privacy.
+            // All text and images are masked by default to protect mental health data.
+            #if DEBUG
+            // Development: No session replay to avoid unnecessary overhead during active dev
+            let sessionSampleRate: Float = 0.0
+            let onErrorSampleRate: Float = 0.0
+            #else
+            // Production: 5% of sessions recorded, 100% of error sessions captured
+            // Low sample rate minimizes storage costs while providing sufficient debugging data
+            let sessionSampleRate: Float = 0.05
+            let onErrorSampleRate: Float = 1.0
+            #endif
+
+            options.sessionReplay.sessionSampleRate = sessionSampleRate
+            options.sessionReplay.onErrorSampleRate = onErrorSampleRate
+
+            // Privacy Protection: CRITICAL for mental health application
+            // - maskAllText: Replaces ALL text with gray blocks (mood scores, journal entries, chat)
+            // - maskAllImages: Replaces ALL images with placeholders (user photos, media)
+            // - maskedViewClasses: Additional defense-in-depth for explicitly masked SwiftUI views
+            options.sessionReplay.maskAllText = true
+            options.sessionReplay.maskAllImages = true
+            options.sessionReplay.maskedViewClasses = SentryReplayMasking.sensitiveViewTypes
         }
 
         isInitialized = true
@@ -303,6 +410,47 @@ final class CrashReporter {
         }
     }
 
+    // MARK: - Log PII Scrubbing
+
+    /// Scrub PII from a Sentry log before transmission.
+    /// Note: SentryLog properties are read-only, so we can only filter logs containing PII.
+    /// Logs with detected PII patterns are dropped entirely for privacy protection.
+    private static func scrubPIIFromLog(_ log: SentryLog) -> SentryLog? {
+        // Check if the log message contains PII patterns
+        // If PII is detected, drop the log entirely since we can't modify it
+        let message = log.body
+        let containsEmail = emailRegex.firstMatch(
+            in: message,
+            options: [],
+            range: NSRange(location: 0, length: (message as NSString).length)
+        ) != nil
+
+        let containsPhone = phoneRegex.firstMatch(
+            in: message,
+            options: [],
+            range: NSRange(location: 0, length: (message as NSString).length)
+        ) != nil
+
+        let containsToken = urlTokenRegex.firstMatch(
+            in: message,
+            options: [],
+            range: NSRange(location: 0, length: (message as NSString).length)
+        ) != nil
+
+        let containsInviteCode = inviteCodeRegex.firstMatch(
+            in: message,
+            options: [],
+            range: NSRange(location: 0, length: (message as NSString).length)
+        ) != nil
+
+        // Drop logs that contain PII
+        if containsEmail || containsPhone || containsToken || containsInviteCode {
+            return nil
+        }
+
+        return log
+    }
+
     // MARK: - User Identification
 
     /// Set the current user for crash reports
@@ -317,7 +465,7 @@ final class CrashReporter {
         let isValidUUID = id.count == 36 && id.filter({ $0 == "-" }).count == 4
         guard isValidUUID else {
             #if DEBUG
-            print("[CrashReporter] WARNING: User ID does not appear to be a UUID format. Refusing to set user context. Received: \(id)")
+            logger.warning("User ID does not appear to be a UUID format. Refusing to set user context. Received: \(id, privacy: .private)")
             #endif
             return
         }
@@ -394,12 +542,143 @@ final class CrashReporter {
         addBreadcrumb(category: "user", message: action, data: data)
     }
 
-    // MARK: - Performance Monitoring
+    // MARK: - Structured Logging
+
+    /// Private helper to reduce code duplication in logging methods
+    /// - Parameters:
+    ///   - message: The log message
+    ///   - attributes: Optional structured attributes
+    ///   - logWithAttrs: Closure that logs with attributes
+    ///   - logSimple: Closure that logs without attributes
+    private func performLog(
+        _ message: String,
+        attributes: [String: Any]?,
+        logWithAttrs: (String, [String: Any]) -> Void,
+        logSimple: (String) -> Void
+    ) {
+        guard isSentryEnabled else { return }
+        if let attrs = attributes {
+            logWithAttrs(message, attrs)
+        } else {
+            logSimple(message)
+        }
+    }
+
+    /// Private helper for error-level logs that include Error objects
+    /// - Parameters:
+    ///   - message: The log message
+    ///   - error: Optional Error object to extract type and message from
+    ///   - attributes: Optional structured attributes
+    ///   - logWithAttrs: Closure that logs with attributes
+    ///   - logSimple: Closure that logs without attributes
+    private func performErrorLog(
+        _ message: String,
+        error: Error?,
+        attributes: [String: Any]?,
+        logWithAttrs: (String, [String: Any]) -> Void,
+        logSimple: (String) -> Void
+    ) {
+        guard isSentryEnabled else { return }
+        var attrs = attributes ?? [:]
+        if let error = error {
+            attrs["error.type"] = String(describing: type(of: error))
+            attrs["error.message"] = error.localizedDescription
+        }
+        if attrs.isEmpty {
+            logSimple(message)
+        } else {
+            logWithAttrs(message, attrs)
+        }
+    }
+
+    /// Log a trace-level message (most verbose, for detailed debugging)
+    func logTrace(_ message: String, attributes: [String: Any]? = nil) {
+        performLog(
+            message,
+            attributes: attributes,
+            logWithAttrs: SentrySDK.logger.trace,
+            logSimple: SentrySDK.logger.trace
+        )
+    }
+
+    /// Log a debug-level message
+    func logDebug(_ message: String, attributes: [String: Any]? = nil) {
+        performLog(
+            message,
+            attributes: attributes,
+            logWithAttrs: SentrySDK.logger.debug,
+            logSimple: SentrySDK.logger.debug
+        )
+    }
+
+    /// Log an info-level message
+    func logInfo(_ message: String, attributes: [String: Any]? = nil) {
+        performLog(
+            message,
+            attributes: attributes,
+            logWithAttrs: SentrySDK.logger.info,
+            logSimple: SentrySDK.logger.info
+        )
+    }
+
+    /// Log a warning-level message
+    func logWarning(_ message: String, attributes: [String: Any]? = nil) {
+        performLog(
+            message,
+            attributes: attributes,
+            logWithAttrs: SentrySDK.logger.warn,
+            logSimple: SentrySDK.logger.warn
+        )
+    }
+
+    /// Log an error-level message
+    func logError(_ message: String, error: Error? = nil, attributes: [String: Any]? = nil) {
+        performErrorLog(
+            message,
+            error: error,
+            attributes: attributes,
+            logWithAttrs: SentrySDK.logger.error,
+            logSimple: SentrySDK.logger.error
+        )
+    }
+
+    /// Log a fatal-level message (critical errors)
+    func logFatal(_ message: String, error: Error? = nil, attributes: [String: Any]? = nil) {
+        performErrorLog(
+            message,
+            error: error,
+            attributes: attributes,
+            logWithAttrs: SentrySDK.logger.fatal,
+            logSimple: SentrySDK.logger.fatal
+        )
+    }
+
+    // MARK: - Performance Monitoring & Tracing
 
     /// Start a transaction for performance monitoring
-    func startTransaction(name: String, operation: String) -> (any Span)? {
+    /// - Parameters:
+    ///   - name: Transaction name (e.g., "HomeView.loadData")
+    ///   - operation: Operation type (e.g., "ui.load", "http.client", "db.query")
+    ///   - bindToScope: If true, binds to current scope for child span access
+    func startTransaction(name: String, operation: String, bindToScope: Bool = false) -> (any Span)? {
         guard isSentryEnabled else { return nil }
-        return SentrySDK.startTransaction(name: name, operation: operation)
+        return SentrySDK.startTransaction(name: name, operation: operation, bindToScope: bindToScope)
+    }
+
+    /// Get the current active span from scope (useful for adding child spans)
+    var currentSpan: (any Span)? {
+        guard isSentryEnabled else { return nil }
+        return SentrySDK.span
+    }
+
+    /// Start a child span on the current transaction
+    /// Use this within a transaction context to track sub-operations
+    /// - Parameters:
+    ///   - operation: Operation type (e.g., "db.query", "http.client", "serialize")
+    ///   - description: Human-readable description of what this span measures
+    func startSpan(operation: String, description: String) -> (any Span)? {
+        guard isSentryEnabled else { return nil }
+        return SentrySDK.span?.startChild(operation: operation, description: description)
     }
 
     /// Measure the duration of a code block
@@ -409,11 +688,82 @@ final class CrashReporter {
         return try block()
     }
 
-    /// Measure async operation
-    func measureAsync<T>(name: String, operation: String, block: () async throws -> T) async rethrows -> T {
-        let transaction = startTransaction(name: name, operation: operation)
-        defer { transaction?.finish() }
-        return try await block()
+    /// Measure async operation with optional data attributes
+    func measureAsync<T>(
+        name: String,
+        operation: String,
+        data: [String: Any]? = nil,
+        block: () async throws -> T
+    ) async rethrows -> T {
+        let transaction = startTransaction(name: name, operation: operation, bindToScope: true)
+
+        // Add custom data to transaction
+        if let data = data {
+            for (key, value) in data {
+                transaction?.setData(value: value, key: key)
+            }
+        }
+
+        do {
+            let result = try await block()
+            transaction?.finish(status: .ok)
+            return result
+        } catch {
+            transaction?.setData(value: error.localizedDescription, key: "error")
+            transaction?.finish(status: .internalError)
+            throw error
+        }
+    }
+
+    /// Trace a database operation (Supabase query)
+    /// Creates a span within the current transaction context
+    func traceDBOperation<T>(
+        table: String,
+        operation: String,
+        block: () async throws -> T
+    ) async rethrows -> T {
+        let span = startSpan(operation: "db.\(operation)", description: "\(operation) \(table)")
+
+        do {
+            let result = try await block()
+            span?.setData(value: table, key: "db.table")
+            span?.finish(status: .ok)
+            return result
+        } catch {
+            span?.setData(value: error.localizedDescription, key: "error")
+            span?.finish(status: .internalError)
+            throw error
+        }
+    }
+
+    /// Trace a network/API call
+    /// Creates a span within the current transaction context
+    func traceAPICall<T>(
+        endpoint: String,
+        method: String = "POST",
+        block: () async throws -> T
+    ) async rethrows -> T {
+        let span = startSpan(operation: "http.client", description: "\(method) \(endpoint)")
+        span?.setData(value: method, key: "http.method")
+        span?.setData(value: endpoint, key: "http.url")
+
+        do {
+            let result = try await block()
+            span?.setData(value: 200, key: "http.status_code")
+            span?.finish(status: .ok)
+            return result
+        } catch {
+            span?.setData(value: error.localizedDescription, key: "error")
+            span?.finish(status: .internalError)
+            throw error
+        }
+    }
+
+    /// Report that a view is fully displayed (for TTFD tracking)
+    /// Call this after all async data loading is complete
+    func reportFullyDisplayed() {
+        guard isSentryEnabled else { return }
+        SentrySDK.reportFullyDisplayed()
     }
 
     // MARK: - Tags & Context

@@ -24,7 +24,7 @@ struct CaptionsView: View {
                     }
                     .pickerStyle(.menu)
                     .onChange(of: captionLanguage) { _, language in
-                        print("Caption language changed to: \(language)")
+                        Log.ui.info("Caption language changed to: \(language)")
                     }
                 }
             }
@@ -37,14 +37,14 @@ struct CaptionsView: View {
                             .accessibilityLabel("Caption Size")
                             .accessibilityValue("\(String(format: "%.0f", captionSize * 100))%")
                             .onChange(of: captionSize) { _, size in
-                                print("Caption size changed to: \(size)")
+                                Log.ui.info("Caption size changed to: \(size)")
                             }
                     }
 
                     Toggle("Background", isOn: $captionBackground)
                         .accessibilityLabel("Caption Background")
                         .onChange(of: captionBackground) { _, enabled in
-                            print("Caption background changed to: \(enabled)")
+                            Log.ui.info("Caption background changed to: \(enabled)")
                         }
 
                     if captionBackground {
@@ -54,7 +54,7 @@ struct CaptionsView: View {
                                 .accessibilityLabel("Background Opacity")
                                 .accessibilityValue("\(String(format: "%.0f", captionOpacity * 100))%")
                                 .onChange(of: captionOpacity) { _, opacity in
-                                    print("Caption opacity changed to: \(opacity)")
+                                    Log.ui.info("Caption opacity changed to: \(opacity)")
                                 }
                         }
                     }

@@ -48,7 +48,7 @@ final class MicroMomentsService: ObservableObject {
         do {
             templates = try await templatesTask
         } catch {
-            print("Failed to fetch templates: \(error)")
+            Log.quests.error("Failed to fetch templates", error: error)
             criticalFailure = true
             lastError = error
         }
@@ -56,28 +56,28 @@ final class MicroMomentsService: ObservableObject {
         do {
             suggestions = try await suggestionsTask
         } catch {
-            print("Failed to fetch suggestions: \(error)")
+            Log.quests.error("Failed to fetch suggestions", error: error)
             // Suggestions failure is non-critical
         }
 
         do {
             streak = try await streakTask
         } catch {
-            print("Failed to fetch streak: \(error)")
+            Log.quests.error("Failed to fetch streak", error: error)
             // Streak failure is non-critical
         }
 
         do {
             recentCompletions = try await completionsTask
         } catch {
-            print("Failed to fetch completions: \(error)")
+            Log.quests.error("Failed to fetch completions", error: error)
             // Completions failure is non-critical
         }
 
         do {
             recentCheckIns = try await checkInsTask
         } catch {
-            print("Failed to fetch check-ins: \(error)")
+            Log.quests.error("Failed to fetch check-ins", error: error)
             // Check-ins failure is non-critical
         }
 
@@ -86,7 +86,7 @@ final class MicroMomentsService: ObservableObject {
                 deliveryPreferences = prefs
             }
         } catch {
-            print("Failed to fetch preferences: \(error)")
+            Log.quests.error("Failed to fetch preferences", error: error)
             // Preferences failure is non-critical
         }
 
@@ -288,7 +288,7 @@ final class MicroMomentsService: ObservableObject {
             throw MicroMomentsError.notAuthenticated
         }
 
-        let startDate = Calendar.current.date(byAdding: .day, value: -days, to: Date())!
+        let startDate = Calendar.current.date(byAdding: .day, value: -days, to: Date()) ?? Date().addingTimeInterval(Double(-days) * 24 * 3600)
         let formatter = ISO8601DateFormatter()
 
         let checkIns: [QuickCheckIn] = try await supabase

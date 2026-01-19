@@ -140,9 +140,6 @@ struct HomeView: View {
             .refreshable {
                 await loadData()
             }
-            .task {
-                await loadData()
-            }
             .onChange(of: scenePhase) { _, newPhase in
                 // Refresh data when app returns to foreground to prevent stale state
                 if newPhase == .active {
@@ -166,6 +163,10 @@ struct HomeView: View {
             .sheet(isPresented: $showInviteBuddySheet) {
                 InviteBuddySheet()
             }
+        }
+        // Load data on appear
+        .task {
+            await loadData()
         }
     }
 
@@ -363,7 +364,7 @@ struct HomeView: View {
                 // Shield status is set from protection check above
             }
         } catch {
-            print("HomeView loadData error: \(error)")
+            Log.ui.error("HomeView loadData error", error: error)
             questState = .error(error.localizedDescription)
         }
     }
@@ -385,7 +386,7 @@ struct HomeView: View {
             }
         } catch {
             // Don't fail the whole load if re-engagement check fails
-            print("Re-engagement check error: \(error)")
+            Log.data.error("Re-engagement check error", error: error)
         }
     }
 
@@ -1198,15 +1199,10 @@ struct BuddyWidget: View {
                 }
             }
         )
-        .onChange(of: showEncouragementSent) { _, newValue in
-            if newValue {
-                // Reset after 2 seconds
-                Task {
-                    try? await Task.sleep(for: .seconds(2))
-                    await MainActor.run {
-                        showEncouragementSent = false
-                    }
-                }
+        .task(id: showEncouragementSent) {
+            if showEncouragementSent {
+                try? await Task.sleep(for: .seconds(2))
+                showEncouragementSent = false
             }
         }
     }

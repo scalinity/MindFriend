@@ -27,7 +27,7 @@ struct MoodHistoryView: View {
                 } else if moods.isEmpty {
                     EmptyMoodHistoryView()
                 } else {
-                    MoodChart(moods: moods)
+                    MoodChart(moods: moods, selectedDays: selectedDays)
                         .frame(height: 200)
                         .padding()
 
@@ -72,23 +72,43 @@ struct MoodHistoryView: View {
 
 struct MoodChart: View {
     let moods: [MoodEntry]
+    let selectedDays: Int
+
+    private var moodsWithDates: [(mood: MoodEntry, date: Date)] {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return moods.compactMap { mood in
+            guard let date = formatter.date(from: mood.localDate) else { return nil }
+            return (mood, date)
+        }
+    }
 
     var body: some View {
-        Chart(moods) { mood in
+        Chart(moodsWithDates, id: \.mood.id) { item in
             LineMark(
-                x: .value("Date", mood.localDate),
-                y: .value("Mood", mood.moodScore)
+                x: .value("Date", item.date),
+                y: .value("Mood", item.mood.moodScore)
             )
             .foregroundStyle(Color.accentColor)
             .interpolationMethod(.catmullRom)
 
             PointMark(
-                x: .value("Date", mood.localDate),
-                y: .value("Mood", mood.moodScore)
+                x: .value("Date", item.date),
+                y: .value("Mood", item.mood.moodScore)
             )
             .foregroundStyle(Color.accentColor)
         }
         .chartYScale(domain: 1...5)
+        .chartXAxis {
+            AxisMarks(values: .stride(by: .day, count: xAxisStride)) { value in
+                AxisGridLine()
+                if selectedDays == 7 {
+                    AxisValueLabel(format: .dateTime.weekday(.abbreviated))
+                } else {
+                    AxisValueLabel(format: .dateTime.day())
+                }
+            }
+        }
         .chartYAxis {
             AxisMarks(values: [1, 2, 3, 4, 5]) { value in
                 AxisValueLabel {
@@ -97,6 +117,15 @@ struct MoodChart: View {
                     }
                 }
             }
+        }
+    }
+
+    private var xAxisStride: Int {
+        switch selectedDays {
+        case 7: return 1
+        case 14: return 2
+        case 30: return 7
+        default: return 2
         }
     }
 

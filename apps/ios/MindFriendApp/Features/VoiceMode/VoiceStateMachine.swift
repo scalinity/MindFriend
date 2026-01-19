@@ -512,7 +512,12 @@ struct VoiceStateMachine {
 
         #if DEBUG
         if state != previousState {
-            print("[VoiceStateMachine] \(previousState) -> \(state) (event: \(event))")
+            // Build the message first so the logger's autoclosure doesn't capture `self`
+            let old = previousState
+            let new = state
+            let evt = event
+            let msg = "[VoiceStateMachine] \(old) -> \(new) (event: \(evt))"
+            Log.voice.debug("\(msg, privacy: .public)")
         }
         #endif
 
@@ -554,5 +559,76 @@ extension VoiceStateMachine.State {
     var isEnded: Bool {
         if case .ended = self { return true }
         return false
+    }
+}
+
+// MARK: - Logging descriptions
+
+extension VoiceStateMachine.State: CustomStringConvertible {
+    var description: String {
+        switch self {
+        case .idle: return "idle"
+        case .requestingPermissions: return "requestingPermissions"
+        case .connecting: return "connecting"
+        case .ready: return "ready"
+        case .listening: return "listening"
+        case .userSpeaking: return "userSpeaking"
+        case .endOfUtterance: return "endOfUtterance"
+        case .sending: return "sending"
+        case .thinking: return "thinking"
+        case .processing: return "processing"
+        case .speaking: return "speaking"
+        case .bargeIn: return "bargeIn"
+        case .muted: return "muted"
+        case .reconnecting: return "reconnecting"
+        case .error(let message): return "error(\(message))"
+        case .ended: return "ended"
+        }
+    }
+}
+
+extension VoiceStateMachine.Event: CustomStringConvertible {
+    var description: String {
+        switch self {
+        // UI Events
+        case .tapStart: return "tapStart"
+        case .tapEnd: return "tapEnd"
+        case .tapInterrupt: return "tapInterrupt"
+        case .toggleMute: return "toggleMute"
+        case .toggleCaptions: return "toggleCaptions"
+        case .selectVoice(let id): return "selectVoice(\(id))"
+
+        // Permission Events
+        case .micPermissionGranted: return "micPermissionGranted"
+        case .micPermissionDenied: return "micPermissionDenied"
+        case .speechPermissionGranted: return "speechPermissionGranted"
+        case .speechPermissionDenied: return "speechPermissionDenied"
+
+        // VAD Events
+        case .speechStart: return "speechStart"
+        case .speechEnd: return "speechEnd"
+        case .endOfUtteranceDetected: return "endOfUtteranceDetected"
+
+        // Transport Events
+        case .connected: return "connected"
+        case .disconnected: return "disconnected"
+        case .serverTranscriptDelta(let text): return "serverTranscriptDelta(\(text))"
+        case .serverAudioChunk(let data): return "serverAudioChunk(\(data.count) bytes)"
+        case .serverThinking: return "serverThinking"
+        case .serverResponseStart: return "serverResponseStart"
+        case .serverResponseDone: return "serverResponseDone"
+        case .serverError(let message): return "serverError(\(message))"
+
+        // Audio Events
+        case .audioPlaybackStarted: return "audioPlaybackStarted"
+        case .audioPlaybackFinished: return "audioPlaybackFinished"
+
+        // System Events
+        case .audioInterruptedBegin: return "audioInterruptedBegin"
+        case .audioInterruptedEnd: return "audioInterruptedEnd"
+        case .routeChanged: return "routeChanged"
+        case .sessionTimeout: return "sessionTimeout"
+        case .quotaExceeded: return "quotaExceeded"
+        }
     }
 }

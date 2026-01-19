@@ -57,37 +57,37 @@ final class PeerSupportService: ObservableObject {
         do {
             listenerProfile = try await listenerTask
         } catch {
-            print("Failed to fetch listener profile: \(error)")
+            Log.social.error("Failed to fetch listener profile", error: error)
         }
 
         do {
             activeSessions = try await sessionsTask
         } catch {
-            print("Failed to fetch active sessions: \(error)")
+            Log.social.error("Failed to fetch active sessions", error: error)
         }
 
         do {
             mentorships = try await mentorshipsTask
         } catch {
-            print("Failed to fetch mentorships: \(error)")
+            Log.social.error("Failed to fetch mentorships", error: error)
         }
 
         do {
             receivedGratitude = try await gratitudeTask
         } catch {
-            print("Failed to fetch gratitude: \(error)")
+            Log.social.error("Failed to fetch gratitude", error: error)
         }
 
         do {
             communityWisdom = try await wisdomTask
         } catch {
-            print("Failed to fetch community wisdom: \(error)")
+            Log.social.error("Failed to fetch community wisdom", error: error)
         }
 
         do {
             anonymousRooms = try await roomsTask
         } catch {
-            print("Failed to fetch anonymous rooms: \(error)")
+            Log.social.error("Failed to fetch anonymous rooms", error: error)
         }
 
         isLoading = false

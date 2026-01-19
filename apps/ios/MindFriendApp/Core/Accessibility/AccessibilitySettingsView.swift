@@ -31,14 +31,14 @@ struct AccessibilitySettingsView: View {
                         .onChange(of: hapticFeedbackEnabled) { _, value in
                             Task {
                                 // Persist change via service
-                                print("Haptic feedback changed to: \(value)")
+                                Log.ui.info("Haptic feedback changed to: \(value)")
                             }
                         }
                     Toggle("Sound Effects", isOn: $soundEffectsEnabled)
                         .onChange(of: soundEffectsEnabled) { _, value in
                             Task {
                                 // Persist change via service
-                                print("Sound effects changed to: \(value)")
+                                Log.ui.info("Sound effects changed to: \(value)")
                             }
                         }
                 }
@@ -59,7 +59,7 @@ struct AccessibilitySettingsView: View {
                         .onChange(of: reduceMotionEnabled) { _, value in
                             Task {
                                 // Persist change via service
-                                print("Reduce motion changed to: \(value)")
+                                Log.ui.info("Reduce motion changed to: \(value)")
                             }
                         }
                     Toggle("Button Shapes", isOn: .constant(true))

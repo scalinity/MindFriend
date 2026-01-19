@@ -330,7 +330,7 @@ struct ArtGeneratorView: View {
             let newStatus = try await container.creativeExpressionService.toggleFavorite(workId: work.id)
             generatedWork?.isFavorite = newStatus
         } catch {
-            print("Toggle favorite error: \(error)")
+            Log.creative.error("Toggle favorite error", error: error)
         }
     }
 }

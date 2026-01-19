@@ -36,7 +36,14 @@ enum SupabaseConfig {
 /// Shared Supabase client instance
 let supabase = SupabaseClient(
     supabaseURL: SupabaseConfig.projectURL,
-    supabaseKey: SupabaseConfig.anonKey
+    supabaseKey: SupabaseConfig.anonKey,
+    options: SupabaseClientOptions(
+        auth: .init(
+            redirectToURL: SupabaseConfig.redirectURL,
+            flowType: .pkce,
+            emitLocalSessionAsInitialSession: true
+        )
+    )
 )
 
 // MARK: - Database Table Names
@@ -429,7 +436,7 @@ struct DBCirclePostWithProfile: Codable {
     }
 }
 
-// MARK: - Legacy DBProfile (kept for backward compatibility during transition)
+// MARK: - DBProfile (used for data export - queries all profile fields in a single fetch)
 
 struct DBProfile: Codable {
     let id: UUID
@@ -777,21 +784,7 @@ struct DBCircleCheckinWithProfile: Codable {
     }
 }
 
-struct DBBadge: Codable {
-    let id: UUID
-    let name: String
-    let description: String
-    let iconName: String
-    let requirementType: String
-    let requirementValue: Int
-
-    enum CodingKeys: String, CodingKey {
-        case id, name, description
-        case iconName = "icon_name"
-        case requirementType = "requirement_type"
-        case requirementValue = "requirement_value"
-    }
-}
+// DBBadge moved to AchievementModels.swift (more comprehensive version)
 
 struct DBCrisisResource: Codable {
     let id: UUID

@@ -18,7 +18,11 @@ export interface InsightContext {
   userName?: string;
   wellnessFocus?: string;
   avgMood: number | null;
+  avgAnxiety: number | null;
+  avgEnergy: number | null;
   moodTrend: string | null;
+  anxietyTrend: string | null;
+  energyTrend: string | null;
   questCount: number;
   exerciseCount: number;
   exerciseMinutes: number;
@@ -26,10 +30,11 @@ export interface InsightContext {
   circleCheckinCount: number;
   patterns: Pattern[];
   streakDays: number;
+  recentNotes: string[];
 }
 
 const XAI_API_URL = "https://api.x.ai/v1/chat/completions";
-const MODEL = "grok-4-1-fast-non-reasoning-fast";
+const MODEL = "grok-4-1-fast-non-reasoning";
 
 // Fallback insights when AI is unavailable or data is insufficient
 const FALLBACK_INSIGHTS: Record<string, AIInsightResult> = {
@@ -119,24 +124,54 @@ function buildPrompt(context: InsightContext): string {
   }
 
   // Weekly metrics
-  parts.push(`\nThis week's data:`);
+  parts.push(`\nThis week's wellness data:`);
+  parts.push(`- Mood check-ins logged: ${context.checkinCount}`);
+
   if (context.avgMood !== null) {
-    parts.push(`- Average mood: ${context.avgMood.toFixed(1)} out of 5`);
+    parts.push(`- Average mood score: ${context.avgMood.toFixed(1)} out of 5`);
   }
   if (context.moodTrend) {
     parts.push(`- Mood trend vs last week: ${context.moodTrend}`);
   }
-  parts.push(`- Mood check-ins: ${context.checkinCount}`);
+
+  if (context.avgAnxiety !== null) {
+    parts.push(
+      `- Average anxiety level: ${context.avgAnxiety.toFixed(1)} out of 5 (lower is better)`,
+    );
+  }
+  if (context.anxietyTrend) {
+    parts.push(`- Anxiety trend vs last week: ${context.anxietyTrend}`);
+  }
+
+  if (context.avgEnergy !== null) {
+    parts.push(
+      `- Average energy level: ${context.avgEnergy.toFixed(1)} out of 5`,
+    );
+  }
+  if (context.energyTrend) {
+    parts.push(`- Energy trend vs last week: ${context.energyTrend}`);
+  }
+
   parts.push(`- Quests completed: ${context.questCount}`);
   parts.push(`- Exercises completed: ${context.exerciseCount}`);
   if (context.exerciseMinutes > 0) {
     parts.push(`- Total exercise time: ${context.exerciseMinutes} minutes`);
   }
   if (context.circleCheckinCount > 0) {
-    parts.push(`- Social check-ins: ${context.circleCheckinCount}`);
+    parts.push(
+      `- Social check-ins with circles: ${context.circleCheckinCount}`,
+    );
   }
   if (context.streakDays > 0) {
     parts.push(`- Current streak: ${context.streakDays} days`);
+  }
+
+  // Recent notes from mood check-ins
+  if (context.recentNotes && context.recentNotes.length > 0) {
+    parts.push(`\nRecent reflections from the user's mood logs:`);
+    for (const note of context.recentNotes.slice(0, 5)) {
+      parts.push(`- "${note}"`);
+    }
   }
 
   // Patterns
@@ -154,10 +189,13 @@ function buildPrompt(context: InsightContext): string {
 ${dataSection}
 
 Write:
-1. A 2-3 sentence personalized observation about their week. Be warm, specific, and avoid generic platitudes. Reference their actual data.
+1. A 2-3 sentence personalized observation about their week. Be warm, specific, and avoid generic platitudes. Reference their actual data including mood, anxiety, and energy patterns. If they wrote notes, acknowledge themes you notice.
 2. One specific, actionable recommendation based on their patterns and behavior.
 
 Guidelines:
+- Consider the relationship between mood, anxiety, and energy levels
+- If anxiety is high but mood is okay, acknowledge their resilience
+- If energy is low, suggest gentle activities rather than demanding ones
 - If mood is declining, be compassionate and gentle, not preachy
 - If they have a streak, acknowledge it positively
 - Connect recommendations to their observed patterns

@@ -151,7 +151,7 @@ struct QuestDetailView: View {
                     )
                 }
             } catch {
-                print("QuestDetailView completeQuest error: \(error)")
+                Log.quests.error("QuestDetailView completeQuest error", error: error)
                 appState.showError(.apiError(error.localizedDescription))
             }
             isCompleting = false
@@ -256,7 +256,7 @@ struct QuestDetailView: View {
                     dismiss()
                 }
             } catch {
-                print("QuestDetailView skipQuest error: \(error)")
+                Log.quests.error("QuestDetailView skipQuest error", error: error)
                 appState.showError(.apiError(error.localizedDescription))
             }
         }

@@ -411,7 +411,7 @@ struct SubscriptionView: View {
         do {
             try await billingService.refreshEntitlements()
         } catch {
-            print("Failed to refresh entitlements: \(error)")
+            Log.billing.error("Failed to refresh entitlements", error: error)
         }
     }
 

@@ -2,12 +2,19 @@
 // Handles AI conversation with quota enforcement and crisis detection
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  createClient,
+  SupabaseClient,
+} from "https://esm.sh/@supabase/supabase-js@2";
+
+// Type alias for untyped Supabase client (no generated database types)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type UntypedSupabaseClient = SupabaseClient<any, "public", any>;
 import { getCorsHeaders } from "../_shared/cors.ts";
 import {
+  CRISIS_RESPONSE,
   detectCrisis,
   getMatchedCrisisKeyword,
-  CRISIS_RESPONSE,
 } from "../_shared/crisis.ts";
 import { checkRateLimit, getRateLimitHeaders } from "../_shared/ratelimit.ts";
 
@@ -371,14 +378,24 @@ serve(async (req) => {
         }
 
         memoryContext = "\n\n## What you know about this user:\n";
-        if (grouped.person)
-          memoryContext += `- People in their life: ${grouped.person.join(", ")}\n`;
-        if (grouped.fact)
+        if (grouped.person) {
+          memoryContext += `- People in their life: ${grouped.person.join(
+            ", ",
+          )}\n`;
+        }
+        if (grouped.fact) {
           memoryContext += `- Facts about them: ${grouped.fact.join(", ")}\n`;
-        if (grouped.preference)
-          memoryContext += `- Their preferences: ${grouped.preference.join(", ")}\n`;
-        if (grouped.event)
-          memoryContext += `- Upcoming/recent events: ${grouped.event.join(", ")}\n`;
+        }
+        if (grouped.preference) {
+          memoryContext += `- Their preferences: ${grouped.preference.join(
+            ", ",
+          )}\n`;
+        }
+        if (grouped.event) {
+          memoryContext += `- Upcoming/recent events: ${grouped.event.join(
+            ", ",
+          )}\n`;
+        }
         memoryContext +=
           "\nUse this context naturally in conversation when relevant. Reference past events or details to show you remember and care.";
       }
@@ -535,7 +552,7 @@ serve(async (req) => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: "grok-4-1-fast-non-reasoning-fast",
+            model: "grok-4-1-fast-non-reasoning",
             messages: [
               {
                 role: "system",
@@ -638,17 +655,53 @@ function sanitizeForPrompt(input: string): string {
       .replace(/\n/g, " ")
       .replace(/\r/g, "")
       .replace(/\t/g, " ")
-      // Remove potential prompt injection patterns
-      .replace(/^(system|assistant|user):/gi, "[redacted]:")
+      // Remove potential prompt injection patterns - role impersonation
+      .replace(/^(system|assistant|user):/gim, "[redacted]:")
+      .replace(/\b(system|assistant|user)\s*:\s*/gi, "[redacted]: ")
+      // Common LLM-specific delimiters and tokens
       .replace(/\[INST\]/gi, "[redacted]")
+      .replace(/\[\/INST\]/gi, "[redacted]")
       .replace(/<<SYS>>/gi, "[redacted]")
       .replace(/<\|.*?\|>/g, "[redacted]")
+      .replace(/\[\[.*?\]\]/g, (match) =>
+        match.toLowerCase().includes("system") ||
+        match.toLowerCase().includes("instruction")
+          ? "[redacted]"
+          : match,
+      )
+      // Instruction override attempts
+      .replace(
+        /ignore\s+(all\s+)?(previous|above|prior)\s+(instructions?|prompts?)/gi,
+        "[redacted]",
+      )
+      .replace(
+        /forget\s+(everything|all|your)\s+(you('ve)?\s+)?(learned|know|were told)/gi,
+        "[redacted]",
+      )
+      .replace(/disregard\s+(all\s+)?(previous|above|system)/gi, "[redacted]")
+      .replace(/new\s+instructions?:\s*/gi, "[redacted]: ")
+      .replace(/override\s+(system|instructions?|prompt)/gi, "[redacted]")
+      // Jailbreak/DAN pattern indicators
+      .replace(/\b(do\s+anything\s+now|DAN|jailbreak)\b/gi, "[redacted]")
+      .replace(
+        /pretend\s+(to\s+be|you\s+are)\s+(a\s+)?(different|evil|unrestricted)/gi,
+        "[redacted]",
+      )
+      .replace(
+        /you\s+are\s+now\s+(a\s+)?(different|evil|unrestricted|free)/gi,
+        "[redacted]",
+      )
+      // Roleplay escape attempts
+      .replace(/stop\s+being\s+(a\s+)?helpful/gi, "[redacted]")
+      .replace(/exit\s+(character|roleplay|persona)/gi, "[redacted]")
+      // Markdown/formatting abuse
+      .replace(/```(system|instruction|prompt)/gi, "```[redacted]")
   );
 }
 
 // Memory extraction function - runs in background, non-blocking
 async function extractMemories(
-  supabaseAdmin: ReturnType<typeof createClient>,
+  supabaseAdmin: UntypedSupabaseClient,
   userId: string,
   conversationId: string,
   userMessage: string,
@@ -691,7 +744,7 @@ Return ONLY valid JSON array, no explanation. Example: [{"type": "person", "key"
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "grok-4-1-fast-non-reasoning-fast",
+        model: "grok-4-1-fast-non-reasoning",
         messages: [
           {
             role: "system",

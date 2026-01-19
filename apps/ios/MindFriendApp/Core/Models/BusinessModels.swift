@@ -3,7 +3,7 @@ import Foundation
 // MARK: - Subscription Plan
 
 /// A subscription plan offering from MindFriend
-struct SubscriptionPlan: Codable, Identifiable, Equatable {
+struct SubscriptionPlan: Codable, Identifiable, Equatable, Hashable {
     let id: UUID
     let name: String
     let description: String?
@@ -127,7 +127,7 @@ struct SubscriptionPlan: Codable, Identifiable, Equatable {
 // MARK: - Plan Features
 
 /// Feature set for a subscription plan
-struct PlanFeatures: Codable, Equatable {
+struct PlanFeatures: Codable, Equatable, Hashable {
     let unlimitedChat: Bool
     let unlimitedExercises: Bool
     let premiumContent: Bool

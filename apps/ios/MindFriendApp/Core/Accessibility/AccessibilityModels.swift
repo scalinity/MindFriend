@@ -362,3 +362,24 @@ struct AccessibilityFeedback: Codable, Equatable {
         case assistiveTechUsed = "assistive_tech_used"
     }
 }
+
+// Submission model for database insertion
+struct AccessibilityFeedbackSubmission: Codable {
+    let userId: String
+    let category: String
+    let screenName: String?
+    let elementIdentifier: String?
+    let issueType: String
+    let description: String
+    let assistiveTechUsed: String // Comma-separated string
+
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case category
+        case screenName = "screen_name"
+        case elementIdentifier = "element_identifier"
+        case issueType = "issue_type"
+        case description
+        case assistiveTechUsed = "assistive_tech_used"
+    }
+}

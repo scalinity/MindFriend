@@ -83,7 +83,7 @@ struct FamilyAlertsView: View {
         do {
             alerts = try await container.familyService.fetchFamilyAlerts()
         } catch {
-            print("Failed to load alerts: \(error)")
+            Log.family.error("Failed to load alerts", error: error)
         }
     }
 
@@ -93,7 +93,7 @@ struct FamilyAlertsView: View {
                 try await container.familyService.markAlertAsRead(alertId: alertId)
                 alerts = try await container.familyService.fetchFamilyAlerts()
             } catch {
-                print("Failed to mark alert as read: \(error)")
+                Log.family.error("Failed to mark alert as read", error: error)
             }
         }
     }

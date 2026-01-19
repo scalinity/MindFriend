@@ -57,7 +57,7 @@ struct DrawingCanvasView: View {
                             Text("Save")
                                 .bold()
                         }
-                        .disabled(drawingState.strokes.isEmpty)
+                        .disabled(!drawingState.hasContent)
                     }
                 }
             }
@@ -211,7 +211,7 @@ struct DrawingCanvasView: View {
 
             // Save to service
             _ = try await container.creativeExpressionService.saveDrawing(
-                strokes: drawingState.strokes,
+                strokes: drawingState.generateStrokes(),
                 canvasSize: canvasSize,
                 imageData: imageData,
                 title: drawingTitle.isEmpty ? nil : drawingTitle,
@@ -232,18 +232,15 @@ struct DrawingCanvasView: View {
 
 @MainActor
 class DrawingState: ObservableObject {
-    @Published var strokes: [DrawingStroke] = []
-    @Published var currentStroke: DrawingStroke?
     @Published var selectedTool: DrawingTool = .pen
     @Published var selectedColor: Color = .black
     @Published var lineWidth: CGFloat = 5
     @Published var canvasView = PKCanvasView()
 
-    private var undoStack: [[DrawingStroke]] = []
-    private var redoStack: [[DrawingStroke]] = []
-
-    var canUndo: Bool { !undoStack.isEmpty }
-    var canRedo: Bool { !redoStack.isEmpty }
+    // Undo/Redo/Save state
+    @Published var canUndo: Bool = false
+    @Published var canRedo: Bool = false
+    @Published var hasContent: Bool = false
 
     static let presetColors: [Color] = [
         .black, .gray, .red, .orange, .yellow, .green, .blue, .purple, .pink, .brown
@@ -257,95 +254,106 @@ class DrawingState: ObservableObject {
         canvasView.drawingPolicy = .anyInput
         canvasView.tool = PKInkingTool(.pen, color: .black, width: 5)
         canvasView.backgroundColor = .white
-    }
-
-    func startStroke(at point: CGPoint) {
-        saveForUndo()
-        currentStroke = DrawingStroke(
-            id: UUID(),
-            points: [point],
-            color: hexString(from: selectedColor),
-            lineWidth: lineWidth,
-            tool: selectedTool,
-            opacity: selectedTool == .watercolor ? 0.5 : 1.0
-        )
-    }
-
-    func continueStroke(to point: CGPoint) {
-        currentStroke?.points.append(point)
-    }
-
-    func endStroke() {
-        if var stroke = currentStroke {
-            strokes.append(stroke)
-        }
-        currentStroke = nil
-        redoStack.removeAll()
+        canvasView.becomeFirstResponder()
     }
 
     func undo() {
-        guard let lastState = undoStack.popLast() else { return }
-        redoStack.append(strokes)
-        strokes = lastState
-
-        // Also undo on PencilKit canvas
         canvasView.undoManager?.undo()
     }
 
     func redo() {
-        guard let nextState = redoStack.popLast() else { return }
-        undoStack.append(strokes)
-        strokes = nextState
-
-        // Also redo on PencilKit canvas
         canvasView.undoManager?.redo()
     }
-
+    
     func clear() {
-        saveForUndo()
-        strokes.removeAll()
         canvasView.drawing = PKDrawing()
-        redoStack.removeAll()
+        updateState()
     }
-
-    private func saveForUndo() {
-        undoStack.append(strokes)
-        // Limit undo history
-        if undoStack.count > 50 {
-            undoStack.removeFirst()
-        }
+    
+    func updateState() {
+        canUndo = canvasView.undoManager?.canUndo ?? false
+        canRedo = canvasView.undoManager?.canRedo ?? false
+        hasContent = !canvasView.drawing.strokes.isEmpty
     }
 
     func renderToImage() -> Data? {
         let renderer = UIGraphicsImageRenderer(bounds: canvasView.bounds)
         let image = renderer.image { context in
+            // Fill background with white since PKCanvasView is transparent by default in some contexts
+            UIColor.white.setFill()
+            context.fill(canvasView.bounds)
+            
             canvasView.drawHierarchy(in: canvasView.bounds, afterScreenUpdates: true)
         }
         return image.pngData()
     }
+    
+    /// Convert PKDrawing to simplified DrawingStroke model for storage/replay
+    func generateStrokes() -> [DrawingStroke] {
+        return canvasView.drawing.strokes.compactMap { pkStroke -> DrawingStroke? in
+            // Map PKInkType to DrawingTool
+            let tool: DrawingTool
+            switch pkStroke.ink.inkType {
+            case .pen: tool = .pen
+            case .marker: tool = .marker
+            case .watercolor: tool = .watercolor
+            default: tool = .pen
+            }
+            
+            // Extract points
+            let points = pkStroke.path.compactMap { $0.location }
+            guard !points.isEmpty else { return nil }
+            
+            // Approximate width from the first point of the path
+            // PKStroke doesn't expose a global width, so we take a sample
+            let approxWidth = pkStroke.path.first?.size.width ?? 5.0
+            
+            return DrawingStroke(
+                id: UUID(),
+                points: points,
+                color: hexString(from: pkStroke.ink.color),
+                lineWidth: approxWidth,
+                tool: tool,
+                opacity: 1.0 // Opacity is usually baked into the color in PK
+            )
+        }
+    }
 
     private func hexString(from color: Color) -> String {
-        let uiColor = UIColor(color)
+        return hexString(from: UIColor(color))
+    }
+
+    private func hexString(from uiColor: UIColor) -> String {
         var red: CGFloat = 0
         var green: CGFloat = 0
         var blue: CGFloat = 0
         var alpha: CGFloat = 0
 
-        uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        // Handle monochrome (black/white) explicitly if getRed fails or returns monochrome
+        if !uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha) {
+            // Try getWhite for monochrome colors
+            var white: CGFloat = 0
+            if uiColor.getWhite(&white, alpha: &alpha) {
+                red = white
+                green = white
+                blue = white
+            }
+        }
 
         return String(format: "#%02X%02X%02X", Int(red * 255), Int(green * 255), Int(blue * 255))
     }
 
     func updateTool() {
         let pkTool: PKTool
+        let uiColor = UIColor(selectedColor)
 
         switch selectedTool {
         case .pen:
-            pkTool = PKInkingTool(.pen, color: UIColor(selectedColor), width: lineWidth)
+            pkTool = PKInkingTool(.pen, color: uiColor, width: lineWidth)
         case .marker:
-            pkTool = PKInkingTool(.marker, color: UIColor(selectedColor), width: lineWidth)
+            pkTool = PKInkingTool(.marker, color: uiColor, width: lineWidth)
         case .watercolor:
-            pkTool = PKInkingTool(.watercolor, color: UIColor(selectedColor).withAlphaComponent(0.5), width: lineWidth)
+            pkTool = PKInkingTool(.watercolor, color: uiColor.withAlphaComponent(0.5), width: lineWidth)
         case .eraser:
             pkTool = PKEraserTool(.vector)
         }
@@ -381,7 +389,9 @@ struct DrawingCanvas: UIViewRepresentable {
         }
 
         func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
-            // Could sync PKDrawing to custom stroke format if needed
+            DispatchQueue.main.async {
+                self.drawingState.updateState()
+            }
         }
     }
 }
@@ -463,7 +473,7 @@ struct CreativeExercisesListView: View {
         do {
             exercises = try await container.creativeExpressionService.fetchExercises()
         } catch {
-            print("Failed to load exercises: \(error)")
+            Log.creative.error("Failed to load exercises", error: error)
         }
     }
 }
@@ -672,7 +682,7 @@ struct CreativeExerciseDetailView: View {
             completionId = try await container.creativeExpressionService.startExercise(exerciseId: exercise.id)
             isStarted = true
         } catch {
-            print("Failed to start exercise: \(error)")
+            Log.creative.error("Failed to start exercise", error: error)
             isStarted = true // Allow to continue even if tracking fails
         }
     }
@@ -692,7 +702,7 @@ struct CreativeExerciseDetailView: View {
                 moodAfter: moodAfter
             )
         } catch {
-            print("Failed to complete exercise: \(error)")
+            Log.creative.error("Failed to complete exercise", error: error)
         }
 
         dismiss()

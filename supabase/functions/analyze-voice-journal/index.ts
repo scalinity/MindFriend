@@ -82,7 +82,7 @@ serve(async (req) => {
       supabaseAdmin,
       user.id,
       "analyze-voice",
-      3,
+      { windowMs: 60 * 1000, maxRequests: 3 },
     );
     if (!rateLimitResult.allowed) {
       return new Response(
