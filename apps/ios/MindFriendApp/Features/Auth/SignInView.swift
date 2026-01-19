@@ -3,7 +3,7 @@ import AuthenticationServices
 import GoogleSignIn
 
 struct SignInView: View {
-    private let googleClientID = "937820575713-3n91aim648r7vhjr9iojm08opbp84c1n.apps.googleusercontent.com"
+    private let googleClientID = "937820575713-afr6c9u3mtle5emk9aefa1fiosojfmbg.apps.googleusercontent.com"
 
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
@@ -340,11 +340,11 @@ struct EmailAuthView: View {
     @State private var displayName = ""
     @State private var showForgotPassword = false
 
-    @FocusState private var focusedField: Field?
-
     enum Field {
         case email, password, confirmPassword, displayName
     }
+
+    @FocusState private var focusedField: Field?
 
     var body: some View {
         NavigationStack {
@@ -445,6 +445,10 @@ struct EmailAuthView: View {
                     }
                     .font(.subheadline)
                 }
+            }
+            .dismissKeyboardOnSwipe()
+            .onTapGesture {
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
