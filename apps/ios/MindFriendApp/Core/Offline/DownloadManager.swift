@@ -155,15 +155,23 @@ final class DownloadManager: NSObject, ObservableObject {
         urlSession.getAllTasks { [weak self] tasks in
             guard let self = self else { return }
 
+            // Find the task identifier for this download task ID
             if let taskIdentifier = self.backgroundTaskMap.first(where: { $0.value == taskId })?.key,
                let task = tasks.first(where: { $0.taskIdentifier == taskIdentifier }) {
                 task.cancel()
-            }
 
-            Task { @MainActor in
-                self.activeTasks.removeAll { $0.id == taskId }
-                self.backgroundTaskMap.removeValue(forKey: taskId.hashValue)
-                await self.saveActiveTasks()
+                Task { @MainActor in
+                    self.activeTasks.removeAll { $0.id == taskId }
+                    // Remove using the correct key (taskIdentifier), not taskId.hashValue
+                    self.backgroundTaskMap.removeValue(forKey: taskIdentifier)
+                    await self.saveActiveTasks()
+                }
+            } else {
+                // Task not found in map, just clean up activeTasks
+                Task { @MainActor in
+                    self.activeTasks.removeAll { $0.id == taskId }
+                    await self.saveActiveTasks()
+                }
             }
         }
     }
@@ -254,6 +262,26 @@ final class DownloadManager: NSObject, ObservableObject {
         downloads.removeAll()
         await saveDownloads()
         await updateStorageUsed()
+    }
+
+    /// Clear all state on logout - cancels downloads and resets state
+    func clearOnLogout() async {
+        // Cancel all active downloads
+        urlSession.getAllTasks { [weak self] tasks in
+            for task in tasks {
+                task.cancel()
+            }
+            Task { @MainActor in
+                self?.backgroundTaskMap.removeAll()
+            }
+        }
+
+        // Clear in-memory state
+        downloads.removeAll()
+        activeTasks.removeAll()
+        totalStorageUsed = 0
+
+        // Note: File cleanup is handled by OfflineStorageManager.deleteCurrentUserData()
     }
 
     // MARK: - Query Methods

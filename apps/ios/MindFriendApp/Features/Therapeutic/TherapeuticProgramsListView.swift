@@ -364,7 +364,7 @@ struct TherapeuticProgramDetailSheet: View {
             ForEach(program.learningObjectives, id: \.self) { objective in
                 HStack(alignment: .top, spacing: 12) {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.accentColor)
+                        .foregroundStyle(Color.accentColor)
 
                     Text(objective)
                         .font(.subheadline)

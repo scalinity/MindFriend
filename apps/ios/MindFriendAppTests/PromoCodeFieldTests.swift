@@ -1,6 +1,5 @@
 import XCTest
 import SwiftUI
-import ViewInspector
 @testable import MindFriendApp
 
 /// UI tests for PromoCodeField component (Spec 15 Business Model)
@@ -420,19 +419,14 @@ final class PromoCodeFieldTests: XCTestCase {
 
 // MARK: - Mock BillingService
 
-class MockBillingService: BillingService {
+class MockBillingService {
     var shouldFailValidation = false
     var mockPromo: PromoCode?
+    var validatedPromoCode: PromoCode?
 
-    override init(authService: SupabaseAuthService) {
-        super.init(authService: authService)
-    }
+    init() {}
 
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func validatePromoCode(_ code: String) async throws -> PromoCode {
+    func validatePromoCode(_ code: String) async throws -> PromoCode {
         if shouldFailValidation {
             throw BillingError.invalidPromoCode
         }
@@ -460,17 +454,7 @@ class MockBillingService: BillingService {
         )
     }
 
-    override func clearValidatedPromoCode() {
+    func clearValidatedPromoCode() {
         validatedPromoCode = nil
-    }
-}
-
-// MARK: - View Inspector Extensions
-
-extension Inspection<Never> {
-    func visit<V>(view: V.Type, offset: Int = 0, _ callback: (V) -> Void) throws {
-        try onReceive(DispatchQueue.main, after: 0) { () in
-            callback(try self.find(view, skipFound: offset).view)
-        }
     }
 }

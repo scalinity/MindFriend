@@ -194,7 +194,7 @@ struct MicroMomentListView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(MicroMomentFilter.allCases, id: \.self) { filter in
-                    FilterChip(
+                    MicroMomentFilterChip(
                         label: filter.rawValue,
                         isSelected: selectedFilter == filter
                     ) {
@@ -226,7 +226,7 @@ struct MicroMomentListView: View {
 
 // MARK: - Filter Chip
 
-struct FilterChip: View {
+struct MicroMomentFilterChip: View {
     let label: String
     let isSelected: Bool
     let action: () -> Void

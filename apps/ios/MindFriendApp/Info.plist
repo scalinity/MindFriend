@@ -51,14 +51,10 @@
 	<string>MindFriend uses the camera to let you add photos to your journal entries and profile.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>MindFriend uses Face ID to securely unlock your private journal and mood data.</string>
-	<key>NSHealthShareUsageDescription</key>
-	<string>MindFriend reads your health data (sleep, heart rate, activity) to provide personalized insights about how your physical wellness affects your mood and mental health.</string>
-	<key>NSHealthUpdateUsageDescription</key>
-	<string>MindFriend does not write to your health data, but this permission is required by iOS.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright 2024 MindFriend. All rights reserved.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>MindFriend needs microphone access so you can have voice conversations with your AI companion.</string>
+	<string>MindFriend uses the microphone for voice journaling and guided meditation recordings.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>MindFriend needs access to your photos to let you add images to your journal entries and profile.</string>
 	<key>NSUserTrackingUsageDescription</key>
@@ -70,12 +66,6 @@
 		<key>UISceneConfigurations</key>
 		<dict/>
 	</dict>
-	<key>SUPABASE_URL</key>
-	<string>$(SUPABASE_URL)</string>
-	<key>SUPABASE_ANON_KEY</key>
-	<string>$(SUPABASE_ANON_KEY)</string>
-	<key>SENTRY_DSN</key>
-	<string>$(SENTRY_DSN)</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

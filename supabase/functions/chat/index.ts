@@ -61,15 +61,9 @@ serve(async (req) => {
   }
 
   try {
-    // Initialize Supabase client with service role for admin operations
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-
-    // Get user from JWT
+    // Get auth header first
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Missing authorization" }), {
         status: 401,
         headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
@@ -77,16 +71,51 @@ serve(async (req) => {
     }
 
     const token = authHeader.replace("Bearer ", "");
+
+    // Create user-scoped client with the JWT token
+    // This is the recommended Supabase pattern for Edge Functions
+    const supabaseUser = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      {
+        global: {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      },
+    );
+
+    // Initialize admin client for operations that need elevated privileges
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    // Get user from the user-scoped client
     const {
       data: { user },
       error: authError,
-    } = await supabaseAdmin.auth.getUser(token);
+    } = await supabaseUser.auth.getUser();
 
     if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Invalid token" }), {
-        status: 401,
-        headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
-      });
+      console.error(
+        "Auth validation failed:",
+        authError?.message || "No user returned",
+        "Code:",
+        authError?.code,
+      );
+      return new Response(
+        JSON.stringify({
+          error: "Invalid token",
+          details:
+            authError?.message ||
+            "Session validation failed. Please sign out and sign back in.",
+          code: authError?.code,
+        }),
+        {
+          status: 401,
+          headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     // Rate limiting check (10 requests per minute)
@@ -261,7 +290,10 @@ serve(async (req) => {
       );
     }
 
-    const quotaData = quotaResult?.[0];
+    // Handle both TABLE (array) and JSON (object) return types
+    const quotaData = Array.isArray(quotaResult)
+      ? quotaResult?.[0]
+      : quotaResult;
     if (!quotaData?.allowed) {
       return new Response(
         JSON.stringify({
@@ -543,8 +575,13 @@ serve(async (req) => {
     // Auto-generate conversation title if this is the first message
     const isFirstMessage = !messages || messages.length === 0;
     let conversationTitle: string | null = null;
+    console.log(
+      `Title generation check: isFirstMessage=${isFirstMessage}, messagesCount=${messages?.length ?? 0}`,
+    );
+
     if (isFirstMessage) {
       try {
+        console.log("Generating conversation title...");
         const titleResponse = await fetch(XAI_API_URL, {
           method: "POST",
           headers: {
@@ -552,7 +589,7 @@ serve(async (req) => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: "grok-4-1-fast-non-reasoning",
+            model: "grok-4-1-fast-reasoning", // Same model as main chat - confirmed working
             messages: [
               {
                 role: "system",
@@ -570,13 +607,27 @@ serve(async (req) => {
           const titleData = await titleResponse.json();
           const generatedTitle =
             titleData.choices?.[0]?.message?.content?.trim();
+          console.log(`Generated title: "${generatedTitle}"`);
           if (generatedTitle && generatedTitle.length > 0) {
             conversationTitle = generatedTitle;
-            await supabaseAdmin
+            const { error: updateError } = await supabaseAdmin
               .from("conversations")
               .update({ title: generatedTitle })
               .eq("id", conversationId);
+            if (updateError) {
+              console.error("Failed to save title:", updateError.message);
+            } else {
+              console.log(`Title saved to conversation ${conversationId}`);
+            }
           }
+        } else {
+          // Log failed title generation for debugging
+          const errorText = await titleResponse.text();
+          console.error(
+            "Title generation API error:",
+            titleResponse.status,
+            errorText,
+          );
         }
       } catch (titleError) {
         // Non-critical: log but don't fail the request
@@ -744,7 +795,7 @@ Return ONLY valid JSON array, no explanation. Example: [{"type": "person", "key"
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "grok-4-1-fast-non-reasoning",
+        model: "grok-4-1-fast-reasoning", // Same model as main chat - confirmed working
         messages: [
           {
             role: "system",

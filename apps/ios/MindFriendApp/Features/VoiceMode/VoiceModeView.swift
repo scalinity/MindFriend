@@ -488,9 +488,9 @@ struct VoiceModeView: View {
         // Handle tap based on current state
         switch stateMachine.state {
         case .speaking, .thinking, .processing:
-            // Barge-in: interrupt AI
-            _ = stateMachine.send(.tapInterrupt)
-            voiceService.stopListeningAndRespond()
+            // Manual interrupts disabled - only automatic barge-in via speech detection
+            // Tapping during AI speech has no effect
+            break
 
         case .idle:
             // Start session
@@ -500,6 +500,12 @@ struct VoiceModeView: View {
 
         case .error:
             // Retry connection
+            Task {
+                await startVoiceSession()
+            }
+
+        case .ended:
+            // Restart session
             Task {
                 await startVoiceSession()
             }

@@ -8,11 +8,11 @@ import Supabase
 @MainActor
 final class AccessibilityServiceTests: XCTestCase {
     var service: AccessibilityService!
-    var mockSupabase: MockSupabaseClient!
+    var mockSupabase: MockAccessibilitySupabaseClient!
 
     override func setUp() {
         super.setUp()
-        mockSupabase = MockSupabaseClient()
+        mockSupabase = MockAccessibilitySupabaseClient()
         service = AccessibilityService(supabase: mockSupabase as! SupabaseClient)
     }
 
@@ -322,9 +322,9 @@ final class AccessibilityServiceTests: XCTestCase {
     }
 }
 
-// MARK: - Mock Supabase Client
+// MARK: - Mock Objects
 
-class MockSupabaseClient {
+class MockAccessibilitySupabaseClient {
     var mockCurrentUser: UUID?
     var mockLoadPreferences: AccessibilityPreferences?
     var mockCaptions: AudioCaptions?

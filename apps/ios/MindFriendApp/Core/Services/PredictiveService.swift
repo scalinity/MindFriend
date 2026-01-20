@@ -232,17 +232,13 @@ final class PredictiveService: ObservableObject {
             }
         }
 
-        let response = try await supabase.functions
+        let result: AssessmentResponse = try await supabase.functions
             .invoke(
                 "run-risk-assessment",
                 options: FunctionInvokeOptions(
                     body: AssessmentRequest(userId: uid)
                 )
             )
-
-        // Parse response
-        let decoder = JSONDecoder()
-        let result = try decoder.decode(AssessmentResponse.self, from: response.data)
 
         if result.success {
             // Refresh latest assessment
@@ -492,11 +488,3 @@ enum PredictiveError: LocalizedError {
     }
 }
 
-// MARK: - Analytics Event Extensions
-
-extension AnalyticsEvent {
-    static let settingsChanged = AnalyticsEvent("settings_changed")
-    static let interventionResponse = AnalyticsEvent("intervention_response")
-    static let interventionRated = AnalyticsEvent("intervention_rated")
-    static let dataDeletionRequested = AnalyticsEvent("data_deletion_requested")
-}

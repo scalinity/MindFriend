@@ -150,6 +150,14 @@ actor OfflineCacheService {
         memoryCache.removeAll()
     }
 
+    /// Clear all caches on logout - invalidates all user-specific data
+    func clearOnLogout() {
+        // Clear memory cache
+        memoryCache.removeAll()
+        // Invalidate all disk cache (user-specific data)
+        invalidateAll()
+    }
+
     // MARK: - Specific Cache Methods
 
     /// Cache today's quest

@@ -2,6 +2,48 @@
 -- Extends existing family tables and creates 10 new tables for family wellness features
 
 -- =============================================================================
+-- MARK: - Create base family tables if they don't exist
+-- =============================================================================
+
+-- Create family_groups base table if it doesn't exist
+CREATE TABLE IF NOT EXISTS family_groups (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT DEFAULT 'My Family',
+  admin_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  circle_id UUID REFERENCES circles(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_family_groups_admin ON family_groups(admin_user_id);
+ALTER TABLE family_groups ENABLE ROW LEVEL SECURITY;
+
+-- Create family_members base table if it doesn't exist
+CREATE TABLE IF NOT EXISTS family_members (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  family_id UUID NOT NULL REFERENCES family_groups(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT unique_family_member UNIQUE (family_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_family_members_family ON family_members(family_id);
+CREATE INDEX IF NOT EXISTS idx_family_members_user ON family_members(user_id);
+ALTER TABLE family_members ENABLE ROW LEVEL SECURITY;
+
+-- Create family_invitations base table if it doesn't exist
+CREATE TABLE IF NOT EXISTS family_invitations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  family_id UUID NOT NULL REFERENCES family_groups(id) ON DELETE CASCADE,
+  inviter_id UUID NOT NULL REFERENCES auth.users(id),
+  invitee_email TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_family_invitations_family ON family_invitations(family_id);
+ALTER TABLE family_invitations ENABLE ROW LEVEL SECURITY;
+
+-- =============================================================================
 -- MARK: - Extend existing family_groups table
 -- =============================================================================
 
@@ -21,6 +63,7 @@ WHERE invite_code IS NULL;
 -- MARK: - Extend existing family_members table
 -- =============================================================================
 
+ALTER TABLE family_members ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
 ALTER TABLE family_members ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'child';
 ALTER TABLE family_members ADD COLUMN IF NOT EXISTS nickname TEXT;
 ALTER TABLE family_members ADD COLUMN IF NOT EXISTS avatar_emoji TEXT;
@@ -30,6 +73,15 @@ ALTER TABLE family_members ADD COLUMN IF NOT EXISTS share_mood_with_family BOOLE
 ALTER TABLE family_members ADD COLUMN IF NOT EXISTS share_activity_with_family BOOLEAN DEFAULT true;
 ALTER TABLE family_members ADD COLUMN IF NOT EXISTS share_achievements_with_family BOOLEAN DEFAULT true;
 ALTER TABLE family_members ADD COLUMN IF NOT EXISTS invited_by UUID REFERENCES auth.users(id);
+
+-- Add status constraint
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'valid_family_member_status') THEN
+    ALTER TABLE family_members ADD CONSTRAINT valid_family_member_status
+      CHECK (status IN ('active', 'inactive', 'removed'));
+  END IF;
+END $$;
 
 -- Add role constraint
 DO $$

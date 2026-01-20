@@ -119,10 +119,10 @@ final class PeerSupportService: ObservableObject {
     ) async throws -> UUID {
         let response: UUID = try await supabase
             .rpc("apply_to_become_listener", params: [
-                "p_display_name": displayName as Any,
-                "p_bio": bio as Any,
-                "p_specializations": specializations.map { $0.rawValue },
-                "p_languages": languages
+                "p_display_name": PeerSupportAnyEncodable(displayName),
+                "p_bio": PeerSupportAnyEncodable(bio),
+                "p_specializations": PeerSupportAnyEncodable(specializations.map { $0.rawValue }),
+                "p_languages": PeerSupportAnyEncodable(languages)
             ])
             .execute()
             .value
@@ -146,8 +146,8 @@ final class PeerSupportService: ObservableObject {
     func completeTrainingModule(moduleId: String, score: Int) async throws {
         let _: Bool = try await supabase
             .rpc("complete_training_module", params: [
-                "p_module_id": moduleId,
-                "p_score": score
+                "p_module_id": PeerSupportAnyEncodable(moduleId),
+                "p_score": PeerSupportAnyEncodable(score)
             ])
             .execute()
             .value
@@ -267,13 +267,13 @@ final class PeerSupportService: ObservableObject {
 
     /// End a session
     func endSession(sessionId: UUID, moodAfter: Int?) async throws {
-        var updates: [String: AnyEncodable] = [
-            "status": AnyEncodable("completed"),
-            "ended_at": AnyEncodable(Date().ISO8601Format())
+        var updates: [String: PeerSupportAnyEncodable] = [
+            "status": PeerSupportAnyEncodable("completed"),
+            "ended_at": PeerSupportAnyEncodable(Date().ISO8601Format())
         ]
 
         if let moodAfter = moodAfter {
-            updates["seeker_mood_after"] = AnyEncodable(moodAfter)
+            updates["seeker_mood_after"] = PeerSupportAnyEncodable(moodAfter)
         }
 
         try await supabase
@@ -313,10 +313,10 @@ final class PeerSupportService: ObservableObject {
 
     /// Send a message in a session
     func sendMessage(sessionId: UUID, content: String, senderType: DBSupportMessage.SenderType) async throws {
-        let message: [String: AnyEncodable] = [
-            "session_id": AnyEncodable(sessionId),
-            "sender_type": AnyEncodable(senderType.rawValue),
-            "content": AnyEncodable(content)
+        let message: [String: PeerSupportAnyEncodable] = [
+            "session_id": PeerSupportAnyEncodable(sessionId),
+            "sender_type": PeerSupportAnyEncodable(senderType.rawValue),
+            "content": PeerSupportAnyEncodable(content)
         ]
 
         try await supabase
@@ -391,14 +391,14 @@ final class PeerSupportService: ObservableObject {
             throw PeerSupportError.invalidRating
         }
 
-        let feedback: [String: AnyEncodable] = [
-            "session_id": AnyEncodable(sessionId),
-            "from_user_id": AnyEncodable(userId),
-            "rating": AnyEncodable(rating),
-            "felt_heard": AnyEncodable(feltHeard as Any),
-            "felt_supported": AnyEncodable(feltSupported as Any),
-            "would_recommend": AnyEncodable(wouldRecommend as Any),
-            "feedback_text": AnyEncodable(feedbackText as Any)
+        let feedback: [String: PeerSupportAnyEncodable] = [
+            "session_id": PeerSupportAnyEncodable(sessionId),
+            "from_user_id": PeerSupportAnyEncodable(userId),
+            "rating": PeerSupportAnyEncodable(rating),
+            "felt_heard": PeerSupportAnyEncodable(feltHeard),
+            "felt_supported": PeerSupportAnyEncodable(feltSupported),
+            "would_recommend": PeerSupportAnyEncodable(wouldRecommend),
+            "feedback_text": PeerSupportAnyEncodable(feedbackText)
         ]
 
         try await supabase
@@ -423,8 +423,8 @@ final class PeerSupportService: ObservableObject {
     func requestMentorship(mentorId: UUID, challenges: [SupportTopic]) async throws -> UUID {
         let response: UUID = try await supabase
             .rpc("request_mentorship", params: [
-                "p_mentor_id": mentorId.uuidString,
-                "p_challenges": challenges.map { $0.rawValue }
+                "p_mentor_id": PeerSupportAnyEncodable(mentorId.uuidString),
+                "p_challenges": PeerSupportAnyEncodable(challenges.map { $0.rawValue })
             ])
             .execute()
             .value
@@ -437,7 +437,7 @@ final class PeerSupportService: ObservableObject {
     func acceptMentorship(mentorshipId: UUID) async throws {
         let _: Bool = try await supabase
             .rpc("accept_mentorship", params: [
-                "p_mentorship_id": mentorshipId.uuidString
+                "p_mentorship_id": PeerSupportAnyEncodable(mentorshipId.uuidString)
             ])
             .execute()
             .value
@@ -470,15 +470,15 @@ final class PeerSupportService: ObservableObject {
             throw PeerSupportError.notAuthenticated
         }
 
-        let checkin: [String: AnyEncodable] = [
-            "mentorship_id": AnyEncodable(mentorshipId),
-            "initiated_by": AnyEncodable(userId),
-            "checkin_type": AnyEncodable(type.rawValue),
-            "message": AnyEncodable(message as Any),
-            "mood_shared": AnyEncodable(mood as Any),
-            "wins_shared": AnyEncodable(wins as Any),
-            "challenges_shared": AnyEncodable(challenges as Any),
-            "goals_discussed": AnyEncodable(goals as Any)
+        let checkin: [String: PeerSupportAnyEncodable] = [
+            "mentorship_id": PeerSupportAnyEncodable(mentorshipId),
+            "initiated_by": PeerSupportAnyEncodable(userId),
+            "checkin_type": PeerSupportAnyEncodable(type.rawValue),
+            "message": PeerSupportAnyEncodable(message),
+            "mood_shared": PeerSupportAnyEncodable(mood),
+            "wins_shared": PeerSupportAnyEncodable(wins),
+            "challenges_shared": PeerSupportAnyEncodable(challenges),
+            "goals_discussed": PeerSupportAnyEncodable(goals)
         ]
 
         try await supabase
@@ -506,19 +506,19 @@ final class PeerSupportService: ObservableObject {
     func sendGratitude(
         toUserId: UUID?,
         actionType: DBGratitudeAction.ActionType,
-        message: String?,
+        message: String,
         isPublic: Bool,
         sessionId: UUID?,
         mentorshipId: UUID?
     ) async throws -> UUID {
         let response: UUID = try await supabase
             .rpc("send_gratitude", params: [
-                "p_to_user_id": toUserId?.uuidString as Any,
-                "p_action_type": actionType.rawValue,
-                "p_message": message as Any,
-                "p_is_public": isPublic,
-                "p_session_id": sessionId?.uuidString as Any,
-                "p_mentorship_id": mentorshipId?.uuidString as Any
+                "p_to_user_id": PeerSupportAnyEncodable(toUserId?.uuidString ?? ""),
+                "p_action_type": PeerSupportAnyEncodable(actionType.rawValue),
+                "p_message": PeerSupportAnyEncodable(message),
+                "p_is_public": PeerSupportAnyEncodable(isPublic),
+                "p_session_id": PeerSupportAnyEncodable(sessionId?.uuidString ?? ""),
+                "p_mentorship_id": PeerSupportAnyEncodable(mentorshipId?.uuidString ?? "")
             ])
             .execute()
             .value
@@ -589,12 +589,12 @@ final class PeerSupportService: ObservableObject {
             throw PeerSupportError.notAuthenticated
         }
 
-        let wisdom: [String: AnyEncodable] = [
-            "user_id": AnyEncodable(userId),
-            "title": AnyEncodable(title),
-            "content": AnyEncodable(content),
-            "category": AnyEncodable(category.rawValue),
-            "tags": AnyEncodable(tags as Any)
+        let wisdom: [String: PeerSupportAnyEncodable] = [
+            "user_id": PeerSupportAnyEncodable(userId),
+            "title": PeerSupportAnyEncodable(title),
+            "content": PeerSupportAnyEncodable(content),
+            "category": PeerSupportAnyEncodable(category.rawValue),
+            "tags": PeerSupportAnyEncodable(tags)
         ]
 
         try await supabase
@@ -754,9 +754,9 @@ enum PeerSupportError: LocalizedError {
     }
 }
 
-// MARK: - AnyEncodable Helper
+// MARK: - PeerSupportAnyEncodable Helper
 
-private struct AnyEncodable: Encodable {
+private struct PeerSupportAnyEncodable: Encodable {
     private let _encode: (Encoder) throws -> Void
 
     init<T: Encodable>(_ wrapped: T) {

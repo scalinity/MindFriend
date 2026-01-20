@@ -10,6 +10,17 @@ import {
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { isAuthorizedCronRequest } from "../_shared/auth.ts";
 import { isInQuietHours } from "../_shared/notification-utils.ts";
+import {
+  getProactiveSettingsBatch,
+  getUsersProactiveCountsBatch,
+  getEngagementStatesBatch,
+  insertProactiveMessagesBatch,
+  updateNotificationStatusesBatch,
+  updateEngagementStatesBatch,
+  type BatchProactiveMessage,
+  type BatchNotificationStatusUpdate,
+  type BatchEngagementUpdate,
+} from "../_shared/batch-utils.ts";
 
 interface ProactiveCandidate {
   user_id: string;
@@ -18,18 +29,16 @@ interface ProactiveCandidate {
   context: Record<string, unknown>;
 }
 
-interface UserSettings {
-  proactive_enabled: boolean;
-  proactive_max_daily: number;
-  proactive_types_enabled: string[];
-  quiet_hours_start_local: string | null;
-  quiet_hours_end_local: string | null;
-  timezone: string;
+// Validate UUID format to prevent injection attacks
+function isValidUUID(uuid: string): boolean {
+  const uuidRegex =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(uuid);
 }
 
-interface EngagementState {
-  proactive_ignore_count: number;
-  last_proactive_at: string | null;
+// Validate array of UUIDs
+function validateUserIds(userIds: string[]): boolean {
+  return userIds.every(isValidUUID);
 }
 
 serve(async (req) => {
@@ -190,162 +199,191 @@ async function processProactiveCandidates(
     }
   }
 
+  const userIds = Array.from(byUser.keys());
+  console.log(
+    `Processing ${userIds.length} unique users (batch pre-fetch starting)`,
+  );
+
+  // Helper to safely log user identifiers without exposing full UUIDs
+  const hashUserId = (id: string) => id.substring(0, 8) + "...";
+
+  // Validate all user IDs to prevent injection attacks
+  if (!validateUserIds(userIds)) {
+    console.error("Invalid user IDs detected in batch processing");
+    throw new Error("Invalid user ID format");
+  }
+
+  // Pre-fetch all data in 3 batch queries instead of N sequential queries
+  const settingsMap = await getProactiveSettingsBatch(supabase, userIds);
+  const countsMap = await getUsersProactiveCountsBatch(supabase, userIds);
+  const engagementMap = await getEngagementStatesBatch(supabase, userIds);
+
+  // Also pre-fetch all display names in one query
+  const { data: allProfiles } = await supabase
+    .from("profiles")
+    .select("id, display_name")
+    .in("id", userIds);
+
+  const profileMap = new Map<string, string>();
+  if (allProfiles) {
+    for (const p of allProfiles) {
+      const firstName = (p.display_name || "there").split(" ")[0];
+      profileMap.set(p.id, firstName);
+    }
+  }
+
+  // Collect all messages and updates for batch operations
+  const messagesToInsert: BatchProactiveMessage[] = [];
+  const statusUpdates: BatchNotificationStatusUpdate[] = [];
+  const engagementUpdates: BatchEngagementUpdate[] = [];
+
   for (const [userId, candidate] of byUser) {
     try {
-      // Check user preferences
-      const { data: settings } = await supabase
-        .from("user_settings")
-        .select(
-          "proactive_enabled, proactive_max_daily, proactive_types_enabled, quiet_hours_start_local, quiet_hours_end_local, timezone",
-        )
-        .eq("user_id", userId)
-        .single();
+      // All data now fetched - O(1) lookups instead of sequential queries
+      const settings = settingsMap.get(userId);
+      const count = countsMap.get(userId);
+      const engagement = engagementMap.get(userId);
 
-      const userSettings = settings as UserSettings | null;
-
-      if (!userSettings?.proactive_enabled) {
-        console.log(`User ${userId}: proactive disabled`);
+      if (!settings?.proactive_enabled) {
+        console.log(`User ${hashUserId(userId)}: proactive disabled`);
         continue;
       }
 
-      if (
-        !userSettings.proactive_types_enabled?.includes(candidate.trigger_type)
-      ) {
+      if (!settings.proactive_types_enabled?.includes(candidate.trigger_type)) {
         console.log(
-          `User ${userId}: trigger type ${candidate.trigger_type} not enabled`,
+          `User ${hashUserId(userId)}: trigger type ${candidate.trigger_type} not enabled`,
         );
         continue;
       }
 
       // Check quiet hours
-      const timezone = userSettings.timezone || "UTC";
-      const formatter = new Intl.DateTimeFormat("en-US", {
-        timeZone: timezone,
+      const currentHour = new Date().toLocaleString("en-US", {
+        timeZone: settings.timezone || "UTC",
         hour: "numeric",
         hour12: false,
       });
-      const currentHour = parseInt(formatter.format(new Date()), 10);
+      const hour = parseInt(currentHour, 10);
 
       if (
         isInQuietHours(
-          currentHour,
-          userSettings.quiet_hours_start_local,
-          userSettings.quiet_hours_end_local,
+          hour,
+          settings.quiet_hours_start_local,
+          settings.quiet_hours_end_local,
         )
       ) {
-        console.log(`User ${userId}: in quiet hours`);
+        console.log(`User ${hashUserId(userId)}: in quiet hours`);
         continue;
       }
 
       // Check daily limit
-      const { count } = await supabase
-        .from("proactive_messages")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", userId)
-        .gte(
-          "sent_at",
-          new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+      if ((count?.count_today || 0) >= (settings.max_daily || 2)) {
+        console.log(
+          `User ${hashUserId(userId)}: daily limit reached (${count?.count_today})`,
         );
-
-      if ((count || 0) >= (userSettings.proactive_max_daily || 2)) {
-        console.log(`User ${userId}: daily limit reached (${count})`);
         continue;
       }
 
       // Check engagement state backoff
-      const { data: engagement } = await supabase
-        .from("user_engagement_states")
-        .select("proactive_ignore_count, last_proactive_at")
-        .eq("user_id", userId)
-        .single();
-
-      const engagementState = engagement as EngagementState | null;
-      if (engagementState && engagementState.proactive_ignore_count >= 3) {
+      if (engagement && engagement.proactive_ignore_count >= 3) {
         console.log(
-          `User ${userId}: too many ignored messages (${engagementState.proactive_ignore_count})`,
+          `User ${hashUserId(userId)}: too many ignored messages (${engagement.proactive_ignore_count})`,
         );
         continue;
       }
 
-      // Generate message and schedule
-      const message = await generateProactiveMessage(
-        supabase,
-        userId,
-        candidate,
-      );
+      // Generate message
+      const displayName =
+        profileMap.get(userId) || (settings ? "there" : "there");
+      const message = generateProactiveMessage(displayName, candidate);
 
-      // Insert proactive message record
-      const { error: insertError } = await supabase
-        .from("proactive_messages")
-        .insert({
-          user_id: userId,
-          trigger_type: candidate.trigger_type,
-          message_content: message,
-          delivery_channel: "push",
-          scheduled_for: new Date().toISOString(),
-          status: "scheduled",
-          metadata: candidate.context,
-        });
-
-      if (insertError) {
-        console.error(
-          `Error inserting proactive message for ${userId}:`,
-          insertError,
-        );
-        continue;
-      }
-
-      // Send push notification via existing send-notification function
-      const notificationType = getNotificationType(candidate.trigger_type);
-      const response = await supabase.functions.invoke("send-notification", {
-        body: {
-          type: notificationType,
-          recipientId: userId,
-          data: {
-            ...candidate.context,
-            displayName: await getUserDisplayName(supabase, userId),
-          },
-        },
+      // Collect for batch insert
+      messagesToInsert.push({
+        user_id: userId,
+        trigger_type: candidate.trigger_type,
+        message_content: message,
+        delivery_channel: "push",
+        scheduled_for: new Date().toISOString(),
       });
 
-      if (response.error) {
-        console.error(
-          `Error sending proactive notification to ${userId}:`,
-          response.error,
-        );
-        // Update message status to failed
-        await supabase
-          .from("proactive_messages")
-          .update({ status: "expired" })
-          .eq("user_id", userId)
-          .eq("status", "scheduled")
-          .order("created_at", { ascending: false })
-          .limit(1);
-      } else {
-        // Update message status to sent
-        await supabase
-          .from("proactive_messages")
-          .update({ status: "sent", sent_at: new Date().toISOString() })
-          .eq("user_id", userId)
-          .eq("status", "scheduled")
-          .order("created_at", { ascending: false })
-          .limit(1);
-
-        // Update last_proactive_at
-        await supabase.from("user_engagement_states").upsert(
-          {
-            user_id: userId,
-            last_proactive_at: new Date().toISOString(),
-          },
-          { onConflict: "user_id" },
-        );
-
-        processed.push(candidate);
-        console.log(`Sent proactive ${candidate.trigger_type} to ${userId}`);
-      }
+      processed.push(candidate);
+      console.log(`Approved ${candidate.trigger_type} for ${hashUserId(userId)}`);
     } catch (err) {
-      console.error(`Error processing candidate ${userId}:`, err);
+      console.error(`Error processing candidate ${hashUserId(userId)}:`, err);
     }
+  }
+
+  // Batch insert all messages at once
+  if (messagesToInsert.length > 0) {
+    console.log(
+      `Batch inserting ${messagesToInsert.length} proactive messages...`,
+    );
+    const insertedMessages = await insertProactiveMessagesBatch(
+      supabase,
+      messagesToInsert,
+    );
+
+    // Prepare notification updates and engagement updates for all inserted messages
+    const promises: Promise<void>[] = [];
+    for (const message of messagesToInsert) {
+      const inserted = insertedMessages.get(message.user_id);
+      if (inserted) {
+        const notificationType = getNotificationType(message.trigger_type);
+
+        // Send push notification
+        const response = supabase.functions.invoke("send-notification", {
+          body: {
+            type: notificationType,
+            recipientId: message.user_id,
+            data: {
+              displayName: profileMap.get(message.user_id) || "there",
+            },
+          },
+        });
+
+        promises.push(
+          (async () => {
+            const result = await response;
+            if (!result.error) {
+              // Collect status update
+              statusUpdates.push({
+                message_id: inserted.id,
+                status: "sent",
+                sent_at: new Date().toISOString(),
+              });
+
+              // Collect engagement update
+              engagementUpdates.push({
+                user_id: message.user_id,
+                new_state: "active", // Mark as re-engaged
+              });
+            } else {
+              // Mark as failed
+              statusUpdates.push({
+                message_id: inserted.id,
+                status: "expired",
+              });
+            }
+          })(),
+        );
+      }
+    }
+
+    // Wait for all promises to resolve
+    await Promise.allSettled(promises);
+  }
+
+  // Batch update all notification statuses
+  if (statusUpdates.length > 0) {
+    console.log(`Batch updating ${statusUpdates.length} notification statuses`);
+    await updateNotificationStatusesBatch(supabase, statusUpdates);
+  }
+
+  // Batch update all engagement states
+  if (engagementUpdates.length > 0) {
+    console.log(
+      `Batch updating ${engagementUpdates.length} engagement state records`,
+    );
+    await updateEngagementStatesBatch(supabase, engagementUpdates);
   }
 
   return processed;
@@ -362,25 +400,11 @@ function getNotificationType(triggerType: string): string {
   return typeMap[triggerType] || "proactive_mood_decline";
 }
 
-async function getUserDisplayName(
-  supabase: SupabaseClient,
-  userId: string,
-): Promise<string> {
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("display_name")
-    .eq("id", userId)
-    .single();
-
-  return profile?.display_name?.split(" ")[0] || "there";
-}
-
-async function generateProactiveMessage(
-  supabase: SupabaseClient,
-  userId: string,
+function generateProactiveMessage(
+  displayName: string,
   candidate: ProactiveCandidate,
-): Promise<string> {
-  const name = await getUserDisplayName(supabase, userId);
+): string {
+  const name = displayName || "there";
 
   // Template-based generation
   const templates: Record<string, string[]> = {

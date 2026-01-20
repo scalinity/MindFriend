@@ -396,15 +396,18 @@ struct HSAFSARecord: Codable, Identifiable, Equatable {
 enum BillingPeriod: String, Codable, CaseIterable {
     case monthly
     case yearly
-    case lifetime
-    case custom
 
     var displayName: String {
         switch self {
         case .monthly: return "Monthly"
         case .yearly: return "Annual"
-        case .lifetime: return "Lifetime"
-        case .custom: return "Custom"
+        }
+    }
+
+    var savingsPercent: Int? {
+        switch self {
+        case .monthly: return nil
+        case .yearly: return 20
         }
     }
 }
@@ -413,6 +416,7 @@ enum BillingPeriod: String, Codable, CaseIterable {
 
 enum PlanType: String, Codable, CaseIterable {
     case individual
+    case couples
     case family
     case enterprise
     case gift
@@ -420,19 +424,35 @@ enum PlanType: String, Codable, CaseIterable {
     var displayName: String {
         switch self {
         case .individual: return "Individual"
+        case .couples: return "Couples"
         case .family: return "Family"
         case .enterprise: return "Enterprise"
         case .gift: return "Gift"
         }
     }
 
+    var maxSeats: Int {
+        switch self {
+        case .individual: return 1
+        case .couples: return 2
+        case .family: return 6
+        case .enterprise: return Int.max
+        case .gift: return 1
+        }
+    }
+
     var description: String {
         switch self {
-        case .individual: return "For 1 person"
-        case .family: return "For up to 6 people"
+        case .individual: return "Just for you"
+        case .couples: return "For 2 people"
+        case .family: return "Up to 6 people"
         case .enterprise: return "For organizations"
         case .gift: return "Gift to someone"
         }
+    }
+
+    var isFamilyPlan: Bool {
+        self == .family || self == .couples
     }
 }
 

@@ -592,7 +592,13 @@ struct CheckInContentView: View {
                 tags: [],
                 coverImageUrl: nil,
                 estimatedDailyMinutes: 10,
-                sortOrder: 1
+                sortOrder: 1,
+                methodology: nil,
+                evidenceSummary: nil,
+                evidenceUrl: nil,
+                targetConditions: [],
+                requiresBaselineAssessment: false,
+                assessmentType: nil
             )
         ))
     }

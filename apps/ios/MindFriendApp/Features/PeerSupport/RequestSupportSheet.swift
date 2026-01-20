@@ -1,4 +1,5 @@
 import SwiftUI
+import Supabase
 
 /// Sheet for requesting a peer support session
 struct RequestSupportSheet: View {
@@ -319,5 +320,5 @@ extension SupportMatchResponse: Identifiable {
 }
 
 #Preview("Request Support") {
-    RequestSupportSheet(service: PeerSupportService(supabase: SupabaseClient.shared))
+    RequestSupportSheet(service: PeerSupportService(supabase: DependencyContainer.preview.supabase))
 }

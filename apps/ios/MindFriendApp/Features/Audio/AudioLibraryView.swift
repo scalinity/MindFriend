@@ -276,7 +276,7 @@ struct AudioTrackCard: View {
                                 Image(systemName: "music.note")
                                     .font(.title)
                                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                    .background(Color(.tertiary))
+                                    .background(Color.gray.opacity(0.3))
                             @unknown default:
                                 EmptyView()
                             }
@@ -285,7 +285,7 @@ struct AudioTrackCard: View {
                         Image(systemName: "music.note")
                             .font(.title)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .background(Color(.tertiary))
+                            .background(Color.gray.opacity(0.3))
                     }
 
                     // Play button overlay
@@ -305,7 +305,7 @@ struct AudioTrackCard: View {
                         .foregroundStyle(.primary)
 
                     if let narrator = track.narrator {
-                        Text(narrator.name)
+                        Text(narrator)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -322,7 +322,7 @@ struct AudioTrackCard: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(track.title)\(track.narrator.map { ", by \($0.name)" } ?? "")")
+        .accessibilityLabel("\(track.title)\(track.narrator.map { ", by \($0)" } ?? "")")
     }
 }
 
@@ -358,7 +358,7 @@ struct AudioTrackListItem: View {
                     }
                 }
                 .frame(width: 44, height: 44)
-                .background(Color(.tertiary))
+                .background(Color.gray.opacity(0.3))
                 .clipShape(RoundedRectangle(cornerRadius: 8))
 
                 // Content
@@ -371,7 +371,7 @@ struct AudioTrackListItem: View {
 
                     HStack(spacing: 8) {
                         if let narrator = track.narrator {
-                            Text(narrator.name)
+                            Text(narrator)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }

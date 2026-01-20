@@ -144,7 +144,7 @@ struct VoiceStateMachine {
             case .speaking:
                 return "Speaking..."
             case .bargeIn:
-                return "Interrupted"
+                return "Listening..."
             case .muted:
                 return "Muted"
             case .reconnecting:
@@ -423,19 +423,31 @@ struct VoiceStateMachine {
         // MARK: - Barge-In State Transitions
 
         case (.bargeIn, .audioPlaybackFinished):
+            // Playback stopped, check if user is speaking
+            state = .listening
+
+        case (.bargeIn, .speechStart):
+            // User started/is speaking during barge-in
             state = .userSpeaking
 
         case (.bargeIn, .speechEnd):
+            // User finished their interruption
             state = .endOfUtterance
+
+        case (.bargeIn, .serverResponseDone):
+            // Previous response cancelled, ready to listen
+            state = .listening
 
         case (.bargeIn, .disconnected):
             state = .reconnecting
 
-        // After stopping playback, transition based on whether user is still speaking
-        case (.bargeIn, _):
-            // Default: transition to listening for more speech
-            if case .speechStart = event {
-                state = .userSpeaking
+        case (.bargeIn, .tapEnd):
+            state = .ended
+
+        case (.bargeIn, .toggleMute):
+            isMuted.toggle()
+            if isMuted {
+                state = .muted
             }
 
         // MARK: - Muted State Transitions

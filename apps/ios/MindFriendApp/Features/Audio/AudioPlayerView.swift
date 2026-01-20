@@ -1,5 +1,6 @@
 import SwiftUI
 import MediaPlayer
+import Supabase
 
 /// Full-screen audio player view with controls, progress, and sleep timer
 struct AudioPlayerView: View {
@@ -15,11 +16,8 @@ struct AudioPlayerView: View {
 
     init(track: AudioTrack) {
         self.track = track
-        // Note: playerService is injected via environmentObject in parent
-        _playerService = ObservedObject(initialValue: AudioPlayerService(supabase: SupabaseClient(
-            supabaseURL: URL(string: "https://localhost:54321")!,
-            supabaseKey: "example-key"
-        )))
+        // Use shared supabase client for initialization
+        _playerService = ObservedObject(initialValue: AudioPlayerService(supabase: DependencyContainer.shared.supabase))
     }
 
     var body: some View {
@@ -117,31 +115,49 @@ struct AudioPlayerView: View {
 
     private var coverArtView: some View {
         ZStack {
-            if let coverUrl = track.coverImageUrl {
-                AsyncImage(url: coverUrl) { phase in
+            // Album art
+            if let imageUrl = track.imageUrl, let url = URL(string: imageUrl) {
+                AsyncImage(url: url) { phase in
                     switch phase {
-                    case .empty:
-                        ProgressView()
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                     case .success(let image):
                         image
                             .resizable()
                             .scaledToFill()
-                    case .failure:
-                        Image(systemName: "music.note")
-                            .font(.system(size: 60))
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .background(Color(.tertiary))
+                    case .failure, .empty:
+                        Color.gray.opacity(0.2)
                     @unknown default:
-                        EmptyView()
+                        Color.gray.opacity(0.2)
                     }
                 }
+                .frame(height: 300)
+                .clipped()
             } else {
-                Image(systemName: "music.note")
-                    .font(.system(size: 60))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color(.tertiary))
+                Color.gray.opacity(0.2)
+                    .frame(height: 300)
             }
+
+            // Track info overlay
+            VStack(spacing: 12) {
+                Text(track.title)
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .lineLimit(2)
+
+                if let authorName = track.authorName {
+                    Text(authorName)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let description = track.description {
+                    Text(description)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                }
+            }
+            .padding()
+            .background(Color(.secondarySystemBackground).opacity(0.8))
         }
         .frame(height: 280)
         .clipShape(RoundedRectangle(cornerRadius: 20))
@@ -155,43 +171,10 @@ struct AudioPlayerView: View {
                 .fontWeight(.bold)
                 .lineLimit(2)
 
-            if let narrator = track.narrator {
-                HStack(spacing: 8) {
-                    if let avatarUrl = narrator.avatarUrl {
-                        AsyncImage(url: avatarUrl) { phase in
-                            switch phase {
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(width: 32, height: 32)
-                                    .clipShape(Circle())
-                            default:
-                                Image(systemName: "person.circle")
-                                    .font(.system(size: 32))
-                            }
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Narrator")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text(narrator.name)
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                    }
-
-                    Spacer()
-
-                    Button(action: { showNarratorInfo = true }) {
-                        Image(systemName: "info.circle")
-                            .foregroundStyle(.blue)
-                    }
-                }
-                .padding()
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+            if let authorName = track.authorName {
+                Text(authorName)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
 
             if let description = track.description {
@@ -364,50 +347,18 @@ struct AudioPlayerView: View {
             NavigationStack {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
-                        // Avatar
-                        if let avatarUrl = narrator.avatarUrl {
-                            AsyncImage(url: avatarUrl) { phase in
-                                switch phase {
-                                case .success(let image):
-                                    image
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(height: 200)
-                                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                                case .failure:
-                                    Image(systemName: "person.crop.circle")
-                                        .font(.system(size: 60))
-                                        .frame(maxWidth: .infinity)
-                                        .frame(height: 200)
-                                        .background(Color(.tertiary))
-                                default:
-                                    ProgressView()
-                                        .frame(height: 200)
-                                }
-                            }
-                        }
+                        // Avatar Placeholder
+                        Image(systemName: "person.crop.circle")
+                            .font(.system(size: 60))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 200)
+                            .background(Color(.secondarySystemBackground))
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
 
                         VStack(alignment: .leading, spacing: 8) {
-                            Text(narrator.name)
+                            Text(narrator)
                                 .font(.title2)
                                 .fontWeight(.bold)
-
-                            if let style = narrator.voiceStyle {
-                                Label(style.capitalized, systemImage: "speaker.wave.2")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-
-                        if let bio = narrator.bio {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("About")
-                                    .font(.headline)
-
-                                Text(bio)
-                                    .font(.body)
-                                    .foregroundStyle(.secondary)
-                            }
                         }
 
                         Spacer()
@@ -443,6 +394,8 @@ struct AudioPlayerView: View {
 
 // MARK: - Preview
 
+// Preview disabled - AudioTrack and Narrator types not yet implemented
+/*
 #Preview {
     AudioPlayerView(track: AudioTrack(
         id: "preview-1",
@@ -486,3 +439,4 @@ struct AudioPlayerView: View {
     ))
     .environmentObject(DependencyContainer())
 }
+*/

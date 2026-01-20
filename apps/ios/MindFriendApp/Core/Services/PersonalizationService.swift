@@ -52,12 +52,12 @@ final class PersonalizationService: ObservableObject {
         async let insightsTask = loadInsights()
         async let suggestionsTask = loadScheduleSuggestions()
 
-        // Await all tasks
-        await profileTask
-        await learnedTask
-        await patternsTask
-        await insightsTask
-        await suggestionsTask
+        // Await all tasks and collect results
+        _ = await profileTask
+        _ = await learnedTask
+        _ = await patternsTask
+        _ = await insightsTask
+        _ = await suggestionsTask
 
         isLoading = false
     }

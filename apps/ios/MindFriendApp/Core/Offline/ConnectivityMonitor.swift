@@ -40,7 +40,7 @@ final class ConnectivityMonitor: ObservableObject {
 
     // MARK: - Private Properties
 
-    private let monitor: NWPathMonitor
+    private var monitor: NWPathMonitor?
     private let monitorQueue = DispatchQueue(label: "com.mindfriend.connectivity", qos: .utility)
     private var wasConnected: Bool = true
     private var isMonitoring: Bool = false
@@ -52,7 +52,7 @@ final class ConnectivityMonitor: ObservableObject {
     // MARK: - Initialization
 
     init() {
-        self.monitor = NWPathMonitor()
+        // Monitor is created on-demand in startMonitoring()
     }
 
     // MARK: - Public Methods
@@ -62,20 +62,26 @@ final class ConnectivityMonitor: ObservableObject {
         guard !isMonitoring else { return }
         isMonitoring = true
 
-        monitor.pathUpdateHandler = { [weak self] path in
+        // Create a new NWPathMonitor instance each time
+        // NWPathMonitor cannot be restarted after cancel() - must create new instance
+        let newMonitor = NWPathMonitor()
+        self.monitor = newMonitor
+
+        newMonitor.pathUpdateHandler = { [weak self] path in
             Task { @MainActor [weak self] in
                 self?.handlePathUpdate(path)
             }
         }
 
-        monitor.start(queue: monitorQueue)
+        newMonitor.start(queue: monitorQueue)
     }
 
     /// Stop monitoring network connectivity
     func stopMonitoring() {
         guard isMonitoring else { return }
         isMonitoring = false
-        monitor.cancel()
+        monitor?.cancel()
+        monitor = nil // Release the monitor so a new one can be created on restart
     }
 
     /// Check if current connection allows downloads (respects WiFi-only setting)
@@ -91,6 +97,11 @@ final class ConnectivityMonitor: ObservableObject {
 
     /// Force a connectivity check
     func checkConnectivity() {
+        guard let monitor = monitor else {
+            // If monitor is not started, start it now
+            startMonitoring()
+            return
+        }
         let currentPath = monitor.currentPath
         handlePathUpdate(currentPath)
     }

@@ -251,7 +251,7 @@ struct SubscriptionView: View {
                     HStack {
                         Image(systemName: "tag.fill")
                             .foregroundStyle(.green)
-                        Text("Save 50% with annual billing")
+                        Text("Save 20% with annual billing")
                             .font(.subheadline)
                             .foregroundStyle(.green)
                         Spacer()
@@ -543,12 +543,11 @@ struct BillingPeriodCard: View {
                     .font(.headline)
                     .foregroundStyle(.primary)
 
-                if showSavings {
-                    Text("Save 50%")
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.green)
-                }
+                // Always render text to maintain consistent height
+                Text(showSavings ? "Save 20%" : " ")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(showSavings ? .green : .clear)
             }
             .frame(maxWidth: .infinity)
             .padding()
@@ -562,7 +561,7 @@ struct BillingPeriodCard: View {
         .buttonStyle(.plain)
         // P3-R7: Accessibility labels
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(period.displayName) billing\(showSavings ? ", Save 50%" : "")")
+        .accessibilityLabel("\(period.displayName) billing\(showSavings ? ", Save 20%" : "")")
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityHint("Double tap to select this billing period")
         .accessibilityAddTraits(isSelected ? .isSelected : [])

@@ -78,6 +78,15 @@ struct ProfileView: View {
                     }
                 }
 
+                // Professional / Therapist
+                Section("Professional") {
+                    NavigationLink {
+                        TherapistApplicationView()
+                    } label: {
+                        Label("Become a Therapist/Coach", systemImage: "person.badge.plus")
+                    }
+                }
+
                 // Creator Studio
                 // TODO: Uncomment when CreatorService is integrated (Spec 13)
                 // if container.creatorService.creatorProfile != nil {
@@ -127,6 +136,13 @@ struct ProfileView: View {
                         ProactiveSettingsView()
                     } label: {
                         Label("Proactive Check-ins", systemImage: "sparkles")
+                    }
+
+                    NavigationLink {
+                        SOSSettingsView()
+                    } label: {
+                        Label("SOS Panic Button", systemImage: "heart.fill")
+                            .foregroundStyle(.red)
                     }
 
                     NavigationLink {
@@ -232,14 +248,16 @@ struct ProfileView: View {
                 }
             }
             .navigationTitle("Profile")
-            .confirmationDialog("Sign Out", isPresented: $showLogoutConfirm) {
+            .alert("Sign Out", isPresented: $showLogoutConfirm) {
+                Button("Cancel", role: .cancel) { }
                 Button("Sign Out", role: .destructive) {
                     logout()
                 }
             } message: {
                 Text("Are you sure you want to sign out?")
             }
-            .confirmationDialog("Delete Account", isPresented: $showDeleteConfirm) {
+            .alert("Delete Account", isPresented: $showDeleteConfirm) {
+                Button("Cancel", role: .cancel) { }
                 Button("Delete Account", role: .destructive) {
                     deleteAccount()
                 }

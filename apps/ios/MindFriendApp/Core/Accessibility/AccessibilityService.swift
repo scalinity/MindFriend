@@ -7,9 +7,9 @@ import Supabase
 @MainActor
 final class AccessibilityService: ObservableObject {
     // MARK: - Published State
-    @Published private(set) var preferences: AccessibilityPreferences = .default
-    @Published private(set) var isLoading = false
-    @Published private(set) var error: Error?
+    @Published var preferences: AccessibilityPreferences = .default
+    @Published var isLoading = false
+    @Published var error: Error?
 
     // MARK: - Private Properties
     private let supabase: SupabaseClient
@@ -251,6 +251,23 @@ enum AccessibilityError: LocalizedError {
             return "Failed to load localization strings"
         case .invalidPreferences:
             return "Invalid accessibility preferences"
+        }
+    }
+}
+
+extension AccessibilityError: Equatable {
+    public static func == (lhs: AccessibilityError, rhs: AccessibilityError) -> Bool {
+        switch (lhs, rhs) {
+        case (.invalidFeedback(let a), .invalidFeedback(let b)):
+            return a == b
+        case (.captionsNotAvailable, .captionsNotAvailable):
+            return true
+        case (.localizationFailed, .localizationFailed):
+            return true
+        case (.invalidPreferences, .invalidPreferences):
+            return true
+        default:
+            return false
         }
     }
 }

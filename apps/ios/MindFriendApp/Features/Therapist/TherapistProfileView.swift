@@ -270,7 +270,7 @@ struct TherapistProfileView: View {
                 if therapist.ratingCount > 0 {
                     Text("See all \(therapist.ratingCount)")
                         .font(.subheadline)
-                        .foregroundStyle(.accentColor)
+                        .foregroundStyle(Color.accentColor)
                 }
             }
 
@@ -340,67 +340,7 @@ extension Decimal {
     }
 }
 
-// MARK: - Flow Layout
-
-struct FlowLayout: Layout {
-    var spacing: CGFloat = 8
-
-    struct CacheData {
-        var size: CGSize = .zero
-        var positions: [CGPoint] = []
-    }
-
-    func makeCache(subviews: Subviews) -> CacheData {
-        CacheData()
-    }
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout CacheData) -> CGSize {
-        let result = layout(proposal: proposal, subviews: subviews)
-        cache.size = result.size
-        cache.positions = result.positions
-        return result.size
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout CacheData) {
-        // Use cached positions if available, otherwise recalculate
-        let positions = cache.positions.isEmpty
-            ? layout(proposal: proposal, subviews: subviews).positions
-            : cache.positions
-
-        for (index, position) in positions.enumerated() {
-            subviews[index].place(
-                at: CGPoint(x: bounds.minX + position.x, y: bounds.minY + position.y),
-                proposal: .unspecified
-            )
-        }
-    }
-
-    private func layout(proposal: ProposedViewSize, subviews: Subviews) -> (size: CGSize, positions: [CGPoint]) {
-        let maxWidth = proposal.width ?? .infinity
-        var positions: [CGPoint] = []
-        var currentX: CGFloat = 0
-        var currentY: CGFloat = 0
-        var lineHeight: CGFloat = 0
-        var totalHeight: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-
-            if currentX + size.width > maxWidth && currentX > 0 {
-                currentX = 0
-                currentY += lineHeight + spacing
-                lineHeight = 0
-            }
-
-            positions.append(CGPoint(x: currentX, y: currentY))
-            lineHeight = max(lineHeight, size.height)
-            currentX += size.width + spacing
-            totalHeight = max(totalHeight, currentY + lineHeight)
-        }
-
-        return (CGSize(width: maxWidth, height: totalHeight), positions)
-    }
-}
+// MARK: - Preview
 
 #Preview {
     NavigationStack {

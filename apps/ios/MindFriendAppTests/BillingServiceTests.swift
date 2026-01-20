@@ -59,15 +59,15 @@ final class BillingServiceTests: XCTestCase {
     func testProductBillingPeriodMappingAnnual() {
         XCTAssertEqual(
             BillingService.productBillingPeriods["com.mindfriend.premium.yearly"],
-            .annual
+            .yearly
         )
         XCTAssertEqual(
             BillingService.productBillingPeriods["com.mindfriend.couples.annual"],
-            .annual
+            .yearly
         )
         XCTAssertEqual(
             BillingService.productBillingPeriods["com.mindfriend.family.annual"],
-            .annual
+            .yearly
         )
     }
 
@@ -171,7 +171,7 @@ final class BillingServiceTests: XCTestCase {
 
     func testBillingPeriodDisplayName() {
         XCTAssertEqual(BillingPeriod.monthly.displayName, "Monthly")
-        XCTAssertEqual(BillingPeriod.annual.displayName, "Annual")
+        XCTAssertEqual(BillingPeriod.yearly.displayName, "Annual")
     }
 
     // MARK: - Subscription Model Tests
@@ -196,11 +196,10 @@ final class BillingServiceTests: XCTestCase {
     // MARK: - FamilyMember Status Tests
 
     func testFamilyMemberStatusRawValues() {
-        XCTAssertEqual(FamilyMember.MemberStatus.invited.rawValue, "invited")
         XCTAssertEqual(FamilyMember.MemberStatus.active.rawValue, "active")
+        XCTAssertEqual(FamilyMember.MemberStatus.pending.rawValue, "pending")
         XCTAssertEqual(FamilyMember.MemberStatus.removed.rawValue, "removed")
     }
-}
 
     // MARK: - Spec 15: Promo Code Validation Tests
 

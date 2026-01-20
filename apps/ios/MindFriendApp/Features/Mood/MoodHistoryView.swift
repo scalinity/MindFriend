@@ -186,7 +186,7 @@ struct MoodStatsCard: View {
     }
 }
 
-struct StatBox: View {
+private struct StatBox: View {
     let title: String
     let value: String
     let icon: String

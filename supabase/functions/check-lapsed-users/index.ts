@@ -12,6 +12,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { isAuthorizedCronRequest } from "../_shared/auth.ts";
+import {
+  calculateUserAbsenceBatch,
+  checkRecentNotificationsBatch,
+  type BatchRecentNotificationCheck,
+} from "../_shared/batch-utils.ts";
 import type { NotificationType } from "../_shared/notification-utils.ts";
 
 interface LapsedUser {
@@ -38,6 +44,18 @@ function getNotificationType(daysAbsent: number): NotificationType | null {
   }
 }
 
+// Validate UUID format to prevent injection attacks
+function isValidUUID(uuid: string): boolean {
+  const uuidRegex =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(uuid);
+}
+
+// Validate array of UUIDs
+function validateUserIds(userIds: string[]): boolean {
+  return userIds.every(isValidUUID);
+}
+
 serve(async (req) => {
   const origin = req.headers.get("Origin");
   const headers = {
@@ -51,36 +69,17 @@ serve(async (req) => {
   }
 
   try {
-    // Verify this is a cron job call (Authorization header with service role key)
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    // Verify this is a cron job call (require cron secret or service role key)
+    const expectedCronSecret = Deno.env.get("CRON_SECRET") || "";
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+
+    if (
+      !isAuthorizedCronRequest(req.headers, expectedCronSecret, serviceRoleKey)
+    ) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers,
       });
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-
-    // Constant-time comparison to prevent timing attacks
-    const tokenBytes = new TextEncoder().encode(token);
-    const keyBytes = new TextEncoder().encode(serviceRoleKey);
-
-    let isServiceRole = tokenBytes.length === keyBytes.length;
-    if (isServiceRole) {
-      let diff = 0;
-      for (let i = 0; i < tokenBytes.length; i++) {
-        diff |= tokenBytes[i] ^ keyBytes[i];
-      }
-      isServiceRole = diff === 0;
-    }
-
-    if (!isServiceRole) {
-      return new Response(
-        JSON.stringify({ error: "This endpoint requires service role access" }),
-        { status: 403, headers },
-      );
     }
 
     // Initialize Supabase admin client
@@ -105,6 +104,46 @@ serve(async (req) => {
     const users = (lapsedUsers || []) as LapsedUser[];
     console.log(`Found ${users.length} lapsed users to notify`);
 
+    // Helper to safely log user identifiers without exposing full UUIDs
+    const sanitizeUserId = (id: string) => id.substring(0, 8) + "...";
+
+    // Pre-fetch all data in batch queries
+    const userIds = users.map((u) => u.user_id);
+
+    // Validate all user IDs to prevent injection attacks
+    if (!validateUserIds(userIds)) {
+      console.error("Invalid user IDs detected in batch processing");
+      return new Response(
+        JSON.stringify({ error: "Invalid user ID format detected" }),
+        { status: 400, headers },
+      );
+    }
+
+    // Batch 1: Get absence metrics for all users
+    const absenceMetricsMap = await calculateUserAbsenceBatch(
+      supabaseAdmin,
+      userIds,
+    );
+
+    // Batch 2: Check recent notifications for all users
+    const recentNotificationChecks: BatchRecentNotificationCheck[] = users
+      .map((u) => {
+        const notifType = getNotificationType(u.days_absent);
+        return {
+          user_id: u.user_id,
+          notification_type: notifType || "unknown",
+        };
+      })
+      .filter((c) => c.notification_type !== "unknown");
+
+    const recentNotificationsMap =
+      recentNotificationChecks.length > 0
+        ? await checkRecentNotificationsBatch(
+            supabaseAdmin,
+            recentNotificationChecks,
+          )
+        : new Map();
+
     // Track results
     const results = {
       total: users.length,
@@ -112,7 +151,7 @@ serve(async (req) => {
       skipped: 0,
       failed: 0,
       details: [] as Array<{
-        userId: string;
+        userIdHash: string;
         daysAbsent: number;
         notificationType: string | null;
         status: string;
@@ -120,14 +159,23 @@ serve(async (req) => {
       }>,
     };
 
-    // Process each lapsed user
+    // Collect reengagement events for batch insert
+    const reengagementEvents: Array<{
+      user_id: string;
+      event_type: string;
+      absence_days: number;
+      metadata: Record<string, unknown>;
+    }> = [];
+
+    // Process each lapsed user (all data now pre-fetched)
+    const sendPromises: Promise<void>[] = [];
     for (const user of users) {
       const notificationType = getNotificationType(user.days_absent);
 
       if (!notificationType) {
         results.skipped++;
         results.details.push({
-          userId: user.user_id,
+          userIdHash: sanitizeUserId(user.user_id),
           daysAbsent: user.days_absent,
           notificationType: null,
           status: "skipped",
@@ -136,39 +184,14 @@ serve(async (req) => {
         continue;
       }
 
-      // Get additional data for social hook notification
-      let hugsReceived = 0;
-      let circlePosts = 0;
-
-      if (notificationType === "reengagement_social") {
-        // Fetch hugs and circle posts count for this user
-        const { data: absenceData } = await supabaseAdmin.rpc(
-          "calculate_user_absence",
-          { p_user_id: user.user_id },
-        );
-
-        if (absenceData && absenceData.length > 0) {
-          hugsReceived = absenceData[0].hugs_received || 0;
-          circlePosts = absenceData[0].circle_posts || 0;
-        }
-      }
-
       // Check if we've already sent this type of notification recently
-      const { data: recentNotification } = await supabaseAdmin
-        .from("notification_history")
-        .select("id")
-        .eq("user_id", user.user_id)
-        .eq("notification_type", notificationType)
-        .gte(
-          "created_at",
-          new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-        )
-        .single();
+      const recentKey = `${user.user_id}:${notificationType}`;
+      const wasRecentlySent = recentNotificationsMap.get(recentKey);
 
-      if (recentNotification) {
+      if (wasRecentlySent?.recently_sent) {
         results.skipped++;
         results.details.push({
-          userId: user.user_id,
+          userIdHash: sanitizeUserId(user.user_id),
           daysAbsent: user.days_absent,
           notificationType,
           status: "skipped",
@@ -176,6 +199,11 @@ serve(async (req) => {
         });
         continue;
       }
+
+      // Get absence metrics (already pre-fetched)
+      const absenceData = absenceMetricsMap.get(user.user_id);
+      const hugsReceived = absenceData?.hugs_received || 0;
+      const circlePosts = absenceData?.circle_posts || 0;
 
       // Send the notification via send-notification function
       const notificationPayload = {
@@ -189,69 +217,90 @@ serve(async (req) => {
         },
       };
 
-      try {
-        const notificationResponse = await fetch(
-          `${Deno.env.get("SUPABASE_URL")}/functions/v1/send-notification`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-            },
-            body: JSON.stringify(notificationPayload),
+      const sendPromise = fetch(
+        `${Deno.env.get("SUPABASE_URL")}/functions/v1/send-notification`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
           },
-        );
+          body: JSON.stringify(notificationPayload),
+        },
+      )
+        .then((response) => response.json())
+        .then((notificationResult) => {
+          if (notificationResult.success && !notificationResult.skipped) {
+            results.sent++;
+            results.details.push({
+              userIdHash: sanitizeUserId(user.user_id),
+              daysAbsent: user.days_absent,
+              notificationType,
+              status: "sent",
+            });
 
-        const notificationResult = await notificationResponse.json();
-
-        if (notificationResult.success && !notificationResult.skipped) {
-          results.sent++;
-          results.details.push({
-            userId: user.user_id,
-            daysAbsent: user.days_absent,
-            notificationType,
-            status: "sent",
-          });
-
-          // Log re-engagement event
-          await supabaseAdmin.from("reengagement_events").insert({
-            user_id: user.user_id,
-            event_type: "notification_sent",
-            absence_days: user.days_absent,
-            metadata: { notification_type: notificationType },
-          });
-        } else if (notificationResult.skipped) {
-          results.skipped++;
-          results.details.push({
-            userId: user.user_id,
-            daysAbsent: user.days_absent,
-            notificationType,
-            status: "skipped",
-            reason: notificationResult.reason,
-          });
-        } else {
+            // Collect reengagement event for batch insert
+            reengagementEvents.push({
+              user_id: user.user_id,
+              event_type: "notification_sent",
+              absence_days: user.days_absent,
+              metadata: { notification_type: notificationType },
+            });
+          } else if (notificationResult.skipped) {
+            results.skipped++;
+            results.details.push({
+              userIdHash: sanitizeUserId(user.user_id),
+              daysAbsent: user.days_absent,
+              notificationType,
+              status: "skipped",
+              reason: notificationResult.reason,
+            });
+          } else {
+            results.failed++;
+            results.details.push({
+              userIdHash: sanitizeUserId(user.user_id),
+              daysAbsent: user.days_absent,
+              notificationType,
+              status: "failed",
+              reason: notificationResult.error,
+            });
+          }
+        })
+        .catch((sendError) => {
+          console.error(
+            `Failed to send notification to user ${sanitizeUserId(user.user_id)}:`,
+            sendError,
+          );
           results.failed++;
           results.details.push({
-            userId: user.user_id,
+            userIdHash: sanitizeUserId(user.user_id),
             daysAbsent: user.days_absent,
             notificationType,
             status: "failed",
-            reason: notificationResult.error,
+            reason: String(sendError),
           });
-        }
-      } catch (sendError) {
-        console.error(
-          `Failed to send notification to user ${user.user_id}:`,
-          sendError,
-        );
-        results.failed++;
-        results.details.push({
-          userId: user.user_id,
-          daysAbsent: user.days_absent,
-          notificationType,
-          status: "failed",
-          reason: String(sendError),
         });
+
+      sendPromises.push(sendPromise);
+    }
+
+    // Wait for all send promises to resolve
+    await Promise.allSettled(sendPromises);
+
+    // Batch insert all reengagement events
+    if (reengagementEvents.length > 0) {
+      console.log(
+        `Batch inserting ${reengagementEvents.length} reengagement events`,
+      );
+      const { error: insertError } = await supabaseAdmin
+        .from("reengagement_events")
+        .insert(reengagementEvents);
+
+      if (insertError) {
+        console.error(
+          "Error batch inserting reengagement events:",
+          insertError,
+        );
       }
     }
 

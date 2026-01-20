@@ -349,9 +349,53 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
     }
 
     /// Interrupt assistant playback immediately for barge-in.
+    /// This stops audio, cancels any pending server response, and prepares for user input.
     func interruptPlayback() {
+        guard connectionState.isConnected else { return }
+
+        // Check if there's actually something to interrupt
+        let wasPlaying = isSpeaking || isWaitingForResponse
+        guard wasPlaying else { return }
+
+        #if DEBUG
+        Log.voice.debug("[Voice] Barge-in: interrupting playback")
+        #endif
+
+        // 1. Stop audio playback immediately
         audioPlayback.stop()
+
+        // 2. Clear any pending response state
         isWaitingForResponse = false
+        isSpeaking = false
+
+        // 3. Reset echo gate counter for fresh start
+        echoGateFramesAboveThreshold = 0
+
+        // 4. Send response.cancel to stop server from generating more audio
+        webSocketManager.send(["type": "response.cancel"])
+        #if DEBUG
+        Log.voice.debug("[Voice] Barge-in: sent response.cancel to server")
+        #endif
+
+        // 5. Clear the input audio buffer on server to start fresh
+        webSocketManager.send(["type": "input_audio_buffer.clear"])
+
+        // 6. Notify delegate of barge-in
+        delegate?.voiceService(self, didEmit: .bargeInTriggered)
+
+        // 7. Ensure microphone capture continues for user's new input
+        if !isListening {
+            do {
+                try startListening()
+                #if DEBUG
+                Log.voice.debug("[Voice] Barge-in: restarted listening")
+                #endif
+            } catch {
+                #if DEBUG
+                Log.voice.error("[Voice] Barge-in: failed to restart listening: \(error)")
+                #endif
+            }
+        }
     }
 
     /// Just stop listening without requesting response (for muting)
@@ -536,13 +580,51 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
 
     // MARK: - Private Methods - Audio
 
+    // Echo gate: tracks consecutive frames above threshold during AI playback
+    // Requires sustained speech (not just a brief spike) to trigger barge-in
+    private var echoGateFramesAboveThreshold: Int = 0
+    private let echoGateRequiredFrames: Int = 3  // ~125ms at 24kHz with 4096 buffer
+    private let echoGateThreshold: Float = 0.20  // Mic level threshold during AI speech
+
     private func sendAudioData(_ audioData: Data) {
-        // Skip sending audio when AI is speaking to prevent feedback loop
+        // Echo gate: when AI is speaking, require sustained high mic level
+        // This prevents the AI's own audio from triggering false barge-ins
+        // iOS AEC handles most echo, but this provides an additional safety layer
         if isSpeaking {
-            return
+            if micLevel >= echoGateThreshold {
+                echoGateFramesAboveThreshold += 1
+
+                // Only send audio after sustained speech is detected
+                if echoGateFramesAboveThreshold < echoGateRequiredFrames {
+                    #if DEBUG
+                    if echoGateFramesAboveThreshold == 1 {
+                        Log.voice.debug("[Voice] Echo gate: potential speech detected, waiting for sustained input (mic: \(self.micLevel))")
+                    }
+                    #endif
+                    return
+                }
+
+                #if DEBUG
+                if echoGateFramesAboveThreshold == echoGateRequiredFrames {
+                    Log.voice.debug("[Voice] Echo gate: sustained speech confirmed, allowing barge-in (mic: \(self.micLevel))")
+                }
+                #endif
+            } else {
+                // Reset counter when level drops below threshold
+                if echoGateFramesAboveThreshold > 0 {
+                    #if DEBUG
+                    Log.voice.debug("[Voice] Echo gate: level dropped, resetting (mic: \(self.micLevel))")
+                    #endif
+                }
+                echoGateFramesAboveThreshold = 0
+                return
+            }
+        } else {
+            // Reset echo gate counter when not speaking
+            echoGateFramesAboveThreshold = 0
         }
 
-        // Echo suppression: wait after playback ends
+        // Echo suppression: wait briefly after playback ends to avoid residual echo
         if let lastEnd = audioPlayback.lastPlaybackEndTime {
             let timeSincePlaybackEnd = Date().timeIntervalSince(lastEnd)
             if timeSincePlaybackEnd < audioPlayback.echoCooldownSeconds {
@@ -647,15 +729,36 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
             #if DEBUG
             Log.voice.debug("[Voice] VAD detected speech start")
             #endif
-            isUserSpeaking = true
-            // User started speaking - implement barge-in
-            if isSpeaking {
+
+            // Check if this is a barge-in situation (user speaking while AI is responding)
+            let isBargeIn = isSpeaking || isWaitingForResponse
+
+            if isBargeIn {
                 #if DEBUG
-                Log.voice.debug("[Voice] Barge-in: stopping AI playback")
+                Log.voice.debug("[Voice] Barge-in detected: user speaking during AI response")
                 #endif
+
+                // 1. Stop audio playback immediately
                 audioPlayback.stop()
+
+                // 2. Cancel the ongoing response from server
+                webSocketManager.send(["type": "response.cancel"])
+                #if DEBUG
+                Log.voice.debug("[Voice] Barge-in: sent response.cancel")
+                #endif
+
+                // 3. Update state
+                isSpeaking = false
+                isWaitingForResponse = false
+
+                // 4. Reset echo gate for fresh start
+                echoGateFramesAboveThreshold = 0
+
+                // 5. Notify delegate of barge-in
+                delegate?.voiceService(self, didEmit: .bargeInTriggered)
             }
-            isWaitingForResponse = false // Reset in case we were waiting
+
+            isUserSpeaking = true
 
         case "input_audio_buffer.speech_stopped":
             #if DEBUG

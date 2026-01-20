@@ -5,6 +5,7 @@ final class SupabaseDataServiceTests: XCTestCase {
 
     // MARK: - Unique Constraint Violation Detection Tests
 
+    @MainActor
     func testIsUniqueConstraintViolation_PostgreSQLErrorCode() {
         let service = SupabaseDataService(authService: SupabaseAuthService())
 
@@ -12,12 +13,13 @@ final class SupabaseDataServiceTests: XCTestCase {
         let error = NSError(
             domain: "PostgrestError",
             code: 0,
-            userInfo: [NSLocalizedDescriptionKey: "duplicate key value violates unique constraint \"circles_invite_code_key\" (SQLSTATE 23505)"]
+            userInfo: [NSLocalizedDescriptionKey: "duplicate key value violates unique constraint \\\"circles_invite_code_key\\\" (SQLSTATE 23505)"]
         )
 
         XCTAssertTrue(service.isUniqueConstraintViolation(error))
     }
 
+    @MainActor
     func testIsUniqueConstraintViolation_UniqueKeyword() {
         let service = SupabaseDataService(authService: SupabaseAuthService())
 
@@ -30,6 +32,7 @@ final class SupabaseDataServiceTests: XCTestCase {
         XCTAssertTrue(service.isUniqueConstraintViolation(error))
     }
 
+    @MainActor
     func testIsUniqueConstraintViolation_DuplicateKeyKeyword() {
         let service = SupabaseDataService(authService: SupabaseAuthService())
 
@@ -42,6 +45,7 @@ final class SupabaseDataServiceTests: XCTestCase {
         XCTAssertTrue(service.isUniqueConstraintViolation(error))
     }
 
+    @MainActor
     func testIsUniqueConstraintViolation_CaseInsensitive() {
         let service = SupabaseDataService(authService: SupabaseAuthService())
 
@@ -55,6 +59,7 @@ final class SupabaseDataServiceTests: XCTestCase {
         XCTAssertTrue(service.isUniqueConstraintViolation(error))
     }
 
+    @MainActor
     func testIsUniqueConstraintViolation_NotAUniqueError() {
         let service = SupabaseDataService(authService: SupabaseAuthService())
 
@@ -68,6 +73,7 @@ final class SupabaseDataServiceTests: XCTestCase {
         XCTAssertFalse(service.isUniqueConstraintViolation(networkError))
     }
 
+    @MainActor
     func testIsUniqueConstraintViolation_AuthError() {
         let service = SupabaseDataService(authService: SupabaseAuthService())
 
@@ -81,6 +87,7 @@ final class SupabaseDataServiceTests: XCTestCase {
         XCTAssertFalse(service.isUniqueConstraintViolation(authError))
     }
 
+    @MainActor
     func testIsUniqueConstraintViolation_ForeignKeyError() {
         let service = SupabaseDataService(authService: SupabaseAuthService())
 
@@ -94,6 +101,7 @@ final class SupabaseDataServiceTests: XCTestCase {
         XCTAssertFalse(service.isUniqueConstraintViolation(fkError))
     }
 
+    @MainActor
     func testIsUniqueConstraintViolation_GenericError() {
         let service = SupabaseDataService(authService: SupabaseAuthService())
 
@@ -189,6 +197,7 @@ extension SupabaseDataServiceTests {
     }
 
     /// Tests that various database error types are properly categorized
+    @MainActor
     func testDatabaseErrorTypes() {
         let service = SupabaseDataService(authService: SupabaseAuthService())
 

@@ -23,11 +23,23 @@ struct MainTabView: View {
                 }
                 .tag(MainTab.chat)
 
+            OutcomeHomeView()
+                .tabItem {
+                    Label(MainTab.outcomes.title, systemImage: MainTab.outcomes.icon)
+                }
+                .tag(MainTab.outcomes)
+
             CirclesListView()
                 .tabItem {
                     Label(MainTab.circles.title, systemImage: MainTab.circles.icon)
                 }
                 .tag(MainTab.circles)
+
+            SleepTabView(contentIdToPlay: .constant(nil))
+                .tabItem {
+                    Label(MainTab.sleep.title, systemImage: MainTab.sleep.icon)
+                }
+                .tag(MainTab.sleep)
 
             ForYouView()
                 .tabItem {

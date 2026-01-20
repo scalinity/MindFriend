@@ -75,6 +75,10 @@ struct JoinFamilySheet: View {
                 .disabled(inviteCode.isEmpty || isLoading)
             }
         }
+        .dismissKeyboardOnSwipe()
+        .onTapGesture {
+            hideKeyboard()
+        }
         .navigationTitle("Join Family")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

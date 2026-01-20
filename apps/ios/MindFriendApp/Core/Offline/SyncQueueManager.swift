@@ -358,6 +358,17 @@ final class SyncQueueManager: ObservableObject {
         updatePendingCount()
     }
 
+    /// Clear all state on logout - clears queue without syncing
+    func clearOnLogout() async {
+        isSyncing = false
+        syncQueue = OfflineSyncQueue()
+        pendingSyncCount = 0
+        lastSyncAt = nil
+        syncStatusMessage = ""
+        syncError = nil
+        // Note: persisted queue will be deleted by OfflineStorageManager.deleteCurrentUserData()
+    }
+
     /// Remove a specific mood entry from the queue
     func removeMoodEntry(id: UUID) async {
         syncQueue.moodEntries.removeAll { $0.id == id }

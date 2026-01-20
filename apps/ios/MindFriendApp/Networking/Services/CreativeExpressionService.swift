@@ -21,17 +21,11 @@ final class CreativeExpressionService: ObservableObject {
 
     // MARK: - Private Helpers
 
-    /// Retrieves auth headers with access token for Edge Function calls
-    /// Uses refreshSession() to ensure token is fresh and valid
-    private func getAuthHeaders() async throws -> [String: String] {
-        // Ensure user is authenticated first for user-friendly error
+    /// Validate user is authenticated before making Edge Function calls
+    private func ensureAuthenticated() throws {
         guard supabase.auth.currentUser != nil else {
             throw CreativeError.notAuthenticated
         }
-
-        // Refresh session to ensure token is valid (not expired)
-        let session = try await supabase.auth.refreshSession()
-        return ["Authorization": "Bearer \(session.accessToken)"]
     }
 
     // MARK: - Quota Management
@@ -65,6 +59,8 @@ final class CreativeExpressionService: ObservableObject {
         moodScore: Int? = nil,
         moodTags: [String]? = nil
     ) async throws -> CreativeWork {
+        try ensureAuthenticated()
+
         isLoading = true
         defer { isLoading = false }
 
@@ -77,10 +73,7 @@ final class CreativeExpressionService: ObservableObject {
 
         let response: GenerateArtResponse = try await supabase.functions.invoke(
             "generate-art",
-            options: .init(
-                headers: try await getAuthHeaders(),
-                body: request
-            )
+            options: .init(body: request)
         )
 
         if let error = response.error {
@@ -160,6 +153,8 @@ final class CreativeExpressionService: ObservableObject {
 
     /// Analyze a voice journal entry
     func analyzeVoiceJournal(workId: String, durationSeconds: Int) async throws -> VoiceJournalAnalysis {
+        try ensureAuthenticated()
+
         isLoading = true
         defer { isLoading = false }
 
@@ -171,10 +166,7 @@ final class CreativeExpressionService: ObservableObject {
 
         let response: AnalyzeVoiceResponse = try await supabase.functions.invoke(
             "analyze-voice-journal",
-            options: .init(
-                headers: try await getAuthHeaders(),
-                body: request
-            )
+            options: .init(body: request)
         )
 
         if let error = response.error {

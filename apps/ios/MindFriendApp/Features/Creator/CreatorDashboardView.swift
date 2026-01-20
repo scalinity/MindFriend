@@ -515,5 +515,5 @@ struct NewContentView: View {
 
 #Preview {
     CreatorDashboardView()
-        .environmentObject(CreatorService(supabase: SupabaseClient(supabaseURL: URL(string: "http://localhost")!, supabaseKey: "key")))
+        .environmentObject(CreatorService(supabase: supabase))
 }

@@ -1,6 +1,7 @@
 import SwiftUI
-import SentrySwiftUI
 import Sentry
+// Note: Sentry tracing utilities available in main Sentry module
+// import SentrySwiftUI
 
 // MARK: - Automatic View Tracing
 

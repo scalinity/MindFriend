@@ -51,6 +51,10 @@ final class VoiceCoordinator: ObservableObject, VoiceServiceDelegate {
             onAssistantSpeechEnd?()
             onStateEvent?(.audioPlaybackFinished)
 
+        case .bargeInTriggered:
+            // Barge-in: user interrupted AI, transition to bargeIn state then userSpeaking
+            onStateEvent?(.tapInterrupt)
+
         case .transcriptUpdated(let text):
             onTranscriptUpdate?(text)
 

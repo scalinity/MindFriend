@@ -9,6 +9,7 @@ struct ChatListView: View {
     @State private var showNewChat = false
     @State private var showVoiceChat = false
     @State private var loadError: String?
+    @State private var refreshTrigger = UUID() // Changes to trigger refresh
 
     var body: some View {
         NavigationStack {
@@ -41,6 +42,10 @@ struct ChatListView: View {
                     }
                 } else if conversations.isEmpty {
                     EmptyConversationsView(showNewChat: $showNewChat)
+                        .onAppear {
+                            // Also refresh here in case a conversation was just created
+                            refreshTrigger = UUID()
+                        }
                 } else {
                     List {
                         ForEach(conversations) { conversation in
@@ -53,6 +58,12 @@ struct ChatListView: View {
                         .onDelete(perform: deleteConversations)
                     }
                     .listStyle(.plain)
+                    .onAppear {
+                        // Refresh when returning from viewing a conversation
+                        // This fires when the List becomes visible again after navigation
+                        Log.chat.debug("[ChatList] List appeared, refreshing for updated titles")
+                        refreshTrigger = UUID()
+                    }
                 }
             }
             .navigationTitle("Chat")
@@ -96,14 +107,17 @@ struct ChatListView: View {
                 await loadConversations()
             }
         }
-        .onAppear {
-            Log.chat.debug("[ChatList] View appeared")
-        }
-        // Load conversations on appearance
-        .task {
-            Log.chat.debug("[ChatList] task starting...")
+        // Load conversations when view appears or refreshTrigger changes
+        .task(id: refreshTrigger) {
+            Log.chat.debug("[ChatList] Task triggered, refreshing conversations")
             await loadConversations()
-            Log.chat.debug("[ChatList] task completed")
+        }
+        // Trigger refresh when returning from new chat
+        .onChange(of: showNewChat) { _, isShowing in
+            if !isShowing {
+                Log.chat.debug("[ChatList] Returned from new chat, triggering refresh")
+                refreshTrigger = UUID()
+            }
         }
     }
 

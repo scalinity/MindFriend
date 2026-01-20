@@ -190,7 +190,7 @@ struct BiometricsDashboardView: View {
                 .font(.headline)
 
             ForEach(alerts.prefix(3)) { alert in
-                AlertCard(alert: alert) {
+                BiometricAlertCard(alert: alert) {
                     Task {
                         try? await healthKit.markAlertRead(alert.id)
                         await loadAlerts()
@@ -428,7 +428,7 @@ struct MetricCard: View {
 
 // MARK: - Alert Card
 
-struct AlertCard: View {
+struct BiometricAlertCard: View {
     let alert: BiometricAlert
     let onDismiss: () -> Void
 

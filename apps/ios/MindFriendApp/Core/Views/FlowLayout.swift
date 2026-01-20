@@ -75,12 +75,8 @@ struct FlowLayout: Layout {
     }
 }
 
-// MARK: - Convenience Initializer
-
-extension FlowLayout {
-    /// Creates a FlowLayout with the specified spacing between items.
-    /// - Parameter spacing: The spacing between items (default: 8)
-    init(spacing: CGFloat = 8, @ViewBuilder content: () -> some View) {
-        self.spacing = spacing
-    }
-}
+// Note: FlowLayout conforms to the Layout protocol, which enables using it
+// with a trailing closure via callAsFunction. Usage:
+//     FlowLayout(spacing: 8) {
+//         ForEach(...) { ... }
+//     }

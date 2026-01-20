@@ -132,14 +132,14 @@ final class FamilyService: ObservableObject {
 
         let inviteCode = generateInviteCode()
 
-        let newFamily: [String: AnyEncodable] = [
-            "name": AnyEncodable(name),
-            "admin_user_id": AnyEncodable(userId),
-            "invite_code": AnyEncodable(inviteCode),
-            "default_child_age_filter": AnyEncodable(defaultChildAgeFilter),
-            "max_members": AnyEncodable(maxMembers),
-            "created_at": AnyEncodable(Date().ISO8601Format()),
-            "updated_at": AnyEncodable(Date().ISO8601Format())
+        let newFamily: [String: FamilyAnyEncodable] = [
+            "name": FamilyAnyEncodable(name),
+            "admin_user_id": FamilyAnyEncodable(userId),
+            "invite_code": FamilyAnyEncodable(inviteCode),
+            "default_child_age_filter": FamilyAnyEncodable(defaultChildAgeFilter),
+            "max_members": FamilyAnyEncodable(maxMembers),
+            "created_at": FamilyAnyEncodable(Date().ISO8601Format()),
+            "updated_at": FamilyAnyEncodable(Date().ISO8601Format())
         ]
 
         let response: [FamilyWellnessGroup] = try await supabase
@@ -171,29 +171,27 @@ final class FamilyService: ObservableObject {
         inviteCode: String,
         nickname: String? = nil,
         birthDate: Date? = nil
-    ) async throws -> FamilyWellnessGroup {
-        let response: [String: AnyEncodable] = try await supabase.functions.invoke(
+    ) async throws {
+        struct JoinResponse: Decodable {
+            let success: Bool
+        }
+
+        let response: JoinResponse = try await supabase.functions.invoke(
             "join-family",
             options: .init(body: [
-                "inviteCode": inviteCode,
-                "nickname": nickname as Any,
-                "birthDate": birthDate.map { $0.ISO8601Format() } as Any
+                "inviteCode": FamilyAnyEncodable(inviteCode),
+                "nickname": FamilyAnyEncodable(nickname),
+                "birthDate": FamilyAnyEncodable(birthDate.map { $0.ISO8601Format() })
             ])
         )
 
-        guard let success = response["success"] as? Bool, success else {
+        guard response.success else {
             throw FamilyServiceError.joinFamilyFailed
         }
 
         // Refresh family data
         _ = try await fetchFamilyGroup()
         familyMembers = try await fetchFamilyMembers()
-
-        guard let family = familyGroup else {
-            throw FamilyServiceError.joinFamilyFailed
-        }
-
-        return family
     }
 
     // MARK: - Family Member Operations
@@ -225,19 +223,19 @@ final class FamilyService: ObservableObject {
             throw FamilyServiceError.notAuthenticated
         }
 
-        let newMember: [String: AnyEncodable] = [
-            "family_id": AnyEncodable(familyId),
-            "user_id": AnyEncodable(userId),
-            "role": AnyEncodable(role.rawValue),
-            "nickname": AnyEncodable(nickname as Any),
-            "birth_date": AnyEncodable(birthDate.map { $0.ISO8601Format() } as Any),
-            "share_mood_with_family": AnyEncodable(true),
-            "share_activity_with_family": AnyEncodable(true),
-            "share_achievements_with_family": AnyEncodable(true),
-            "status": AnyEncodable("active"),
-            "joined_at": AnyEncodable(Date().ISO8601Format()),
-            "created_at": AnyEncodable(Date().ISO8601Format()),
-            "updated_at": AnyEncodable(Date().ISO8601Format())
+        let newMember: [String: FamilyAnyEncodable] = [
+            "family_id": FamilyAnyEncodable(familyId),
+            "user_id": FamilyAnyEncodable(userId),
+            "role": FamilyAnyEncodable(role.rawValue),
+            "nickname": FamilyAnyEncodable(nickname),
+            "birth_date": FamilyAnyEncodable(birthDate.map { $0.ISO8601Format() }),
+            "share_mood_with_family": FamilyAnyEncodable(true),
+            "share_activity_with_family": FamilyAnyEncodable(true),
+            "share_achievements_with_family": FamilyAnyEncodable(true),
+            "status": FamilyAnyEncodable("active"),
+            "joined_at": FamilyAnyEncodable(Date().ISO8601Format()),
+            "created_at": FamilyAnyEncodable(Date().ISO8601Format()),
+            "updated_at": FamilyAnyEncodable(Date().ISO8601Format())
         ]
 
         let response: [FamilyWellnessMember] = try await supabase
@@ -264,24 +262,24 @@ final class FamilyService: ObservableObject {
         shareAchievementsWithFamily: Bool? = nil,
         ageFilterOverride: Int? = nil
     ) async throws {
-        var updates: [String: AnyEncodable] = [
-            "updated_at": AnyEncodable(Date().ISO8601Format())
+        var updates: [String: FamilyAnyEncodable] = [
+            "updated_at": FamilyAnyEncodable(Date().ISO8601Format())
         ]
 
         if let nickname = nickname {
-            updates["nickname"] = AnyEncodable(nickname)
+            updates["nickname"] = FamilyAnyEncodable(nickname)
         }
         if let shareMood = shareMoodWithFamily {
-            updates["share_mood_with_family"] = AnyEncodable(shareMood)
+            updates["share_mood_with_family"] = FamilyAnyEncodable(shareMood)
         }
         if let shareActivity = shareActivityWithFamily {
-            updates["share_activity_with_family"] = AnyEncodable(shareActivity)
+            updates["share_activity_with_family"] = FamilyAnyEncodable(shareActivity)
         }
         if let shareAchievements = shareAchievementsWithFamily {
-            updates["share_achievements_with_family"] = AnyEncodable(shareAchievements)
+            updates["share_achievements_with_family"] = FamilyAnyEncodable(shareAchievements)
         }
         if let override = ageFilterOverride {
-            updates["age_filter_override"] = AnyEncodable(override)
+            updates["age_filter_override"] = FamilyAnyEncodable(override)
         }
 
         try await supabase
@@ -344,22 +342,22 @@ final class FamilyService: ObservableObject {
         let now = Date()
         let endDate = Calendar.current.date(byAdding: .day, value: durationDays, to: now) ?? now
 
-        let newChallenge: [String: AnyEncodable] = [
-            "family_id": AnyEncodable(familyId),
-            "title": AnyEncodable(title),
-            "description": AnyEncodable(description as Any),
-            "challenge_type": AnyEncodable(challengeType.rawValue),
-            "target_value": AnyEncodable(targetValue),
-            "minimum_participants": AnyEncodable(minimumParticipants),
-            "start_date": AnyEncodable(now.ISO8601Format()),
-            "end_date": AnyEncodable(endDate.ISO8601Format()),
-            "requires_all_members": AnyEncodable(requiresAllMembers),
-            "allow_makeup_activities": AnyEncodable(allowMakeupActivities),
-            "status": AnyEncodable("active"),
-            "current_progress": AnyEncodable(0),
-            "created_by": AnyEncodable(userId),
-            "created_at": AnyEncodable(now.ISO8601Format()),
-            "updated_at": AnyEncodable(now.ISO8601Format())
+        let newChallenge: [String: FamilyAnyEncodable] = [
+            "family_id": FamilyAnyEncodable(familyId),
+            "title": FamilyAnyEncodable(title),
+            "description": FamilyAnyEncodable(description),
+            "challenge_type": FamilyAnyEncodable(challengeType.rawValue),
+            "target_value": FamilyAnyEncodable(targetValue),
+            "minimum_participants": FamilyAnyEncodable(minimumParticipants),
+            "start_date": FamilyAnyEncodable(now.ISO8601Format()),
+            "end_date": FamilyAnyEncodable(endDate.ISO8601Format()),
+            "requires_all_members": FamilyAnyEncodable(requiresAllMembers),
+            "allow_makeup_activities": FamilyAnyEncodable(allowMakeupActivities),
+            "status": FamilyAnyEncodable("active"),
+            "current_progress": FamilyAnyEncodable(0),
+            "created_by": FamilyAnyEncodable(userId),
+            "created_at": FamilyAnyEncodable(now.ISO8601Format()),
+            "updated_at": FamilyAnyEncodable(now.ISO8601Format())
         ]
 
         let response: [FamilyChallenge] = try await supabase
@@ -385,8 +383,8 @@ final class FamilyService: ObservableObject {
         try await supabase
             .from("family_challenges")
             .update([
-                "current_progress": AnyEncodable(progress),
-                "updated_at": AnyEncodable(Date().ISO8601Format())
+                "current_progress": FamilyAnyEncodable(progress),
+                "updated_at": FamilyAnyEncodable(Date().ISO8601Format())
             ])
             .eq("id", value: challengeId)
             .execute()
@@ -462,12 +460,12 @@ final class FamilyService: ObservableObject {
         let response: StartSessionResponse = try await supabase.functions.invoke(
             "start-together-session",
             options: .init(body: [
-                "familyId": familyId,
-                "templateId": templateId as Any,
-                "exerciseId": exerciseId as Any,
-                "title": title,
-                "invitedMemberIds": invitedMemberIds as Any,
-                "syncMode": syncMode
+                "familyId": FamilyAnyEncodable(familyId),
+                "templateId": FamilyAnyEncodable(templateId),
+                "exerciseId": FamilyAnyEncodable(exerciseId),
+                "title": FamilyAnyEncodable(title),
+                "invitedMemberIds": FamilyAnyEncodable(invitedMemberIds),
+                "syncMode": FamilyAnyEncodable(syncMode)
             ])
         )
 
@@ -493,7 +491,7 @@ final class FamilyService: ObservableObject {
             status: .inProgress,
             syncMode: syncMode == "realtime" ? .realtime : .asyncWindow,
             asyncWindowHours: syncMode == "async_window" ? 24 : nil,
-            createdBy: supabase.auth.currentUser?.id ?? "",
+            createdBy: supabase.auth.currentUser?.id.uuidString ?? "",
             createdAt: Date()
         )
     }
@@ -530,8 +528,8 @@ final class FamilyService: ObservableObject {
             try await supabase
                 .from("together_participants")
                 .update([
-                    "status": AnyEncodable("joined"),
-                    "joined_at": AnyEncodable(Date().ISO8601Format())
+                    "status": FamilyAnyEncodable("joined"),
+                    "joined_at": FamilyAnyEncodable(Date().ISO8601Format())
                 ])
                 .eq("id", value: participantId)
                 .execute()
@@ -545,8 +543,8 @@ final class FamilyService: ObservableObject {
         try await supabase
             .from("together_sessions")
             .update([
-                "status": AnyEncodable("completed"),
-                "ended_at": AnyEncodable(Date().ISO8601Format())
+                "status": FamilyAnyEncodable("completed"),
+                "ended_at": FamilyAnyEncodable(Date().ISO8601Format())
             ])
             .eq("id", value: sessionId)
             .execute()
@@ -577,8 +575,8 @@ final class FamilyService: ObservableObject {
         try await supabase
             .from("family_alerts")
             .update([
-                "was_read": AnyEncodable(true),
-                "read_at": AnyEncodable(Date().ISO8601Format())
+                "was_read": FamilyAnyEncodable(true),
+                "read_at": FamilyAnyEncodable(Date().ISO8601Format())
             ])
             .eq("id", value: alertId)
             .execute()
@@ -590,7 +588,7 @@ final class FamilyService: ObservableObject {
     func markAlertAsActedUpon(alertId: String) async throws {
         try await supabase
             .from("family_alerts")
-            .update(["was_acted_upon": AnyEncodable(true)])
+            .update(["was_acted_upon": FamilyAnyEncodable(true)])
             .eq("id", value: alertId)
             .execute()
 
@@ -625,13 +623,13 @@ final class FamilyService: ObservableObject {
 
         let expiresAt = Calendar.current.date(byAdding: .day, value: 14, to: Date()) ?? Date()
 
-        let newConsent: [String: AnyEncodable] = [
-            "child_user_id": AnyEncodable(childUserId),
-            "parent_user_id": AnyEncodable(userId),
-            "parent_email": AnyEncodable(parentEmail),
-            "consent_type": AnyEncodable("initial"),
-            "expires_at": AnyEncodable(expiresAt.ISO8601Format()),
-            "created_at": AnyEncodable(Date().ISO8601Format())
+        let newConsent: [String: FamilyAnyEncodable] = [
+            "child_user_id": FamilyAnyEncodable(childUserId),
+            "parent_user_id": FamilyAnyEncodable(userId),
+            "parent_email": FamilyAnyEncodable(parentEmail),
+            "consent_type": FamilyAnyEncodable("initial"),
+            "expires_at": FamilyAnyEncodable(expiresAt.ISO8601Format()),
+            "created_at": FamilyAnyEncodable(Date().ISO8601Format())
         ]
 
         let response: [ParentalConsent] = try await supabase
@@ -773,9 +771,9 @@ enum FamilyServiceError: LocalizedError {
     }
 }
 
-// MARK: - AnyEncodable Helper
+// MARK: - FamilyAnyEncodable Helper
 
-private struct AnyEncodable: Encodable {
+private struct FamilyAnyEncodable: Encodable {
     private let _encode: (Encoder) throws -> Void
 
     init<T: Encodable>(_ wrapped: T) {

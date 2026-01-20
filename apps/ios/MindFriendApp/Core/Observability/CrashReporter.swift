@@ -141,7 +141,7 @@ final class CrashReporter {
             // MARK: - Structured Logging
 
             // Enable Sentry structured logs for remote observability
-            options.enableLogs = true
+            // options.enableLogs = true // Removed as it is not available in current Sentry SDK
 
             // PRIVACY: PII scrubbing for logs - same rules as events
             options.beforeSendLog = { log in
@@ -237,10 +237,9 @@ final class CrashReporter {
             // Privacy Protection: CRITICAL for mental health application
             // - maskAllText: Replaces ALL text with gray blocks (mood scores, journal entries, chat)
             // - maskAllImages: Replaces ALL images with placeholders (user photos, media)
-            // - maskedViewClasses: Additional defense-in-depth for explicitly masked SwiftUI views
+            // - SwiftUI views can use .sentryMask() modifier for explicit defense-in-depth
             options.sessionReplay.maskAllText = true
             options.sessionReplay.maskAllImages = true
-            options.sessionReplay.maskedViewClasses = SentryReplayMasking.sensitiveViewTypes
         }
 
         isInitialized = true
@@ -254,20 +253,20 @@ final class CrashReporter {
     private static func scrubPII(from event: Event) -> Event? {
         // Scrub message
         if let message = event.message {
-            event.message?.message = scrubText(message.message)
+            event.message?.message = scrubText(message.message) ?? ""
         }
 
         // Scrub exceptions
         event.exceptions = event.exceptions?.map { exception in
             var scrubbed = exception
-            scrubbed.value = scrubText(exception.value)
+            scrubbed.value = scrubText(exception.value) ?? ""
             return scrubbed
         }
 
         // Scrub breadcrumbs (navigation, user actions, etc.)
         event.breadcrumbs = event.breadcrumbs?.map { crumb in
             var scrubbed = crumb
-            scrubbed.message = scrubText(crumb.message)
+            scrubbed.message = scrubText(crumb.message) ?? ""
             scrubbed.data = scrubDictionary(crumb.data)
             return scrubbed
         }

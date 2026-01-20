@@ -146,6 +146,11 @@ enum AnalyticsEvent: String {
     case programAbandoned = "program_abandoned"
     case programDaySkipped = "program_day_skipped"
     case certificateShared = "certificate_shared"
+
+    // Predictive/Intervention
+    case interventionResponse = "intervention_response"
+    case interventionRated = "intervention_rated"
+    case dataDeletionRequested = "data_deletion_requested"
 }
 
 /// User properties for segmentation

@@ -384,6 +384,32 @@ enum CognitiveDistortionType: String, Codable, CaseIterable {
             return "Describe the behavior instead of using a label. What specifically happened?"
         }
     }
+
+    /// A gentle, supportive description for journal analysis
+    var supportiveDescription: String {
+        switch self {
+        case .allOrNothing:
+            return "This is a common pattern where things feel either perfect or a total failure. Many people experience this."
+        case .overgeneralization:
+            return "Sometimes we see one event as part of a bigger pattern. It's natural to make these connections."
+        case .mentalFilter:
+            return "Our minds sometimes zoom in on one detail. This happens to everyone sometimes."
+        case .disqualifyingPositive:
+            return "It's common to brush off positive things when we're struggling. You're not alone in this."
+        case .mindReading:
+            return "We often try to guess what others think. It's a way our minds try to protect us."
+        case .fortuneTelling:
+            return "Predicting the future is something our minds naturally do to prepare us."
+        case .catastrophizing:
+            return "When we're worried, it's natural to imagine worst-case scenarios."
+        case .emotionalReasoning:
+            return "Our feelings are real and valid, even when they don't reflect the full picture."
+        case .shouldStatements:
+            return "Using 'should' is very common. It often shows we care about doing things well."
+        case .labeling:
+            return "Labeling is a shortcut our minds use. It doesn't define who you really are."
+        }
+    }
 }
 
 // MARK: - Emotion Entry
