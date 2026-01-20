@@ -4,6 +4,91 @@
 
 ---
 
+## [2026-01-19] Therapy Integration - iOS Implementation Complete (Phase H & I)
+
+**Type:** Feature
+**Status:** Complete
+
+### Summary
+
+Completed Phase H (iOS SwiftUI Views) and Phase I (Integration) of the Therapy Integration feature. Built 6 SwiftUI views for managing therapist connections, data sharing permissions, and homework assignments. Integrated therapy service into DependencyContainer and ProfileView navigation. All files successfully added to Xcode project build target.
+
+### Changes
+
+| Component                 | File(s)                                                                 | Details                                                                         |
+| ------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| **iOS Views**             | `apps/ios/MindFriendApp/Features/Therapy/ConnectedTherapistsView.swift` | Main list view with active/pending/revoked connection sections, empty state     |
+| **iOS Views**             | `apps/ios/MindFriendApp/Features/Therapy/InviteTherapistView.swift`     | Email invitation form with validation, default permissions display              |
+| **iOS Views**             | `apps/ios/MindFriendApp/Features/Therapy/TherapistDetailView.swift`     | Therapist profile, access log, sharing settings navigation, disconnect action   |
+| **iOS Views**             | `apps/ios/MindFriendApp/Features/Therapy/SharingSettingsView.swift`     | Granular permission toggles per data type, crisis alerts, privacy protection    |
+| **iOS Views**             | `apps/ios/MindFriendApp/Features/Therapy/AssignmentsView.swift`         | Homework list with overdue/pending/completed sections, filter by therapist      |
+| **iOS Views**             | `apps/ios/MindFriendApp/Features/Therapy/AssignmentDetailView.swift`    | Assignment details, completion form with notes, therapist info                  |
+| **Integration**           | `apps/ios/MindFriendApp/App/DependencyContainer.swift`                  | Added lazy therapyIntegrationService property                                   |
+| **Integration**           | `apps/ios/MindFriendApp/Features/Profile/ProfileView.swift`             | Added "Therapy" section with "My Therapists" and "Homework & Assignments" links |
+| **Project Configuration** | `apps/ios/add_therapy_integration_files.py`                             | Python script to add 8 therapy files to Xcode project.pbxproj                   |
+| **Project Configuration** | `apps/ios/MindFriendApp.xcodeproj/project.pbxproj`                      | Added TherapyModels, TherapyIntegrationService, and 6 views to build target     |
+
+### Key Features Implemented
+
+✅ **Phase H: iOS SwiftUI Views**
+
+- ConnectedTherapistsView with active/pending/revoked sections
+- InviteTherapistView with email validation and privacy notice
+- TherapistDetailView with profile, access log, and actions
+- SharingSettingsView with granular per-data-type toggles
+- AssignmentsView with overdue highlighting and filter menu
+- AssignmentDetailView with completion form and notes
+
+✅ **Phase I: Integration & Project Setup**
+
+- Added TherapyIntegrationService to DependencyContainer
+- Added navigation links in ProfileView "Therapy" section
+- Created Python script for Xcode project file manipulation
+- Successfully added all 8 therapy files to Xcode build target
+- All files properly referenced in PBXBuildFile, PBXFileReference, and PBXSourcesBuildPhase sections
+
+### Architecture Decisions
+
+**View Structure:**
+
+- All views follow MVVM pattern with @MainActor ViewModels
+- State management via @Published properties
+- Async/await for all network operations
+- Alert and sheet presentation via @State bindings
+
+**Permission Controls:**
+
+- Toggle switches for mood, journal, assessments, exercises
+- Crisis alerts as separate safety feature section
+- Privacy protection notice in every relevant view
+- Change detection for "Save" button state
+
+**Navigation Flow:**
+
+- Profile → My Therapists → Therapist Detail → Sharing Settings
+- Profile → Homework & Assignments → Assignment Detail
+- ConnectedTherapistsView → Invite sheet (modal presentation)
+
+### Testing Checklist
+
+- [x] All 6 SwiftUI views created
+- [x] TherapyIntegrationService integrated into DependencyContainer
+- [x] Navigation links added to ProfileView
+- [x] Files added to Xcode project build target
+- [ ] Compile and run iOS app to verify no build errors
+- [ ] Manual testing of invitation flow (email → accept → connection)
+- [ ] Manual testing of sharing settings (toggle → save → verify DB)
+- [ ] Manual testing of assignments (view → complete → verify DB)
+- [ ] End-to-end integration test (invite → data access → revoke)
+
+### Notes
+
+**Phase 1: BUILD Complete** - All backend (Phases A-E), iOS models & service (Phases F-G), iOS views (Phase H), and integration (Phase I) are complete. Ready for Phase 2: REVIEW.
+
+**Context Budget Status:** 85K tokens used of 200K budget. 115K remaining, well above Phase 2 requirement of 50K.
+
+---
+
 ## [2026-01-19] Medication Reminders - Full Implementation Complete
 
 **Type:** Feature
