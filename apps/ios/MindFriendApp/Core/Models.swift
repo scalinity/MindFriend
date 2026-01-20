@@ -2,43 +2,7 @@ import Foundation
 import SwiftUI
 
 // MARK: - Stub Types (from files not yet in Xcode project target)
-// TODO: Remove these stubs once FamilyWellnessModels.swift is added to project
-
-/// Mood trend over time - stub definition
-/// Full definition in FamilyWellnessModels.swift
-enum MoodTrend: String, Codable, Equatable {
-    case improving
-    case stable
-    case declining
-    case insufficientData = "insufficient_data"
-
-    var icon: String {
-        switch self {
-        case .improving: return "arrow.up.right"
-        case .stable: return "arrow.right"
-        case .declining: return "arrow.down.right"
-        case .insufficientData: return "questionmark.circle"
-        }
-    }
-
-    var color: String {
-        switch self {
-        case .improving: return "green"
-        case .stable: return "yellow"
-        case .declining: return "orange"
-        case .insufficientData: return "gray"
-        }
-    }
-
-    var emoji: String {
-        switch self {
-        case .improving: return "📈"
-        case .stable: return "➡️"
-        case .declining: return "📉"
-        case .insufficientData: return "❓"
-        }
-    }
-}
+// TODO: Remove other stubs as their feature modules are added
 
 // MARK: - User
 
@@ -2931,7 +2895,7 @@ struct UserPattern: Codable, Identifiable, Equatable {
         switch patternType {
         case .dayOfWeek:
             guard let delta = patternData["delta"]?.value as? Double else { return nil }
-            let dayName = patternKey.components(separatedBy: "_").first ?? "that day"
+            let dayName = patternKey.components(separatedBy: "_").first ?? "thatday"
             let trend = patternKey.contains("dip") ? "dip" : "peak"
             if trend == "dip" {
                 return "Your mood tends to dip on \(dayName)s (about \(String(format: "%.1f", abs(delta))) points lower than average)."
@@ -3059,77 +3023,6 @@ struct ProactiveSettings: Codable, Equatable {
             proactiveTypesEnabled = typesArray.compactMap { ProactiveTriggerType(rawValue: $0) }
         } else {
             proactiveTypesEnabled = ProactiveTriggerType.allCases
-        }
-    }
-}
-
-/// Type-erased Codable wrapper for dictionary values
-struct AnyCodable: Codable, Equatable {
-    let value: Any
-
-    init(_ value: Any) {
-        self.value = value
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.singleValueContainer()
-
-        if container.decodeNil() {
-            value = NSNull()
-        } else if let bool = try? container.decode(Bool.self) {
-            value = bool
-        } else if let int = try? container.decode(Int.self) {
-            value = int
-        } else if let double = try? container.decode(Double.self) {
-            value = double
-        } else if let string = try? container.decode(String.self) {
-            value = string
-        } else if let array = try? container.decode([AnyCodable].self) {
-            value = array.map { $0.value }
-        } else if let dict = try? container.decode([String: AnyCodable].self) {
-            value = dict.mapValues { $0.value }
-        } else {
-            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unable to decode AnyCodable")
-        }
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.singleValueContainer()
-
-        switch value {
-        case is NSNull:
-            try container.encodeNil()
-        case let bool as Bool:
-            try container.encode(bool)
-        case let int as Int:
-            try container.encode(int)
-        case let double as Double:
-            try container.encode(double)
-        case let string as String:
-            try container.encode(string)
-        case let array as [Any]:
-            try container.encode(array.map { AnyCodable($0) })
-        case let dict as [String: Any]:
-            try container.encode(dict.mapValues { AnyCodable($0) })
-        default:
-            throw EncodingError.invalidValue(value, EncodingError.Context(codingPath: container.codingPath, debugDescription: "Unable to encode AnyCodable"))
-        }
-    }
-
-    static func == (lhs: AnyCodable, rhs: AnyCodable) -> Bool {
-        switch (lhs.value, rhs.value) {
-        case is (NSNull, NSNull):
-            return true
-        case let (l as Bool, r as Bool):
-            return l == r
-        case let (l as Int, r as Int):
-            return l == r
-        case let (l as Double, r as Double):
-            return l == r
-        case let (l as String, r as String):
-            return l == r
-        default:
-            return false
         }
     }
 }
@@ -3424,16 +3317,7 @@ struct UserPresence: Codable, Equatable {
 
     // Joined data
     var displayName: String?
-
-    /// Whether user is currently online (seen within last 2 minutes)
-    var isOnline: Bool {
-        status == .online && Date().timeIntervalSince(lastSeenAt) < 120
-    }
-
-    /// Whether user was active recently (within last 15 minutes)
-    var isRecentlyActive: Bool {
-        Date().timeIntervalSince(lastSeenAt) < 900
-    }
+    var isOnline: Bool?
 
     enum CodingKeys: String, CodingKey {
         case userId = "user_id"
@@ -3441,6 +3325,7 @@ struct UserPresence: Codable, Equatable {
         case lastSeenAt = "last_seen_at"
         case currentActivity = "current_activity"
         case displayName = "display_name"
+        case isOnline = "is_online"
     }
 }
 
@@ -3471,7 +3356,8 @@ struct DBUserPresence: Codable {
             status: PresenceStatus(rawValue: status) ?? .offline,
             lastSeenAt: lastSeenAt,
             currentActivity: currentActivity,
-            displayName: nil
+            displayName: nil,
+            isOnline: nil
         )
     }
 }
@@ -4291,13 +4177,13 @@ struct UserQuestArc: Codable, Identifiable, Equatable {
 
     var isExpired: Bool {
         guard status == .paused, let pausedAt = pausedAt else { return false }
-        let thirtyDaysAgo = Calendar.current.date(byAdding: .day, value: -30, to: Date())!
-        return pausedAt < thirtyDaysAgo
+        let daysSincePause = Calendar.current.dateComponents([.day], from: pausedAt, to: Date()).day ?? 0
+        return daysSincePause > QuestArcConstants.pauseExpirationDays
     }
 
     var expiresAt: Date? {
         guard status == .paused, let pausedAt = pausedAt else { return nil }
-        return Calendar.current.date(byAdding: .day, value: 30, to: pausedAt)
+        return Calendar.current.date(byAdding: .day, value: QuestArcConstants.pauseExpirationDays, to: pausedAt)
     }
 
     var nextMilestone: Int? {
@@ -4307,6 +4193,23 @@ struct UserQuestArc: Codable, Identifiable, Equatable {
     var daysToNextMilestone: Int? {
         guard let next = nextMilestone else { return nil }
         return next - currentDay
+    }
+    
+    // MARK: - Computed Properties for UI
+    
+    /// Alias for consistency with views (nextMilestone already exists)
+    var nextMilestoneDay: Int? {
+        nextMilestone
+    }
+    
+    /// Returns array of completed milestone days
+    var completedMilestones: [Int] {
+        snapshotMilestoneDays.filter { $0 <= currentDay }
+    }
+    
+    /// Convenience accessor for the joined QuestArc (matches property name in CodingKeys)
+    var questArc: QuestArc? {
+        arc
     }
 }
 
