@@ -85,6 +85,11 @@ enum Tables {
     // Subscriptions
     static let subscriptions = "subscriptions"
 
+    // Action Autopilot
+    static let actionPlans = "action_plans"
+    static let actionPlanItems = "action_plan_items"
+    static let actionPlanFeedback = "action_plan_feedback"
+
     // Memory
     static let memoryFragments = "memory_fragments"
 

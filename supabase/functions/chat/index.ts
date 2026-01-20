@@ -322,6 +322,70 @@ serve(async (req) => {
         detected_at: now.toISOString(),
       });
 
+      // Alert connected therapists (if crisis_alerts_enabled)
+      try {
+        const { data: connections } = await supabaseAdmin
+          .from("therapy_connections")
+          .select(
+            `
+            id,
+            therapist_id,
+            therapist_accounts!inner (
+              user_id,
+              practice_name
+            ),
+            profiles!therapy_connections_client_id_fkey (
+              display_name
+            )
+          `,
+          )
+          .eq("client_id", user.id)
+          .eq("status", "active")
+          .eq("crisis_alerts_enabled", true);
+
+        if (connections && connections.length > 0) {
+          // Get client name for notification
+          const clientName =
+            connections[0]?.profiles?.display_name || "A client";
+
+          // Send notification to each connected therapist
+          for (const connection of connections) {
+            const therapistUserId = Array.isArray(connection.therapist_accounts)
+              ? connection.therapist_accounts[0]?.user_id
+              : connection.therapist_accounts?.user_id;
+
+            if (therapistUserId) {
+              // Send push notification
+              await supabaseAdmin.from("notification_history").insert({
+                user_id: therapistUserId,
+                title: `Crisis Alert: ${clientName}`,
+                body: "Immediate attention needed - crisis keywords detected",
+                type: "therapist_crisis_alert",
+                data: {
+                  clientId: user.id,
+                  clientName: clientName,
+                  timestamp: now.toISOString(),
+                  severity: "high",
+                },
+                is_read: false,
+              });
+
+              // Log to audit trail
+              await supabaseAdmin.from("therapy_access_log").insert({
+                connection_id: connection.id,
+                therapist_id: connection.therapist_id,
+                action: "crisis_alert_sent",
+                resource_type: "crisis_event",
+                created_at: now.toISOString(),
+              });
+            }
+          }
+        }
+      } catch (alertError) {
+        // Log error but don't block crisis response
+        console.error("Failed to send therapist crisis alerts:", alertError);
+      }
+
       // Save user message with full select to get all fields
       const { data: crisisUserMessage } = await supabaseAdmin
         .from("messages")

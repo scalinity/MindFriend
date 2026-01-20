@@ -4891,3 +4891,92 @@ If selective unmasking becomes necessary (e.g., for debugging specific UI elemen
 3. Wrap content in `UIViewRepresentable` with `UnmaskedContentView`
 4. Require security review before enabling
 5. Update privacy audit documentation
+
+---
+
+## [2026-01-19] Photo Mood Logging Infrastructure
+
+**Type:** Feature
+**Status:** Complete (Infrastructure Only - UI Views Deferred)
+
+### Summary
+
+Implemented photo mood logging infrastructure including database schema with RLS policies, Supabase Storage bucket configuration, Swift models with privacy-focused EXIF stripping, and full CRUD service layer with signed URL generation and batch deletion.
+
+### Changes
+
+| Component          | File(s)                                                          | Details                                                                 |
+| ------------------ | ---------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| **Database**       | `supabase/migrations/20260119000000_photo_moods.sql`             | photo_moods table with RLS, mood-photos storage bucket with policies    |
+| **Models**         | `Core/PhotoMoodModels.swift`                                     | PhotoMood, MoodEmotion enum (12 emotions), PhotoMoodError enum          |
+| **Privacy**        | `Core/Extensions/UIImage+Privacy.swift`                          | EXIF stripping, compression, thumbnail generation                       |
+| **Service**        | `Core/Services/PhotoMoodService.swift`                           | @MainActor CRUD service with upload, fetch, delete operations           |
+| **DI**             | `App/DependencyContainer.swift`                                  | PhotoMoodService integration                                            |
+| **Documentation**  | `docs/photo-mood-decisions.md`                                   | 10 architectural decisions resolving spec ambiguities                   |
+
+### Testing
+
+- [ ] Unit tests added/updated
+- [ ] Integration tests pass
+- [x] Build verification done (photo mood code compiles successfully)
+- [ ] Manual verification done
+
+### Bug Fixes (Phase 2 Code Review)
+
+**All Critical Bugs Fixed Before Commit:**
+
+1. ✅ **SQL Query Mismatch** (PhotoMoodService:278-283)
+   - **Issue:** `deleteAllPhotoMoods()` selected only 2 columns but decoded full PhotoMood objects
+   - **Fix:** Changed `.select("photo_storage_path, photo_thumbnail_path")` to `.select()`
+
+2. ✅ **Wrong Error Types** (PhotoMoodService:190, 207, 224)
+   - **Issue:** Threw `PhotoMoodError.uploadFailed` for fetch and URL generation operations
+   - **Fix:** Added `.fetchFailed(String)` and `.urlGenerationFailed(String)` error types
+
+3. ✅ **EXIF Edge Case Documented** (UIImage+Privacy:84-86)
+   - **Issue:** `resized()` returns original image without EXIF stripping when already small
+   - **Fix:** Documented as safety measure; not a bug since `compressToLimit()` always calls `strippingEXIF()`
+
+### Review Scores (10 Parallel Agents)
+
+- **Security:** 8.5/10 (strong RLS, EXIF stripping, private storage)
+- **Architecture:** 7.5/10 (stateful service pattern noted)
+- **Performance:** 7/10 (main thread blocking identified but deferred)
+- **Correctness:** 9/10 (after bug fixes)
+
+### Known Limitations
+
+1. **UI Views Not Implemented:**
+   - PhotoMoodCaptureView (camera/library picker, mood selector, emotion tags, caption)
+   - PhotoMoodGalleryView (grid with thumbnails, date grouping, mood filter)
+   - PhotoMoodDetailView (full image, metadata)
+   - PhotosUI integration for PHPickerViewController
+   - Face ID protection for gallery (optional)
+
+2. **No Tests:** Unit/integration tests deferred to follow-up work
+
+3. **Main Thread Blocking:** Image processing should be moved to background dispatch
+
+4. **Missing Index:** No composite index for filtered pagination queries
+
+5. **Pre-existing Build Errors:** SleepTabView and OutcomeHomeView have compilation errors (unrelated to photo mood feature)
+
+### Next Steps
+
+1. Implement SwiftUI views (PhotoMoodCaptureView, PhotoMoodGalleryView, PhotoMoodDetailView)
+2. Add PhotosUI integration for PHPickerViewController
+3. Add unit tests for EXIF stripping functionality
+4. Add integration tests for PhotoMoodService
+5. Move image processing to background dispatch
+6. Add composite index for filtered pagination queries
+7. Implement Face ID protection (optional)
+
+### Notes
+
+- Database migration `20260119000000_photo_moods.sql` applied successfully
+- All photo mood code compiles without errors
+- Privacy-first design: EXIF stripping before upload, private bucket, user-scoped folders
+- Iterative compression strategy (0.8 → 0.6 → 0.4 → 0.2) ensures 5MB limit compliance
+- Storage-first deletion order for idempotency
+- Signed URLs valid for 1 hour, client should refresh on 4xx errors
+

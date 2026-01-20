@@ -48,6 +48,7 @@ struct UserProfile: Codable, Identifiable, Equatable {
     let displayName: String
     let email: String?
     let timezone: String
+    var preferredLanguage: String?
     let createdAt: Date
     var settings: UserSettings
     var stats: UserStats

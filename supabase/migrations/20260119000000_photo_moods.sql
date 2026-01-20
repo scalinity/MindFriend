@@ -44,9 +44,9 @@ CREATE TABLE IF NOT EXISTS photo_moods (
 CREATE INDEX IF NOT EXISTS idx_photo_moods_user_date
     ON photo_moods(user_id, logged_at DESC);
 
--- Filter by mood score
-CREATE INDEX IF NOT EXISTS idx_photo_moods_user_mood
-    ON photo_moods(user_id, mood_score);
+-- Composite index for filtered pagination (covers both filtered and unfiltered queries)
+CREATE INDEX IF NOT EXISTS idx_photo_moods_user_mood_date
+    ON photo_moods(user_id, mood_score, logged_at DESC);
 
 -- Circle sharing (future)
 CREATE INDEX IF NOT EXISTS idx_photo_moods_shared

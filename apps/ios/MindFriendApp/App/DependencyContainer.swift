@@ -53,6 +53,10 @@ final class DependencyContainer: ObservableObject {
         AccessibilityService(supabase: self.supabaseClient)
     }()
 
+    lazy var localizationService: LocalizationService = {
+        LocalizationService(supabase: self.supabaseClient)
+    }()
+
     lazy var actionPlanService: ActionPlanService = {
         ActionPlanService(authService: supabaseAuthService, supabase: supabaseClient)
     }()

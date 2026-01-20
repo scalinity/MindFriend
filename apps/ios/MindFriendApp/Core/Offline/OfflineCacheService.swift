@@ -288,7 +288,7 @@ extension OfflineCacheService {
         key: OfflineCacheKey,
         as type: T.Type,
         forceRefresh: Bool = false,
-        fetch: () async throws -> T
+        fetch: @escaping () async throws -> T
     ) async -> T? {
         // Return cached if available and not forcing refresh
         if !forceRefresh, let cached: T = try? retrieve(key: key, as: type) {
