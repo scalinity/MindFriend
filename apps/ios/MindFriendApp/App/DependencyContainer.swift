@@ -69,6 +69,32 @@ final class DependencyContainer: ObservableObject {
         PhotoMoodService(supabase: self.supabaseClient)
     }()
 
+    // MARK: - Medication Services
+    lazy var medicationRepository: MedicationRepository = {
+        SupabaseMedicationRepository(supabase: supabaseClient)
+    }()
+
+    lazy var medicationLogRepository: MedicationLogRepository = {
+        SupabaseMedicationLogRepository(supabase: supabaseClient)
+    }()
+
+    lazy var notificationScheduler: NotificationScheduler = {
+        NotificationScheduler()
+    }()
+
+    lazy var adherenceCalculator: AdherenceCalculator = {
+        AdherenceCalculator()
+    }()
+
+    lazy var medicationService: MedicationService = {
+        MedicationService(
+            medicationRepository: medicationRepository,
+            logRepository: medicationLogRepository,
+            notificationScheduler: notificationScheduler,
+            adherenceCalculator: adherenceCalculator
+        )
+    }()
+
     // TODO: Add CreatorService and FamilyService to Xcode project target
     // These services exist on disk but need to be added to the project's pbxproj file
     // lazy var creatorService: CreatorService = {
