@@ -144,9 +144,10 @@ CREATE INDEX IF NOT EXISTS idx_daily_intents_user
 CREATE INDEX IF NOT EXISTS idx_daily_intents_expires
   ON daily_intents(expires_at);
 
+-- Note: Cannot use partial index with NOW() as it's not immutable
+-- Use composite index instead - queries filter expires_at > $timestamp at runtime
 CREATE INDEX IF NOT EXISTS idx_daily_intents_user_active
-  ON daily_intents(user_id, expires_at)
-  WHERE expires_at > NOW();
+  ON daily_intents(user_id, expires_at DESC);
 
 -- RLS Policies
 ALTER TABLE daily_intents ENABLE ROW LEVEL SECURITY;
