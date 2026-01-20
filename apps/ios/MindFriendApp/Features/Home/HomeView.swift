@@ -31,6 +31,9 @@ struct HomeView: View {
     @State private var showInviteBuddySheet = false
     // SOS intervention state
     @State private var showSOSIntervention = false
+    // Recovery mode state
+    @State private var recoveryModeState: RecoveryModeState = .inactive
+    @State private var showExitRecoveryModeConfirmation = false
 
     /// Background color adapts to mood context
     private var adaptiveBackgroundColor: Color {
@@ -39,6 +42,44 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack {
+            // Conditionally show Recovery Mode or Standard Home
+            if recoveryModeState.isActive {
+                RecoveryModeHomeView(
+                    recoveryState: recoveryModeState,
+                    onExitRecoveryMode: {
+                        if recoveryModeState.canManuallyExit {
+                            showExitRecoveryModeConfirmation = true
+                        }
+                    }
+                )
+                .navigationTitle("Home")
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            appState.showCrisisResources = true
+                        } label: {
+                            Image(systemName: "heart.text.square.fill")
+                                .foregroundStyle(.red)
+                        }
+                        .accessibilityLabel("Crisis Resources")
+                    }
+                }
+                .refreshable {
+                    await loadData()
+                }
+                .confirmationDialog(
+                    "Exit Recovery Mode?",
+                    isPresented: $showExitRecoveryModeConfirmation,
+                    titleVisibility: .visible
+                ) {
+                    Button("Exit Recovery Mode") {
+                        Task { await exitRecoveryMode() }
+                    }
+                    Button("Stay in Recovery Mode", role: .cancel) {}
+                } message: {
+                    Text("You'll return to the full home screen with all features.")
+                }
+            } else {
             ScrollView {
                 VStack(spacing: 24) {
                     // Adaptive greeting with time-of-day context
@@ -93,6 +134,12 @@ struct HomeView: View {
                     // Contextual quick actions (mood-adaptive)
                     if let actions = homeContext?.recommendedActions, !actions.isEmpty {
                         ContextualActionsRow(actions: actions)
+                    }
+
+                    if let plan = appState.todayActionPlan,
+                       !appState.todayActionPlanItems.isEmpty,
+                       plan.isActive {
+                        ActionPlanHomeCard(plan: plan, items: appState.todayActionPlanItems)
                     }
 
                     // Today's quest - with proper state handling
@@ -181,10 +228,31 @@ struct HomeView: View {
                 SOSInterventionView()
                     .environmentObject(container)
             }
+            } // End of else block for standard home
         }
         // Load data on appear
         .task {
             await loadData()
+        }
+    }
+
+    // MARK: - Recovery Mode Exit
+
+    private func exitRecoveryMode() async {
+        do {
+            let result = try await container.supabaseDataService.toggleRecoveryMode(enable: false)
+            if result.success {
+                await MainActor.run {
+                    recoveryModeState = result.newState
+                }
+                Analytics.shared.track(.recoveryModeExited, properties: [
+                    "method": "manual"
+                ])
+            } else if let error = result.errorMessage {
+                appState.showError(.apiError(error))
+            }
+        } catch {
+            appState.showError(.apiError("Failed to exit recovery mode"))
         }
     }
 
@@ -332,16 +400,21 @@ struct HomeView: View {
             async let homeContextTask = try? await container.supabaseDataService.getHomeContext()
             async let buddyTask = try? await container.supabaseDataService.getBuddyWidgetData()
             async let celebrationsTask = try? await container.supabaseDataService.getPendingCelebrations()
+            async let recoveryModeTask = try? await container.supabaseDataService.fetchRecoveryModeState()
 
             // Await all results concurrently
             let questResult = try await questTask
             let profileResult = try await profileTask
+            let actionPlanResult = try? await container.actionPlanService.fetchLatestPlan(
+                timezone: profileResult.timezone
+            )
             let events = await eventsTask ?? []
             let participation = await participationTask ?? []
             let insightResult = (await insightTask) ?? nil
             let contextResult = await homeContextTask
             let buddyResult = (await buddyTask) ?? nil
             let pendingCelebrations = await celebrationsTask ?? []
+            let recoveryModeResult = await recoveryModeTask ?? .inactive
 
             // Compute level info from profile
             let levelResult = UserLevel.from(stats: profileResult.stats)
@@ -356,6 +429,14 @@ struct HomeView: View {
                     appState.todayQuest = quest
                 } else {
                     questState = .noQuest
+                }
+
+                if let actionPlanResult {
+                    appState.todayActionPlan = actionPlanResult.0
+                    appState.todayActionPlanItems = actionPlanResult.1
+                } else {
+                    appState.todayActionPlan = nil
+                    appState.todayActionPlanItems = []
                 }
 
                 // Update user profile
@@ -380,6 +461,9 @@ struct HomeView: View {
 
                 // Set buddy widget data
                 buddyWidgetData = buddyResult
+
+                // Set recovery mode state
+                recoveryModeState = recoveryModeResult
 
                 // Queue any pending celebrations
                 if !pendingCelebrations.isEmpty {

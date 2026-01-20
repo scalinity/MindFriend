@@ -23,6 +23,18 @@ const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 const RATE_LIMIT_MAX_PER_USER = 100; // Max notifications per user per hour
 const RATE_LIMIT_MAX_PER_SENDER = 50; // Max notifications a sender can trigger per hour
 
+// Recovery mode notification types that should be blocked
+// These are "pressure" notifications that could increase stress during difficult periods
+// See: kimispecs/03-recovery-mode-ux-spec.md - achieves >50% notification reduction
+const RECOVERY_MODE_BLOCKED_TYPES: Set<NotificationType> = new Set([
+  "streak_risk",
+  "reengagement_gentle",
+  "reengagement_social",
+  "reengagement_progress",
+  "reengagement_fresh_start",
+  "weekly_summary",
+]);
+
 interface NotificationRequest {
   type: NotificationType;
   recipientId: string;
@@ -370,6 +382,27 @@ serve(async (req) => {
           success: true,
           skipped: true,
           reason: "notification_type_disabled",
+        }),
+        { status: 200, headers },
+      );
+    }
+
+    // Check recovery mode - block pressure notifications when user is in recovery
+    // This achieves >50% notification reduction by blocking stress-inducing types
+    // while preserving social support notifications (circle_activity, hug, challenge)
+    if (
+      settings?.recovery_mode_active === true &&
+      RECOVERY_MODE_BLOCKED_TYPES.has(body.type)
+    ) {
+      console.log(
+        `[Recovery Mode] Blocking ${body.type} notification for user ${body.recipientId}`,
+      );
+      return new Response(
+        JSON.stringify({
+          success: true,
+          skipped: true,
+          reason: "recovery_mode_active",
+          blockedType: body.type,
         }),
         { status: 200, headers },
       );

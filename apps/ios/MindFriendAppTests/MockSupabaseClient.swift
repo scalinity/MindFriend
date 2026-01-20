@@ -3,12 +3,12 @@ import Foundation
 
 /// Mock Supabase client for testing
 struct MockSupabaseClient {
-    func from(_ table: String) -> PostgrestQueryBuilder {
+    func from(_ table: String) -> MockPostgrestQueryBuilder {
         MockPostgrestQueryBuilder()
     }
-    
-    var auth: MockAuth {
-        MockAuth()
+
+    var auth: MockSupabaseAuth {
+        MockSupabaseAuth()
     }
 }
 
@@ -32,5 +32,5 @@ struct MockPostgrestResponse {
     var value: Any = []
 }
 
-/// Mock Auth
-struct MockAuth {}
+/// Mock Supabase Auth
+struct MockSupabaseAuth {}

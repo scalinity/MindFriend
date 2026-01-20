@@ -97,6 +97,75 @@ struct UserSettings: Codable, Equatable {
     var notifyStreakRisk: Bool?
     var notifyWeeklySummary: Bool?
     var preferredNotifyHour: Int?
+
+    // Recovery mode fields (optional for backwards compatibility)
+    var recoveryModeActive: Bool?
+    var recoveryModeEnteredAt: Date?
+    var recoveryModeReason: RecoveryModeReason?
+}
+
+// MARK: - Recovery Mode
+
+/// Reason for entering recovery mode
+enum RecoveryModeReason: String, Codable, Equatable {
+    case manual
+    case autoConsecutiveLowMood = "auto_consecutive_low_mood"
+
+    var displayText: String {
+        switch self {
+        case .manual:
+            return "You enabled recovery mode"
+        case .autoConsecutiveLowMood:
+            return "We noticed you've had some tough days"
+        }
+    }
+}
+
+/// Represents the current recovery mode state for a user
+struct RecoveryModeState: Codable, Equatable {
+    let isActive: Bool
+    let enteredAt: Date?
+    let reason: RecoveryModeReason?
+
+    /// Whether the user can manually exit (requires 24h minimum)
+    var canManuallyExit: Bool {
+        guard isActive, let enteredAt = enteredAt else { return true }
+        let hoursSinceEntry = Date().timeIntervalSince(enteredAt) / 3600
+        return hoursSinceEntry >= 24
+    }
+
+    /// Hours remaining until manual exit is allowed
+    var hoursUntilExitAllowed: Int? {
+        guard isActive, !canManuallyExit, let enteredAt = enteredAt else { return nil }
+        let hoursSinceEntry = Date().timeIntervalSince(enteredAt) / 3600
+        return max(0, Int(ceil(24 - hoursSinceEntry)))
+    }
+
+    /// Time remaining formatted as "Xh Ym"
+    var timeUntilExitFormatted: String? {
+        guard let hours = hoursUntilExitAllowed else { return nil }
+        if hours >= 1 {
+            return "\(hours)h"
+        }
+        return "< 1h"
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case isActive = "recovery_mode_active"
+        case enteredAt = "recovery_mode_entered_at"
+        case reason = "recovery_mode_reason"
+    }
+
+    static let inactive = RecoveryModeState(isActive: false, enteredAt: nil, reason: nil)
+}
+
+/// Result of toggling recovery mode
+struct ToggleRecoveryModeResult: Equatable {
+    let success: Bool
+    let errorMessage: String?
+    let newState: RecoveryModeState
+
+    var failed: Bool { !success }
 }
 
 struct UserStats: Codable, Equatable {
@@ -513,6 +582,7 @@ struct VoiceSettings: Codable {
 }
 
 // MARK: - Subscription & Family Plans
+// Note: BillingPeriod and PlanType are defined in BusinessModels.swift
 
 struct Subscription: Codable, Identifiable, Equatable {
     let id: String
@@ -595,8 +665,8 @@ struct FamilyMember: Codable, Identifiable, Equatable {
     let invitedEmail: String?
     var status: MemberStatus
     let invitedAt: Date
-    var joinedAt: Date?
-    var removedAt: Date?
+    let joinedAt: Date?
+    let removedAt: Date?
 
     // Joined profile data (optional from joined query)
     var displayName: String?
@@ -1216,12 +1286,11 @@ struct WeeklySummary: Codable, Identifiable, Equatable {
     /// Formatted week date range label
     var weekLabel: String {
         let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.dateFormat = "MMM d"
         guard let startDate = formatter.date(from: weekStart) else {
             return weekStart
         }
         let endDate = Calendar.current.date(byAdding: .day, value: 6, to: startDate) ?? startDate
-        formatter.dateFormat = "MMM d"
         return "\(formatter.string(from: startDate)) - \(formatter.string(from: endDate))"
     }
 
@@ -1298,6 +1367,8 @@ struct SendMessageResponse: Codable {
     let quotaLimit: Int?     // Server-authoritative: limit value
     let crisisDetected: Bool?
     let conversationTitle: String?
+    let memoryUsed: Bool?    // Whether companion memory was used in this response
+    let memoryIdsUsed: [String]?  // IDs of memories that were used
 }
 
 // MARK: - Circle
@@ -1536,6 +1607,7 @@ struct BuddyRelationship: Codable, Identifiable, Equatable {
         case accepted
         case declined
         case expired
+        case hibernating = "hibernating"
     }
 
     enum CodingKeys: String, CodingKey {
@@ -2360,12 +2432,14 @@ enum LapseTier: String, Codable, CaseIterable {
 }
 
 /// Summary of what the user missed while away
-struct AbsenceSummary: Codable, Equatable {
+struct AbsenceSummary: Codable, Identifiable, Equatable {
     let absenceDays: Int
     let lapseTier: LapseTier
     let hugsReceived: Int
     let circlePosts: Int
     let friendMilestones: [FriendMilestone]
+
+    var id: String { "\(absenceDays)-\(lapseTier.rawValue)" }
 
     /// Nested type for friend milestone info
     struct FriendMilestone: Codable, Equatable, Identifiable {
@@ -3345,8 +3419,8 @@ struct BuddyQuestWindow: Codable, Identifiable, Equatable {
 struct UserPresence: Codable, Equatable {
     let userId: String
     var status: PresenceStatus
-    var lastSeenAt: Date
-    var currentActivity: String?
+    let lastSeenAt: Date
+    let currentActivity: String?
 
     // Joined data
     var displayName: String?

@@ -159,6 +159,13 @@ struct ProfileView: View {
                     }
 
                     NavigationLink {
+                        RecoveryModeSettingsView()
+                    } label: {
+                        Label("Recovery Mode", systemImage: "heart.circle.fill")
+                            .foregroundStyle(.pink)
+                    }
+
+                    NavigationLink {
                         OurApproachView()
                     } label: {
                         Label("Our Approach", systemImage: "checkmark.seal.fill")

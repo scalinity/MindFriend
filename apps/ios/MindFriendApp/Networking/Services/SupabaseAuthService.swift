@@ -61,6 +61,15 @@ final class SupabaseAuthService: ObservableObject {
     /// Profile cache validity duration (1 hour)
     private let profileCacheValidityDuration: TimeInterval = 60 * 60
 
+    /// Authentication headers for Edge Function calls
+    /// Returns headers with Bearer token if session exists, empty otherwise
+    var authHeaders: [String: String] {
+        guard let accessToken = session?.accessToken else {
+            return [:]
+        }
+        return ["Authorization": "Bearer \(accessToken)"]
+    }
+
     init() {
         // Listen for auth state changes
         Task {
@@ -71,17 +80,19 @@ final class SupabaseAuthService: ObservableObject {
                 switch event {
                 case .initialSession:
                     Log.auth.debug("Initial session loaded")
+                    // TODO: Enable when OfflineStorageManager is added to project
                     // Initialize offline storage with user ID if session exists
-                    if let userId = session?.user.id.uuidString {
-                        await OfflineStorageManager.shared.setCurrentUser(userId)
-                    }
+                    // if let userId = session?.user.id.uuidString {
+                    //     await OfflineStorageManager.shared.setCurrentUser(userId)
+                    // }
                 case .signedIn:
                     Log.auth.userAction("User signed in", userId: session?.user.id.uuidString ?? "unknown")
                     Analytics.shared.track(.signInCompleted, properties: ["provider": "supabase"])
+                    // TODO: Enable when OfflineStorageManager is added to project
                     // Initialize offline storage with user ID for data isolation
-                    if let userId = session?.user.id.uuidString {
-                        await OfflineStorageManager.shared.setCurrentUser(userId)
-                    }
+                    // if let userId = session?.user.id.uuidString {
+                    //     await OfflineStorageManager.shared.setCurrentUser(userId)
+                    // }
                 case .signedOut:
                     Log.auth.info("User signed out")
                     Analytics.shared.track(.signOut)
@@ -387,7 +398,7 @@ final class SupabaseAuthService: ObservableObject {
 
     func signOut() async throws {
         // Get user ID before signing out (for offline data cleanup)
-        let userId = currentUser?.id.uuidString
+        // let userId = currentUser?.id.uuidString
 
         try await supabase.auth.signOut()
         session = nil
@@ -397,27 +408,29 @@ final class SupabaseAuthService: ObservableObject {
         CrashReporter.shared.clearUser()
         Analytics.shared.reset()
 
+        // TODO: Enable when offline services are added to project
         // Clear offline data for the user
-        await clearOfflineDataOnLogout(userId: userId)
+        // await clearOfflineDataOnLogout(userId: userId)
     }
 
-    /// Clear all offline data when user logs out
-    private func clearOfflineDataOnLogout(userId: String?) async {
-        // Clear download manager state (cancel downloads, clear tasks)
-        await DownloadManager.shared.clearOnLogout()
-
-        // Clear sync queue manager state (pending sync items)
-        await SyncQueueManager.shared.clearOnLogout()
-
-        // Clear offline cache (user-specific cached data)
-        await OfflineCacheService.shared.clearOnLogout()
-
-        // Clear offline storage manager and delete user files
-        if let userId = userId {
-            try? await OfflineStorageManager.shared.deleteUserData(userId: userId)
-        }
-        await OfflineStorageManager.shared.clearCurrentUser()
-    }
+    // TODO: Enable when offline services are added to project
+    // /// Clear all offline data when user logs out
+    // private func clearOfflineDataOnLogout(userId: String?) async {
+    //     // Clear download manager state (cancel downloads, clear tasks)
+    //     await DownloadManager.shared.clearOnLogout()
+    //
+    //     // Clear sync queue manager state (pending sync items)
+    //     await SyncQueueManager.shared.clearOnLogout()
+    //
+    //     // Clear offline cache (user-specific cached data)
+    //     await OfflineCacheService.shared.clearOnLogout()
+    //
+    //     // Clear offline storage manager and delete user files
+    //     if let userId = userId {
+    //         try? await OfflineStorageManager.shared.deleteUserData(userId: userId)
+    //     }
+    //     await OfflineStorageManager.shared.clearCurrentUser()
+    // }
 
     // MARK: - Auth State Caching
 
