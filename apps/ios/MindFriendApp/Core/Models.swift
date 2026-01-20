@@ -1,6 +1,45 @@
 import Foundation
 import SwiftUI
 
+// MARK: - Stub Types (from files not yet in Xcode project target)
+// TODO: Remove these stubs once FamilyWellnessModels.swift is added to project
+
+/// Mood trend over time - stub definition
+/// Full definition in FamilyWellnessModels.swift
+enum MoodTrend: String, Codable, Equatable {
+    case improving
+    case stable
+    case declining
+    case insufficientData = "insufficient_data"
+
+    var icon: String {
+        switch self {
+        case .improving: return "arrow.up.right"
+        case .stable: return "arrow.right"
+        case .declining: return "arrow.down.right"
+        case .insufficientData: return "questionmark.circle"
+        }
+    }
+
+    var color: String {
+        switch self {
+        case .improving: return "green"
+        case .stable: return "yellow"
+        case .declining: return "orange"
+        case .insufficientData: return "gray"
+        }
+    }
+
+    var emoji: String {
+        switch self {
+        case .improving: return "📈"
+        case .stable: return "➡️"
+        case .declining: return "📉"
+        case .insufficientData: return "❓"
+        }
+    }
+}
+
 // MARK: - User
 
 struct UserProfile: Codable, Identifiable, Equatable {
@@ -3874,136 +3913,156 @@ struct VoiceAnalysisResult: Codable {
     let reflectionPrompts: [String]
 }
 
-// MARK: - Business Models (from BusinessModels.swift)
-// NOTE: These models are defined here temporarily because BusinessModels.swift 
-// is not currently included in the Xcode project target.
-// Once BusinessModels.swift is added to the pbxproj file, consider moving these back
-// to their own file for better code organization.
+// MARK: - Medications
 
-// MARK: - Subscription Plan (DEPRECATED - Use BusinessModels.swift)
-
-/// A subscription plan offering from MindFriend
-// DEPRECATED: This is a duplicate. Use the one in BusinessModels.swift
-// Renamed to avoid ambiguity error
-struct _DuplicateSubscriptionPlan: Codable, Identifiable, Equatable, Hashable {
+struct Medication: Codable, Identifiable {
     let id: UUID
+    let userId: UUID
     let name: String
-    let description: String?
-
-    // Pricing
-    let priceCents: Int
-    let currency: String
-    let billingPeriod: BillingPeriod
-    let billingPeriodMonths: Int?
-
-    // Plan type and capacity
-    let planType: PlanType
-    let maxSeats: Int?
-
-    // Features
-    let features: PlanFeatures
-    let aiChatLimit: Int?
-    let exerciseLimit: Int?
-
-    // Store IDs
-    let appStoreProductId: String?
-
-    // Status
+    let dosage: String?
+    let purpose: String?
+    let color: String?
+    let icon: MedicationIcon
+    let frequency: MedicationFrequency
+    let timesPerDay: Int
+    let scheduledTimes: [Date]
+    let daysOfWeek: [Int]?
+    let reminderEnabled: Bool
+    let reminderSound: String
+    let notificationText: String?
+    let useGenericNotification: Bool
+    let supplyCount: Int?
+    let refillReminderCount: Int?
     let isActive: Bool
-    let isVisible: Bool
+    let archivedAt: Date?
+    let startedAt: Date
+    let endedAt: Date?
+    let createdAt: Date
+    let updatedAt: Date
 
     enum CodingKeys: String, CodingKey {
-        case id, name, description, currency, features
-        case priceCents = "price_cents"
-        case billingPeriod = "billing_period"
-        case billingPeriodMonths = "billing_period_months"
-        case planType = "plan_type"
-        case maxSeats = "max_seats"
-        case aiChatLimit = "ai_chat_limit"
-        case exerciseLimit = "exercise_limit"
-        case appStoreProductId = "app_store_product_id"
+        case id, name, dosage, purpose, color, icon, frequency
+        case timesPerDay = "times_per_day"
+        case scheduledTimes = "scheduled_times"
+        case daysOfWeek = "days_of_week"
+        case reminderEnabled = "reminder_enabled"
+        case reminderSound = "reminder_sound"
+        case notificationText = "notification_text"
+        case useGenericNotification = "use_generic_notification"
+        case supplyCount = "supply_count"
+        case refillReminderCount = "refill_reminder_count"
         case isActive = "is_active"
-        case isVisible = "is_visible"
+        case archivedAt = "archived_at"
+        case startedAt = "started_at"
+        case endedAt = "ended_at"
+        case userId = "user_id"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+}
+
+enum MedicationIcon: String, Codable, CaseIterable {
+    case pill
+    case capsule
+    case liquid
+    case injection
+    case patch
+    case drops
+
+    var systemImage: String {
+        switch self {
+        case .pill: return "pills.fill"
+        case .capsule: return "capsule.fill"
+        case .liquid: return "drop.fill"
+        case .injection: return "syringe.fill"
+        case .patch: return "bandage.fill"
+        case .drops: return "drop.triangle.fill"
+        }
+    }
+}
+
+enum MedicationFrequency: String, Codable {
+    case daily
+    case twiceDaily = "twice_daily"
+    case threeTimesDaily = "three_times_daily"
+    case weekly
+    case asNeeded = "as_needed"
+    case custom
+
+    var description: String {
+        switch self {
+        case .daily: return "Once daily"
+        case .twiceDaily: return "Twice daily"
+        case .threeTimesDaily: return "Three times daily"
+        case .weekly: return "Weekly"
+        case .asNeeded: return "As needed"
+        case .custom: return "Custom schedule"
+        }
+    }
+}
+
+struct MedicationLog: Codable, Identifiable {
+    let id: UUID
+    let userId: UUID
+    let medicationId: UUID
+    let scheduledAt: Date
+    let status: MedicationStatus
+    let loggedAt: Date?
+    let skipReason: String?
+    let notes: String?
+    let sideEffects: [String]?
+    let moodAtTime: Int?
+    let createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case medicationId = "medication_id"
+        case scheduledAt = "scheduled_at"
+        case status
+        case loggedAt = "logged_at"
+        case skipReason = "skip_reason"
+        case notes
+        case sideEffects = "side_effects"
+        case moodAtTime = "mood_at_time"
+        case createdAt = "created_at"
+    }
+}
+
+enum MedicationStatus: String, Codable {
+    case pending
+    case taken
+    case skipped
+    case late
+}
+
+struct ScheduledMedication: Identifiable {
+    let id: UUID
+    let medication: Medication
+    let scheduledAt: Date
+    let status: MedicationStatus
+    let log: MedicationLog?
+}
+
+struct MedicationMoodCorrelation: Codable {
+    let averageMoodWhenAdherent: Double
+    let averageMoodWhenNotAdherent: Double
+    let adherentDays: Int
+    let nonAdherentDays: Int
+
+    var moodDifference: Double {
+        averageMoodWhenAdherent - averageMoodWhenNotAdherent
     }
 
-    /// Formatted price string (e.g., "$9.99")
-    var displayPrice: String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = currency
-        return formatter.string(from: NSNumber(value: Double(priceCents) / 100)) ?? "$\(priceCents / 100)"
+    var insight: String {
+        if moodDifference > 0.5 {
+            return "Your mood tends to be better on days you take your medication consistently."
+        } else if moodDifference < -0.5 {
+            return "Your mood may be affected by your medication. Consider talking to your doctor."
+        } else {
+            return "Your mood appears stable regardless of medication adherence."
+        }
     }
-
-    /// Price per month for multi-month plans (e.g., "$6.67/month" for annual)
-    var pricePerMonth: String? {
-        guard let months = billingPeriodMonths, months > 1 else { return nil }
-        let monthlyPrice = Double(priceCents) / Double(months) / 100
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = currency
-        return formatter.string(from: NSNumber(value: monthlyPrice))
-    }
-
-    /// Savings percentage for annual plans
-    var savingsPercent: Int? {
-        billingPeriod == .yearly ? 50 : nil
-    }
-
-    // MARK: - Static Defaults
-
-    static let premiumMonthly = SubscriptionPlan(
-        id: UUID(uuidString: "00000000-0000-0000-0000-000000000001") ?? UUID(),
-        name: "Premium Monthly",
-        description: "Unlimited access",
-        priceCents: 999,
-        currency: "USD",
-        billingPeriod: .monthly,
-        billingPeriodMonths: 1,
-        planType: .individual,
-        maxSeats: 1,
-        features: .premium,
-        aiChatLimit: nil,
-        exerciseLimit: nil,
-        appStoreProductId: "com.mindfriend.premium.monthly",
-        isActive: true,
-        isVisible: true
-    )
-
-    static let premiumAnnual = SubscriptionPlan(
-        id: UUID(uuidString: "00000000-0000-0000-0000-000000000002") ?? UUID(),
-        name: "Premium Annual",
-        description: "Save 2 months with annual billing",
-        priceCents: 7999,
-        currency: "USD",
-        billingPeriod: .yearly,
-        billingPeriodMonths: 12,
-        planType: .individual,
-        maxSeats: 1,
-        features: .premium,
-        aiChatLimit: nil,
-        exerciseLimit: nil,
-        appStoreProductId: "com.mindfriend.premium.yearly",
-        isActive: true,
-        isVisible: true
-    )
-
-    static let familyAnnual = SubscriptionPlan(
-        id: UUID(uuidString: "00000000-0000-0000-0000-000000000003") ?? UUID(),
-        name: "Family Annual",
-        description: "Up to 6 family members",
-        priceCents: 11999,
-        currency: "USD",
-        billingPeriod: .yearly,
-        billingPeriodMonths: 12,
-        planType: .family,
-        maxSeats: 6,
-        features: .premium,
-        aiChatLimit: nil,
-        exerciseLimit: nil,
-        appStoreProductId: "com.mindfriend.family.annual",
-        isActive: true,
-        isVisible: true
-    )
 }
 
 
