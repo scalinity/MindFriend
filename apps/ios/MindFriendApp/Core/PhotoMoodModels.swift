@@ -144,6 +144,7 @@ enum PhotoMoodError: LocalizedError {
     case networkRequired
     case photoTooLarge
     case invalidPhotoFormat
+    case authenticationRequired
 
     var errorDescription: String? {
         switch self {
@@ -175,6 +176,8 @@ enum PhotoMoodError: LocalizedError {
             return "Photo too large. Try a different photo."
         case .invalidPhotoFormat:
             return "Invalid photo format. Please use JPEG or PNG."
+        case .authenticationRequired:
+            return "Please sign in to save photo moods."
         }
     }
 
@@ -188,6 +191,8 @@ enum PhotoMoodError: LocalizedError {
             return "Check your internet connection."
         case .photoTooLarge:
             return "Try selecting a smaller photo or taking a new one."
+        case .authenticationRequired:
+            return "Sign in and try again."
         default:
             return nil
         }

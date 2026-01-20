@@ -28,6 +28,20 @@ final class PhotoMoodService: ObservableObject {
         self.supabase = supabase
     }
 
+    // MARK: - Private Helpers
+
+    /// Safely retrieves authenticated user ID
+    ///
+    /// - Returns: UUID of authenticated user
+    /// - Throws: PhotoMoodError.authenticationRequired if session invalid
+    private func getAuthenticatedUserId() async throws -> UUID {
+        guard let session = try? await supabase.auth.session,
+              let userId = session.user.id else {
+            throw PhotoMoodError.authenticationRequired
+        }
+        return userId
+    }
+
     // MARK: - Create Photo Mood
 
     /// Creates new photo mood with compression, EXIF stripping, thumbnail generation
@@ -77,7 +91,7 @@ final class PhotoMoodService: ObservableObject {
         }
 
         // Get current user ID
-        let userId = try await supabase.auth.session.user.id
+        let userId = try await getAuthenticatedUserId()
 
         // Step 1: Prepare full image (strip EXIF, compress) - background processing
         await MainActor.run { uploadProgress = 0.2 }
@@ -94,10 +108,10 @@ final class PhotoMoodService: ObservableObject {
         // Step 2: Thumbnail generation completed
         await MainActor.run { uploadProgress = 0.3 }
 
-        // Step 3: Generate file paths
-        let timestamp = Int(Date().timeIntervalSince1970)
-        let photoPath = "\(userId.uuidString)/\(timestamp).jpg"
-        let thumbPath = "\(userId.uuidString)/thumb_\(timestamp).jpg"
+        // Step 3: Generate file paths with UUID (prevents collisions)
+        let fileId = UUID().uuidString
+        let photoPath = "\(userId.uuidString)/\(fileId).jpg"
+        let thumbPath = "\(userId.uuidString)/thumb_\(fileId).jpg"
 
         // Step 4: Upload full photo
         await MainActor.run { uploadProgress = 0.4 }
@@ -181,7 +195,7 @@ final class PhotoMoodService: ObservableObject {
     ///   - moodFilter: Optional mood score filter (1-5)
     /// - Throws: PhotoMoodError.fetchFailed if query fails
     func fetchPhotoMoods(limit: Int = 50, offset: Int = 0, moodFilter: Int? = nil) async throws {
-        let userId = try await supabase.auth.session.user.id
+        let userId = try await getAuthenticatedUserId()
 
         var query = supabase
             .from("photo_moods")
@@ -253,21 +267,9 @@ final class PhotoMoodService: ObservableObject {
         isDeleting = true
         defer { isDeleting = false }
 
-        // Step 1: Delete from storage (storage-first for idempotency)
-        var pathsToDelete = [photoMood.photoStoragePath]
-        if let thumbPath = photoMood.photoThumbnailPath {
-            pathsToDelete.append(thumbPath)
-        }
-
-        do {
-            let _: EmptyResponse = try await supabase.storage
-                .from(bucketName)
-                .remove(paths: pathsToDelete)
-        } catch {
-            throw PhotoMoodError.deleteFailed("Failed to delete photo files: \(error.localizedDescription)")
-        }
-
-        // Step 2: Delete database record
+        // Step 1: Delete database record FIRST to prevent orphaned DB records
+        // If DB delete fails, nothing is deleted (safe to retry)
+        // If storage delete fails later, orphaned files will be cleaned by cron
         do {
             try await supabase
                 .from("photo_moods")
@@ -279,7 +281,22 @@ final class PhotoMoodService: ObservableObject {
                 photoMoods.removeAll { $0.id == photoMood.id }
             }
         } catch {
-            throw PhotoMoodError.deleteFailed("Failed to delete mood record: \(error.localizedDescription)")
+            throw PhotoMoodError.deleteFailed("Unable to delete photo mood. Please try again.")
+        }
+
+        // Step 2: Delete storage files (non-fatal if fails - orphaned files cleaned by cron)
+        var pathsToDelete = [photoMood.photoStoragePath]
+        if let thumbPath = photoMood.photoThumbnailPath {
+            pathsToDelete.append(thumbPath)
+        }
+
+        do {
+            let _: EmptyResponse = try await supabase.storage
+                .from(bucketName)
+                .remove(paths: pathsToDelete)
+        } catch {
+            // Log but don't throw - DB record already deleted successfully
+            print("⚠️ Storage cleanup failed for mood \(photoMood.id): \(error)")
         }
     }
 
@@ -292,28 +309,50 @@ final class PhotoMoodService: ObservableObject {
         isDeleting = true
         defer { isDeleting = false }
 
-        let userId = try await supabase.auth.session.user.id
+        let userId = try await getAuthenticatedUserId()
 
-        // Step 1: Fetch all photo paths (select all columns for proper decoding)
-        let moods: [PhotoMood] = try await supabase
+        // Step 1: Delete database records FIRST (prevents orphaned DB records)
+        try await supabase
             .from("photo_moods")
-            .select()
+            .delete()
+            .eq("user_id", value: userId.uuidString)
+            .execute()
+
+        await MainActor.run {
+            photoMoods = []
+        }
+
+        // Step 2: Fetch ONLY storage paths (minimal memory footprint)
+        // Lightweight struct for path-only queries
+        struct PhotoPath: Codable {
+            let photoStoragePath: String
+            let photoThumbnailPath: String?
+
+            enum CodingKeys: String, CodingKey {
+                case photoStoragePath = "photo_storage_path"
+                case photoThumbnailPath = "photo_thumbnail_path"
+            }
+        }
+
+        let photoPaths: [PhotoPath] = try await supabase
+            .from("photo_moods")
+            .select("photo_storage_path, photo_thumbnail_path")
             .eq("user_id", value: userId.uuidString)
             .execute()
             .value
 
-        guard !moods.isEmpty else { return } // Nothing to delete
+        guard !photoPaths.isEmpty else { return } // Nothing to clean up
 
-        // Step 2: Collect all paths efficiently with functional approach
-        let paths = moods.flatMap { mood -> [String] in
-            var result = [mood.photoStoragePath]
-            if let thumbPath = mood.photoThumbnailPath {
+        // Step 3: Collect paths efficiently
+        let paths = photoPaths.flatMap { paths -> [String] in
+            var result = [paths.photoStoragePath]
+            if let thumbPath = paths.photoThumbnailPath {
                 result.append(thumbPath)
             }
             return result
         }
 
-        // Step 3: Delete in batches (100 per batch) with memory-efficient processing
+        // Step 4: Clean up storage files in batches (100 per batch, non-fatal if fails)
         let batchSize = 100
         let totalBatches = (paths.count + batchSize - 1) / batchSize
 
@@ -339,17 +378,6 @@ final class PhotoMoodService: ObservableObject {
 
             // Yield to allow other tasks to run and prevent blocking
             await Task.yield()
-        }
-
-        // Step 4: Delete all database records
-        try await supabase
-            .from("photo_moods")
-            .delete()
-            .eq("user_id", value: userId.uuidString)
-            .execute()
-
-        await MainActor.run {
-            photoMoods = []
         }
     }
 }

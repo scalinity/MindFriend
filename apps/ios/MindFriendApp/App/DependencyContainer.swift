@@ -73,6 +73,10 @@ final class DependencyContainer: ObservableObject {
         PhotoMoodService(supabase: self.supabaseClient)
     }()
 
+    lazy var therapyIntegrationService: TherapyIntegrationService = {
+        TherapyIntegrationService(supabase: self.supabaseClient)
+    }()
+
     // MARK: - Medication Services
     lazy var medicationRepository: MedicationRepository = {
         SupabaseMedicationRepository(supabase: supabaseClient)

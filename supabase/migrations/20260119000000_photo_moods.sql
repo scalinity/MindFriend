@@ -15,12 +15,15 @@ CREATE TABLE IF NOT EXISTS photo_moods (
 
     -- Optional metadata
     caption TEXT CHECK (caption IS NULL OR LENGTH(caption) <= 500),
-    emotion_tags TEXT[], -- Max 5 emotions (client-side validation)
+    emotion_tags TEXT[] CHECK (
+        emotion_tags IS NULL OR
+        (array_length(emotion_tags, 1) <= 5 AND array_length(emotion_tags, 1) > 0)
+    ),
     location_name TEXT CHECK (location_name IS NULL OR LENGTH(location_name) <= 100),
 
     -- Photo storage references
-    photo_storage_path TEXT NOT NULL, -- {user_id}/{timestamp}.jpg
-    photo_thumbnail_path TEXT, -- {user_id}/thumb_{timestamp}.jpg
+    photo_storage_path TEXT NOT NULL, -- {user_id}/{uuid}.jpg
+    photo_thumbnail_path TEXT, -- {user_id}/thumb_{uuid}.jpg
 
     -- AI analysis (future, nullable)
     ai_mood_suggestion INTEGER CHECK (ai_mood_suggestion IS NULL OR ai_mood_suggestion BETWEEN 1 AND 5),
