@@ -31,6 +31,9 @@ struct MindFriendApp: App {
                     // Configure notification manager with container for device registration
                     notificationManager.configure(container: container)
 
+                    // Register medication notification categories
+                    NotificationCategoryManager.shared.registerCategories()
+
                     // Configure offline services with sync handlers
                     container.configureOfflineServices()
 
