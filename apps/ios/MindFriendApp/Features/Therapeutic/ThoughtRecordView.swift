@@ -10,13 +10,13 @@ struct ThoughtRecordView: View {
 
     let enrollmentId: String?
     let programDayNumber: Int?
-    let onComplete: (ThoughtRecord) -> Void
+    let onComplete: (TherapeuticThoughtRecord) -> Void
 
     init(
         enrollmentId: String? = nil,
         programDayNumber: Int? = nil,
         service: TherapeuticProgramService,
-        onComplete: @escaping (ThoughtRecord) -> Void
+        onComplete: @escaping (TherapeuticThoughtRecord) -> Void
     ) {
         self.enrollmentId = enrollmentId
         self.programDayNumber = programDayNumber
@@ -627,7 +627,7 @@ final class ThoughtRecordViewModel: ObservableObject {
     // State
     @Published var isSaving = false
     @Published var isAnalyzing = false
-    @Published var savedRecord: ThoughtRecord?
+    @Published var savedRecord: TherapeuticThoughtRecord?
     @Published var aiAnalysis: AIThoughtAnalysis?
 
     let enrollmentId: String?

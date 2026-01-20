@@ -1,4 +1,5 @@
 import Foundation
+import MindFriendApp
 
 struct MedicationAdherenceStats {
     let percentage: Double
@@ -49,11 +50,11 @@ final class AdherenceCalculator {
 
         for day in dateSet {
             let dayLogs = medicationLogs.filter { calendar.isDate($0.scheduledAt, inSameDayAs: day) }
-            let dayMoods = moodLogs.filter { calendar.isDate($0.loggedAt, inSameDayAs: day) }
+            let dayMoods = moodLogs.filter { calendar.isDate($0.createdAt, inSameDayAs: day) }
 
             guard !dayMoods.isEmpty else { continue }
 
-            let avgMood = dayMoods.map { Double($0.score) }.reduce(0, +) / Double(dayMoods.count)
+            let avgMood = dayMoods.map { Double($0.moodScore) }.reduce(0, +) / Double(dayMoods.count)
             let isAdherent = dayLogs.allSatisfy { $0.status == .taken || $0.status == .late }
 
             if isAdherent {

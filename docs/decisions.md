@@ -541,6 +541,32 @@ The spec-analyzer identified 12 critical blockers in the Community Forums specif
 
 ---
 
+## 2026-01-20: Safety Plan MVP Scope and Storage
+
+**Decision:** Implement the Safety Plan feature as MVP scope per `docs/implementation-plan.md`, with server-stored JSONB payloads and local offline cache. `pinnedToQuickActions` is stored locally on-device, not in Supabase.
+
+**Rationale:**
+
+1. **User safety** - A personal safety plan complements crisis resources and is safety-critical.
+2. **Implementation plan alignment** - The plan is already written and referenced across UI and Edge Functions.
+3. **Low-risk storage** - JSONB keeps schema flexible during MVP iteration while RLS enforces access.
+4. **Offline access** - File-based `OfflineCacheService` already exists and supports lightweight caching.
+
+**Alternatives considered:**
+
+- **Add to `MindFriend-spec.md` first** - Rejected to avoid blocking implementation; decision log clarifies scope.
+- **Field-level encryption now** - Deferred to avoid large crypto changes during MVP; rely on Supabase disk encryption and iOS Data Protection for cache.
+- **Persist pin state in DB** - Rejected to avoid new schema; local preference is sufficient for MVP.
+- **Return 404 for missing plan** - Rejected to avoid edge-function error handling in the iOS client; return `success=true` with `data=null` instead.
+
+**Implications:**
+
+- Safety plan payload is stored unencrypted at field level (disk encryption only) until a later security pass.
+- Offline cache uses `OfflineCacheService` file-based storage with iOS Data Protection and explicit cache expiry metadata.
+- UI pinning is device-specific and does not sync across devices in MVP.
+
+---
+
 ## Template for Future Decisions
 
 ```markdown

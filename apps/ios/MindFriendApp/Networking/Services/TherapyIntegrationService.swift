@@ -132,13 +132,21 @@ final class TherapyIntegrationService: ObservableObject {
 
     /// Complete an assignment
     func completeAssignment(id: UUID, notes: String?) async throws {
+        struct UpdateData: Encodable {
+            let status: String
+            let completedAt: String
+            let clientNotes: String?
+        }
+
+        let updateData = UpdateData(
+            status: "completed",
+            completedAt: ISO8601DateFormatter().string(from: Date()),
+            clientNotes: notes
+        )
+
         try await supabase
             .from("therapist_assignments")
-            .update([
-                "status": "completed",
-                "completed_at": ISO8601DateFormatter().string(from: Date()),
-                "client_notes": notes as Any?
-            ])
+            .update(updateData)
             .eq("id", value: id.uuidString)
             .execute()
     }

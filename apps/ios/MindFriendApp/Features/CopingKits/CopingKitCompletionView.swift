@@ -227,7 +227,7 @@ struct CopingKitCompletionView: View {
             Task {
                 // Submit feedback if selected
                 if let feedback = selectedFeedback {
-                    try? await viewModel.service.submitFeedback(
+                    try? await viewModel.submitFeedback(
                         kitId: kit.id,
                         helpful: feedback,
                         comment: feedbackComment.isEmpty ? nil : feedbackComment

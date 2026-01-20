@@ -359,6 +359,36 @@ struct Creator: Identifiable, Hashable {
     let totalMinutes: Int
     let averageRating: Double?
 
+    init(
+        id: UUID,
+        displayName: String,
+        bio: String? = nil,
+        profileImageUrl: String? = nil,
+        websiteUrl: String? = nil,
+        verificationLevel: VerificationLevel = .pending,
+        verifiedAt: Date? = nil,
+        status: CreatorStatus = .pending,
+        followerCount: Int = 0,
+        contentCount: Int = 0,
+        totalPlays: Int = 0,
+        totalMinutes: Int = 0,
+        averageRating: Double? = nil
+    ) {
+        self.id = id
+        self.displayName = displayName
+        self.bio = bio
+        self.profileImageUrl = profileImageUrl
+        self.websiteUrl = websiteUrl
+        self.verificationLevel = verificationLevel
+        self.verifiedAt = verifiedAt
+        self.status = status
+        self.followerCount = followerCount
+        self.contentCount = contentCount
+        self.totalPlays = totalPlays
+        self.totalMinutes = totalMinutes
+        self.averageRating = averageRating
+    }
+
     init(from db: DBCreator) {
         self.id = db.id
         self.displayName = db.displayName
@@ -397,6 +427,7 @@ struct CreatorContent: Identifiable, Hashable {
     let coverImageUrl: String?
     let category: String
     let tags: [String]
+    let transcript: String?
     let status: ContentStatus
     let submittedAt: Date?
     let publishedAt: Date?
@@ -412,6 +443,50 @@ struct CreatorContent: Identifiable, Hashable {
         return String(format: "%d:%02d", minutes, secs)
     }
 
+    init(
+        id: UUID,
+        creatorId: UUID,
+        contentType: ContentType,
+        format: ContentFormat,
+        title: String,
+        description: String? = nil,
+        durationSeconds: Int? = nil,
+        difficulty: ContentDifficulty? = nil,
+        mediaUrl: String? = nil,
+        coverImageUrl: String? = nil,
+        category: String = "",
+        tags: [String] = [],
+        transcript: String? = nil,
+        status: ContentStatus = .draft,
+        submittedAt: Date? = nil,
+        publishedAt: Date? = nil,
+        playCount: Int = 0,
+        uniqueListeners: Int = 0,
+        averageRating: Double? = nil,
+        ratingCount: Int = 0
+    ) {
+        self.id = id
+        self.creatorId = creatorId
+        self.contentType = contentType
+        self.format = format
+        self.title = title
+        self.description = description
+        self.durationSeconds = durationSeconds
+        self.difficulty = difficulty
+        self.mediaUrl = mediaUrl
+        self.coverImageUrl = coverImageUrl
+        self.category = category
+        self.tags = tags
+        self.transcript = transcript
+        self.status = status
+        self.submittedAt = submittedAt
+        self.publishedAt = publishedAt
+        self.playCount = playCount
+        self.uniqueListeners = uniqueListeners
+        self.averageRating = averageRating
+        self.ratingCount = ratingCount
+    }
+
     init(from db: DBCreatorContent) {
         self.id = db.id
         self.creatorId = db.creatorId
@@ -425,6 +500,7 @@ struct CreatorContent: Identifiable, Hashable {
         self.coverImageUrl = db.coverImageUrl
         self.category = db.category
         self.tags = db.tags
+        self.transcript = db.transcript
         self.status = ContentStatus(rawValue: db.status) ?? .draft
         self.submittedAt = db.submittedAt.flatMap { ISO8601DateFormatter().date(from: $0) }
         self.publishedAt = db.publishedAt.flatMap { ISO8601DateFormatter().date(from: $0) }
@@ -532,5 +608,160 @@ enum CreatorError: Error, LocalizedError {
         case .networkError(let message):
             return "Network error: \(message)"
         }
+    }
+}
+
+// MARK: - Application Types
+
+enum LicenseType: String, Codable, CaseIterable, Identifiable {
+    case lmft = "LMFT"
+    case lcsw = "LCSW"
+    case phd = "PhD"
+    case psyd = "PsyD"
+    case lpc = "LPC"
+    case lmhc = "LMHC"
+    case lpcc = "LPCC"
+    case mbsr = "MBSR Teacher"
+    case mbct = "MBCT Teacher"
+    case yoga = "Yoga Teacher (500hr+)"
+    case other = "Other"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .lmft: return "Licensed Marriage & Family Therapist (LMFT)"
+        case .lcsw: return "Licensed Clinical Social Worker (LCSW)"
+        case .phd: return "PhD in Psychology or Related Field"
+        case .psyd: return "PsyD (Doctor of Psychology)"
+        case .lpc: return "Licensed Professional Counselor (LPC)"
+        case .lmhc: return "Licensed Mental Health Counselor (LMHC)"
+        case .lpcc: return "Licensed Professional Clinical Counselor (LPCC)"
+        case .mbsr: return "MBSR (Mindfulness-Based Stress Reduction) Teacher"
+        case .mbct: return "MBCT (Mindfulness-Based Cognitive Therapy) Teacher"
+        case .yoga: return "Yoga Teacher (500hr+)"
+        case .other: return "Other"
+        }
+    }
+
+    var requiresLicenseNumber: Bool {
+        switch self {
+        case .mbsr, .mbct, .yoga, .other: return false
+        default: return true
+        }
+    }
+}
+
+struct Certification: Identifiable, Codable {
+    var id: UUID
+    var name: String
+    var issuer: String
+    var yearObtained: String
+
+    init(id: UUID = UUID(), name: String = "", issuer: String = "", yearObtained: String = "") {
+        self.id = id
+        self.name = name
+        self.issuer = issuer
+        self.yearObtained = yearObtained
+    }
+}
+
+enum Specialty: String, Codable, CaseIterable, Identifiable {
+    case anxiety
+    case depression
+    case sleep
+    case stress
+    case trauma
+    case grief
+    case relationships
+    case adhd = "ADHD"
+    case addiction
+    case panic
+    case ptsd = "PTSD"
+    case ocd = "OCD"
+    case selfEsteem = "self_esteem"
+    case burnout
+    case emotionalRegulation = "emotional_regulation"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .anxiety: return "Anxiety"
+        case .depression: return "Depression"
+        case .sleep: return "Sleep"
+        case .stress: return "Stress"
+        case .trauma: return "Trauma"
+        case .grief: return "Grief"
+        case .relationships: return "Relationships"
+        case .adhd: return "ADHD"
+        case .addiction: return "Addiction"
+        case .panic: return "Panic"
+        case .ptsd: return "PTSD"
+        case .ocd: return "OCD"
+        case .selfEsteem: return "Self-Esteem"
+        case .burnout: return "Burnout"
+        case .emotionalRegulation: return "Emotional Regulation"
+        }
+    }
+}
+
+// Note: TherapeuticApproach is defined in TherapistModels.swift
+// Reuse the existing enum for consistency across the codebase
+
+enum ContentCategory: String, Codable, CaseIterable, Identifiable {
+    case all
+    case meditation
+    case breathing
+    case journaling
+    case movement
+    case educational
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .all: return "All"
+        case .meditation: return "Meditation"
+        case .breathing: return "Breathing"
+        case .journaling: return "Journaling"
+        case .movement: return "Movement"
+        case .educational: return "Educational"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .all: return "square.grid.2x2"
+        case .meditation: return "brain.head.profile"
+        case .breathing: return "wind"
+        case .journaling: return "book"
+        case .movement: return "figure.walk"
+        case .educational: return "lightbulb"
+        }
+    }
+}
+
+enum SubscriptionTier: String, Codable, CaseIterable {
+    case monthly
+    case annual
+
+    var displayName: String {
+        switch self {
+        case .monthly: return "Monthly"
+        case .annual: return "Annual"
+        }
+    }
+
+    var price: Int {
+        switch self {
+        case .monthly: return 799  // $7.99
+        case .annual: return 6999  // $69.99/year
+        }
+    }
+
+    var displayPrice: String {
+        let dollars = Double(price) / 100.0
+        return String(format: "$%.2f", dollars)
     }
 }

@@ -100,7 +100,7 @@ private struct OfflineInfoContent: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
-                .background(Color.accentColor)
+                .background(Color.blue)
                 .foregroundStyle(.white)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
             }
@@ -251,7 +251,7 @@ struct DownloadButton: View {
     @State private var errorMessage = ""
 
     var body: some View {
-        Group {
+        ZStack {
             if downloadManager.isDownloaded(contentId: content.id) {
                 // Downloaded state
                 Menu {
@@ -301,7 +301,7 @@ struct DownloadButton: View {
                         Text(ByteCountFormatter.string(fromByteCount: content.estimatedSize, countStyle: .file))
                             .font(.caption2)
                     }
-                    .foregroundStyle(.accent)
+                    .foregroundStyle(.blue)
                 }
             }
         }

@@ -86,7 +86,9 @@ struct QuestChoiceView: View {
     }
 
     private func createQuestFromSelection(alternatives: QuestAlternatives, variant: QuestAlternatives.SelectedVariant) -> Quest? {
-        let today = ISO8601DateFormatter.dateOnly.string(from: Date())
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let today = dateFormatter.string(from: Date())
 
         switch variant {
         case .primary, .reroll:
@@ -96,6 +98,7 @@ struct QuestChoiceView: View {
                 localDate: today,
                 status: .assigned,
                 assignedAt: Date(),
+                completedAt: nil,
                 template: template
             )
 
@@ -119,6 +122,7 @@ struct QuestChoiceView: View {
                 localDate: today,
                 status: .assigned,
                 assignedAt: Date(),
+                completedAt: nil,
                 template: quickTemplate,
                 isQuickVariant: true,
                 xpMultiplier: quickVariant.xpMultiplier
@@ -131,6 +135,7 @@ struct QuestChoiceView: View {
                 localDate: today,
                 status: .assigned,
                 assignedAt: Date(),
+                completedAt: nil,
                 template: template
             )
         }

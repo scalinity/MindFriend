@@ -255,22 +255,14 @@ struct DBUserStatsRow: Codable {
 extension DBProfileRow {
     func toUserProfile(settings: DBUserSettingsRow, stats: DBUserStatsRow) -> UserProfile {
         UserProfile(
-            id: id.uuidString,
+            id: id,
             handle: handle,
             displayName: displayName,
             email: email,
+            avatarUrl: avatarUrl,
             timezone: timezone,
             createdAt: createdAt,
-            settings: UserSettings(
-                dailyQuestTimeLocal: settings.dailyQuestTimeLocal,
-                quietHoursStartLocal: settings.quietHoursStartLocal,
-                quietHoursEndLocal: settings.quietHoursEndLocal,
-                remindersEnabled: settings.remindersEnabled,
-                nudgeAfterDaysInactive: settings.nudgeAfterDaysInactive,
-                shareMoodInCircles: settings.shareMoodInCircles,
-                aiTone: AITone(rawValue: settings.aiTone) ?? .friendly,
-                privacyMode: PrivacyMode(rawValue: settings.privacyMode) ?? .standard
-            ),
+            onboardingCompletedAt: onboardingCompletedAt,
             stats: UserStats(
                 currentStreakDays: stats.currentStreakDays,
                 longestStreakDays: stats.longestStreakDays,
@@ -282,14 +274,22 @@ extension DBProfileRow {
                 levelTitle: stats.levelTitle,
                 lastXpResetWeek: stats.lastXpResetWeek
             ),
-            entitlements: Entitlements(
-                tier: Tier(rawValue: subscriptionTier) ?? .free,
-                dailyAiQuota: dailyAiQuota,
-                dailyAiUsed: dailyAiUsed
+            settings: UserSettings(
+                dailyQuestTimeLocal: settings.dailyQuestTimeLocal,
+                quietHoursStartLocal: settings.quietHoursStartLocal,
+                quietHoursEndLocal: settings.quietHoursEndLocal,
+                remindersEnabled: settings.remindersEnabled,
+                nudgeAfterDaysInactive: settings.nudgeAfterDaysInactive,
+                shareMoodInCircles: settings.shareMoodInCircles,
+                aiTone: AITone(rawValue: settings.aiTone) ?? .friendly,
+                privacyMode: PrivacyMode(rawValue: settings.privacyMode) ?? .standard
             ),
-            badges: [],
-            wellnessFocus: wellnessFocus.flatMap { WellnessFocus(rawValue: $0) },
-            onboardingCompletedAt: onboardingCompletedAt
+            entitlements: UserEntitlements(
+                subscriptionTier: subscriptionTier,
+                premiumExpiresAt: nil,
+                features: [:]
+            ),
+            badges: []
         )
     }
 }
@@ -437,13 +437,15 @@ struct DBCirclePostWithProfile: Codable {
     func toCirclePost() -> CirclePost {
         CirclePost(
             id: id?.uuidString ?? UUID().uuidString,
+            circleId: circleId.uuidString,
             userId: userId.uuidString,
-            userDisplayName: profiles?.displayName ?? "Member",
             kind: PostKind(rawValue: kind) ?? .checkin,
             moodEmoji: moodEmoji,
             bodyText: bodyText,
             localDate: localDate ?? "",
-            createdAt: createdAt ?? Date()
+            createdAt: createdAt ?? Date(),
+            userDisplayName: profiles?.displayName ?? "Member",
+            ritualId: nil
         )
     }
 }
@@ -459,6 +461,7 @@ struct DBProfile: Codable {
     var timezone: String
     let createdAt: Date
     var updatedAt: Date
+    var lastActiveAt: Date?
 
     // Settings
     var dailyQuestTimeLocal: String
@@ -501,6 +504,7 @@ struct DBProfile: Codable {
         case timezone
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case lastActiveAt = "last_active_at"
         case dailyQuestTimeLocal = "daily_quest_time_local"
         case quietHoursStartLocal = "quiet_hours_start_local"
         case quietHoursEndLocal = "quiet_hours_end_local"
@@ -978,22 +982,14 @@ struct DBMemoryFragment: Codable {
 extension DBProfile {
     func toUserProfile() -> UserProfile {
         UserProfile(
-            id: id.uuidString,
+            id: id,
             handle: handle ?? "",
             displayName: displayName ?? "User",
             email: email,
+            avatarUrl: avatarUrl,
             timezone: timezone,
             createdAt: createdAt,
-            settings: UserSettings(
-                dailyQuestTimeLocal: dailyQuestTimeLocal,
-                quietHoursStartLocal: quietHoursStartLocal,
-                quietHoursEndLocal: quietHoursEndLocal,
-                remindersEnabled: remindersEnabled,
-                nudgeAfterDaysInactive: nudgeAfterDaysInactive,
-                shareMoodInCircles: shareMoodInCircles,
-                aiTone: AITone(rawValue: aiTone) ?? .friendly,
-                privacyMode: PrivacyMode(rawValue: privacyMode) ?? .standard
-            ),
+            onboardingCompletedAt: onboardingCompletedAt,
             stats: UserStats(
                 currentStreakDays: currentStreakDays,
                 longestStreakDays: longestStreakDays,
@@ -1005,14 +1001,22 @@ extension DBProfile {
                 levelTitle: levelTitle,
                 lastXpResetWeek: lastXpResetWeek
             ),
-            entitlements: Entitlements(
-                tier: Tier(rawValue: subscriptionTier) ?? .free,
-                dailyAiQuota: dailyAiQuota,
-                dailyAiUsed: dailyAiUsed
+            settings: UserSettings(
+                dailyQuestTimeLocal: dailyQuestTimeLocal,
+                quietHoursStartLocal: quietHoursStartLocal,
+                quietHoursEndLocal: quietHoursEndLocal,
+                remindersEnabled: remindersEnabled,
+                nudgeAfterDaysInactive: nudgeAfterDaysInactive,
+                shareMoodInCircles: shareMoodInCircles,
+                aiTone: AITone(rawValue: aiTone) ?? .friendly,
+                privacyMode: PrivacyMode(rawValue: privacyMode) ?? .standard
             ),
-            badges: [],
-            wellnessFocus: wellnessFocus.flatMap { WellnessFocus(rawValue: $0) },
-            onboardingCompletedAt: onboardingCompletedAt
+            entitlements: UserEntitlements(
+                subscriptionTier: subscriptionTier,
+                premiumExpiresAt: nil,
+                features: [:]
+            ),
+            badges: []
         )
     }
 }
@@ -1442,14 +1446,14 @@ struct DBVoiceJournalAnalysis: Codable {
             return EmotionScores()
         }
         return EmotionScores(
-            joy: (data["joy"]?.value as? Double) ?? 0,
-            sadness: (data["sadness"]?.value as? Double) ?? 0,
-            anger: (data["anger"]?.value as? Double) ?? 0,
-            fear: (data["fear"]?.value as? Double) ?? 0,
-            surprise: (data["surprise"]?.value as? Double) ?? 0,
-            trust: (data["trust"]?.value as? Double) ?? 0,
-            anticipation: (data["anticipation"]?.value as? Double) ?? 0,
-            disgust: (data["disgust"]?.value as? Double) ?? 0
+            joy: (data["joy"] as? Double) ?? 0,
+            sadness: (data["sadness"] as? Double) ?? 0,
+            anger: (data["anger"] as? Double) ?? 0,
+            fear: (data["fear"] as? Double) ?? 0,
+            surprise: (data["surprise"] as? Double) ?? 0,
+            trust: (data["trust"] as? Double) ?? 0,
+            anticipation: (data["anticipation"] as? Double) ?? 0,
+            disgust: (data["disgust"] as? Double) ?? 0
         )
     }
 
@@ -1458,10 +1462,10 @@ struct DBVoiceJournalAnalysis: Codable {
             return ToneAnalysis()
         }
         return ToneAnalysis(
-            energy: ToneLevel(rawValue: (data["energy"]?.value as? String) ?? "medium") ?? .medium,
-            pace: TonePace(rawValue: (data["pace"]?.value as? String) ?? "moderate") ?? .moderate,
-            confidence: ToneConfidence(rawValue: (data["confidence"]?.value as? String) ?? "neutral") ?? .neutral,
-            emotionalIntensity: ToneIntensity(rawValue: (data["emotional_intensity"]?.value as? String) ?? "moderate") ?? .moderate
+            energy: ToneLevel(rawValue: (data["energy"] as? String) ?? "medium") ?? .medium,
+            pace: TonePace(rawValue: (data["pace"] as? String) ?? "moderate") ?? .moderate,
+            confidence: ToneConfidence(rawValue: (data["confidence"] as? String) ?? "neutral") ?? .neutral,
+            emotionalIntensity: ToneIntensity(rawValue: (data["emotional_intensity"] as? String) ?? "moderate") ?? .moderate
         )
     }
 }
@@ -1552,6 +1556,571 @@ struct DBCreativeQuotaUsage: Codable {
         case date
         case aiArtCount = "ai_art_count"
         case voiceMinutesUsed = "voice_minutes_used"
+    }
+}
+
+// MARK: - Circle Related DB Models
+
+/// Exercise session from database
+struct DBExerciseSession: Codable {
+    let id: UUID?
+    let userId: UUID
+    let exerciseId: UUID
+    let startedAt: Date?
+    let completedAt: Date?
+    let durationSeconds: Int?
+    let createdAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case exerciseId = "exercise_id"
+        case startedAt = "started_at"
+        case completedAt = "completed_at"
+        case durationSeconds = "duration_seconds"
+        case createdAt = "created_at"
+    }
+}
+
+/// Circle with member details
+struct DBCircleWithMembers: Codable {
+    let id: UUID
+    let name: String
+    let maxMembers: Int
+    let inviteCode: String
+    let createdAt: Date?
+    let circleMembers: [DBCircleMemberWithProfile]?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name
+        case maxMembers = "max_members"
+        case inviteCode = "invite_code"
+        case createdAt = "created_at"
+        case circleMembers = "circle_members"
+    }
+
+    func toCircle(currentUserId: UUID) -> FriendCircle {
+        // Determine role based on membership data
+        let role: CircleRole = .member // TODO: Implement proper role detection from membership
+        let joinedAt = circleMembers?.first(where: { $0.userId == currentUserId })?.joinedAt ?? createdAt ?? Date()
+
+        return FriendCircle(
+            id: id.uuidString,
+            name: name,
+            description: nil,
+            inviteCode: inviteCode,
+            maxMembers: maxMembers,
+            memberCount: circleMembers?.count ?? 0,
+            role: role,
+            joinedAt: joinedAt
+        )
+    }
+}
+
+/// Circle member with profile
+struct DBCircleMemberWithProfile: Codable {
+    let id: UUID?
+    let circleId: UUID
+    let userId: UUID
+    let joinedAt: Date?
+    let profiles: DBMemberProfile?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case circleId = "circle_id"
+        case userId = "user_id"
+        case joinedAt = "joined_at"
+        case profiles
+    }
+}
+
+/// Circle hug from database
+struct DBCircleHug: Codable {
+    let id: UUID?
+    let circleId: UUID
+    let fromUserId: UUID
+    let toUserId: UUID
+    let createdAt: Date?
+    let sender: DBMemberProfile?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case circleId = "circle_id"
+        case fromUserId = "from_user_id"
+        case toUserId = "to_user_id"
+        case createdAt = "created_at"
+        case sender = "sender_profile"
+    }
+
+    var senderId: UUID { fromUserId }
+    var recipientId: UUID { toUserId }
+}
+
+/// Circle challenge from database
+struct DBCircleChallenge: Codable {
+    let id: UUID?
+    let circleId: UUID
+    let creatorId: UUID
+    let title: String
+    let description: String?
+    let challengeType: String
+    let targetExerciseId: UUID?
+    let durationDays: Int
+    let startDate: String?
+    let endDate: String?
+    let startsAt: Date?
+    let endsAt: Date?
+    let createdAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case circleId = "circle_id"
+        case creatorId = "creator_id"
+        case title, description
+        case challengeType = "challenge_type"
+        case targetExerciseId = "target_exercise_id"
+        case durationDays = "duration_days"
+        case startDate = "start_date"
+        case endDate = "end_date"
+        case startsAt = "starts_at"
+        case endsAt = "ends_at"
+        case createdAt = "created_at"
+    }
+
+    var createdBy: UUID { creatorId }
+}
+
+/// Circle challenge with completion data
+struct DBCircleChallengeWithCompletions: Codable {
+    let id: UUID?
+    let circleId: UUID
+    let creatorId: UUID
+    let title: String
+    let description: String?
+    let challengeType: String
+    let targetExerciseId: UUID?
+    let durationDays: Int
+    let startDate: String?
+    let endDate: String?
+    let startsAt: Date?
+    let endsAt: Date?
+    let createdAt: Date?
+    let completions: [DBChallengeCompletion]?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case circleId = "circle_id"
+        case creatorId = "creator_id"
+        case title, description
+        case challengeType = "challenge_type"
+        case targetExerciseId = "target_exercise_id"
+        case durationDays = "duration_days"
+        case startDate = "start_date"
+        case endDate = "end_date"
+        case startsAt = "starts_at"
+        case endsAt = "ends_at"
+        case createdAt = "created_at"
+        case completions = "challenge_completions"
+    }
+
+    var createdBy: UUID { creatorId }
+}
+
+/// Challenge completion record
+struct DBChallengeCompletion: Codable {
+    let id: UUID?
+    let challengeId: UUID
+    let userId: UUID
+    let completedDate: String?
+    let createdAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case challengeId = "challenge_id"
+        case userId = "user_id"
+        case completedDate = "completed_date"
+        case createdAt = "created_at"
+    }
+}
+
+/// Circle reaction to a post
+struct DBCircleReaction: Codable {
+    let id: UUID?
+    let postId: UUID
+    let userId: UUID
+    let reactionType: String
+    let createdAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case postId = "post_id"
+        case userId = "user_id"
+        case reactionType = "reaction_type"
+        case createdAt = "created_at"
+    }
+
+    var emoji: String { reactionType }
+}
+
+/// Circle invite record
+struct DBCircleInvite: Codable {
+    let id: UUID?
+    let circleId: UUID
+    let inviterId: UUID
+    let inviteCode: String
+    let contactInfo: String?
+    let inviteeEmail: String?
+    let inviteePhone: String?
+    let sentAt: Date?
+    let acceptedAt: Date?
+    let reminderSentAt: Date?
+    let expiresAt: Date?
+    let createdAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case circleId = "circle_id"
+        case inviterId = "inviter_id"
+        case inviteCode = "invite_code"
+        case contactInfo = "contact_info"
+        case inviteeEmail = "invitee_email"
+        case inviteePhone = "invitee_phone"
+        case sentAt = "sent_at"
+        case acceptedAt = "accepted_at"
+        case reminderSentAt = "reminder_sent_at"
+        case expiresAt = "expires_at"
+        case createdAt = "created_at"
+    }
+}
+
+/// Buddy relationship from database
+struct DBBuddyRelationship: Codable {
+    let id: UUID?
+    let userId: UUID
+    let buddyId: UUID
+    let status: String
+    let createdAt: Date?
+    let acceptedAt: Date?
+    let expiresAt: Date?
+    let inviteCode: String?
+    let inviteMethod: String?
+    let inviteeContact: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case buddyId = "buddy_id"
+        case status
+        case createdAt = "created_at"
+        case acceptedAt = "accepted_at"
+        case expiresAt = "expires_at"
+        case inviteCode = "invite_code"
+        case inviteMethod = "invite_method"
+        case inviteeContact = "invitee_contact"
+    }
+
+    func toBuddyRelationship(currentUserId: UUID) -> BuddyRelationship {
+        // Determine who is the inviter and who is the invitee based on current user
+        let isCurrentUserInviter = userId == currentUserId
+
+        return BuddyRelationship(
+            id: id?.uuidString ?? UUID().uuidString,
+            inviterId: userId.uuidString,
+            inviteeId: buddyId.uuidString,
+            inviteCode: inviteCode ?? "",
+            inviteMethod: inviteMethod.flatMap { BuddyRelationship.InviteMethod(rawValue: $0) },
+            inviteeContact: inviteeContact,
+            status: BuddyRelationship.BuddyStatus(rawValue: status) ?? .pending,
+            invitedAt: createdAt ?? Date(),
+            acceptedAt: acceptedAt,
+            buddyCircleId: nil,
+            expiresAt: expiresAt ?? Date().addingTimeInterval(30 * 24 * 60 * 60),
+            inviter: nil,
+            invitee: nil
+        )
+    }
+}
+
+/// Buddy relationship with profile details
+struct DBBuddyRelationshipWithProfiles: Codable {
+    let id: UUID?
+    let userId: UUID
+    let buddyId: UUID
+    let status: String
+    let createdAt: Date?
+    let acceptedAt: Date?
+    let expiresAt: Date?
+    let inviteCode: String?
+    let inviteMethod: String?
+    let inviteeContact: String?
+    let buddyProfile: DBProfile?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case buddyId = "buddy_id"
+        case status
+        case createdAt = "created_at"
+        case acceptedAt = "accepted_at"
+        case expiresAt = "expires_at"
+        case inviteCode = "invite_code"
+        case inviteMethod = "invite_method"
+        case inviteeContact = "invitee_contact"
+        case buddyProfile = "buddy_profile"
+    }
+
+    func toBuddyRelationship(currentUserId: UUID) -> BuddyRelationship {
+        let buddyProfileData = buddyProfile.map { profile in
+            BuddyProfile(
+                id: profile.id.uuidString,
+                displayName: profile.displayName ?? "Buddy",
+                currentStreakDays: profile.currentStreakDays
+            )
+        }
+
+        return BuddyRelationship(
+            id: id?.uuidString ?? UUID().uuidString,
+            inviterId: userId.uuidString,
+            inviteeId: buddyId.uuidString,
+            inviteCode: inviteCode ?? "",
+            inviteMethod: inviteMethod.flatMap { BuddyRelationship.InviteMethod(rawValue: $0) },
+            inviteeContact: inviteeContact,
+            status: BuddyRelationship.BuddyStatus(rawValue: status) ?? .pending,
+            invitedAt: createdAt ?? Date(),
+            acceptedAt: acceptedAt,
+            buddyCircleId: nil,
+            expiresAt: expiresAt ?? Date().addingTimeInterval(30 * 24 * 60 * 60),
+            inviter: userId == currentUserId ? nil : buddyProfileData,
+            invitee: userId == currentUserId ? buddyProfileData : nil
+        )
+    }
+}
+
+/// Buddy widget data
+struct DBBuddyWidgetData: Codable {
+    let buddyId: UUID
+    let displayName: String?
+    let lastMood: String?
+    let lastActiveAt: Date?
+    let streakDays: Int?
+    let relationshipId: UUID?
+    let hasCompletedToday: Bool?
+    let needsCheckIn: Bool?
+    let lastEncouragementId: UUID?
+    let lastEncouragementType: String?
+    let lastEncouragementAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case buddyId = "buddy_id"
+        case displayName = "display_name"
+        case lastMood = "last_mood"
+        case lastActiveAt = "last_active_at"
+        case streakDays = "streak_days"
+        case relationshipId = "relationship_id"
+        case hasCompletedToday = "has_completed_today"
+        case needsCheckIn = "needs_check_in"
+        case lastEncouragementId = "last_encouragement_id"
+        case lastEncouragementType = "last_encouragement_type"
+        case lastEncouragementAt = "last_encouragement_at"
+    }
+
+    var buddyName: String { displayName ?? "Buddy" }
+    var buddyStreak: Int { streakDays ?? 0 }
+}
+
+/// Device registration from database
+struct DBDevice: Codable {
+    let id: UUID?
+    let userId: UUID
+    let deviceToken: String
+    let platform: String
+    let createdAt: Date?
+    let updatedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case deviceToken = "device_token"
+        case platform
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+}
+
+/// Weekly summary from database
+struct DBWeeklySummary: Codable {
+    let id: UUID?
+    let userId: UUID
+    let weekStart: String
+    let weekEnd: String
+    let questsCompleted: Int
+    let exercisesCompleted: Int
+    let moodAverage: Double?
+    let topEmotions: [String]?
+    let insights: String?
+    let createdAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case weekStart = "week_start"
+        case weekEnd = "week_end"
+        case questsCompleted = "quests_completed"
+        case exercisesCompleted = "exercises_completed"
+        case moodAverage = "mood_average"
+        case topEmotions = "top_emotions"
+        case insights
+        case createdAt = "created_at"
+    }
+
+    func toWeeklySummary() -> WeeklySummary {
+        // Determine mood trend based on average
+        var trend: MoodTrend = .insufficientData
+        if let avg = moodAverage {
+            if avg >= 7 {
+                trend = .improving
+            } else if avg >= 5 {
+                trend = .stable
+            } else {
+                trend = .declining
+            }
+        }
+
+        return WeeklySummary(
+            id: id?.uuidString ?? UUID().uuidString,
+            userId: userId.uuidString,
+            weekStart: weekStart,
+            checkinCount: 0, // Not tracked in DB model yet
+            questCount: questsCompleted,
+            exerciseCount: exercisesCompleted,
+            avgMood: moodAverage,
+            moodTrend: moodAverage != nil ? trend : nil,
+            generatedAt: createdAt ?? Date(),
+            moodMin: nil, // Not tracked in DB model yet
+            moodMax: nil, // Not tracked in DB model yet
+            moodByDay: nil, // Not tracked in DB model yet
+            circleCheckinCount: nil, // Not tracked in DB model yet
+            exerciseMinutes: nil, // Not tracked in DB model yet
+            patternsDetected: nil, // Not tracked in DB model yet
+            aiInsight: insights,
+            aiRecommendations: nil // Not tracked in DB model yet
+        )
+    }
+}
+
+/// Circle membership (simplified)
+struct DBCircleMembership: Codable {
+    let id: UUID?
+    let circleId: UUID
+    let userId: UUID
+    let joinedAt: Date?
+    let role: String?
+
+    // Relationship
+    let circles: DBCircleBasic?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case circleId = "circle_id"
+        case userId = "user_id"
+        case joinedAt = "joined_at"
+        case role
+        case circles
+    }
+}
+
+/// Basic circle data for relationships
+struct DBCircleBasic: Codable {
+    let id: UUID
+    let name: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+    }
+}
+
+/// Exercise session for export
+struct DBExerciseSessionForExport: Codable {
+    let id: UUID?
+    let userId: UUID
+    let exerciseId: UUID
+    let startedAt: Date?
+    let completedAt: Date?
+    let durationSeconds: Int?
+    let rating: Int?
+    let note: String?
+
+    // Relationship
+    let exercises: DBExerciseBasic?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case exerciseId = "exercise_id"
+        case startedAt = "started_at"
+        case completedAt = "completed_at"
+        case durationSeconds = "duration_seconds"
+        case rating
+        case note
+        case exercises
+    }
+}
+
+/// Basic exercise data for relationships
+struct DBExerciseBasic: Codable {
+    let id: UUID
+    let title: String
+    let type: String
+    let durationSeconds: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case type
+        case durationSeconds = "duration_seconds"
+    }
+}
+
+/// Subscription for export
+struct DBSubscriptionForExport: Codable {
+    let id: UUID?
+    let userId: UUID
+    let tier: String
+    let status: String
+    let startedAt: Date?
+    let expiresAt: Date?
+    let productId: String?
+    let planType: String?
+    let billingPeriod: String?
+    let createdAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case tier
+        case status
+        case startedAt = "started_at"
+        case expiresAt = "expires_at"
+        case productId = "product_id"
+        case planType = "plan_type"
+        case billingPeriod = "billing_period"
+        case createdAt = "created_at"
+    }
+}
+
+/// Crisis event for export
+struct DBCrisisEventForExport: Codable {
+    let id: UUID?
+    let userId: UUID
+    let triggerWords: [String]?
+    let createdAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case triggerWords = "trigger_words"
+        case createdAt = "created_at"
     }
 }
 

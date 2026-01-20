@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import OSLog
 
 /// Aggregates context from all providers with caching
@@ -20,15 +21,25 @@ final class ContextEngine: ObservableObject {
     @Published private(set) var shouldSuppressNotifications = false
 
     init(
-        calendarProvider: CalendarContextProviding = CalendarContextProvider(),
-        locationProvider: LocationContextProviding = LocationContextProvider(),
-        biometricProvider: BiometricContextProviding = BiometricContextProvider(),
-        focusModeProvider: FocusModeProviding = FocusModeProvider()
+        calendarProvider: CalendarContextProviding,
+        locationProvider: LocationContextProviding,
+        biometricProvider: BiometricContextProviding,
+        focusModeProvider: FocusModeProviding
     ) {
         self.calendarProvider = calendarProvider
         self.locationProvider = locationProvider
         self.biometricProvider = biometricProvider
         self.focusModeProvider = focusModeProvider
+    }
+
+    /// Convenience initializer with default providers
+    convenience init() {
+        self.init(
+            calendarProvider: CalendarContextProvider(),
+            locationProvider: LocationContextProvider(),
+            biometricProvider: BiometricContextProvidingMock(),
+            focusModeProvider: FocusModeProvider()
+        )
     }
 
     // MARK: - Public Interface

@@ -319,7 +319,7 @@ struct ExperimentReportView: View {
                     ForEach(report.recommendation.nextSteps, id: \.self) { step in
                         HStack(alignment: .top, spacing: 8) {
                             Image(systemName: "arrow.right.circle.fill")
-                                .foregroundStyle(.accentColor)
+                                .foregroundStyle(Color.accentColor)
                                 .font(.caption)
                             Text(step)
                                 .font(.subheadline)

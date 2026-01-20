@@ -4,6 +4,77 @@
 
 ---
 
+## [2026-01-20] Safety Plan MVP
+
+**Type:** Feature
+**Status:** Complete
+
+### Summary
+
+Implemented Safety Plan flows with offline cache, Edge Function CRUD, and crisis/home entry points.
+
+### Changes
+
+- **File:** `apps/ios/MindFriendApp/Features/SafetyPlan/SafetyPlanView.swift` — async wizard save, copy updates, condensed view wiring.
+- **File:** `apps/ios/MindFriendApp/Features/SafetyPlan/SafetyPlanCondensedView.swift` — stale cache banner.
+- **File:** `apps/ios/MindFriendApp/Features/SafetyPlan/SafetyPlanViewModel.swift` — offline caching, pinned quick action storage, version tracking.
+- **File:** `apps/ios/MindFriendApp/Core/Offline/OfflineModels.swift` — add safety plan cache key.
+- **File:** `apps/ios/MindFriendApp/Core/Models.swift` — add SafetyPlanCachePayload model.
+- **File:** `apps/ios/MindFriendApp/Networking/Services/SupabaseDataService.swift` — use SafetyPlanRequest/Response for Edge Function calls.
+- **File:** `apps/ios/MindFriendApp/Features/Home/HomeView.swift` — pinned Safety Plan quick action.
+- **File:** `apps/ios/MindFriendApp/Features/Crisis/CrisisResourcesView.swift` — safety plan CTA.
+- **File:** `supabase/functions/manage-safety-plan/index.ts` — CORS, validation, cache updates.
+- **File:** `supabase/functions/manage-safety-plan/test.ts` — CRUD and validation tests.
+- **File:** `supabase/migrations/20260701000000_safety_plan.sql` — conditional RLS policies and index guardrails.
+- **File:** `supabase/functions/_shared/crisis.ts` — safety plan note in crisis response.
+
+### Testing
+
+- [x] Unit tests added/updated
+- [ ] Integration tests pass
+- [ ] Manual verification done
+
+### Notes
+
+- Supabase migration updated and pushed with `supabase db push`.
+
+---
+
+## [2026-01-20] iOS Build Fixes - Creator and ContextEngine Features
+
+**Type:** Bugfix
+**Status:** Complete
+
+### Summary
+
+Fixed all remaining iOS build errors in Creator marketplace features and ContextEngine smart notifications system after adding new files to project.
+
+### Changes
+
+| File                                                                                           | Change                                                                                                                              |
+| ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/ios/MindFriendApp/Core/Models/CreatorModels.swift`                                       | Added missing `transcript: String?` property to `CreatorContent` struct and updated both initializers to map it from database model |
+| `apps/ios/MindFriendApp/Core/Models/CreatorModels.swift:763-766`                               | Added `displayPrice` computed property to `SubscriptionTier` enum to format cents as dollar string                                  |
+| `apps/ios/MindFriendApp/Features/Creator/PublicCreatorProfileView.swift:404,432`               | Changed `option.price` to `option.displayPrice` to use formatted string instead of raw Int                                          |
+| `apps/ios/MindFriendApp/Features/Creator/PublicCreatorProfileView.swift:395`                   | Fixed enum case name from `.yearly` to `.annual`                                                                                    |
+| `apps/ios/MindFriendApp/Core/Services/ContextEngine.swift:2`                                   | Added `import UIKit` for UIApplication notifications                                                                                |
+| `apps/ios/MindFriendApp/Core/Services/ContextEngine.swift:36`                                  | Removed `nonisolated` keyword from convenience initializer to fix main actor isolation                                              |
+| `apps/ios/MindFriendApp/Features/Notifications/Context/BiometricContextProvider.swift:256-264` | Created `BiometricContextProvidingMock` class for testing without HealthKit permissions                                             |
+
+### Testing
+
+- [x] Full build verification completed successfully
+- [x] No errors remaining
+- [ ] Manual verification done
+
+### Notes
+
+- Build command: `xcodebuild -project MindFriendApp.xcodeproj -scheme MindFriendApp -destination 'generic/platform=iOS Simulator' build`
+- Result: **BUILD SUCCEEDED**
+- Warnings remain (mainly Swift 6 concurrency warnings and deprecated API usage) but no blocking errors
+
+---
+
 ## [2026-01-20] B2B Join Flows - Remote Test Fixes
 
 **Type:** Bugfix

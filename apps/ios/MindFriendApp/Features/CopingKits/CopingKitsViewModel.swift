@@ -221,7 +221,7 @@ final class CopingKitsViewModel: ObservableObject {
                 )
             }
         } catch {
-            error = .serverError(statusCode: 0)
+            self.error = .serverError(statusCode: 0)
             showError = true
         }
     }
@@ -240,6 +240,10 @@ final class CopingKitsViewModel: ObservableObject {
 
     func dismissPremiumUpgrade() {
         showPremiumUpgrade = false
+    }
+
+    func submitFeedback(kitId: String, helpful: Bool, comment: String?) async throws {
+        try await service.submitFeedback(kitId: kitId, helpful: helpful, comment: comment)
     }
 
     // MARK: - Navigation

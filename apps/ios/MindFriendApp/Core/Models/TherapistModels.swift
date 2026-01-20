@@ -184,7 +184,7 @@ enum TherapistCredential: String, Codable, CaseIterable, Sendable {
 // MARK: - Therapeutic Approaches
 
 /// Therapeutic modalities and approaches
-enum TherapeuticApproach: String, Codable, CaseIterable, Sendable {
+enum TherapeuticApproach: String, Codable, CaseIterable, Sendable, Identifiable {
     case cbt = "CBT"
     case dbt = "DBT"
     case act = "ACT"
@@ -199,6 +199,8 @@ enum TherapeuticApproach: String, Codable, CaseIterable, Sendable {
     case artTherapy = "Art Therapy"
     case playTherapy = "Play Therapy"
     case coachingApproach = "Coaching"
+
+    var id: String { rawValue }
 
     var displayName: String {
         switch self {

@@ -45,6 +45,17 @@ enum AssessmentType: String, Codable, CaseIterable, Identifiable {
         }
     }
 
+    /// Maximum possible score for this assessment
+    var maxScore: Int {
+        switch self {
+        case .phq9: return 27  // 9 questions × 3 points max
+        case .gad7: return 21  // 7 questions × 3 points max
+        case .who5: return 25  // 5 questions × 5 points max
+        case .pss10: return 40 // 10 questions × 4 points max
+        case .wemwbs: return 70 // 14 questions × 5 points max
+        }
+    }
+
     /// Recommended frequency in days
     var recommendedFrequencyDays: Int {
         switch self {

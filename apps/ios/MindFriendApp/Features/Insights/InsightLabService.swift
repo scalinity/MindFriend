@@ -132,12 +132,10 @@ final class InsightLabService: ObservableObject {
             description: actionType.description
         )
 
-        let response = try await supabase.functions.invoke(
+        let startResponse: StartExperimentResponse = try await supabase.functions.invoke(
             "start-insight-experiment",
             options: FunctionInvokeOptions(body: request)
         )
-
-        let startResponse = try decoder.decode(StartExperimentResponse.self, from: response.data)
 
         let experiment = InsightExperiment(
             id: startResponse.experimentId,
@@ -171,12 +169,10 @@ final class InsightLabService: ObservableObject {
             energyScore: energyScore
         )
 
-        let response = try await supabase.functions.invoke(
+        let recordResponse: RecordDayResponse = try await supabase.functions.invoke(
             "record-experiment-day",
             options: FunctionInvokeOptions(body: request)
         )
-
-        let recordResponse = try decoder.decode(RecordDayResponse.self, from: response.data)
 
         // Update local state
         if var experiment = activeExperiment, experiment.id == experimentId {
@@ -208,12 +204,10 @@ final class InsightLabService: ObservableObject {
 
         let request = GenerateReportRequest(experimentId: experimentId)
 
-        let response = try await supabase.functions.invoke(
+        return try await supabase.functions.invoke(
             "generate-experiment-report",
             options: FunctionInvokeOptions(body: request)
         )
-
-        return try decoder.decode(ExperimentReport.self, from: response.data)
     }
 
     // MARK: - Cancel Experiment
