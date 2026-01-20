@@ -73,7 +73,7 @@ export function isFamilyPlan(planType: PlanType): boolean {
 
 // Generate an 8-character invite code using cryptographically secure random
 export function generateInviteCode(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
   const randomBytes = new Uint8Array(8);
   crypto.getRandomValues(randomBytes);
   let result = "";

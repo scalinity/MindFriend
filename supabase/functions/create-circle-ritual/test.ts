@@ -16,26 +16,11 @@ interface MockSupabaseClient {
   auth: {
     getUser: (token: string) => Promise<{ data: { user: { id: string } | null }; error: Error | null }>;
   };
-  from: (table: string) => MockQueryBuilder;
+  from: (table: string) => Record<string, unknown>;
   functions: {
     invoke: (name: string, options?: { body?: Record<string, unknown> }) => Promise<{ data?: unknown; error?: Error }>;
   };
-  channel: (name: string) => MockChannel;
-}
-
-interface MockQueryBuilder {
-  select: (columns?: string) => MockQueryBuilder;
-  insert: (data: Record<string, unknown>) => MockQueryBuilder;
-  update: (data: Record<string, unknown>) => MockQueryBuilder;
-  eq: (column: string, value: unknown) => MockQueryBuilder;
-  single: () => Promise<{ data: Record<string, unknown> | null; error: Error | null }>;
-  then: (resolve: (result: { data: unknown[]; error: Error | null }) => void, reject: (e: Error) => void): void;
-}
-
-interface MockChannel {
-  subscribe: () => Promise<void>;
-  broadcast: (event: string) => MockChannel;
-  broadcastStream: (event: string) => AsyncIterable<unknown>;
+  channel: (name: string) => Record<string, unknown>;
 }
 
 function createMockSupabase(
@@ -165,14 +150,16 @@ Deno.test("create-circle-ritual - validates ritualType", async () => {
 
 Deno.test("create-circle-ritual - start now sets status to active", async () => {
   // When startOption is "now", status should be "active"
-  const startOption = "now";
+  const getStartOption = (): "now" | "scheduled" => "now";
+  const startOption = getStartOption();
   const expectedStatus = startOption === "now" ? "active" : "scheduled";
   assertEquals(expectedStatus, "active");
 });
 
 Deno.test("create-circle-ritual - scheduled sets status to scheduled", async () => {
   // When startOption is "scheduled", status should be "scheduled"
-  const startOption = "scheduled";
+  const getStartOption = (): "now" | "scheduled" => "scheduled";
+  const startOption = getStartOption();
   const expectedStatus = startOption === "now" ? "active" : "scheduled";
   assertEquals(expectedStatus, "scheduled");
 });

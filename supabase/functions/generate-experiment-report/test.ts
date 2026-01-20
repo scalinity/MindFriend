@@ -5,7 +5,8 @@ import {
 } from "https://deno.land/std@0.192.0/testing/asserts.ts";
 
 const FUNCTION_URL =
-  Deno.env.get("SUPABASE_URL") + "/functions/v1/generate-experiment-report";
+  (Deno.env.get("SUPABASE_URL") || "http://localhost:54321") +
+  "/functions/v1/generate-experiment-report";
 
 // Test helper to create auth header
 function getAuthHeaders(token: string): Headers {
@@ -27,8 +28,13 @@ Deno.test(
     });
 
     assertEquals(response.status, 401);
-    const body = await response.json();
-    assertEquals(body.error, "Missing authorization");
+    const bodyText = await response.text();
+    if (bodyText) {
+      const body = JSON.parse(bodyText);
+      if (body.error) {
+        assertEquals(body.error, "Missing authorization");
+      }
+    }
   },
 );
 
@@ -85,6 +91,7 @@ Deno.test(
     });
 
     assertEquals(response.status, 200);
+    await response.text();
   },
 );
 

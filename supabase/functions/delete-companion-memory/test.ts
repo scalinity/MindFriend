@@ -23,6 +23,7 @@ Deno.test("delete-companion-memory - returns 401 without auth", async () => {
   );
 
   assertEquals(response.status, 401);
+  await response.text();
 });
 
 Deno.test("delete-companion-memory - returns 400 for missing id", async () => {

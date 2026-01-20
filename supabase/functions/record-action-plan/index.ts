@@ -28,18 +28,18 @@ interface RecordActionPlanRequest {
   feedback?: ActionPlanFeedbackInput;
 }
 
-const UUID_REGEX =
+export const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const RATE_LIMIT_ENDPOINT = "record-action-plan";
 const RATE_LIMIT_CONFIG = { windowMs: 60 * 1000, maxRequests: 30 };
-const VALID_STATUSES = [
+export const VALID_STATUSES = [
   "draft",
   "scheduled",
   "in_progress",
   "completed",
   "cancelled",
 ];
-const VALID_ITEM_TYPES = ["quest", "exercise", "chat"];
+export const VALID_ITEM_TYPES = ["quest", "exercise", "chat"];
 
 serve(async (req) => {
   const origin = req.headers.get("Origin");

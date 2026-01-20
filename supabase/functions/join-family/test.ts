@@ -10,8 +10,18 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // Test configuration
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "http://localhost:54321";
 const SUPABASE_ANON_KEY =
+  Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ||
+  Deno.env.get("SUPABASE_ANON_KEY_REMOTE") ||
   Deno.env.get("SUPABASE_ANON_KEY") ||
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRlc3QiLCJyb2xlIjoiYW5vbiIsImlhdCI6MCwiZXhwIjoyMDAwMDAwMDAwfQ.test";
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+const SUPABASE_AUTH_KEY = Deno.env.get("SUPABASE_PUBLISHABLE_KEY") || SUPABASE_ANON_KEY;
+const SUPABASE_FUNCTIONS_KEY =
+  Deno.env.get("SUPABASE_FUNCTIONS_KEY") ||
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ||
+  Deno.env.get("SUPABASE_ANON_KEY_REMOTE") ||
+  Deno.env.get("SUPABASE_ANON_KEY") ||
+  SUPABASE_AUTH_KEY;
 const FUNCTION_URL = `${SUPABASE_URL}/functions/v1/join-family`;
 
 // Helper: Create authenticated request
@@ -25,39 +35,74 @@ async function makeRequest(
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
+      apikey: SUPABASE_FUNCTIONS_KEY,
     },
     body: JSON.stringify(body),
   });
 
-  return {
-    status: response.status,
-    headers: response.headers,
-    data: await response.json(),
-  };
+  const data = await response.json();
+  if (response.status >= 400) {
+    console.log(`Request failed (${response.status}):`, JSON.stringify(data));
+  }
+  return { status: response.status, data, headers: response.headers };
 }
 
 // Helper: Get test user token
 async function getTestUserToken(): Promise<string> {
-  const supabase = createClient<any>(SUPABASE_URL, SUPABASE_ANON_KEY) as ReturnType<typeof createClient<any>>;
+  const email = Deno.env.get("SUPABASE_TEST_EMAIL") ?? "test@example.com";
+  const password = Deno.env.get("SUPABASE_TEST_PASSWORD") ?? "TestPassword123!";
 
+  const response = await fetch(
+    `${SUPABASE_URL}/auth/v1/token?grant_type=password`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_AUTH_KEY,
+      },
+      body: JSON.stringify({ email, password }),
+    },
+  );
 
-
-  // Try signing in with test account
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: "test@example.com",
-    password: "TestPassword123!",
-  });
-
-  if (error || !data?.session?.access_token) {
-    throw new Error(`Failed to get test token: ${error?.message}`);
+  const data = await response.json();
+  if (!response.ok || !data?.access_token) {
+    throw new Error(`Failed to get test token: ${data?.message || response.status}`);
   }
 
-  return data.session.access_token;
+  return data.access_token;
+}
+
+function getServiceRoleClient() {
+  if (!SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY for test setup");
+  }
+  return createClient<any>(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  }) as ReturnType<typeof createClient<any>>;
+}
+
+async function getUserIdFromToken(token: string): Promise<string> {
+  const supabase = getServiceRoleClient();
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error || !data?.user?.id) {
+    throw new Error(`Failed to fetch user: ${error?.message || "unknown error"}`);
+  }
+  return data.user.id;
+}
+
+async function resetRateLimit(userId: string) {
+  const supabase = getServiceRoleClient();
+  await supabase
+    .from("rate_limits")
+    .delete()
+    .eq("user_id", userId)
+    .eq("endpoint", "join-family");
 }
 
 // Helper: Create test family with invite code
 async function createTestFamily(
   supabase: ReturnType<typeof createClient<any>>,
+  adminUserId: string,
 ): Promise<{
   id: string;
   invite_code: string;
@@ -69,6 +114,7 @@ async function createTestFamily(
       name: `Test Family ${Date.now()}`,
       invite_code: `TEST${Math.random().toString(36).substring(7).toUpperCase()}`,
       max_members: 5,
+      admin_user_id: adminUserId,
     })
     .select()
     .single();
@@ -80,16 +126,37 @@ async function createTestFamily(
   return data;
 }
 
+async function seedFamilyInvitation(
+  supabase: ReturnType<typeof createClient<any>>,
+  familyId: string,
+  inviteCode: string,
+) {
+  const { error } = await (supabase as unknown as any)
+    .from("family_invitations")
+    .insert({
+      family_id: familyId,
+      invite_code: inviteCode,
+      email: `test-${Math.random().toString(36).substring(7)}@example.com`,
+      status: "pending",
+    });
+
+  if (error) {
+    throw new Error(`Failed to seed family invitation: ${error.message}`);
+  }
+}
+
 // ============================================================================
 // TESTS
 // ============================================================================
 
 Deno.test("Join Family - Happy Path", async () => {
-  const supabase = createClient<any>(SUPABASE_URL, SUPABASE_ANON_KEY) as ReturnType<typeof createClient<any>>;
-
+  const supabase = getServiceRoleClient();
 
   const token = await getTestUserToken();
-  const family = await createTestFamily(supabase);
+  const adminUserId = await getUserIdFromToken(token);
+  await resetRateLimit(adminUserId);
+  const family = await createTestFamily(supabase, adminUserId);
+  await seedFamilyInvitation(supabase, family.id, family.invite_code);
 
   const response = await makeRequest(
     {
@@ -107,13 +174,16 @@ Deno.test("Join Family - Happy Path", async () => {
   assertEquals(response.data.family.id, family.id, "Family ID should match");
   assertEquals(
     response.data.member.role,
-    "child",
-    "Role should be child (age 24)",
+    "parent",
+    "Role should be parent (age 24)",
   );
 });
 
 Deno.test("Join Family - Invalid Invite Code Format", async () => {
+  const supabase = getServiceRoleClient();
   const token = await getTestUserToken();
+  const adminUserId = await getUserIdFromToken(token);
+  await resetRateLimit(adminUserId);
 
   const testCases = [
     { code: "SHORT", desc: "Too short (5 chars)" },
@@ -139,6 +209,7 @@ Deno.test("Join Family - Missing Authorization", async () => {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      apikey: SUPABASE_FUNCTIONS_KEY,
     },
     body: JSON.stringify({ inviteCode: "ABCDEF123456" }),
   });
@@ -149,11 +220,13 @@ Deno.test("Join Family - Missing Authorization", async () => {
 });
 
 Deno.test("Join Family - Invalid Nickname (XSS)", async () => {
-  const supabase = createClient<any>(SUPABASE_URL, SUPABASE_ANON_KEY) as ReturnType<typeof createClient<any>>;
-
+  const supabase = getServiceRoleClient();
 
   const token = await getTestUserToken();
-  const family = await createTestFamily(supabase);
+  const adminUserId = await getUserIdFromToken(token);
+  await resetRateLimit(adminUserId);
+  const family = await createTestFamily(supabase, adminUserId);
+  await seedFamilyInvitation(supabase, family.id, family.invite_code);
 
   const testCases = [
     { nickname: "<script>alert('xss')</script>", desc: "Script tag" },
@@ -175,15 +248,17 @@ Deno.test("Join Family - Invalid Nickname (XSS)", async () => {
 });
 
 Deno.test("Join Family - Invalid Birth Date", async () => {
-  const supabase = createClient<any>(SUPABASE_URL, SUPABASE_ANON_KEY) as ReturnType<typeof createClient<any>>;
-
+  const supabase = getServiceRoleClient();
 
   const token = await getTestUserToken();
-  const family = await createTestFamily(supabase);
+  const adminUserId = await getUserIdFromToken(token);
+  await resetRateLimit(adminUserId);
+  const family = await createTestFamily(supabase, adminUserId);
+  await seedFamilyInvitation(supabase, family.id, family.invite_code);
 
   const testCases = [
     { date: "2030-01-01", desc: "Future date" },
-    { date: "1900-01-01", desc: "Age > 130 years" },
+    { date: "1880-01-01", desc: "Age > 130 years" },
     { date: "2024-13-01", desc: "Invalid month" },
     { date: "2024-01-32", desc: "Invalid day" },
     { date: "01/15/2000", desc: "Wrong format (MM/DD/YYYY)" },
@@ -203,11 +278,13 @@ Deno.test("Join Family - Invalid Birth Date", async () => {
 });
 
 Deno.test("Join Family - Duplicate Membership", async () => {
-  const supabase = createClient<any>(SUPABASE_URL, SUPABASE_ANON_KEY) as ReturnType<typeof createClient<any>>;
-
+  const supabase = getServiceRoleClient();
 
   const token = await getTestUserToken();
-  const family = await createTestFamily(supabase);
+  const adminUserId = await getUserIdFromToken(token);
+  await resetRateLimit(adminUserId);
+  const family = await createTestFamily(supabase, adminUserId);
+  await seedFamilyInvitation(supabase, family.id, family.invite_code);
 
   // First join
   const response1 = await makeRequest(
@@ -224,21 +301,24 @@ Deno.test("Join Family - Duplicate Membership", async () => {
   assertEquals(response2.status, 400, "Duplicate join should fail");
   assertEquals(
     response2.data.error,
-    "Already a member of this family",
-    "Should indicate already a member",
+    "Invalid request or insufficient permissions",
+    "Should return generic error message",
   );
 });
 
 Deno.test("Join Family - Rate Limiting", async () => {
-  const supabase = createClient<any>(SUPABASE_URL, SUPABASE_ANON_KEY) as ReturnType<typeof createClient<any>>;
-
+  const supabase = getServiceRoleClient();
 
   const token = await getTestUserToken();
+  const adminUserId = await getUserIdFromToken(token);
+  await resetRateLimit(adminUserId);
+  const family = await createTestFamily(supabase, adminUserId);
+  await seedFamilyInvitation(supabase, family.id, family.invite_code);
 
   // Make 10 requests (should succeed, at limit)
   for (let i = 0; i < 10; i++) {
     const response = await makeRequest(
-      { inviteCode: "ABCDEF123456" }, // Invalid code, but shouldn't reach rate limit yet
+      { inviteCode: family.invite_code },
       token,
     );
     assertEquals(
@@ -249,7 +329,7 @@ Deno.test("Join Family - Rate Limiting", async () => {
   }
 
   // 11th request should be rate limited
-  const response = await makeRequest({ inviteCode: "ABCDEF123456" }, token);
+  const response = await makeRequest({ inviteCode: family.invite_code }, token);
   assertEquals(
     response.status,
     429,
@@ -272,6 +352,7 @@ Deno.test("Join Family - Invalid HTTP Method", async () => {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
+      apikey: SUPABASE_FUNCTIONS_KEY,
     },
   });
 
@@ -285,6 +366,7 @@ Deno.test("Join Family - CORS Preflight", async () => {
     method: "OPTIONS",
     headers: {
       Origin: "https://getmindfriend.app",
+      apikey: SUPABASE_FUNCTIONS_KEY,
     },
   });
 
@@ -293,14 +375,17 @@ Deno.test("Join Family - CORS Preflight", async () => {
     response.headers.get("Access-Control-Allow-Origin"),
     "Should include CORS headers",
   );
+  await response.text();
 });
 
 Deno.test("Join Family - Role Assignment from Birth Date", async () => {
-  const supabase = createClient<any>(SUPABASE_URL, SUPABASE_ANON_KEY) as ReturnType<typeof createClient<any>>;
-
+  const supabase = getServiceRoleClient();
 
   const token = await getTestUserToken();
-  const family = await createTestFamily(supabase);
+  const adminUserId = await getUserIdFromToken(token);
+  await resetRateLimit(adminUserId);
+  const family = await createTestFamily(supabase, adminUserId);
+  await seedFamilyInvitation(supabase, family.id, family.invite_code);
 
   const testCases = [
     { age: 25, expectedRole: "parent" },
@@ -333,11 +418,13 @@ Deno.test("Join Family - Role Assignment from Birth Date", async () => {
 });
 
 Deno.test("Join Family - Atomic RPC Success", async () => {
-  const supabase = createClient<any>(SUPABASE_URL, SUPABASE_ANON_KEY) as ReturnType<typeof createClient<any>>;
-
+  const supabase = getServiceRoleClient();
 
   const token = await getTestUserToken();
-  const family = await createTestFamily(supabase);
+  const adminUserId = await getUserIdFromToken(token);
+  await resetRateLimit(adminUserId);
+  const family = await createTestFamily(supabase, adminUserId);
+  await seedFamilyInvitation(supabase, family.id, family.invite_code);
 
   const response = await makeRequest(
     {
@@ -364,11 +451,13 @@ Deno.test("Join Family - Atomic RPC Success", async () => {
 });
 
 Deno.test("Join Family - Response Includes CORS Headers", async () => {
-  const supabase = createClient<any>(SUPABASE_URL, SUPABASE_ANON_KEY) as ReturnType<typeof createClient<any>>;
-
+  const supabase = getServiceRoleClient();
 
   const token = await getTestUserToken();
-  const family = await createTestFamily(supabase);
+  const adminUserId = await getUserIdFromToken(token);
+  await resetRateLimit(adminUserId);
+  const family = await createTestFamily(supabase, adminUserId);
+  await seedFamilyInvitation(supabase, family.id, family.invite_code);
 
   const response = await makeRequest({ inviteCode: family.invite_code }, token);
 

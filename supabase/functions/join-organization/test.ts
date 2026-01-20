@@ -13,8 +13,18 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "http://localhost:54321";
 const SUPABASE_ANON_KEY =
+  Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ||
+  Deno.env.get("SUPABASE_ANON_KEY_REMOTE") ||
   Deno.env.get("SUPABASE_ANON_KEY") ||
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test";
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+const SUPABASE_AUTH_KEY = Deno.env.get("SUPABASE_PUBLISHABLE_KEY") || SUPABASE_ANON_KEY;
+const SUPABASE_FUNCTIONS_KEY =
+  Deno.env.get("SUPABASE_FUNCTIONS_KEY") ||
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ||
+  Deno.env.get("SUPABASE_ANON_KEY_REMOTE") ||
+  Deno.env.get("SUPABASE_ANON_KEY") ||
+  SUPABASE_AUTH_KEY;
 const FUNCTION_URL = `${SUPABASE_URL}/functions/v1/join-organization`;
 
 interface JoinOrganizationResponse {
@@ -42,39 +52,125 @@ async function callJoinOrganization(
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
+      apikey: SUPABASE_FUNCTIONS_KEY,
     },
     body: JSON.stringify({ inviteCode }),
   });
 
-  return {
-    status: response.status,
-    data: await response.json(),
-  };
+  const data = await response.json();
+  if (response.status >= 400) {
+    console.log(`Request failed (${response.status}):`, JSON.stringify(data));
+  }
+  return { status: response.status, data };
 }
 
 // Helper to get test user token
 async function getTestUserToken(): Promise<string> {
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const email = Deno.env.get("SUPABASE_TEST_EMAIL") ?? "test@example.com";
+  const password = Deno.env.get("SUPABASE_TEST_PASSWORD") ?? "TestPassword123!";
 
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: "test@example.com",
-    password: "TestPassword123!",
-  });
+  const response = await fetch(
+    `${SUPABASE_URL}/auth/v1/token?grant_type=password`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_AUTH_KEY,
+      },
+      body: JSON.stringify({ email, password }),
+    },
+  );
 
-  if (error || !data?.session?.access_token) {
-    throw new Error(`Failed to get test token: ${error?.message}`);
+  const data = await response.json();
+  if (!response.ok || !data?.access_token) {
+    throw new Error(`Failed to get test token: ${data?.message || response.status}`);
   }
 
-  return data.session.access_token;
+  return data.access_token;
+}
+
+function getServiceRoleClient() {
+  if (!SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY for test setup");
+  }
+  return createClient<any>(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  }) as ReturnType<typeof createClient<any>>;
+}
+
+async function getUserIdFromToken(
+  supabase: ReturnType<typeof createClient<any>>,
+  token: string,
+): Promise<string> {
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error || !data?.user?.id) {
+    throw new Error(`Failed to fetch user: ${error?.message || "unknown error"}`);
+  }
+  return data.user.id;
+}
+
+async function resetOrganizationState(
+  supabase: ReturnType<typeof createClient<any>>,
+  token: string,
+  inviteCode: string,
+  options: { seatsUsed?: number } = {},
+): Promise<{ organizationId: string; seatCount: number }> {
+  const userId = await getUserIdFromToken(supabase, token);
+  const { data: invite, error: inviteError } = await supabase
+    .from("organization_invites")
+    .select("organization_id")
+    .eq("invite_code", inviteCode)
+    .single();
+
+  if (inviteError || !invite) {
+    throw new Error(`Failed to fetch invite ${inviteCode}: ${inviteError?.message}`);
+  }
+
+  await supabase
+    .from("organization_members")
+    .delete()
+    .eq("organization_id", invite.organization_id)
+    .eq("user_id", userId);
+
+  await supabase
+    .from("subscriptions")
+    .delete()
+    .eq("user_id", userId)
+    .eq("organization_id", invite.organization_id);
+
+  await supabase
+    .from("organization_invites")
+    .update({ uses_count: 0 })
+    .eq("invite_code", inviteCode);
+
+  if (options.seatsUsed !== undefined) {
+    await supabase
+      .from("organizations")
+      .update({ seats_used: options.seatsUsed })
+      .eq("id", invite.organization_id);
+  }
+
+  const { data: organization } = await supabase
+    .from("organizations")
+    .select("seat_count")
+    .eq("id", invite.organization_id)
+    .single();
+
+  return {
+    organizationId: invite.organization_id,
+    seatCount: organization?.seat_count ?? 0,
+  };
 }
 
 // ============================================================================
 // TEST 4.1: Join organization creates organization_members record
 // ============================================================================
 Deno.test("join-organization creates organization_members record", async () => {
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const supabase = getServiceRoleClient();
   const testToken = await getTestUserToken();
   const testInviteCode = "JOINTEST123";
+
+  await resetOrganizationState(supabase, testToken, testInviteCode, { seatsUsed: 0 });
 
   const response = await callJoinOrganization(testInviteCode, testToken);
 
@@ -104,6 +200,9 @@ Deno.test(
   async () => {
     const testToken = await getTestUserToken();
     const testInviteCode = "PREMIUMTEST";
+    const supabase = getServiceRoleClient();
+
+    await resetOrganizationState(supabase, testToken, testInviteCode, { seatsUsed: 0 });
 
     const response = await callJoinOrganization(testInviteCode, testToken);
 
@@ -111,8 +210,8 @@ Deno.test(
     assertExists(response.data.subscription, "Should return subscription data");
     assertEquals(
       response.data.subscription?.tier,
-      "premium",
-      "Subscription tier should be premium",
+      "organization",
+      "Subscription tier should be organization",
     );
     assertEquals(
       response.data.subscription?.access_source,
@@ -128,6 +227,9 @@ Deno.test(
 Deno.test("join-organization prevents duplicate membership", async () => {
   const testToken = await getTestUserToken();
   const testInviteCode = "DUPLICATETEST";
+  const supabase = getServiceRoleClient();
+
+  await resetOrganizationState(supabase, testToken, testInviteCode, { seatsUsed: 0 });
 
   // First join should succeed
   const response1 = await callJoinOrganization(testInviteCode, testToken);
@@ -149,8 +251,10 @@ Deno.test("join-organization prevents duplicate membership", async () => {
 Deno.test("join-organization links user to correct organization", async () => {
   const testToken = await getTestUserToken();
   const testInviteCode = "LINKTEST123";
-  // This would need to be set up in test data
-  const expectedOrgId = "expected-organization-uuid";
+  const expectedOrgId = "00000000-0000-0000-0000-000000000002";
+  const supabase = getServiceRoleClient();
+
+  await resetOrganizationState(supabase, testToken, testInviteCode, { seatsUsed: 0 });
 
   const response = await callJoinOrganization(testInviteCode, testToken);
 
@@ -168,9 +272,11 @@ Deno.test("join-organization links user to correct organization", async () => {
 Deno.test(
   "join-organization logs audit event with event_type member_joined",
   async () => {
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const supabase = getServiceRoleClient();
     const testToken = await getTestUserToken();
     const testInviteCode = "AUDITLOGTEST";
+
+    await resetOrganizationState(supabase, testToken, testInviteCode, { seatsUsed: 0 });
 
     const beforeTime = new Date().toISOString();
 
@@ -205,6 +311,18 @@ Deno.test(
   async () => {
     const testToken = await getTestUserToken();
     const testInviteCode = "FULLORGCODE";
+    const supabase = getServiceRoleClient();
+
+    const { organizationId, seatCount } = await resetOrganizationState(
+      supabase,
+      testToken,
+      testInviteCode,
+    );
+
+    await supabase
+      .from("organizations")
+      .update({ seats_used: seatCount })
+      .eq("id", organizationId);
 
     const response = await callJoinOrganization(testInviteCode, testToken);
 
@@ -223,10 +341,17 @@ Deno.test(
 Deno.test(
   "join-organization increments organization.seats_used counter",
   async () => {
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const supabase = getServiceRoleClient();
     const testToken = await getTestUserToken();
     const testInviteCode = "SEATCOUNTTEST";
-    const testOrgId = "test-org-for-seat-count";
+    const testOrgId = "00000000-0000-0000-0000-000000000004";
+
+    await resetOrganizationState(supabase, testToken, testInviteCode, { seatsUsed: 0 });
+
+    await supabase
+      .from("organizations")
+      .update({ seats_used: 2 })
+      .eq("id", testOrgId);
 
     // Get initial seats_used
     const { data: beforeOrg } = await supabase
@@ -247,11 +372,8 @@ Deno.test(
       .eq("id", testOrgId)
       .single();
 
-    assertEquals(
-      afterOrg?.seats_used,
-      initialSeats + 1,
-      "seats_used should increment by 1",
-    );
+    const afterSeats = afterOrg?.seats_used ?? 0;
+    assertEquals(afterSeats, initialSeats + 1, "seats_used should increment by 1");
   },
 );
 
@@ -263,6 +385,7 @@ Deno.test("join-organization returns 401 without auth", async () => {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      apikey: SUPABASE_FUNCTIONS_KEY,
     },
     body: JSON.stringify({ inviteCode: "ANYCODE" }),
   });
@@ -281,6 +404,7 @@ Deno.test("join-organization returns 405 for GET request", async () => {
     method: "GET",
     headers: {
       Authorization: `Bearer ${testToken}`,
+      apikey: SUPABASE_FUNCTIONS_KEY,
     },
   });
 

@@ -15,8 +15,8 @@ import {
 } from "https://deno.land/std@0.168.0/testing/asserts.ts";
 
 Deno.test("complete-circle-ritual - creator can complete", () => {
-  const userId = "660e8400-e29b-41d4-a716-446655440001";
-  const createdBy = "660e8400-e29b-41d4-a716-446655440001";
+  const userId: string = "660e8400-e29b-41d4-a716-446655440001";
+  const createdBy: string = "660e8400-e29b-41d4-a716-446655440001";
 
   assertEquals(
     userId === createdBy,
@@ -26,8 +26,8 @@ Deno.test("complete-circle-ritual - creator can complete", () => {
 });
 
 Deno.test("complete-circle-ritual - non-creator cannot complete", () => {
-  const userId = "770e8400-e29b-41d4-a716-446655440002";
-  const createdBy = "660e8400-e29b-41d4-a716-446655440001";
+  const userId: string = "770e8400-e29b-41d4-a716-446655440002";
+  const createdBy: string = "660e8400-e29b-41d4-a716-446655440001";
 
   assertEquals(userId === createdBy, false, "Non-creator should not complete");
 });
