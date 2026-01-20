@@ -436,6 +436,162 @@ await channel.subscribe()
 
 ---
 
+## 7.1) Adding Files to Xcode Project (CRITICAL)
+
+When creating new Swift files, you MUST add them to the Xcode project (`project.pbxproj`). Files on disk that aren't in the project won't compile.
+
+### Why This Matters
+
+- Xcode doesn't auto-discover files - the project file (`project.pbxproj`) is the source of truth
+- Files must be in both the filesystem AND the project file to compile
+- The GUI "Add Files..." option may be unavailable in some contexts
+
+### Method: Use Ruby xcodeproj Gem
+
+**Never manually edit `project.pbxproj`** - it's a complex OpenStep format that's easy to corrupt. Use Apple's official tool instead.
+
+#### Install (one-time)
+
+```bash
+gem install xcodeproj
+```
+
+#### Add Files Script
+
+Create and run this Ruby script from `apps/ios/`:
+
+```ruby
+#!/usr/bin/env ruby
+require 'xcodeproj'
+
+project = Xcodeproj::Project.open('MindFriendApp.xcodeproj')
+app_target = project.targets.find { |t| t.name == 'MindFriendApp' }
+test_target = project.targets.find { |t| t.name == 'MindFriendAppTests' }
+
+# Helper to find/create group hierarchy matching filesystem
+def find_or_create_group(project, file_path)
+  components = Pathname.new(file_path).each_filename.to_a
+  filename = components.pop
+
+  current_group = project.main_group
+  components.each do |component|
+    child = current_group.children.find { |c|
+      c.is_a?(Xcodeproj::Project::Object::PBXGroup) && c.name == component
+    }
+    current_group = child || current_group.new_group(component, component)
+  end
+
+  [current_group, filename]
+end
+
+# Add a file to the project
+file_path = "MindFriendApp/Features/NewFeature/MyView.swift"  # EDIT THIS
+is_test = file_path.include?("Tests")
+target = is_test ? test_target : app_target
+
+group, filename = find_or_create_group(project, file_path)
+file_ref = group.new_reference(filename)
+file_ref.source_tree = '<group>'
+file_ref.last_known_file_type = 'sourcecode.swift'
+target.source_build_phase.add_file_reference(file_ref)
+
+project.save
+puts "Added: #{file_path}"
+```
+
+#### Bulk Add Missing Files
+
+To find and add all Swift files not in the project:
+
+```ruby
+#!/usr/bin/env ruby
+require 'xcodeproj'
+require 'pathname'
+
+project = Xcodeproj::Project.open('MindFriendApp.xcodeproj')
+app_target = project.targets.find { |t| t.name == 'MindFriendApp' }
+test_target = project.targets.find { |t| t.name == 'MindFriendAppTests' }
+
+def find_or_create_group(project, file_path)
+  components = Pathname.new(file_path).each_filename.to_a
+  filename = components.pop
+  current_group = project.main_group
+  components.each do |component|
+    child = current_group.children.find { |c|
+      c.is_a?(Xcodeproj::Project::Object::PBXGroup) && c.name == component
+    }
+    current_group = child || current_group.new_group(component, component)
+  end
+  [current_group, filename]
+end
+
+# Find missing files
+Dir.glob("{MindFriendApp,MindFriendAppTests}/**/*.swift").each do |file_path|
+  basename = File.basename(file_path)
+  next if project.files.any? { |f| File.basename(f.path.to_s) == basename }
+
+  is_test = file_path.include?("Tests")
+  target = is_test ? test_target : app_target
+
+  group, filename = find_or_create_group(project, file_path)
+  file_ref = group.new_reference(filename)
+  file_ref.source_tree = '<group>'
+  file_ref.last_known_file_type = 'sourcecode.swift'
+  target.source_build_phase.add_file_reference(file_ref)
+
+  puts "Added: #{file_path}"
+end
+
+project.save
+```
+
+### Key Concepts
+
+| Term                     | Meaning                              |
+| ------------------------ | ------------------------------------ |
+| `PBXFileReference`       | Metadata about a file (path, type)   |
+| `PBXGroup`               | Folder structure in Xcode navigator  |
+| `PBXBuildFile`           | Maps file to a build phase           |
+| `PBXSourcesBuildPhase`   | Compile sources for a target         |
+| `sourceTree = "<group>"` | Path is relative to containing group |
+
+### Common Pitfalls
+
+1. **Path doubling**: Don't use full paths when `sourceTree = "<group>"` - just use the filename
+2. **Missing groups**: Create the full group hierarchy matching the filesystem
+3. **Wrong target**: Test files go to `MindFriendAppTests`, app files to `MindFriendApp`
+4. **Validation**: Always run `xcodebuild -list` after changes to verify project is valid
+
+### Removing Orphaned References
+
+If a file was deleted but the reference remains:
+
+```ruby
+require 'xcodeproj'
+project = Xcodeproj::Project.open('MindFriendApp.xcodeproj')
+
+orphan_files = ['DeletedFile.swift', 'OldView.swift']  # EDIT THIS
+
+project.targets.each do |target|
+  target.source_build_phase.files.each do |build_file|
+    next unless build_file.file_ref
+    if orphan_files.include?(File.basename(build_file.file_ref.path.to_s))
+      build_file.remove_from_project
+    end
+  end
+end
+
+project.files.each do |file_ref|
+  if orphan_files.include?(File.basename(file_ref.path.to_s))
+    file_ref.remove_from_project
+  end
+end
+
+project.save
+```
+
+---
+
 ## 8) Edge Functions
 
 ### Function Inventory
