@@ -428,7 +428,7 @@ final class ChallengeService: ObservableObject {
             .execute()
 
         // Auto-join creator
-        if let challengeId: [["id": UUID]] = try? await supabaseClient
+        if let challengeId: [[String: UUID]] = try? await supabaseClient
             .from("challenges")
             .select("id")
             .eq("created_by", value: userId)
