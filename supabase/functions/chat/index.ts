@@ -497,6 +497,84 @@ serve(async (req) => {
       }
     }
 
+    // Fetch companion memories (user-curated Memory Vault) ONLY if privacy mode is OFF
+    let companionMemoryContext = "";
+    let memoryIdsUsed: string[] = [];
+
+    if (!privacyModeEnabled) {
+      try {
+        // Fetch active companion memories and current daily intent
+        const { data: companionMemories } = await supabaseAdmin
+          .from("companion_memory")
+          .select("id, category, content")
+          .eq("user_id", user.id)
+          .is("deleted_at", null)
+          .order("last_used_at", { ascending: false, nullsFirst: false })
+          .limit(20);
+
+        const { data: dailyIntent } = await supabaseAdmin
+          .from("daily_intents")
+          .select("intent")
+          .eq("user_id", user.id)
+          .gt("expires_at", now.toISOString())
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        // Build companion memory context if any exist
+        if (
+          (companionMemories && companionMemories.length > 0) ||
+          dailyIntent?.intent
+        ) {
+          companionMemoryContext =
+            "\n\n## User-defined companion context (Memory Vault):\n";
+
+          // Add daily intent if set
+          if (dailyIntent?.intent) {
+            // Sanitize intent to prevent prompt injection
+            const sanitizedIntent = sanitizeForPrompt(dailyIntent.intent);
+            companionMemoryContext += `**Today's focus:** "${sanitizedIntent}"\n\n`;
+          }
+
+          // Group memories by category
+          if (companionMemories && companionMemories.length > 0) {
+            const categoryLabels: Record<string, string> = {
+              boundaries: "Boundaries to respect",
+              preferences: "Preferences",
+              triggers: "Topics that may be sensitive",
+              avoid_topics: "Topics to avoid",
+              positive_reinforcement:
+                "Things that help (positive reinforcement)",
+              life_context: "Life context",
+            };
+
+            const grouped: Record<string, string[]> = {};
+            for (const mem of companionMemories) {
+              if (!grouped[mem.category]) grouped[mem.category] = [];
+              // Sanitize each memory content to prevent prompt injection
+              const sanitizedContent = sanitizeForPrompt(mem.content);
+              grouped[mem.category].push(sanitizedContent);
+              memoryIdsUsed.push(mem.id);
+            }
+
+            for (const [category, items] of Object.entries(grouped)) {
+              const label = categoryLabels[category] || category;
+              companionMemoryContext += `- ${label}: ${items.join("; ")}\n`;
+            }
+
+            companionMemoryContext +=
+              "\nHonor these user-defined preferences and boundaries in all interactions.";
+          }
+        }
+      } catch (memoryError) {
+        // Non-critical: continue chat without companion memory if fetch fails
+        console.error(
+          "Companion memory fetch failed (non-critical):",
+          memoryError,
+        );
+      }
+    }
+
     // Fetch re-engagement context (for returning users after absence)
     let reengagementContext = "";
     const { data: profileExtended } = await supabaseAdmin
@@ -553,7 +631,11 @@ serve(async (req) => {
     }
 
     const enhancedSystemPrompt =
-      SYSTEM_PROMPT + toneInstruction + memoryContext + reengagementContext;
+      SYSTEM_PROMPT +
+      toneInstruction +
+      memoryContext +
+      companionMemoryContext +
+      reengagementContext;
 
     // Sanitize user content to prevent prompt injection attacks
     // This removes role impersonation attempts and prompt manipulation patterns
@@ -713,6 +795,25 @@ serve(async (req) => {
       ).catch((err) => console.error("Memory extraction failed:", err));
     }
 
+    // Update companion memory usage stats (fire-and-forget with error logging)
+    if (memoryIdsUsed.length > 0) {
+      supabaseAdmin
+        .rpc("update_companion_memory_usage", {
+          memory_ids: memoryIdsUsed,
+          used_at: now.toISOString(),
+          for_user_id: user.id, // Pass user ID for ownership validation
+        })
+        .then(({ error }) => {
+          if (error) {
+            console.error("Failed to update companion memory usage:", error);
+          } else {
+            console.log(
+              `Updated usage for ${memoryIdsUsed.length} companion memories`,
+            );
+          }
+        });
+    }
+
     return new Response(
       JSON.stringify({
         // EXE-007: Return full message objects for both user and assistant
@@ -742,6 +843,8 @@ serve(async (req) => {
         quotaUsed: quotaUsed,
         quotaLimit: quotaLimit,
         conversationTitle: conversationTitle,
+        memoryUsed: memoryIdsUsed.length > 0,
+        memoryIdsUsed: memoryIdsUsed,
       }),
       { headers: responseHeaders },
     );

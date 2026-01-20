@@ -9,6 +9,8 @@ struct CompanionMemoryView: View {
     @State private var memoryToEdit: CompanionMemory?
     @State private var memoryToDelete: CompanionMemory?
     @State private var showingDeleteConfirmation = false
+    @State private var deleteError: String?
+    @State private var showingDeleteError = false
 
     var body: some View {
         NavigationStack {
@@ -138,13 +140,23 @@ struct CompanionMemoryView: View {
                 Button("Delete", role: .destructive) {
                     if let memory = memoryToDelete {
                         Task {
-                            try? await memoryService.deleteMemory(id: memory.id)
+                            do {
+                                try await memoryService.deleteMemory(id: memory.id)
+                            } catch {
+                                deleteError = error.localizedDescription
+                                showingDeleteError = true
+                            }
                         }
                     }
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("This memory will be permanently deleted.")
+            }
+            .alert("Delete Failed", isPresented: $showingDeleteError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(deleteError ?? "Failed to delete memory. Please try again.")
             }
             .task {
                 if memoryService.memories.isEmpty {
@@ -276,5 +288,5 @@ private struct EmptyMemoryView: View {
 
 #Preview {
     CompanionMemoryView()
-        .environmentObject(CompanionMemoryService(authService: SupabaseAuthService()))
+        .environmentObject(DependencyContainer.preview.companionMemoryService)
 }
