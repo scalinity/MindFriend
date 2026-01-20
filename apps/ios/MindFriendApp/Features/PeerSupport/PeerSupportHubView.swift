@@ -1,4 +1,5 @@
 import SwiftUI
+import Supabase
 
 /// Main hub view for peer support features
 struct PeerSupportHubView: View {
@@ -803,7 +804,7 @@ struct CommunityWisdomView: View {
             // Category filter
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    CategoryChip(
+                    PeerSupportCategoryChip(
                         title: "All",
                         isSelected: selectedCategory == nil
                     ) {
@@ -812,7 +813,7 @@ struct CommunityWisdomView: View {
                     }
 
                     ForEach(DBCommunityWisdom.WisdomCategory.allCases, id: \.self) { category in
-                        CategoryChip(
+                        PeerSupportCategoryChip(
                             title: category.displayName,
                             isSelected: selectedCategory == category
                         ) {
@@ -864,7 +865,7 @@ struct CommunityWisdomView: View {
     }
 }
 
-struct CategoryChip: View {
+private struct PeerSupportCategoryChip: View {
     let title: String
     let isSelected: Bool
     let action: () -> Void
@@ -933,5 +934,6 @@ struct WisdomDetailCard: View {
 }
 
 #Preview {
-    PeerSupportHubView(supabase: SupabaseClient.shared)
+    PeerSupportHubView(supabase: DependencyContainer.preview.supabase)
+        .environmentObject(DependencyContainer.preview)
 }

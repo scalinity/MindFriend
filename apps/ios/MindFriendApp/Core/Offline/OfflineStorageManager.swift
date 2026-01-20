@@ -18,26 +18,66 @@ actor OfflineStorageManager {
     // MARK: - Properties
 
     private let fileManager = FileManager.default
-    private let baseDirectory: URL
-    private let contentDirectory: URL
-    private let metadataDirectory: URL
-    private let tempDirectory: URL
+    private let appSupportDirectory: URL
+    private var currentUserId: String?
+
+    private var baseDirectory: URL {
+        guard let userId = currentUserId else {
+            // Fallback to shared directory (should only happen before login)
+            return appSupportDirectory.appendingPathComponent("MindFriend/Offline/shared", isDirectory: true)
+        }
+        return appSupportDirectory.appendingPathComponent("MindFriend/Offline/\(userId)", isDirectory: true)
+    }
+
+    private var contentDirectory: URL {
+        baseDirectory.appendingPathComponent("Content", isDirectory: true)
+    }
+
+    private var metadataDirectory: URL {
+        baseDirectory.appendingPathComponent("Metadata", isDirectory: true)
+    }
+
+    private var tempDirectory: URL {
+        baseDirectory.appendingPathComponent("Temp", isDirectory: true)
+    }
 
     // MARK: - Initialization
 
     init() {
         // Use Application Support directory for durability (not cleared like Caches)
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        baseDirectory = appSupport.appendingPathComponent("MindFriend/Offline", isDirectory: true)
-        contentDirectory = baseDirectory.appendingPathComponent("Content", isDirectory: true)
-        metadataDirectory = baseDirectory.appendingPathComponent("Metadata", isDirectory: true)
-        tempDirectory = baseDirectory.appendingPathComponent("Temp", isDirectory: true)
+        appSupportDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+    }
 
-        // Create directories synchronously during init
-        let directories = [baseDirectory, contentDirectory, metadataDirectory, tempDirectory]
-        for directory in directories {
-            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    // MARK: - User Management
+
+    /// Set the current user ID - MUST be called after login before any storage operations
+    func setCurrentUser(_ userId: String) {
+        self.currentUserId = userId
+        createDirectoriesIfNeeded()
+    }
+
+    /// Clear user ID on logout
+    func clearCurrentUser() {
+        self.currentUserId = nil
+    }
+
+    /// Get current user ID
+    func getCurrentUserId() -> String? {
+        currentUserId
+    }
+
+    /// Delete all data for a specific user (for logout cleanup)
+    func deleteUserData(userId: String) throws {
+        let userDirectory = appSupportDirectory.appendingPathComponent("MindFriend/Offline/\(userId)", isDirectory: true)
+        if fileManager.fileExists(atPath: userDirectory.path) {
+            try fileManager.removeItem(at: userDirectory)
         }
+    }
+
+    /// Delete all offline data for current user
+    func deleteCurrentUserData() throws {
+        guard let userId = currentUserId else { return }
+        try deleteUserData(userId: userId)
     }
 
     // MARK: - Directory Management

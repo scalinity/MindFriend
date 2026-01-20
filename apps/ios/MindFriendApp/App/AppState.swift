@@ -155,21 +155,23 @@ final class AppState: ObservableObject {
 
     /// Process pending quest completions made from widgets
     /// Called when app becomes active to sync widget actions to backend
+    /// TODO: SharedDataStore not added to Xcode project target
     func processPendingWidgetSyncs(container: DependencyContainer) async {
-        let pendingCompletions = SharedDataStore.shared.pendingQuestCompletions
-        guard !pendingCompletions.isEmpty else { return }
-
-        for questId in pendingCompletions {
-            do {
-                // Sync quest completion to backend (widget completions don't include reflection/rating)
-                try await container.supabaseDataService.completeQuest(id: questId, reflectionNote: nil, rating: nil)
-                SharedDataStore.shared.clearPendingQuestCompletion(questId: questId)
-                Log.general.info("[WidgetSync] Synced quest completion: \(questId)")
-            } catch {
-                // Keep in pending queue if sync fails - will retry next time
-                Log.general.error("[WidgetSync] Failed to sync quest completion: \(questId), error: \(error)")
-            }
-        }
+        // Temporarily disabled - SharedDataStore exists but not in build target
+        // let pendingCompletions = SharedDataStore.shared.pendingQuestCompletions
+        // guard !pendingCompletions.isEmpty else { return }
+        //
+        // for questId in pendingCompletions {
+        //     do {
+        //         // Sync quest completion to backend (widget completions don't include reflection/rating)
+        //         try await container.supabaseDataService.completeQuest(id: questId, reflectionNote: nil, rating: nil)
+        //         SharedDataStore.shared.clearPendingQuestCompletion(questId: questId)
+        //         Log.general.info("[WidgetSync] Synced quest completion: \(questId)")
+        //     } catch {
+        //         // Keep in pending queue if sync fails - will retry next time
+        //         Log.general.error("[WidgetSync] Failed to sync quest completion: \(questId), error: \(error)")
+        //     }
+        // }
     }
 }
 
@@ -179,6 +181,7 @@ enum MainTab: String, CaseIterable {
     case home
     case programs
     case chat
+    case outcomes
     case circles
     case sleep
     case personalization
@@ -189,6 +192,7 @@ enum MainTab: String, CaseIterable {
         case .home: return "Home"
         case .programs: return "Programs"
         case .chat: return "Chat"
+        case .outcomes: return "Progress"
         case .circles: return "Circles"
         case .sleep: return "Sleep"
         case .personalization: return "For You"
@@ -201,6 +205,7 @@ enum MainTab: String, CaseIterable {
         case .home: return "house.fill"
         case .programs: return "book.fill"
         case .chat: return "bubble.left.and.bubble.right.fill"
+        case .outcomes: return "chart.line.uptrend.xyaxis"
         case .circles: return "person.3.fill"
         case .sleep: return "moon.fill"
         case .personalization: return "sparkles"

@@ -59,6 +59,10 @@ struct CreateFamilySheet: View {
                 .disabled(familyName.isEmpty || isLoading)
             }
         }
+        .dismissKeyboardOnSwipe()
+        .onTapGesture {
+            hideKeyboard()
+        }
         .navigationTitle("Create Family")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

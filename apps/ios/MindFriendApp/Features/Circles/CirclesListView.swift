@@ -433,7 +433,7 @@ struct CircleDetailView: View {
             }
         }
         .sheet(isPresented: $showCreateChallenge) {
-            CreateChallengeSheet(circleId: circle.id) { challenge in
+            CircleCreateChallengeSheet(circleId: circle.id) { challenge in
                 activeChallenge = challenge
             }
         }

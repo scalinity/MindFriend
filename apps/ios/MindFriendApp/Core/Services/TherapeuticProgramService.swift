@@ -44,11 +44,15 @@ final class TherapeuticProgramService: ObservableObject {
 
     /// Get module unlock status for a therapeutic program enrollment
     func getModuleUnlockStatus(enrollmentId: String, weekNumber: Int) async throws -> ModuleUnlockStatus {
+        struct RPCParams: Encodable {
+            let p_enrollment_id: String
+            let p_week_number: Int
+        }
+
+        let params = RPCParams(p_enrollment_id: enrollmentId, p_week_number: weekNumber)
+
         let response = try await supabase
-            .rpc("get_module_unlock_status", params: [
-                "p_enrollment_id": enrollmentId,
-                "p_week_number": weekNumber
-            ])
+            .rpc("get_module_unlock_status", params: params)
             .execute()
 
         let data = response.data
@@ -111,18 +115,23 @@ final class TherapeuticProgramService: ObservableObject {
             throw TherapeuticServiceError.notAuthenticated
         }
 
-        var query = supabase
+        // Build filter query first (all .eq() calls before .order()/.limit())
+        var filterQuery = supabase
             .from("clinical_assessments")
             .select()
             .eq("user_id", value: userId.uuidString)
-            .order("created_at", ascending: false)
-            .limit(limit)
 
         if let type = type {
-            query = query.eq("assessment_type", value: type.rawValue)
+            filterQuery = filterQuery.eq("assessment_type", value: type.rawValue)
         }
 
-        let response: [DBClinicalAssessment] = try await query.execute().value
+        // Apply transforms after all filters
+        let response: [DBClinicalAssessment] = try await filterQuery
+            .order("created_at", ascending: false)
+            .limit(limit)
+            .execute()
+            .value
+
         return response.map { $0.toClinicalAssessment() }
     }
 
@@ -233,36 +242,30 @@ final class TherapeuticProgramService: ObservableObject {
             .execute()
 
         // Call the Edge Function for analysis
-        let response = try await supabase.functions.invoke(
-            "analyze-thought-record",
-            options: .init(body: ["thoughtRecordId": thoughtRecordId])
-        )
-
-        guard let data = response.data else {
-            throw TherapeuticServiceError.analysisUnavailable
-        }
-
         struct AnalysisResponse: Decodable {
             let analysis: AIThoughtAnalysis
             let distortions: [String]
         }
 
-        let result = try JSONDecoder().decode(AnalysisResponse.self, from: data)
+        let result: AnalysisResponse = try await supabase.functions.invoke(
+            "analyze-thought-record",
+            options: .init(body: ["thoughtRecordId": thoughtRecordId])
+        )
 
         // Update the record with the analysis
-        // Convert AIThoughtAnalysis to AnyJSON by encoding/decoding
-        let analysisData = try JSONEncoder().encode(result.analysis)
-        let analysisJson = try JSONDecoder().decode(AnyJSON.self, from: analysisData)
+        struct ThoughtRecordUpdate: Encodable {
+            let ai_analysis: AIThoughtAnalysis
+            let cognitive_distortions: [String]
+        }
 
-        // Convert [String] to AnyJSON array
-        let distortionsJson = AnyJSON.array(result.distortions.map { AnyJSON.string($0) })
+        let updateData = ThoughtRecordUpdate(
+            ai_analysis: result.analysis,
+            cognitive_distortions: result.distortions
+        )
 
         try await supabase
             .from("thought_records")
-            .update([
-                "ai_analysis": analysisJson,
-                "cognitive_distortions": distortionsJson
-            ])
+            .update(updateData)
             .eq("id", value: thoughtRecordId)
             .execute()
 
@@ -278,18 +281,23 @@ final class TherapeuticProgramService: ObservableObject {
             throw TherapeuticServiceError.notAuthenticated
         }
 
-        var query = supabase
+        // Build filter query first (all .eq() calls before .order()/.limit())
+        var filterQuery = supabase
             .from("thought_records")
             .select()
             .eq("user_id", value: userId.uuidString)
-            .order("created_at", ascending: false)
-            .limit(limit)
 
         if let enrollmentId = enrollmentId {
-            query = query.eq("enrollment_id", value: enrollmentId)
+            filterQuery = filterQuery.eq("enrollment_id", value: enrollmentId)
         }
 
-        let response: [DBThoughtRecord] = try await query.execute().value
+        // Apply transforms after all filters
+        let response: [DBThoughtRecord] = try await filterQuery
+            .order("created_at", ascending: false)
+            .limit(limit)
+            .execute()
+            .value
+
         return response.map { $0.toThoughtRecord() }
     }
 
@@ -359,22 +367,27 @@ final class TherapeuticProgramService: ObservableObject {
             throw TherapeuticServiceError.notAuthenticated
         }
 
-        var query = supabase
+        // Build filter query first (all .eq() calls before .order()/.limit())
+        var filterQuery = supabase
             .from("emotion_regulation_logs")
             .select()
             .eq("user_id", value: userId.uuidString)
-            .order("created_at", ascending: false)
-            .limit(limit)
 
         if let enrollmentId = enrollmentId {
-            query = query.eq("enrollment_id", value: enrollmentId)
+            filterQuery = filterQuery.eq("enrollment_id", value: enrollmentId)
         }
 
         if let skillCategory = skillCategory {
-            query = query.eq("skill_category", value: skillCategory.rawValue)
+            filterQuery = filterQuery.eq("skill_category", value: skillCategory.rawValue)
         }
 
-        let response: [DBEmotionRegulationLog] = try await query.execute().value
+        // Apply transforms after all filters
+        let response: [DBEmotionRegulationLog] = try await filterQuery
+            .order("created_at", ascending: false)
+            .limit(limit)
+            .execute()
+            .value
+
         return response.map { $0.toEmotionRegulationLog() }
     }
 
@@ -483,22 +496,27 @@ final class TherapeuticProgramService: ObservableObject {
             throw TherapeuticServiceError.notAuthenticated
         }
 
-        var query = supabase
+        // Build filter query first (all .eq() calls before .order()/.limit())
+        var filterQuery = supabase
             .from("values_assessments")
             .select()
             .eq("user_id", value: userId.uuidString)
-            .order("created_at", ascending: false)
-            .limit(limit)
 
         if let enrollmentId = enrollmentId {
-            query = query.eq("enrollment_id", value: enrollmentId)
+            filterQuery = filterQuery.eq("enrollment_id", value: enrollmentId)
         }
 
         if let valueDomain = valueDomain {
-            query = query.eq("value_domain", value: valueDomain.rawValue)
+            filterQuery = filterQuery.eq("value_domain", value: valueDomain.rawValue)
         }
 
-        let response: [DBValuesAssessment] = try await query.execute().value
+        // Apply transforms after all filters
+        let response: [DBValuesAssessment] = try await filterQuery
+            .order("created_at", ascending: false)
+            .limit(limit)
+            .execute()
+            .value
+
         return response.map { $0.toValuesAssessment() }
     }
 

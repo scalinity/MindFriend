@@ -113,6 +113,10 @@ struct InviteBuddySheet: View {
                     Spacer(minLength: 32)
                 }
             }
+            .dismissKeyboardOnSwipe()
+            .onTapGesture {
+                hideKeyboard()
+            }
             .navigationTitle("Invite Buddy")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

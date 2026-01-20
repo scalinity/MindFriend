@@ -143,21 +143,21 @@ struct MicroMomentsHubView: View {
                 .font(.headline)
 
             HStack(spacing: 16) {
-                StatBox(
+                MicroMomentStatBox(
                     value: "\(streak.currentStreak)",
                     label: "Day Streak",
                     icon: "flame.fill",
                     color: .orange
                 )
 
-                StatBox(
+                MicroMomentStatBox(
                     value: "\(streak.totalMicroMoments)",
                     label: "Moments",
                     icon: "sparkles",
                     color: .purple
                 )
 
-                StatBox(
+                MicroMomentStatBox(
                     value: "\(streak.totalMinutesPracticed)",
                     label: "Minutes",
                     icon: "clock.fill",
@@ -293,7 +293,7 @@ struct MicroMomentCard: View {
 
 // MARK: - Stat Box
 
-struct StatBox: View {
+struct MicroMomentStatBox: View {
     let value: String
     let label: String
     let icon: String

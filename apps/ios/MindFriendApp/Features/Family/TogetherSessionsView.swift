@@ -29,7 +29,7 @@ struct TogetherSessionsView: View {
                                 .padding(.horizontal)
 
                             ForEach(activeSessions, id: \.id) { session in
-                                ActiveSessionCard(session: session)
+                                TogetherActiveSessionCard(session: session)
                             }
                         }
                     }
@@ -104,7 +104,7 @@ struct TogetherSessionsView: View {
 
 // MARK: - Supporting Cards
 
-struct ActiveSessionCard: View {
+struct TogetherActiveSessionCard: View {
     let session: TogetherSession
 
     var body: some View {

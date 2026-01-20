@@ -8,107 +8,28 @@
 
 import SwiftUI
 import Sentry
+// Note: privacySensitive() is available in Sentry module for SDK 8.x+
+// import SentrySwiftUI
 
-// MARK: - UIView Subclasses for Sentry Masking
+// MARK: - SwiftUI View Extensions for Sentry Session Replay
 
-/// Custom UIView subclass that Sentry will mask in session replays.
-/// Used internally by the `.sentryMask()` modifier.
-private final class SensitiveContentView: UIView {
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        backgroundColor = .clear
-    }
-
-    required init?(coder: NSCoder) {
-        // Programmatic initialization only - this view is never used in Interface Builder
-        super.init(coder: coder)
-    }
-}
-
-/// Custom UIView subclass for mood-related content masking.
-private final class MoodInputView: UIView {
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        backgroundColor = .clear
-    }
-
-    required init?(coder: NSCoder) {
-        // Programmatic initialization only - this view is never used in Interface Builder
-        super.init(coder: coder)
-    }
-}
-
-/// Custom UIView subclass for chat content masking.
-private final class ChatContentView: UIView {
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        backgroundColor = .clear
-    }
-
-    required init?(coder: NSCoder) {
-        // Programmatic initialization only - this view is never used in Interface Builder
-        super.init(coder: coder)
-    }
-}
-
-// MARK: - UIViewRepresentable Wrapper
-
-/// Generic UIViewRepresentable that wraps content in a specified UIView subclass for Sentry masking.
+/// Extension providing semantic masking modifiers for Sentry session replay.
 ///
-/// This generic wrapper eliminates code duplication by providing a single implementation
-/// that works with any UIView subclass (SensitiveContentView, MoodInputView, ChatContentView).
+/// These modifiers wrap the SDK's built-in `privacySensitive()` with semantic names
+/// that document the type of sensitive content being masked. This approach:
+/// 1. Uses the SDK's official SwiftUI masking mechanism
+/// 2. Provides semantic clarity about what content is being protected
+/// 3. Makes code audits easier by clearly identifying sensitive UI elements
 ///
-/// - Parameters:
-///   - MaskView: The UIView subclass to use as the masking container
-///   - Content: The SwiftUI view content to be masked
-private struct MaskedContentWrapper<MaskView: UIView, Content: View>: UIViewRepresentable {
-    let content: Content
-
-    final class Coordinator {
-        let hostingController: UIHostingController<Content>
-
-        init(rootView: Content) {
-            self.hostingController = UIHostingController(rootView: rootView)
-            self.hostingController.view.backgroundColor = .clear
-        }
-
-        func update(content: Content) {
-            hostingController.rootView = content
-        }
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(rootView: content)
-    }
-
-    func makeUIView(context: Context) -> MaskView {
-        let view = MaskView()
-        let hostingController = context.coordinator.hostingController
-        hostingController.view.translatesAutoresizingMaskIntoConstraints = false
-
-        view.addSubview(hostingController.view)
-        NSLayoutConstraint.activate([
-            hostingController.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            hostingController.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            hostingController.view.topAnchor.constraint(equalTo: view.topAnchor),
-            hostingController.view.bottomAnchor.constraint(equalTo: view.bottomAnchor)
-        ])
-
-        return view
-    }
-
-    func updateUIView(_ uiView: MaskView, context: Context) {
-        context.coordinator.update(content: content)
-    }
-}
-
-// MARK: - SwiftUI View Extensions
-
+/// **Privacy Configuration (CrashReporter.swift):**
+/// - `maskAllText = true` - All text is masked by default
+/// - `maskAllImages = true` - All images are masked by default
+/// - These modifiers provide explicit, defense-in-depth protection
 extension View {
     /// Marks this view as sensitive content that should be masked in Sentry session replays.
     ///
-    /// This modifier wraps the view in a UIView subclass that Sentry will replace with a solid
-    /// gray block in session recordings. Use this for any content containing:
+    /// This modifier uses Sentry's built-in `privacySensitive()` for masking. Use this for
+    /// any content containing:
     /// - Personal health information
     /// - User-generated content (journal entries, chat messages)
     /// - Mood scores and emotional states
@@ -117,7 +38,7 @@ extension View {
     /// **Privacy Note:** Even with global `maskAllText=true`, apply this modifier to sensitive
     /// screens as defense-in-depth protection.
     ///
-    /// - Returns: A view wrapped in a masking container that Sentry will redact
+    /// - Returns: A view that Sentry will redact in session replays
     ///
     /// Example:
     /// ```swift
@@ -128,27 +49,27 @@ extension View {
     /// }
     /// ```
     func sentryMask() -> some View {
-        MaskedContentWrapper<SensitiveContentView, Self>(content: self)
+        self.privacySensitive()
     }
 
     /// Marks mood-related content for masking in Sentry session replays.
     ///
-    /// Specialized variant of `sentryMask()` for mood tracking screens. Creates a
-    /// MoodInputView wrapper that can be specifically tracked and analyzed.
+    /// Semantic variant of `sentryMask()` for mood tracking screens. Helps identify
+    /// mood-specific sensitive content during code audits.
     ///
-    /// - Returns: A view wrapped in a mood-specific masking container
+    /// - Returns: A view that Sentry will redact in session replays
     func sentryMaskMood() -> some View {
-        MaskedContentWrapper<MoodInputView, Self>(content: self)
+        self.privacySensitive()
     }
 
     /// Marks chat content for masking in Sentry session replays.
     ///
-    /// Specialized variant of `sentryMask()` for chat/conversation screens. Creates a
-    /// ChatContentView wrapper that can be specifically tracked and analyzed.
+    /// Semantic variant of `sentryMask()` for chat/conversation screens. Helps identify
+    /// chat-specific sensitive content during code audits.
     ///
-    /// - Returns: A view wrapped in a chat-specific masking container
+    /// - Returns: A view that Sentry will redact in session replays
     func sentryMaskChat() -> some View {
-        MaskedContentWrapper<ChatContentView, Self>(content: self)
+        self.privacySensitive()
     }
 
     /// Explicitly allows this view to be shown in Sentry session replays.
@@ -174,7 +95,6 @@ extension View {
     /// a defense-in-depth security approach where:
     /// 1. Global setting masks ALL text by default (first layer)
     /// 2. Explicit `sentryMask()` on sensitive views (second layer)
-    /// 3. Custom UIView subclasses for granular control (third layer)
     ///
     /// **Security Rationale:**
     /// Mental health apps contain highly sensitive personal health information (PHI).
@@ -182,54 +102,31 @@ extension View {
     /// even if `sentryUnmask()` is misapplied. The global `maskAllText=true` always wins.
     ///
     /// **Future Implementation Path:**
-    /// If selective unmasking becomes necessary (e.g., for debugging specific UI elements),
-    /// implement this by:
-    /// 1. Create a `UnmaskedContentView: UIView` subclass
-    /// 2. Add to Sentry's `unmaskViewTypes` configuration
-    /// 3. Wrap content in `UIViewRepresentable` with `UnmaskedContentView`
-    /// 4. **CRITICAL**: Require security review before enabling
-    /// 5. **CRITICAL**: Update privacy audit documentation
-    ///
-    /// **Example Future Implementation:**
-    /// ```swift
-    /// private final class UnmaskedContentView: UIView { }
-    ///
-    /// func sentryUnmask() -> some View {
-    ///     MaskedContentWrapper<UnmaskedContentView, Self>(content: self)
-    /// }
-    /// ```
-    ///
-    /// **Why Not Implement Now:**
-    /// We don't currently need selective unmasking. Adding it would:
-    /// - Increase attack surface (risk of misuse)
-    /// - Complicate security audits
-    /// - Violate principle of least privilege
+    /// If selective unmasking becomes necessary (e.g., for debugging specific UI elements):
+    /// 1. Use `self.sentryReplayUnmask()` from Sentry SDK
+    /// 2. **CRITICAL**: Require security review before enabling
+    /// 3. **CRITICAL**: Update privacy audit documentation
     ///
     /// - Returns: The original view (unmodified - global masking still applies)
     func sentryUnmask() -> some View {
         // Intentional no-op: global maskAllText=true in CrashReporter provides
-        // defense-in-depth. Cannot selectively unmask without UIView subclass.
+        // defense-in-depth. Cannot selectively unmask without security review.
+        // To enable: replace with `self.sentryReplayUnmask()`
         self
     }
 }
 
-// MARK: - Registration Helper
+// MARK: - Legacy Support (Deprecated)
 
-/// Registers custom UIView subclasses with Sentry for session replay masking.
+/// Legacy registration helper for custom UIView subclasses.
 ///
-/// Call this during Sentry SDK initialization in CrashReporter.swift:
+/// **DEPRECATED:** Sentry SDK 9.x provides built-in SwiftUI modifiers (`privacySensitive()`).
+/// This enum is retained for backward compatibility but the custom view classes are no longer needed.
 ///
-/// ```swift
-/// SentrySDK.start { options in
-///     // ... other options ...
-///     options.sessionReplay.redactViewTypes = SentryReplayMasking.sensitiveViewTypes
-/// }
-/// ```
+/// The SDK's built-in modifiers are now used directly in the View extension above.
+@available(*, deprecated, message: "Use the SDK's built-in privacySensitive() modifier instead")
 enum SentryReplayMasking {
-    /// Array of UIView subclasses that should be masked in session replays.
-    static let sensitiveViewTypes: [AnyClass] = [
-        SensitiveContentView.self,
-        MoodInputView.self,
-        ChatContentView.self
-    ]
+    /// Empty array - custom view types are no longer needed with SDK 9.x built-in modifiers.
+    /// Masking is now handled by the SDK's `privacySensitive()` SwiftUI modifier.
+    static let sensitiveViewTypes: [AnyClass] = []
 }

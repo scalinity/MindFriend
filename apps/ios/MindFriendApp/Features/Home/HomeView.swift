@@ -29,6 +29,8 @@ struct HomeView: View {
     // Buddy widget data
     @State private var buddyWidgetData: BuddyWidgetData?
     @State private var showInviteBuddySheet = false
+    // SOS intervention state
+    @State private var showSOSIntervention = false
 
     /// Background color adapts to mood context
     private var adaptiveBackgroundColor: Color {
@@ -74,6 +76,18 @@ struct HomeView: View {
                         TodayMoodCard(mood: mood)
                     } else {
                         AdaptiveMoodPromptCard(timeOfDay: homeContext?.timeOfDay ?? .current)
+                    }
+
+                    // SOS Panic Button - prominent placement for safety access
+                    if container.sosCoordinator.settings?.sosEnabled != false {
+                        HStack {
+                            Spacer()
+                            SOSButton {
+                                showSOSIntervention = true
+                            }
+                            Spacer()
+                        }
+                        .padding(.vertical, 8)
                     }
 
                     // Contextual quick actions (mood-adaptive)
@@ -162,6 +176,10 @@ struct HomeView: View {
             }
             .sheet(isPresented: $showInviteBuddySheet) {
                 InviteBuddySheet()
+            }
+            .fullScreenCover(isPresented: $showSOSIntervention) {
+                SOSInterventionView()
+                    .environmentObject(container)
             }
         }
         // Load data on appear
@@ -306,17 +324,24 @@ struct HomeView: View {
             // Note: Shield status is populated from protection check above to avoid duplicate call
             async let questTask = container.supabaseDataService.getTodayQuest()
             async let profileTask = container.supabaseAuthService.fetchProfile()
-            async let eventsTask = container.supabaseDataService.getActiveEvents()
-            async let participationTask = container.supabaseDataService.getEventParticipation()
-            async let insightTask = container.supabaseDataService.getWeeklySummary()
-            async let homeContextTask = container.supabaseDataService.getHomeContext()
-            async let buddyTask = container.supabaseDataService.getBuddyWidgetData()
-            async let celebrationsTask = container.supabaseDataService.getPendingCelebrations()
+            
+            // Optional data (fail gracefully)
+            async let eventsTask = try? await container.supabaseDataService.getActiveEvents()
+            async let participationTask = try? await container.supabaseDataService.getEventParticipation()
+            async let insightTask = try? await container.supabaseDataService.getWeeklySummary()
+            async let homeContextTask = try? await container.supabaseDataService.getHomeContext()
+            async let buddyTask = try? await container.supabaseDataService.getBuddyWidgetData()
+            async let celebrationsTask = try? await container.supabaseDataService.getPendingCelebrations()
 
             // Await all results concurrently
-            let (questResult, profileResult, events, participation, insightResult, contextResult, buddyResult, pendingCelebrations) = try await (
-                questTask, profileTask, eventsTask, participationTask, insightTask, homeContextTask, buddyTask, celebrationsTask
-            )
+            let questResult = try await questTask
+            let profileResult = try await profileTask
+            let events = await eventsTask ?? []
+            let participation = await participationTask ?? []
+            let insightResult = (await insightTask) ?? nil
+            let contextResult = await homeContextTask
+            let buddyResult = (await buddyTask) ?? nil
+            let pendingCelebrations = await celebrationsTask ?? []
 
             // Compute level info from profile
             let levelResult = UserLevel.from(stats: profileResult.stats)
@@ -763,40 +788,44 @@ struct QuickActionsSection: View {
                 NavigationLink {
                     LiveSessionsView()
                 } label: {
-                    QuickActionButton(
-                        icon: "person.3.sequence.fill",
+                    HomeQuickActionButton(
                         title: "Live",
-                        color: .red
+                        icon: "person.3.sequence.fill",
+                        color: .red,
+                        action: {}
                     )
                 }
 
                 NavigationLink {
                     CreativeHubView()
                 } label: {
-                    QuickActionButton(
-                        icon: "paintpalette.fill",
+                    HomeQuickActionButton(
                         title: "Create",
-                        color: .pink
+                        icon: "paintpalette.fill",
+                        color: .pink,
+                        action: {}
                     )
                 }
 
                 NavigationLink {
                     ExerciseLibraryView()
                 } label: {
-                    QuickActionButton(
-                        icon: "figure.mind.and.body",
+                    HomeQuickActionButton(
                         title: "Exercises",
-                        color: .purple
+                        icon: "figure.mind.and.body",
+                        color: .purple,
+                        action: {}
                     )
                 }
 
                 NavigationLink {
                     MoodHistoryView()
                 } label: {
-                    QuickActionButton(
-                        icon: "chart.line.uptrend.xyaxis",
+                    HomeQuickActionButton(
                         title: "Mood",
-                        color: .blue
+                        icon: "chart.line.uptrend.xyaxis",
+                        color: .blue,
+                        action: {}
                     )
                 }
             }
@@ -806,14 +835,24 @@ struct QuickActionsSection: View {
                 NavigationLink {
                     BadgesView()
                 } label: {
-                    QuickActionButton(
-                        icon: "medal.fill",
+                    HomeQuickActionButton(
                         title: "Badges",
-                        color: .yellow
+                        icon: "medal.fill",
+                        color: .yellow,
+                        action: {}
                     )
                 }
 
-                // TODO: MicroMomentsHubView and PeerSupportHubView coming in future releases
+                NavigationLink {
+                    TherapistDiscoveryView()
+                } label: {
+                    HomeQuickActionButton(
+                        title: "Therapists",
+                        icon: "person.2.wave.2.fill",
+                        color: .teal,
+                        action: {}
+                    )
+                }
 
                 Spacer()
             }
@@ -889,25 +928,31 @@ struct InsightsPreviewCard: View {
     }
 }
 
-struct QuickActionButton: View {
-    let icon: String
+struct HomeQuickActionButton: View {
     let title: String
+    let icon: String
     let color: Color
+    let action: () -> Void
 
     var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundStyle(color)
+        Button(action: action) {
+            VStack(spacing: 8) {
+                ZStack {
+                    Circle()
+                        .fill(color.opacity(0.1))
+                        .frame(width: 50, height: 50)
 
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.primary)
+                    Image(systemName: icon)
+                        .font(.system(size: 24))
+                        .foregroundStyle(color)
+                }
+
+                Text(title)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.primary)
+            }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
-        .background(color.opacity(0.1))
-        .cornerRadius(12)
     }
 }
 

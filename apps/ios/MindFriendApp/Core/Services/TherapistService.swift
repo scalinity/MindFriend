@@ -79,46 +79,49 @@ final class TherapistService {
     /// Search for therapists with filters and pagination
     func searchTherapists(filters: TherapistSearchFilters) async throws -> TherapistSearchResult {
         do {
-            var query = supabase
+            // Build filter query first (all filter methods before transform methods)
+            var filterQuery = supabase
                 .from(Tables.therapistProfiles)
                 .select()
 
             // Filter for verified and accepting clients
             if filters.verifiedOnly {
-                query = query
+                filterQuery = filterQuery
                     .eq("verified", value: true)
                     .eq("accepts_new_clients", value: true)
             }
 
             // Filter by profile type
             if let profileType = filters.profileType {
-                query = query.eq("profile_type", value: profileType.rawValue)
+                filterQuery = filterQuery.eq("profile_type", value: profileType.rawValue)
             }
 
             // Filter by specialty
             if let specialty = filters.specialty {
-                query = query.contains("specialties", value: [specialty.rawValue])
+                filterQuery = filterQuery.contains("specialties", value: [specialty.rawValue])
             }
 
-            // Apply sorting
+            // Apply sorting and pagination (transform methods last)
+            let offset = filters.page * filters.pageSize
+
+            let orderedQuery: PostgrestTransformBuilder
             switch filters.sortBy {
             case .ratingDescending:
-                query = query.order("rating_average", ascending: false)
+                orderedQuery = filterQuery.order("rating_average", ascending: false)
             case .ratingAscending:
-                query = query.order("rating_average", ascending: true)
+                orderedQuery = filterQuery.order("rating_average", ascending: true)
             case .priceAscending:
-                query = query.order("rate_60_min", ascending: true)
+                orderedQuery = filterQuery.order("rate_60_min", ascending: true)
             case .priceDescending:
-                query = query.order("rate_60_min", ascending: false)
+                orderedQuery = filterQuery.order("rate_60_min", ascending: false)
             case .newest:
-                query = query.order("created_at", ascending: false)
+                orderedQuery = filterQuery.order("created_at", ascending: false)
             }
 
-            // Apply pagination
-            let offset = filters.page * filters.pageSize
-            query = query.range(from: offset, to: offset + filters.pageSize - 1)
-
-            let response: [TherapistProfile] = try await query.execute().value
+            let response: [TherapistProfile] = try await orderedQuery
+                .range(from: offset, to: offset + filters.pageSize - 1)
+                .execute()
+                .value
 
             // Determine if there are more results
             let hasMore = response.count == filters.pageSize

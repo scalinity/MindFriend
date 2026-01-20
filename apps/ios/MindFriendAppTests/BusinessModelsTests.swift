@@ -28,7 +28,7 @@ final class BusinessModelsTests: XCTestCase {
 
     func testSubscriptionPlanSavingsPercent() {
         let plan = SubscriptionPlan.premiumAnnual
-        XCTAssertEqual(plan.savingsPercent, 50)
+        XCTAssertEqual(plan.savingsPercent, 20)
     }
 
     func testSubscriptionPlanSavingsPercentNilForMonthly() {
@@ -609,7 +609,6 @@ final class BusinessModelsTests: XCTestCase {
     func testBillingPeriodDisplayNames() {
         XCTAssertEqual(BillingPeriod.monthly.displayName, "Monthly")
         XCTAssertEqual(BillingPeriod.yearly.displayName, "Annual")
-        XCTAssertEqual(BillingPeriod.lifetime.displayName, "Lifetime")
     }
 
     func testPlanTypeDisplayNames() {

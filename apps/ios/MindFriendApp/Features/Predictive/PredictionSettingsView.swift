@@ -100,7 +100,7 @@ struct PredictionSettingsView: View {
                             .font(.caption)
                     }
                     .font(.subheadline)
-                    .foregroundStyle(.accentColor)
+                    .foregroundStyle(Color.accentColor)
                 }
             }
             .padding(.vertical, 8)
@@ -331,7 +331,7 @@ struct PredictionSettingsView: View {
         do {
             try await container.predictiveService.deleteAllPredictionData()
             settings = .defaults
-            appState.showToast("Prediction data deleted")
+            appState.showCelebration(title: "Deleted", subtitle: "Prediction data cleared", icon: "trash.fill")
         } catch {
             appState.showError(.apiError(error.localizedDescription))
         }

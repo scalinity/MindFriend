@@ -120,10 +120,11 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Store the completion handler
         backgroundCompletionHandlers[identifier] = completionHandler
 
-        // Pass to OfflineContentService for download completion handling
-        Task { @MainActor in
-            OfflineContentService.shared.setBackgroundCompletionHandler(completionHandler)
-        }
+        // TODO: OfflineContentService not added to Xcode project target
+        // Temporarily commented out - file exists but not in build target
+        // Task { @MainActor in
+        //     OfflineContentService.shared.setBackgroundCompletionHandler(completionHandler)
+        // }
     }
 
     /// Call this when background URL session finishes

@@ -608,7 +608,7 @@ struct GenerateInsightsResponse: Codable {
 
 // MARK: - AnyCodable Helper
 
-enum AnyCodableValue: Codable {
+enum AnyCodableValue: Codable, Equatable {
     case int(Int)
     case double(Double)
     case string(String)

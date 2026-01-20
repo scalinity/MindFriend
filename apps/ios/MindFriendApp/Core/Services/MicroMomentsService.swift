@@ -125,16 +125,16 @@ final class MicroMomentsService: ObservableObject {
         maxDuration: Int? = nil,
         energyPreference: EnergyEffect? = nil
     ) async throws -> [MicroMomentTemplate] {
-        var body: [String: Any] = [:]
+        var body: [String: MicroMomentAnyEncodable] = [:]
 
         if let context = context {
-            body["context"] = context
+            body["context"] = MicroMomentAnyEncodable(context)
         }
         if let maxDuration = maxDuration {
-            body["maxDuration"] = maxDuration
+            body["maxDuration"] = MicroMomentAnyEncodable(maxDuration)
         }
         if let energy = energyPreference {
-            body["energyPreference"] = energy.rawValue
+            body["energyPreference"] = MicroMomentAnyEncodable(energy.rawValue)
         }
 
         let response: MicroSuggestionResponse = try await supabase.functions
@@ -152,20 +152,12 @@ final class MicroMomentsService: ObservableObject {
     func recordCompletion(_ data: MicroCompletionData) async throws -> MicroCompletionResponse {
         let formatter = ISO8601DateFormatter()
 
-        var body: [String: Any] = [
-            "templateId": data.templateId,
-            "triggerSource": data.triggerSource.rawValue,
-            "startedAt": formatter.string(from: data.startedAt),
-            "completedAt": formatter.string(from: data.completedAt),
-            "durationActualSeconds": data.durationActualSeconds
+        var body: [String: MicroMomentAnyEncodable] = [
+            "moment_id": MicroMomentAnyEncodable(data.templateId),
+            "completed_at": MicroMomentAnyEncodable(formatter.string(from: Date())),
+            "duration_seconds": MicroMomentAnyEncodable(data.durationActualSeconds),
+            "was_helpful": MicroMomentAnyEncodable(data.feltHelpful ?? false)
         ]
-
-        if let context = data.context {
-            body["context"] = context
-        }
-        if let feltHelpful = data.feltHelpful {
-            body["feltHelpful"] = feltHelpful
-        }
 
         let response: MicroCompletionResponse = try await supabase.functions
             .invoke(
@@ -223,23 +215,23 @@ final class MicroMomentsService: ObservableObject {
             throw MicroMomentsError.notAuthenticated
         }
 
-        var checkIn: [String: Any] = [
-            "user_id": userId.uuidString,
-            "type": data.type.rawValue,
-            "source": "app"
+        var checkIn: [String: MicroMomentAnyEncodable] = [
+            "user_id": MicroMomentAnyEncodable(userId.uuidString),
+            "type": MicroMomentAnyEncodable(data.type.rawValue),
+            "source": MicroMomentAnyEncodable("app")
         ]
 
         if let numeric = data.valueNumeric {
-            checkIn["value_numeric"] = numeric
+            checkIn["value_numeric"] = MicroMomentAnyEncodable(numeric)
         }
         if let emoji = data.valueEmoji {
-            checkIn["value_emoji"] = emoji
+            checkIn["value_emoji"] = MicroMomentAnyEncodable(emoji)
         }
         if let text = data.valueText {
-            checkIn["value_text"] = text
+            checkIn["value_text"] = MicroMomentAnyEncodable(text)
         }
         if !data.contextTags.isEmpty {
-            checkIn["context_tags"] = data.contextTags
+            checkIn["context_tags"] = MicroMomentAnyEncodable(data.contextTags)
         }
 
         try await supabase
@@ -421,30 +413,30 @@ final class MicroMomentsService: ObservableObject {
 
         let formatter = ISO8601DateFormatter()
 
-        var update: [String: Any] = [
-            "user_id": userId.uuidString,
-            "morning_checkin_enabled": preferences.morningCheckinEnabled,
-            "evening_checkin_enabled": preferences.eveningCheckinEnabled,
-            "pre_meeting_reminder": preferences.preMeetingReminder,
-            "pre_meeting_minutes": preferences.preMeetingMinutes,
-            "post_meeting_suggestion": preferences.postMeetingSuggestion,
-            "max_suggestions_per_day": preferences.maxSuggestionsPerDay,
-            "min_hours_between_suggestions": preferences.minHoursBetweenSuggestions,
-            "silent_mode_only": preferences.silentModeOnly,
-            "updated_at": formatter.string(from: Date())
+        var update: [String: MicroMomentAnyEncodable] = [
+            "user_id": MicroMomentAnyEncodable(userId.uuidString),
+            "morning_checkin_enabled": MicroMomentAnyEncodable(preferences.morningCheckinEnabled),
+            "evening_checkin_enabled": MicroMomentAnyEncodable(preferences.eveningCheckinEnabled),
+            "pre_meeting_reminder": MicroMomentAnyEncodable(preferences.preMeetingReminder),
+            "pre_meeting_minutes": MicroMomentAnyEncodable(preferences.preMeetingMinutes),
+            "post_meeting_suggestion": MicroMomentAnyEncodable(preferences.postMeetingSuggestion),
+            "max_suggestions_per_day": MicroMomentAnyEncodable(preferences.maxSuggestionsPerDay),
+            "min_hours_between_suggestions": MicroMomentAnyEncodable(preferences.minHoursBetweenSuggestions),
+            "silent_mode_only": MicroMomentAnyEncodable(preferences.silentModeOnly),
+            "updated_at": MicroMomentAnyEncodable(formatter.string(from: Date()))
         ]
 
         if let time = preferences.morningCheckinTime {
-            update["morning_checkin_time"] = time
+            update["morning_checkin_time"] = MicroMomentAnyEncodable(time)
         }
         if let time = preferences.eveningCheckinTime {
-            update["evening_checkin_time"] = time
+            update["evening_checkin_time"] = MicroMomentAnyEncodable(time)
         }
         if let types = preferences.preferredTypes {
-            update["preferred_types"] = types.map { $0.rawValue }
+            update["preferred_types"] = MicroMomentAnyEncodable(types.map { $0.rawValue })
         }
         if let durations = preferences.preferredDurations {
-            update["preferred_durations"] = durations
+            update["preferred_durations"] = MicroMomentAnyEncodable(durations)
         }
 
         try await supabase
@@ -476,4 +468,11 @@ enum MicroMomentsError: LocalizedError {
             return "Network error. Please check your connection."
         }
     }
+}
+
+// MARK: - Helper
+private struct MicroMomentAnyEncodable: Encodable {
+    private let _encode: (Encoder) throws -> Void
+    init<T: Encodable>(_ wrapped: T) { _encode = wrapped.encode }
+    func encode(to encoder: Encoder) throws { try _encode(encoder) }
 }

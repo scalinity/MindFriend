@@ -5,11 +5,11 @@ import XCTest
 final class GrokVoiceServiceTests: XCTestCase {
 
     var sut: GrokVoiceService!
-    var mockSupabase: MockSupabaseClient!
+    var mockSupabase: MockVoiceSupabaseClient!
 
     override func setUp() async throws {
         try await super.setUp()
-        mockSupabase = MockSupabaseClient()
+        mockSupabase = MockVoiceSupabaseClient()
         sut = GrokVoiceService(supabase: mockSupabase)
     }
 
@@ -209,7 +209,7 @@ final class GrokVoiceServiceTests: XCTestCase {
 
 // MARK: - Mock Supabase Client
 
-class MockSupabaseClient {
+class MockVoiceSupabaseClient {
     // Minimal mock for testing
     // In a real implementation, this would mock SupabaseClient properly
 }

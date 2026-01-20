@@ -525,7 +525,7 @@ struct ThoughtRecordView: View {
     private func promptCard(icon: String, text: String) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: icon)
-                .foregroundStyle(.accentColor)
+                .foregroundStyle(Color.accentColor)
 
             Text(text)
                 .font(.caption)
