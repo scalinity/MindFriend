@@ -30,18 +30,16 @@ const DISTORTION_PATTERNS_EN: DistortionKeywords[] = [
     keywords: {
       always: 1.0,
       never: 1.0,
-      "every time": 1.0,
-      completely: 0.8,
-      totally: 0.8,
-      perfect: 0.7,
-      failure: 0.7,
-      "all or nothing": 1.5,
-      either: 0.6,
-      only: 0.5,
+      everyone: 0.9,
+      "no one": 0.9,
+      everything: 0.8,
+      nothing: 0.8,
+      completely: 0.7,
+      totally: 0.7,
     },
     phraseMultipliers: [
-      { pattern: /\b(always|never)\b/gi, multiplier: 1.5 },
-      { pattern: /\b(everyone|no one)\b/gi, multiplier: 1.4 },
+      { pattern: /\b(always|never)\b/i, multiplier: 1.5 },
+      { pattern: /\b(everyone|no one)\b/i, multiplier: 1.4 },
     ],
   },
   {
@@ -58,8 +56,8 @@ const DISTORTION_PATTERNS_EN: DistortionKeywords[] = [
       doomed: 1.0,
     },
     phraseMultipliers: [
-      { pattern: /\bworst\s+(case|scenario)\b/gi, multiplier: 1.6 },
-      { pattern: /\bfall\s+apart\b/gi, multiplier: 1.5 },
+      { pattern: /\bworst\s+(case|scenario)\b/i, multiplier: 1.6 },
+      { pattern: /\bfall\s+apart\b/i, multiplier: 1.5 },
     ],
   },
   {
@@ -73,7 +71,7 @@ const DISTORTION_PATTERNS_EN: DistortionKeywords[] = [
       "must know": 1.0,
     },
     phraseMultipliers: [
-      { pattern: /\bthey\s+(must|probably)\s+think\b/gi, multiplier: 1.5 },
+      { pattern: /\bthey\s+(must|probably)\s+think\b/i, multiplier: 1.5 },
     ],
   },
   {
@@ -86,8 +84,8 @@ const DISTORTION_PATTERNS_EN: DistortionKeywords[] = [
       "will definitely": 0.8,
     },
     phraseMultipliers: [
-      { pattern: /\bwill\s+never\b/gi, multiplier: 1.5 },
-      { pattern: /\bi\s+know\s+(i|it)\s+will\b/gi, multiplier: 1.4 },
+      { pattern: /\bwill\s+never\b/i, multiplier: 1.5 },
+      { pattern: /\bi\s+know\s+(i|it)\s+will\b/i, multiplier: 1.4 },
     ],
   },
   {
@@ -97,11 +95,12 @@ const DISTORTION_PATTERNS_EN: DistortionKeywords[] = [
       "i'm such a": 1.2,
       loser: 1.0,
       idiot: 1.0,
-      failure: 0.9,
+      failure: 1.0,
       worthless: 1.2,
+      stupid: 0.9,
     },
     phraseMultipliers: [
-      { pattern: /\bi\'m\s+(a|an|such\s+a)\s+\w+\b/gi, multiplier: 1.4 },
+      { pattern: /\bi'm\s+(a|an|such\s+a)\s+\w+\b/i, multiplier: 1.4 },
     ],
   },
   {
@@ -109,25 +108,24 @@ const DISTORTION_PATTERNS_EN: DistortionKeywords[] = [
     keywords: {
       should: 1.0,
       must: 1.0,
-      "ought to": 1.0,
-      "have to": 0.7,
-      "supposed to": 0.8,
+      ought: 0.9,
+      "have to": 0.8,
+      supposed: 0.8,
     },
     phraseMultipliers: [
-      { pattern: /\b(should|must|ought)\b/gi, multiplier: 1.3 },
+      { pattern: /\b(should|must|ought)\b/i, multiplier: 1.3 },
     ],
   },
   {
     code: "EMF",
     keywords: {
-      "i feel": 0.8,
-      "feel like": 0.9,
-      "so i must": 1.2,
+      "i feel": 1.0,
+      "feels like": 0.9,
       "must be": 0.8,
     },
     phraseMultipliers: [
       {
-        pattern: /\bi\s+feel\s+\w+,?\s+so\s+(i|it)\s+must\b/gi,
+        pattern: /\bi\s+feel\s+\w+,?\s+so\s+(i|it)\s+must\b/i,
         multiplier: 1.6,
       },
     ],
@@ -136,13 +134,12 @@ const DISTORTION_PATTERNS_EN: DistortionKeywords[] = [
     code: "MINS",
     keywords: {
       "doesn't count": 1.2,
-      "anyone could": 1.0,
-      "it was easy": 0.9,
+      "doesn't matter": 0.9,
       "just luck": 1.0,
-      but: 0.4,
+      fluke: 1.0,
     },
     phraseMultipliers: [
-      { pattern: /\b(doesn\'t|don\'t)\s+count\b/gi, multiplier: 1.5 },
+      { pattern: /\b(doesn't|don't)\s+count\b/i, multiplier: 1.5 },
     ],
   },
   {
@@ -155,19 +152,17 @@ const DISTORTION_PATTERNS_EN: DistortionKeywords[] = [
       "they made me": 1.0,
     },
     phraseMultipliers: [
-      { pattern: /\ball\s+(my|their)\s+fault\b/gi, multiplier: 1.5 },
+      { pattern: /\ball\s+(my|their)\s+fault\b/i, multiplier: 1.5 },
     ],
   },
   {
     code: "COMP",
     keywords: {
       "everyone else": 1.0,
-      "better than me": 1.2,
-      "compared to": 0.9,
-      "they have": 0.7,
-      "never as": 0.8,
+      "better than": 0.8,
+      "worse than": 0.8,
     },
-    phraseMultipliers: [{ pattern: /\beveryone\s+else\b/gi, multiplier: 1.4 }],
+    phraseMultipliers: [{ pattern: /\beveryone\s+else\b/i, multiplier: 1.4 }],
   },
   {
     code: "RG",
@@ -179,8 +174,8 @@ const DISTORTION_PATTERNS_EN: DistortionKeywords[] = [
       "wish i": 0.8,
     },
     phraseMultipliers: [
-      { pattern: /\bif\s+only\b/gi, multiplier: 1.5 },
-      { pattern: /\bshould(n\'t)?\s+have\b/gi, multiplier: 1.3 },
+      { pattern: /\bif\s+only\b/i, multiplier: 1.5 },
+      { pattern: /\bshould(n\'t)?\s+have\b/i, multiplier: 1.3 },
     ],
   },
   {
@@ -190,7 +185,7 @@ const DISTORTION_PATTERNS_EN: DistortionKeywords[] = [
       might: 0.6,
       could: 0.5,
     },
-    phraseMultipliers: [{ pattern: /\bwhat\s+if\b/gi, multiplier: 1.7 }],
+    phraseMultipliers: [{ pattern: /\bwhat\s+if\b/i, multiplier: 1.7 }],
   },
 ];
 

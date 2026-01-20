@@ -172,6 +172,9 @@ struct HomeView: View {
                     // Weekly Insights
                     InsightsPreviewCard(insight: weeklyInsight)
 
+                    // Sensory Regulation Toolkit
+                    SensoryToolkitCard()
+
                     // Progress Stories - Weekly Recap
                     ProgressStoryPreviewCard()
 

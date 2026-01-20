@@ -30,11 +30,25 @@ export async function getReframe(
   language: string = "en",
 ): Promise<ReframeResult | null> {
   try {
-    // Fetch distortion data and translations
+    // Fetch distortion with education in a single query using JOIN
     const { data: distortionData, error: distortionError } = await supabase
       .from("cognitive_distortions")
-      .select("id, name, short_description, full_description")
+      .select(`
+        id,
+        name,
+        short_description,
+        full_description,
+        distortion_education!inner (
+          locale,
+          name_translated,
+          short_description_translated,
+          full_description_translated,
+          reframe_templates_translated,
+          questions_translated
+        )
+      `)
       .eq("code", distortionCode)
+      .eq("distortion_education.locale", language)
       .single();
 
     if (distortionError || !distortionData) {
@@ -42,24 +56,19 @@ export async function getReframe(
       return null;
     }
 
-    // Fetch localized education content
-    const { data: educationData, error: educationError } = await supabase
-      .from("distortion_education")
-      .select(
-        "name_translated, short_description_translated, full_description_translated, reframe_templates_translated, questions_translated",
-      )
-      .eq("distortion_id", distortionData.id)
-      .eq("locale", language)
-      .single();
+    // Extract education data (will be array due to JOIN)
+    const educationData = Array.isArray(distortionData.distortion_education)
+      ? distortionData.distortion_education[0]
+      : distortionData.distortion_education;
 
-    // Fallback to English if translation not found
     let reframeTemplates: string[];
     let questions: string[];
     let name: string;
     let shortDesc: string;
     let fullDesc: string;
 
-    if (educationError || !educationData) {
+    if (!educationData) {
+      // Fallback to English if translation not found
       console.warn(
         `Translation not found for ${distortionCode} in ${language}, falling back to English`,
       );

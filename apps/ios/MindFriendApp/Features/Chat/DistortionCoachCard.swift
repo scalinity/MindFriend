@@ -2,10 +2,10 @@ import SwiftUI
 
 struct DistortionCoachCard: View {
     let coachData: CoachData
+    let isAcknowledged: Bool  // Passed from parent instead of local @State
     let onAction: (CoachInteraction.Action) -> Void
 
     @State private var showFullEducation = false
-    @State private var isAcknowledged = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -13,6 +13,7 @@ struct DistortionCoachCard: View {
             HStack {
                 Image(systemName: "brain.head.profile")
                     .foregroundColor(.blue)
+                    .accessibilityHidden(true)
                 Text("Noticed something")
                     .font(.subheadline)
                     .fontWeight(.medium)
@@ -21,7 +22,7 @@ struct DistortionCoachCard: View {
 
             // Short description with distortion name
             VStack(alignment: .leading, spacing: 6) {
-                Text(""" + coachData.distortionName + """)
+                Text("\"" + coachData.distortionName + "\"")
                     .font(.subheadline)
                     .fontWeight(.semibold)
                     .foregroundColor(.primary)
@@ -37,6 +38,7 @@ struct DistortionCoachCard: View {
                     Image(systemName: "lightbulb.fill")
                         .font(.caption)
                         .foregroundColor(.yellow)
+                        .accessibilityHidden(true)
                     Text("Reframe:")
                         .font(.caption)
                         .fontWeight(.semibold)
@@ -73,9 +75,6 @@ struct DistortionCoachCard: View {
             if !isAcknowledged {
                 HStack(spacing: 12) {
                     Button {
-                        withAnimation {
-                            isAcknowledged = true
-                        }
                         onAction(.helpful)
                     } label: {
                         Text("This helps")
@@ -87,11 +86,10 @@ struct DistortionCoachCard: View {
                             .foregroundColor(.white)
                             .cornerRadius(8)
                     }
+                    .accessibilityLabel("This helps")
+                    .accessibilityHint("Marks this cognitive reframe as helpful and records your feedback")
 
                     Button {
-                        withAnimation {
-                            isAcknowledged = true
-                        }
                         onAction(.dismissed)
                     } label: {
                         Text("Not right now")
@@ -103,6 +101,8 @@ struct DistortionCoachCard: View {
                             .foregroundColor(.primary)
                             .cornerRadius(8)
                     }
+                    .accessibilityLabel("Not right now")
+                    .accessibilityHint("Dismisses this suggestion and suppresses coaching for 30 minutes")
 
                     Button {
                         showFullEducation.toggle()
@@ -116,16 +116,20 @@ struct DistortionCoachCard: View {
                             .foregroundColor(.primary)
                             .cornerRadius(8)
                     }
+                    .accessibilityLabel("Learn more")
+                    .accessibilityHint("Shows additional reflection questions about this thinking pattern")
                 }
             } else {
                 // Acknowledged state
                 HStack {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundColor(.green)
+                        .accessibilityHidden(true)
                     Text("Thank you for engaging")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
+                .accessibilityLabel("Coach feedback acknowledged")
                 .transition(.opacity)
             }
         }
@@ -163,6 +167,7 @@ struct DistortionCoachCard: View {
                 ],
                 confidence: 0.85
             ),
+            isAcknowledged: false,
             onAction: { action in
                 print("Action: \(action)")
             }

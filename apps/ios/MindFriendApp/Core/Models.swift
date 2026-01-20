@@ -1376,6 +1376,7 @@ struct SendMessageResponse: Codable {
     let conversationTitle: String?
     let memoryUsed: Bool?    // Whether companion memory was used in this response
     let memoryIdsUsed: [String]?  // IDs of memories that were used
+    let coachData: CoachData?
 }
 
 // MARK: - Circle
@@ -4838,7 +4839,7 @@ struct ProfessionalResource: Codable, Identifiable, Equatable {
 enum ProfessionalResourceType: String, Codable {
     case hotline
     case therapist
-    case crisisLine = "crisis-line"
+    case crisisLine = "crisis_line"
     case custom
 
     var displayName: String {
@@ -4992,7 +4993,7 @@ enum ConversationMode: String, Codable, CaseIterable, Identifiable {
         case .reflect:
             return "I'm here to listen without judgment. What's on your mind today?"
         case .plan:
-            return "Let's work together on some actionable steps. What would you like to accomplish?"
+            return "Let's work together on some actionable steps. What's one small step you could take toward a goal?"
         case .reframe:
             return "Let's explore different perspectives together. What's a situation you'd like to look at differently?"
         }
@@ -5010,7 +5011,7 @@ enum ConversationMode: String, Codable, CaseIterable, Identifiable {
 /// Type of cognitive distortion for thought records
 enum CognitiveDistortion: String, Codable, CaseIterable, Identifiable {
     case allOrNothing = "all_or_nothing"           // Black or white thinking
-    case catrophizing = "catrophizing"             // Magnifying negatives, minimizing positives
+    case catrophizing = "catastrophizing"             // Magnifying negatives, minimizing positives
     case emotionalReasoning = "emotional_reasoning" // Assuming feelings reflect reality
     case mindReading = "mind_reading"              // Assuming others' thoughts
     case overgeneralization = "overgeneralization" // Single event = always happens
@@ -5026,7 +5027,7 @@ enum CognitiveDistortion: String, Codable, CaseIterable, Identifiable {
     var displayName: String {
         switch self {
         case .allOrNothing: return "All-or-Nothing Thinking"
-        case .catrophizing: return "Catastrophizing"
+        case .catastrophizing: return "Catastrophizing"
         case .emotionalReasoning: return "Emotional Reasoning"
         case .mindReading: return "Mind Reading"
         case .overgeneralization: return "Overgeneralization"
@@ -5043,7 +5044,7 @@ enum CognitiveDistortion: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .allOrNothing:
             return "Seeing things in black and white categories"
-        case .catrophizing:
+        case .catastrophizing:
             return "Expecting the worst possible outcome"
         case .emotionalReasoning:
             return "Believing something is true because it feels true"
@@ -5070,7 +5071,7 @@ enum CognitiveDistortion: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .allOrNothing:
             return "Are there any shades of gray in this situation?"
-        case .catrophizing:
+        case .catastrophizing:
             return "What's the actual evidence for the worst-case scenario?"
         case .emotionalReasoning:
             return "How would you describe this situation to a neutral observer?"
