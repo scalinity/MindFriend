@@ -259,6 +259,47 @@ CREATE POLICY "Authenticated users can read templates"
 }
 ```
 
+**Business Logic:**
+
+**Top Needs Calculation Algorithm:**
+
+1. For each need key in `step2_importance_ratings`:
+   - Calculate gap_score using matrix:
+     ```
+     importance="high"   + currently_met="no"        → gap_score=9
+     importance="high"   + currently_met="sometimes" → gap_score=7
+     importance="high"   + currently_met="yes"       → gap_score=3
+     importance="medium" + currently_met="no"        → gap_score=6
+     importance="medium" + currently_met="sometimes" → gap_score=4
+     importance="medium" + currently_met="yes"       → gap_score=2
+     importance="low"    + currently_met="no"        → gap_score=3
+     importance="low"    + currently_met="sometimes" → gap_score=2
+     importance="low"    + currently_met="yes"       → gap_score=1
+     ```
+2. Sort needs by gap_score DESC
+3. Return top 3 needs (or all needs with gap_score >= 6)
+4. Break ties alphabetically
+
+**Recommended Boundaries Generation:**
+Based on `assessment_type` and `top_needs`, suggest boundaries:
+
+| Assessment Type | Top Need           | Boundary Type | Priority |
+| --------------- | ------------------ | ------------- | -------- |
+| work            | personal_time      | time          | high     |
+| work            | autonomy           | emotional     | high     |
+| work            | respect            | emotional     | medium   |
+| relationships   | emotional_safety   | emotional     | high     |
+| relationships   | respect            | emotional     | high     |
+| relationships   | personal_space     | physical      | medium   |
+| family          | personal_time      | time          | high     |
+| family          | autonomy           | emotional     | high     |
+| family          | boundaries         | physical      | medium   |
+| friends         | personal_time      | time          | medium   |
+| friends         | emotional_safety   | emotional     | high     |
+| friends         | digital_boundaries | digital       | low      |
+
+Return up to 3 recommendations, prioritized by: priority level → gap_score
+
 **Errors:**
 
 - 400: Invalid assessment_type or missing responses
@@ -355,9 +396,26 @@ CREATE POLICY "Authenticated users can read templates"
 3. For each variation requested:
    - Find template with matching variation
    - If not found, fallback to relationship_type = 'other'
-   - Replace placeholders: [boundary] → statement_text, [stakeholder] → stakeholder
+   - Replace placeholders using placeholder specification (see below)
 4. Update boundary.scripts JSONB
 5. Return generated scripts
+
+**Placeholder Specification:**
+
+| Placeholder        | Source                            | Required | Fallback Value                |
+| ------------------ | --------------------------------- | -------- | ----------------------------- |
+| `[boundary]`       | `statement_text`                  | Yes      | (error if missing)            |
+| `[why_matters]`    | `why_matters`                     | No       | "maintain healthy boundaries" |
+| `[stakeholder]`    | `stakeholder`                     | No       | "the other person"            |
+| `[contact_method]` | `user_settings.preferred_contact` | No       | "text message"                |
+
+**Placeholder Replacement Algorithm:**
+
+1. For each placeholder in template_text
+2. Lookup value from source column
+3. If value is null/empty and required = Yes: return 500 error "Template requires missing field"
+4. If value is null/empty and required = No: use fallback value
+5. Replace `[placeholder]` with actual value
 
 **Errors:**
 
@@ -401,9 +459,66 @@ CREATE POLICY "Authenticated users can read templates"
 - set → adjusted (user edits boundary)
 - any → archived (user deletes)
 
+**Enforcement Mechanism:**
+
+State transitions are validated in the Edge Function (NOT database constraint) to allow flexible business logic.
+
+**Validation Logic:**
+
+```typescript
+function validateTransition(
+  currentStatus: string,
+  newStatus: string,
+  boundary: Boundary,
+): boolean {
+  // Allow archiving from any state
+  if (newStatus === "archived") return true;
+
+  // Draft → Ready: requires scripts
+  if (currentStatus === "draft" && newStatus === "ready") {
+    return boundary.scripts !== null && boundary.scripts.length > 0;
+  }
+
+  // Ready → Practiced: requires practice_count >= 3
+  if (currentStatus === "ready" && newStatus === "practiced") {
+    return boundary.practice_count >= 3;
+  }
+
+  // Practiced → Set: always allowed (user action)
+  if (currentStatus === "practiced" && newStatus === "set") {
+    return true;
+  }
+
+  // Set → Adjusted: always allowed (user edits)
+  if (currentStatus === "set" && newStatus === "adjusted") {
+    return true;
+  }
+
+  // Adjusted → Set: always allowed (user re-sets)
+  if (currentStatus === "adjusted" && newStatus === "set") {
+    return true;
+  }
+
+  // All other transitions are invalid
+  return false;
+}
+```
+
+If validation fails, return 400 error:
+
+```json
+{
+  "error": "Invalid state transition",
+  "current": "draft",
+  "requested": "set",
+  "allowed": ["ready", "archived"],
+  "reason": "Scripts must be generated before marking as ready"
+}
+```
+
 **Errors:**
 
-- 400: Invalid status transition
+- 400: Invalid status transition (see validation logic above)
 - 404: Boundary not found
 - 401: Unauthorized
 - 500: Database error
