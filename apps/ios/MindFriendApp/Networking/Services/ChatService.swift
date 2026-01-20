@@ -59,7 +59,8 @@ final class ChatService: ObservableObject {
             crisisDetected: response.isCrisisResponse,
             conversationTitle: response.conversationTitle,
             memoryUsed: nil,                     // Not yet available from chat response
-            memoryIdsUsed: nil                   // Not yet available from chat response
+            memoryIdsUsed: nil,                  // Not yet available from chat response
+            coachData: response.coachData
         )
     }
 

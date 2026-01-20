@@ -15,8 +15,18 @@ struct ChatView: View {
     @State private var sendTask: Task<Void, Never>?
     @FocusState private var isInputFocused: Bool
     @State private var showVoiceMode = false
+    @State private var latestCoachData: CoachData?
+    @StateObject private var coachViewModel: CoachViewModel
 
     private let quotaWarningThreshold = 3
+    
+    init(conversation: Conversation) {
+        self.conversation = conversation
+        // Initialize CoachViewModel - will be injected via container in body
+        _coachViewModel = StateObject(wrappedValue: CoachViewModel(
+            coachService: DependencyContainer.shared.coachService
+        ))
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -27,6 +37,26 @@ struct ChatView: View {
                         ForEach(messages) { message in
                             MessageBubble(message: message)
                                 .id(message.id)
+                        }
+
+                        // Coach card - show after assistant's latest message
+                        if let coachData = latestCoachData,
+                           !coachViewModel.isAcknowledged,
+                           !coachViewModel.isSuppressed() {
+                            DistortionCoachCard(
+                                coachData: coachData,
+                                isAcknowledged: coachViewModel.isAcknowledged,
+                                onAction: { action in
+                                    withAnimation {
+                                        coachViewModel.handleAction(
+                                            action,
+                                            encounterId: coachData.encounterId,
+                                            distortionCode: coachData.distortionCode,
+                                            confidence: coachData.confidence
+                                        )
+                                    }
+                                }
+                            )
                         }
 
                         if isSending {
@@ -178,6 +208,14 @@ struct ChatView: View {
                 // Update title if generated
                 if let newTitle = response.conversationTitle {
                     displayTitle = newTitle
+                }
+                
+                // Handle coach data if present
+                if let coachData = response.coachData {
+                    withAnimation {
+                        latestCoachData = coachData
+                        coachViewModel.isAcknowledged = false // Reset for new coach card
+                    }
                 }
 
                 // Show crisis resources after a brief delay

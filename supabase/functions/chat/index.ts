@@ -726,8 +726,11 @@ serve(async (req) => {
 
     // Cognitive Bias Coach detection (after AI response, before title generation)
     let coachData: any = null;
+    let conversationTitle: string | null = null; // TODO: Implement title generation
+
     try {
       // Fetch coach settings for this user
+      // TODO: Cache coach settings with 5-minute TTL to avoid fetching on every message
       const { data: coachSettings } = await supabaseAdmin
         .from("coach_settings")
         .select("is_enabled, sensitivity_level, silent_hours_start, silent_hours_end, disabled_distortions")
@@ -787,26 +790,30 @@ serve(async (req) => {
                 );
 
                 if (reframe) {
-                  // Log encounter
-                  const { data: encounter } = await supabaseAdmin
-                    .from("distortion_encounters")
-                    .insert({
-                      user_id: user.id,
-                      distortion_code: detection.distortionCode,
-                      conversation_id: conversationId,
-                      original_message_preview: trimmedContent.substring(0, 200),
-                      reframe_offered: true,
-                      reframe_text: reframe.reframeText,
-                      confidence: detection.confidence,
-                      encounter_type: "chat",
-                      occurred_at: now.toISOString(),
+                  // Log encounter using atomic RPC function
+                  const { data: encounterResult, error: encounterError } = await supabaseAdmin
+                    .rpc("log_coach_encounter", {
+                      p_user_id: user.id,
+                      p_distortion_code: detection.distortionCode,
+                      p_conversation_id: conversationId,
+                      p_original_message_preview: trimmedContent.substring(0, 200),
+                      p_reframe_text: reframe.reframeText,
+                      p_confidence: detection.confidence,
+                      p_encounter_type: "chat",
                     })
-                    .select("id")
                     .single();
+
+                  if (encounterError || !encounterResult?.success) {
+                    console.error(
+                      "Failed to log encounter:",
+                      encounterError || encounterResult?.error_message
+                    );
+                    // Continue anyway - don't block coach from showing
+                  }
 
                   // Build coach data for response
                   coachData = {
-                    encounterId: encounter?.id,
+                    encounterId: encounterResult?.encounter_id || null,
                     distortionCode: detection.distortionCode,
                     distortionName: reframe.distortionName,
                     shortDescription: reframe.shortDescription,
