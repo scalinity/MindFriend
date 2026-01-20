@@ -248,7 +248,9 @@ COMMENT ON FUNCTION update_companion_memory_usage IS 'Updates last_used_at and i
 
 -- Schedule cron job to cleanup expired intents every hour (requires pg_cron extension)
 -- This handles automatic cleanup of expired daily intents
-DO $$
+-- Note: pg_cron may not be available in all Supabase environments
+-- If not available, call cleanup_expired_intents() manually or via scheduled Edge Function
+DO $outer$
 BEGIN
   -- Check if pg_cron extension is available
   IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
@@ -258,16 +260,16 @@ BEGIN
     -- Schedule the cleanup to run every hour at minute 0
     PERFORM cron.schedule(
       'cleanup_expired_intents_hourly',
-      '0 * * * *',  -- Every hour at minute 0
-      $$SELECT cleanup_expired_intents(1000)$$
+      '0 * * * *',
+      'SELECT cleanup_expired_intents(1000)'
     );
 
     RAISE NOTICE 'Scheduled cleanup_expired_intents cron job';
   ELSE
-    RAISE NOTICE 'pg_cron extension not available - skipping cron schedule. Call cleanup_expired_intents manually or via Edge Function.';
+    RAISE NOTICE 'pg_cron extension not available - skipping cron schedule';
   END IF;
 EXCEPTION
   WHEN OTHERS THEN
     -- pg_cron may not be available in all environments
     RAISE NOTICE 'Could not schedule cron job: %', SQLERRM;
-END $$;
+END $outer$;
