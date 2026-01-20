@@ -356,7 +356,8 @@ struct InsightCard: View {
                 severityLevel: "moderate",
                 isBaseline: true,
                 notes: nil,
-                completedAt: Date().addingTimeInterval(-86400 * 7)
+                completedAt: Date().addingTimeInterval(-86400 * 7),
+                createdAt: Date()
             ),
             AssessmentResponse(
                 id: UUID(),
@@ -367,7 +368,8 @@ struct InsightCard: View {
                 severityLevel: "moderate",
                 isBaseline: false,
                 notes: nil,
-                completedAt: Date()
+                completedAt: Date(),
+                createdAt: Date()
             )
         ],
         goal: OutcomeGoal(
@@ -379,7 +381,9 @@ struct InsightCard: View {
             baselineScore: 18,
             baselineDate: Date().addingTimeInterval(-86400 * 7),
             achieved: false,
-            achievedAt: nil
+            achievedAt: nil,
+            createdAt: Date(),
+            updatedAt: Date()
         )
     )
 }

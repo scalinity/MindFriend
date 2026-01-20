@@ -1,0 +1,437 @@
+import Foundation
+import Supabase
+
+/// Service for generating and managing AI-created wellness content
+@MainActor
+final class GeneratedContentService: ObservableObject {
+    private let supabase: SupabaseClient
+
+    @Published private(set) var isGenerating = false
+    @Published private(set) var quotaStatus: ContentQuotaStatus?
+    @Published private(set) var error: GeneratedContentError?
+
+    init(supabase: SupabaseClient) {
+        self.supabase = supabase
+    }
+
+    // MARK: - Content Generation
+
+    /// Generate new AI content
+    func generateContent(
+        type: GeneratedContentType,
+        params: GenerateContentParams = GenerateContentParams()
+    ) async throws -> GenerateContentResponse {
+        isGenerating = true
+        error = nil
+
+        defer { isGenerating = false }
+
+        let request = GenerateContentRequest(contentType: type, params: params)
+
+        do {
+            let response: GenerateContentResponse = try await supabase.functions.invoke(
+                "generate-content",
+                options: FunctionInvokeOptions(body: request)
+            )
+
+            // Update quota status from response
+            quotaStatus = ContentQuotaStatus(
+                used: response.quotaUsed,
+                limit: response.quotaLimit,
+                isPremium: response.quotaLimit > 3,
+                resetsAt: Calendar.current.startOfDay(for: Date().addingTimeInterval(86400))
+            )
+
+            if let errorMessage = response.error {
+                throw GeneratedContentError.generationFailed(errorMessage)
+            }
+
+            return response
+        } catch let functionError as FunctionsError {
+            let contentError = mapFunctionsError(functionError)
+            error = contentError
+            throw contentError
+        }
+    }
+
+    // MARK: - Content Library
+
+    /// Fetch user's generated content library
+    func fetchContentLibrary(
+        type: GeneratedContentType? = nil,
+        limit: Int = 50,
+        offset: Int = 0
+    ) async throws -> [GeneratedContent] {
+        var query = supabase
+            .from("generated_content")
+            .select()
+            .order("created_at", ascending: false)
+            .range(from: offset, to: offset + limit - 1)
+
+        if let type = type {
+            query = query.eq("content_type", value: type.rawValue)
+        }
+
+        let content: [GeneratedContent] = try await query.execute().value
+        return content
+    }
+
+    /// Fetch a single content item by ID
+    func fetchContent(id: UUID) async throws -> GeneratedContent {
+        let content: GeneratedContent = try await supabase
+            .from("generated_content")
+            .select()
+            .eq("id", value: id.uuidString)
+            .single()
+            .execute()
+            .value
+
+        return content
+    }
+
+    /// Fetch user's favorite content
+    func fetchFavorites() async throws -> [GeneratedContent] {
+        let content: [GeneratedContent] = try await supabase
+            .from("generated_content")
+            .select()
+            .eq("is_favorite", value: true)
+            .order("created_at", ascending: false)
+            .execute()
+            .value
+
+        return content
+    }
+
+    /// Toggle favorite status for content
+    func toggleFavorite(contentId: UUID) async throws -> Bool {
+        // First get current state
+        let current: GeneratedContent = try await supabase
+            .from("generated_content")
+            .select("is_favorite")
+            .eq("id", value: contentId.uuidString)
+            .single()
+            .execute()
+            .value
+
+        let newState = !current.isFavorite
+
+        try await supabase
+            .from("generated_content")
+            .update(["is_favorite": newState])
+            .eq("id", value: contentId.uuidString)
+            .execute()
+
+        return newState
+    }
+
+    /// Record that content was played
+    func recordPlay(contentId: UUID) async throws {
+        try await supabase.rpc(
+            "increment_play_count",
+            params: ["content_id": contentId.uuidString]
+        ).execute()
+    }
+
+    /// Delete generated content
+    func deleteContent(id: UUID) async throws {
+        try await supabase
+            .from("generated_content")
+            .delete()
+            .eq("id", value: id.uuidString)
+            .execute()
+    }
+
+    // MARK: - Content Series
+
+    /// Fetch user's content series
+    func fetchSeries(activeOnly: Bool = true) async throws -> [GeneratedContentSeries] {
+        var query = supabase
+            .from("gen_content_series")
+            .select()
+            .order("created_at", ascending: false)
+
+        if activeOnly {
+            query = query.eq("is_active", value: true)
+        }
+
+        let series: [GeneratedContentSeries] = try await query.execute().value
+        return series
+    }
+
+    /// Fetch content in a series
+    func fetchSeriesContent(seriesId: UUID) async throws -> [GeneratedContent] {
+        let content: [GeneratedContent] = try await supabase
+            .from("generated_content")
+            .select()
+            .eq("series_id", value: seriesId.uuidString)
+            .order("series_order", ascending: true)
+            .execute()
+            .value
+
+        return content
+    }
+
+    // MARK: - Voice Preferences
+
+    /// Fetch voice preferences
+    func fetchVoicePreferences() async throws -> [VoicePreference] {
+        let preferences: [VoicePreference] = try await supabase
+            .from("voice_preferences")
+            .select()
+            .execute()
+            .value
+
+        return preferences
+    }
+
+    /// Update voice preference for a content type
+    func updateVoicePreference(
+        contentType: GeneratedContentType,
+        voiceId: String,
+        speed: Double = 1.0,
+        backgroundSound: BackgroundSoundType? = nil,
+        backgroundVolume: Double = 0.3
+    ) async throws {
+        let userId = try await getCurrentUserId()
+
+        try await supabase
+            .from("voice_preferences")
+            .upsert([
+                "user_id": userId.uuidString,
+                "content_type": contentType.rawValue,
+                "preferred_voice_id": voiceId,
+                "preferred_speed": speed,
+                "background_sound_enabled": backgroundSound != nil,
+                "background_sound_type": backgroundSound?.rawValue as Any,
+                "background_sound_volume": backgroundVolume
+            ], onConflict: "user_id,content_type")
+            .execute()
+    }
+
+    // MARK: - Ratings & Feedback
+
+    /// Rate content
+    func rateContent(
+        contentId: UUID,
+        rating: Int,
+        helpful: Bool? = nil,
+        feedback: String? = nil
+    ) async throws -> RateContentResponse {
+        let request = RateContentRequest(
+            contentId: contentId.uuidString,
+            rating: rating,
+            helpful: helpful,
+            feedback: feedback
+        )
+
+        let response: RateContentResponse = try await supabase.functions.invoke(
+            "rate-content",
+            options: FunctionInvokeOptions(body: request)
+        )
+
+        return response
+    }
+
+    /// Flag content for review
+    func flagContent(
+        contentId: UUID,
+        reason: ContentFlagReason,
+        details: String? = nil
+    ) async throws -> FlagContentResponse {
+        let request = FlagContentRequest(
+            contentId: contentId.uuidString,
+            reason: reason,
+            details: details
+        )
+
+        let response: FlagContentResponse = try await supabase.functions.invoke(
+            "flag-content",
+            options: FunctionInvokeOptions(body: request)
+        )
+
+        return response
+    }
+
+    // MARK: - Quota
+
+    /// Fetch current quota status
+    func fetchQuotaStatus() async throws -> ContentQuotaStatus {
+        let userId = try await getCurrentUserId()
+
+        // Get today's generation count
+        let startOfDay = Calendar.current.startOfDay(for: Date())
+
+        struct CountResult: Codable {
+            let count: Int
+        }
+
+        let result: [CountResult] = try await supabase
+            .from("gen_content_requests")
+            .select("count", head: false, count: .exact)
+            .eq("user_id", value: userId.uuidString)
+            .gte("created_at", value: ISO8601DateFormatter().string(from: startOfDay))
+            .execute()
+            .value
+
+        let used = result.first?.count ?? 0
+
+        // Check premium status
+        struct SubscriptionStatus: Codable {
+            let tier: String
+        }
+
+        let subscription: SubscriptionStatus? = try? await supabase
+            .from("subscriptions")
+            .select("tier")
+            .eq("user_id", value: userId.uuidString)
+            .eq("status", value: "active")
+            .single()
+            .execute()
+            .value
+
+        let isPremium = subscription?.tier == "premium"
+        let limit = isPremium ? 999 : 3
+
+        let status = ContentQuotaStatus(
+            used: used,
+            limit: limit,
+            isPremium: isPremium,
+            resetsAt: Calendar.current.startOfDay(for: Date().addingTimeInterval(86400))
+        )
+
+        quotaStatus = status
+        return status
+    }
+
+    // MARK: - Helpers
+
+    private func getCurrentUserId() async throws -> UUID {
+        guard let user = supabase.auth.currentUser else {
+            throw GeneratedContentError.notAuthenticated
+        }
+        return user.id
+    }
+
+    private func mapFunctionsError(_ error: FunctionsError) -> GeneratedContentError {
+        switch error {
+        case .httpError(let code, _):
+            switch code {
+            case 401:
+                return .notAuthenticated
+            case 429:
+                return .quotaExceeded
+            case 400:
+                return .invalidRequest("Invalid request parameters")
+            default:
+                return .serverError("Server error: \(code)")
+            }
+        case .relayError:
+            return .networkError
+        }
+    }
+}
+
+// MARK: - Errors
+
+enum GeneratedContentError: LocalizedError {
+    case notAuthenticated
+    case quotaExceeded
+    case invalidRequest(String)
+    case generationFailed(String)
+    case serverError(String)
+    case networkError
+    case contentNotFound
+
+    var errorDescription: String? {
+        switch self {
+        case .notAuthenticated:
+            return "Please sign in to generate content"
+        case .quotaExceeded:
+            return "Daily generation limit reached. Upgrade to Premium for unlimited content."
+        case .invalidRequest(let message):
+            return "Invalid request: \(message)"
+        case .generationFailed(let message):
+            return "Generation failed: \(message)"
+        case .serverError(let message):
+            return message
+        case .networkError:
+            return "Network error. Please check your connection."
+        case .contentNotFound:
+            return "Content not found"
+        }
+    }
+
+    var recoverySuggestion: String? {
+        switch self {
+        case .quotaExceeded:
+            return "Tap here to explore Premium"
+        case .networkError:
+            return "Check your internet connection and try again"
+        default:
+            return nil
+        }
+    }
+}
+
+// MARK: - Preview Helpers
+
+#if DEBUG
+extension GeneratedContentService {
+    static var preview: GeneratedContentService {
+        GeneratedContentService(supabase: SupabaseClient(
+            supabaseURL: URL(string: "https://example.supabase.co")!,
+            supabaseKey: "preview-key"
+        ))
+    }
+}
+
+extension GeneratedContent {
+    static var preview: GeneratedContent {
+        GeneratedContent(
+            id: UUID(),
+            userId: UUID(),
+            contentType: .meditation,
+            title: "Peaceful Evening Meditation",
+            textContent: "Welcome to this peaceful evening meditation...",
+            audioUrl: "https://example.com/audio.mp3",
+            voiceId: DefaultVoice.sarah.id,
+            duration: 600,
+            qualityScore: 0.92,
+            status: .completed,
+            generationPrompt: "A calming meditation for evening relaxation",
+            aiModel: "grok-2",
+            processingTimeMs: 15000,
+            triggerWarnings: nil,
+            averageRating: 4.5,
+            ratingCount: 12,
+            seriesId: nil,
+            seriesOrder: nil,
+            isFavorite: false,
+            playCount: 5,
+            lastPlayedAt: Date().addingTimeInterval(-3600),
+            createdAt: Date().addingTimeInterval(-86400),
+            updatedAt: Date().addingTimeInterval(-86400)
+        )
+    }
+}
+
+extension ContentQuotaStatus {
+    static var preview: ContentQuotaStatus {
+        ContentQuotaStatus(
+            used: 1,
+            limit: 3,
+            isPremium: false,
+            resetsAt: Calendar.current.startOfDay(for: Date().addingTimeInterval(86400))
+        )
+    }
+
+    static var premiumPreview: ContentQuotaStatus {
+        ContentQuotaStatus(
+            used: 5,
+            limit: 999,
+            isPremium: true,
+            resetsAt: nil
+        )
+    }
+}
+#endif

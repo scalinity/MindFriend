@@ -184,6 +184,9 @@ struct HomeView: View {
                     // Weekly Insights
                     InsightsPreviewCard(insight: weeklyInsight)
 
+                    // Progress Stories - Weekly Recap
+                    ProgressStoryPreviewCard()
+
                     // Insight Lab - 7-day experiments
                     InsightLabHomeCard()
                         .environmentObject(container.insightLabService)

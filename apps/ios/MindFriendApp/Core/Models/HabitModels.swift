@@ -168,9 +168,9 @@ struct HabitTemplate: Identifiable, Codable {
     }
 }
 
-// MARK: - Streak Information Model
+// MARK: - Habit Streak Information Model
 
-struct StreakInfo: Equatable {
+struct HabitStreakInfo: Equatable {
     let currentStreak: Int
     let longestStreak: Int
     let lastCompletionDate: Date?

@@ -1,6 +1,6 @@
 import Foundation
 
-struct AdherenceStats {
+struct MedicationAdherenceStats {
     let percentage: Double
     let takenCount: Int
     let missedCount: Int
@@ -14,7 +14,7 @@ struct AdherenceStats {
 }
 
 final class AdherenceCalculator {
-    func calculate(logs: [MedicationLog], totalScheduled: Int) -> AdherenceStats {
+    func calculate(logs: [MedicationLog], totalScheduled: Int) -> MedicationAdherenceStats {
         let taken = logs.filter { $0.status == .taken }.count
         let late = logs.filter { $0.status == .late }.count
         let skipped = logs.filter { $0.status == .skipped }.count
@@ -27,7 +27,7 @@ final class AdherenceCalculator {
 
         let streak = calculateStreak(logs: logs.sorted { $0.scheduledAt > $1.scheduledAt })
 
-        return AdherenceStats(
+        return MedicationAdherenceStats(
             percentage: percentage,
             takenCount: taken,
             missedCount: skipped + pending,
@@ -39,7 +39,7 @@ final class AdherenceCalculator {
 
     func calculateMoodCorrelation(
         medicationLogs: [MedicationLog],
-        moodLogs: [Mood]
+        moodLogs: [MoodEntry]
     ) -> MedicationMoodCorrelation {
         var adherentDayMoods: [Double] = []
         var nonAdherentDayMoods: [Double] = []

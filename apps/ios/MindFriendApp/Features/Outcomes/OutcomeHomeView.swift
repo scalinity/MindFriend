@@ -289,5 +289,5 @@ extension Double {
 }
 
 #Preview {
-    OutcomeHomeView(outcomeService: OutcomeTrackingService(supabaseClient: MockSupabaseClient()))
+    OutcomeHomeView(outcomeService: OutcomeTrackingService(supabase: .mock, authService: SupabaseAuthService()))
 }

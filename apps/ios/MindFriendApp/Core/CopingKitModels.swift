@@ -54,52 +54,7 @@ enum CopingKitStepType: String, Codable {
 }
 
 // MARK: - Breathing Pattern
-
-enum BreathingPattern: String, Codable {
-    case box = "box"
-    case fourSevenEight = "4-7-8"
-    case calm = "calm"
-
-    var displayName: String {
-        switch self {
-        case .box: return "Box Breathing"
-        case .fourSevenEight: return "4-7-8 Breathing"
-        case .calm: return "Calm Breathing"
-        }
-    }
-
-    var inhaleSeconds: Int {
-        switch self {
-        case .box: return 4
-        case .fourSevenEight: return 4
-        case .calm: return 4
-        }
-    }
-
-    var holdAfterInhaleSeconds: Int {
-        switch self {
-        case .box: return 4
-        case .fourSevenEight: return 7
-        case .calm: return 0
-        }
-    }
-
-    var exhaleSeconds: Int {
-        switch self {
-        case .box: return 4
-        case .fourSevenEight: return 8
-        case .calm: return 6
-        }
-    }
-
-    var holdAfterExhaleSeconds: Int {
-        switch self {
-        case .box: return 4
-        case .fourSevenEight: return 0
-        case .calm: return 0
-        }
-    }
-}
+// See SOSModels.swift for BreathingPattern enum definition
 
 // MARK: - Coping Kit Step
 
@@ -135,7 +90,7 @@ struct CopingKitStep: Codable, Identifiable, Equatable {
 
     /// Get breathing pattern with fallback to box breathing
     var effectiveBreathingPattern: BreathingPattern {
-        breathingPattern ?? .box
+        breathingPattern ?? .boxBreathing
     }
 }
 
@@ -280,7 +235,7 @@ struct GetCopingKitsResponse: Codable {
 
 // MARK: - Track Request Types
 
-enum CopingKitAction: String {
+enum CopingKitAction: String, Codable {
     case start
     case stepComplete = "step_complete"
     case complete

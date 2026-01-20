@@ -3,45 +3,6 @@ import SwiftUI
 
 // MARK: - Clinical Assessment Types
 
-/// Types of clinical assessments available
-enum AssessmentType: String, Codable, CaseIterable {
-    case phq9 = "phq9"
-    case gad7 = "gad7"
-    case weeklyCheckin = "weekly_checkin"
-
-    var displayName: String {
-        switch self {
-        case .phq9: return "PHQ-9"
-        case .gad7: return "GAD-7"
-        case .weeklyCheckin: return "Weekly Check-In"
-        }
-    }
-
-    var fullName: String {
-        switch self {
-        case .phq9: return "Patient Health Questionnaire-9"
-        case .gad7: return "Generalized Anxiety Disorder-7"
-        case .weeklyCheckin: return "Weekly Progress Check-In"
-        }
-    }
-
-    var questionCount: Int {
-        switch self {
-        case .phq9: return 9
-        case .gad7: return 7
-        case .weeklyCheckin: return 5
-        }
-    }
-
-    var maxScore: Int {
-        switch self {
-        case .phq9: return 27  // 9 questions × 3 max
-        case .gad7: return 21  // 7 questions × 3 max
-        case .weeklyCheckin: return 15  // 5 questions × 3 max
-        }
-    }
-}
-
 /// Assessment point in a program
 enum AssessmentPoint: String, Codable {
     case pre

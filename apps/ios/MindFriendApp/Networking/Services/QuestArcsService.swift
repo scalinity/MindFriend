@@ -27,12 +27,12 @@ final class QuestArcsService {
     /// - Returns: Array of quest arcs enriched with user enrollment status
     /// - Throws: QuestArcError with specific error context
     func getQuestArcs(category: String? = nil, includeCompleted: Bool = false) async throws -> [QuestArc] {
-        var params: [String: String] = [:]
+        var queryItems: [URLQueryItem] = []
         if let category = category {
-            params["category"] = category
+            queryItems.append(URLQueryItem(name: "category", value: category))
         }
         if includeCompleted {
-            params["includeCompleted"] = "true"
+            queryItems.append(URLQueryItem(name: "includeCompleted", value: "true"))
         }
 
         do {
@@ -40,7 +40,7 @@ final class QuestArcsService {
                 "get-quest-arcs",
                 options: FunctionInvokeOptions(
                     method: .get,
-                    query: params.isEmpty ? nil : params
+                    query: queryItems.isEmpty ? nil : queryItems
                 )
             )
             return response.arcs
@@ -66,7 +66,7 @@ final class QuestArcsService {
 
             // Check for error responses
             if let error = response.error, !error.isEmpty {
-                throw QuestArcError.from(response) ?? QuestArcError.apiError(code: response.code ?? "UNKNOWN", message: error)
+                throw QuestArcError.from(response: response) ?? QuestArcError.apiError(code: response.code ?? "UNKNOWN", message: error)
             }
 
             return response

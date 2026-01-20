@@ -164,7 +164,9 @@ struct MedicationScheduleRow: View {
 }
 
 #Preview {
-    MedicationsListView(viewModel: MedicationListViewModel(service: MockMedicationService()))
+    // TODO: Medications feature needs proper service setup in DependencyContainer
+    // MedicationsListView(viewModel: MedicationListViewModel(service: MockMedicationService()))
+    Text("Medications feature preview temporarily disabled")
 }
 
 // Mock for preview

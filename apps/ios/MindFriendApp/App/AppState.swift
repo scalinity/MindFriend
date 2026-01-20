@@ -57,7 +57,6 @@ final class AppState: ObservableObject {
 
     func setAuthenticated(user: UserProfile) {
         self.currentUser = user
-        self.entitlements = user.entitlements
         self.authState = .authenticated
         self.hasCompletedInitialAuth = true
         self.isUsingCachedData = false
@@ -66,7 +65,6 @@ final class AppState: ObservableObject {
     /// Set authenticated state with cached data (before network verification)
     func setAuthenticatedFromCache(user: UserProfile) {
         self.currentUser = user
-        self.entitlements = user.entitlements
         self.authState = .authenticated
         self.isUsingCachedData = true
         // Don't set hasCompletedInitialAuth - that's for after network verification
@@ -91,7 +89,6 @@ final class AppState: ObservableObject {
 
     func completeOnboarding(user: UserProfile) {
         self.currentUser = user
-        self.entitlements = user.entitlements
         self.authState = .authenticated
     }
 
@@ -102,7 +99,6 @@ final class AppState: ObservableObject {
 
     func updateEntitlements(_ entitlements: Entitlements) {
         self.entitlements = entitlements
-        self.currentUser?.entitlements = entitlements
     }
 
     func showLevelUpCelebration(level: Int, title: String) {
