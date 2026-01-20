@@ -363,6 +363,7 @@
 		C584218D2696A0AF36F70EDE /* SkillTreeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C4807FE0FAA6E1520CAB492 /* SkillTreeView.swift */; };
 		C5CD5B639A021B79419978B6 /* ArtGeneratorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E3DEF04F6EFE411C69B88BA /* ArtGeneratorView.swift */; };
 		C648FAC23AEB10F1EEE6B166 /* RitualModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 140407069DFC525EA9856CB8 /* RitualModels.swift */; };
+		C6E6DE20FF34622F4EF3E66F /* SensoryToolkitCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5DB9F52670A7759DF2AFBBA /* SensoryToolkitCard.swift */; };
 		C6F27CC833AE09834A29B583 /* EditMemorySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BA8EC122A89C099977E4C41 /* EditMemorySheet.swift */; };
 		C7DEAB17670F693A69D83D63 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AD19E2219C48E7E03F76B460 /* PrivacyInfo.xcprivacy */; };
 		C808AE897911CFA87B0DABA0 /* MedicationListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09B57C517969A19410C5F29E /* MedicationListViewModel.swift */; };
@@ -840,6 +841,7 @@
 		C3DF0D106BD32F67046E0740 /* AddMedicationView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AddMedicationView.swift; sourceTree = "<group>"; };
 		C44ECA1801C3C8F60F888B41 /* HabitNotificationServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HabitNotificationServiceTests.swift; sourceTree = "<group>"; };
 		C5BEF65212D8B83A046FA240 /* MockSupabaseClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MockSupabaseClient.swift; path = MockSupabaseClient.swift; sourceTree = "<group>"; };
+		C5DB9F52670A7759DF2AFBBA /* SensoryToolkitCard.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SensoryToolkitCard.swift; sourceTree = "<group>"; };
 		C7AD65176299932BB1BB0BDB /* VoiceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSettingsView.swift; sourceTree = "<group>"; };
 		C7ADE85D274F40B51B58B674 /* ReactionPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReactionPicker.swift; sourceTree = "<group>"; };
 		C7E24898F95D4B14450DE134 /* PhotoMoodModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PhotoMoodModels.swift; sourceTree = "<group>"; };
@@ -1917,6 +1919,7 @@
 			isa = PBXGroup;
 			children = (
 				75913D2DA15F48212D0E4681 /* RecoveryModeHomeView.swift */,
+				C5DB9F52670A7759DF2AFBBA /* SensoryToolkitCard.swift */,
 			);
 			name = Home;
 			path = Home;
@@ -2992,6 +2995,7 @@
 				D8CEA5563A7A7068D6D2DFFC /* TactileLibraryView.swift in Sources */,
 				08082DDAD826169B4574CB62 /* VisualLibraryView.swift in Sources */,
 				1BD495887DDADABD8717C65B /* SensoryHomeView.swift in Sources */,
+				C6E6DE20FF34622F4EF3E66F /* SensoryToolkitCard.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
