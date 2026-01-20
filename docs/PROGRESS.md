@@ -1,3 +1,69 @@
+## [2026-01-21] Sensory Regulation Toolkit - AHAP Patterns, Localization, and Edge Functions
+
+**Type:** Feature
+**Status:** Phase 1 Content Complete
+
+### Summary
+
+Completed high-priority content for Sensory Regulation Toolkit: 6 AHAP haptic pattern files for tactile modality, ~100 localization string keys, and 2 Edge Functions for favorites and statistics. All patterns added to Xcode Resources, enabling tactile patterns to deliver actual haptic feedback on devices.
+
+### Changes
+
+| Component          | Files                                                  | Description                                                                                      |
+| ------------------ | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| **AHAP Patterns**  | 6 files in `apps/ios/MindFriendApp/Resources/Haptics/` | Tactile patterns: heartbeat (60 BPM), earth_pulse (deep rhythm), wave (rising/falling intensity) |
+|                    |                                                        | breath_cue (4s inhale + 6s exhale with curves), counting (4-7-8 breathing), sos (Morse code)     |
+| **Localization**   | `apps/ios/sensory-localization-strings.json`           | ~100 string key definitions: pattern names/descriptions, categories, errors, tips, achievements  |
+| **Edge Functions** | `supabase/functions/save-sensory-favorite/index.ts`    | Add/remove pattern favorites with unique constraint handling (code 23505)                        |
+|                    | `supabase/functions/get-sensory-stats/index.ts`        | Stats aggregation: total sessions/minutes, streaks, modality breakdown, recent sessions          |
+| **Integration**    | `apps/ios/MindFriendApp.xcodeproj/project.pbxproj`     | Added all 6 AHAP files to Resources build phase (file type: text.json)                           |
+
+### Pattern Design Details
+
+**AHAP Format:**
+
+- **heartbeat.ahap**: 5 HapticTransient events at 1-second intervals (intensity 0.8, sharpness 0.3)
+- **earth_pulse.ahap**: HapticContinuous events with 0.4s duration, low sharpness (0.1) for deep feel
+- **wave.ahap**: ParameterCurveControlPoints for smooth intensity transitions (0.2 → 0.8 → 1.0 → 0.6 → 0.2)
+- **breath_cue.ahap**: Separate curves for inhale (rising 0.3→0.7) and exhale (falling 0.7→0.2)
+- **counting.ahap**: 19 taps with varied intensity/sharpness per breathing phase (4s inhale, 7s hold, 8s exhale)
+- **sos.ahap**: Morse code structure (3 short taps + 3 long vibrations + 3 short taps)
+
+**Streak Calculation Algorithm:**
+
+- Group sessions by date (normalized to midnight)
+- Count consecutive days backwards from today using Map for O(1) lookup
+- Return current streak + longest streak (simplified for MVP)
+
+### Testing
+
+- [x] AHAP files created with valid JSON structure
+- [x] Added to Xcode Resources build phase (verified via project.pbxproj)
+- [ ] Manual verification: Load patterns in iOS app and test haptic feedback
+- [ ] Unit tests: Streak calculation logic
+- [ ] Integration tests: save-sensory-favorite unique constraint handling
+- [ ] Integration tests: get-sensory-stats data accuracy
+
+### Notes
+
+**Blocking Work Completed:**
+
+- AHAP files were blocking requirement - tactile patterns couldn't vibrate without them
+- All 6 patterns follow Apple's Core Haptics specification
+- Designed without Apple Haptics Studio (used timing calculations and format docs)
+
+**Commit:** feat: add AHAP patterns, localization, and Edge Functions for Sensory Toolkit (b992857)
+
+**Next Steps:**
+
+1. Deploy Edge Functions to production: `supabase functions deploy save-sensory-favorite get-sensory-stats`
+2. Add actual localized strings to Xcode String Catalog using key definitions
+3. Create Settings view for sensory preferences (default speed, haptic intensity, auto-pause)
+4. Seed achievement badge definitions (SEN-001 through SEN-005)
+5. Write unit tests for all 4 services (TactileService, VisualService, AudioService, SensorySessionService)
+
+---
+
 ## [2026-01-20] Cognitive Bias Coach - Complete Implementation (Phase 0-2)
 
 **Type:** Feature
