@@ -96,7 +96,7 @@ struct ResultsView: View {
                                     .font(.system(size: 16, weight: .semibold, design: .default))
                                     .foregroundColor(.gray)
                                 
-                                HStack(alignment: .baseline, spacing: 4) {
+                                HStack(alignment: .firstTextBaseline, spacing: 4) {
                                     Text("\(response.totalScore)")
                                         .font(.system(size: 56, weight: .bold, design: .default))
                                         .foregroundColor(severityColor)

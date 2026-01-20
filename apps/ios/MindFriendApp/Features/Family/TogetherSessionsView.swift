@@ -54,7 +54,7 @@ struct TogetherSessionsView: View {
                             .padding(.horizontal)
 
                         ForEach(templates.prefix(4), id: \.id) { template in
-                            TemplateCard(template: template) {
+                            TogetherTemplateCard(template: template) {
                                 // Start session with this template
                             }
                         }
@@ -184,7 +184,7 @@ struct SessionCard: View {
     }
 }
 
-struct TemplateCard: View {
+struct TogetherTemplateCard: View {
     let template: TogetherTemplate
     let action: () -> Void
 

@@ -26,6 +26,35 @@ struct CrisisResourcesView: View {
                     }
                     .padding(.horizontal)
 
+                    NavigationLink {
+                        SafetyPlanView()
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "heart.shield.fill")
+                                .font(.title3)
+                                .foregroundStyle(.red)
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("View My Safety Plan")
+                                    .font(.headline)
+                                    .foregroundStyle(.primary)
+                                Text("Personal steps you chose for difficult moments")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Spacer()
+
+                            Image(systemName: "chevron.right")
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding()
+                        .background(Color(.secondarySystemBackground))
+                        .cornerRadius(12)
+                        .padding(.horizontal)
+                    }
+                    .buttonStyle(.plain)
+
                     // Resources list
                     if isLoading {
                         ProgressView()

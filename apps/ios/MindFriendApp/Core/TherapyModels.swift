@@ -167,8 +167,8 @@ struct TherapistAssignment: Codable, Identifiable, Equatable {
     var clientNotes: String?
     let createdAt: Date
 
-    // Joined data (Exercise model from Models.swift)
-    // Note: Exercise relationship loaded separately if needed
+    // Joined data (loaded separately via query)
+    var connection: TherapyConnection?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -182,6 +182,7 @@ struct TherapistAssignment: Codable, Identifiable, Equatable {
         case completedAt = "completed_at"
         case clientNotes = "client_notes"
         case createdAt = "created_at"
+        case connection = "therapy_connections"
     }
 
     // Computed properties
@@ -436,7 +437,7 @@ extension TherapistAssignment {
         let completedAt: Date? = nil
         let clientNotes: String? = nil
 
-        return TherapistAssignment(
+        var assignment = TherapistAssignment(
             id: UUID(),
             connectionId: UUID(),
             title: "Daily Gratitude Journal",
@@ -451,5 +452,7 @@ extension TherapistAssignment {
             clientNotes: clientNotes,
             createdAt: Date()
         )
+        assignment.connection = TherapyConnection.sample
+        return assignment
     }
 }

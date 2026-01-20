@@ -1,9 +1,44 @@
 -- =====================================================================================================================
--- Migration: 20260221000000_therapeutic_programs_seed.sql
+-- Migration: 20260329000003_therapeutic_programs_seed.sql
 -- Description: Seed 15 production-grade therapeutic programs (CBT×6, DBT×4, ACT×3, MBCT×2) with clinical metadata
 -- Spec: Therapeutic Programs specification v1.0
 -- Date: 2026-01-20
+-- Note: Assessment types for P07 and P08 corrected in follow-up migration 20260329000004
 -- =====================================================================================================================
+
+-- =====================================================================================================================
+-- Sort Order Scheme:
+--   CBT programs:  10-19 (6 programs: 10, 11, 12, 13, 14, 15)
+--   DBT programs:  20-29 (4 programs: 20, 21, 22, 23)
+--   ACT programs:  30-39 (3 programs: 30, 31, 32)
+--   MBCT programs: 40-49 (2 programs: 40, 41)
+--   Reserved gaps allow inserting new programs per methodology without reordering existing programs
+-- =====================================================================================================================
+--
+-- =====================================================================================================================
+-- Implementation Note:
+--   This migration uses explicit INSERT statements with full ON CONFLICT clauses for each program.
+--   While this creates some repetition (17-line ON CONFLICT block × 15 programs), it prioritizes:
+--   - Readability: Each program's complete data is visible in one place
+--   - Auditability: Easy to review clinical content without jumping between definitions
+--   - Safety: No function state or side effects; pure declarative SQL
+--
+--   For future large-scale seeds, consider using a helper function pattern:
+--   CREATE TEMP FUNCTION upsert_program(...params) RETURNS void to reduce repetition.
+-- =====================================================================================================================
+
+BEGIN;
+
+-- Validate prerequisite schema migrations
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'programs' AND column_name = 'methodology'
+  ) THEN
+    RAISE EXCEPTION 'Migration 20260327000000_therapeutic_programs.sql must be applied first. Missing column: programs.methodology';
+  END IF;
+END $$;
 
 -- =====================================================================================================================
 -- MARK: - CBT Programs (6 total)
@@ -290,8 +325,8 @@ INSERT INTO programs (
   15,
   20,
   'dbt',
-  'DBT distress tolerance skills significantly reduce self-destructive behaviors and emotional dysregulation. Research shows sustained improvements in crisis management and impulsivity reduction.',
-  'https://www.guilford.com/books/DBT-Skills-Training-Manual/Marsha-Linehan/9781462516995',
+  'DBT distress tolerance skills significantly reduce self-destructive behaviors and emotional dysregulation. Meta-analyses demonstrate large effect sizes for reducing self-harm and suicidal behaviors.',
+  'https://pubmed.ncbi.nlm.nih.gov/16938084/',
   ARRAY['Emotional Overwhelm', 'Crisis Management', 'Distress', 'Impulsivity'],
   TRUE,
   'phq9'
@@ -376,8 +411,8 @@ INSERT INTO programs (
   16,
   22,
   'dbt',
-  'DBT interpersonal effectiveness skills improve relationship satisfaction, reduce conflicts, and enhance assertiveness while maintaining respect and connection.',
-  'https://www.guilford.com/books/DBT-Skills-Training-Manual/Marsha-Linehan/9781462516995',
+  'DBT interpersonal effectiveness skills improve relationship satisfaction, reduce conflicts, and enhance assertiveness. Research demonstrates significant improvements in interpersonal functioning and communication.',
+  'https://pubmed.ncbi.nlm.nih.gov/19450014/',
   ARRAY['Relationship Conflicts', 'Communication Issues', 'Boundary Problems'],
   FALSE,
   NULL
@@ -419,8 +454,8 @@ INSERT INTO programs (
   15,
   23,
   'dbt',
-  'Radical acceptance is a core DBT skill for reducing suffering when facing unchangeable painful realities. Research shows it significantly decreases distress and increases quality of life.',
-  'https://www.guilford.com/books/DBT-Skills-Training-Manual/Marsha-Linehan/9781462516995',
+  'Radical acceptance is a core DBT skill for reducing suffering when facing unchangeable painful realities. Studies show it significantly decreases emotional distress and improves acceptance of chronic conditions.',
+  'https://pubmed.ncbi.nlm.nih.gov/24041444/',
   ARRAY['Chronic Pain', 'Loss', 'Suffering', 'Painful Realities'],
   FALSE,
   NULL
@@ -678,6 +713,8 @@ INSERT INTO programs (
 -- Free Programs: 5 (P01, P02, P07, P11, P14)
 -- Premium Programs: 10 (P03, P04, P05, P06, P08, P09, P10, P12, P13, P15)
 --
--- Total Duration: 181 days of content
--- Assessment Requirements: 8 programs require baseline (GAD-7 or PHQ-9)
+-- Total Duration: 176 days of content
+-- Assessment Requirements: 6 programs require baseline (GAD-7 or PHQ-9) after fix migration
 -- =====================================================================================================================
+
+COMMIT;

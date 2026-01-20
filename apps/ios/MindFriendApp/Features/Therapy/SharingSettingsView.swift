@@ -150,7 +150,7 @@ struct PermissionToggle: View {
     }
 }
 
-struct BulletPoint: View {
+fileprivate struct BulletPoint: View {
     let text: String
 
     var body: some View {

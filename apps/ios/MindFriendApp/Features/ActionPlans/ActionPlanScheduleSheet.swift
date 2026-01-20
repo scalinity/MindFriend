@@ -19,11 +19,11 @@ struct ActionPlanScheduleSheet: View {
     private let scheduler = ActionPlanScheduler()
 
     private var quietHoursStart: String? {
-        appState.currentUser?.settings.quietHoursStartLocal
+        appState.currentUser?.settings?.quietHoursStartLocal
     }
 
     private var quietHoursEnd: String? {
-        appState.currentUser?.settings.quietHoursEndLocal
+        appState.currentUser?.settings?.quietHoursEndLocal
     }
 
     private var adjustmentNotice: String? {

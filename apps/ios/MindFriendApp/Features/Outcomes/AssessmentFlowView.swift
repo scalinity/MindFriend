@@ -367,7 +367,8 @@ struct AssessmentFlowView: View {
             
             isPresented = false
         } catch {
-            outcomeService.error = error
+            // Error is already logged by the service
+            print("Failed to submit assessment: \(error)")
         }
         isSubmitting = false
     }

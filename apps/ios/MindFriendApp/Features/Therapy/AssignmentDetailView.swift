@@ -128,7 +128,7 @@ struct AssignmentDetailView: View {
 
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(therapist.displayName)
+                    Text(therapist.displayName ?? "Therapist")
                         .font(.subheadline)
                         .fontWeight(.medium)
 
@@ -304,13 +304,11 @@ struct AssignmentDetailView: View {
         switch viewModel.assignment.assignmentType {
         case .exercise:
             return .purple
-        case .journaling:
+        case .journalPrompt:
             return .orange
         case .moodTracking:
             return .green
-        case .reading:
-            return .blue
-        case .other:
+        case .custom:
             return .gray
         }
     }

@@ -247,3 +247,18 @@ final class BiometricContextProvider: BiometricContextProviding {
         return false
     }
 }
+
+// MARK: - Mock for Testing
+
+/// Mock biometric context provider for testing and development
+/// Returns default context without requiring HealthKit permissions
+@MainActor
+final class BiometricContextProvidingMock: BiometricContextProviding {
+    func getContext() async -> BiometricContext {
+        return .default
+    }
+
+    func requestAccess() async -> Bool {
+        return true
+    }
+}

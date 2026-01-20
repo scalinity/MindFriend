@@ -34,9 +34,6 @@ struct MindFriendApp: App {
                     // Register medication notification categories
                     NotificationCategoryManager.shared.registerCategories()
 
-                    // Configure offline services with sync handlers
-                    container.configureOfflineServices()
-
                     // OPTIMIZATION 1: Load cached auth state immediately to skip splash
                     if let cachedProfile = container.supabaseAuthService.getCachedProfile() {
                         if cachedProfile.needsOnboarding {
@@ -47,11 +44,11 @@ struct MindFriendApp: App {
 
                             // Set user context for crash reporting (from cache)
                             CrashReporter.shared.setUser(
-                                id: cachedProfile.id,
+                                id: cachedProfile.id.uuidString,
                                 email: cachedProfile.email,
                                 username: cachedProfile.handle
                             )
-                            Analytics.shared.identify(userId: cachedProfile.id)
+                            Analytics.shared.identify(userId: cachedProfile.id.uuidString)
                         }
                     }
 
@@ -80,12 +77,12 @@ struct MindFriendApp: App {
 
                             // Set user context for crash reporting and analytics
                             CrashReporter.shared.setUser(
-                                id: profile.id,
+                                id: profile.id.uuidString,
                                 email: profile.email,
                                 username: profile.handle
                             )
-                            Analytics.shared.identify(userId: profile.id)
-                            Analytics.shared.setUserProperty(.subscriptionTier, value: profile.entitlements.tier.rawValue)
+                            Analytics.shared.identify(userId: profile.id.uuidString)
+                            Analytics.shared.setUserProperty(.subscriptionTier, value: profile.entitlements?.subscriptionTier ?? "free")
                         } else {
                             // Could not fetch profile, session may be invalid
                             if !appState.isUsingCachedData {

@@ -430,7 +430,7 @@ final class SyncQueueManager: ObservableObject {
 // MARK: - Sync Status
 
 /// Represents the current sync status
-enum SyncStatus: Equatable {
+enum QueueSyncStatus: Equatable {
     case idle
     case syncing(progress: Int, total: Int)
     case completed(count: Int)

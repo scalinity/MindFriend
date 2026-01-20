@@ -159,7 +159,7 @@ private struct StorageUsageRow: View {
         } else if info.isNearLimit {
             return .orange
         } else {
-            return .accentColor
+            return .blue
         }
     }
 }
@@ -193,7 +193,7 @@ private struct ActiveDownloadRow: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Image(systemName: task.contentType.icon)
-                    .foregroundStyle(.accent)
+                    .foregroundStyle(.blue)
 
                 VStack(alignment: .leading) {
                     Text(task.title)
@@ -218,7 +218,7 @@ private struct ActiveDownloadRow: View {
 
             if task.status == .downloading {
                 ProgressView(value: task.progress)
-                    .tint(.accent)
+                    .tint(.blue)
 
                 HStack {
                     Text("\(task.progressPercentage)%")
@@ -280,7 +280,7 @@ private struct DownloadedContentRow: View {
         HStack(spacing: 12) {
             Image(systemName: content.contentType.icon)
                 .font(.title2)
-                .foregroundStyle(.accent)
+                .foregroundStyle(.blue)
                 .frame(width: 40)
 
             VStack(alignment: .leading, spacing: 4) {

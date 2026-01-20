@@ -319,7 +319,7 @@ struct CircleDetailView: View {
     }()
 
     private var currentUserId: String {
-        appState.currentUser?.id ?? ""
+        appState.currentUser?.id.uuidString ?? ""
     }
 
     var body: some View {
@@ -477,7 +477,7 @@ struct CircleDetailView: View {
         .fullScreenCover(item: $selectedRitual) { ritual in
             RitualSessionView(
                 ritual: ritual,
-                isCreator: ritual.createdBy.uuidString == appState.currentUser?.id
+                isCreator: ritual.createdBy == appState.currentUser?.id
             )
         }
         .refreshable {

@@ -293,12 +293,20 @@ struct SignInView: View {
     private func skipSignIn() {
         // Create mock user for development
         let mockUser = UserProfile(
-            id: "dev-user-123",
+            id: UUID(),
             handle: "devuser",
             displayName: "Dev User",
             email: "dev@test.com",
+            avatarUrl: nil,
             timezone: TimeZone.current.identifier,
             createdAt: Date(),
+            onboardingCompletedAt: Date(),
+            stats: UserStats(
+                currentStreakDays: 5,
+                longestStreakDays: 10,
+                totalQuestsCompleted: 25,
+                totalExercisesCompleted: 12
+            ),
             settings: UserSettings(
                 dailyQuestTimeLocal: "09:00",
                 quietHoursStartLocal: nil,
@@ -309,13 +317,11 @@ struct SignInView: View {
                 aiTone: .friendly,
                 privacyMode: .standard
             ),
-            stats: UserStats(
-                currentStreakDays: 5,
-                longestStreakDays: 10,
-                totalQuestsCompleted: 25,
-                totalExercisesCompleted: 12
+            entitlements: UserEntitlements(
+                subscriptionTier: "free",
+                premiumExpiresAt: nil,
+                features: [:]
             ),
-            entitlements: .free,
             badges: []
         )
         appState.setAuthenticated(user: mockUser)

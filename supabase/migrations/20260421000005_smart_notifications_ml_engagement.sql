@@ -33,9 +33,9 @@ CREATE TABLE IF NOT EXISTS notification_predictions (
 );
 
 -- Indexes for efficient queries
-CREATE INDEX idx_predictions_user_created ON notification_predictions(user_id, created_at DESC);
-CREATE INDEX idx_predictions_user_type ON notification_predictions(user_id, notification_type, created_at DESC);
-CREATE INDEX idx_predictions_scheduled ON notification_predictions(scheduled_for, delivered_at)
+CREATE INDEX IF NOT EXISTS idx_predictions_user_created ON notification_predictions(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_predictions_user_type ON notification_predictions(user_id, notification_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_predictions_scheduled ON notification_predictions(scheduled_for, delivered_at)
   WHERE delivered_at IS NULL;
 
 -- Enable RLS
@@ -103,10 +103,10 @@ CREATE TABLE IF NOT EXISTS notification_engagement_events (
 );
 
 -- Indexes
-CREATE INDEX idx_engagement_user_created ON notification_engagement_events(user_id, created_at DESC);
-CREATE INDEX idx_engagement_outcome ON notification_engagement_events(actual_outcome, created_at DESC);
-CREATE INDEX idx_engagement_type ON notification_engagement_events(notification_type, created_at DESC);
-CREATE INDEX idx_engagement_training ON notification_engagement_events(user_id, actual_outcome, created_at)
+CREATE INDEX IF NOT EXISTS idx_engagement_user_created ON notification_engagement_events(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_engagement_outcome ON notification_engagement_events(actual_outcome, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_engagement_type ON notification_engagement_events(notification_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_engagement_training ON notification_engagement_events(user_id, actual_outcome, created_at)
   WHERE actual_outcome IN ('opened', 'completed', 'dismissed', 'ignored');
 
 -- Enable RLS
@@ -198,7 +198,7 @@ BEGIN
 END;
 $$;
 
-COMMENT ON FUNCTION public.get_notification_training_data IS 'Get engagement events for ML model training';
+COMMENT ON FUNCTION public.get_notification_training_data(UUID, INT) IS 'Get engagement events for ML model training';
 
 -- =============================================================================
 -- MARK: - Get Weekly Engagement Stats Function
@@ -247,7 +247,7 @@ BEGIN
 END;
 $$;
 
-COMMENT ON FUNCTION public.get_weekly_engagement_stats IS 'Get weekly engagement statistics for a user';
+COMMENT ON FUNCTION public.get_weekly_engagement_stats(UUID) IS 'Get weekly engagement statistics for a user';
 
 -- =============================================================================
 -- MARK: - Log Notification Engagement Function
@@ -314,4 +314,4 @@ BEGIN
 END;
 $$;
 
-COMMENT ON FUNCTION public.log_notification_engagement IS 'Log notification engagement event from mobile app';
+COMMENT ON FUNCTION public.log_notification_engagement(UUID, TEXT, TEXT, DECIMAL, JSONB, INT, TEXT) IS 'Log notification engagement event from mobile app';

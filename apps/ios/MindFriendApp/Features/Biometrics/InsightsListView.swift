@@ -8,12 +8,17 @@ struct InsightsListView: View {
     var body: some View {
         List {
             ForEach(insights) { insight in
-                InsightCard(insight: insight)
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
-                    .onTapGesture {
-                        selectedInsight = insight
-                    }
+                InsightCard(
+                    icon: insight.insightCategory.icon,
+                    title: insight.title,
+                    description: insight.description,
+                    color: categoryColor(for: insight.insightCategory)
+                )
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+                .onTapGesture {
+                    selectedInsight = insight
+                }
             }
             .onDelete { indexSet in
                 for index in indexSet {
@@ -28,6 +33,15 @@ struct InsightsListView: View {
         .navigationTitle("All Insights")
         .sheet(item: $selectedInsight) { insight in
             InsightDetailView(insight: insight, healthKit: healthKit)
+        }
+    }
+
+    private func categoryColor(for category: BiometricInsight.InsightCategory) -> Color {
+        switch category {
+        case .sleep: return .indigo
+        case .activity: return .green
+        case .stress: return .orange
+        case .general: return .blue
         }
     }
 }

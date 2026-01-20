@@ -33,9 +33,9 @@ final class ChatService: ObservableObject {
             content: content
         )
 
-        // Create user message with server-provided ID for consistency
+        // Create user message (server saves it, we create local representation)
         let userMessage = Message(
-            id: response.userMessageId ?? UUID().uuidString,  // Use server ID, fallback for safety
+            id: UUID().uuidString,
             role: .user,
             content: content,
             createdAt: Date(),
