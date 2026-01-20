@@ -9,12 +9,12 @@ Implemented Real-Time Cognitive Bias Coach: keyword-based detection (12 distorti
 
 ### Changes
 
-| Component | Files | Description |
-|-----------|-------|-------------|
-| Database | 4 migrations | 6 tables with RLS policies, 12 distortion types, UPDATE policies, atomic RPC |
-| Edge Functions | 3 files | Detection algorithm, reframe templates (JOIN optimized), chat integration |
-| iOS | 7 files | Models (CoachModels.swift), service (CoachService.swift), UI (DistortionCoachCard, ChatView), view model |
-| Fixes | Multiple | coachData field, RLS policies, regex bugs, accessibility, race conditions, suppression |
+| Component      | Files        | Description                                                                                              |
+| -------------- | ------------ | -------------------------------------------------------------------------------------------------------- |
+| Database       | 4 migrations | 6 tables with RLS policies, 12 distortion types, UPDATE policies, atomic RPC                             |
+| Edge Functions | 3 files      | Detection algorithm, reframe templates (JOIN optimized), chat integration                                |
+| iOS            | 7 files      | Models (CoachModels.swift), service (CoachService.swift), UI (DistortionCoachCard, ChatView), view model |
+| Fixes          | Multiple     | coachData field, RLS policies, regex bugs, accessibility, race conditions, suppression                   |
 
 ### Review Results (10 Agents → Auto-Fix)
 
