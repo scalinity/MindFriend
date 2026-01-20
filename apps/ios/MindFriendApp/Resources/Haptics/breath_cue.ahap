@@ -1,0 +1,70 @@
+{
+  "Version": 1.0,
+  "Metadata": {
+    "Project": "MindFriend Sensory Toolkit",
+    "Created": "2026-01-20",
+    "Description": "Tactile inhale/exhale timing cues (4s inhale, 6s exhale)"
+  },
+  "Pattern": [
+    {
+      "Event": {
+        "Time": 0.0,
+        "EventType": "HapticTransient",
+        "EventParameters": [
+          {"ParameterID": "HapticIntensity", "ParameterValue": 0.6},
+          {"ParameterID": "HapticSharpness", "ParameterValue": 0.5}
+        ]
+      }
+    },
+    {
+      "Event": {
+        "Time": 0.0,
+        "EventType": "HapticContinuous",
+        "EventDuration": 4.0,
+        "EventParameters": [
+          {"ParameterID": "HapticIntensity", "ParameterValue": 0.3},
+          {"ParameterID": "HapticSharpness", "ParameterValue": 0.2}
+        ]
+      },
+      "ParameterCurve": {
+        "ParameterID": "HapticIntensityControl",
+        "Time": 0.0,
+        "ParameterCurveControlPoints": [
+          {"Time": 0.0, "ParameterValue": 0.3},
+          {"Time": 2.0, "ParameterValue": 0.5},
+          {"Time": 4.0, "ParameterValue": 0.7}
+        ]
+      }
+    },
+    {
+      "Event": {
+        "Time": 4.0,
+        "EventType": "HapticTransient",
+        "EventParameters": [
+          {"ParameterID": "HapticIntensity", "ParameterValue": 0.6},
+          {"ParameterID": "HapticSharpness", "ParameterValue": 0.5}
+        ]
+      }
+    },
+    {
+      "Event": {
+        "Time": 4.0,
+        "EventType": "HapticContinuous",
+        "EventDuration": 6.0,
+        "EventParameters": [
+          {"ParameterID": "HapticIntensity", "ParameterValue": 0.7},
+          {"ParameterID": "HapticSharpness", "ParameterValue": 0.2}
+        ]
+      },
+      "ParameterCurve": {
+        "ParameterID": "HapticIntensityControl",
+        "Time": 4.0,
+        "ParameterCurveControlPoints": [
+          {"Time": 4.0, "ParameterValue": 0.7},
+          {"Time": 7.0, "ParameterValue": 0.5},
+          {"Time": 10.0, "ParameterValue": 0.2}
+        ]
+      }
+    }
+  ]
+}
