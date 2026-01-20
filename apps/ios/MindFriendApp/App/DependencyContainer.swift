@@ -103,6 +103,14 @@ final class DependencyContainer: ObservableObject {
         )
     }()
 
+    lazy var companionMemoryService: CompanionMemoryService = {
+        CompanionMemoryService(authService: supabaseAuthService, supabase: supabaseClient)
+    }()
+
+    lazy var questArcsService: QuestArcsService = {
+        QuestArcsService(supabase: supabaseClient)
+    }()
+
     // TODO: Add CreatorService and FamilyService to Xcode project target
     // These services exist on disk but need to be added to the project's pbxproj file
     // lazy var creatorService: CreatorService = {
