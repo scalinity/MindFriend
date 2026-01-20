@@ -4,11 +4,11 @@ import XCTest
 final class RitualServiceTests: XCTestCase {
 
     var sut: RitualService!
-    var mockSupabase: MockSupabaseClient!
+    var mockSupabase: RitualMockSupabaseClient!
 
     override func setUp() {
         super.setUp()
-        mockSupabase = MockSupabaseClient()
+        mockSupabase = RitualMockSupabaseClient()
         sut = RitualService(supabase: mockSupabase)
     }
 
@@ -206,7 +206,7 @@ final class RitualServiceTests: XCTestCase {
 
 // MARK: - Mock Supabase Client
 
-final class MockSupabaseClient: SupabaseClient {
+final class RitualMockSupabaseClient: SupabaseClient {
     var mockInvokeResult: Data?
     var mockQueryResult: [Any] = []
     var capturedRequest: Any?

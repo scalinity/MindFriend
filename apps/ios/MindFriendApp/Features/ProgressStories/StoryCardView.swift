@@ -6,6 +6,7 @@ struct StoryCardView: View {
     let card: StoryCard
     let privacyMode: Bool
     var isExport: Bool = false
+    var onCTAAction: ((String) -> Void)?
 
     // Standard story card dimensions (9:16 aspect ratio for Instagram Stories)
     private let exportWidth: CGFloat = 1080
@@ -158,15 +159,33 @@ struct StoryCardView: View {
 
     @ViewBuilder
     private func ctaButton(title: String) -> some View {
-        Text(title)
-            .font(.system(size: isExport ? 32 : 16, weight: .semibold))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 32)
-            .padding(.vertical, 16)
-            .background(
-                Capsule()
-                    .fill(.white.opacity(0.2))
-            )
+        // Only make it tappable if not in export mode and callback is provided
+        if isExport || onCTAAction == nil {
+            Text(title)
+                .font(.system(size: isExport ? 32 : 16, weight: .semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 32)
+                .padding(.vertical, 16)
+                .background(
+                    Capsule()
+                        .fill(.white.opacity(0.2))
+                )
+        } else {
+            Button {
+                onCTAAction?(title)
+            } label: {
+                Text(title)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 32)
+                    .padding(.vertical, 16)
+                    .background(
+                        Capsule()
+                            .fill(.white.opacity(0.2))
+                    )
+            }
+            .buttonStyle(.plain)
+        }
     }
 
     // MARK: - Card Type Indicator

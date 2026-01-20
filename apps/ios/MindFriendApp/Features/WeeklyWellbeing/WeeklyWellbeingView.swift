@@ -262,7 +262,7 @@ struct WeeklyWellbeingView: View {
                         currentMetricIndex += 1
                     }
                 } label: {
-                    Text(currentMetricIndex == viewModel.metrics.count + 1 ? "Complete" : "Continue")
+                    Text(currentMetricIndex >= viewModel.metrics.count + 1 ? "Complete" : "Continue")
                         .fontWeight(.semibold)
                         .frame(maxWidth: .infinity)
                         .padding()

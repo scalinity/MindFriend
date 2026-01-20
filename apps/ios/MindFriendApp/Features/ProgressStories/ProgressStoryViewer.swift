@@ -5,6 +5,7 @@ import UIKit
 struct ProgressStoryViewer: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var container: DependencyContainer
+    @EnvironmentObject private var appState: AppState
 
     /// Week start date (nil = current week)
     let weekStart: Date?
@@ -20,6 +21,7 @@ struct ProgressStoryViewer: View {
     @State private var showShareSheet = false
     @State private var shareImage: UIImage?
     @State private var showLoadingTimeout = false
+    @State private var showMoodLogger = false
 
     var body: some View {
         NavigationStack {
@@ -89,6 +91,11 @@ struct ProgressStoryViewer: View {
                 )
             }
         }
+        .sheet(isPresented: $showMoodLogger) {
+            MoodCheckInView()
+                .environmentObject(container)
+                .environmentObject(appState)
+        }
     }
 
     // MARK: - Story Content
@@ -107,10 +114,16 @@ struct ProgressStoryViewer: View {
                 set: { vm.currentIndex = $0 }
             )) {
                 ForEach(Array(story.cards.enumerated()), id: \.offset) { index, card in
-                    StoryCardView(card: card, privacyMode: privacyMode)
-                        .tag(index)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 32)
+                    StoryCardView(
+                        card: card,
+                        privacyMode: privacyMode,
+                        onCTAAction: { ctaTitle in
+                            handleCTAAction(ctaTitle)
+                        }
+                    )
+                    .tag(index)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 32)
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
@@ -370,6 +383,16 @@ struct ProgressStoryViewer: View {
         await vm.prepareShare(index: vm.currentIndex)
         vm.showCircleShare = true
     }
+
+    private func handleCTAAction(_ ctaTitle: String) {
+        // Handle different CTA actions based on title
+        let normalizedTitle = ctaTitle.lowercased()
+
+        if normalizedTitle.contains("mood") || normalizedTitle.contains("log") {
+            showMoodLogger = true
+        }
+        // Add other CTA handlers here as needed (e.g., exercise, quest)
+    }
 }
 
 // MARK: - Story Share Sheet (UIKit Wrapper)
@@ -393,4 +416,5 @@ private struct StoryShareSheet: UIViewControllerRepresentable {
 #Preview {
     ProgressStoryViewer(weekStart: nil)
         .environmentObject(DependencyContainer.preview)
+        .environmentObject(AppState())
 }

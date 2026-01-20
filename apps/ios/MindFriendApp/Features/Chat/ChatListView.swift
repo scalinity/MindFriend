@@ -119,6 +119,13 @@ struct ChatListView: View {
                 refreshTrigger = UUID()
             }
         }
+        // Handle SOS-initiated chat - automatically open new chat
+        .onChange(of: appState.shouldOpenNewChat) { _, shouldOpen in
+            if shouldOpen {
+                showNewChat = true
+                appState.shouldOpenNewChat = false
+            }
+        }
     }
 
     private func loadConversations() async {

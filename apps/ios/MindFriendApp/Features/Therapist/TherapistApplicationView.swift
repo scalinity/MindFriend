@@ -14,249 +14,247 @@ struct TherapistApplicationView: View {
     @StateObject private var viewModel = TherapistApplicationViewModel()
 
     var body: some View {
-        NavigationStack {
-            Form {
-                // Profile Type Section
-                Section {
-                    Picker("I am a", selection: $viewModel.profileType) {
-                        ForEach(TherapistProfileType.allCases, id: \.self) { type in
-                            Text(type.displayName).tag(type)
-                        }
+        Form {
+            // Profile Type Section
+            Section {
+                Picker("I am a", selection: $viewModel.profileType) {
+                    ForEach(TherapistProfileType.allCases, id: \.self) { type in
+                        Text(type.displayName).tag(type)
                     }
+                }
 
-                    Text(viewModel.profileType.description)
+                Text(viewModel.profileType.description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            // Personal Info Section
+            Section("Personal Information") {
+                TextField("Display Name", text: $viewModel.displayName)
+                    .textContentType(.name)
+
+                VStack(alignment: .leading) {
+                    Text("Bio")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    TextEditor(text: $viewModel.bio)
+                        .frame(minHeight: 100)
                 }
 
-                // Personal Info Section
-                Section("Personal Information") {
-                    TextField("Display Name", text: $viewModel.displayName)
-                        .textContentType(.name)
+                Text("\(viewModel.bio.count)/50 characters minimum")
+                    .font(.caption)
+                    .foregroundStyle(viewModel.bio.count >= 50 ? .secondary : Color.red)
+            }
 
-                    VStack(alignment: .leading) {
-                        Text("Bio")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        TextEditor(text: $viewModel.bio)
-                            .frame(minHeight: 100)
-                    }
-
-                    Text("\(viewModel.bio.count)/50 characters minimum")
-                        .font(.caption)
-                        .foregroundStyle(viewModel.bio.count >= 50 ? .secondary : Color.red)
-                }
-
-                // Credentials Section
-                Section("Credentials") {
-                    ForEach(viewModel.selectedCredentials, id: \.self) { credential in
-                        HStack {
-                            Text(credential)
-                            Spacer()
-                            Button {
-                                viewModel.removeCredential(credential)
-                            } label: {
-                                Image(systemName: "minus.circle.fill")
-                                    .foregroundStyle(.red)
-                            }
-                        }
-                    }
-
-                    Menu {
-                        ForEach(TherapistCredential.allCases.filter {
-                            !viewModel.selectedCredentials.contains($0.rawValue)
-                        }, id: \.self) { credential in
-                            Button(credential.fullName) {
-                                viewModel.addCredential(credential.rawValue)
-                            }
-                        }
-                    } label: {
-                        Label("Add Credential", systemImage: "plus.circle")
-                    }
-                }
-
-                // Specialties Section
-                Section("Specialties") {
-                    ForEach(viewModel.selectedSpecialties, id: \.self) { specialty in
-                        if let spec = TherapistSpecialty(rawValue: specialty) {
-                            HStack {
-                                Image(systemName: spec.icon)
-                                Text(spec.displayName)
-                                Spacer()
-                                Button {
-                                    viewModel.removeSpecialty(specialty)
-                                } label: {
-                                    Image(systemName: "minus.circle.fill")
-                                        .foregroundStyle(.red)
-                                }
-                            }
-                        }
-                    }
-
-                    Menu {
-                        ForEach(TherapistSpecialty.allCases.filter {
-                            !viewModel.selectedSpecialties.contains($0.rawValue)
-                        }, id: \.self) { specialty in
-                            Button {
-                                viewModel.addSpecialty(specialty.rawValue)
-                            } label: {
-                                Label(specialty.displayName, systemImage: specialty.icon)
-                            }
-                        }
-                    } label: {
-                        Label("Add Specialty", systemImage: "plus.circle")
-                    }
-                }
-
-                // Therapeutic Approaches Section
-                Section("Therapeutic Approaches (Optional)") {
-                    ForEach(viewModel.selectedApproaches, id: \.self) { approach in
-                        HStack {
-                            Text(approach)
-                            Spacer()
-                            Button {
-                                viewModel.removeApproach(approach)
-                            } label: {
-                                Image(systemName: "minus.circle.fill")
-                                    .foregroundStyle(.red)
-                            }
-                        }
-                    }
-
-                    Menu {
-                        ForEach(TherapeuticApproach.allCases.filter {
-                            !viewModel.selectedApproaches.contains($0.rawValue)
-                        }, id: \.self) { approach in
-                            Button(approach.displayName) {
-                                viewModel.addApproach(approach.rawValue)
-                            }
-                        }
-                    } label: {
-                        Label("Add Approach", systemImage: "plus.circle")
-                    }
-                }
-
-                // License Section (for therapists)
-                if viewModel.profileType == .therapist {
-                    Section("License Information") {
-                        TextField("License Number", text: $viewModel.licenseNumber)
-
-                        Picker("License State", selection: $viewModel.licenseState) {
-                            Text("Select State").tag("")
-                            ForEach(USState.allCases, id: \.self) { state in
-                                Text(state.fullName).tag(state.rawValue)
-                            }
-                        }
-                    }
-                }
-
-                // Languages Section
-                Section("Languages") {
-                    ForEach(viewModel.languages, id: \.self) { language in
-                        HStack {
-                            Text(language)
-                            Spacer()
-                            if language != "English" {
-                                Button {
-                                    viewModel.removeLanguage(language)
-                                } label: {
-                                    Image(systemName: "minus.circle.fill")
-                                        .foregroundStyle(.red)
-                                }
-                            }
-                        }
-                    }
-
+            // Credentials Section
+            Section("Credentials") {
+                ForEach(viewModel.selectedCredentials, id: \.self) { credential in
                     HStack {
-                        TextField("Add language", text: $viewModel.newLanguage)
+                        Text(credential)
+                        Spacer()
                         Button {
-                            viewModel.addLanguage()
+                            viewModel.removeCredential(credential)
                         } label: {
-                            Image(systemName: "plus.circle.fill")
+                            Image(systemName: "minus.circle.fill")
+                                .foregroundStyle(.red)
                         }
-                        .disabled(viewModel.newLanguage.isEmpty)
                     }
                 }
 
-                // Rates Section
-                Section("Session Rates (USD)") {
-                    HStack {
-                        Text("30 min")
-                        Spacer()
-                        TextField("Rate", text: $viewModel.rate30Min)
-                            .keyboardType(.numberPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 80)
+                Menu {
+                    ForEach(TherapistCredential.allCases.filter {
+                        !viewModel.selectedCredentials.contains($0.rawValue)
+                    }, id: \.self) { credential in
+                        Button(credential.fullName) {
+                            viewModel.addCredential(credential.rawValue)
+                        }
                     }
+                } label: {
+                    Label("Add Credential", systemImage: "plus.circle")
+                }
+            }
 
-                    HStack {
-                        Text("45 min")
-                        Spacer()
-                        TextField("Rate", text: $viewModel.rate45Min)
-                            .keyboardType(.numberPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 80)
+            // Specialties Section
+            Section("Specialties") {
+                ForEach(viewModel.selectedSpecialties, id: \.self) { specialty in
+                    if let spec = TherapistSpecialty(rawValue: specialty) {
+                        HStack {
+                            Image(systemName: spec.icon)
+                            Text(spec.displayName)
+                            Spacer()
+                            Button {
+                                viewModel.removeSpecialty(specialty)
+                            } label: {
+                                Image(systemName: "minus.circle.fill")
+                                    .foregroundStyle(.red)
+                            }
+                        }
                     }
-
-                    HStack {
-                        Text("60 min")
-                        Spacer()
-                        TextField("Rate", text: $viewModel.rate60Min)
-                            .keyboardType(.numberPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 80)
-                    }
-
-                    Text("Set at least one rate. Rates can be changed later.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
 
-                // Submit Section
-                Section {
+                Menu {
+                    ForEach(TherapistSpecialty.allCases.filter {
+                        !viewModel.selectedSpecialties.contains($0.rawValue)
+                    }, id: \.self) { specialty in
+                        Button {
+                            viewModel.addSpecialty(specialty.rawValue)
+                        } label: {
+                            Label(specialty.displayName, systemImage: specialty.icon)
+                        }
+                    }
+                } label: {
+                    Label("Add Specialty", systemImage: "plus.circle")
+                }
+            }
+
+            // Therapeutic Approaches Section
+            Section("Therapeutic Approaches (Optional)") {
+                ForEach(viewModel.selectedApproaches, id: \.self) { approach in
+                    HStack {
+                        Text(approach)
+                        Spacer()
+                        Button {
+                            viewModel.removeApproach(approach)
+                        } label: {
+                            Image(systemName: "minus.circle.fill")
+                                .foregroundStyle(.red)
+                        }
+                    }
+                }
+
+                Menu {
+                    ForEach(TherapeuticApproach.allCases.filter {
+                        !viewModel.selectedApproaches.contains($0.rawValue)
+                    }, id: \.self) { approach in
+                        Button(approach.displayName) {
+                            viewModel.addApproach(approach.rawValue)
+                        }
+                    }
+                } label: {
+                    Label("Add Approach", systemImage: "plus.circle")
+                }
+            }
+
+            // License Section (for therapists)
+            if viewModel.profileType == .therapist {
+                Section("License Information") {
+                    TextField("License Number", text: $viewModel.licenseNumber)
+
+                    Picker("License State", selection: $viewModel.licenseState) {
+                        Text("Select State").tag("")
+                        ForEach(USState.allCases, id: \.self) { state in
+                            Text(state.fullName).tag(state.rawValue)
+                        }
+                    }
+                }
+            }
+
+            // Languages Section
+            Section("Languages") {
+                ForEach(viewModel.languages, id: \.self) { language in
+                    HStack {
+                        Text(language)
+                        Spacer()
+                        if language != "English" {
+                            Button {
+                                viewModel.removeLanguage(language)
+                            } label: {
+                                Image(systemName: "minus.circle.fill")
+                                    .foregroundStyle(.red)
+                            }
+                        }
+                    }
+                }
+
+                HStack {
+                    TextField("Add language", text: $viewModel.newLanguage)
                     Button {
-                        Task {
-                            await viewModel.submitApplication()
-                        }
+                        viewModel.addLanguage()
                     } label: {
-                        if viewModel.isSubmitting {
-                            ProgressView()
-                                .frame(maxWidth: .infinity)
-                        } else {
-                            Text("Submit Application")
-                                .frame(maxWidth: .infinity)
-                                .fontWeight(.semibold)
-                        }
+                        Image(systemName: "plus.circle.fill")
                     }
-                    .disabled(!viewModel.isValid || viewModel.isSubmitting)
-                } footer: {
-                    Text("Your application will be reviewed by our team. You'll be notified once approved.")
+                    .disabled(viewModel.newLanguage.isEmpty)
                 }
             }
-            .navigationTitle("Become a Provider")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        dismiss()
+
+            // Rates Section
+            Section("Session Rates (USD)") {
+                HStack {
+                    Text("30 min")
+                    Spacer()
+                    TextField("Rate", text: $viewModel.rate30Min)
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 80)
+                }
+
+                HStack {
+                    Text("45 min")
+                    Spacer()
+                    TextField("Rate", text: $viewModel.rate45Min)
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 80)
+                }
+
+                HStack {
+                    Text("60 min")
+                    Spacer()
+                    TextField("Rate", text: $viewModel.rate60Min)
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 80)
+                }
+
+                Text("Set at least one rate. Rates can be changed later.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            // Submit Section
+            Section {
+                Button {
+                    Task {
+                        await viewModel.submitApplication()
+                    }
+                } label: {
+                    if viewModel.isSubmitting {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                    } else {
+                        Text("Submit Application")
+                            .frame(maxWidth: .infinity)
+                            .fontWeight(.semibold)
                     }
                 }
+                .disabled(!viewModel.isValid || viewModel.isSubmitting)
+            } footer: {
+                Text("Your application will be reviewed by our team. You'll be notified once approved.")
             }
-            .task {
-                viewModel.therapistService = dependencies.therapistService
-            }
-            .alert("Application Submitted", isPresented: $viewModel.showSuccess) {
-                Button("OK") {
+        }
+        .navigationTitle("Become a Provider")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") {
                     dismiss()
                 }
-            } message: {
-                Text("Thank you for applying! We'll review your application and get back to you within 5-7 business days.")
             }
-            .alert("Error", isPresented: $viewModel.showError) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(viewModel.errorMessage)
+        }
+        .task {
+            viewModel.therapistService = dependencies.therapistService
+        }
+        .alert("Application Submitted", isPresented: $viewModel.showSuccess) {
+            Button("OK") {
+                dismiss()
             }
+        } message: {
+            Text("Thank you for applying! We'll review your application and get back to you within 5-7 business days.")
+        }
+        .alert("Error", isPresented: $viewModel.showError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(viewModel.errorMessage)
         }
     }
 }

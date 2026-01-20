@@ -385,14 +385,15 @@ final class SupabaseDataService: ObservableObject {
         }
 
         // Fetch the related quest templates to populate the joined data
+        // Use DBQuestTemplate which has proper snake_case mappings for database decoding
         if let primaryId = alternatives.primaryQuestId as UUID? {
-            let templates: [QuestTemplate] = try await supabase
+            let templates: [DBQuestTemplate] = try await supabase
                 .from(Tables.questTemplates)
                 .select()
                 .eq("id", value: primaryId)
                 .execute()
                 .value
-            alternatives.primaryQuest = templates.first
+            alternatives.primaryQuest = templates.first?.toQuestTemplate()
         }
 
         if let quickId = alternatives.quickVariantId {
@@ -406,13 +407,13 @@ final class SupabaseDataService: ObservableObject {
         }
 
         if let altId = alternatives.altQuestId {
-            let templates: [QuestTemplate] = try await supabase
+            let templates: [DBQuestTemplate] = try await supabase
                 .from(Tables.questTemplates)
                 .select()
                 .eq("id", value: altId)
                 .execute()
                 .value
-            alternatives.altQuest = templates.first
+            alternatives.altQuest = templates.first?.toQuestTemplate()
         }
 
         return alternatives
@@ -451,14 +452,15 @@ final class SupabaseDataService: ObservableObject {
         }
 
         // Fetch the new primary quest template
+        // Use DBQuestTemplate which has proper snake_case mappings for database decoding
         if let primaryId = alternatives.primaryQuestId as UUID? {
-            let templates: [QuestTemplate] = try await supabase
+            let templates: [DBQuestTemplate] = try await supabase
                 .from(Tables.questTemplates)
                 .select()
                 .eq("id", value: primaryId)
                 .execute()
                 .value
-            alternatives.primaryQuest = templates.first
+            alternatives.primaryQuest = templates.first?.toQuestTemplate()
         }
 
         // Fetch quick variant if available
@@ -1047,7 +1049,7 @@ final class SupabaseDataService: ObservableObject {
         let currentUserId = try userId
         let circles: [DBCircleWithMembers] = try await supabase
             .from(Tables.circles)
-            .select("*, circle_members(user_id, profiles(display_name, avatar_url))")
+            .select("*, circle_members(id, circle_id, user_id, role, joined_at, profiles(display_name, avatar_url))")
             .execute()
             .value
 
@@ -2617,9 +2619,12 @@ final class SupabaseDataService: ObservableObject {
         // weekday 1 = Sunday, 2 = Monday, etc.
         let daysFromMonday = (weekday == 1) ? 6 : weekday - 2
         guard let weekStart = calendar.date(byAdding: .day, value: -daysFromMonday, to: now) else {
+            Log.data.error("Failed to calculate week start")
             return nil
         }
         let weekStartStr = DateFormatter.dateOnly.string(from: weekStart)
+
+        Log.data.info("Fetching weekly summary for week_start: \(weekStartStr)")
 
         let summaries: [DBWeeklySummary] = try await supabase
             .from("weekly_summaries")
@@ -2629,6 +2634,21 @@ final class SupabaseDataService: ObservableObject {
             .limit(1)
             .execute()
             .value
+
+        Log.data.info("Weekly summaries found: \(summaries.count)")
+
+        if summaries.isEmpty {
+            // Debug: Try fetching any summary to see if any exist
+            let anySummaries: [DBWeeklySummary] = try await supabase
+                .from("weekly_summaries")
+                .select()
+                .eq("user_id", value: try userId)
+                .order("week_start", ascending: false)
+                .limit(3)
+                .execute()
+                .value
+            Log.data.info("Any summaries in DB: \(anySummaries.count), week_starts: \(anySummaries.map { $0.weekStart })")
+        }
 
         guard let summary = summaries.first else {
             return nil
@@ -2669,20 +2689,36 @@ final class SupabaseDataService: ObservableObject {
     /// Calls the generate-weekly-summary Edge Function which will calculate
     /// stats, detect patterns, and generate AI insights
     func generateWeeklyInsight() async throws -> WeeklySummary? {
-        // Get valid session token for Edge Function auth
-        let session = try await supabase.auth.session
+        // Validate and refresh session if needed
+        do {
+            try await authService.ensureValidSession()
+        } catch {
+            Log.data.warning("[WeeklyInsight] Session validation failed: \(error)")
+            throw APIError.badRequest("Session expired. Please sign in again.")
+        }
 
-        // Invoke the Edge Function with explicit auth header
-        _ = try await supabase.functions.invoke(
+        // Get the refreshed access token
+        guard let accessToken = authService.session?.accessToken else {
+            Log.data.warning("[WeeklyInsight] No access token after refresh")
+            throw APIError.badRequest("Session expired. Please sign in again.")
+        }
+
+        Log.data.info("Calling generate-weekly-summary edge function...")
+
+        // Invoke the Edge Function with explicit auth header (SDK doesn't auto-include it)
+        try await supabase.functions.invoke(
             "generate-weekly-summary",
             options: .init(
-                method: .post,
-                headers: ["Authorization": "Bearer \(session.accessToken)"]
+                headers: ["Authorization": "Bearer \(accessToken)"]
             )
         )
 
+        Log.data.info("Edge function completed successfully")
+
         // After successful generation, fetch the newly created summary
-        return try await getWeeklySummary()
+        let summary = try await getWeeklySummary()
+        Log.data.info("Fetched summary after generation: \(summary != nil ? "found" : "nil")")
+        return summary
     }
 
     // MARK: - Data Export
@@ -4791,5 +4827,78 @@ final class SupabaseDataService: ObservableObject {
     func getActiveEnrollment() async throws -> ProgramEnrollment? {
         // TODO: Implement getActiveEnrollment
         return nil
+    }
+
+    // MARK: - Stress Signature
+
+    /// Fetch stress signature patterns for current user
+    func fetchStressSignature() async throws -> StressSignature {
+        let currentUserId = try userId
+
+        // Response DTOs
+        struct StressSignatureResponse: Decodable {
+            let userId: UUID
+            let generatedAt: Date
+            let patterns: [PatternResponse]
+        }
+
+        struct PatternResponse: Decodable {
+            let id: UUID
+            let category: String
+            let type: String
+            let confidenceScore: Double
+            let evidenceCount: Int
+            let firstDetected: Date
+            let lastDetected: Date
+            let data: PatternDataResponse
+
+            private enum CodingKeys: String, CodingKey {
+                case id, category, type, data
+                case confidenceScore  // RPC outputs camelCase
+                case evidenceCount
+                case firstDetected
+                case lastDetected
+            }
+        }
+
+        struct PatternDataResponse: Decodable {
+            let category: String
+            let frequency: Double
+            let timeline: [TimelinePoint]
+            let topExercises: [String]?
+            let peakTimes: [String]?
+        }
+
+        struct TimelinePoint: Decodable {
+            let date: Date
+            let count: Int
+        }
+
+        let response: StressSignatureResponse = try await supabase
+            .rpc("get_stress_signature", params: ["p_user_id": currentUserId])
+            .execute()
+            .value
+
+        return StressSignature(
+            userId: response.userId,
+            generatedAt: response.generatedAt,
+            patterns: response.patterns.map { pattern in
+                SignaturePattern(
+                    id: pattern.id,
+                    category: pattern.data.category,
+                    type: SignaturePatternType(rawValue: pattern.type) ?? .other,
+                    confidenceScore: pattern.confidenceScore,
+                    evidenceCount: pattern.evidenceCount,
+                    frequency: pattern.data.frequency,
+                    timeline: pattern.data.timeline.map { point in
+                        TimelineDataPoint(date: point.date, count: point.count)
+                    },
+                    firstDetected: pattern.firstDetected,
+                    lastDetected: pattern.lastDetected,
+                    topExercises: pattern.data.topExercises,
+                    peakTimes: pattern.data.peakTimes
+                )
+            }
+        )
     }
 }

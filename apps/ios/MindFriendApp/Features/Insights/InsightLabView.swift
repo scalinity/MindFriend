@@ -5,39 +5,65 @@ import SwiftUI
 
 struct InsightLabView: View {
     @EnvironmentObject private var insightLabService: InsightLabService
+    @EnvironmentObject private var container: DependencyContainer
     @State private var showingCompletedExperiments = false
+    @State private var showingStressSignature = false
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if let experiment = insightLabService.activeExperiment {
-                    if experiment.status == .completed {
-                        // Show report for completed experiment
-                        ExperimentReportView(experimentId: experiment.id)
-                    } else {
-                        // Show progress view for active experiment
-                        ExperimentProgressView()
-                    }
+        Group {
+            if let experiment = insightLabService.activeExperiment {
+                let _ = print("[InsightLabView] Showing experiment: \(experiment.title), status: \(experiment.status)")
+                if experiment.status == .completed {
+                    // Show report for completed experiment
+                    ExperimentReportView(experimentId: experiment.id)
+                        .id("report-\(experiment.id)")
                 } else {
-                    // Show catalog when no active experiment
-                    ExperimentCatalogView()
+                    // Show progress view for active experiment
+                    ExperimentProgressView()
+                        .id("progress-\(experiment.id)")
                 }
+            } else {
+                let _ = print("[InsightLabView] No active experiment, showing catalog")
+                // Show catalog when no active experiment
+                ExperimentCatalogView()
+                    .id("catalog")
             }
-            .navigationTitle("Insight Lab")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+        }
+        .navigationTitle("Insight Lab")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Menu {
                     Button {
                         showingCompletedExperiments = true
                     } label: {
-                        Image(systemName: "clock.arrow.circlepath")
+                        Label("Past Experiments", systemImage: "clock.arrow.circlepath")
                     }
+
+                    Button {
+                        showingStressSignature = true
+                    } label: {
+                        Label("Stress Signature", systemImage: "chart.bar.xaxis")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
                 }
             }
-            .sheet(isPresented: $showingCompletedExperiments) {
-                CompletedExperimentsView()
+        }
+        .sheet(isPresented: $showingCompletedExperiments) {
+            CompletedExperimentsView()
+        }
+        .sheet(isPresented: $showingStressSignature) {
+            NavigationStack {
+                StressSignatureView(dataService: container.supabaseDataService)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Close") {
+                                showingStressSignature = false
+                            }
+                        }
+                    }
             }
         }
-        .environmentObject(insightLabService)
         .task {
             await insightLabService.fetchActiveExperiment()
         }
@@ -139,6 +165,8 @@ extension UUID: @retroactive Identifiable {
 }
 
 #Preview {
-    InsightLabView()
-        .environmentObject(DependencyContainer.shared.insightLabService)
+    NavigationStack {
+        InsightLabView()
+    }
+    .environmentObject(DependencyContainer.shared.insightLabService)
 }

@@ -555,6 +555,12 @@ struct DBMood: Codable {
 struct DBQuestInstruction: Codable {
     let step: Int
     let text: String
+    let durationSeconds: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case step, text
+        case durationSeconds = "duration_seconds"
+    }
 }
 
 struct DBQuestTemplate: Codable {
@@ -613,7 +619,7 @@ struct DBQuestTemplate: Codable {
     func defaultInstructions() -> [QuestInstruction] {
         // If database has instructions, use those
         if let dbInstructions = instructions, !dbInstructions.isEmpty {
-            return dbInstructions.map { QuestInstruction(step: $0.step, text: $0.text, durationSeconds: nil) }
+            return dbInstructions.map { QuestInstruction(step: $0.step, text: $0.text, durationSeconds: $0.durationSeconds) }
         }
 
         // Generate default instructions based on category
@@ -1586,28 +1592,41 @@ struct DBExerciseSession: Codable {
 struct DBCircleWithMembers: Codable {
     let id: UUID
     let name: String
+    let description: String?
     let maxMembers: Int
     let inviteCode: String
+    let ownerId: UUID
     let createdAt: Date?
     let circleMembers: [DBCircleMemberWithProfile]?
 
     enum CodingKeys: String, CodingKey {
-        case id, name
+        case id, name, description
         case maxMembers = "max_members"
         case inviteCode = "invite_code"
+        case ownerId = "owner_id"
         case createdAt = "created_at"
         case circleMembers = "circle_members"
     }
 
     func toCircle(currentUserId: UUID) -> FriendCircle {
-        // Determine role based on membership data
-        let role: CircleRole = .member // TODO: Implement proper role detection from membership
+        // Determine role: check if user is the owner, otherwise check member role
+        let role: CircleRole = {
+            if ownerId == currentUserId {
+                return .owner
+            }
+            // Check if member has owner role (in case of legacy data)
+            if let memberRole = circleMembers?.first(where: { $0.userId == currentUserId })?.role {
+                return memberRole
+            }
+            return .member
+        }()
+
         let joinedAt = circleMembers?.first(where: { $0.userId == currentUserId })?.joinedAt ?? createdAt ?? Date()
 
         return FriendCircle(
             id: id.uuidString,
             name: name,
-            description: nil,
+            description: description,
             inviteCode: inviteCode,
             maxMembers: maxMembers,
             memberCount: circleMembers?.count ?? 0,
@@ -1622,6 +1641,7 @@ struct DBCircleMemberWithProfile: Codable {
     let id: UUID?
     let circleId: UUID
     let userId: UUID
+    let role: CircleRole?
     let joinedAt: Date?
     let profiles: DBMemberProfile?
 
@@ -1629,6 +1649,7 @@ struct DBCircleMemberWithProfile: Codable {
         case id
         case circleId = "circle_id"
         case userId = "user_id"
+        case role
         case joinedAt = "joined_at"
         case profiles
     }
@@ -1947,64 +1968,101 @@ struct DBDevice: Codable {
     }
 }
 
-/// Weekly summary from database
+/// Weekly summary from database - matches actual weekly_summaries table schema
 struct DBWeeklySummary: Codable {
     let id: UUID?
     let userId: UUID
-    let weekStart: String
-    let weekEnd: String
-    let questsCompleted: Int
-    let exercisesCompleted: Int
-    let moodAverage: Double?
-    let topEmotions: [String]?
-    let insights: String?
-    let createdAt: Date?
+    let weekStart: String  // DATE stored as string YYYY-MM-DD
+    let checkinCount: Int
+    let questCount: Int
+    let exerciseCount: Int
+    let avgMood: Double?
+    let moodTrend: String?  // 'improving', 'stable', 'declining', 'insufficient_data'
+    let generatedAt: Date?
+
+    // Extended columns from weekly_insights_extension migration
+    let moodMin: Int?
+    let moodMax: Int?
+    let moodByDay: [String: Double]?  // JSONB: {"mon": 3.5, "tue": 4.0, ...}
+    let circleCheckinCount: Int?
+    let exerciseMinutes: Int?
+    let patternsDetected: [DBDetectedPattern]?  // JSONB array
+    let aiInsight: String?
+    let aiRecommendations: [DBInsightRecommendation]?  // JSONB array
 
     enum CodingKeys: String, CodingKey {
         case id
         case userId = "user_id"
         case weekStart = "week_start"
-        case weekEnd = "week_end"
-        case questsCompleted = "quests_completed"
-        case exercisesCompleted = "exercises_completed"
-        case moodAverage = "mood_average"
-        case topEmotions = "top_emotions"
-        case insights
-        case createdAt = "created_at"
+        case checkinCount = "checkin_count"
+        case questCount = "quest_count"
+        case exerciseCount = "exercise_count"
+        case avgMood = "avg_mood"
+        case moodTrend = "mood_trend"
+        case generatedAt = "generated_at"
+        case moodMin = "mood_min"
+        case moodMax = "mood_max"
+        case moodByDay = "mood_by_day"
+        case circleCheckinCount = "circle_checkin_count"
+        case exerciseMinutes = "exercise_minutes"
+        case patternsDetected = "patterns_detected"
+        case aiInsight = "ai_insight"
+        case aiRecommendations = "ai_recommendations"
     }
 
     func toWeeklySummary() -> WeeklySummary {
-        // Determine mood trend based on average
-        var trend: MoodTrend = .insufficientData
-        if let avg = moodAverage {
-            if avg >= 7 {
-                trend = .improving
-            } else if avg >= 5 {
-                trend = .stable
-            } else {
-                trend = .declining
+        // Parse mood trend from string
+        let trend: MoodTrend? = {
+            guard let trendStr = moodTrend else { return nil }
+            switch trendStr {
+            case "improving": return .improving
+            case "stable": return .stable
+            case "declining": return .declining
+            case "insufficient_data": return .insufficientData
+            default: return nil
             }
-        }
+        }()
 
         return WeeklySummary(
             id: id?.uuidString ?? UUID().uuidString,
             userId: userId.uuidString,
             weekStart: weekStart,
-            checkinCount: 0, // Not tracked in DB model yet
-            questCount: questsCompleted,
-            exerciseCount: exercisesCompleted,
-            avgMood: moodAverage,
-            moodTrend: moodAverage != nil ? trend : nil,
-            generatedAt: createdAt ?? Date(),
-            moodMin: nil, // Not tracked in DB model yet
-            moodMax: nil, // Not tracked in DB model yet
-            moodByDay: nil, // Not tracked in DB model yet
-            circleCheckinCount: nil, // Not tracked in DB model yet
-            exerciseMinutes: nil, // Not tracked in DB model yet
-            patternsDetected: nil, // Not tracked in DB model yet
-            aiInsight: insights,
-            aiRecommendations: nil // Not tracked in DB model yet
+            checkinCount: checkinCount,
+            questCount: questCount,
+            exerciseCount: exerciseCount,
+            avgMood: avgMood,
+            moodTrend: trend,
+            generatedAt: generatedAt ?? Date(),
+            moodMin: moodMin,
+            moodMax: moodMax,
+            moodByDay: moodByDay,
+            circleCheckinCount: circleCheckinCount,
+            exerciseMinutes: exerciseMinutes,
+            patternsDetected: patternsDetected?.map { $0.toDetectedPattern() },
+            aiInsight: aiInsight,
+            aiRecommendations: aiRecommendations?.map { $0.toInsightRecommendation() }
         )
+    }
+}
+
+/// Detected pattern from database JSONB
+struct DBDetectedPattern: Codable {
+    let type: String
+    let description: String
+    let confidence: Double
+
+    func toDetectedPattern() -> DetectedPattern {
+        DetectedPattern(type: type, description: description, confidence: confidence)
+    }
+}
+
+/// AI recommendation from database JSONB
+struct DBInsightRecommendation: Codable {
+    let title: String
+    let reason: String
+
+    func toInsightRecommendation() -> InsightRecommendation {
+        InsightRecommendation(title: title, reason: reason)
     }
 }
 

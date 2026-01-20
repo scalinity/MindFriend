@@ -67,15 +67,48 @@ final class AchievementService: ObservableObject {
             throw AchievementError.notAuthenticated
         }
 
-        let dbExperience: DBUserExperience = try await supabase
-            .from("user_experience")
-            .select()
-            .eq("user_id", value: userId)
+        // Fetch from profiles table (same source as Home screen) for consistency
+        struct ProfileStats: Decodable {
+            let stats: UserStats?
+            
+            enum CodingKeys: String, CodingKey {
+                case stats
+            }
+        }
+        
+        let profile: ProfileStats = try await supabase
+            .from("profiles")
+            .select("stats")
+            .eq("id", value: userId)
             .single()
             .execute()
             .value
-
-        self.userExperience = UserExperience(from: dbExperience)
+        
+        // Build UserExperience from profile stats
+        if let stats = profile.stats {
+            self.userExperience = UserExperience(
+                totalXp: stats.xpTotal,
+                currentLevel: stats.level,
+                xpToNextLevel: UserLevel.xpThresholds[min(stats.level, 49)] - stats.xpTotal,
+                dailyXp: 0,  // Not tracked in profile stats
+                weeklyXp: stats.xpThisWeek,
+                prestigeLevel: 0,
+                xpMultiplier: 1.0,
+                multiplierExpiresAt: nil
+            )
+        } else {
+            // Default for new users
+            self.userExperience = UserExperience(
+                totalXp: 0,
+                currentLevel: 1,
+                xpToNextLevel: 100,
+                dailyXp: 0,
+                weeklyXp: 0,
+                prestigeLevel: 0,
+                xpMultiplier: 1.0,
+                multiplierExpiresAt: nil
+            )
+        }
     }
 
     func awardXP(source: XPSource, amount: Int, sourceId: UUID? = nil, description: String? = nil, skillTreeId: UUID? = nil) async throws -> AwardXPResponse {

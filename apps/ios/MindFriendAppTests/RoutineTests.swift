@@ -4,11 +4,11 @@ import XCTest
 @MainActor
 final class RoutineTests: XCTestCase {
     var habitService: HabitService!
-    var mockSupabase: MockSupabaseClient!
+    var mockSupabase: RoutineMockSupabaseClient!
 
     override func setUp() {
         super.setUp()
-        mockSupabase = MockSupabaseClient()
+        mockSupabase = RoutineMockSupabaseClient()
         habitService = HabitService(supabase: mockSupabase)
     }
 
@@ -536,7 +536,7 @@ final class RoutineTests: XCTestCase {
 
 // MARK: - Mock Supabase Client
 
-class MockSupabaseClient {
+class RoutineMockSupabaseClient {
     var insertedRoutineHabits: [RoutineHabit] = []
     var insertedRoutineCompletions: [RoutineCompletion] = []
     var mockRoutineHabits: [RoutineHabit] = []

@@ -13,97 +13,95 @@ struct CompanionMemoryView: View {
     @State private var showingDeleteError = false
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                // Daily Intent Section
-                if let intent = memoryService.dailyIntent, !intent.isExpired {
-                    DailyIntentBanner(intent: intent)
-                        .padding(.horizontal)
-                        .padding(.top, 8)
-                }
-
-                // Category Filter
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        MemoryFilterChip(
-                            title: "All",
-                            isSelected: selectedCategory == nil,
-                            color: .primary
-                        ) {
-                            selectedCategory = nil
-                        }
-
-                        ForEach(MemoryCategory.allCases) { category in
-                            MemoryFilterChip(
-                                title: category.displayName,
-                                isSelected: selectedCategory == category,
-                                color: category.color
-                            ) {
-                                selectedCategory = category
-                            }
-                        }
-                    }
+        VStack(spacing: 0) {
+            // Daily Intent Section
+            if let intent = memoryService.dailyIntent, !intent.isExpired {
+                DailyIntentBanner(intent: intent)
                     .padding(.horizontal)
-                    .padding(.vertical, 12)
-                }
+                    .padding(.top, 8)
+            }
 
-                // Memory Count
-                HStack {
-                    Text("\(memoryService.totalCount) of \(memoryService.maxLimit) memories")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            // Category Filter
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    MemoryFilterChip(
+                        title: "All",
+                        isSelected: selectedCategory == nil,
+                        color: .primary
+                    ) {
+                        selectedCategory = nil
+                    }
 
-                    Spacer()
-
-                    if memoryService.isLimitReached {
-                        Label("Limit reached", systemImage: "exclamationmark.circle.fill")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
+                    ForEach(MemoryCategory.allCases) { category in
+                        MemoryFilterChip(
+                            title: category.displayName,
+                            isSelected: selectedCategory == category,
+                            color: category.color
+                        ) {
+                            selectedCategory = category
+                        }
                     }
                 }
                 .padding(.horizontal)
-                .padding(.bottom, 8)
+                .padding(.vertical, 12)
+            }
 
-                // Memory List
-                if memoryService.isLoading && memoryService.memories.isEmpty {
-                    Spacer()
-                    ProgressView("Loading memories...")
-                    Spacer()
-                } else if filteredMemories.isEmpty {
-                    Spacer()
-                    EmptyMemoryView(
-                        hasFilter: selectedCategory != nil || !searchText.isEmpty,
-                        onAddTapped: { showingAddSheet = true }
-                    )
-                    Spacer()
-                } else {
-                    List {
-                        ForEach(groupedMemories, id: \.key) { category, memories in
-                            Section {
-                                ForEach(memories) { memory in
-                                    MemoryItemCard(memory: memory)
-                                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                            Button(role: .destructive) {
-                                                memoryToDelete = memory
-                                                showingDeleteConfirmation = true
-                                            } label: {
-                                                Label("Delete", systemImage: "trash")
-                                            }
+            // Memory Count
+            HStack {
+                Text("\(memoryService.totalCount) of \(memoryService.maxLimit) memories")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
-                                            Button {
-                                                memoryToEdit = memory
-                                            } label: {
-                                                Label("Edit", systemImage: "pencil")
-                                            }
-                                            .tint(.blue)
+                Spacer()
+
+                if memoryService.isLimitReached {
+                    Label("Limit reached", systemImage: "exclamationmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 8)
+
+            // Memory List
+            if memoryService.isLoading && memoryService.memories.isEmpty {
+                Spacer()
+                ProgressView("Loading memories...")
+                Spacer()
+            } else if filteredMemories.isEmpty {
+                Spacer()
+                EmptyMemoryView(
+                    hasFilter: selectedCategory != nil || !searchText.isEmpty,
+                    onAddTapped: { showingAddSheet = true }
+                )
+                Spacer()
+            } else {
+                List {
+                    ForEach(groupedMemories, id: \.key) { category, memories in
+                        Section {
+                            ForEach(memories) { memory in
+                                MemoryItemCard(memory: memory)
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                        Button(role: .destructive) {
+                                            memoryToDelete = memory
+                                            showingDeleteConfirmation = true
+                                        } label: {
+                                            Label("Delete", systemImage: "trash")
                                         }
-                                }
-                            } header: {
-                                HStack {
-                                    Image(systemName: category.icon)
-                                        .foregroundStyle(category.color)
-                                    Text(category.displayName)
-                                }
+
+                                        Button {
+                                            memoryToEdit = memory
+                                        } label: {
+                                            Label("Edit", systemImage: "pencil")
+                                        }
+                                        .tint(.blue)
+                                    }
+                            }
+                        } header: {
+                            HStack {
+                                Image(systemName: category.icon)
+                                    .foregroundStyle(category.color)
+                                Text(category.displayName)
                             }
                         }
                     }
@@ -113,55 +111,55 @@ struct CompanionMemoryView: View {
                     }
                 }
             }
-            .navigationTitle("Memory Vault")
-            .navigationBarTitleDisplayMode(.large)
-            .searchable(text: $searchText, prompt: "Search memories")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        showingAddSheet = true
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                    .disabled(memoryService.isLimitReached)
+        }
+        .navigationTitle("Memory Vault")
+        .navigationBarTitleDisplayMode(.large)
+        .searchable(text: $searchText, prompt: "Search memories")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showingAddSheet = true
+                } label: {
+                    Image(systemName: "plus")
                 }
+                .disabled(memoryService.isLimitReached)
             }
-            .sheet(isPresented: $showingAddSheet) {
-                EditMemorySheet(mode: .create)
-            }
-            .sheet(item: $memoryToEdit) { memory in
-                EditMemorySheet(mode: .edit(memory))
-            }
-            .confirmationDialog(
-                "Delete Memory",
-                isPresented: $showingDeleteConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("Delete", role: .destructive) {
-                    if let memory = memoryToDelete {
-                        Task {
-                            do {
-                                try await memoryService.deleteMemory(id: memory.id)
-                            } catch {
-                                deleteError = error.localizedDescription
-                                showingDeleteError = true
-                            }
+        }
+        .sheet(isPresented: $showingAddSheet) {
+            EditMemorySheet(mode: .create)
+        }
+        .sheet(item: $memoryToEdit) { memory in
+            EditMemorySheet(mode: .edit(memory))
+        }
+        .confirmationDialog(
+            "Delete Memory",
+            isPresented: $showingDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                if let memory = memoryToDelete {
+                    Task {
+                        do {
+                            try await memoryService.deleteMemory(id: memory.id)
+                        } catch {
+                            deleteError = error.localizedDescription
+                            showingDeleteError = true
                         }
                     }
                 }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("This memory will be permanently deleted.")
             }
-            .alert("Delete Failed", isPresented: $showingDeleteError) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(deleteError ?? "Failed to delete memory. Please try again.")
-            }
-            .task {
-                if memoryService.memories.isEmpty {
-                    await memoryService.fetchMemories()
-                }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This memory will be permanently deleted.")
+        }
+        .alert("Delete Failed", isPresented: $showingDeleteError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(deleteError ?? "Failed to delete memory. Please try again.")
+        }
+        .task {
+            if memoryService.memories.isEmpty {
+                await memoryService.fetchMemories()
             }
         }
     }

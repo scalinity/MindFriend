@@ -501,15 +501,41 @@ final class OutcomeTrackingService: ObservableObject {
                 .value
 
             self.outcomeGoals = goals
-            logger.info("Loaded \(goals.count) active outcome goals")
+            logger.info("Loaded \\(goals.count) active outcome goals")
         } catch {
             self.error = error
-            logger.error("Failed to load outcome goals: \(error.localizedDescription)")
+            logger.error("Failed to load outcome goals: \\(error.localizedDescription)")
             throw error
         }
     }
 
     // MARK: - Progress Tracking
+
+    /// Load recent assessment responses for the current user
+    /// Used by the Progress tab to show recent results.
+    func loadRecentResponses(limit: Int = 3) async throws {
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            let uid = try userId
+            let responses: [AssessmentResponse] = try await supabase
+                .from("assessment_responses")
+                .select()
+                .eq("user_id", value: uid)
+                .order("completed_at", ascending: false)
+                .limit(limit)
+                .execute()
+                .value
+
+            self.recentResponses = responses
+            logger.info("Loaded \\(responses.count) recent assessment responses")
+        } catch {
+            self.error = error
+            logger.error("Failed to load recent assessment responses: \\(error.localizedDescription)")
+            throw error
+        }
+    }
 
     /// Get assessment history for trend analysis
     func getAssessmentHistory(

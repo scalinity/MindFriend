@@ -325,11 +325,11 @@ final class PartnerModeTests: XCTestCase {
 final class PartnerModeViewModelTests: XCTestCase {
 
     var viewModel: PartnerModeViewModel!
-    var mockDataService: MockSupabaseDataService!
+    var mockDataService: PartnerMockSupabaseDataService!
 
     override func setUp() {
         super.setUp()
-        mockDataService = MockSupabaseDataService()
+        mockDataService = PartnerMockSupabaseDataService()
         viewModel = PartnerModeViewModel(dataService: mockDataService)
     }
 
@@ -471,10 +471,8 @@ final class PartnerModeViewModelTests: XCTestCase {
 
 // MARK: - Mock Data Service
 
-final class MockSupabaseDataService: SupabaseDataServiceProtocol {
-    init() {
-        super.init(authService: MockSupabaseAuthService())
-    }
+final class PartnerMockSupabaseDataService: SupabaseDataService {
+    init() { super.init(authService: SupabaseAuthService(client: SupabaseClient(supabaseURL: URL(string: "https://test.com")!, supabaseKey: "test"))) }
 
     override func getPartnerInfo() async throws -> PartnerInfo? {
         return nil

@@ -15,6 +15,7 @@ struct ExperimentProgressView: View {
     var body: some View {
         Group {
             if let experiment = insightLabService.activeExperiment {
+                let _ = print("[ExperimentProgressView] Rendering with experiment: \(experiment.title), days: \(experiment.days.count)")
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
                         // Progress header
@@ -38,6 +39,7 @@ struct ExperimentProgressView: View {
                 .navigationTitle(experiment.title)
                 .navigationBarTitleDisplayMode(.inline)
             } else {
+                let _ = print("[ExperimentProgressView] ERROR: No active experiment available!")
                 ContentUnavailableView(
                     "No Active Experiment",
                     systemImage: "flask",
