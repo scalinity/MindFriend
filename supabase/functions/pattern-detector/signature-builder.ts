@@ -51,6 +51,14 @@ export async function buildSignaturePatterns(
   userId: string,
   allPatterns: UserPattern[],
 ): Promise<SignaturePattern[]> {
+  // Input validation
+  if (!userId || typeof userId !== 'string' || userId.trim() === '') {
+    throw new Error('Invalid userId: must be non-empty string');
+  }
+  if (!Array.isArray(allPatterns)) {
+    throw new Error('Invalid allPatterns: must be an array');
+  }
+
   const signaturePatterns: SignaturePattern[] = [];
 
   // Filter confident patterns only
@@ -65,7 +73,7 @@ export async function buildSignaturePatterns(
 
   for (const trigger of stressTriggers) {
     const timeline = buildTimeline(trigger);
-    const frequency = calculateFrequency(trigger, timeline);
+    const frequency = calculateFrequency(trigger);
 
     signaturePatterns.push({
       patternType: "signature_stress_trigger",
@@ -89,7 +97,7 @@ export async function buildSignaturePatterns(
 
   for (const strategy of copingStrategies) {
     const timeline = buildTimeline(strategy);
-    const frequency = calculateFrequency(strategy, timeline);
+    const frequency = calculateFrequency(strategy);
     const topExercises = extractTopExercises(strategy);
 
     signaturePatterns.push({
@@ -100,7 +108,7 @@ export async function buildSignaturePatterns(
       firstDetectedAt: strategy.firstDetectedAt,
       lastDetectedAt: strategy.lastDetectedAt,
       patternData: {
-        category: categorizeCoopingStrategy(strategy.patternKey),
+        category: categorizeCopingStrategy(strategy.patternKey),
         frequency,
         timeline,
         topExercises,
@@ -115,7 +123,7 @@ export async function buildSignaturePatterns(
 
   for (const timePattern of timePatterns) {
     const timeline = buildTimeline(timePattern);
-    const frequency = calculateFrequency(timePattern, timeline);
+    const frequency = calculateFrequency(timePattern);
     const peakTimes = extractPeakTimes(timePattern);
 
     signaturePatterns.push({
@@ -153,17 +161,29 @@ function buildTimeline(
 }
 
 /**
- * Calculate pattern frequency in patterns per week
- * Protected against division by zero
+ * Minimum weeks active to prevent division by near-zero
+ * (prevents frequency spikes from patterns detected in first few days)
  */
-function calculateFrequency(pattern: UserPattern, timeline: any[]): number {
+const MIN_WEEKS_ACTIVE = 0.1;
+
+/**
+ * Calculate pattern frequency in patterns per week
+ * Protected against division by zero and invalid dates
+ */
+function calculateFrequency(pattern: UserPattern): number {
   const firstDate = new Date(pattern.firstDetectedAt);
   const lastDate = new Date(pattern.lastDetectedAt);
+  
+  // Validate dates
+  if (isNaN(firstDate.getTime()) || isNaN(lastDate.getTime())) {
+    return 0;
+  }
+  
   const daysSinceFirst = Math.max(
     1,
     (lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24),
   );
-  const weeksActive = Math.max(0.1, daysSinceFirst / 7);  // Prevent division by zero (min 0.1 weeks)
+  const weeksActive = Math.max(MIN_WEEKS_ACTIVE, daysSinceFirst / 7);
   return Number((pattern.evidenceCount / weeksActive).toFixed(2));
 }
 
@@ -257,7 +277,7 @@ function categorizeStressTrigger(patternKey: string): string {
 /**
  * Map pattern keys to user-friendly coping strategy categories
  */
-function categorizeCoopingStrategy(patternKey: string): string {
+function categorizeCopingStrategy(patternKey: string): string {
   return categorizePattern(
     patternKey,
     COPING_STRATEGY_CATEGORIES,
@@ -279,6 +299,7 @@ function categorizeTimePattern(patternKey: string): string {
 
 /**
  * Extract top exercises from pattern data
+ * Validates array elements are strings
  */
 function extractTopExercises(strategy: UserPattern): string[] {
   // Extract from pattern_data.exercises if available
@@ -286,7 +307,9 @@ function extractTopExercises(strategy: UserPattern): string[] {
     strategy.patternData?.exercises &&
     Array.isArray(strategy.patternData.exercises)
   ) {
-    return strategy.patternData.exercises.slice(0, 3);
+    return strategy.patternData.exercises
+      .filter((e): e is string => typeof e === 'string')
+      .slice(0, 3);
   }
 
   // Extract from pattern_data.topActivities
@@ -294,7 +317,9 @@ function extractTopExercises(strategy: UserPattern): string[] {
     strategy.patternData?.topActivities &&
     Array.isArray(strategy.patternData.topActivities)
   ) {
-    return strategy.patternData.topActivities.slice(0, 3);
+    return strategy.patternData.topActivities
+      .filter((a): a is string => typeof a === 'string')
+      .slice(0, 3);
   }
 
   return [];
@@ -302,16 +327,17 @@ function extractTopExercises(strategy: UserPattern): string[] {
 
 /**
  * Extract peak times from time pattern data
+ * Validates array elements are numbers
  */
 function extractPeakTimes(timePattern: UserPattern): string[] {
-  // Extract from pattern_data.peak_hours if available
+  // Extract from pattern_data.peakHours if available
   if (
     timePattern.patternData?.peakHours &&
     Array.isArray(timePattern.patternData.peakHours)
   ) {
-    return timePattern.patternData.peakHours.map(
-      (h: number) => `${h.toString().padStart(2, "0")}:00`,
-    );
+    return timePattern.patternData.peakHours
+      .filter((h): h is number => typeof h === 'number' && !isNaN(h))
+      .map((h) => `${h.toString().padStart(2, "0")}:00`);
   }
 
   // Extract from pattern_data.times
@@ -319,7 +345,9 @@ function extractPeakTimes(timePattern: UserPattern): string[] {
     timePattern.patternData?.times &&
     Array.isArray(timePattern.patternData.times)
   ) {
-    return timePattern.patternData.times.slice(0, 3);
+    return timePattern.patternData.times
+      .filter((t): t is string => typeof t === 'string')
+      .slice(0, 3);
   }
 
   return [];
