@@ -27,6 +27,11 @@ enum AnalyticsEvent: String {
     case recoveryQuestStarted = "recovery_quest_started"
     case recoveryQuestCompleted = "recovery_quest_completed"
 
+    // Recovery Mode UX
+    case recoveryModeEnabled = "recovery_mode_enabled"
+    case recoveryModeExited = "recovery_mode_exited"
+    case recoveryModeAutoTriggered = "recovery_mode_auto_triggered"
+
     // Quest Choice
     case questVariantSelected = "quest_variant_selected"
     case questRerolled = "quest_rerolled"
