@@ -4,6 +4,79 @@
 
 ---
 
+## [2026-01-20] Boundary & Needs Planner - Phase 0 Foundation (Database + Core Edge Functions)
+
+**Type:** Feature
+**Status:** In Progress (Foundation Complete, Backend and iOS Implementation Pending)
+
+### Summary
+
+Completed foundational infrastructure for Boundary & Needs Planner feature: database schema with RLS policies, practice count synchronization trigger, Swift models, and core Edge Functions (needs assessment, boundary generation). Establishes pattern for template-based script generation and tier limit enforcement.
+
+### Changes
+
+| File                                                                    | Description                                                                                                                                                         |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Database Schema**                                                     |                                                                                                                                                                     |
+| `supabase/migrations/20260121300000_create_boundary_planner_tables.sql` | 4 tables (needs_assessments, defined_boundaries, boundary_follow_ups, boundary_script_templates) with RLS policies, indexes, updated_at triggers                    |
+|                                                                         | Practice count synchronization trigger on custom_scenarios table for Conversation Rehearsal integration                                                             |
+|                                                                         | ALTER TABLE custom_scenarios with source_feature/source_id columns for loose coupling                                                                               |
+| **Swift Models**                                                        |                                                                                                                                                                     |
+| `apps/ios/MindFriendApp/Core/BoundaryModels.swift`                      | Complete Codable models matching database schema: NeedsAssessment, DefinedBoundary, BoundaryFollowUp, BoundaryScriptTemplate                                        |
+|                                                                         | Enums: AssessmentType, BoundaryType, BoundaryStatus, ScriptVariation, FollowUpOutcome with LocalizedStringKey support                                               |
+|                                                                         | API response models: CreateAssessmentResponse, GenerateBoundaryResponse, etc.                                                                                       |
+|                                                                         | Preview helpers for SwiftUI previews                                                                                                                                |
+| **Edge Functions**                                                      |                                                                                                                                                                     |
+| `supabase/functions/_shared/cors.ts`                                    | Shared CORS headers utility for all Edge Functions                                                                                                                  |
+| `supabase/functions/create-assessment/index.ts`                         | POST /create-assessment: Needs assessment creation with gap score calculation (importance × currently_met matrix)                                                   |
+|                                                                         | Returns top 3 needs (or all with gap_score ≥ 6) + boundary recommendations based on assessment type                                                                 |
+| `supabase/functions/generate-boundary/index.ts`                         | POST /generate-boundary: Boundary creation with validation (10-500 char statement/whyMatters)                                                                       |
+|                                                                         | Server-side tier limit enforcement (free: 3 boundaries max, premium: unlimited)                                                                                     |
+|                                                                         | Expected impact generation based on boundary type                                                                                                                   |
+| **Specifications**                                                      |                                                                                                                                                                     |
+| `minimax-specs/04-boundary-planner-spec-formal.md`                      | 1,000+ line formal specification (READY verdict, 10/10 completeness): database schema, 9 API endpoints, state machine, localization (75 strings), test requirements |
+| `minimax-specs/04-boundary-planner-implementation-plan.md`              | 1,309-line implementation plan: 24 new files, 5 modified files, 5-phase sequence, test strategy, risk assessment, rollback procedures                               |
+
+### Testing
+
+- [ ] Unit tests: Gap score calculation algorithm
+- [ ] Unit tests: Tier limit enforcement logic
+- [ ] Integration tests: End-to-end assessment → boundary creation flow
+- [ ] Integration tests: RLS policy enforcement (cross-user access blocked)
+- [ ] Integration tests: Practice count trigger synchronization
+
+### Notes
+
+**Foundation Complete:**
+
+- Database migration applied successfully to remote database
+- Swift models added to Xcode project via xcodeproj gem
+- Edge Function patterns established (auth, validation, error handling, business logic)
+
+**Next Steps:**
+
+- Implement remaining 7 Edge Functions (generate-scripts, save-boundary, list-boundaries, etc.)
+- Implement 7 iOS SwiftUI views (NeedsAssessmentView, BoundaryDefinitionView, ScriptGeneratorView, etc.)
+- Seed boundary_script_templates table with 135 templates (en/es/pt × 45 templates)
+- Add 75 LocalizedStringKey strings to Localizable.xcstrings
+- Integration testing with Conversation Rehearsal Studio
+
+**Architectural Decisions:**
+
+- Practice count: Database trigger on custom_scenarios INSERT auto-increments defined_boundaries.practice_count (single source of truth)
+- Script generation: Template-based (not AI) for MVP; 4 placeholders ([boundary], [why_matters], [stakeholder], [contact_method])
+- Tier limits: Server-side enforcement in generate-boundary Edge Function (402 error for free tier limit)
+- State transitions: Edge Function validation (not database constraint) for flexible business logic
+
+**Risk Mitigations:**
+
+- RLS policies on all 4 tables prevent cross-user data access
+- Conversation Rehearsal integration uses loose coupling (custom_scenarios.source_feature)
+- Tier limit enforced server-side (cannot be bypassed from client)
+- Database trigger ensures practice_count accuracy (no manual sync required)
+
+---
+
 ## [2026-01-20] Values Compass & Decision Coach - Phase 0-1 (Database + Edge Functions)
 
 **Type:** Feature
@@ -43,20 +116,41 @@ Completed database foundation and Edge Functions for Values Compass & Decision C
 - All blockers resolved with documented assumptions in decisions.md
 - Architect agent designed 9-phase implementation plan (A-I) with complete API contracts
 
-**Phase 1 (BUILD):** 🚧 Partial (Database + Edge Functions Complete)
+**Phase 1 (BUILD):** ✅ Complete (Backend + iOS Foundation)
 
 - ✅ **Phase A:** 6 tables created with RLS policies, 32 value cards seeded, migrations applied
 - ✅ **Phase B:** 5 Edge Functions implemented with xAI integration, fallback handling, validation
-- ⏳ **Phases C-E:** iOS models, services, views, view models pending (15+ files)
+- ✅ **Phase C:** iOS models (ValuesModels.swift), service layer (ValuesService.swift), dependency injection
+- ✅ **Phase D:** UI components (ValueCardView, CompassRenderer with SwiftUI Canvas)
+- ✅ **Phase E:** Core views (ValuesDiscoveryView + ViewModel, ValuesCompassView + ViewModel)
 
-**Key Details:**
+**iOS Files Created:**
+
+- Models: `ValuesModels.swift` (15+ data structures matching API contracts)
+- Services: `ValuesService.swift` (complete API client with error handling)
+- Components: `ValueCardView.swift`, `CompassRenderer.swift` (reusable UI)
+- Views: `ValuesDiscoveryView.swift`, `ValuesCompassView.swift` (3-phase flow + compass display)
+- ViewModels: `ValuesDiscoveryViewModel.swift`, `ValuesCompassViewModel` (state management)
+
+**Remaining Work:**
+
+- ⏳ Decision Coach view + ViewModel (analyzes decisions with AI)
+- ⏳ Values Journal view + ViewModel (track values in action)
+- ⏳ Trade-Off Exercise view (practice values conflicts)
+- ⏳ Values Settings view (manage profile)
+- ⏳ Navigation integration (ProfileView → Values Compass)
+- ⏳ Add files to Xcode project (via Ruby xcodeproj gem)
+- ⏳ Unit/integration tests
+
+**Key Implementation:**
 
 - 3-Phase Discovery: Progressive narrowing (8-12 → rank 5 → confirm 5)
-- AI Analysis: xAI Grok with 10s timeout, 200 token limit, fallback on failure
+- AI Analysis: xAI Grok with 10s timeout, 200 token limit, graceful fallback
 - Confidence Score: `(aligned - conflicting) / total_values` → -1.0 to +1.0
 - Gap Analysis: 30-day baseline, flags if current week <50% average
+- Export: PNG 1080x1080 via ImageRenderer + iOS share sheet
 
-**Context Budget:** 120K/200K (60%) - Sufficient for iOS implementation continuation
+**Context Budget:** 140K/200K (70%) - Core functionality implemented, additional views deferred
 
 ---
 
