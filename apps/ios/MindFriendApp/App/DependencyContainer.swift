@@ -111,6 +111,10 @@ final class DependencyContainer: ObservableObject {
         QuestArcsService(supabase: supabaseClient)
     }()
 
+    lazy var insightLabService: InsightLabService = {
+        InsightLabService(supabase: supabaseClient)
+    }()
+
     // TODO: Add CreatorService and FamilyService to Xcode project target
     // These services exist on disk but need to be added to the project's pbxproj file
     // lazy var creatorService: CreatorService = {

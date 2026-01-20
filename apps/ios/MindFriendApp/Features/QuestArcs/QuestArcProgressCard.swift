@@ -1,0 +1,285 @@
+//
+//  QuestArcProgressCard.swift
+//  MindFriendApp
+//
+//  Home screen card showing active quest arc progress
+//
+
+import SwiftUI
+
+struct QuestArcProgressCard: View {
+    let userArc: UserQuestArc
+    let onTap: () -> Void
+
+    private var arc: QuestArc? {
+        userArc.questArc
+    }
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 16) {
+                // Header
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "flame.fill")
+                                .foregroundStyle(.orange)
+                            Text("Active Journey")
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Text(arc?.title ?? "Quest Journey")
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(.primary)
+                    }
+
+                    Spacer()
+
+                    // Category icon
+                    if let category = arc?.category {
+                        categoryIcon(for: category)
+                    }
+                }
+
+                // Progress bar with milestones
+                progressSection
+
+                // Stats row
+                HStack {
+                    statItem(
+                        value: "\(userArc.currentDay)",
+                        label: "Day",
+                        icon: "calendar"
+                    )
+
+                    Divider()
+                        .frame(height: 24)
+
+                    statItem(
+                        value: "\(userArc.completedMilestones.count)",
+                        label: "Milestones",
+                        icon: "flag.fill"
+                    )
+
+                    Divider()
+                        .frame(height: 24)
+
+                    statItem(
+                        value: "\(Int(userArc.progressPercentage * 100))%",
+                        label: "Complete",
+                        icon: "chart.line.uptrend.xyaxis"
+                    )
+                }
+                .padding(.top, 4)
+
+                // Status badge for paused arcs
+                if userArc.status == "paused" {
+                    pausedBadge
+                }
+            }
+            .padding()
+            .background(Color(.secondarySystemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Progress Section
+
+    // Cache milestone marker data to prevent recalculation on every layout pass
+    private struct MilestoneMarker: Identifiable {
+        let id: Int
+        let position: CGFloat
+        let isCompleted: Bool
+    }
+
+    private func milestoneMarkers(width: CGFloat) -> [MilestoneMarker] {
+        guard userArc.snapshotDurationDays > 0 else { return [] }
+        return userArc.snapshotMilestoneDays.map { day in
+            MilestoneMarker(
+                id: day,
+                position: CGFloat(day) / CGFloat(userArc.snapshotDurationDays),
+                isCompleted: userArc.currentDay >= day
+            )
+        }
+    }
+
+    private var progressSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Day progress text
+            HStack {
+                Text("Day \(userArc.currentDay) of \(userArc.snapshotDurationDays)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                if let nextMilestone = userArc.nextMilestoneDay {
+                    Text("Next milestone: Day \(nextMilestone)")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+            }
+
+            // Progress bar with milestone markers (optimized rendering)
+            GeometryReader { geometry in
+                let width = geometry.size.width
+                let categoryColor = QuestArcCategory.color(for: arc?.category ?? "")
+                let markers = milestoneMarkers(width: width)
+
+                ZStack(alignment: .leading) {
+                    // Background track
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color(.systemGray5))
+                        .frame(height: 8)
+
+                    // Progress fill
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(
+                            LinearGradient(
+                                colors: [categoryColor.opacity(0.8), categoryColor],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(width: width * userArc.progressPercentage, height: 8)
+
+                    // Milestone markers (using cached positions)
+                    ForEach(markers) { marker in
+                        Circle()
+                            .fill(marker.isCompleted ? categoryColor : Color(.systemGray4))
+                            .frame(width: 12, height: 12)
+                            .overlay(
+                                Circle()
+                                    .stroke(Color(.systemBackground), lineWidth: 2)
+                            )
+                            .offset(x: (width * marker.position) - 6)
+                    }
+                }
+            }
+            .frame(height: 12)
+        }
+    }
+
+    // MARK: - Supporting Views
+
+    private func categoryIcon(for category: String) -> some View {
+        Image(systemName: QuestArcCategory.iconName(for: category))
+            .font(.title2)
+            .foregroundStyle(QuestArcCategory.color(for: category))
+            .frame(width: 44, height: 44)
+            .background(QuestArcCategory.color(for: category).opacity(0.15))
+            .clipShape(Circle())
+    }
+
+    private func statItem(value: String, label: String, icon: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(value)
+                    .font(.subheadline.weight(.semibold))
+                Text(label)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var pausedBadge: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "pause.circle.fill")
+            Text("Paused")
+                .font(.caption.weight(.medium))
+            Text("- Tap to resume")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .foregroundStyle(.orange)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.orange.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    // MARK: - Helpers
+
+}
+
+// MARK: - No Active Arc Card
+
+struct NoActiveArcCard: View {
+    let onBrowse: () -> Void
+
+    var body: some View {
+        Button(action: onBrowse) {
+            VStack(spacing: 16) {
+                Image(systemName: "map.fill")
+                    .font(.largeTitle)
+                    .foregroundStyle(.secondary)
+
+                VStack(spacing: 4) {
+                    Text("Start a Quest Journey")
+                        .font(.headline)
+
+                    Text("Multi-day programs to build lasting habits")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+
+                HStack {
+                    Image(systemName: "arrow.right.circle.fill")
+                    Text("Browse Journeys")
+                        .font(.subheadline.weight(.medium))
+                }
+                .foregroundStyle(.accentColor)
+            }
+            .padding()
+            .frame(maxWidth: .infinity)
+            .background(Color(.secondarySystemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+#Preview("Active Arc") {
+    QuestArcProgressCard(
+        userArc: UserQuestArc(
+            id: UUID(),
+            userId: UUID(),
+            arcId: UUID(),
+            status: "active",
+            currentDay: 5,
+            snapshotDurationDays: 14,
+            snapshotMilestoneDays: [3, 7, 14],
+            startedAt: Date(),
+            pausedAt: nil,
+            completedAt: nil,
+            abandonedAt: nil,
+            questArc: QuestArc(
+                id: UUID(),
+                title: "Stress Relief Journey",
+                description: "A 14-day program",
+                category: "stress",
+                durationDays: 14,
+                milestoneDays: [3, 7, 14],
+                isPremium: false,
+                isActive: true,
+                createdAt: Date()
+            )
+        ),
+        onTap: {}
+    )
+    .padding()
+}
+
+#Preview("No Active Arc") {
+    NoActiveArcCard(onBrowse: {})
+        .padding()
+}

@@ -34,6 +34,9 @@ struct HomeView: View {
     // Recovery mode state
     @State private var recoveryModeState: RecoveryModeState = .inactive
     @State private var showExitRecoveryModeConfirmation = false
+    // Quest Arc state
+    @State private var activeQuestArc: UserQuestArc?
+    @State private var showQuestArcCatalog = false
 
     /// Background color adapts to mood context
     private var adaptiveBackgroundColor: Color {
@@ -145,6 +148,17 @@ struct HomeView: View {
                     // Today's quest - with proper state handling
                     questCard
 
+                    // Quest Arc progress card
+                    if let arc = activeQuestArc {
+                        QuestArcProgressCard(userArc: arc) {
+                            showQuestArcCatalog = true
+                        }
+                    } else {
+                        NoActiveArcCard {
+                            showQuestArcCatalog = true
+                        }
+                    }
+
                     // Streak with shields
                     StreakCardWithShields(
                         currentStreak: appState.currentStreak,
@@ -169,6 +183,10 @@ struct HomeView: View {
 
                     // Weekly Insights
                     InsightsPreviewCard(insight: weeklyInsight)
+
+                    // Insight Lab - 7-day experiments
+                    InsightLabHomeCard()
+                        .environmentObject(container.insightLabService)
 
                     // Standard quick actions (fallback)
                     QuickActionsSection()
@@ -226,6 +244,10 @@ struct HomeView: View {
             }
             .fullScreenCover(isPresented: $showSOSIntervention) {
                 SOSInterventionView()
+                    .environmentObject(container)
+            }
+            .sheet(isPresented: $showQuestArcCatalog) {
+                QuestArcCatalogView()
                     .environmentObject(container)
             }
             } // End of else block for standard home
@@ -401,6 +423,7 @@ struct HomeView: View {
             async let buddyTask = try? await container.supabaseDataService.getBuddyWidgetData()
             async let celebrationsTask = try? await container.supabaseDataService.getPendingCelebrations()
             async let recoveryModeTask = try? await container.supabaseDataService.fetchRecoveryModeState()
+            async let questArcTask = try? await container.questArcsService.getActiveArc()
 
             // Await all results concurrently
             let questResult = try await questTask
@@ -415,6 +438,7 @@ struct HomeView: View {
             let buddyResult = (await buddyTask) ?? nil
             let pendingCelebrations = await celebrationsTask ?? []
             let recoveryModeResult = await recoveryModeTask ?? .inactive
+            let questArcResult = await questArcTask ?? nil
 
             // Compute level info from profile
             let levelResult = UserLevel.from(stats: profileResult.stats)
@@ -464,6 +488,9 @@ struct HomeView: View {
 
                 // Set recovery mode state
                 recoveryModeState = recoveryModeResult
+
+                // Set active quest arc
+                activeQuestArc = questArcResult
 
                 // Queue any pending celebrations
                 if !pendingCelebrations.isEmpty {

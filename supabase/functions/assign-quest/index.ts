@@ -203,6 +203,56 @@ async function assignQuestToUser(
       .single(),
   ]);
 
+  // Check for active arc and use arc step if available
+  try {
+    const { data: arcStepResult, error: arcStepError } = await supabase.rpc(
+      "get_arc_step_for_user",
+      {
+        p_user_id: userId,
+      },
+    );
+
+    // Differentiate between errors and empty results
+    if (arcStepError) {
+      // Log database/RPC errors but don't fail quest assignment
+      console.error(
+        `Arc step RPC error for user ${userId}:`,
+        arcStepError.code,
+        arcStepError.message,
+      );
+      // Fall through to normal quest selection
+    } else if (arcStepResult && arcStepResult.length > 0) {
+      const arcStep = arcStepResult[0];
+      console.log(
+        `Arc-driven quest for user ${userId}: template ${arcStep.quest_template_id} (day ${arcStep.day_number})`,
+      );
+
+      const { error: arcInsertError } = await supabase.from("quests").insert({
+        user_id: userId,
+        template_id: arcStep.quest_template_id,
+        local_date: localDate,
+        status: "assigned",
+        arc_user_id: arcStep.user_arc_id,
+      });
+
+      if (!arcInsertError) {
+        return { assigned: true };
+      }
+      console.error(
+        "Failed to assign arc quest, falling back:",
+        arcInsertError.code,
+        arcInsertError.message,
+      );
+    }
+    // If arcStepResult is empty array, user has no active arc - this is expected
+  } catch (err) {
+    // Catch unexpected errors (should not happen with proper error field checking above)
+    console.error(
+      `Unexpected error in arc step lookup for user ${userId}:`,
+      err,
+    );
+  }
+
   // Try preference-weighted quest selection first (Quest Choice feature)
   let templateId: string | null = null;
 
@@ -734,6 +784,81 @@ serve(async (req) => {
         user.id,
         quest.local_date,
       );
+
+      // Check if quest was part of an arc and handle milestone/completion
+      if (quest.arc_user_id) {
+        try {
+          // Increment arc day (current_day is now N+1)
+          await supabaseAdmin.rpc("increment_arc_day", {
+            p_user_arc_id: quest.arc_user_id,
+          });
+
+          // Get updated arc progress (current_day has been incremented by increment_arc_day)
+          const { data: arcProgress } = await supabaseAdmin
+            .from("user_quest_arcs")
+            .select(
+              "current_day, snapshot_milestone_days, snapshot_duration_days, arc:quest_arcs(title)",
+            )
+            .eq("id", quest.arc_user_id)
+            .single();
+
+          if (arcProgress) {
+            // Check if the UPDATED current_day is a milestone
+            const isMilestone = arcProgress.snapshot_milestone_days?.includes(
+              arcProgress.current_day,
+            );
+
+            if (isMilestone) {
+              console.log(
+                `Arc milestone reached: day ${arcProgress.current_day} for user ${user.id}`,
+              );
+
+              // Post milestone to user's circles
+              const { data: memberships } = await supabaseAdmin
+                .from("circle_members")
+                .select("circle_id")
+                .eq("user_id", user.id);
+
+              const { data: userProfile } = await supabaseAdmin
+                .from("profiles")
+                .select("display_name, share_mood_in_circles")
+                .eq("id", user.id)
+                .single();
+
+              // Respect privacy setting - only post if sharing is enabled
+              if (
+                userProfile?.share_mood_in_circles !== false &&
+                memberships?.length
+              ) {
+                const displayName = userProfile?.display_name || "Someone";
+                const arcTitle =
+                  (arcProgress.arc as { title?: string })?.title || "their arc";
+
+                for (const membership of memberships) {
+                  await supabaseAdmin.from("circle_posts").insert({
+                    circle_id: membership.circle_id,
+                    user_id: user.id,
+                    kind: "checkin",
+                    mood_emoji: "🎯",
+                    body_text: `${displayName} reached day ${arcProgress.current_day} of ${arcTitle}!`,
+                    local_date: quest.local_date,
+                  });
+                }
+              }
+            }
+
+            // Check for arc completion (note: increment_arc_day RPC already handles
+            // marking arc as completed, but we log it here for observability)
+            if (arcProgress.current_day >= arcProgress.snapshot_duration_days) {
+              console.log(
+                `Arc completed for user ${user.id}: ${(arcProgress.arc as { title?: string })?.title}`,
+              );
+            }
+          }
+        } catch (arcErr) {
+          console.error("Arc completion handling error:", arcErr);
+        }
+      }
 
       return new Response(JSON.stringify({ success: true, completed: true }), {
         status: 200,
