@@ -97,6 +97,30 @@ final class DependencyContainer: ObservableObject {
         AudioPlayerService(supabase: self.supabaseClient)
     }()
 
+    // MARK: - Sensory Regulation Services
+
+    lazy var tactilePatternService: TactilePatternService = {
+        TactilePatternService()
+    }()
+
+    lazy var visualAnimationService: VisualAnimationService = {
+        VisualAnimationService()
+    }()
+
+    lazy var audioSoundscapeService: AudioSoundscapeService = {
+        AudioSoundscapeService()
+    }()
+
+    lazy var sensoryRegulationService: SensoryRegulationService = {
+        SensoryRegulationService(
+            supabase: supabaseDataService,
+            tactileService: tactilePatternService,
+            visualService: visualAnimationService,
+            audioService: audioSoundscapeService,
+            achievementService: achievementService
+        )
+    }()
+
     lazy var valuesService: ValuesService = {
         ValuesService(supabase: self.supabaseClient)
     }()

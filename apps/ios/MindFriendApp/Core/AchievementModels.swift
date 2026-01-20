@@ -13,6 +13,7 @@ enum BadgeCategory: String, Codable, CaseIterable {
     case meditation = "meditation"
     case mood = "mood"
     case circles = "circles"
+    case sensory = "sensory"
     case special = "special"
     case seasonal = "seasonal"
 
@@ -25,6 +26,7 @@ enum BadgeCategory: String, Codable, CaseIterable {
         case .meditation: return "Meditation"
         case .mood: return "Mood"
         case .circles: return "Circles"
+        case .sensory: return "Sensory Regulation"
         case .special: return "Special"
         case .seasonal: return "Seasonal"
         }
@@ -71,6 +73,7 @@ enum StreakType: String, Codable, CaseIterable {
     case exercise
     case meditation
     case checkin
+    case sensory
     case appOpen = "app_open"
 
     var displayName: String {
