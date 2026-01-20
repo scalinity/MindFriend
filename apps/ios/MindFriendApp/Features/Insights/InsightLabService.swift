@@ -54,11 +54,13 @@ final class InsightLabService: ObservableObject {
     // MARK: - Fetch Active Experiment
 
     func fetchActiveExperiment() async {
+        print("[InsightLabService] fetchActiveExperiment called, current activeExperiment: \(activeExperiment?.title ?? "nil")")
         isLoading = true
         error = nil
 
         do {
             guard let userId = supabase.auth.currentUser?.id else {
+                print("[InsightLabService] fetchActiveExperiment - No user ID, setting activeExperiment to nil")
                 activeExperiment = nil
                 isLoading = false
                 return
@@ -74,7 +76,10 @@ final class InsightLabService: ObservableObject {
                 .execute()
                 .value
 
+            print("[InsightLabService] fetchActiveExperiment - Found \(experiments.count) experiments")
+
             guard let experimentRow = experiments.first else {
+                print("[InsightLabService] fetchActiveExperiment - No active experiment found, setting to nil")
                 activeExperiment = nil
                 isLoading = false
                 return
@@ -126,6 +131,8 @@ final class InsightLabService: ObservableObject {
 
         defer { isLoading = false }
 
+        print("[InsightLabService] Starting experiment: \(actionType.rawValue)")
+
         let request = StartExperimentRequest(
             actionType: actionType.rawValue,
             title: actionType.title,
@@ -136,6 +143,8 @@ final class InsightLabService: ObservableObject {
             "start-insight-experiment",
             options: FunctionInvokeOptions(body: request)
         )
+
+        print("[InsightLabService] Received response - experimentId: \(startResponse.experimentId), title: \(startResponse.title), days: \(startResponse.days.count)")
 
         let experiment = InsightExperiment(
             id: startResponse.experimentId,
@@ -150,7 +159,9 @@ final class InsightLabService: ObservableObject {
             days: startResponse.days
         )
 
+        print("[InsightLabService] Setting activeExperiment to: \(experiment.title)")
         activeExperiment = experiment
+        print("[InsightLabService] activeExperiment is now: \(activeExperiment?.title ?? "nil")")
         return experiment
     }
 

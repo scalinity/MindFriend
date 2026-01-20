@@ -229,7 +229,7 @@ final class AdherenceCalculatorTests: XCTestCase {
         let medicationLogs = [
             createLog(status: .taken)
         ]
-        let moodLogs: [Mood] = []
+        let moodLogs: [MoodEntry] = []
 
         // When
         let correlation = sut.calculateMoodCorrelation(medicationLogs: medicationLogs, moodLogs: moodLogs)
@@ -274,19 +274,34 @@ final class AdherenceCalculatorTests: XCTestCase {
             notes: nil,
             sideEffects: nil,
             moodAtTime: nil,
-            createdAt: Date(),
-            updatedAt: Date()
+            createdAt: Date()
         )
     }
 
-    private func createMood(score: Int) -> Mood {
-        Mood(
+    private func createMedicationLog(status: MedicationStatus, scheduledAt: Date) -> MedicationLog {
+        MedicationLog(
             id: UUID(),
             userId: UUID(),
-            score: score,
-            loggedAt: Date(),
+            medicationId: UUID(),
+            scheduledAt: scheduledAt,
+            status: status,
+            loggedAt: nil,
+            skipReason: nil,
             notes: nil,
-            activities: nil,
+            sideEffects: nil,
+            moodAtTime: nil,
+            createdAt: Date()
+        )
+    }
+
+    private func createMood(score: Int) -> MoodEntry {
+        MoodEntry(
+            id: UUID(),
+            userId: UUID(),
+            moodScore: score,
+            title: "Test",
+            notes: nil,
+            activities: [],
             createdAt: Date()
         )
     }

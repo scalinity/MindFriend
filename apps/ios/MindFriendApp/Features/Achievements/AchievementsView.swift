@@ -23,48 +23,46 @@ struct AchievementsView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    // XP and Level Header
-                    XPProgressView()
+        ScrollView {
+            VStack(spacing: 24) {
+                // XP and Level Header
+                XPProgressView()
 
-                    // Tab Picker
-                    Picker("Tab", selection: $selectedTab) {
-                        ForEach(AchievementTab.allCases, id: \.self) { tab in
-                            Label(tab.rawValue, systemImage: tab.icon)
-                                .tag(tab)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal)
-
-                    // Tab Content
-                    switch selectedTab {
-                    case .badges:
-                        BadgeCollectionView()
-                    case .skills:
-                        SkillTreesListView()
-                    case .streaks:
-                        StreaksListView()
+                // Tab Picker
+                Picker("Tab", selection: $selectedTab) {
+                    ForEach(AchievementTab.allCases, id: \.self) { tab in
+                        Label(tab.rawValue, systemImage: tab.icon)
+                            .tag(tab)
                     }
                 }
-                .padding(.vertical)
+                .pickerStyle(.segmented)
+                .padding(.horizontal)
+
+                // Tab Content
+                switch selectedTab {
+                case .badges:
+                    BadgeCollectionView()
+                case .skills:
+                    SkillTreesListView()
+                case .streaks:
+                    StreaksListView()
+                }
             }
-            .navigationTitle("Achievements")
-            .navigationBarTitleDisplayMode(.large)
-            .refreshable {
+            .padding(.vertical)
+        }
+        .navigationTitle("Achievements")
+        .navigationBarTitleDisplayMode(.large)
+        .refreshable {
+            await achievementService.loadAllAchievementData()
+        }
+        .task {
+            if achievementService.badges.isEmpty {
                 await achievementService.loadAllAchievementData()
             }
-            .task {
-                if achievementService.badges.isEmpty {
-                    await achievementService.loadAllAchievementData()
-                }
-            }
-            .overlay {
-                if achievementService.isLoading && achievementService.badges.isEmpty {
-                    ProgressView("Loading achievements...")
-                }
+        }
+        .overlay {
+            if achievementService.isLoading && achievementService.badges.isEmpty {
+                ProgressView("Loading achievements...")
             }
         }
     }
@@ -92,17 +90,10 @@ struct XPProgressView: View {
                         ))
                         .frame(width: 80, height: 80)
 
-                    VStack(spacing: 2) {
-                        Text("LVL")
-                            .font(.caption2)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.white.opacity(0.8))
-
-                        Text("\(experience?.currentLevel ?? 1)")
-                            .font(.title)
-                            .fontWeight(.bold)
-                            .foregroundStyle(.white)
-                    }
+                    Text("\(experience?.currentLevel ?? 1)")
+                        .font(.title)
+                        .fontWeight(.bold)
+                        .foregroundStyle(.white)
                 }
 
                 VStack(alignment: .leading, spacing: 8) {

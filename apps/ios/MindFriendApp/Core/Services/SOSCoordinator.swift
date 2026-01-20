@@ -52,7 +52,11 @@ final class SOSCoordinator: ObservableObject {
 
     /// Load user's SOS settings
     func loadSettings() async {
-        guard let userId = supabase.auth.currentUser?.id.uuidString else { return }
+        guard let userId = supabase.auth.currentUser?.id.uuidString else {
+            // Use in-memory defaults for unauthenticated users (dev/preview mode)
+            settings = SOSSettings.defaults(userId: "preview")
+            return
+        }
 
         do {
             let fetchedSettings: [SOSSettings] = try await supabase
@@ -84,10 +88,12 @@ final class SOSCoordinator: ObservableObject {
     func startSOS(from location: String? = "home") async {
         // Guard against rapid double-taps and concurrent starts
         guard phase == .ready, !isLoading else { return }
-        guard let userId = supabase.auth.currentUser?.id.uuidString else { return }
 
         isLoading = true
         defer { isLoading = false }
+
+        // Get userId (use "preview" for unauthenticated users)
+        let userId = supabase.auth.currentUser?.id.uuidString ?? "preview"
 
         // Create event
         var event = SOSEvent.create(userId: userId, triggerLocation: location)
@@ -139,9 +145,15 @@ final class SOSCoordinator: ObservableObject {
 
     /// Proceed to breathing phase
     func proceedToBreathing() async {
-        guard let settings = settings else { return }
+        // Use current settings or fall back to defaults to ensure SOS flow always continues
+        let currentSettings = settings ?? SOSSettings.defaults(userId: supabase.auth.currentUser?.id.uuidString ?? "preview")
 
-        let pattern = settings.preferredBreathingPattern
+        // Update settings if we had to use defaults (so other phases have access)
+        if settings == nil {
+            settings = currentSettings
+        }
+
+        let pattern = currentSettings.preferredBreathingPattern
         let totalCycles = pattern.defaultCycles
 
         phase = .breathing(cycleIndex: 0, totalCycles: totalCycles, phaseIndex: 0)
@@ -177,6 +189,7 @@ final class SOSCoordinator: ObservableObject {
         triggerHaptic(.phaseComplete)
         recordPhaseCompletion("breathing")
 
+        // Always proceed - default to resources if settings unavailable
         if settings?.includeGrounding == true {
             proceedToGrounding()
         } else {
@@ -437,6 +450,12 @@ final class SOSCoordinator: ObservableObject {
     // MARK: - Persistence
 
     private func saveEvent(_ event: SOSEvent) async {
+        // Don't try to save preview events to database
+        guard event.userId != "preview" else {
+            print("SOS event not saved (preview mode)")
+            return
+        }
+
         do {
             try await supabase
                 .from("sos_events")

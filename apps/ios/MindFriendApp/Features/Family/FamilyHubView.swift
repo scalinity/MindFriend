@@ -46,7 +46,6 @@ struct FamilyHubView: View {
             }
         }
         .navigationTitle("Family Wellness")
-        .navigationBarTitleDisplayMode(.inline)
         .task {
             await viewModel.loadData(
                 familyService: container.familyService,

@@ -337,10 +337,16 @@ struct UpcomingCheckinCard: View {
         .buttonStyle(.plain)
     }
 
-    private func dayAbbreviation(_ day: Int) -> String {
+    private static let dayFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US")
-        return String(formatter.shortWeekdaySymbols[(day % 7)])
+        return formatter
+    }()
+
+    private func dayAbbreviation(_ day: Int) -> String {
+        // Convert 1-based day (1-7) to 0-based index (0-6)
+        let symbols = Self.dayFormatter.shortWeekdaySymbols
+        return String(symbols[((day - 1) % 7)].prefix(2))
     }
 }
 

@@ -66,22 +66,22 @@ struct SleepContentCard: View {
                     Text(content.title)
                         .font(.subheadline)
                         .fontWeight(.medium)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(.white)
                         .lineLimit(2)
 
                     HStack(spacing: 4) {
                         Image(systemName: content.contentType.icon)
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.white.opacity(0.7))
                         Text(content.category.displayName)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.white.opacity(0.7))
                     }
 
                     if let narrator = content.narrator {
                         Text("by \(narrator)")
                             .font(.caption2)
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.white.opacity(0.5))
                     }
                 }
             }
@@ -150,13 +150,13 @@ struct SleepContentListItem: View {
                     Text(content.title)
                         .font(.subheadline)
                         .fontWeight(.medium)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(.white)
                         .lineLimit(1)
 
                     HStack(spacing: 8) {
                         Label(content.formattedDuration, systemImage: "clock")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.white.opacity(0.7))
 
                         if content.isPremium {
                             Label("Premium", systemImage: "crown.fill")
@@ -168,7 +168,7 @@ struct SleepContentListItem: View {
                     if let narrator = content.narrator {
                         Text("by \(narrator)")
                             .font(.caption2)
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.white.opacity(0.5))
                     }
                 }
 

@@ -5,6 +5,8 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { authenticateRequest, errorResponse } from "../_shared/auth.ts";
 
 interface CreateOrganizationRequest {
   name: string;
@@ -13,14 +15,11 @@ interface CreateOrganizationRequest {
 }
 
 serve(async (req) => {
+  const origin = req.headers.get("Origin");
+  const corsHeaders = getCorsHeaders(origin);
+
   if (req.method === "OPTIONS") {
-    return new Response("ok", {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization",
-      },
-    });
+    return new Response("ok", { headers: corsHeaders });
   }
 
   if (req.method !== "POST") {
@@ -31,23 +30,35 @@ serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Missing authorization header" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
     const body = (await req.json()) as CreateOrganizationRequest;
 
     if (!body?.name || !body?.adminEmail || !body?.seatCount) {
-      return new Response(
-        JSON.stringify({ error: "Missing required fields" }),
-        {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        },
+      return errorResponse(
+        "VALIDATION_ERROR",
+        "Missing required fields",
+        400,
+        corsHeaders,
+      );
+    }
+
+    // Validate seat count limits
+    const MAX_SEATS = 100;
+    if (body.seatCount < 1 || body.seatCount > MAX_SEATS) {
+      return errorResponse(
+        "VALIDATION_ERROR",
+        `Seat count must be between 1 and ${MAX_SEATS}`,
+        400,
+        corsHeaders,
+      );
+    }
+
+    // Validate name length
+    if (body.name.length < 2 || body.name.length > 255) {
+      return errorResponse(
+        "VALIDATION_ERROR",
+        "Organization name must be 2-255 characters",
+        400,
+        corsHeaders,
       );
     }
 
@@ -56,16 +67,15 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const { data: authData, error: authError } = await supabase.auth.getUser(
-      authHeader.replace("Bearer ", ""),
-    );
+    // Use shared auth utility for consistent security
+    const auth = await authenticateRequest(req);
 
-    if (authError || !authData?.user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
+    // Type guard: check if result is an AuthError
+    if ("response" in auth) {
+      return auth.response;
     }
+
+    const user = auth.user;
 
     const { data: organization, error } = await supabase
       .from("organizations")
@@ -81,15 +91,19 @@ serve(async (req) => {
       .single();
 
     if (error || !organization) {
-      return new Response(JSON.stringify({ error: "Failed to create organization" }), {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: "Failed to create organization" }),
+        {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
     }
 
     return new Response(
       JSON.stringify({
-        stripeCustomerId: organization.stripe_customer_id ?? "test_stripe_customer",
+        stripeCustomerId:
+          organization.stripe_customer_id ?? "test_stripe_customer",
         organization,
       }),
       {

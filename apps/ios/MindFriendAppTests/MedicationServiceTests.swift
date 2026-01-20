@@ -6,14 +6,14 @@ final class MedicationServiceTests: XCTestCase {
     var mockMedicationRepository: MockMedicationRepository!
     var mockLogRepository: MockMedicationLogRepository!
     var mockNotificationScheduler: MockNotificationScheduler!
-    var mockAdherenceCalculator: MockAdherenceCalculator!
+    var mockAdherenceCalculator: AdherenceCalculator!
 
     override func setUp() {
         super.setUp()
         mockMedicationRepository = MockMedicationRepository()
         mockLogRepository = MockMedicationLogRepository()
         mockNotificationScheduler = MockNotificationScheduler()
-        mockAdherenceCalculator = MockAdherenceCalculator()
+        mockAdherenceCalculator = AdherenceCalculator()
 
         sut = MedicationService(
             medicationRepository: mockMedicationRepository,
@@ -314,14 +314,14 @@ class MockMedicationLogRepository: MedicationLogRepository {
     var logDoseResult: Result<MedicationLog, Error> = .success(
         MedicationLog(id: UUID(), userId: UUID(), medicationId: UUID(), scheduledAt: Date(),
                       status: .taken, loggedAt: Date(), skipReason: nil, notes: nil,
-                      sideEffects: nil, moodAtTime: nil, createdAt: Date(), updatedAt: Date())
+                      sideEffects: nil, moodAtTime: nil, createdAt: Date())
     )
 
     var skipDoseWasCalled = false
     var skipDoseResult: Result<MedicationLog, Error> = .success(
         MedicationLog(id: UUID(), userId: UUID(), medicationId: UUID(), scheduledAt: Date(),
                       status: .skipped, loggedAt: Date(), skipReason: nil, notes: nil,
-                      sideEffects: nil, moodAtTime: nil, createdAt: Date(), updatedAt: Date())
+                      sideEffects: nil, moodAtTime: nil, createdAt: Date())
     )
 
     var fetchAllLogsResult: Result<[MedicationLog], Error> = .success([])
@@ -373,9 +373,7 @@ class MockNotificationScheduler: NotificationSchedulerProtocol {
     }
 }
 
-class MockAdherenceCalculator: AdherenceCalculator {
-    // Inherits implementation from actual AdherenceCalculator for testing
-}
+// AdherenceCalculator is final, using real instance for testing as it is stateless
 
 enum TestError: Error {
     case networkError

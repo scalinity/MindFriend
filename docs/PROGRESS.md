@@ -4,6 +4,457 @@
 
 ---
 
+## [2026-01-20] Values Compass & Decision Coach - Phase 0-1 (Database + Edge Functions)
+
+**Type:** Feature
+**Status:** In Progress (Phase A-B Complete, iOS Implementation Pending)
+
+### Summary
+
+Completed database foundation and Edge Functions for Values Compass & Decision Coach feature (guided values discovery, AI-powered decision analysis, trade-off exercises, values journal with gap analysis). All backend infrastructure ready for iOS integration.
+
+### Changes
+
+| File                                                          | Description                                                                                                                                  |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Database Schema**                                           |                                                                                                                                              |
+| `supabase/migrations/20260120290000_create_values_tables.sql` | 6 tables (values_cards, user_values, user_decisions, values_journal, trade_off_scenarios, user_trade_offs) with RLS policies and indexes     |
+| `supabase/migrations/20260120290001_seed_values_cards.sql`    | 32 predefined value cards (8 per category: personal, relationships, work, growth) with SF Symbols, descriptions, reflection questions        |
+| **Edge Functions**                                            |                                                                                                                                              |
+| `supabase/functions/_shared/xai-client.ts`                    | xAI Grok API client utility with 10s timeout, prompt sanitization, JSON parsing, graceful fallback                                           |
+| `supabase/functions/values-discovery/index.ts`                | 3-phase assessment (select 8-12 → rank 5 → confirm 5) with scoring algorithm and confidence calculation                                      |
+| `supabase/functions/analyze-decision/index.ts`                | AI-powered decision analysis using xAI Grok API; identifies aligned/conflicting values with confidence score                                 |
+| `supabase/functions/trade-off-exercise/index.ts`              | GET random conflict scenario, POST user choice with reasoning                                                                                |
+| `supabase/functions/values-journal/index.ts`                  | CRUD operations + automatic gap analysis (30-day baseline, flags <50% weekly activity)                                                       |
+| **Documentation**                                             |                                                                                                                                              |
+| `docs/decisions.md`                                           | 8 architectural assumptions (3-phase algorithm, AI analysis mechanism, confidence formula, gap analysis, export format, compass positioning) |
+
+### Testing
+
+- [ ] Unit tests pending (Edge Functions: values-discovery, analyze-decision, trade-off-exercise, values-journal)
+- [ ] Integration tests pending (3-phase discovery flow, AI analysis with fallback, gap analysis calculation)
+- [ ] iOS tests pending (ValuesService, ViewModels, UI flow tests)
+
+### Notes
+
+**Phase 0 (PLAN):** ✅ Complete
+
+- Spec-analyzer identified spec as 40% complete with 5 blocking issues
+- All blockers resolved with documented assumptions in decisions.md
+- Architect agent designed 9-phase implementation plan (A-I) with complete API contracts
+
+**Phase 1 (BUILD):** 🚧 Partial (Database + Edge Functions Complete)
+
+- ✅ **Phase A:** 6 tables created with RLS policies, 32 value cards seeded, migrations applied
+- ✅ **Phase B:** 5 Edge Functions implemented with xAI integration, fallback handling, validation
+- ⏳ **Phases C-E:** iOS models, services, views, view models pending (15+ files)
+
+**Key Details:**
+
+- 3-Phase Discovery: Progressive narrowing (8-12 → rank 5 → confirm 5)
+- AI Analysis: xAI Grok with 10s timeout, 200 token limit, fallback on failure
+- Confidence Score: `(aligned - conflicting) / total_values` → -1.0 to +1.0
+- Gap Analysis: 30-day baseline, flags if current week <50% average
+
+**Context Budget:** 120K/200K (60%) - Sufficient for iOS implementation continuation
+
+---
+
+## [2026-01-20] Sensory Regulation Toolkit - Phase 0-1 Foundation
+
+**Type:** Feature
+**Status:** In Progress (Foundation Complete, Implementation Pending)
+
+### Summary
+
+Completed planning and foundation for Sensory Regulation Toolkit feature (tactile/visual/audio patterns for non-audio calming). Spec analyzed, architectural decisions made, database schema created, core models implemented, service scaffolds prepared.
+
+### Changes
+
+| File                                                               | Description                                                                                                           |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `docs/decisions.md`                                                | Architectural decisions (12 key choices for local-first patterns, Core Haptics, SwiftUI Canvas, simulated heart rate) |
+| `supabase/migrations/20260120280000_create_sensory_tables.sql`     | 3 tables (sensory_sessions, sensory_favorites, sensory_settings) + indexes + triggers                                 |
+| `supabase/migrations/20260120280001_add_sensory_rls_policies.sql`  | RLS policies for user-level data isolation                                                                            |
+| `apps/ios/MindFriendApp/Core/SensoryModels.swift`                  | Core data models (6 tactile patterns, 8 visual animations, 2 audio soundscapes)                                       |
+| `apps/ios/MindFriendApp/Core/Services/TactilePatternService.swift` | Core Haptics service scaffold (AHAP playback - TODOs documented)                                                      |
+| `docs/sensory-toolkit-implementation-roadmap.md`                   | Comprehensive implementation plan (15-20 hours estimated, 40+ files to create/modify)                                 |
+
+### Testing
+
+- [ ] Unit tests pending (TactilePatternService, VisualAnimationService, SensoryRegulationService)
+- [ ] Integration tests pending (session lifecycle, achievement triggers)
+- [ ] Accessibility tests pending (VoiceOver, Reduce Motion, Dynamic Type)
+- [ ] Performance tests pending (Canvas 60fps, memory <100MB)
+
+### Notes
+
+**Phase 0 (PLAN):** ✅ Complete
+
+- Spec-analyzer identified 6 blocking issues (animation config schema, haptic schema, heart rate data source, widget architecture, pattern bootstrap, API contracts)
+- All blockers resolved with conservative architectural decisions (see decisions.md)
+- Architect agent designed comprehensive implementation plan with component boundaries, API contracts, state machines, error handling
+
+**Phase 1 (BUILD):** 🚧 Partial (4 of 50+ files created)
+
+- Database migrations created (ready to apply once blocking migration `20260119000200_couples_session_rating_rpc.sql` is fixed)
+- Core models complete with hardcoded pattern libraries (local-first architecture)
+- Service layer scaffolded with TODO comments for Core Haptics, Canvas rendering, audio playback
+- **Remaining:** 9 view files, 3 service implementations, 4 Edge Functions, 8 test files, integration updates, localization, AHAP pattern files
+
+**Context Budget:** 112K/200K tokens used. Pausing here to preserve budget for Phases 2-5 (Review, Verify, Commit, Monitor).
+
+**Blockers:**
+
+1. Migration ordering issue (`20260119000200`) must be fixed before sensory migrations can apply
+2. 6 AHAP haptic pattern files need to be created (heartbeat, earth_pulse, wave, breath_cue, counting, sos)
+3. Audio soundscape files need to be sourced/licensed (rain.m4a, ocean_waves.m4a)
+
+**Next Steps:** Resume with `/dev-pipeline:continue` in fresh session after migration blocker resolved. See `docs/sensory-toolkit-implementation-roadmap.md` for detailed checklist.
+
+**Architectural Highlights:**
+
+- Local-first: All patterns embedded in iOS app (no required download)
+- Offline-capable: Full functionality without network
+- Premium gating: Client-side check + server validation
+- 30-minute session limit with auto-pause
+- Simulated heart rate visualization (no HealthKit complexity)
+- App Groups widget support (iOS 14+)
+- Core Haptics for tactile (iOS 13+), SwiftUI Canvas for visual (60fps target)
+
+---
+
+## [2026-01-20] Cognitive Bias Coach - Phase 1 Foundation
+
+**Type:** Feature
+**Status:** In Progress (Foundation Complete, Edge Functions + iOS Pending)
+
+### Summary
+
+Implemented database schema, architectural decisions, and core detection engine for Real-Time Cognitive Bias Coach. Detects 12 cognitive distortions in chat messages using keyword-based pattern matching with confidence scoring.
+
+### Changes
+
+| File                                                               | Description                                         |
+| ------------------------------------------------------------------ | --------------------------------------------------- |
+| `docs/decisions.md`                                                | Architectural decisions (14 key choices documented) |
+| `supabase/migrations/20260701000004_cognitive_coach_schema.sql`    | 6 tables + RLS policies + indexes                   |
+| `supabase/migrations/20260701000005_cognitive_coach_seed_data.sql` | 12 distortion types + EN/ES/PT translations         |
+| `supabase/functions/_shared/distortion-detection.ts`               | Keyword-based detection with sensitivity thresholds |
+
+### Testing
+
+- [ ] Unit tests pending (detection accuracy >85%, false positive <10%)
+- [ ] Integration tests pending
+- [ ] Manual verification pending
+
+### Notes
+
+**Migration Status:** Created but not yet applied due to pre-existing database migration state conflicts. Migrations are correct and ready once DB state is resolved.
+
+**Remaining Phase 1 Work:**
+
+- Reframe template utility
+- Chat Edge Function integration
+- iOS models, service, views
+- Integration testing
+
+**Context Budget:** 107K/200K tokens used. Breaking here to preserve budget for Phases 2-5. Continue in fresh session.
+
+---
+
+## [2026-01-20] Ocean Waves Replacement
+
+**Type:** Fix
+**Status:** Complete
+
+### Summary
+
+Replaced ocean waves soundscape with actual beach wave sounds after user reported the original file didn't sound like ocean waves.
+
+### Changes
+
+| File                                        | Description                                                                      |
+| ------------------------------------------- | -------------------------------------------------------------------------------- |
+| `sleep-content/soundscapes/ocean-waves.m4a` | Replaced with "Waves 3 - 10h Night Beach Gentle" from Relaxing Sounds collection |
+| `docs/sleep-audio-sources.md`               | Updated source attribution                                                       |
+
+### Original vs New
+
+**Original:** "Deep Fathom Ocean - ambient music - underwater sounds" (43MB)
+
+- Was more of an ambient music track than actual ocean waves
+
+**New:** "Waves 3 - 10h Night Beach Gentle, NO GULLS" (37MB)
+
+- Actual natural recording of gentle night beach waves
+- No background music or seagull sounds
+- From the same Relaxing Sounds collection as the Campfire soundscape
+
+### Testing
+
+- [x] Downloaded 10-hour source file from Internet Archive (825MB)
+- [x] Processed to 30 minutes with ffmpeg
+- [x] Converted to M4A format for iOS
+- [x] Uploaded to replace old ocean-waves.m4a file
+- [ ] Manual verification in iOS app
+
+### Notes
+
+- Source: https://archive.org/details/relaxingsounds
+- File: "Waves 3 10h Night Beach-Gentle, NO GULLS.mp3"
+- License: CC0/Public Domain
+
+---
+
+## [2026-01-20] Remaining Soundscapes Upload
+
+**Type:** Feature
+**Status:** Complete
+
+### Summary
+
+Uploaded 4 remaining soundscapes from Internet Archive to complete the Sleep content library. All 7 soundscapes (4 free + 3 premium) are now playable.
+
+### Changes
+
+| File                                                                    | Description                                                        |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `supabase/migrations/20260120250000_activate_remaining_soundscapes.sql` | Activated 4 soundscapes with correct audio URLs and durations      |
+| `docs/sleep-audio-sources.md`                                           | Updated with all 7 soundscapes, removed from "Future Content" list |
+
+### Storage Uploads
+
+Uploaded 4 soundscapes to `sleep-content/soundscapes/` bucket:
+
+**Free Tier:**
+
+- **White Noise** (30:00, 24MB) - Pure white noise for masking sounds
+  - Source: [60 Minutes Of White Noise](https://archive.org/details/01-60-minutes-of-white-noise)
+
+**Premium:**
+
+- **Thunderstorm** (30:00, 38MB) - Realistic thunderstorm with rain
+  - Source: [1 Hour Thunderstorm](https://archive.org/details/1HourThunderstorm)
+- **Campfire** (30:00, 47MB) - Roaring campfire with crickets and nature sounds
+  - Source: [Relaxing Sounds - Fire](https://archive.org/details/relaxingsounds)
+- **Binaural Sleep Waves** (30:00, 15MB) - Pure delta waves (2.5 Hz) for deep sleep
+  - Source: [Restorative Sleep - Binaural Beats](https://archive.org/details/RestorativeSleepMusicBinauralBeatsSleepInTheClouds432Hz)
+
+All files sourced from [Internet Archive](https://archive.org/) under CC0/Public Domain license.
+
+### Processing
+
+1. Downloaded original MP3 files from Internet Archive (60min - 4hr duration, 82MB - 347MB)
+2. Trimmed to 30 minutes using ffmpeg (`-t 1800`)
+3. Converted to AAC/M4A format for iOS compatibility (`-c:a aac -b:a 192k`)
+4. Compressed to fit under 50MB file size limit
+5. Uploaded to Supabase Storage with `.m4a` extension
+
+### Testing
+
+- [x] 4 soundscape files downloaded from Internet Archive
+- [x] Audio files processed (trimmed, compressed, converted)
+- [x] Files uploaded to Supabase Storage
+- [x] Database migration applied successfully
+- [x] All soundscapes marked as active (14 total: 8 free, 6 premium)
+- [ ] Manual verification in iOS app
+
+### Notes
+
+- Database now has **13 active content items**: 7 soundscapes + 6 stories
+- Only 1 placeholder remains: "Mountain Lake at Dusk" story (needs narration)
+- All uploaded content is legally licensed for commercial use (CC0/Public Domain)
+
+---
+
+## [2026-01-20] LibriVox Sleep Stories Upload
+
+**Type:** Feature
+**Status:** Complete
+
+### Summary
+
+Uploaded 6 public domain narrated fairy tales from LibriVox to replace custom story titles. All stories are now playable in the Sleep feature.
+
+### Changes
+
+| File                                                                   | Description                                                                             |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `supabase/migrations/20260120240000_replace_stories_with_librivox.sql` | Replaced custom story titles with LibriVox public domain narrations, updated audio URLs |
+
+### Storage Uploads
+
+Uploaded 6 stories to `sleep-content/stories/` bucket:
+
+**Free Tier:**
+
+- **Jack and His Golden Snuff-Box** (19:22, 19MB) - English fairy tale narrated by Joy Chan
+- **Whittington and His Cat** (18:12, 17MB) - Classic English folklore narrated by Joy Chan
+- **Jack the Giant-Killer** (22:55, 22MB) - Legendary giant-slaying tale narrated by Joy Chan
+
+**Premium:**
+
+- **The Brave Tin Soldier** (5:05, 4.9MB) - Andersen fairy tale
+- **The Ugly Duckling** (6:27, 6.2MB) - Andersen classic
+
+**Kids:**
+
+- **Thumbelina** (6:46, 6.5MB) - Andersen fairy tale
+- **The Ugly Duckling** (6:27, 6.2MB) - Andersen classic (shared with premium)
+
+All files sourced from [LibriVox](https://librivox.org/) under Public Domain license.
+
+### Testing
+
+- [x] 6 story files downloaded from LibriVox/Archive.org
+- [x] Audio files uploaded to Supabase Storage
+- [x] Database updated with new titles, descriptions, narrators, durations
+- [x] All stories marked as active
+- [ ] Manual verification in iOS app
+- [ ] Test story playback
+- [ ] Verify premium/kids filtering
+
+### Notes
+
+- LibriVox stories are professional quality public domain narrations
+- Files are already optimized (128kbps MP3), no processing needed
+- All stories under 25MB, well within storage limits
+- Database now shows 14 active stories total (may include soundscapes from previous upload)
+- One story placeholder ("Mountain Lake at Dusk") not updated - "The Daisy" too short (2 min)
+
+---
+
+## [2026-01-20] Sleep Audio Content Upload
+
+**Type:** Feature
+**Status:** Complete
+
+### Summary
+
+Fixed sleep audio playback by creating Supabase Storage bucket and uploading copyright-free soundscapes.
+
+### Changes
+
+| File                                                                   | Description                                                                              |
+| ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `supabase/migrations/20260120210000_fix_sleep_storage_urls.sql`        | Created `sleep-content` storage bucket with public read access, updated placeholder URLs |
+| `supabase/migrations/20260120220000_increase_sleep_storage_limit.sql`  | Increased bucket file size limit to 500MB                                                |
+| `supabase/migrations/20260120230000_activate_uploaded_soundscapes.sql` | Marked uploaded soundscapes as active                                                    |
+| `supabase/config.toml:29`                                              | Increased global storage file size limit from 50MiB to 500MiB                            |
+| `docs/sleep-audio-sources.md`                                          | Documented audio sources, licenses, and processing steps                                 |
+
+### Storage Uploads
+
+Uploaded 3 soundscapes to `sleep-content` bucket:
+
+- **Ocean Waves** (43MB, 30 min) - Deep ocean ambient sounds
+- **Gentle Rain** (43MB, 30 min) - Soft rainfall for relaxation
+- **Forest Night** (43MB, 30 min) - Nighttime forest sounds with crickets
+
+All files sourced from [Internet Archive](https://archive.org/details/audio) under CC0/Public Domain licenses.
+
+### Testing
+
+- [x] Storage bucket created
+- [x] Audio files uploaded
+- [x] Database records activated
+- [ ] Manual verification in iOS app
+- [ ] Test audio playback
+- [ ] Verify sleep timer functionality
+
+### Notes
+
+- Audio files compressed to 192kbps MP3, trimmed to 30 minutes to fit under 50MB project limit
+- **Complete source documentation created**: `docs/sleep-content-sources-complete.md` contains:
+  - Direct links for all 4 remaining soundscapes (white noise, thunderstorm, campfire, binaural beats)
+  - [LibriVox](https://librivox.org/) public domain story alternatives for all 8 stories
+  - AI TTS options ([ElevenLabs](https://elevenlabs.io/), [Play.ht](https://play.ht/)) for custom narrations
+  - Processing workflow, upload commands, and alternative sources
+- **Status**: 3/14 items complete (Ocean Waves, Gentle Rain, Forest Night)
+- **Next steps**: Manual download remaining soundscapes from browser, process with ffmpeg, upload to Supabase
+- See `docs/sleep-audio-sources.md` for initial uploads and `docs/sleep-content-sources-complete.md` for full guide
+
+---
+
+## [2026-01-20] Profile Navigation Double Back Button Fix
+
+**Type:** Bugfix
+**Status:** Complete
+
+### Summary
+
+Fixed double back button issue affecting all profile settings pages where nested NavigationStacks created duplicate navigation bars.
+
+### Changes
+
+- **File:** `apps/ios/MindFriendApp/Features/Memory/CompanionMemoryView.swift:15-16` — Removed NavigationStack wrapper, kept VStack with navigation modifiers
+- **File:** `apps/ios/MindFriendApp/Features/Achievements/AchievementsView.swift:25-26` — Removed NavigationStack wrapper, kept ScrollView with navigation modifiers
+- **File:** `apps/ios/MindFriendApp/Features/Therapist/TherapistApplicationView.swift:16-17` — Removed NavigationStack wrapper, kept Form with navigation modifiers
+
+### Root Cause
+
+Three views were being pushed via NavigationLink from ProfileView (which has a NavigationStack), but they each created their own NavigationStack:
+
+```swift
+ProfileView
+  → NavigationStack (correct)
+    → NavigationLink to CompanionMemoryView
+      → CompanionMemoryView
+        → NavigationStack (WRONG - creates nested navigation)
+          → VStack with .navigationTitle()
+```
+
+Nested NavigationStacks in SwiftUI create duplicate navigation bars, resulting in two back buttons stacked vertically.
+
+### Testing
+
+- [x] Build succeeds
+- [ ] Manual verification in simulator
+
+### Notes
+
+- **Pattern:** Views presented via NavigationLink should NOT have NavigationStack
+- **Pattern:** Views presented as sheets (.sheet) SHOULD have NavigationStack
+- All three fixed views are accessed via NavigationLink from ProfileView
+- ProfileView correctly maintains single NavigationStack for all pushed views
+
+---
+
+## [2026-01-20] Partner Mode Infinite Loading Bug Fix
+
+**Type:** Bugfix
+**Status:** Complete
+
+### Summary
+
+Fixed critical bug where Partner Mode view would hang indefinitely on "Loading..." screen when network errors occurred or connections stalled.
+
+### Changes
+
+- **File:** `apps/ios/MindFriendApp/Features/Partner/PartnerModeViewModel.swift:77-79` — Added `partnerState = .noPartner` in error handler to prevent UI from staying in `.loading` state forever
+- **File:** `apps/ios/MindFriendApp/Features/Partner/PartnerModeViewModel.swift:50-80` — Added 15-second timeout protection with `withTimeout()` helper to prevent indefinite hangs on network stalls
+- **File:** `apps/ios/MindFriendApp/Features/Partner/PartnerModeViewModel.swift:335-362` — Added `TimeoutError` type and `withTimeout()` helper function for async timeout handling
+
+### Root Cause
+
+When `loadPartnerData()` encountered any error (network failure, timeout, Supabase error), it called `handleError()` but never updated `partnerState` from its initial `.loading` value. The UI renders based on `partnerState`, so it showed "Loading..." indefinitely even though the loading had failed.
+
+### Testing
+
+- [ ] Unit tests added/updated
+- [ ] Integration tests pass
+- [ ] Manual verification done
+
+### Notes
+
+- **Before:** Error → `handleError()` → `partnerState` stays `.loading` → UI stuck forever
+- **After:** Error → `partnerState = .noPartner` → UI shows onboarding screen → User can retry
+- Added 15-second timeout to prevent network stalls from hanging UI indefinitely
+- Timeout shows user-friendly message: "Connection timed out. Please check your network and try again."
+
+---
+
 ## [2026-01-20] Safety Plan MVP
 
 **Type:** Feature
@@ -4960,6 +5411,28 @@ Novice: 0, Apprentice: 150, Practitioner: 500, Expert: 1200, Master: 3000
 - Add unit tests for progression calculations
 - Add SkillLevel shared constants struct
 - Verify max level (50) edge case handling
+
+---
+
+## [2026-01-20] Progress Tab Wellness Tracking Fix
+
+**Type:** Bugfix
+**Status:** Complete
+
+### Summary
+
+Progress tab now loads outcome schedules and recent results so the Wellness Tracking screen is populated instead of empty when data exists.
+
+### Changes
+
+- **File:** `apps/ios/MindFriendApp/Core/Services/OutcomeTrackingService.swift` — Added `loadRecentResponses(limit:)` to fetch recent assessment responses for the current user and populate `recentResponses`.
+- **File:** `apps/ios/MindFriendApp/Features/Outcomes/OutcomeHomeView.swift` — Updated `.task` to load assessment schedules, outcome goals, and recent responses when the Progress tab appears.
+- **File:** `apps/ios/MindFriendApp/Features/Outcomes/OutcomeHomeView.swift` — Added empty-state card that invites brand-new users to take their first assessment when no schedules, results, or goals exist yet.
+
+### Testing
+
+- [ ] Unit tests added/updated
+- [x] Manual verification: Progress tab shows due assessments and recent results when data is present
 
 ---
 

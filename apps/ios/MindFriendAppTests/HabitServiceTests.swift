@@ -4,11 +4,11 @@ import XCTest
 @MainActor
 final class HabitServiceTests: XCTestCase {
     var sut: HabitService!
-    var mockSupabase: MockSupabaseDataService!
+    var mockSupabase: HabitMockSupabaseDataService!
 
     override func setUp() {
         super.setUp()
-        mockSupabase = MockSupabaseDataService()
+        mockSupabase = HabitMockSupabaseDataService()
         sut = HabitService(supabaseDataService: mockSupabase)
     }
 
@@ -562,7 +562,8 @@ final class HabitServiceTests: XCTestCase {
 
 // MARK: - Mock Supabase Data Service
 
-final class MockSupabaseDataService: SupabaseDataService {
+final class HabitMockSupabaseDataService: SupabaseDataService {
+    init() { super.init(authService: SupabaseAuthService(client: SupabaseClient(supabaseURL: URL(string: "https://test.com")!, supabaseKey: "test"))) }
     var mockFetchHabitsResult: [Habit] = []
     var mockFetchHabitsError: HabitServiceError?
     var mockCreateHabitResult: Habit?

@@ -31,6 +31,10 @@ final class DependencyContainer: ObservableObject {
     lazy var billingService: BillingService = {
         BillingService(authService: supabaseAuthService)
     }()
+    
+    lazy var coachService: CoachService = {
+        CoachService(supabase: self.supabaseClient)
+    }()
 
     // TODO: Fix GrokVoiceService compilation errors (inputNode, isPlayerPlaying references)
     // lazy var grokVoiceService: GrokVoiceService = {
@@ -91,6 +95,10 @@ final class DependencyContainer: ObservableObject {
 
     lazy var audioPlayerService: AudioPlayerService = {
         AudioPlayerService(supabase: self.supabaseClient)
+    }()
+
+    lazy var valuesService: ValuesService = {
+        ValuesService(supabase: self.supabaseClient)
     }()
 
     // MARK: - Medication Services
