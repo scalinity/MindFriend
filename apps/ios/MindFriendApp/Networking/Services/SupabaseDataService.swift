@@ -72,6 +72,7 @@ struct ChatResponse: Codable {
     let quotaUsed: Int?
     let quotaLimit: Int?
     let conversationTitle: String?
+    let coachData: CoachData?
 }
 
 struct ChatFunctionResponse: Codable {
@@ -80,6 +81,7 @@ struct ChatFunctionResponse: Codable {
     let quotaUsed: Int?
     let quotaLimit: Int?
     let conversationTitle: String?
+    let coachData: CoachData?
 }
 
 // MARK: - Private DB Types for Credibility
@@ -1003,7 +1005,8 @@ final class SupabaseDataService: ObservableObject {
             isCrisisResponse: chatResponse.isCrisisResponse ?? false,
             quotaUsed: chatResponse.quotaUsed,
             quotaLimit: chatResponse.quotaLimit,
-            conversationTitle: chatResponse.conversationTitle
+            conversationTitle: chatResponse.conversationTitle,
+            coachData: chatResponse.coachData
         )
     }
 
@@ -4817,11 +4820,6 @@ final class SupabaseDataService: ObservableObject {
     func getEnrollment(programId: String) async throws -> ProgramEnrollment? {
         // TODO: Implement getEnrollment
         return nil
-    }
-
-    func getPrograms() async throws -> [Program] {
-        // TODO: Implement getPrograms
-        return []
     }
 
     func getActiveEnrollment() async throws -> ProgramEnrollment? {
