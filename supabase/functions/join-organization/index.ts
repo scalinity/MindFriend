@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -27,15 +28,11 @@ interface JoinOrganizationResponse {
 }
 
 serve(async (req) => {
-  // CORS headers
+  const origin = req.headers.get("Origin");
+  const corsHeaders = getCorsHeaders(origin);
+
   if (req.method === "OPTIONS") {
-    return new Response("ok", {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization",
-      },
-    });
+    return new Response("ok", { headers: corsHeaders });
   }
 
   try {
@@ -43,7 +40,7 @@ serve(async (req) => {
     if (req.method !== "POST") {
       return new Response(JSON.stringify({ error: "Method not allowed" }), {
         status: 405,
-        headers: { "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -57,7 +54,7 @@ serve(async (req) => {
         } as JoinOrganizationResponse),
         {
           status: 401,
-          headers: { "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         },
       );
     }
@@ -75,7 +72,7 @@ serve(async (req) => {
         } as JoinOrganizationResponse),
         {
           status: 401,
-          headers: { "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         },
       );
     }
@@ -91,7 +88,7 @@ serve(async (req) => {
         } as JoinOrganizationResponse),
         {
           status: 400,
-          headers: { "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         },
       );
     }
@@ -105,6 +102,8 @@ serve(async (req) => {
       .eq("invite_code", inviteCode)
       .single();
 
+    console.log(`Found invite for code ${inviteCode}:`, JSON.stringify(invite));
+
     if (fetchError || !invite) {
       return new Response(
         JSON.stringify({
@@ -114,7 +113,7 @@ serve(async (req) => {
         } as JoinOrganizationResponse),
         {
           status: 404,
-          headers: { "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         },
       );
     }
@@ -130,7 +129,7 @@ serve(async (req) => {
         } as JoinOrganizationResponse),
         {
           status: 400,
-          headers: { "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         },
       );
     }
@@ -146,7 +145,7 @@ serve(async (req) => {
           } as JoinOrganizationResponse),
           {
             status: 400,
-            headers: { "Content-Type": "application/json" },
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
           },
         );
       }
@@ -161,7 +160,7 @@ serve(async (req) => {
         } as JoinOrganizationResponse),
         {
           status: 400,
-          headers: { "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         },
       );
     }
@@ -174,7 +173,7 @@ serve(async (req) => {
       .select("*")
       .eq("organization_id", organizationId)
       .eq("user_id", user.id)
-      .single();
+      .maybeSingle();
 
     if (existingMember) {
       return new Response(
@@ -185,7 +184,7 @@ serve(async (req) => {
         } as JoinOrganizationResponse),
         {
           status: 400,
-          headers: { "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         },
       );
     }
@@ -206,12 +205,19 @@ serve(async (req) => {
         } as JoinOrganizationResponse),
         {
           status: 404,
-          headers: { "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         },
       );
     }
 
-    if (organization.seats_used >= organization.seat_count) {
+    console.log(
+      `Checking capacity for org ${organizationId}: seats_used=${organization.seats_used}, seat_count=${organization.seat_count}`,
+    );
+
+    const isAtCapacity = organization.seats_used >= organization.seat_count;
+    console.log(`isAtCapacity: ${isAtCapacity}`);
+
+    if (isAtCapacity) {
       return new Response(
         JSON.stringify({
           success: false,
@@ -220,7 +226,7 @@ serve(async (req) => {
         } as JoinOrganizationResponse),
         {
           status: 400,
-          headers: { "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         },
       );
     }
@@ -228,7 +234,7 @@ serve(async (req) => {
     // Increment invite uses
     const { error: updateInviteError } = await supabase
       .from("organization_invites")
-      .update({ uses_count: invite.uses_count + 1 })
+      .update({ uses_count: (invite.uses_count || 0) + 1 })
       .eq("invite_code", inviteCode);
 
     if (updateInviteError) {
@@ -237,15 +243,37 @@ serve(async (req) => {
         JSON.stringify({
           success: false,
           error: "Failed to process invite",
+          errorCode: "UPDATE_FAILED",
         } as JoinOrganizationResponse),
         {
           status: 500,
-          headers: { "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         },
       );
     }
 
-    // Add user as organization member
+    // Increment seats_used counter (non-atomic for now due to PostgREST limitation)
+    const { error: seatsError } = await supabase
+      .from("organizations")
+      .update({ seats_used: organization.seats_used + 1 })
+      .eq("id", organizationId);
+
+    if (seatsError) {
+      console.error("Error incrementing seats_used:", seatsError);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Failed to update organization seats",
+          errorCode: "UPDATE_FAILED",
+        } as JoinOrganizationResponse),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    // Create member record
     const now = new Date().toISOString();
     const { data: member, error: memberError } = await supabase
       .from("organization_members")
@@ -267,37 +295,7 @@ serve(async (req) => {
         } as JoinOrganizationResponse),
         {
           status: 500,
-          headers: { "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    // Increment seats_used counter atomically with capacity check
-    const { data: updatedOrg, error: seatsError } = await supabase
-      .from("organizations")
-      .update({ seats_used: organization.seats_used + 1 })
-      .eq("id", organizationId)
-      .lt("seats_used", "seat_count") // Atomic capacity check
-      .select()
-      .single();
-
-    if (seatsError || !updatedOrg) {
-      console.error(
-        "Error incrementing seats_used (capacity reached):",
-        seatsError,
-      );
-      // Rollback: delete member
-      await supabase.from("organization_members").delete().eq("id", member.id);
-
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: "Organization has reached seat capacity",
-          errorCode: "SEAT_LIMIT_REACHED",
-        } as JoinOrganizationResponse),
-        {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         },
       );
     }
@@ -305,20 +303,21 @@ serve(async (req) => {
     // Grant premium subscription via organization sponsorship
     const { data: subscription, error: subscriptionError } = await supabase
       .from("subscriptions")
-      .insert({
+      .upsert({
         user_id: user.id,
-        organization_id: organizationId,
-        tier: "premium",
+        plan_type: "organization",
         status: "active",
         access_source: "organization_sponsored",
-        current_period_start: now,
-        current_period_end: null, // Null = organization-managed expiry
-      })
+        organization_id: organizationId,
+        product_id: "org_sponsored_premium",
+        original_transaction_id: `org_${organizationId}_${user.id}`,
+        expires_at: null, // Sponsored memberships don't expire as long as they're in the org
+      }, { onConflict: "user_id" })
       .select()
       .single();
 
     if (subscriptionError) {
-      console.error("Error creating subscription:", subscriptionError);
+      console.error("Error granting premium subscription:", subscriptionError);
       // Rollback: delete member, decrement seats
       await supabase.from("organization_members").delete().eq("id", member.id);
       await supabase
@@ -330,10 +329,11 @@ serve(async (req) => {
         JSON.stringify({
           success: false,
           error: "Failed to grant premium subscription",
+          debugError: subscriptionError,
         } as JoinOrganizationResponse),
         {
           status: 500,
-          headers: { "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         },
       );
     }
@@ -387,27 +387,23 @@ serve(async (req) => {
         },
         subscription: subscription
           ? {
-              tier: subscription.tier,
+              tier: subscription.plan_type,
               access_source: subscription.access_source,
             }
           : undefined,
       } as JoinOrganizationResponse),
       {
         status: 200,
-        headers: { "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       },
     );
   } catch (error) {
-    console.error("Error joining organization:", error);
-
+    console.error("Join organization error:", error);
     return new Response(
-      JSON.stringify({
-        success: false,
-        error: "Internal server error",
-      } as JoinOrganizationResponse),
+      JSON.stringify({ success: false, error: "Internal server error", debugError: error }),
       {
         status: 500,
-        headers: { "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       },
     );
   }

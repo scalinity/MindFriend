@@ -4,6 +4,93 @@
 
 ---
 
+## [2026-01-20] B2B Join Flows - Remote Test Fixes
+
+**Type:** Bugfix
+**Status:** Complete
+
+### Summary
+
+Aligned B2B join-family/join-organization behavior with remote schema constraints and stabilized rate-limited test runs.
+
+### Changes
+
+- **File:** `supabase/functions/join-family/index.ts:317` — Treat default child invites as non-explicit to allow age-based roles.
+- **File:** `supabase/functions/join-organization/index.ts:341` — Write audit log metadata instead of changes.
+- **File:** `supabase/functions/join-family/test.ts:89` — Reset join-family rate limits between tests and update age validation case.
+- **File:** `supabase/functions/join-organization/test.ts:97` — Reset org state between runs and assert audit metadata.
+- **File:** `supabase/migrations/20260120181500_add_organization_plan_type.sql` — Allow organization plan type.
+- **File:** `supabase/migrations/20260120183000_add_family_member_timestamps.sql` — Ensure family_members timestamps.
+- **File:** `supabase/migrations/20260120184500_fix_family_member_columns.sql` — Add missing family_members created_at.
+- **File:** `supabase/migrations/20260120190000_restore_rate_limit_rpc.sql` — Restore rate_limits table + check_rate_limit RPC.
+
+### Testing
+
+- [x] Unit tests added/updated
+- [ ] Integration tests pass
+- [ ] Manual verification done
+
+### Notes
+
+- Remote tests run: `deno test --allow-net --allow-env supabase/functions/join-family/test.ts supabase/functions/join-organization/test.ts`
+
+---
+
+## [2026-01-20] Therapeutic Programs - Post-Implementation Review & Fixes
+
+**Type:** Review | Bugfix
+**Status:** Complete
+
+### Summary
+
+Conducted comprehensive 10-agent review of therapeutic programs implementation. Fixed 3 MEDIUM-severity clinical assessment mismatches and documentation errors. All issues resolved to 10/10 quality standard.
+
+### Review Results
+
+**Agents Deployed**: CR1 (Architecture), CR2 (Code Quality), CR3 (Best Practices), CA1 (Correctness), CA2 (Reliability), CA3 (Performance), SA1 (Input/Output Security), SA2 (Auth & Access), SA3 (Data & Secrets), DB1 (Bug Hunt)
+
+**Final Scores**: Architecture 10/10, Code Quality 10/10, Correctness 10/10, Reliability 10/10, Performance 10/10, Security 10/10
+
+**Improvements for 10/10 Quality**:
+
+- Added sort order scheme documentation (10s/20s/30s/40s pattern for CBT/DBT/ACT/MBCT)
+- Added dependency validation check (verifies `methodology` column exists)
+- Replaced 3 Guilford book URLs with PubMed research citations (P07, P09, P10)
+- Added implementation note documenting design rationale (explicit INSERTs vs DRY helpers)
+
+### Issues Fixed
+
+| Issue                                                              | Severity | Fix                                                                   |
+| ------------------------------------------------------------------ | -------- | --------------------------------------------------------------------- |
+| P07 (DBT Distress Tolerance) uses PHQ-9 for non-depression program | MEDIUM   | Changed to `requires_baseline_assessment=FALSE, assessment_type=NULL` |
+| P08 (DBT Emotion Regulation) uses PHQ-9 for non-depression program | MEDIUM   | Changed to `requires_baseline_assessment=FALSE, assessment_type=NULL` |
+| Documentation claimed 181 days but actual total is 176 days        | MEDIUM   | Corrected to 176 days                                                 |
+| Migration header had wrong filename timestamp                      | WARNING  | Updated to correct filename                                           |
+| No explicit transaction boundaries                                 | WARNING  | Added `BEGIN;` and `COMMIT;`                                          |
+
+### Changes
+
+| Component          | File(s)                                                            | Details                                                                                                      |
+| ------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| **Fix Migration**  | `supabase/migrations/20260329000004_fix_assessment_types.sql`      | Updates P07 and P08 to remove inappropriate PHQ-9 assessments                                                |
+| **Seed Migration** | `supabase/migrations/20260329000003_therapeutic_programs_seed.sql` | Fixed header, transactions, duration; added sort order docs, validation check, PubMed URLs, design rationale |
+
+### Testing
+
+- [x] Fix migration applied successfully
+- [x] P07 and P08 assessment types corrected in database
+- [x] Documentation accuracy verified
+- [x] All agents gave approval after fixes
+
+### Notes
+
+- Changed assessment requirements from 8 to 6 programs (after P07/P08 fixes)
+- PHQ-9 now only used for depression-related programs (P02, P14)
+- GAD-7 only used for anxiety-related programs (P01, P04, P05, P12)
+- Programs without appropriate assessments now correctly set to not require baseline
+
+---
+
 ## [2026-01-20] Therapeutic Programs - Production Seed Data
 
 **Type:** Feature
@@ -28,7 +115,7 @@ Added 15 production-grade therapeutic programs with clinical metadata using evid
 
 **Free Programs**: 5 (P01, P02, P07, P11, P14)
 **Premium Programs**: 10 (P03-P06, P08-P10, P12, P13, P15)
-**Total Duration**: 181 days of content framework
+**Total Duration**: 176 days of content framework
 
 ### Testing
 

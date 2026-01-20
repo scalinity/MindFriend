@@ -33,6 +33,7 @@ Deno.test("update-companion-memory - returns 401 without auth", async () => {
   );
 
   assertEquals(response.status, 401);
+  await response.text();
 });
 
 Deno.test(

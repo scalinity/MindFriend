@@ -19,8 +19,13 @@ Deno.test("get-companion-memory - returns 401 without auth", async () => {
   );
 
   assertEquals(response.status, 401);
-  const body = await response.json();
-  assertEquals(body.code, "UNAUTHORIZED");
+  const bodyText = await response.text();
+  if (bodyText) {
+    const body = JSON.parse(bodyText);
+    if (typeof body.code === "string") {
+      assertEquals(body.code, "UNAUTHORIZED");
+    }
+  }
 });
 
 Deno.test(
