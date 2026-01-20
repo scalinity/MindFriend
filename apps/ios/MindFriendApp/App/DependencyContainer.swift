@@ -115,6 +115,37 @@ final class DependencyContainer: ObservableObject {
         InsightLabService(supabase: supabaseClient)
     }()
 
+    // TODO: RitualService not available in build target - investigate file inclusion
+    // lazy var ritualService: RitualService = {
+    //    RitualService(supabase: supabaseClient)
+    // }()
+
+    lazy var predictiveService: PredictiveService = {
+        PredictiveService(authService: supabaseAuthService)
+    }()
+
+    // MARK: - Vault Services (Local-only, encrypted journal)
+
+    lazy var vaultEncryptionService: VaultEncryptionService = {
+        VaultEncryptionService()
+    }()
+
+    lazy var vaultAuthService: VaultAuthService = {
+        VaultAuthService()
+    }()
+
+    lazy var vaultStorageService: VaultStorageService = {
+        VaultStorageService(encryptionService: vaultEncryptionService)
+    }()
+
+    lazy var vaultViewModel: VaultViewModel = {
+        VaultViewModel(
+            storageService: vaultStorageService,
+            authService: vaultAuthService,
+            encryptionService: vaultEncryptionService
+        )
+    }()
+
     // TODO: Add CreatorService and FamilyService to Xcode project target
     // These services exist on disk but need to be added to the project's pbxproj file
     // lazy var creatorService: CreatorService = {

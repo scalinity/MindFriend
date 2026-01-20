@@ -127,6 +127,22 @@ struct ProfileView: View {
                     }
 
                     NavigationLink {
+                        VaultListView()
+                            .environmentObject(container.vaultViewModel)
+                    } label: {
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Private Vault")
+                                Text("Encrypted, device-only journal")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: "lock.shield.fill")
+                        }
+                    }
+
+                    NavigationLink {
                         MemorySettingsView()
                     } label: {
                         Label("AI Memory", systemImage: "brain.head.profile")
