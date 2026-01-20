@@ -32,6 +32,7 @@
 		0BE9C710ECF599116FB3FE73 /* RitualModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1665F5EBEAE79D9B5FEFCCD3 /* RitualModelsTests.swift */; };
 		0C926A02E02F682B93FEC100 /* EmailPreferencesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D155417FD92657F2519FB73D /* EmailPreferencesViewModel.swift */; };
 		0D515BBD7222578EEF21584B /* RecoveryModeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 866B2A915995FDCF08C84B56 /* RecoveryModeTests.swift */; };
+		0DC514E8A1BBEE0401E8F381 /* SensorySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F0E619D6222ADC2F4343DC1 /* SensorySettingsView.swift */; };
 		0DD6159A8351E08418A6DBB8 /* RitualScheduleCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06EA434375C23BA43F52880A /* RitualScheduleCard.swift */; };
 		0E094C63C087748C91D22D0E /* CircleHabitsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E109A5E0D10D8822F759B3F7 /* CircleHabitsViewModel.swift */; };
 		0EBCF2C1F48A53948F676508 /* SendHugButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = B15870A8B2BEAE2A4AB84C6D /* SendHugButton.swift */; };
@@ -51,6 +52,7 @@
 		1845DA2A1446D853201D0088 /* FamilyHubViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 810CB05C44D15BF64A7254BB /* FamilyHubViewModel.swift */; };
 		185EF929129BEAF13C1E6EE0 /* SOSResourcesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B09D9487A95102875F4BBD5 /* SOSResourcesView.swift */; };
 		18E468D0875D8E314BFB2BEB /* StreakCardWithShields.swift in Sources */ = {isa = PBXBuildFile; fileRef = B89AD7E6DA319614C0AC4803 /* StreakCardWithShields.swift */; };
+		190A9C9D550129102EB399EA /* SensoryRegulationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEF551C73B275FF13F5E2FCA /* SensoryRegulationServiceTests.swift */; };
 		1A75FA9057DF4D78D02AB257 /* AudioModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42D24DCD65B4BCA9469FD432 /* AudioModels.swift */; };
 		1AB2397607226F1F8266D8CA /* ProgressStoryPreviewCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63EECEE44DDA4E4546058871 /* ProgressStoryPreviewCard.swift */; };
 		1B79C678EF4D76E8BB5BAA30 /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4C4253E7F1569BF22053E55 /* PaywallView.swift */; };
@@ -192,6 +194,7 @@
 		63944A100B4B913D40BFF427 /* heartbeat.ahap in Resources */ = {isa = PBXBuildFile; fileRef = FCEFE80EB5DC9102E9FCFC0D /* heartbeat.ahap */; };
 		64416E625872A550F564DCA8 /* UIImage+Privacy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CF721F73DE7F49FAD056008 /* UIImage+Privacy.swift */; };
 		646C41C8AEE4D07F3345152C /* MedicationRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2EC285919570907C12DF8D0 /* MedicationRepository.swift */; };
+		647808B89D46E71777CB7110 /* BoundariesListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8F0746ABBB52D8E16F2CC70 /* BoundariesListView.swift */; };
 		65599434F1098F7F2B7319AF /* View+Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 580514ABDA39D14605E225D5 /* View+Localization.swift */; };
 		65A3EDA336E7932DA8FF25B6 /* FamilyChallengesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8766B7489A9E4DC26D2F1FAB /* FamilyChallengesView.swift */; };
 		668F5B3429D061D1B496C6CB /* FamilyServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D28ABD3052737EFDCE894D08 /* FamilyServiceTests.swift */; };
@@ -449,6 +452,7 @@
 		F2F8DED42AC62CBF840616F0 /* JournalListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DE170835795E1D33420E2BA /* JournalListView.swift */; };
 		F34B142F909BFE701B719ADE /* ActionPlanSchedulerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F292BDB7F5125DAA17824FF5 /* ActionPlanSchedulerTests.swift */; };
 		F391BE0BC3B04753C4214A75 /* VoiceAudioCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = C023543291D5474A57B35C93 /* VoiceAudioCapture.swift */; };
+		F3961AEC2AA071B07DDAB191 /* BoundaryPlannerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 467B6C458D7EC822E1D340A1 /* BoundaryPlannerService.swift */; };
 		F4FB71A9382B13545ABF6892 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23D490333DC8BA4297BD45DC /* AppDelegate.swift */; };
 		F636BAF2C8A4B0EA5736F026 /* MicroMomentsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AA0EEDB5FB4F04F74765D07 /* MicroMomentsModels.swift */; };
 		F6C68DC21A4CAD5738458ABA /* CouplesModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A93DDE47627A5F4C2746B80C /* CouplesModels.swift */; };
@@ -547,6 +551,7 @@
 		1E82075846E18CF5372C470F /* VoicePreferencesView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VoicePreferencesView.swift; sourceTree = "<group>"; };
 		1E8C880831593C2F41798FDF /* ForumHomeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ForumHomeView.swift; sourceTree = "<group>"; };
 		1EE86E8E6D5E63208EDEF602 /* SessionViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SessionViewModel.swift; sourceTree = "<group>"; };
+		1F0E619D6222ADC2F4343DC1 /* SensorySettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SensorySettingsView.swift; sourceTree = "<group>"; };
 		20808CDC5AD2C66F819F28A8 /* ExperimentCatalogView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ExperimentCatalogView.swift; sourceTree = "<group>"; };
 		2093C0D00EAF243164B8122C /* ChallengeServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ChallengeServiceTests.swift; sourceTree = "<group>"; };
 		219EA5EB2D0D7008A8C52CB3 /* VaultModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VaultModels.swift; sourceTree = "<group>"; };
@@ -626,6 +631,7 @@
 		45C1AE3E0E78F54E9AF08D1F /* ChatViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModelTests.swift; sourceTree = "<group>"; };
 		45E996EDB94CF6F7B9808586 /* ComposeThreadView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ComposeThreadView.swift; sourceTree = "<group>"; };
 		4639F94193D4F553DF82BE68 /* VoiceChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceChatView.swift; sourceTree = "<group>"; };
+		467B6C458D7EC822E1D340A1 /* BoundaryPlannerService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BoundaryPlannerService.swift; sourceTree = "<group>"; };
 		46A020821CB7E7F7CA025FBD /* JournalAnalysisView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = JournalAnalysisView.swift; sourceTree = "<group>"; };
 		471A9E444E89BF3831F762EB /* WeeklyWellbeingView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WeeklyWellbeingView.swift; sourceTree = "<group>"; };
 		473F5AFAB8195EB2B47680F9 /* RecoveryQuestBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryQuestBanner.swift; sourceTree = "<group>"; };
@@ -870,6 +876,7 @@
 		CD513A6EF65C799F3B0E6D00 /* ActiveSessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveSessionView.swift; sourceTree = "<group>"; };
 		CDE2EDF058B091CCD1E57EFF /* PartnerModeTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PartnerModeTests.swift; sourceTree = "<group>"; };
 		CDE77E9B7ED84DA5FD79E0D5 /* SeasonalEventCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonalEventCard.swift; sourceTree = "<group>"; };
+		CEF551C73B275FF13F5E2FCA /* SensoryRegulationServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SensoryRegulationServiceTests.swift; sourceTree = "<group>"; };
 		CFCCF89379AB535D22E54341 /* OfflineModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OfflineModels.swift; sourceTree = "<group>"; };
 		CFEC0910E4AFE443A36B1686 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		D04C6C2E2742A897861D5112 /* StreakShieldIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreakShieldIndicator.swift; sourceTree = "<group>"; };
@@ -892,6 +899,7 @@
 		D709AA1C88662C1C8072C543 /* SleepPlayerView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SleepPlayerView.swift; sourceTree = "<group>"; };
 		D7183242361CBB51E01BFD21 /* MindFriendApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MindFriendApp.entitlements; sourceTree = "<group>"; };
 		D8899CDEFA939F3563EA7004 /* SmartNotificationService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SmartNotificationService.swift; sourceTree = "<group>"; };
+		D8F0746ABBB52D8E16F2CC70 /* BoundariesListView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BoundariesListView.swift; sourceTree = "<group>"; };
 		D9B5D3DCE698D378FB6588A8 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		D9BE76FB714D7C5B466BAD57 /* QuestArcCategoryHelpers.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QuestArcCategoryHelpers.swift; sourceTree = "<group>"; };
 		DA816D8494CD341E1CC1A63E /* PeerSupportModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerSupportModels.swift; sourceTree = "<group>"; };
@@ -1280,6 +1288,7 @@
 				EBA698DB50C40FFA5DEF76CE /* Therapist */,
 				6C5688BC0D9C69C12C6892BE /* SOS */,
 				CBEF67815C303687A30316E7 /* Privacy */,
+				D7B9E53AFC7D904922E36571 /* Boundaries */,
 			);
 			path = Features;
 			sourceTree = "<group>";
@@ -1905,6 +1914,7 @@
 				A3644B6FDBF8F2FDC2CAE2D3 /* TactileLibraryView.swift */,
 				7FBF3EA30970A7CF46F9182B /* VisualLibraryView.swift */,
 				98DE83458F69E1A40DF6EDA3 /* SensoryHomeView.swift */,
+				1F0E619D6222ADC2F4343DC1 /* SensorySettingsView.swift */,
 			);
 			name = Sensory;
 			path = Sensory;
@@ -2062,6 +2072,7 @@
 				CDE2EDF058B091CCD1E57EFF /* PartnerModeTests.swift */,
 				27DD86BC771C3413A72D1040 /* GeneratedContentServiceTests.swift */,
 				F75184D2C90A5DF75D7ED553 /* SafetyPlanTests.swift */,
+				CEF551C73B275FF13F5E2FCA /* SensoryRegulationServiceTests.swift */,
 			);
 			name = MindFriendAppTests;
 			path = MindFriendAppTests;
@@ -2100,6 +2111,7 @@
 				0AB9C29CC494B20D03A8129A /* TherapistService.swift */,
 				54FB239809696F626303B6AA /* LocalizationService.swift */,
 				76B95B773FA44D88AEDFF515 /* PrivacyLockManager.swift */,
+				467B6C458D7EC822E1D340A1 /* BoundaryPlannerService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -2199,6 +2211,15 @@
 				94A409873A610559DE798558 /* BadgeEarnedView.swift */,
 			);
 			path = Achievements;
+			sourceTree = "<group>";
+		};
+		D7B9E53AFC7D904922E36571 /* Boundaries */ = {
+			isa = PBXGroup;
+			children = (
+				D8F0746ABBB52D8E16F2CC70 /* BoundariesListView.swift */,
+			);
+			name = Boundaries;
+			path = Boundaries;
 			sourceTree = "<group>";
 		};
 		DABDCB79508BEED2FD5BBC89 /* CopingKits */ = {
@@ -2624,6 +2645,7 @@
 				46441BAA7FAA165640A90773 /* SafetyPlanTests.swift in Sources */,
 				331350AD7F36264600D00A90 /* ChallengeServiceTests.swift in Sources */,
 				F92D4321D30365597E695EC6 /* ChallengeModelsTests.swift in Sources */,
+				190A9C9D550129102EB399EA /* SensoryRegulationServiceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -3038,6 +3060,9 @@
 				08082DDAD826169B4574CB62 /* VisualLibraryView.swift in Sources */,
 				1BD495887DDADABD8717C65B /* SensoryHomeView.swift in Sources */,
 				C6E6DE20FF34622F4EF3E66F /* SensoryToolkitCard.swift in Sources */,
+				F3961AEC2AA071B07DDAB191 /* BoundaryPlannerService.swift in Sources */,
+				0DC514E8A1BBEE0401E8F381 /* SensorySettingsView.swift in Sources */,
+				647808B89D46E71777CB7110 /* BoundariesListView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
