@@ -4,6 +4,366 @@ This document records architectural and implementation decisions that deviate fr
 
 ---
 
+## 2026-01-20: Values Compass & Decision Coach Implementation Assumptions
+
+**Decision:** Implement Values Compass & Decision Coach with spec-analyzer-provided assumptions for 5 blocking issues and 4 JSONB schema definitions, enabling autonomous pipeline execution.
+
+**Rationale:**
+
+The spec-analyzer identified the specification as 40% complete with 5 critical blockers (three-phase selection algorithm, decision analysis mechanism, confidence score calculation, gap analysis algorithm, weekly insights generation) and undefined JSONB schemas. Rather than block the pipeline for clarification, we adopt conservative, testable assumptions based on proven UX patterns and existing MindFriend architecture.
+
+**Key Assumptions:**
+
+1. **Three-Phase Selection Algorithm (FR1)**
+   - Phase 1 "Must Have": Select 8-12 values from 32 cards (all categories)
+   - Phase 2 "Important": Rank top 5 from Phase 1 selections
+   - Phase 3 "Confirm": Review and confirm final 5 values
+   - Scoring: Inversely weighted by phase (must-have=3, important=2, confirm=1)
+   - Final top values: Fixed at 5 (not variable 5-8 as spec suggested)
+   - Rationale: Progressive narrowing matches common card-sorting UX patterns
+   - Risk: May not match intended design; reversible with UX feedback
+
+2. **Decision Analysis Mechanism (FR3)**
+   - AI-generated via Edge Function using xAI Grok API
+   - Structured prompt: "Analyze how [option] aligns with or conflicts with [value]. Provide specific reasons."
+   - Response format: JSON with `{aligned: string[], conflicting: string[], reasoning: string}`
+   - Guardrails: Max 200 tokens per option, timeout 10s, fallback to generic advice on failure
+   - Cost: ~$0.001 per decision analysis (acceptable for MVP)
+   - Rationale: Spec mentions "iteration/feedback" in mitigations, implying AI-driven approach
+   - Risk: High - requires AI integration, latency considerations
+
+3. **Confidence Score Calculation (FR3)**
+   - Formula: `(aligned_count - conflicting_count) / total_selected_values`
+   - Range: -1.0 (all conflict) to +1.0 (all align), normalized to 0-100% for display
+   - Thresholds: >70% = High confidence, 40-70% = Medium, <40% = Low
+   - No weighting by value importance in MVP (all values treated equally)
+   - Rationale: Simple, deterministic, testable
+   - Risk: Oversimplifies complex decisions; can enhance with weighting in v2
+
+4. **Gap Analysis Algorithm (FR5)**
+   - Baseline: 30-day rolling average of journal entries per value
+   - Threshold: Flag if current week < 50% of baseline
+   - Message template: "You're living {value} less this week. You logged {count} {value} entries vs {avg} average."
+   - New users: Skip gap analysis until 14+ days of history
+   - Rationale: Straightforward statistical approach
+   - Risk: May be too sensitive or not sensitive enough; tunable with feedback
+
+5. **Weekly Insights Generation (FR5)**
+   - Templated text with fill-in variables (no AI generation in MVP)
+   - Template structure: "This week: {top_value} (logged {count}x), Gap: {low_value} ({percent}% drop)"
+   - Trigger: Cron job Sundays at midnight UTC via `generate-weekly-insights` Edge Function
+   - Delivery: In-app badge notification, optional push notification
+   - Rationale: No AI dependency, faster to implement, proven effective in CBT apps
+   - Risk: Less engaging than AI-generated insights; can upgrade in v2
+
+6. **Compass Positioning (FR2)**
+   - Category-based layout (not weighted by importance)
+   - Four quadrants: Personal (top-left), Relationships (top-right), Work (bottom-left), Growth (bottom-right)
+   - Values positioned equidistant within category
+   - Center point shows user's "values balance" indicator
+   - Rationale: Simpler to implement, clearer visual semantics
+   - Risk: Less sophisticated than weighted positioning; sufficient for MVP
+
+7. **Export Functionality (FR2)**
+   - iOS native share sheet (not custom export UI)
+   - Formats: PNG image (compass visualization), PDF (compass + top 5 list with descriptions)
+   - Image dimensions: 1080x1080px (Instagram-friendly)
+   - PDF: A4 size, single page
+   - Rationale: Standard iOS pattern, less code, familiar UX
+   - Risk: Less customization; can add custom export UI in v2
+
+8. **Top Values Count (FR1)**
+   - Fixed at 5 values (not variable 5-8)
+   - UI shows "Your Top 5" consistently
+   - Database allows storing up to 8 in `top_values` array for future flexibility
+   - Rationale: UI mockup shows "Top 5", simpler UX, clearer messaging
+   - Risk: Less flexible; easily changed to variable count if needed
+
+**JSONB Schema Definitions:**
+
+1. **user_values.values_data**
+   ```json
+   {
+     "phase1_selections": ["autonomy", "growth", "family", "creativity", ...],
+     "phase2_rankings": ["growth", "autonomy", "creativity", "security", "connection"],
+     "phase3_confirmed": ["growth", "autonomy", "creativity", "security", "connection"],
+     "scores": {
+       "growth": 3.0,
+       "autonomy": 2.8,
+       "creativity": 2.6,
+       "security": 2.4,
+       "connection": 2.2
+     },
+     "custom_definitions": {
+       "adventure": "Seeking new experiences and taking calculated risks"
+     }
+   }
+   ```
+
+2. **user_values.values_categories**
+   ```json
+   {
+     "personal": ["growth", "autonomy"],
+     "relationships": ["connection"],
+     "work": ["creativity"],
+     "growth": ["security"]
+   }
+   ```
+
+3. **user_decisions.options**
+   ```json
+   [
+     {
+       "id": "opt1",
+       "label": "Take new job offer",
+       "user_notes": "Higher pay but longer commute"
+     },
+     {
+       "id": "opt2", 
+       "label": "Stay at current job",
+       "user_notes": "Comfortable but limited growth"
+     }
+   ]
+   ```
+
+4. **user_decisions.analysis**
+   ```json
+   {
+     "opt1": {
+       "aligned_values": [
+         {"value": "growth", "reason": "New challenges and learning opportunities", "strength": 0.9},
+         {"value": "autonomy", "reason": "More decision-making authority", "strength": 0.7}
+       ],
+       "conflicting_values": [
+         {"value": "security", "reason": "Uncertain new environment", "severity": 0.6}
+       ]
+     },
+     "opt2": {
+       "aligned_values": [
+         {"value": "security", "reason": "Known environment and stability", "strength": 0.8}
+       ],
+       "conflicting_values": [
+         {"value": "growth", "reason": "Limited advancement opportunities", "severity": 0.8}
+       ]
+     },
+     "confidence_score": 0.65,
+     "recommendation": "This decision involves a trade-off between growth and security. Consider: What's more important to you right now - stability or new challenges?"
+   }
+   ```
+
+**Database Enhancements:**
+
+- Add CHECK constraints: `confidence_score BETWEEN -1.0 AND 1.0`, `impact_level BETWEEN 1 AND 5`
+- Add indexes: `user_values.user_id`, `user_decisions.user_id`, `values_journal.user_id`, `values_journal.created_at`
+- Add unique constraint: `values_cards.value_key`
+- Add array length validation: `top_values` max 8 elements
+
+**API Request/Response Schemas:**
+
+All Edge Functions implement:
+- Standard error format: `{error: 'ERROR_CODE', message: 'Human-readable', details?: any}`
+- HTTP status codes: 200 (success), 400 (validation), 401 (auth), 429 (rate limit), 500 (server error)
+- Rate limiting: 10 req/min for `values-discovery`, 20 req/min for `analyze-decision`, 30 req/min for journal operations
+
+**Alternatives considered:**
+
+- **Block implementation pending full spec clarification** - Rejected; delays feature by weeks, assumptions are conservative and testable
+- **Rule-based decision analysis** - Rejected; requires extensive domain modeling, less flexible than AI approach
+- **AI-generated weekly insights** - Deferred to v2; templates faster and cheaper for MVP
+- **Weighted compass positioning** - Deferred to v2; category-based simpler and sufficient
+- **Variable top values count (5-8)** - Rejected; fixed count simpler UX, can change if user feedback demands
+
+**Implications:**
+
+- Values feature ships with AI-powered decision analysis (depends on xAI API reliability)
+- Confidence score is simple but effective; can enhance with value weighting in future
+- Gap analysis requires 14+ days of history; early users see limited insights
+- Weekly insights are templated; less personalized than AI-generated but faster
+- Compass visualization uses category layout; sufficient for MVP value representation
+- All JSONB schemas are well-defined; enables proper validation and testing
+- Database constraints enforce data integrity at the schema level
+- API contracts are complete; enables parallel frontend/backend development
+
+**Testing Requirements:**
+
+- Unit tests: Three-phase selection algorithm, confidence score calculation (all thresholds), gap analysis (baseline calculation)
+- Integration tests: Full values discovery flow (3 phases), decision analysis (AI integration), weekly insights generation
+- UI tests: Card selection UX, compass visualization rendering, export functionality (PNG/PDF)
+- Performance tests: Decision analysis <3s p95, compass rendering <100ms
+- Edge case tests: 0 values selected, >12 values selected, empty decision question, journal entries exceed 1000+
+- AI tests: Grok API timeout handling, malformed response handling, fallback to generic advice
+
+**Edge Cases Handled:**
+
+- User selects 0 values in Phase 1 → Require minimum 3 selections
+- User selects >12 values in Phase 1 → Force ranking to narrow down
+- Custom value duplicates existing card → Validate and show error
+- Decision with empty question → Return 400 validation error
+- AI analysis timeout → Return generic "Consider pros/cons" fallback
+- Journal entry with invalid value_key → Return 400 validation error
+- Weekly insights with no journal entries → Skip insight generation, show encouragement message
+- Concurrent updates to user_values → Use optimistic locking with version field
+
+**Security Safeguards:**
+
+- All tables have RLS policies enforcing user-level access
+- AI prompts sanitized to prevent injection attacks
+- Decision analysis results validated before storage
+- Custom values length-limited (max 100 chars)
+- Journal entries sanitized (strip HTML)
+- Export images generated server-side with rate limiting (prevent DoS)
+
+**Success Metrics (from spec):**
+
+- Discovery completion: 50% of starters complete all 3 phases
+- Compass export: 30% export their compass (PNG or PDF)
+- Decision coach usage: 25% use for a real decision
+- Decision confidence: 4.0/5.0 average satisfaction rating
+- Trade-off completion: 60% of started exercises completed
+- Journal engagement: 20% add entries weekly
+
+---
+
+## 2026-01-20: Real-Time Cognitive Bias Coach Architecture
+
+**Decision:** Implement Real-Time Cognitive Bias Coach with server-side keyword-based detection, Edge Function analysis, and conservative intervention thresholds.
+
+**Rationale:**
+
+The spec-analyzer identified 14 critical ambiguities in the cognitive bias coach specification. To enable MVP implementation without blocking for full clarification, we adopt the following architecture decisions based on existing MindFriend patterns and conservative defaults:
+
+**Key Decisions:**
+
+1. **Detection Architecture: Server-Side Edge Functions**
+   - Analysis runs in `/functions/v1/analyze-message` Edge Function (not client-side)
+   - Rationale: Consistent with existing chat/crisis detection pattern; enables server-side iteration without app updates
+   - Privacy safeguard: Messages analyzed in-memory only; no message storage; only distortion code + confidence logged
+   - Client receives detection results with reframe suggestions
+
+2. **Detection Mechanism: Keyword-Based (Phase 1)**
+   - Use weighted keyword matching for 12 distortion types (see Appendix A in spec)
+   - Confidence calculation: `(matched_keywords_weight / total_keywords_for_distortion) * phrase_multiplier`
+   - Phrase multipliers: "always/never" = 1.5x, "everyone/no one" = 1.4x, "should/must" = 1.3x
+   - ML model detection deferred to Phase 2 (requires training data + model hosting)
+
+3. **Confidence Threshold: 70% Base + Sensitivity Adjustment**
+   - Base threshold: 0.70 confidence to trigger intervention
+   - Sensitivity adjustments:
+     - Minimal: Show intervention for top 20% of detections (threshold = 0.85)
+     - Balanced: Show intervention for top 50% of detections (threshold = 0.70) [DEFAULT]
+     - Frequent: Show intervention for top 80% of detections (threshold = 0.55)
+   - Multiple distortions: Show highest confidence only
+
+4. **Sensitivity Level Definitions:**
+
+   ```
+   Minimal  (rarely):    Intervene when confidence > 0.85
+   Balanced (default):   Intervene when confidence > 0.70
+   Frequent (more):      Intervene when confidence > 0.55
+   ```
+
+5. **Silent Hours: UTC Storage with Client-Side Conversion**
+   - Store `silent_hours_start` and `silent_hours_end` in UTC
+   - Client converts user's local timezone to UTC before saving
+   - Midnight wrap supported: 22:00-02:00 UTC = 10 PM to 2 AM
+   - Timezone changes: User must update settings manually (no auto-recalculation)
+
+6. **New Topic Detection: 15-Minute Gap**
+   - "New topic" = 15+ minutes since last message in conversation
+   - First 3 exchanges = first 3 user messages (not including AI responses)
+   - Coach silent during first 3 exchanges of new topic
+
+7. **User Actions:**
+   - "This helps" → Record to `coach_interactions` table (action='helpful'), show checkmark for 2s, no other UI change
+   - "Not right now" → Suppress coach for 30 minutes (client-side timer), record action='dismissed'
+   - "Learn more" → Navigate to `DistortionDetailView` with full educational content from `distortion_education` table
+   - Remove "Archive" action (confusing vs dismiss)
+
+8. **Database Schema Enhancements:**
+   - Rename `local_distortion_encounters` → `distortion_encounters` (clarify it syncs to server)
+   - Add fields: `confidence_score`, `user_action`, `conversation_id`, `reframe_text`
+   - Add table: `coach_interactions` for analytics (distortion_code, action, confidence, timestamp)
+   - Add table: `weekly_pattern_summaries` for trend tracking
+   - All tables have RLS policies enforcing user-level access
+
+9. **Reframe Generation: Template-Based with Variable Substitution**
+   - Use `reframe_templates` from `cognitive_distortions` table
+   - Variables: `{original}` (user's phrase), `{alternative}` (reframed version), `{question}` (Socratic question)
+   - No AI generation in Phase 1 (reduces latency + cost; templates proven effective in CBT)
+   - Example: "I **always** mess up" → "Sometimes things go wrong, and sometimes they go well. What went well today?"
+
+10. **Crisis Mode Integration:**
+    - Reuse existing crisis detection from chat Edge Function
+    - If crisis detected: Coach completely suppressed (no interventions shown)
+    - Crisis takes absolute precedence over coach
+
+11. **Weekly Insights: Sunday Midnight UTC Generation**
+    - Cron-triggered Edge Function: `generate-weekly-insights` (Sundays at 00:00 UTC)
+    - Aggregates `distortion_encounters` from past 7 days
+    - Stores result in `weekly_pattern_summaries` table
+    - Push notification if `show_patterns=true` in settings
+
+12. **Repeated Dismissal Logic:**
+    - "Repeatedly" = 3+ dismissals in 24 hours for same distortion type
+    - Action: Reduce intervention frequency by 50% for that distortion for 7 days
+    - Stored in `coach_settings.disabled_distortions` with expiry metadata (JSONB)
+    - Reset after 7 days or if user re-enables
+
+13. **Multi-Language Support (MVP: EN, ES, PT):**
+    - Use `distortion_education` table for translations
+    - Fallback chain: User locale → English → Show English distortion name + code
+    - Reframe templates localized per spec requirement (CLAUDE.md multi-language mandate)
+
+14. **Offline Behavior:**
+    - Analysis requires network (Edge Function dependency)
+    - If offline: Show "Coach unavailable" subtle notice, no intervention shown
+    - Queue messages for analysis when back online? NO (deferred to Phase 2)
+
+**Alternatives considered:**
+
+- **Client-side ML model** - Rejected due to CoreML complexity, app size increase, lower accuracy without training data
+- **AI-generated reframes** - Rejected for Phase 1 due to latency (2-3s) and cost ($0.001/message); templates are faster and clinically validated
+- **Local-only data storage** - Rejected because pattern tracking requires server-side aggregation for insights
+- **Block implementation pending clarification** - Rejected because conservative assumptions enable safe MVP and are reversible
+
+**Implications:**
+
+- Coach feature ships with proven keyword-based detection (similar to existing crisis detection)
+- Reframe quality depends on template library completeness (requires content team review)
+- Pattern insights require 7+ days of usage to show trends (acceptable for MVP)
+- Sensitivity levels can be tuned based on user feedback after launch
+- Edge Function latency budget: <200ms for analysis + reframe lookup (target p95)
+- Database storage: ~100 bytes per encounter × avg 5 interventions/day × 10K users = ~500 MB/month (negligible)
+- All architectural decisions reversible if user feedback indicates different approach needed
+
+**Testing Requirements:**
+
+- Unit tests: Keyword matching accuracy >85%, false positive rate <10%
+- Integration tests: Sensitivity filtering, silent hours enforcement, crisis mode suppression
+- Performance tests: Edge Function analysis <200ms p95
+- Content tests: All 12 distortion types have min 3 reframe template variations
+- RLS tests: Users can only access own encounters/settings
+- Localization tests: ES/PT reframe templates display correctly
+
+**Edge Cases Handled:**
+
+- Multiple distortions in one message → Show highest confidence
+- Detection failure/timeout → Log error, skip intervention (fail gracefully)
+- Network error during Edge Function call → Skip intervention, no user-facing error
+- Silent hours cross midnight → Use UTC comparison for date boundary
+- User timezone change → Requires manual settings update (no auto-recalculation)
+- Distortion taxonomy update → New distortion codes backward compatible (old encounters remain valid)
+
+**Success Metrics (from spec):**
+
+- Coach intervention rate: 20% of messages trigger detection
+- User engagement: 40% click "This helps"
+- Weekly pattern review: 25% of users view patterns
+- User satisfaction: 4.0/5.0 average rating
+- Distortion awareness: +15% improvement in quiz after 30 days
+
+---
+
 ## 2026-01-19-001: Multi-Language Localization Added to MVP Scope
 
 **Decision:** Implement full multi-language localization (Spanish and Portuguese) as part of MVP, overriding the previous CLAUDE.md exclusion.
@@ -152,7 +512,7 @@ This document records architectural and implementation decisions that deviate fr
 
 **Alternatives considered:**
 
-- **Backend WebSocket relay** - Stronger centralized control but higher latency and more infrastructure
+- **Backend WebSocket relay** - Stronger centralized control but adds latency and infrastructure complexity
 - **Full server-side audio proxy** - Rejected due to complexity and operational cost for streaming media
 
 **Implications:**
@@ -502,8 +862,8 @@ The spec-analyzer identified 12 critical blockers in the Community Forums specif
 
 **Alternatives considered:**
 
-- **Block implementation pending full spec clarification** - Rejected; delays feature by weeks and assumptions are conservative enough to proceed safely
-- **Request stakeholder clarification on all 12 blockers** - Rejected; breaks dev-pipeline autonomy and assumptions are testable/reversible
+- **Block implementation pending full spec clarification** - Rejected; breaks dev-pipeline autonomy and assumptions are conservative enough to proceed safely
+- **Request stakeholder clarification on all 12 blockers** - Rejected; breaks dev-pipeline autonomy and assumptions are conservative enough to proceed safely
 - **Implement minimal subset (browse + create only)** - Rejected; partial implementation provides little user value and still requires most infrastructure
 
 **Implications:**
@@ -564,6 +924,227 @@ The spec-analyzer identified 12 critical blockers in the Community Forums specif
 - Safety plan payload is stored unencrypted at field level (disk encryption only) until a later security pass.
 - Offline cache uses `OfflineCacheService` file-based storage with iOS Data Protection and explicit cache expiry metadata.
 - UI pinning is device-specific and does not sync across devices in MVP.
+
+---
+
+## 2026-01-20: Sensory Regulation Toolkit Architecture
+
+**Decision:** Implement Sensory Regulation Toolkit with local-first pattern definitions, Core Haptics-based tactile patterns, SwiftUI animations for visual patterns, and App Groups-based widget architecture.
+
+**Rationale:**
+
+The spec-analyzer identified 6 blocking technical gaps in the sensory regulation toolkit specification. To enable autonomous implementation without delaying for full clarification, we adopt conservative, testable assumptions based on iOS platform best practices and existing MindFriend patterns.
+
+**Key Architectural Decisions:**
+
+1. **Animation Config Schema (Blocking Issue #1)**
+   - Structure: `{type: String, speed: Float, colors: [String], sizing: Float, easing: String}`
+   - Example for expanding_circle: `{type: "expanding_circle", speed: 8.0, colors: ["#4A90E2", "#5BA3F5"], sizing: 0.7, easing: "easeInOut"}`
+   - Implementation: SwiftUI Canvas-based rendering with Core Animation backing for smooth 60fps animations
+   - Patterns hardcoded in iOS app; database records serve as metadata/customization overrides only
+
+2. **Haptic Schema (Blocking Issue #2)**
+   - Structure: Direct embedding of Core Haptics AHAP JSON format in `haptic_schema` JSONB column
+   - Example breath_cue pattern:
+     ```json
+     {
+       "Pattern": [
+         {
+           "Event": {
+             "Time": 0.0,
+             "EventType": "HapticContinuous",
+             "EventDuration": 4.0,
+             "EventParameters": [
+               { "ParameterID": "HapticIntensity", "ParameterValue": 0.5 }
+             ]
+           }
+         },
+         {
+           "Event": {
+             "Time": 4.5,
+             "EventType": "HapticContinuous",
+             "EventDuration": 6.0,
+             "EventParameters": [
+               { "ParameterID": "HapticIntensity", "ParameterValue": 0.3 }
+             ]
+           }
+         }
+       ]
+     }
+     ```
+   - Client uses CHHapticPattern(dictionary:) initializer for playback
+   - Patterns embedded in app code; database serves as optional customization layer
+
+3. **Heart Rate Visualization (Blocking Issue #3)**
+   - **Decision:** Simulated/animated visualization only (no HealthKit integration)
+   - Rationale:
+     - Avoids permission flow complexity in MVP
+     - No privacy policy updates required
+     - Real HR tracking can be added in Phase 2 if user demand exists
+   - Implementation: Animated circle that pulses at target breathing rate (simulates calming down effect)
+
+4. **Widget Architecture (Blocking Issue #4)**
+   - App Groups configuration: `group.com.mindfriend.shared`
+   - Shared container: UserDefaults(suiteName:) for last-used pattern state
+   - Data structure: `{patternKey: String, displayName: String, category: String, lastUsed: Date}`
+   - Widget refresh: On app background, write current session state to shared container
+   - Widget-app communication: URL scheme deep links (`mindfriend://toolkit/start?pattern=expanding_circle`)
+
+5. **Pattern Bootstrap Strategy (Blocking Issue #5)**
+   - All patterns embedded in iOS app bundle (no required download)
+   - Database tables serve as:
+     - Metadata repository for server-side analytics
+     - Optional customization layer (future: user-created presets)
+     - Premium pattern gating (is_premium flag)
+   - Offline behavior: Fully functional (all patterns work offline)
+   - Seed data: Migrations include INSERT statements for default patterns
+
+6. **API Contracts (Blocking Issue #6)**
+   - Simplified for MVP: Most logic is client-side since patterns are local
+   - Endpoints:
+     - `GET /functions/v1/get-toolkit-preferences` → `{haptic_enabled, haptic_intensity, visual_intensity, dim_during_use, quick_access_pattern_keys}`
+     - `PUT /functions/v1/save-toolkit-preferences` → Request: same as GET response | Response: `{success: boolean}`
+     - `POST /functions/v1/record-toolkit-usage` → Request: `{pattern_key, duration_seconds, completed, helpful_rating}` | Response: `{success: boolean, usage_id: string}`
+     - `GET /functions/v1/get-toolkit-stats` → Response: `{total_sessions, total_minutes, favorite_pattern, completion_rate}`
+   - Authentication: All endpoints require Supabase Auth JWT in Authorization header
+   - Rate limiting: 100 requests/hour per user (generous for client-driven feature)
+
+**Additional Clarifications:**
+
+7. **Speed Control** - Discrete presets for MVP:
+   - Slow: 5 breaths/min (inhale 6s, exhale 6s)
+   - Medium: 9 breaths/min (inhale 3.5s, exhale 3s)
+   - Fast: 13 breaths/min (inhale 2.5s, exhale 2s)
+   - Can add continuous slider in Phase 2 if users request
+
+8. **Intensity Unification** - "Intensity" and "opacity" are the same control:
+   - Visual patterns: Intensity = opacity (0.3 = 30% opacity, 1.0 = 100%)
+   - Haptic patterns: Intensity = CHHapticEventParameter value (0.0-1.0)
+   - Terminology: Use "Intensity" in UI for consistency
+
+9. **Session Limits** - Conservative limits to prevent battery/thermal issues:
+   - Maximum duration: 30 minutes per session
+   - Excessive use warning: After 60 minutes cumulative in one day
+   - Auto-pause: Offer to pause at 30-minute mark with user prompt
+   - Background behavior: Timer continues, animations pause (no background modes needed)
+
+10. **Widget Conflict Resolution** - Widget tap while session active:
+    - Action: Switch to widget's pattern, restart session with fresh timer
+    - User feedback: Haptic tap + brief toast "Switched to [pattern name]"
+    - State sync: Update shared UserDefaults immediately
+
+11. **Reduced Motion Accessibility** - Graceful degradation:
+    - Visual patterns: Simplified static version showing mid-state frame (e.g., circle at 70% expansion)
+    - Add text label: "Breathe in - Breathe out" alternating every N seconds
+    - Haptic fallback: Offer to enable haptic-only mode if visual reduced
+
+12. **Premium Pattern Gating** - Check on pattern selection:
+    - Gating location: Client checks `supabaseDataService.getUserSubscription()` before starting session
+    - If free tier + premium pattern: Show paywall immediately
+    - No preview for locked patterns in MVP (can add "try 30 seconds" in Phase 2)
+
+**Database Schema Enhancements:**
+
+Added fields and constraints:
+
+- `visual_patterns.animation_config`: JSONB with schema validation (check against required keys)
+- `haptic_patterns.haptic_schema`: JSONB storing AHAP format
+- `toolkit_preferences.default_pattern_key`: Foreign key to visual_patterns OR haptic_patterns (polymorphic)
+- `toolkit_usage.client_generated_id`: UUID for offline sync and idempotency
+- Indexes: `user_id`, `pattern_key`, `occurred_at` for analytics queries
+- RLS policies:
+  - `visual_patterns`, `haptic_patterns`: SELECT for authenticated (read-only, system data)
+  - `toolkit_preferences`: SELECT/INSERT/UPDATE for own user_id
+  - `toolkit_usage`: SELECT for own user_id, INSERT for own user_id (no UPDATE/DELETE)
+
+**Integration Specifications:**
+
+1. **Home View Integration** - Quick-access card in home screen:
+   - Location: Below daily quest card, above mood check-in
+   - UI: "Feeling overwhelmed? Try a calming pattern" with thumbnail of last-used pattern
+   - Tap action: Deep link to `SensoryToolkitView` with auto-start of last pattern
+
+2. **SOS Flow Integration** - Emergency haptic pattern auto-trigger:
+   - Pattern: "SOS" haptic pattern (rapid triple-pulse: .-.-.-)
+   - Trigger: When user taps "I need help now" on crisis resources screen
+   - Auto-start: Pattern starts immediately, continues for 2 minutes or until user stops
+   - UI overlay: Crisis resources remain visible with "Pattern active" status
+
+3. **Exercises Integration** - Visual patterns as exercise components:
+   - Breathing exercises: Use expanding_circle or wave pattern as visual guide
+   - Exercise payload: Include `visual_pattern_key` field in exercise JSONB
+   - Playback: ExerciseDetailView checks for visual_pattern_key and renders if present
+
+4. **Achievements Integration** - Usage-based badges:
+   - Badge: "First Breath" - Complete first toolkit session
+   - Badge: "Zen Master" - Complete 30 toolkit sessions
+   - Badge: "Daily Practice" - Use toolkit 7 days in a row
+   - Badge: "Pattern Explorer" - Try all 8 visual breathing patterns
+   - Criteria stored in `badges` table, checked by `AchievementService` on toolkit usage insert
+
+**Alternatives considered:**
+
+- **Client-side ML model for pattern recommendations** - Rejected due to CoreML complexity and app size increase; rule-based suggestions sufficient for MVP
+- **AI-generated custom patterns** - Rejected for Phase 1 due to rendering complexity and validation burden; preset patterns proven effective
+- **HealthKit heart rate integration** - Rejected to avoid permission flow complexity; simulated visualization sufficient
+- **Continuous speed slider** - Rejected for MVP to reduce UX complexity; discrete presets cover most use cases
+- **Realtime multi-device sync** - Rejected to keep architecture simple; local-first with async usage sync sufficient
+
+**Implications:**
+
+- All patterns work fully offline (major UX win for crisis situations)
+- Widget provides true one-tap access to last-used pattern
+- Core Haptics requires iOS 13+; older devices gracefully fall back to visual-only
+- Animation performance tested on iPhone 12 and newer (target: 60fps sustained)
+- Database usage minimal: ~50 bytes per session × avg 2 sessions/day × 10K users = ~1 MB/day
+- Edge Function calls only for preferences and usage tracking (low load)
+- Premium gating enforced client-side (acceptable risk for MVP; server validation in Phase 2)
+- Success metrics trackable via `toolkit_usage` table analytics queries
+- Widget requires iOS 14+; older devices get in-app quick access only
+
+**Testing Requirements:**
+
+- Unit tests:
+  - Animation timing accuracy (±100ms acceptable variance)
+  - Haptic pattern playback (manual verification on device required)
+  - Duration timer accuracy (±1s acceptable variance)
+  - Settings persistence (UserDefaults + Supabase sync)
+- Integration tests:
+  - Widget data sharing (App Groups read/write)
+  - Deep link handling (widget URL scheme)
+  - Background session handling (timer continuation)
+  - Offline usage (all features work without network)
+  - Premium pattern gating (free tier blocked, premium allowed)
+- Accessibility tests:
+  - VoiceOver support (all interactive elements labeled)
+  - Dynamic Type (text scales correctly)
+  - Reduced Motion (simplified visuals + haptic fallback)
+- Performance tests:
+  - Animation frame rate (maintain 60fps, <2% dropped frames)
+  - Battery impact (session < 5% drain over 30 minutes)
+  - Memory usage (< 50 MB increase during session)
+
+**Edge Cases Handled:**
+
+- Haptic engine unavailable → Show visual-only with notification
+- Device doesn't support haptics (iPad) → Hide haptic options gracefully
+- Low power mode active → Reduce animation complexity (30fps acceptable, simpler shapes)
+- Background app during session → Pause animation, continue timer and haptics
+- User exits mid-session → Track as incomplete in usage stats
+- Pattern deleted from database → Fallback to default expanding_circle
+- Widget tapped while app running → Switch patterns with haptic feedback
+- Reduced motion enabled → Show static version with text labels
+- Very long session (>30 min) → Auto-pause with user prompt
+- Multiple sessions started rapidly → Stop previous session before starting new
+
+**Success Metrics (from spec):**
+
+- Toolkit adoption: 40% of DAU use within 30 days
+- Session completion: 80% complete started sessions
+- Quick-access usage: 60% of users enable widget
+- Haptic engagement: 50% of sessions use haptics
+- Helpful ratings: 4.0/5.0 average
+- Crisis usage: 20% report using during stressful moments
 
 ---
 

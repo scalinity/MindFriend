@@ -29,21 +29,24 @@ struct ExperimentCatalogView: View {
             .padding()
         }
         .navigationTitle("Insight Lab")
-        .confirmationDialog(
-            "Start Experiment",
-            isPresented: $showingStartConfirmation,
-            presenting: selectedExperiment
-        ) { experiment in
-            Button("Start \(experiment.title)") {
-                Task {
-                    await startExperiment(experiment)
-                }
+        .sheet(isPresented: $showingStartConfirmation) {
+            if let experiment = selectedExperiment {
+                ExperimentStartConfirmationView(
+                    experiment: experiment,
+                    isStarting: isStarting,
+                    onStart: {
+                        Task {
+                            await startExperiment(experiment)
+                        }
+                    },
+                    onCancel: {
+                        showingStartConfirmation = false
+                        selectedExperiment = nil
+                    }
+                )
+                .presentationDetents([.height(280)])
+                .presentationDragIndicator(.visible)
             }
-            Button("Cancel", role: .cancel) {
-                selectedExperiment = nil
-            }
-        } message: { experiment in
-            Text("You'll track this habit for 7 days and see how it affects your mood. Ready to begin?")
         }
         .alert("Error", isPresented: .constant(startError != nil)) {
             Button("OK") {
@@ -136,17 +139,83 @@ struct ExperimentCatalogView: View {
     // MARK: - Actions
 
     private func startExperiment(_ actionType: ExperimentActionType) async {
+        print("[ExperimentCatalogView] startExperiment called for: \(actionType.rawValue)")
         isStarting = true
         startError = nil
 
         do {
-            _ = try await insightLabService.startExperiment(actionType: actionType)
+            let experiment = try await insightLabService.startExperiment(actionType: actionType)
+            print("[ExperimentCatalogView] Experiment started successfully: \(experiment.title)")
+            print("[ExperimentCatalogView] activeExperiment after start: \(insightLabService.activeExperiment?.title ?? "nil")")
+            showingStartConfirmation = false
             selectedExperiment = nil
+            print("[ExperimentCatalogView] Sheet dismissed, selectedExperiment cleared")
         } catch {
+            print("[ExperimentCatalogView] Failed to start experiment: \(error)")
             startError = "Failed to start experiment: \(error.localizedDescription)"
         }
 
         isStarting = false
+    }
+}
+
+// MARK: - Experiment Start Confirmation View
+
+struct ExperimentStartConfirmationView: View {
+    let experiment: ExperimentActionType
+    let isStarting: Bool
+    let onStart: () -> Void
+    let onCancel: () -> Void
+    
+    var body: some View {
+        VStack(spacing: 24) {
+            // Title
+            Text("Start Experiment")
+                .font(.title3)
+                .fontWeight(.semibold)
+            
+            // Message
+            Text("You'll track this habit for 7 days and see how it affects your mood. Ready to begin?")
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+            
+            // Buttons
+            VStack(spacing: 12) {
+                Button(action: onStart) {
+                    HStack {
+                        if isStarting {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .scaleEffect(0.8)
+                        }
+                        Text(isStarting ? "Starting..." : "Start \(experiment.title)")
+                            .fontWeight(.semibold)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(Color.accentColor)
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .disabled(isStarting)
+                
+                Button(action: onCancel) {
+                    Text("Cancel")
+                        .fontWeight(.medium)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(Color(.systemGray5))
+                        .foregroundStyle(.primary)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .disabled(isStarting)
+            }
+            .padding(.horizontal)
+        }
+        .padding(.vertical, 24)
+        .padding(.horizontal, 8)
     }
 }
 

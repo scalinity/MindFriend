@@ -17,6 +17,12 @@ import {
   getMatchedCrisisKeyword,
 } from "../_shared/crisis.ts";
 import { checkRateLimit, getRateLimitHeaders } from "../_shared/ratelimit.ts";
+// Cognitive Bias Coach imports
+import {
+  detectDistortion,
+  getSensitivityThreshold,
+} from "../_shared/distortion-detection.ts";
+import { getReframe } from "../_shared/reframe-templates.ts";
 
 // Security constants
 const MAX_MESSAGE_LENGTH = 4000; // ~1000 tokens
@@ -718,68 +724,110 @@ serve(async (req) => {
       .update({ updated_at: now.toISOString() })
       .eq("id", conversationId);
 
-    // Auto-generate conversation title if this is the first message
-    const isFirstMessage = !messages || messages.length === 0;
-    let conversationTitle: string | null = null;
-    console.log(
-      `Title generation check: isFirstMessage=${isFirstMessage}, messagesCount=${messages?.length ?? 0}`,
-    );
+    // Cognitive Bias Coach detection (after AI response, before title generation)
+    let coachData: any = null;
+    try {
+      // Fetch coach settings for this user
+      const { data: coachSettings } = await supabaseAdmin
+        .from("coach_settings")
+        .select("is_enabled, sensitivity_level, silent_hours_start, silent_hours_end, disabled_distortions")
+        .eq("user_id", user.id)
+        .maybeSingle();
 
-    if (isFirstMessage) {
-      try {
-        console.log("Generating conversation title...");
-        const titleResponse = await fetch(XAI_API_URL, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${xaiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "grok-4-1-fast-reasoning", // Same model as main chat - confirmed working
-            messages: [
-              {
-                role: "system",
-                content:
-                  "Generate a very short title (3-5 words max) for this conversation based on the user's first message. Return only the title, no quotes or punctuation.",
-              },
-              { role: "user", content: trimmedContent },
-            ],
-            max_tokens: 20,
-            temperature: 0.5,
-          }),
-        });
+      // Check if coach is enabled
+      const isCoachEnabled = coachSettings?.is_enabled !== false; // Default to enabled
 
-        if (titleResponse.ok) {
-          const titleData = await titleResponse.json();
-          const generatedTitle =
-            titleData.choices?.[0]?.message?.content?.trim();
-          console.log(`Generated title: "${generatedTitle}"`);
-          if (generatedTitle && generatedTitle.length > 0) {
-            conversationTitle = generatedTitle;
-            const { error: updateError } = await supabaseAdmin
-              .from("conversations")
-              .update({ title: generatedTitle })
-              .eq("id", conversationId);
-            if (updateError) {
-              console.error("Failed to save title:", updateError.message);
-            } else {
-              console.log(`Title saved to conversation ${conversationId}`);
+      if (isCoachEnabled) {
+        // Check silent hours (stored in UTC)
+        const nowUtc = new Date();
+        const currentHour = nowUtc.getUTCHours();
+        const currentMinute = nowUtc.getUTCMinutes();
+        const currentTimeMinutes = currentHour * 60 + currentMinute;
+
+        let inSilentHours = false;
+        if (coachSettings?.silent_hours_start && coachSettings?.silent_hours_end) {
+          const parseTime = (timeStr: string) => {
+            const [h, m] = timeStr.split(":").map(Number);
+            return h * 60 + m;
+          };
+          const startMinutes = parseTime(coachSettings.silent_hours_start);
+          const endMinutes = parseTime(coachSettings.silent_hours_end);
+
+          // Handle midnight wrap (e.g., 22:00 to 02:00)
+          if (startMinutes > endMinutes) {
+            inSilentHours = currentTimeMinutes >= startMinutes || currentTimeMinutes < endMinutes;
+          } else {
+            inSilentHours = currentTimeMinutes >= startMinutes && currentTimeMinutes < endMinutes;
+          }
+        }
+
+        if (!inSilentHours) {
+          // Check if this is a new topic (first 3 messages)
+          const messageCount = (messages?.length || 0) + 2; // +2 for current user + assistant messages
+          const isNewTopic = messageCount <= 6; // First 3 exchanges = 6 messages (user + assistant pairs)
+
+          if (!isNewTopic) {
+            // Get sensitivity threshold
+            const sensitivityLevel = coachSettings?.sensitivity_level || "balanced";
+            const threshold = getSensitivityThreshold(sensitivityLevel);
+
+            // Run detection on user's message
+            const detection = detectDistortion(trimmedContent, "en", threshold);
+
+            if (detection) {
+              // Check if this distortion is disabled
+              const disabledDistortions = coachSettings?.disabled_distortions || [];
+              if (!disabledDistortions.includes(detection.distortionCode)) {
+                // Fetch reframe
+                const reframe = await getReframe(
+                  supabaseAdmin,
+                  detection.distortionCode,
+                  trimmedContent,
+                  "en" // TODO: Use user's language preference
+                );
+
+                if (reframe) {
+                  // Log encounter
+                  const { data: encounter } = await supabaseAdmin
+                    .from("distortion_encounters")
+                    .insert({
+                      user_id: user.id,
+                      distortion_code: detection.distortionCode,
+                      conversation_id: conversationId,
+                      original_message_preview: trimmedContent.substring(0, 200),
+                      reframe_offered: true,
+                      reframe_text: reframe.reframeText,
+                      confidence: detection.confidence,
+                      encounter_type: "chat",
+                      occurred_at: now.toISOString(),
+                    })
+                    .select("id")
+                    .single();
+
+                  // Build coach data for response
+                  coachData = {
+                    encounterId: encounter?.id,
+                    distortionCode: detection.distortionCode,
+                    distortionName: reframe.distortionName,
+                    shortDescription: reframe.shortDescription,
+                    reframeText: reframe.reframeText,
+                    educationalContent: reframe.educationalContent,
+                    socraticQuestions: reframe.socraticQuestions,
+                    confidence: detection.confidence,
+                  };
+                }
+              }
             }
           }
-        } else {
-          // Log failed title generation for debugging
-          const errorText = await titleResponse.text();
-          console.error(
-            "Title generation API error:",
-            titleResponse.status,
-            errorText,
-          );
         }
-      } catch (titleError) {
-        // Non-critical: log but don't fail the request
-        console.error("Title generation failed:", titleError);
       }
+    } catch (coachError) {
+      // Non-critical: log but don't fail the chat
+      console.error("Coach detection failed (non-critical):", coachError);
     }
+
+    // Auto-generate conversation title if this is the first message
+    const isFirstMessage = !messages || messages.length === 0;
 
     // Note: Quota was already incremented atomically at the start of the function
 
@@ -845,6 +893,7 @@ serve(async (req) => {
         conversationTitle: conversationTitle,
         memoryUsed: memoryIdsUsed.length > 0,
         memoryIdsUsed: memoryIdsUsed,
+        coachData: coachData,
       }),
       { headers: responseHeaders },
     );

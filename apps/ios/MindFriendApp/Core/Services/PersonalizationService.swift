@@ -263,6 +263,27 @@ final class PersonalizationService: ObservableObject {
         context: RecommendationContext? = nil,
         limit: Int = 10
     ) async throws -> [ContentRecommendation] {
+        // Ensure user is authenticated
+        guard let userId = supabase.auth.currentUser?.id else {
+            throw NSError(
+                domain: "PersonalizationService",
+                code: 401,
+                userInfo: [NSLocalizedDescriptionKey: "User not authenticated. Please sign in again."]
+            )
+        }
+        
+        // Get the current access token
+        guard let session = try? await supabase.auth.session else {
+            throw NSError(
+                domain: "PersonalizationService",
+                code: 401,
+                userInfo: [NSLocalizedDescriptionKey: "Session expired. Please sign in again."]
+            )
+        }
+        
+        let accessToken = session.accessToken
+        print("🔍 PersonalizationService: Getting recommendations for user \(userId)")
+        
         var contextDict: [String: Any] = [:]
         if let mood = context?.currentMood { contextDict["currentMood"] = mood }
         if let time = context?.timeOfDay { contextDict["timeOfDay"] = time }
@@ -275,12 +296,33 @@ final class PersonalizationService: ObservableObject {
         ]
 
         let data = try JSONSerialization.data(withJSONObject: payload)
-        let result: RecommendationResponse = try await supabase.functions.invoke(
-            "get-recommendations",
-            options: .init(body: data)
-        )
-
-        return result.recommendations
+        
+        do {
+            // CRITICAL: Explicitly include Authorization header (Supabase Swift SDK doesn't auto-add it)
+            let result: RecommendationResponse = try await supabase.functions.invoke(
+                "get-recommendations",
+                options: .init(
+                    headers: ["Authorization": "Bearer \(accessToken)"],
+                    body: data
+                )
+            )
+            print("✅ PersonalizationService: Got \(result.recommendations.count) recommendations")
+            return result.recommendations
+        } catch {
+            // Log the detailed error for debugging
+            print("❌ PersonalizationService: Failed to get recommendations - \(error)")
+            
+            // Check if it's an auth error
+            if let urlError = error as? URLError, urlError.code == .userAuthenticationRequired {
+                throw NSError(
+                    domain: "PersonalizationService",
+                    code: 401,
+                    userInfo: [NSLocalizedDescriptionKey: "Authentication required. Please sign in again."]
+                )
+            }
+            
+            throw error
+        }
     }
 
     /// Log when user clicks a recommendation

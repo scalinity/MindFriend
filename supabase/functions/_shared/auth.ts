@@ -1,7 +1,11 @@
 // Shared authentication utilities for Edge Functions
 // Reduces DRY violations across functions
 
-import { createClient, SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  createClient,
+  SupabaseClient,
+  User,
+} from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "./cors.ts";
 
 export interface AuthResult {
@@ -70,14 +74,44 @@ export async function authenticateRequest(
 /**
  * Type guard to check if auth result is an error
  */
-export function isAuthError(result: AuthResult | AuthError): result is AuthError {
+export function isAuthError(
+  result: AuthResult | AuthError,
+): result is AuthError {
   return "response" in result;
+}
+
+/**
+ * Check if request is authorized as a cron job or service role
+ * Used by scheduled functions that also support manual triggers
+ */
+export function isAuthorizedCronRequest(
+  headers: Headers,
+  cronSecret: string,
+  serviceRoleKey: string,
+): boolean {
+  // Check for cron secret in custom header
+  const cronHeader = headers.get("x-cron-secret");
+  if (cronHeader && cronSecret && cronHeader === cronSecret) {
+    return true;
+  }
+
+  // Check for service role key in Authorization header
+  const authHeader = headers.get("Authorization");
+  if (authHeader?.startsWith("Bearer ") && serviceRoleKey) {
+    const token = authHeader.replace("Bearer ", "");
+    if (token === serviceRoleKey) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /**
  * UUID v4 format validation
  */
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function isValidUUID(value: string): boolean {
   return UUID_REGEX.test(value);
@@ -92,13 +126,10 @@ export function errorResponse(
   status: number,
   corsHeaders: Record<string, string>,
 ): Response {
-  return new Response(
-    JSON.stringify({ error, message }),
-    {
-      status,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    },
-  );
+  return new Response(JSON.stringify({ error, message }), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 }
 
 /**
@@ -109,11 +140,8 @@ export function successResponse(
   status: number,
   corsHeaders: Record<string, string>,
 ): Response {
-  return new Response(
-    JSON.stringify(data),
-    {
-      status,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    },
-  );
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 }

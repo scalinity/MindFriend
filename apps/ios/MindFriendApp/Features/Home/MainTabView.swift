@@ -30,27 +30,9 @@ struct MainTabView: View {
                 }
                 .tag(MainTab.outcomes)
 
-            CirclesListView()
-                .tabItem {
-                    Label(MainTab.circles.title, systemImage: MainTab.circles.icon)
-                }
-                .tag(MainTab.circles)
-
-            SleepTabView(contentIdToPlay: .constant(nil))
-                .tabItem {
-                    Label(MainTab.sleep.title, systemImage: MainTab.sleep.icon)
-                }
-                .tag(MainTab.sleep)
-
-            ForYouView()
-                .tabItem {
-                    Label(MainTab.personalization.title, systemImage: MainTab.personalization.icon)
-                }
-                .tag(MainTab.personalization)
-
             ProfileView()
                 .tabItem {
-                    Label(MainTab.profile.title, systemImage: MainTab.profile.icon)
+                    Label("More", systemImage: "ellipsis")
                 }
                 .tag(MainTab.profile)
         }

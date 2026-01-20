@@ -76,6 +76,32 @@ struct ProfileView: View {
                     }
                 }
 
+                // Features
+                Section("Features") {
+                    NavigationLink {
+                        CirclesListView()
+                    } label: {
+                        Label {
+                            Text("Circles")
+                        } icon: {
+                            Image(systemName: "person.3.fill")
+                                .font(.system(size: 14))
+                        }
+                    }
+
+                    NavigationLink {
+                        SleepTabView(contentIdToPlay: .constant(nil))
+                    } label: {
+                        Label("Sleep", systemImage: "moon.fill")
+                    }
+
+                    NavigationLink {
+                        ForYouView()
+                    } label: {
+                        Label("For You", systemImage: "sparkles")
+                    }
+                }
+
                 // Social
                 Section("Social") {
                     NavigationLink {

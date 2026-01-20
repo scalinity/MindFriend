@@ -36,6 +36,7 @@ final class AppState: ObservableObject {
     @Published var selectedTab: MainTab = .home
     @Published var showPaywall: Bool = false
     @Published var showCrisisResources: Bool = false
+    @Published var shouldOpenNewChat: Bool = false  // Triggers new chat from SOS or other flows
 
     // MARK: - Level Up Celebration
     @Published var showLevelUp: Bool = false

@@ -23,17 +23,26 @@ final class AICoachingViewModel: ObservableObject {
 
     // MARK: - Public Methods
 
+    private var loadTask: Task<Void, Never>?
+
     func loadData(container: DependencyContainer) async {
-        isLoading = true
+        loadTask?.cancel()
 
-        async let loadMode: () = loadCurrentMode(container: container)
-        async let loadRecords: () = loadThoughtRecords(container: container)
-        async let loadQuests: () = loadSuggestedQuests(container: container)
-        async let loadPreferences: () = loadPreferences(container: container)
+        loadTask = Task { [weak self] in
+            guard let self = self, !Task.isCancelled else { return }
+            self.isLoading = true
 
-        _ = await (loadMode, loadRecords, loadQuests, loadPreferences)
+            async let loadMode: () = self.loadCurrentMode(container: container)
+            async let loadRecords: () = self.loadThoughtRecords(container: container)
+            async let loadQuests: () = self.loadSuggestedQuests(container: container)
+            async let loadPreferences: () = self.loadPreferences(container: container)
 
-        isLoading = false
+            _ = await (loadMode, loadRecords, loadQuests, loadPreferences)
+
+            if !Task.isCancelled {
+                self.isLoading = false
+            }
+        }
     }
 
     func selectMode(_ mode: ConversationMode, container: DependencyContainer) async {

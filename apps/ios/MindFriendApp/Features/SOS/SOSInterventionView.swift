@@ -7,11 +7,16 @@ import SwiftUI
 /// Routes between different phases of the intervention
 struct SOSInterventionView: View {
     @EnvironmentObject var container: DependencyContainer
+    @EnvironmentObject var appState: AppState
     @Environment(\.dismiss) private var dismiss
 
-    var sosCoordinator: SOSCoordinator {
+    // Directly observe the coordinator for proper SwiftUI updates
+    private var sosCoordinator: SOSCoordinator {
         container.sosCoordinator
     }
+    
+    // Track phase locally to ensure view updates
+    @State private var currentPhase: SOSPhase = .ready
 
     var body: some View {
         ZStack {
@@ -29,22 +34,25 @@ struct SOSInterventionView: View {
             // Phase-based content
             phaseContent
         }
-        .onChange(of: sosCoordinator.phase) { _, newPhase in
+        .onChange(of: container.sosCoordinator.phase) { _, newPhase in
+            currentPhase = newPhase
             handlePhaseChange(newPhase)
         }
         .onAppear {
-            // Start SOS if not already started
-            if case .ready = sosCoordinator.phase {
-                Task {
-                    await sosCoordinator.startSOS(from: "intervention_view")
-                }
+            // Reset coordinator and start fresh SOS session
+            sosCoordinator.reset()
+            currentPhase = .ready
+            Task {
+                // Load settings first (required for breathing patterns and preferences)
+                await sosCoordinator.loadSettings()
+                await sosCoordinator.startSOS(from: "intervention_view")
             }
         }
     }
 
     @ViewBuilder
     private var phaseContent: some View {
-        switch sosCoordinator.phase {
+        switch currentPhase {
         case .ready:
             // Starting state - show brief loading
             VStack(spacing: 20) {
@@ -95,7 +103,9 @@ struct SOSInterventionView: View {
                     sosCoordinator.proceedToCheckIn()
                 },
                 onChatWithAI: {
-                    // Dismiss intervention and navigate to chat
+                    // Navigate to chat tab and open new chat
+                    appState.shouldOpenNewChat = true
+                    appState.selectedTab = .chat
                     sosCoordinator.exitToChat()
                     dismiss()
                 }
@@ -317,4 +327,5 @@ private struct ErrorView: View {
 #Preview {
     SOSInterventionView()
         .environmentObject(DependencyContainer.preview)
+        .environmentObject(AppState())
 }

@@ -38,10 +38,10 @@ CREATE TABLE IF NOT EXISTS organizations (
   )
 );
 
-CREATE INDEX idx_organizations_billing_email ON organizations(billing_email);
-CREATE INDEX idx_organizations_domain ON organizations(domain);
-CREATE INDEX idx_organizations_saml_org_id ON organizations(saml_org_id);
-CREATE INDEX idx_organizations_stripe_customer ON organizations(stripe_customer_id);
+CREATE INDEX IF NOT EXISTS idx_organizations_billing_email ON organizations(billing_email);
+CREATE INDEX IF NOT EXISTS idx_organizations_domain ON organizations(domain);
+CREATE INDEX IF NOT EXISTS idx_organizations_saml_org_id ON organizations(saml_org_id);
+CREATE INDEX IF NOT EXISTS idx_organizations_stripe_customer ON organizations(stripe_customer_id);
 
 -- ============================================================================
 -- 2. ORGANIZATION ADMINS TABLE
@@ -56,8 +56,8 @@ CREATE TABLE IF NOT EXISTS organization_admins (
   UNIQUE(organization_id, user_id)
 );
 
-CREATE INDEX idx_organization_admins_org ON organization_admins(organization_id);
-CREATE INDEX idx_organization_admins_user ON organization_admins(user_id);
+CREATE INDEX IF NOT EXISTS idx_organization_admins_org ON organization_admins(organization_id);
+CREATE INDEX IF NOT EXISTS idx_organization_admins_user ON organization_admins(user_id);
 
 -- ============================================================================
 -- 3. ORGANIZATION MEMBERS TABLE (Employees)
@@ -76,10 +76,10 @@ CREATE TABLE IF NOT EXISTS organization_members (
   UNIQUE(organization_id, user_id)
 );
 
-CREATE INDEX idx_organization_members_org ON organization_members(organization_id);
-CREATE INDEX idx_organization_members_user ON organization_members(user_id);
-CREATE INDEX idx_organization_members_is_active ON organization_members(is_active);
-CREATE INDEX idx_organization_members_removed_at ON organization_members(removed_at);
+CREATE INDEX IF NOT EXISTS idx_organization_members_org ON organization_members(organization_id);
+CREATE INDEX IF NOT EXISTS idx_organization_members_user ON organization_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_organization_members_is_active ON organization_members(is_active);
+CREATE INDEX IF NOT EXISTS idx_organization_members_removed_at ON organization_members(removed_at);
 
 -- ============================================================================
 -- 4. ORGANIZATION INVITES TABLE
@@ -97,9 +97,9 @@ CREATE TABLE IF NOT EXISTS organization_invites (
   CHECK (uses >= 0 AND (max_uses IS NULL OR uses <= max_uses))
 );
 
-CREATE INDEX idx_organization_invites_code ON organization_invites(invite_code);
-CREATE INDEX idx_organization_invites_org ON organization_invites(organization_id);
-CREATE INDEX idx_organization_invites_expires ON organization_invites(expires_at);
+CREATE INDEX IF NOT EXISTS idx_organization_invites_code ON organization_invites(invite_code);
+CREATE INDEX IF NOT EXISTS idx_organization_invites_org ON organization_invites(organization_id);
+CREATE INDEX IF NOT EXISTS idx_organization_invites_expires ON organization_invites(expires_at);
 
 -- ============================================================================
 -- 5. ORGANIZATION METRICS TABLE (Aggregated, Privacy-Protected)
@@ -128,7 +128,7 @@ CREATE TABLE IF NOT EXISTS organization_metrics (
   UNIQUE(organization_id, metric_date)
 );
 
-CREATE INDEX idx_organization_metrics_org_date ON organization_metrics(organization_id, metric_date);
+CREATE INDEX IF NOT EXISTS idx_organization_metrics_org_date ON organization_metrics(organization_id, metric_date);
 
 -- ============================================================================
 -- 6. PRIVACY ACCESS AUDIT TABLE (Tracks Forbidden Table Access Attempts)
@@ -147,9 +147,9 @@ CREATE TABLE IF NOT EXISTS privacy_access_audit (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_privacy_access_audit_admin ON privacy_access_audit(admin_id);
-CREATE INDEX idx_privacy_access_audit_org ON privacy_access_audit(organization_id);
-CREATE INDEX idx_privacy_access_audit_created ON privacy_access_audit(created_at);
+CREATE INDEX IF NOT EXISTS idx_privacy_access_audit_admin ON privacy_access_audit(admin_id);
+CREATE INDEX IF NOT EXISTS idx_privacy_access_audit_org ON privacy_access_audit(organization_id);
+CREATE INDEX IF NOT EXISTS idx_privacy_access_audit_created ON privacy_access_audit(created_at);
 
 -- ============================================================================
 -- 7. BILLING AUDIT LOG TABLE (Tracks Stripe Events)
@@ -164,9 +164,9 @@ CREATE TABLE IF NOT EXISTS billing_audit_log (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_billing_audit_log_org ON billing_audit_log(organization_id);
-CREATE INDEX idx_billing_audit_log_event ON billing_audit_log(event_type);
-CREATE INDEX idx_billing_audit_log_created ON billing_audit_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_billing_audit_log_org ON billing_audit_log(organization_id);
+CREATE INDEX IF NOT EXISTS idx_billing_audit_log_event ON billing_audit_log(event_type);
+CREATE INDEX IF NOT EXISTS idx_billing_audit_log_created ON billing_audit_log(created_at);
 
 -- ============================================================================
 -- 8. SAML ASSERTIONS TABLE (Replay Prevention)
@@ -180,9 +180,9 @@ CREATE TABLE IF NOT EXISTS saml_assertions (
   processed_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_saml_assertions_org ON saml_assertions(organization_id);
-CREATE INDEX idx_saml_assertions_user ON saml_assertions(user_id);
-CREATE INDEX idx_saml_assertions_processed ON saml_assertions(processed_at);
+CREATE INDEX IF NOT EXISTS idx_saml_assertions_org ON saml_assertions(organization_id);
+CREATE INDEX IF NOT EXISTS idx_saml_assertions_user ON saml_assertions(user_id);
+CREATE INDEX IF NOT EXISTS idx_saml_assertions_processed ON saml_assertions(processed_at);
 
 -- ============================================================================
 -- 9. AUDIT LOG TABLE (General)
@@ -198,10 +198,10 @@ CREATE TABLE IF NOT EXISTS audit_log (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_audit_log_org ON audit_log(organization_id);
-CREATE INDEX idx_audit_log_event ON audit_log(event_type);
-CREATE INDEX idx_audit_log_actor ON audit_log(actor_id);
-CREATE INDEX idx_audit_log_created ON audit_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_log_org ON audit_log(organization_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_event ON audit_log(event_type);
+CREATE INDEX IF NOT EXISTS idx_audit_log_actor ON audit_log(actor_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
 
 -- ============================================================================
 -- 10. UPDATE SUBSCRIPTIONS TABLE FOR B2B SUPPORT

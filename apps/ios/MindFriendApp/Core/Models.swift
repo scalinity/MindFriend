@@ -1057,6 +1057,11 @@ struct QuestInstruction: Codable, Equatable {
     let step: Int
     let text: String
     let durationSeconds: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case step, text
+        case durationSeconds = "duration_seconds"
+    }
 }
 
 enum QuestType: String, Codable, CaseIterable {
@@ -1120,7 +1125,7 @@ struct QuestCompletion: Codable {
 struct QuestAlternatives: Codable, Identifiable, Equatable {
     let id: UUID
     let userId: UUID
-    let questDate: Date
+    let questDate: String  // PostgreSQL DATE returns "YYYY-MM-DD" string format
     let primaryQuestId: UUID
     let quickVariantId: UUID?
     let altQuestId: UUID?

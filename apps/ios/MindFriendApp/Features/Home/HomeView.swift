@@ -122,18 +122,6 @@ struct HomeView: View {
                         AdaptiveMoodPromptCard(timeOfDay: homeContext?.timeOfDay ?? .current)
                     }
 
-                    // SOS Panic Button - prominent placement for safety access
-                    if container.sosCoordinator.settings?.sosEnabled != false {
-                        HStack {
-                            Spacer()
-                            SOSButton {
-                                showSOSIntervention = true
-                            }
-                            Spacer()
-                        }
-                        .padding(.vertical, 8)
-                    }
-
                     // Contextual quick actions (mood-adaptive)
                     if let actions = homeContext?.recommendedActions, !actions.isEmpty {
                         ContextualActionsRow(actions: actions)
@@ -192,7 +180,7 @@ struct HomeView: View {
                         .environmentObject(container.insightLabService)
 
                     // Standard quick actions (fallback)
-                    QuickActionsSection()
+                    QuickActionsSection(onSOSTapped: { showSOSIntervention = true })
 
                     Spacer(minLength: 32)
                 }
@@ -914,6 +902,7 @@ struct StreakCard: View {
 struct QuickActionsSection: View {
     @EnvironmentObject var container: DependencyContainer
     @AppStorage("safety_plan.pinned_quick_actions") private var pinnedSafetyPlan = false
+    var onSOSTapped: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -927,8 +916,7 @@ struct QuickActionsSection: View {
                     HomeQuickActionButton(
                         title: "Live",
                         icon: "person.3.sequence.fill",
-                        color: .red,
-                        action: {}
+                        color: .red
                     )
                 }
 
@@ -938,8 +926,7 @@ struct QuickActionsSection: View {
                     HomeQuickActionButton(
                         title: "Create",
                         icon: "paintpalette.fill",
-                        color: .pink,
-                        action: {}
+                        color: .pink
                     )
                 }
 
@@ -949,8 +936,7 @@ struct QuickActionsSection: View {
                     HomeQuickActionButton(
                         title: "Exercises",
                         icon: "figure.mind.and.body",
-                        color: .purple,
-                        action: {}
+                        color: .purple
                     )
                 }
 
@@ -960,8 +946,7 @@ struct QuickActionsSection: View {
                     HomeQuickActionButton(
                         title: "Mood",
                         icon: "chart.line.uptrend.xyaxis",
-                        color: .blue,
-                        action: {}
+                        color: .blue
                     )
                 }
             }
@@ -974,8 +959,7 @@ struct QuickActionsSection: View {
                     HomeQuickActionButton(
                         title: "Badges",
                         icon: "medal.fill",
-                        color: .yellow,
-                        action: {}
+                        color: .yellow
                     )
                 }
 
@@ -985,8 +969,17 @@ struct QuickActionsSection: View {
                     HomeQuickActionButton(
                         title: "Therapists",
                         icon: "person.2.wave.2.fill",
-                        color: .teal,
-                        action: {}
+                        color: .teal
+                    )
+                }
+
+                // SOS Button - accessible but not prominent
+                if container.sosCoordinator.settings?.sosEnabled != false {
+                    HomeQuickActionButton(
+                        title: "SOS",
+                        icon: "heart.fill",
+                        color: .red,
+                        action: onSOSTapped
                     )
                 }
 
@@ -997,8 +990,7 @@ struct QuickActionsSection: View {
                         HomeQuickActionButton(
                             title: "Safety Plan",
                             icon: "heart.shield.fill",
-                            color: .red,
-                            action: {}
+                            color: .orange
                         )
                     }
                 }
@@ -1081,26 +1073,35 @@ struct HomeQuickActionButton: View {
     let title: String
     let icon: String
     let color: Color
-    let action: () -> Void
+    var action: (() -> Void)? = nil
 
     var body: some View {
-        Button(action: action) {
-            VStack(spacing: 8) {
-                ZStack {
-                    Circle()
-                        .fill(color.opacity(0.1))
-                        .frame(width: 50, height: 50)
-
-                    Image(systemName: icon)
-                        .font(.system(size: 24))
-                        .foregroundStyle(color)
-                }
-
-                Text(title)
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.primary)
+        if let action = action {
+            Button(action: action) {
+                content
             }
+            .buttonStyle(.plain)
+        } else {
+            content
+        }
+    }
+    
+    private var content: some View {
+        VStack(spacing: 8) {
+            ZStack {
+                Circle()
+                    .fill(color.opacity(0.1))
+                    .frame(width: 50, height: 50)
+
+                Image(systemName: icon)
+                    .font(.system(size: 24))
+                    .foregroundStyle(color)
+            }
+
+            Text(title)
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundStyle(.primary)
         }
     }
 }

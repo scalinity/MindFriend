@@ -515,6 +515,27 @@ struct UserExperience {
         return Double(xpInCurrentLevel) / Double(xpNeededForLevel)
     }
 
+    /// Memberwise initializer for constructing from profile stats
+    init(
+        totalXp: Int,
+        currentLevel: Int,
+        xpToNextLevel: Int,
+        dailyXp: Int,
+        weeklyXp: Int,
+        prestigeLevel: Int,
+        xpMultiplier: Double,
+        multiplierExpiresAt: Date?
+    ) {
+        self.totalXp = totalXp
+        self.currentLevel = currentLevel
+        self.xpToNextLevel = xpToNextLevel
+        self.dailyXp = dailyXp
+        self.weeklyXp = weeklyXp
+        self.prestigeLevel = prestigeLevel
+        self.xpMultiplier = xpMultiplier
+        self.multiplierExpiresAt = multiplierExpiresAt
+    }
+
     init(from db: DBUserExperience) {
         self.totalXp = db.totalXp
         self.currentLevel = db.currentLevel

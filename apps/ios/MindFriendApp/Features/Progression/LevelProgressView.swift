@@ -7,16 +7,20 @@ struct LevelProgressView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                // Level badge
+                // Level badge - matches Achievements page design
                 ZStack {
                     Circle()
-                        .fill(Color.accentColor.opacity(0.15))
-                        .frame(width: 44, height: 44)
+                        .fill(LinearGradient(
+                            colors: [.purple, .blue],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ))
+                        .frame(width: 56, height: 56)
 
                     Text("\(userLevel.level)")
                         .font(.title2)
                         .fontWeight(.bold)
-                        .foregroundColor(.accentColor)
+                        .foregroundStyle(.white)
                 }
 
                 VStack(alignment: .leading, spacing: 2) {

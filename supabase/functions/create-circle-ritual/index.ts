@@ -17,12 +17,7 @@ import {
   sanitizeAndTrim,
 } from "../_shared/ritual-validation.ts";
 import { getRitualPrompts, RitualType } from "../_shared/ritual-prompts.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 interface CreateRitualRequest {
   circleId: string;
@@ -33,6 +28,9 @@ interface CreateRitualRequest {
 }
 
 serve(async (req) => {
+  const origin = req.headers.get("Origin");
+  const corsHeaders = getCorsHeaders(origin);
+
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -93,6 +91,17 @@ serve(async (req) => {
         "NOT_CIRCLE_MEMBER",
         "You must be a circle member to create rituals",
         403,
+        corsHeaders,
+      );
+    }
+
+    // Only owners and admins can create rituals
+    if (membership.role !== "owner" && membership.role !== "admin") {
+      return errorResponse(
+        "INSUFFICIENT_PERMISSIONS",
+        "Only circle owners and admins can create rituals",
+        403,
+        corsHeaders,
       );
     }
 
@@ -156,29 +165,41 @@ serve(async (req) => {
         .eq("id", body.circleId)
         .single();
 
+      // Fetch all device tokens for all members in a single query (fixes N+1 pattern)
+      const memberIds = members.map((m) => m.user_id);
+      const { data: allDevices } = await supabase
+        .from("push_tokens")
+        .select("user_id, token, platform")
+        .in("user_id", memberIds);
+
+      // Group devices by user_id for efficient lookup
+      const devicesByUser = (allDevices || []).reduce(
+        (acc, device) => {
+          if (!acc[device.user_id]) acc[device.user_id] = [];
+          acc[device.user_id].push(device);
+          return acc;
+        },
+        {} as Record<string, typeof allDevices>,
+      );
+
+      // Format notification time
+      const ritualTime = new Date(scheduledFor);
+      const timeString =
+        body.startOption === "now"
+          ? "starting now"
+          : `at ${ritualTime.toLocaleTimeString("en-US", {
+              hour: "numeric",
+              minute: "2-digit",
+            })}`;
+
       // Send notifications to members
       const notificationPromises = members.map(async (member) => {
+        const devices = devicesByUser[member.user_id];
+        if (!devices || devices.length === 0) {
+          return;
+        }
+
         try {
-          // Get user's device tokens
-          const { data: devices } = await supabase
-            .from("push_tokens")
-            .select("token, platform")
-            .eq("user_id", member.user_id);
-
-          if (!devices || devices.length === 0) {
-            return;
-          }
-
-          // Format notification time
-          const ritualTime = new Date(scheduledFor);
-          const timeString =
-            body.startOption === "now"
-              ? "starting now"
-              : `at ${ritualTime.toLocaleTimeString("en-US", {
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}`;
-
           // Call send-notification function
           await supabase.functions.invoke("send-notification", {
             body: {

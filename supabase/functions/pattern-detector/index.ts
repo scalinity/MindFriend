@@ -11,6 +11,7 @@ import {
   updateEngagementStatesBatch,
   type BatchEngagementUpdate,
 } from "../_shared/batch-utils.ts";
+import { buildSignaturePatterns } from "./signature-builder.ts";
 
 interface DetectedPattern {
   pattern_type: string;
@@ -63,6 +64,7 @@ serve(async (req) => {
     let patternsDetected = 0;
     let patternsUpdated = 0;
     let engagementStatesUpdated = 0;
+    let signaturePatternsGenerated = 0;
 
     // Get users with sufficient data (14+ days of moods)
     const { data: eligibleUsers, error: eligibleError } =
@@ -172,6 +174,66 @@ serve(async (req) => {
           new_state: "active", // Updated based on detected patterns
         });
 
+        // Generate signature patterns from all user patterns
+        const { data: allUserPatterns, error: fetchError } = await supabaseAdmin
+          .from("user_patterns")
+          .select("*")
+          .eq("user_id", user.user_id)
+          .eq("is_active", true);
+
+        if (!fetchError && allUserPatterns && allUserPatterns.length > 0) {
+          // Convert to signature-builder format
+          const userPatterns = allUserPatterns.map(p => ({
+            id: p.id,
+            userId: p.user_id,
+            patternType: p.pattern_type,
+            patternKey: p.pattern_key,
+            confidenceScore: p.confidence,
+            evidenceCount: p.evidence_count || 0,
+            firstDetectedAt: p.first_detected_at,
+            lastDetectedAt: p.last_confirmed_at || p.first_detected_at,
+            patternData: p.pattern_data,
+            isActive: p.is_active
+          }));
+
+          const signaturePatterns = await buildSignaturePatterns(
+            user.user_id,
+            userPatterns
+          );
+
+          // Upsert signature patterns
+          for (const sigPattern of signaturePatterns) {
+            const { error: sigError } = await supabaseAdmin
+              .from("user_patterns")
+              .upsert(
+                {
+                  user_id: user.user_id,
+                  pattern_type: sigPattern.patternType,
+                  pattern_key: sigPattern.patternKey,
+                  pattern_data: sigPattern.patternData,
+                  confidence: sigPattern.confidenceScore,
+                  evidence_count: sigPattern.evidenceCount,
+                  first_detected_at: sigPattern.firstDetectedAt,
+                  last_confirmed_at: now.toISOString(),
+                  is_active: true,
+                },
+                {
+                  onConflict: "user_id,pattern_type,pattern_key",
+                  ignoreDuplicates: false,
+                }
+              );
+
+            if (sigError) {
+              console.error(
+                `Error upserting signature pattern for ${user.user_id}:`,
+                sigError
+              );
+            } else {
+              signaturePatternsGenerated++;
+            }
+          }
+        }
+
         usersProcessed++;
 
         // Deactivate patterns that weren't confirmed this run
@@ -212,6 +274,7 @@ serve(async (req) => {
       patternsDetected,
       patternsUpdated,
       engagementStatesUpdated,
+      signaturePatternsGenerated,
     });
 
     return new Response(
@@ -222,6 +285,7 @@ serve(async (req) => {
         patterns_detected: patternsDetected,
         patterns_updated: patternsUpdated,
         engagement_states_updated: engagementStatesUpdated,
+        signature_patterns_generated: signaturePatternsGenerated,
       }),
       { status: 200, headers },
     );

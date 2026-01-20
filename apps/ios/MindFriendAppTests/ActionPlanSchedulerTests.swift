@@ -1,6 +1,7 @@
 import XCTest
 @testable import MindFriendApp
 
+@MainActor
 final class ActionPlanSchedulerTests: XCTestCase {
     func testAdjustForQuietHoursShiftsAfterQuietHoursEnd() {
         let scheduler = ActionPlanScheduler()

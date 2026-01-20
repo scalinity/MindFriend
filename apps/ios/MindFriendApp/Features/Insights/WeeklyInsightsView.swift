@@ -47,17 +47,27 @@ struct WeeklyInsightsView: View {
                     }
                 } else {
                     EmptyInsightCard()
+
+                    // Show error if present (for debugging)
+                    if let error = error {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .padding()
+                            .background(Color.red.opacity(0.1))
+                            .cornerRadius(8)
+                    }
                 }
             }
             .padding()
         }
         .navigationTitle("Weekly Insights")
         .background(Color(.systemGroupedBackground))
-        .task { await loadInsights() }
-        .refreshable { await loadInsights() }
+        .task { await loadInsights(forceRegenerate: false) }
+        .refreshable { await loadInsights(forceRegenerate: true) }
     }
 
-    private func loadInsights() async {
+    private func loadInsights(forceRegenerate: Bool) async {
         isLoading = true
         error = nil
 
@@ -65,15 +75,22 @@ struct WeeklyInsightsView: View {
             // First, try to fetch existing insights
             currentInsight = try await container.supabaseDataService.getWeeklySummary()
 
-            // If no current insight exists, auto-generate one
-            if currentInsight == nil {
+            // Regenerate if:
+            // - Force regenerate requested (pull-to-refresh)
+            // - No insight exists
+            // - Existing one has no meaningful data (user may have logged mood since)
+            let hasNoMeaningfulData = currentInsight?.avgMood == nil && currentInsight?.checkinCount == 0
+            let shouldRegenerate = forceRegenerate || currentInsight == nil || hasNoMeaningfulData
+
+            if shouldRegenerate {
                 isLoading = false
                 isGenerating = true
 
                 do {
                     currentInsight = try await container.supabaseDataService.generateWeeklyInsight()
                 } catch {
-                    // If generation fails, continue with empty state
+                    // If generation fails, show the error to the user for debugging
+                    self.error = "Generation failed: \(error.localizedDescription)"
                     Log.data.error("Failed to generate weekly insight", error: error)
                 }
 

@@ -16,12 +16,7 @@ import {
   isValidUUID,
   sanitizeAndTrim,
 } from "../_shared/ritual-validation.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 interface AddReflectionRequest {
   ritualId: string;
@@ -29,6 +24,9 @@ interface AddReflectionRequest {
 }
 
 serve(async (req) => {
+  const origin = req.headers.get("Origin");
+  const corsHeaders = getCorsHeaders(origin);
+
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });

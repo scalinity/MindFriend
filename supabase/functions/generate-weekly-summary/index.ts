@@ -9,7 +9,11 @@ import {
   SupabaseClient,
 } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { isAuthorizedCronRequest } from "../_shared/auth.ts";
+import {
+  isAuthorizedCronRequest,
+  authenticateRequest,
+  isAuthError,
+} from "../_shared/auth.ts";
 import { getMoodTrendMessage } from "../_shared/notification-utils.ts";
 import {
   detectPatterns,
@@ -98,27 +102,15 @@ serve(async (req) => {
   );
 
   if (!isCronOrServiceRole && authHeader?.startsWith("Bearer ")) {
-    // Try to authenticate as a regular user using service role client
-    const supabaseAuth = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
+    // Use shared auth utility for consistent token validation
+    const authResult = await authenticateRequest(req);
 
-    const token = authHeader.replace("Bearer ", "");
-    console.log(`Attempting to validate user token (length: ${token.length})`);
-
-    const {
-      data: { user },
-      error: authError,
-    } = await supabaseAuth.auth.getUser(token);
-
-    if (authError) {
-      console.error("Auth error validating user token:", authError.message);
-    }
-
-    if (!authError && user) {
-      authenticatedUserId = user.id;
-      console.log(`Authenticated user: ${user.id}`);
+    if (isAuthError(authResult)) {
+      console.error("Auth error validating user token");
+      // Don't return the error response yet - we'll check below
+    } else {
+      authenticatedUserId = authResult.user.id;
+      console.log(`Authenticated user: ${authResult.user.id}`);
     }
   }
 

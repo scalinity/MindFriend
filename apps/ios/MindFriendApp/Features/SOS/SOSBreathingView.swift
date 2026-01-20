@@ -95,7 +95,7 @@ struct SOSBreathingView: View {
                         .foregroundStyle(.white)
                         .accessibilityLabel("Breathing instruction: \(currentPhase.instruction)")
 
-                    Text("\(Int(currentPhase.duration - (phaseProgress * currentPhase.duration))) sec")
+                    Text("\(max(1, Int(ceil(currentPhase.duration * (1 - phaseProgress))))) sec")
                         .font(.title2)
                         .foregroundStyle(.white.opacity(0.8))
                         .monospacedDigit()
@@ -129,16 +129,22 @@ struct SOSBreathingView: View {
             HStack {
                 Spacer()
 
-                Button("Skip to Help") {
+                Button {
                     breathingTask?.cancel()
+                    breathingTask = nil
                     onSkip()
+                } label: {
+                    Text("Skip to Help")
+                        .font(.body)
+                        .foregroundStyle(.white.opacity(0.8))
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 12)
+                        .background(Color.white.opacity(0.2))
+                        .clipShape(Capsule())
                 }
-                .font(.body)
-                .foregroundStyle(.white.opacity(0.8))
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
-                .background(Color.white.opacity(0.2))
-                .clipShape(Capsule())
+                .buttonStyle(.plain)
+
+                Spacer()
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 40)

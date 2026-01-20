@@ -18,6 +18,12 @@ struct OutcomeHomeView: View {
             .sorted { $0.nextDueAt < $1.nextDueAt }
     }
     
+    private var hasAnyData: Bool {
+        !dueAssessments.isEmpty ||
+        !outcomeService.recentResponses.isEmpty ||
+        !outcomeService.outcomeGoals.isEmpty
+    }
+    
     var body: some View {
         NavigationStack {
             ZStack {
@@ -47,6 +53,11 @@ struct OutcomeHomeView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 20)
                         .padding(.top, 12)
+                        
+                        // Empty state for brand-new users
+                        if !hasAnyData {
+                            emptyStateSection
+                        }
                         
                         // Due Assessments
                         if !dueAssessments.isEmpty {
@@ -191,15 +202,70 @@ struct OutcomeHomeView: View {
         .task {
             do {
                 try await outcomeService.loadAssessmentTemplates()
+                try await outcomeService.loadAssessmentSchedules()
                 try await outcomeService.loadOutcomeGoals()
+                try await outcomeService.loadRecentResponses()
             } catch {
-                print("Error: \(error)")
+                print("Error: \\(error)")
             }
         }
     }
 }
 
 // MARK: - Supporting Views
+
+private extension OutcomeHomeView {
+    var emptyStateSection: some View {
+        VStack(spacing: 16) {
+            HStack(alignment: .top, spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.9))
+                        .frame(width: 40, height: 40)
+                    Image(systemName: "chart.line.uptrend.xyaxis")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(Color(red: 0.2, green: 0.6, blue: 0.4))
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Start tracking your progress")
+                        .font(.system(size: 16, weight: .semibold, design: .default))
+                        .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
+
+                    Text("Take a quick check-in to set a baseline and unlock personalized goals.")
+                        .font(.system(size: 14, weight: .regular, design: .default))
+                        .foregroundColor(.gray)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+            }
+
+            Button {
+                if let template = outcomeService.assessmentTemplates.first,
+                   let type = AssessmentType(rawValue: template.code) {
+                    selectedAssessmentType = type
+                    showingAssessmentFlow = true
+                }
+            } label: {
+                Text("Take your first assessment")
+                    .font(.system(size: 15, weight: .semibold, design: .default))
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color(red: 0.2, green: 0.6, blue: 0.4))
+                    .foregroundColor(.white)
+                    .cornerRadius(12)
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+        )
+        .padding(.horizontal, 20)
+    }
+}
 
 struct RecentResultCard: View {
     let response: AssessmentResponse

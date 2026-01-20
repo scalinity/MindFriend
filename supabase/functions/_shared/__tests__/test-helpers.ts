@@ -2,7 +2,7 @@
  * Test helpers for ritual Edge Functions
  */
 
-import { isValidUUID } from "./ritual-validation.ts";
+import { isValidUUID } from "./ritual-validation.test.ts";
 
 /**
  * Create a valid UUID for testing

@@ -21,16 +21,25 @@ final class CircleHabitsViewModel: ObservableObject {
 
     // MARK: - Data Loading
 
+    private var loadTask: Task<Void, Never>?
+
     func loadData(container: DependencyContainer) async {
-        isLoading = true
+        loadTask?.cancel()
 
-        async let loadTemplates: () = loadTemplates(container: container)
-        async let loadNudges: () = loadNudges(container: container)
-        async let loadStreak: () = loadStreakStatus(container: container)
+        loadTask = Task { [weak self] in
+            guard let self = self, !Task.isCancelled else { return }
+            self.isLoading = true
 
-        _ = await (loadTemplates, loadNudges, loadStreak)
+            async let loadTemplates: () = self.loadTemplates(container: container)
+            async let loadNudges: () = self.loadNudges(container: container)
+            async let loadStreak: () = self.loadStreakStatus(container: container)
 
-        isLoading = false
+            _ = await (loadTemplates, loadNudges, loadStreak)
+
+            if !Task.isCancelled {
+                self.isLoading = false
+            }
+        }
     }
 
     // MARK: - Template Operations
