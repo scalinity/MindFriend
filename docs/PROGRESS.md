@@ -4,6 +4,99 @@
 
 ---
 
+## [2026-01-20] Therapeutic Programs - Production Seed Data
+
+**Type:** Feature
+**Status:** Complete
+
+### Summary
+
+Added 15 production-grade therapeutic programs with clinical metadata using evidence-based methodologies (CBT×6, DBT×4, ACT×3, MBCT×2). Programs include research citations, target conditions, baseline assessment requirements, and proper difficulty/premium tier distribution.
+
+### Changes
+
+| Component     | File(s)                                                            | Details                                                                                                                                             |
+| ------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Migration** | `supabase/migrations/20260329000003_therapeutic_programs_seed.sql` | Seed data for 15 therapeutic programs with full clinical metadata (methodology, evidence_summary, evidence_url, target_conditions, assessment_type) |
+
+### Programs Added
+
+**CBT (6 programs)**: P01-P06 covering Anxiety, Depression, OCD, Panic, Social Anxiety, Insomnia
+**DBT (4 programs)**: P07-P10 covering Distress Tolerance, Emotion Regulation, Interpersonal Effectiveness, Radical Acceptance
+**ACT (3 programs)**: P11-P13 covering Values Living, ACT Anxiety, Psychological Flexibility
+**MBCT (2 programs)**: P14-P15 covering Depression Relapse Prevention, Stress
+
+**Free Programs**: 5 (P01, P02, P07, P11, P14)
+**Premium Programs**: 10 (P03-P06, P08-P10, P12, P13, P15)
+**Total Duration**: 181 days of content framework
+
+### Testing
+
+- [x] Migration applied successfully to remote database
+- [x] Schema compliance verified (all CHECK constraints satisfied)
+- [x] Evidence URLs validated (PubMed and Guilford Press formats)
+- [x] Methodology/assessment type alignment confirmed
+
+### Notes
+
+Daily content (program_days) not yet seeded - foundation is in place for content team.
+
+---
+
+## [2026-01-20] Advanced Integrations - Phase 1 Complete
+
+**Type:** Feature
+**Status:** Complete
+
+### Summary
+
+Implemented Phase 1 of Advanced Integrations feature (Spec 14) including OAuth infrastructure, calendar stress prediction, and database schema. Core services created for calendar, smart home, travel, and note-taking integrations with FHIR R4 export and HIPAA audit logging.
+
+### Changes
+
+| Component               | File(s)                                                        | Details                                                                                                                                                                  |
+| ----------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Models**              | `IntegrationTypes.swift`                                       | Shared types: IntegrationType, OAuthToken, OAuthState, CalendarEvent, TravelItinerary, StressLevel, FHIR types                                                           |
+| **Encryption**          | `EncryptionService.swift`                                      | AES-256-GCM encryption for tokens, Keychain storage, PKCE state management                                                                                               |
+| **OAuth Handler**       | `OAuthHandler.swift`                                           | PKCE OAuth 2.0 flow for Google Calendar, Microsoft Calendar, Notion with token exchange and refresh                                                                      |
+| **Integration Manager** | `IntegrationManager.swift`                                     | Central orchestrator for all integrations, sync lifecycle, connection state management                                                                                   |
+| **Calendar Service**    | `CalendarIntegrationService.swift`                             | Meeting stress analysis, back-to-back detection, early meeting alerts, stress scoring algorithm                                                                          |
+| **Database Migration**  | `supabase/migrations/20260120000000_advanced_integrations.sql` | Tables: integrations, calendar_events, travel_itineraries, note_exports, smart_home_scenes, wearable_data, fhir_resources, audit_logs, api_rate_limits with RLS policies |
+| **OAuth Callback**      | `supabase/functions/integrations-oauth-callback/index.ts`      | OAuth token exchange for Google, Microsoft with CSRF protection                                                                                                          |
+| **Public API**          | `supabase/functions/public-api/index.ts`                       | REST API with rate limiting (100/day free, 10k/day dev), endpoints: moods, journal, exercises, stats                                                                     |
+| **FHIR Export**         | `supabase/functions/fhir-export/index.ts`                      | FHIR R4 Observation and QuestionnaireResponse export with LOINC codes (44249-1 PHQ-9, 69737-5 GAD-7)                                                                     |
+
+### Key Features Implemented
+
+- **Calendar Stress Prediction**: Analyzes meeting patterns (6+ meetings = hectic, back-to-back within 15min, early meetings before 8am, no lunch break)
+- **OAuth 2.0 with PKCE**: Secure authorization flow with code verifier/challenge, state validation, automatic token refresh
+- **Rate Limiting**: Free tier 100 req/day, Developer tier 10,000 req/day with X-RateLimit headers
+- **FHIR R4 Mapping**: Mood scores → Observation, PHQ-9/GAD-7 → QuestionnaireResponse with proper LOINC codes
+- **HIPAA Audit Logging**: All PHI access logged with user_id, action, resource_type, timestamp, IP address
+
+### Excluded (Technical Barriers)
+
+- Email draft analysis (requires keyboard extension, not feasible via Gmail/Outlook APIs)
+- Garmin/Fitbit native SDK (deferred to HealthKit unification)
+- Real-time HR streaming every 10 seconds (battery impact)
+
+### Testing
+
+- [ ] Unit tests for OAuth PKCE flow
+- [ ] Integration tests for calendar stress prediction
+- [ ] Rate limit tests for public API
+- [ ] FHIR resource mapping tests
+
+### Notes
+
+- Files need to be added to Xcode project via Ruby script (see CLAUDE.md Section 7.1)
+- Database migration applied via `supabase db push`
+- Edge Functions deployed: integrations-oauth-callback, public-api, fhir-export
+- Environment variables needed: GOOGLE_CLIENT_ID, MICROSOFT_CLIENT_ID, NOTION_CLIENT_ID
+- **TripIt removed**: TripIt's developer program has been discontinued, so TripIt integration is no longer available. FlightAware API can be added later for flight tracking.
+
+---
+
 ## [2026-01-20] Partner Mode UX - Completion
 
 **Type:** Feature
