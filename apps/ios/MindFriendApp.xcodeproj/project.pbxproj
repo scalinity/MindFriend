@@ -176,7 +176,12 @@
 		'WYMCD02BC23C3C719CD3C9F' = {isa = PBXBuildFile; fileRef = WYMCD01493347E53EC5C762; };
 		'XC4M462EP5P159LUXZLHR0VG' = {isa = PBXBuildFile; fileRef = X5J1K6VPLGDJ2ZGL519XA4QJ; };
 		'YDTG50YCRCBUQMCNZ37MF5HN' = {isa = PBXBuildFile; fileRef = A1291YV6YVZ7OPRWA1ZF5GXW; };
-/* End PBXBuildFile section */
+
+		A2308727D2BE433181CA6120 /* AppDelegate+Medications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39EE82C01E2A4E9091460F26 /* AppDelegate+Medications.swift */; };
+		A6C1D511F9F94B118C33BF09 /* MedicationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1963AACE59304443B95C37AE /* MedicationServiceTests.swift */; };
+		13D8FA087C7C4F57B583B4FC /* AdherenceCalculatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EFC902B37D540848E3BB936 /* AdherenceCalculatorTests.swift */; };
+		73E190B7219E4EE19065DED9 /* MockSupabaseClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FD98254E14D4985ABE7650F /* MockSupabaseClient.swift */; };
+	/* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
 		7D15D183DAD839CB46975823 /* PBXContainerItemProxy */ = {
@@ -368,7 +373,12 @@
 		'WLCBK01493347E53EC5C762' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeBackView.swift; sourceTree = "<group>"; };
 		'WYMCD01493347E53EC5C762' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatYouMissedCard.swift; sourceTree = "<group>"; };
 		'X5J1K6VPLGDJ2ZGL519XA4QJ' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreakCardWithShields.swift; sourceTree = "<group>"; };
-/* End PBXFileReference section */
+
+		39EE82C01E2A4E9091460F26 /* AppDelegate+Medications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MindFriendApp/App/AppDelegate+Medications.swift; sourceTree = SOURCE_ROOT; };
+		1963AACE59304443B95C37AE /* MedicationServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MindFriendAppTests/MedicationServiceTests.swift; sourceTree = SOURCE_ROOT; };
+		0EFC902B37D540848E3BB936 /* AdherenceCalculatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MindFriendAppTests/AdherenceCalculatorTests.swift; sourceTree = SOURCE_ROOT; };
+		8FD98254E14D4985ABE7650F /* MockSupabaseClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MindFriendAppTests/MockSupabaseClient.swift; sourceTree = SOURCE_ROOT; };
+	/* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		6402F7403C47F6D25B5BF55F /* Frameworks */ = {
