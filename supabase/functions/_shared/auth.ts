@@ -1,38 +1,119 @@
-// Shared auth helpers for Edge Functions
+// Shared authentication utilities for Edge Functions
+// Reduces DRY violations across functions
 
-export function constantTimeCompare(a: string, b: string): boolean {
-  const aBytes = new TextEncoder().encode(a);
-  const bBytes = new TextEncoder().encode(b);
+import { createClient, SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCorsHeaders } from "./cors.ts";
 
-  if (aBytes.length !== bBytes.length) return false;
-
-  let diff = 0;
-  for (let i = 0; i < aBytes.length; i++) {
-    diff |= aBytes[i] ^ bBytes[i];
-  }
-  return diff === 0;
+export interface AuthResult {
+  user: User;
+  supabaseUser: SupabaseClient;
+  supabaseAdmin: SupabaseClient;
 }
 
-export function isAuthorizedCronRequest(
-  headers: Headers,
-  expectedCronSecret: string,
-  serviceRoleKey: string,
-): boolean {
-  const cronSecret = headers.get("X-Cron-Secret");
-  const authHeader = headers.get("Authorization");
+export interface AuthError {
+  response: Response;
+}
 
-  const isCron =
-    expectedCronSecret.length > 0 &&
-    cronSecret !== null &&
-    constantTimeCompare(cronSecret, expectedCronSecret);
+/**
+ * Authenticates a request and returns Supabase clients
+ * Returns either AuthResult on success or AuthError on failure
+ */
+export async function authenticateRequest(
+  req: Request,
+): Promise<AuthResult | AuthError> {
+  const origin = req.headers.get("Origin");
+  const baseCorsHeaders = getCorsHeaders(origin);
 
-  const bearerToken = authHeader?.startsWith("Bearer ")
-    ? authHeader.replace("Bearer ", "")
-    : "";
-  const isServiceRole =
-    serviceRoleKey.length > 0 &&
-    bearerToken.length > 0 &&
-    constantTimeCompare(bearerToken, serviceRoleKey);
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return {
+      response: new Response(
+        JSON.stringify({ error: "Missing authorization" }),
+        {
+          status: 401,
+          headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
+        },
+      ),
+    };
+  }
 
-  return isCron || isServiceRole;
+  const token = authHeader.replace("Bearer ", "");
+
+  const supabaseUser = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
+    { global: { headers: { Authorization: `Bearer ${token}` } } },
+  );
+
+  const supabaseAdmin = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  );
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabaseUser.auth.getUser();
+
+  if (authError || !user) {
+    return {
+      response: new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
+      }),
+    };
+  }
+
+  return { user, supabaseUser, supabaseAdmin };
+}
+
+/**
+ * Type guard to check if auth result is an error
+ */
+export function isAuthError(result: AuthResult | AuthError): result is AuthError {
+  return "response" in result;
+}
+
+/**
+ * UUID v4 format validation
+ */
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function isValidUUID(value: string): boolean {
+  return UUID_REGEX.test(value);
+}
+
+/**
+ * Creates a JSON error response
+ */
+export function errorResponse(
+  error: string,
+  message: string,
+  status: number,
+  corsHeaders: Record<string, string>,
+): Response {
+  return new Response(
+    JSON.stringify({ error, message }),
+    {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    },
+  );
+}
+
+/**
+ * Creates a JSON success response
+ */
+export function successResponse(
+  data: unknown,
+  status: number,
+  corsHeaders: Record<string, string>,
+): Response {
+  return new Response(
+    JSON.stringify(data),
+    {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    },
+  );
 }
