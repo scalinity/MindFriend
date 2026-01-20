@@ -200,28 +200,6 @@ struct MoodCheckInView: View {
     }
 }
 
-struct MoodSlider: View {
-    @Binding var value: Double
-    let labels: [String]
-
-    var body: some View {
-        VStack(spacing: 8) {
-            Slider(value: $value, in: 1...5, step: 1)
-                .tint(Color.accentColor)
-
-            HStack {
-                ForEach(0..<labels.count, id: \.self) { index in
-                    Text(labels[index])
-                        .font(.title3)
-                        .frame(maxWidth: .infinity)
-                        .opacity(Int(value) == index + 1 ? 1 : 0.3)
-                }
-            }
-        }
-        .padding(.horizontal)
-    }
-}
-
 #Preview {
     MoodCheckInView()
         .environmentObject(AppState())

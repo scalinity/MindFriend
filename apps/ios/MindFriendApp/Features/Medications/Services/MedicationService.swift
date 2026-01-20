@@ -2,7 +2,7 @@ import Foundation
 import Combine
 
 @MainActor
-final class MedicationService: ObservableObject {
+class MedicationService: ObservableObject {
     @Published var medications: [Medication] = []
     @Published var todayLogs: [MedicationLog] = []
     @Published var adherenceRate: Double = 0.0

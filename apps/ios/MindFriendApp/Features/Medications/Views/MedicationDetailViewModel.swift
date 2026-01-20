@@ -4,7 +4,7 @@ import Combine
 @MainActor
 final class MedicationDetailViewModel: ObservableObject {
     @Published var medication: Medication
-    @Published var adherenceStats: AdherenceStats?
+    @Published var adherenceStats: MedicationAdherenceStats?
     @Published var logs: [MedicationLog] = []
     @Published var isLoading = false
     @Published var errorMessage = ""

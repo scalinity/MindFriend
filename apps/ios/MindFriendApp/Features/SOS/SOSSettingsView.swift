@@ -412,26 +412,6 @@ struct SOSPrivacyInfoView: View {
     }
 }
 
-private struct BulletPoint: View {
-    let text: String
-
-    init(_ text: String) {
-        self.text = text
-    }
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Circle()
-                .fill(Color.blue)
-                .frame(width: 6, height: 6)
-                .padding(.top, 7)
-
-            Text(text)
-                .font(.body)
-        }
-    }
-}
-
 // MARK: - History View
 
 struct SOSHistoryView: View {

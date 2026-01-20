@@ -2,7 +2,7 @@ import SwiftUI
 
 struct MedicationDetailView: View {
     let medication: Medication
-    @State private var adherenceStats: AdherenceStats?
+    @State private var adherenceStats: MedicationAdherenceStats?
     @State private var logs: [MedicationLog] = []
     @State private var isLoading = false
 

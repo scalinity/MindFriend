@@ -7,9 +7,14 @@ final class AddMedicationViewModel: ObservableObject {
     @Published var purpose = ""
     @Published var icon: MedicationIcon = .pill
     @Published var frequency: MedicationFrequency = .daily
+    @Published var timesPerDay = 1
     @Published var scheduledTimes: [Date] = [Date()]
+    @Published var daysOfWeek: [Int]? = nil
+    @Published var notificationText = ""
     @Published var reminderEnabled = true
     @Published var useGenericNotification = false
+    @Published var supplyCount: Int? = nil
+    @Published var refillReminderCount: Int? = nil
     @Published var isLoading = false
     @Published var errorMessage = ""
     @Published var isSuccessful = false
@@ -36,9 +41,14 @@ final class AddMedicationViewModel: ObservableObject {
             purpose: purpose.isEmpty ? nil : purpose,
             icon: icon,
             frequency: frequency,
+            timesPerDay: timesPerDay,
             scheduledTimes: scheduledTimes,
+            daysOfWeek: daysOfWeek,
             reminderEnabled: reminderEnabled,
-            useGenericNotification: useGenericNotification
+            notificationText: notificationText.isEmpty ? nil : notificationText,
+            useGenericNotification: useGenericNotification,
+            supplyCount: supplyCount,
+            refillReminderCount: refillReminderCount
         )
 
         do {

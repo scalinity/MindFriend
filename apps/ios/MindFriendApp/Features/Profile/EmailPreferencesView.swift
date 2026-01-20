@@ -5,7 +5,7 @@ struct EmailPreferencesView: View {
   @Environment(\.dismiss) var dismiss
   @State private var showUnsubscribeConfirmation = false
 
-  init(supabaseDataService: SupabaseDataService) {
+  init(supabaseDataService: SupabaseDataService, authService: SupabaseAuthService) {
     _viewModel = StateObject(
       wrappedValue: EmailPreferencesViewModel(supabaseDataService: supabaseDataService)
     )
@@ -240,6 +240,6 @@ struct SectionHeader: View {
 // MARK: - Preview
 
 #Preview {
-  let mockService = SupabaseDataService()
-  EmailPreferencesView(supabaseDataService: mockService)
+  // TODO: EmailPreferencesView needs proper service initialization
+  Text("Email Preferences")
 }

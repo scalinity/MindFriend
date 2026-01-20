@@ -115,13 +115,46 @@ final class DependencyContainer: ObservableObject {
         InsightLabService(supabase: supabaseClient)
     }()
 
-    // TODO: RitualService not available in build target - investigate file inclusion
-    // lazy var ritualService: RitualService = {
-    //    RitualService(supabase: supabaseClient)
-    // }()
+    lazy var ritualService: RitualService = {
+        RitualService(supabase: supabaseClient)
+    }()
 
     lazy var predictiveService: PredictiveService = {
         PredictiveService(authService: supabaseAuthService)
+    }()
+
+    // MARK: - Smart Notification Services
+
+    /// Context engine for aggregating calendar, location, biometric, and focus mode data
+    lazy var contextEngine: ContextEngine = {
+        ContextEngine()
+    }()
+
+    /// ML prediction engine for engagement probability
+    lazy var predictionEngine: MLPredictionEngine = {
+        MLPredictionEngine()
+    }()
+
+    /// Notification queue with bundling and priority handling
+    lazy var notificationQueue: NotificationQueue = {
+        NotificationQueue()
+    }()
+
+    /// Engagement tracker for ML training data
+    lazy var engagementTracker: EngagementTracker = {
+        EngagementTracker(supabaseDataService: supabaseDataService)
+    }()
+
+    /// Main smart notification orchestrator service
+    lazy var smartNotificationService: SmartNotificationService = {
+        SmartNotificationService(
+            contextEngine: contextEngine,
+            predictionEngine: predictionEngine,
+            notificationQueue: notificationQueue,
+            engagementTracker: engagementTracker,
+            notificationManager: NotificationManager.shared,
+            supabaseDataService: supabaseDataService
+        )
     }()
 
     // MARK: - Vault Services (Local-only, encrypted journal)

@@ -1,4 +1,5 @@
 import Foundation
+import Supabase
 
 protocol MedicationLogRepository {
     func fetchLogs(medicationId: UUID, from: Date, to: Date) async throws -> [MedicationLog]
@@ -64,18 +65,36 @@ final class SupabaseMedicationLogRepository: MedicationLogRepository {
     func logDose(medicationId: UUID, scheduledAt: Date, status: MedicationStatus, notes: String?) async throws -> MedicationLog {
         let userId = try await supabase.auth.session.user.id
 
-        let payload: [String: Any] = [
-            "user_id": userId.uuidString,
-            "medication_id": medicationId.uuidString,
-            "scheduled_at": ISO8601DateFormatter().string(from: scheduledAt),
-            "status": status.rawValue,
-            "logged_at": ISO8601DateFormatter().string(from: Date()),
-            "notes": notes as Any,
-        ]
+        struct MedicationLogInsert: Codable {
+            let user_id: String
+            let medication_id: String
+            let scheduled_at: String
+            let status: String
+            let logged_at: String
+            let notes: String?
+
+            enum CodingKeys: String, CodingKey {
+                case user_id
+                case medication_id
+                case scheduled_at
+                case status
+                case logged_at
+                case notes
+            }
+        }
+
+        let payload = MedicationLogInsert(
+            user_id: userId.uuidString,
+            medication_id: medicationId.uuidString,
+            scheduled_at: ISO8601DateFormatter().string(from: scheduledAt),
+            status: status.rawValue,
+            logged_at: ISO8601DateFormatter().string(from: Date()),
+            notes: notes
+        )
 
         return try await supabase
             .from("medication_logs")
-            .upsert([payload])
+            .insert(payload)
             .select()
             .single()
             .execute()
@@ -85,18 +104,36 @@ final class SupabaseMedicationLogRepository: MedicationLogRepository {
     func skipDose(medicationId: UUID, scheduledAt: Date, reason: String?) async throws -> MedicationLog {
         let userId = try await supabase.auth.session.user.id
 
-        let payload: [String: Any] = [
-            "user_id": userId.uuidString,
-            "medication_id": medicationId.uuidString,
-            "scheduled_at": ISO8601DateFormatter().string(from: scheduledAt),
-            "status": MedicationStatus.skipped.rawValue,
-            "logged_at": ISO8601DateFormatter().string(from: Date()),
-            "skip_reason": reason as Any,
-        ]
+        struct SkippedDoseLog: Codable {
+            let user_id: String
+            let medication_id: String
+            let scheduled_at: String
+            let status: String
+            let logged_at: String
+            let skip_reason: String?
+
+            enum CodingKeys: String, CodingKey {
+                case user_id
+                case medication_id
+                case scheduled_at
+                case status
+                case logged_at
+                case skip_reason
+            }
+        }
+
+        let payload = SkippedDoseLog(
+            user_id: userId.uuidString,
+            medication_id: medicationId.uuidString,
+            scheduled_at: ISO8601DateFormatter().string(from: scheduledAt),
+            status: MedicationStatus.skipped.rawValue,
+            logged_at: ISO8601DateFormatter().string(from: Date()),
+            skip_reason: reason
+        )
 
         return try await supabase
             .from("medication_logs")
-            .upsert([payload])
+            .insert(payload)
             .select()
             .single()
             .execute()
@@ -107,9 +144,7 @@ final class SupabaseMedicationLogRepository: MedicationLogRepository {
         // Call Edge Function to atomically decrement supply count
         let response = try await supabase.functions.invoke(
             "update-supply-count",
-            options: FunctionInvokeOptions(
-                body: ["medicationId": medicationId.uuidString]
-            )
+            options: .init(body: ["medicationId": medicationId.uuidString])
         )
 
         guard let data = response as? [String: Any],

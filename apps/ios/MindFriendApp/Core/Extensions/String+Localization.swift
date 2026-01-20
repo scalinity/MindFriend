@@ -11,13 +11,15 @@ import Foundation
 extension String {
     /// Localize this string using LocalizationService
     /// Usage: "home.greeting".localized
+    @MainActor
     var localized: String {
         LocalizationService.shared.translate(self)
     }
 
     /// Localize string with format arguments
     /// Usage: "welcome.message".localized(with: userName)
+    @MainActor
     func localized(with arguments: CVarArg...) -> String {
-        LocalizationService.shared.translate(self, arguments: arguments)
+        String(format: LocalizationService.shared.translate(self), arguments: arguments)
     }
 }

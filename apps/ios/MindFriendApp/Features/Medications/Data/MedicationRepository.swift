@@ -1,4 +1,5 @@
 import Foundation
+import Supabase
 
 protocol MedicationRepository {
     func fetchAll() async throws -> [Medication]
@@ -67,28 +68,47 @@ final class SupabaseMedicationRepository: MedicationRepository {
     }
 
     func create(_ medication: CreateMedicationRequest) async throws -> Medication {
-        let userId = try await supabase.auth.session.user.id
+        struct MedicationInsert: Codable {
+            let name: String
+            let dosage: String?
+            let purpose: String?
+            let icon: String
+            let frequency: String
+            let times_per_day: Int
+            let reminder_enabled: Bool
+            let notification_text: String?
+            let use_generic_notification: Bool
+            let supply_count: Int?
+            let refill_reminder_count: Int?
 
-        let payload: [String: Any] = [
-            "user_id": userId.uuidString,
-            "name": medication.name,
-            "dosage": medication.dosage as Any,
-            "purpose": medication.purpose as Any,
-            "icon": medication.icon.rawValue,
-            "frequency": medication.frequency.rawValue,
-            "times_per_day": medication.timesPerDay,
-            "scheduled_times": medication.scheduledTimes.map { formatTime($0) },
-            "days_of_week": medication.daysOfWeek as Any,
-            "reminder_enabled": medication.reminderEnabled,
-            "notification_text": medication.notificationText as Any,
-            "use_generic_notification": medication.useGenericNotification,
-            "supply_count": medication.supplyCount as Any,
-            "refill_reminder_count": medication.refillReminderCount as Any,
-        ]
+            enum CodingKeys: String, CodingKey {
+                case name, dosage, purpose, icon, frequency
+                case times_per_day
+                case reminder_enabled
+                case notification_text
+                case use_generic_notification
+                case supply_count
+                case refill_reminder_count
+            }
+        }
+
+        let payload = MedicationInsert(
+            name: medication.name,
+            dosage: medication.dosage,
+            purpose: medication.purpose,
+            icon: medication.icon.rawValue,
+            frequency: medication.frequency.rawValue,
+            times_per_day: medication.timesPerDay,
+            reminder_enabled: medication.reminderEnabled,
+            notification_text: medication.notificationText,
+            use_generic_notification: medication.useGenericNotification,
+            supply_count: medication.supplyCount,
+            refill_reminder_count: medication.refillReminderCount
+        )
 
         return try await supabase
             .from("medications")
-            .insert([payload])
+            .insert(payload)
             .select()
             .single()
             .execute()
@@ -96,34 +116,39 @@ final class SupabaseMedicationRepository: MedicationRepository {
     }
 
     func update(_ id: UUID, with request: UpdateMedicationRequest) async throws -> Medication {
-        var payload: [String: Any] = [:]
+        struct MedicationUpdate: Codable {
+            let name: String?
+            let dosage: String?
+            let purpose: String?
+            let reminder_enabled: Bool?
+            let notification_text: String?
+            let use_generic_notification: Bool?
+            let supply_count: Int?
+            let refill_reminder_count: Int?
+            let updated_at: String
 
-        if let name = request.name {
-            payload["name"] = name
-        }
-        if let dosage = request.dosage {
-            payload["dosage"] = dosage
-        }
-        if let purpose = request.purpose {
-            payload["purpose"] = purpose
-        }
-        if let reminderEnabled = request.reminderEnabled {
-            payload["reminder_enabled"] = reminderEnabled
-        }
-        if let notificationText = request.notificationText {
-            payload["notification_text"] = notificationText
-        }
-        if let useGenericNotification = request.useGenericNotification {
-            payload["use_generic_notification"] = useGenericNotification
-        }
-        if let supplyCount = request.supplyCount {
-            payload["supply_count"] = supplyCount
-        }
-        if let refillReminderCount = request.refillReminderCount {
-            payload["refill_reminder_count"] = refillReminderCount
+            enum CodingKeys: String, CodingKey {
+                case name, dosage, purpose
+                case reminder_enabled
+                case notification_text
+                case use_generic_notification
+                case supply_count
+                case refill_reminder_count
+                case updated_at
+            }
         }
 
-        payload["updated_at"] = ISO8601DateFormatter().string(from: Date())
+        let payload = MedicationUpdate(
+            name: request.name,
+            dosage: request.dosage,
+            purpose: request.purpose,
+            reminder_enabled: request.reminderEnabled,
+            notification_text: request.notificationText,
+            use_generic_notification: request.useGenericNotification,
+            supply_count: request.supplyCount,
+            refill_reminder_count: request.refillReminderCount,
+            updated_at: ISO8601DateFormatter().string(from: Date())
+        )
 
         return try await supabase
             .from("medications")
@@ -136,24 +161,50 @@ final class SupabaseMedicationRepository: MedicationRepository {
     }
 
     func deactivate(_ id: UUID) async throws {
+        struct DeactivateUpdate: Codable {
+            let is_active: Bool
+            let ended_at: String
+            let updated_at: String
+
+            enum CodingKeys: String, CodingKey {
+                case is_active
+                case ended_at
+                case updated_at
+            }
+        }
+
+        let payload = DeactivateUpdate(
+            is_active: false,
+            ended_at: Date().formatted(date: .numeric, time: .omitted),
+            updated_at: ISO8601DateFormatter().string(from: Date())
+        )
+
         try await supabase
             .from("medications")
-            .update([
-                "is_active": false,
-                "ended_at": Date().formatted(date: .numeric, time: .omitted),
-                "updated_at": ISO8601DateFormatter().string(from: Date()),
-            ])
+            .update(payload)
             .eq("id", value: id.uuidString)
             .execute()
     }
 
     func archive(_ id: UUID) async throws {
+        struct ArchiveUpdate: Codable {
+            let archived: Bool
+            let updated_at: String
+
+            enum CodingKeys: String, CodingKey {
+                case archived
+                case updated_at
+            }
+        }
+
+        let payload = ArchiveUpdate(
+            archived: true,
+            updated_at: ISO8601DateFormatter().string(from: Date())
+        )
+
         try await supabase
             .from("medications")
-            .update([
-                "archived_at": ISO8601DateFormatter().string(from: Date()),
-                "updated_at": ISO8601DateFormatter().string(from: Date()),
-            ])
+            .update(payload)
             .eq("id", value: id.uuidString)
             .execute()
     }

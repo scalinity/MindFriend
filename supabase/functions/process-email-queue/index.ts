@@ -1,6 +1,19 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { timingSafeEqual } from "https://esm.sh/@supabase/email-utils";
+
+// Timing-safe string comparison to prevent timing attacks
+function timingSafeEqual(a: string | null, b: string | null): boolean {
+  if (a === null || b === null) return false;
+  const encoder = new TextEncoder();
+  const aBytes = encoder.encode(a);
+  const bBytes = encoder.encode(b);
+  if (aBytes.length !== bBytes.length) return false;
+  let result = 0;
+  for (let i = 0; i < aBytes.length; i++) {
+    result |= aBytes[i] ^ bBytes[i];
+  }
+  return result === 0;
+}
 
 interface EmailQueueItem {
   id: string;
@@ -15,8 +28,8 @@ interface EmailQueueItem {
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const sendEmailUrl = Deno.env.get("SEND_EMAIL_URL") ||
-  `${supabaseUrl}/functions/v1/send-email`;
+const sendEmailUrl =
+  Deno.env.get("SEND_EMAIL_URL") || `${supabaseUrl}/functions/v1/send-email`;
 
 serve(async (req: Request) => {
   // Only accept POST requests
@@ -27,7 +40,7 @@ serve(async (req: Request) => {
   // Validate CRON_SECRET to prevent unauthorized access
   const cronSecret = Deno.env.get("CRON_SECRET");
   const authHeader = req.headers.get("X-Cron-Secret");
-  
+
   if (!cronSecret || !timingSafeEqual(cronSecret, authHeader)) {
     return new Response("Unauthorized", { status: 401 });
   }
@@ -40,7 +53,7 @@ serve(async (req: Request) => {
     console.log("Cleaning up stale locks...");
     const { data: cleanupResult, error: cleanupError } = await supabase.rpc(
       "cleanup_stale_locks",
-      { p_lock_timeout_minutes: 10 }
+      { p_lock_timeout_minutes: 10 },
     );
 
     if (cleanupError) {
@@ -108,14 +121,14 @@ serve(async (req: Request) => {
           queueItemId: item.id,
           success: false,
           error: String(error),
-        }))
+        })),
     );
 
     const results = await Promise.allSettled(sendPromises);
-    
+
     let successCount = 0;
     let failureCount = 0;
-    
+
     for (const result of results) {
       if (result.status === "fulfilled") {
         if (result.value.success) {
@@ -124,7 +137,7 @@ serve(async (req: Request) => {
           failureCount++;
           console.error(
             `Email send failed for queue item ${result.value.queueItemId}:`,
-            result.value.error
+            result.value.error,
           );
         }
       } else {

@@ -9,14 +9,14 @@ struct VaultEntryEditorView: View {
     let entry: VaultEntry?
 
     @State private var title: String = ""
-    @State private var body: String = ""
+    @State private var entryBody: String = ""
     @State private var isSaving: Bool = false
     @State private var showDeleteConfirmation: Bool = false
     @FocusState private var focusedField: Field?
 
     private enum Field {
         case title
-        case body
+        case entryBody
     }
 
     /// Whether this is editing an existing entry
@@ -26,24 +26,24 @@ struct VaultEntryEditorView: View {
 
     /// Whether the save button should be enabled
     private var canSave: Bool {
-        !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSaving
+        !entryBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSaving
     }
 
     /// Whether any changes have been made
     private var hasChanges: Bool {
         if let entry = entry {
             let newTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-            let newBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+            let newBody = entryBody.trimmingCharacters(in: .whitespacesAndNewlines)
             return (entry.title ?? "") != newTitle || entry.body != newBody
         }
-        return !title.isEmpty || !body.isEmpty
+        return !title.isEmpty || !entryBody.isEmpty
     }
 
     init(entry: VaultEntry? = nil) {
         self.entry = entry
         if let entry = entry {
             _title = State(initialValue: entry.title ?? "")
-            _body = State(initialValue: entry.body)
+            _entryBody = State(initialValue: entry.body)
         }
     }
 
@@ -58,9 +58,9 @@ struct VaultEntryEditorView: View {
                 }
 
                 Section {
-                    TextEditor(text: $body)
+                    TextEditor(text: $entryBody)
                         .frame(minHeight: 200)
-                        .focused($focusedField, equals: .body)
+                        .focused($focusedField, equals: .entryBody)
                         .accessibilityLabel("Entry content")
                         .accessibilityHint("Write your private journal entry here")
                 } header: {
@@ -107,7 +107,7 @@ struct VaultEntryEditorView: View {
             .onAppear {
                 // Focus on body field for new entries, title for editing
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    focusedField = isEditing ? .title : .body
+                    focusedField = isEditing ? .title : .entryBody
                 }
             }
             .alert("Delete Entry?", isPresented: $showDeleteConfirmation) {
@@ -131,9 +131,9 @@ struct VaultEntryEditorView: View {
 
         let success: Bool
         if let entry = entry {
-            success = await viewModel.updateEntry(entry, title: title, body: body)
+            success = await viewModel.updateEntry(entry, title: title, body: entryBody)
         } else {
-            success = await viewModel.createEntry(title: title, body: body)
+            success = await viewModel.createEntry(title: title, body: entryBody)
         }
 
         if success {

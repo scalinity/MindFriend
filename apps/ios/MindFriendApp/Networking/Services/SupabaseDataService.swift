@@ -27,6 +27,52 @@ enum APIError: LocalizedError {
     }
 }
 
+// MARK: - Data Service Errors
+
+enum DataError: LocalizedError {
+    case notAuthenticated
+    case invalidId
+    case circleNotFound
+    case circleFull
+    case operationFailed(String)
+    case custom(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .notAuthenticated:
+            return "Not authenticated"
+        case .invalidId:
+            return "Invalid ID"
+        case .circleNotFound:
+            return "Circle not found"
+        case .circleFull:
+            return "Circle is full"
+        case .operationFailed(let message):
+            return message
+        case .custom(let message):
+            return message
+        }
+    }
+}
+
+// MARK: - Chat Response Types
+
+struct ChatResponse: Codable {
+    let message: Message
+    let isCrisisResponse: Bool
+    let quotaUsed: Int?
+    let quotaLimit: Int?
+    let conversationTitle: String?
+}
+
+struct ChatFunctionResponse: Codable {
+    let message: Message
+    let isCrisisResponse: Bool?
+    let quotaUsed: Int?
+    let quotaLimit: Int?
+    let conversationTitle: String?
+}
+
 // MARK: - Private DB Types for Credibility
 
 private struct DBMethodologyInfo: Codable {
@@ -55,6 +101,11 @@ final class SupabaseDataService: ObservableObject {
             }
             return id
         }
+    }
+
+    /// Current user ID (nil if not authenticated)
+    var currentUserId: UUID? {
+        authService.userId
     }
 
     // MARK: - Moods
@@ -220,7 +271,7 @@ final class SupabaseDataService: ObservableObject {
     // MARK: - Quests
 
     func getTodayQuest() async throws -> Quest? {
-        let today = ISO8601DateFormatter.dateOnly.string(from: Date())
+        let today = DateFormatter.dateOnly.string(from: Date())
 
         // Use the assign_daily_quest RPC which is idempotent - returns existing or creates new
         // The RPC returns the quest row directly
@@ -247,7 +298,7 @@ final class SupabaseDataService: ObservableObject {
         }
 
         let results: [AssignQuestResult] = try await supabase
-            .rpc("assign_daily_quest", params: ["p_local_date": today])
+            .rpc("assign_daily_quest", params: ["p_local_date": AnyEncodable(today)])
             .execute()
             .value
 
@@ -308,7 +359,7 @@ final class SupabaseDataService: ObservableObject {
     /// Get today's quest alternatives, generating them if needed
     /// Returns primary quest, quick variant, and alternative quest options
     func getTodayQuestAlternatives() async throws -> QuestAlternatives {
-        let today = ISO8601DateFormatter.dateOnly.string(from: Date())
+        let today = DateFormatter.dateOnly.string(from: Date())
         let currentUserId = try userId
 
         // First, try to generate/get alternatives via RPC
@@ -932,7 +983,7 @@ final class SupabaseDataService: ObservableObject {
 
         return ChatResponse(
             message: Message(
-                id: chatResponse.message.id ?? UUID().uuidString,
+                id: chatResponse.message.id?.uuidString ?? UUID().uuidString,
                 role: .assistant,
                 content: chatResponse.message.content,
                 createdAt: ISO8601DateFormatter().date(from: chatResponse.message.createdAt ?? "") ?? Date(),
@@ -1204,7 +1255,7 @@ final class SupabaseDataService: ObservableObject {
                 kind: .checkin,
                 moodEmoji: checkin.moodEmoji,
                 bodyText: checkin.bodyText,
-                localDate: ISO8601DateFormatter.dateOnly.string(from: checkin.createdAt ?? Date()),
+                localDate: DateFormatter.dateOnly.string(from: checkin.createdAt ?? Date()),
                 createdAt: checkin.createdAt ?? Date()
             )
         }
@@ -1217,7 +1268,7 @@ final class SupabaseDataService: ObservableObject {
 
         let currentUserId = try userId
 
-        let todayDate = ISO8601DateFormatter.dateOnly.string(from: Date())
+        let todayDate = DateFormatter.dateOnly.string(from: Date())
 
         let checkin = DBCircleCheckin(
             id: nil,
@@ -1268,7 +1319,7 @@ final class SupabaseDataService: ObservableObject {
             kind: .checkin,
             moodEmoji: moodEmoji,
             bodyText: bodyText,
-            localDate: ISO8601DateFormatter.dateOnly.string(from: Date()),
+            localDate: DateFormatter.dateOnly.string(from: Date()),
             createdAt: result.createdAt ?? Date()
         )
     }
@@ -1758,7 +1809,7 @@ final class SupabaseDataService: ObservableObject {
             acceptedAt: result.acceptedAt,
             reminderSentAt: result.reminderSentAt,
             inviterName: nil,
-            circleName: circle.name
+            circleName: nil
         )
     }
 
@@ -1970,6 +2021,334 @@ final class SupabaseDataService: ObservableObject {
         return relationships.map { $0.toBuddyRelationship() }
     }
 
+    // MARK: - Partner Mode (Couples)
+
+    /// Get active partner link for current user
+    func getActivePartnerLink() async throws -> PartnerLink? {
+        let currentUserId = try userId
+
+        let links: [PartnerLink] = try await supabase
+            .from("partner_links")
+            .select()
+            .or("user_id_1.eq.\(currentUserId),user_id_2.eq.\(currentUserId)")
+            .eq("status", value: "active")
+            .limit(1)
+            .execute()
+            .value
+
+        return links.first
+    }
+
+    /// Get or create an invite code (returns existing unexpired code if available)
+    func getOrCreatePartnerInviteCode() async throws -> (code: String, expiresAt: Date) {
+        let currentUserId = try userId
+
+        // Check for existing pending invite
+        let existing: [DBBuddyRelationship] = try await supabase
+            .from("buddy_relationships")
+            .select()
+            .eq("inviter_id", value: currentUserId)
+            .eq("status", value: "pending")
+            .gt("expires_at", value: Date().ISO8601Format())
+            .order("invited_at", ascending: false)
+            .limit(1)
+            .execute()
+            .value
+
+        if let existingInvite = existing.first,
+           let expiresAt = existingInvite.expiresAt {
+            return (existingInvite.inviteCode, expiresAt)
+        }
+
+        // Generate new code via RPC
+        let codeResults: [String] = try await supabase
+            .rpc("generate_buddy_code")
+            .execute()
+            .value
+
+        guard let code = codeResults.first else {
+            throw DataError.custom("Failed to generate invite code")
+        }
+
+        // Create buddy relationship row
+        let expiresAt = Date().addingTimeInterval(30 * 24 * 60 * 60) // 30 days
+        let insertData: [String: AnyEncodable] = [
+            "inviter_id": AnyEncodable(currentUserId),
+            "invite_code": AnyEncodable(code),
+            "invite_method": AnyEncodable("link"),
+            "status": AnyEncodable("pending"),
+            "expires_at": AnyEncodable(expiresAt)
+        ]
+
+        try await supabase
+            .from("buddy_relationships")
+            .insert(insertData)
+            .execute()
+
+        Analytics.shared.track(.buddyInviteSent, properties: [
+            "method": "link",
+            "source": "partner_mode"
+        ])
+
+        return (code, expiresAt)
+    }
+
+    /// Update current user's sharing settings
+    func updatePartnerSharingSettings(shareMood: Bool, shareExercises: Bool) async throws {
+        guard let link = try await getActivePartnerLink() else {
+            throw CouplesModeError.notPartnered
+        }
+
+        let currentUserId = try userId
+        let isUser1 = link.userId1 == currentUserId
+
+        let updateData: [String: AnyEncodable] = isUser1
+            ? ["user_1_share_mood": AnyEncodable(shareMood),
+               "user_1_share_exercises": AnyEncodable(shareExercises),
+               "updated_at": AnyEncodable(Date())]
+            : ["user_2_share_mood": AnyEncodable(shareMood),
+               "user_2_share_exercises": AnyEncodable(shareExercises),
+               "updated_at": AnyEncodable(Date())]
+
+        try await supabase
+            .from("partner_links")
+            .update(updateData)
+            .eq("id", value: link.id)
+            .execute()
+    }
+
+    /// End current partnership
+    func endPartnership() async throws {
+        guard let link = try await getActivePartnerLink() else {
+            throw CouplesModeError.notPartnered
+        }
+
+        try await supabase
+            .from("partner_links")
+            .update([
+                "status": AnyEncodable("ended"),
+                "ended_at": AnyEncodable(Date())
+            ])
+            .eq("id", value: link.id)
+            .execute()
+    }
+
+    /// Get partner's mood history (respects sharing settings)
+    func getPartnerMoodHistory(partnerId: UUID) async throws -> [MoodEntry] {
+        guard let link = try await getActivePartnerLink() else {
+            throw CouplesModeError.notPartnered
+        }
+
+        let currentUserId = try userId
+        let partnerSettings = link.partnerSharingSettings(for: currentUserId)
+
+        guard partnerSettings.shareMood else {
+            throw CouplesModeError.partnerNotSharing
+        }
+
+        // Get moods from past 7 days
+        let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date())!
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+
+        let startDate = dateFormatter.string(from: sevenDaysAgo)
+
+        let moods: [DBMood] = try await supabase
+            .from("moods")
+            .select()
+            .eq("user_id", value: partnerId)
+            .gte("local_date", value: startDate)
+            .order("local_date", ascending: false)
+            .limit(7)
+            .execute()
+            .value
+
+        return moods.map { $0.toMoodEntry() }
+    }
+
+    /// Get partner's today's quest status (respects sharing settings)
+    func getPartnerQuestStatus(partnerId: UUID) async throws -> Quest? {
+        guard let link = try await getActivePartnerLink() else {
+            throw CouplesModeError.notPartnered
+        }
+
+        let currentUserId = try userId
+        let partnerSettings = link.partnerSharingSettings(for: currentUserId)
+
+        guard partnerSettings.shareExercises else {
+            throw CouplesModeError.partnerNotSharing
+        }
+
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let today = dateFormatter.string(from: Date())
+
+        let quests: [DBQuest] = try await supabase
+            .from("quests")
+            .select()
+            .eq("user_id", value: partnerId)
+            .eq("local_date", value: today)
+            .limit(1)
+            .execute()
+            .value
+
+        return quests.first?.toQuest()
+    }
+
+    /// Get partner info for dashboard
+    func getPartnerInfo() async throws -> PartnerInfo? {
+        guard let link = try await getActivePartnerLink() else {
+            return nil
+        }
+
+        let currentUserId = try userId
+        guard let partnerId = link.partnerId(for: currentUserId) else {
+            return nil
+        }
+
+        // Get partner profile
+        let profiles: [DBProfile] = try await supabase
+            .from("profiles")
+            .select()
+            .eq("id", value: partnerId)
+            .limit(1)
+            .execute()
+            .value
+
+        guard let partnerProfile = profiles.first else {
+            return nil
+        }
+
+        // Check if partner completed quest today
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let today = dateFormatter.string(from: Date())
+
+        let todayQuests: [DBQuest] = try await supabase
+            .from("quests")
+            .select()
+            .eq("user_id", value: partnerId)
+            .eq("local_date", value: today)
+            .eq("status", value: "completed")
+            .limit(1)
+            .execute()
+            .value
+
+        let hasCompletedToday = !todayQuests.isEmpty
+
+        // Get partner's sharing settings (what they share with us)
+        let partnerSettings = link.partnerSharingSettings(for: currentUserId)
+
+        return PartnerInfo(
+            partnerId: partnerId,
+            partnerName: partnerProfile.displayName ?? "Partner",
+            partnerStreak: partnerProfile.currentStreakDays ?? 0,
+            hasCompletedToday: hasCompletedToday,
+            lastActive: partnerProfile.lastActiveAt ?? partnerProfile.createdAt,
+            isSharingMood: partnerSettings.shareMood,
+            isSharingExercises: partnerSettings.shareExercises
+        )
+    }
+
+    /// Get list of couples exercises
+    func getCouplesExercises() async throws -> [CouplesExercise] {
+        let exercises: [CouplesExercise] = try await supabase
+            .from("couples_exercises")
+            .select()
+            .order("type")
+            .order("name")
+            .execute()
+            .value
+
+        return exercises
+    }
+
+    /// Start a couples exercise session
+    func startCouplesSession(exerciseId: UUID) async throws -> CouplesExerciseSession {
+        guard let link = try await getActivePartnerLink() else {
+            throw CouplesModeError.notPartnered
+        }
+
+        let currentUserId = try userId
+        guard let partnerId = link.partnerId(for: currentUserId) else {
+            throw CouplesModeError.notPartnered
+        }
+
+        // Check if exercise requires premium
+        let exercises: [CouplesExercise] = try await supabase
+            .from("couples_exercises")
+            .select()
+            .eq("id", value: exerciseId)
+            .execute()
+            .value
+
+        guard let exercise = exercises.first else {
+            throw CouplesModeError.notFound
+        }
+
+        if exercise.requiresPremium {
+            // TODO: Check if either user has premium entitlement
+            throw CouplesModeError.exercisePremiumOnly
+        }
+
+        let isUser1 = link.userId1 == currentUserId
+
+        let insertData: [String: AnyEncodable] = [
+            "partner_link_id": AnyEncodable(link.id),
+            "exercise_id": AnyEncodable(exerciseId),
+            "user_id_1": AnyEncodable(isUser1 ? currentUserId : partnerId),
+            "user_id_2": AnyEncodable(isUser1 ? partnerId : currentUserId),
+            "status": AnyEncodable("pending"),
+            "user_1_progress_percent": AnyEncodable(0),
+            "user_2_progress_percent": AnyEncodable(0),
+            "started_at": AnyEncodable(Date()),
+            "last_activity_at": AnyEncodable(Date())
+        ]
+
+        let session: CouplesExerciseSession = try await supabase
+            .from("couples_exercise_sessions")
+            .insert(insertData)
+            .select()
+            .single()
+            .execute()
+            .value
+
+        // Send notification to partner
+        do {
+            try await supabase.functions.invoke("send-notification", options: .init(body: [
+                "type": AnyEncodable("couples_exercise_invite"),
+                "recipientId": AnyEncodable(partnerId.uuidString),
+                "data": AnyEncodable(["sessionId": session.id.uuidString, "exerciseName": exercise.name])
+            ]))
+        } catch {
+            Log.data.warning("[Data] Failed to send exercise invite notification: \(error)")
+        }
+
+        return session
+    }
+
+    /// Send encouragement to partner with rate limiting
+    func sendPartnerEncouragement(type: BuddyEncouragement.MessageType) async throws {
+        // Check local rate limit (1 per hour)
+        let buddyData = try await getBuddyWidgetData()
+        guard let data = buddyData else {
+            throw CouplesModeError.notPartnered
+        }
+
+        let lastSendKey = "lastEncouragement_\(data.relationshipId)"
+        if let lastSend = UserDefaults.standard.object(forKey: lastSendKey) as? Date,
+           Date().timeIntervalSince(lastSend) < 3600 {
+            let remaining = Int(3600 - Date().timeIntervalSince(lastSend))
+            throw CouplesModeError.rateLimited(retryAfterSeconds: remaining)
+        }
+
+        // Send via existing method
+        try await sendEncouragement(to: data.buddyId, relationshipId: data.relationshipId, type: type)
+
+        // Update rate limit cache
+        UserDefaults.standard.set(Date(), forKey: lastSendKey)
+    }
+
     // MARK: - Crisis Resources
 
     func getCrisisResources(country: String? = nil) async throws -> [CrisisResource] {
@@ -2162,6 +2541,9 @@ final class SupabaseDataService: ObservableObject {
         ])
     }
 
+    // MARK: - Notification Engagement (Smart Notifications) - DISABLED
+    // TODO: Re-enable when SmartNotification feature types are complete
+
     /// Update typical active hour based on app open time (rolling average)
     func updateTypicalActiveHour() async throws {
         let currentHour = Calendar.current.component(.hour, from: Date())
@@ -2186,7 +2568,7 @@ final class SupabaseDataService: ObservableObject {
         guard let weekStart = calendar.date(byAdding: .day, value: -daysFromMonday, to: now) else {
             return nil
         }
-        let weekStartStr = ISO8601DateFormatter.dateOnly.string(from: weekStart)
+        let weekStartStr = DateFormatter.dateOnly.string(from: weekStart)
 
         let summaries: [DBWeeklySummary] = try await supabase
             .from("weekly_summaries")
@@ -2348,7 +2730,7 @@ final class SupabaseDataService: ObservableObject {
             .execute()
             .value
 
-        // EXE-010: Fetch crisis events (keyword + timestamp only, no actual content for privacy)
+        // EXE-010: Fetch crisis events (keyword + timestamp only for privacy)
         let crisisEvents: [DBCrisisEventForExport] = try await supabase
             .from(Tables.crisisEvents)
             .select("id, user_id, trigger_content, detected_at")
@@ -2997,12 +3379,14 @@ final class SupabaseDataService: ObservableObject {
 
     /// Acknowledge a pattern (mark as seen by user)
     func acknowledgePattern(patternId: String) async throws {
-        let currentUserId = try userId
+        guard let patternUUID = UUID(uuidString: patternId) else {
+            throw DataError.invalidId
+        }
 
         try await supabase
             .rpc("acknowledge_pattern", params: [
-                "p_user_id": currentUserId.uuidString,
-                "p_pattern_id": patternId
+                "p_user_id": AnyEncodable(try userId),
+                "p_pattern_id": AnyEncodable(patternUUID)
             ])
             .execute()
     }
@@ -3031,11 +3415,13 @@ final class SupabaseDataService: ObservableObject {
 
     /// Record engagement with a proactive message
     func recordProactiveEngagement(messageId: String, engaged: Bool) async throws {
-        let currentUserId = try userId
+        guard let messageUUID = UUID(uuidString: messageId) else {
+            throw DataError.invalidId
+        }
 
         let params: [String: AnyEncodable] = [
-            "p_user_id": AnyEncodable(currentUserId.uuidString),
-            "p_message_id": AnyEncodable(messageId),
+            "p_user_id": AnyEncodable(try userId),
+            "p_message_id": AnyEncodable(messageUUID),
             "p_engaged": AnyEncodable(engaged)
         ]
 
@@ -3251,1024 +3637,6 @@ final class SupabaseDataService: ObservableObject {
             .execute()
             .value
     }
-}
-
-// MARK: - Supporting Types
-
-struct DBExerciseSession: Codable {
-    let id: UUID?
-    let userId: UUID
-    let exerciseId: UUID
-    let startedAt: Date?
-    let completedAt: Date?
-    let rating: Int?
-    let note: String?
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case userId = "user_id"
-        case exerciseId = "exercise_id"
-        case startedAt = "started_at"
-        case completedAt = "completed_at"
-        case rating, note
-    }
-}
-
-struct DBDevice: Codable {
-    let id: UUID?
-    let userId: UUID
-    let token: String
-    let platform: String
-    let createdAt: Date?
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case userId = "user_id"
-        case token
-        case platform
-        case createdAt = "created_at"
-    }
-}
-
-struct DBUserQuestWithTemplate: Codable {
-    let id: UUID
-    let userId: UUID
-    let questTemplateId: UUID
-    let assignedDate: String
-    let status: String
-    let reflectionNote: String?
-    let rating: Int?
-    let completedAt: Date?
-    let questTemplates: DBQuestTemplate
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case userId = "user_id"
-        case questTemplateId = "quest_template_id"
-        case assignedDate = "assigned_date"
-        case status
-        case reflectionNote = "reflection_note"
-        case rating
-        case completedAt = "completed_at"
-        case questTemplates = "quest_templates"
-    }
-
-    func toQuest() -> Quest {
-        Quest(
-            id: id.uuidString,
-            localDate: assignedDate,
-            status: QuestStatus(rawValue: status) ?? .assigned,
-            assignedAt: Date(),
-            completedAt: completedAt,
-            template: QuestTemplate(
-                id: questTemplates.id.uuidString,
-                type: QuestType(rawValue: questTemplates.category) ?? .focus,
-                title: questTemplates.title,
-                description: questTemplates.description,
-                estimatedMinutes: questTemplates.estimatedMinutes,
-                difficulty: "medium",
-                tags: [],
-                instructions: questTemplates.defaultInstructions()
-            )
-        )
-    }
-}
-
-struct DBCircleWithMembers: Codable {
-    let id: UUID
-    let name: String
-    let description: String?
-    let inviteCode: String
-    let ownerId: UUID
-    let createdAt: Date
-    let circleMembers: [DBCircleMemberWithProfile]
-
-    enum CodingKeys: String, CodingKey {
-        case id, name, description
-        case inviteCode = "invite_code"
-        case ownerId = "owner_id"
-        case createdAt = "created_at"
-        case circleMembers = "circle_members"
-    }
-
-    func toCircle(currentUserId: UUID?) -> FriendCircle {
-        FriendCircle(
-            id: id.uuidString,
-            name: name,
-            description: description,
-            inviteCode: inviteCode,
-            maxMembers: 10,
-            memberCount: circleMembers.count,
-            role: currentUserId == ownerId ? .owner : .member,
-            joinedAt: createdAt
-        )
-    }
-}
-
-struct DBCircleMemberWithProfile: Codable {
-    let userId: UUID
-    let profiles: DBMemberProfile?
-
-    enum CodingKeys: String, CodingKey {
-        case userId = "user_id"
-        case profiles
-    }
-
-    func toMember() -> CircleMember? {
-        guard let profile = profiles else { return nil }
-        return CircleMember(
-            id: userId.uuidString,
-            userId: userId.uuidString,
-            displayName: profile.displayName ?? "User",
-            role: .member,
-            joinedAt: Date(),
-            premiumBadge: profile.premiumBadge
-        )
-    }
-}
-
-// MARK: - Circle Virality DB Models
-// Note: DBMemberProfile is defined in SupabaseClient.swift
-
-struct DBCircleHug: Codable {
-    let id: UUID?
-    let senderId: UUID
-    let recipientId: UUID
-    let circleId: UUID
-    let createdAt: Date?
-    let sender: DBMemberProfile?
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case senderId = "sender_id"
-        case recipientId = "recipient_id"
-        case circleId = "circle_id"
-        case createdAt = "created_at"
-        case sender
-    }
-}
-
-struct DBCircleChallenge: Codable {
-    let id: UUID?
-    let circleId: UUID
-    let createdBy: UUID
-    let challengeType: String
-    let title: String
-    let description: String?
-    let targetExerciseId: UUID?
-    let startsAt: Date?
-    let endsAt: Date
-    let createdAt: Date?
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case circleId = "circle_id"
-        case createdBy = "created_by"
-        case challengeType = "challenge_type"
-        case title, description
-        case targetExerciseId = "target_exercise_id"
-        case startsAt = "starts_at"
-        case endsAt = "ends_at"
-        case createdAt = "created_at"
-    }
-}
-
-struct DBCircleChallengeWithCompletions: Codable {
-    let id: UUID?
-    let circleId: UUID
-    let createdBy: UUID
-    let challengeType: String
-    let title: String
-    let description: String?
-    let targetExerciseId: UUID?
-    let startsAt: Date?
-    let endsAt: Date
-    let createdAt: Date?
-    let completions: [DBChallengeCompletion]?
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case circleId = "circle_id"
-        case createdBy = "created_by"
-        case challengeType = "challenge_type"
-        case title, description
-        case targetExerciseId = "target_exercise_id"
-        case startsAt = "starts_at"
-        case endsAt = "ends_at"
-        case createdAt = "created_at"
-        case completions
-    }
-}
-
-struct DBChallengeCompletion: Codable {
-    let id: UUID?
-    let challengeId: UUID
-    let userId: UUID
-    let completedAt: Date?
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case challengeId = "challenge_id"
-        case userId = "user_id"
-        case completedAt = "completed_at"
-    }
-}
-
-struct DBCircleReaction: Codable {
-    let id: UUID?
-    let postId: UUID
-    let userId: UUID
-    let emoji: String
-    let createdAt: Date?
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case postId = "post_id"
-        case userId = "user_id"
-        case emoji
-        case createdAt = "created_at"
-    }
-}
-
-struct DBCircleInvite: Codable {
-    let id: UUID?
-    let circleId: UUID
-    let inviterId: UUID
-    let inviteeEmail: String?
-    let inviteePhone: String?
-    let inviteCode: String
-    let sentAt: Date?
-    let acceptedAt: Date?
-    let reminderSentAt: Date?
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case circleId = "circle_id"
-        case inviterId = "inviter_id"
-        case inviteeEmail = "invitee_email"
-        case inviteePhone = "invitee_phone"
-        case inviteCode = "invite_code"
-        case sentAt = "sent_at"
-        case acceptedAt = "accepted_at"
-        case reminderSentAt = "reminder_sent_at"
-    }
-}
-
-// MARK: - Buddy System DB Models
-
-struct DBBuddyRelationship: Codable {
-    let id: UUID?
-    let inviterId: UUID
-    let inviteeId: UUID?
-    let inviteCode: String
-    let inviteMethod: String?
-    let inviteeContact: String?
-    let status: String
-    let invitedAt: Date?
-    let acceptedAt: Date?
-    let buddyCircleId: UUID?
-    let expiresAt: Date?
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case inviterId = "inviter_id"
-        case inviteeId = "invitee_id"
-        case inviteCode = "invite_code"
-        case inviteMethod = "invite_method"
-        case inviteeContact = "invitee_contact"
-        case status
-        case invitedAt = "invited_at"
-        case acceptedAt = "accepted_at"
-        case buddyCircleId = "buddy_circle_id"
-        case expiresAt = "expires_at"
-    }
-
-    func toBuddyRelationship() -> BuddyRelationship {
-        BuddyRelationship(
-            id: id?.uuidString ?? UUID().uuidString,
-            inviterId: inviterId.uuidString,
-            inviteeId: inviteeId?.uuidString,
-            inviteCode: inviteCode,
-            inviteMethod: inviteMethod.flatMap { BuddyRelationship.InviteMethod(rawValue: $0) },
-            inviteeContact: inviteeContact,
-            status: BuddyRelationship.BuddyStatus(rawValue: status) ?? .pending,
-            invitedAt: invitedAt ?? Date(),
-            acceptedAt: acceptedAt,
-            buddyCircleId: buddyCircleId?.uuidString,
-            expiresAt: expiresAt ?? Date().addingTimeInterval(30 * 24 * 60 * 60),
-            inviter: nil,
-            invitee: nil
-        )
-    }
-}
-
-struct DBBuddyProfile: Codable {
-    let id: UUID
-    let displayName: String?
-    let currentStreakDays: Int?
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case displayName = "display_name"
-        case currentStreakDays = "current_streak_days"
-    }
-
-    func toBuddyProfile() -> BuddyProfile {
-        BuddyProfile(
-            id: id.uuidString,
-            displayName: displayName ?? "User",
-            currentStreakDays: currentStreakDays
-        )
-    }
-}
-
-struct DBBuddyRelationshipWithProfiles: Codable {
-    let id: UUID?
-    let inviterId: UUID
-    let inviteeId: UUID?
-    let inviteCode: String
-    let inviteMethod: String?
-    let inviteeContact: String?
-    let status: String
-    let invitedAt: Date?
-    let acceptedAt: Date?
-    let buddyCircleId: UUID?
-    let expiresAt: Date?
-    let inviter: DBBuddyProfile?
-    let invitee: DBBuddyProfile?
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case inviterId = "inviter_id"
-        case inviteeId = "invitee_id"
-        case inviteCode = "invite_code"
-        case inviteMethod = "invite_method"
-        case inviteeContact = "invitee_contact"
-        case status
-        case invitedAt = "invited_at"
-        case acceptedAt = "accepted_at"
-        case buddyCircleId = "buddy_circle_id"
-        case expiresAt = "expires_at"
-        case inviter
-        case invitee
-    }
-
-    func toBuddyRelationship() -> BuddyRelationship {
-        BuddyRelationship(
-            id: id?.uuidString ?? UUID().uuidString,
-            inviterId: inviterId.uuidString,
-            inviteeId: inviteeId?.uuidString,
-            inviteCode: inviteCode,
-            inviteMethod: inviteMethod.flatMap { BuddyRelationship.InviteMethod(rawValue: $0) },
-            inviteeContact: inviteeContact,
-            status: BuddyRelationship.BuddyStatus(rawValue: status) ?? .pending,
-            invitedAt: invitedAt ?? Date(),
-            acceptedAt: acceptedAt,
-            buddyCircleId: buddyCircleId?.uuidString,
-            expiresAt: expiresAt ?? Date().addingTimeInterval(30 * 24 * 60 * 60),
-            inviter: inviter?.toBuddyProfile(),
-            invitee: invitee?.toBuddyProfile()
-        )
-    }
-}
-
-struct DBBuddyWidgetData: Codable {
-    let buddyName: String?
-    let buddyStreak: Int?
-    let buddyId: UUID?
-    let relationshipId: UUID?
-    let hasCompletedToday: Bool?
-    let needsCheckIn: Bool?
-    let lastEncouragementId: UUID?
-    let lastEncouragementType: String?
-    let lastEncouragementAt: Date?
-
-    enum CodingKeys: String, CodingKey {
-        case buddyName = "buddy_name"
-        case buddyStreak = "buddy_streak"
-        case buddyId = "buddy_id"
-        case relationshipId = "relationship_id"
-        case hasCompletedToday = "has_completed_today"
-        case needsCheckIn = "needs_check_in"
-        case lastEncouragementId = "last_encouragement_id"
-        case lastEncouragementType = "last_encouragement_type"
-        case lastEncouragementAt = "last_encouragement_at"
-    }
-}
-
-// MARK: - Weekly Summary / Insights DB Model
-
-struct DBWeeklySummary: Codable {
-    let id: UUID
-    let userId: UUID
-    let weekStart: String
-    let checkinCount: Int
-    let questCount: Int
-    let exerciseCount: Int
-    let avgMood: Double?
-    let moodTrend: String?
-    let generatedAt: Date?
-
-    // Extended insights fields
-    let moodMin: Int?
-    let moodMax: Int?
-    let moodByDay: [String: Double]?
-    let circleCheckinCount: Int?
-    let exerciseMinutes: Int?
-    let patternsDetected: [DBDetectedPattern]?
-    let aiInsight: String?
-    let aiRecommendations: [DBInsightRecommendation]?
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case userId = "user_id"
-        case weekStart = "week_start"
-        case checkinCount = "checkin_count"
-        case questCount = "quest_count"
-        case exerciseCount = "exercise_count"
-        case avgMood = "avg_mood"
-        case moodTrend = "mood_trend"
-        case generatedAt = "generated_at"
-        case moodMin = "mood_min"
-        case moodMax = "mood_max"
-        case moodByDay = "mood_by_day"
-        case circleCheckinCount = "circle_checkin_count"
-        case exerciseMinutes = "exercise_minutes"
-        case patternsDetected = "patterns_detected"
-        case aiInsight = "ai_insight"
-        case aiRecommendations = "ai_recommendations"
-    }
-
-    func toWeeklySummary() -> WeeklySummary {
-        WeeklySummary(
-            id: id.uuidString,
-            userId: userId.uuidString,
-            weekStart: weekStart,
-            checkinCount: checkinCount,
-            questCount: questCount,
-            exerciseCount: exerciseCount,
-            avgMood: avgMood,
-            moodTrend: moodTrend.flatMap { MoodTrend(rawValue: $0) },
-            generatedAt: generatedAt ?? Date(),
-            moodMin: moodMin,
-            moodMax: moodMax,
-            moodByDay: moodByDay,
-            circleCheckinCount: circleCheckinCount,
-            exerciseMinutes: exerciseMinutes,
-            patternsDetected: patternsDetected?.map { $0.toDetectedPattern() },
-            aiInsight: aiInsight,
-            aiRecommendations: aiRecommendations?.map { $0.toInsightRecommendation() }
-        )
-    }
-}
-
-struct DBDetectedPattern: Codable {
-    let type: String
-    let description: String
-    let confidence: Double
-
-    func toDetectedPattern() -> DetectedPattern {
-        DetectedPattern(type: type, description: description, confidence: confidence)
-    }
-}
-
-struct DBInsightRecommendation: Codable {
-    let title: String
-    let reason: String
-
-    func toInsightRecommendation() -> InsightRecommendation {
-        InsightRecommendation(title: title, reason: reason)
-    }
-}
-
-// MARK: - Chat Edge Function Response Types
-
-struct ChatFunctionResponse: Codable {
-    let message: ChatFunctionMessage
-    let isCrisisResponse: Bool?
-    let quotaUsed: Int?
-    let quotaLimit: Int?
-    let conversationTitle: String?
-    let userMessageId: String?  // Server-provided ID for consistency
-}
-
-struct ChatFunctionMessage: Codable {
-    let id: String?
-    let role: String
-    let content: String
-    let createdAt: String?
-    let blocked: Bool?
-}
-
-/// Response from sendMessage containing the AI response and quota info
-struct ChatResponse {
-    let message: Message
-    let isCrisisResponse: Bool
-    let quotaUsed: Int?
-    let quotaLimit: Int?
-    let conversationTitle: String?
-    let userMessageId: String?  // Server-provided ID for the user message
-
-    var isQuotaExceeded: Bool {
-        guard let used = quotaUsed, let limit = quotaLimit, limit > 0 else { return false }
-        return used >= limit
-    }
-}
-
-// MARK: - Export DB Models
-
-/// Circle membership with nested circle info for data export
-struct DBCircleMembership: Codable {
-    let id: UUID?
-    let circleId: UUID
-    let userId: UUID
-    let role: String?
-    let joinedAt: Date?
-    let circles: DBCircleForExport?
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case circleId = "circle_id"
-        case userId = "user_id"
-        case role
-        case joinedAt = "joined_at"
-        case circles
-    }
-}
-
-/// Simplified circle for export (matches Supabase select * on circles)
-struct DBCircleForExport: Codable {
-    let id: UUID?
-    let name: String
-    let description: String?
-
-    enum CodingKeys: String, CodingKey {
-        case id, name, description
-    }
-}
-
-/// Exercise session with nested exercise info for data export
-struct DBExerciseSessionForExport: Codable {
-    let id: UUID?
-    let userId: UUID
-    let exerciseId: UUID
-    let startedAt: Date?
-    let completedAt: Date?
-    let rating: Int?
-    let note: String?
-    let exercises: DBExerciseForExport?
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case userId = "user_id"
-        case exerciseId = "exercise_id"
-        case startedAt = "started_at"
-        case completedAt = "completed_at"
-        case rating, note
-        case exercises
-    }
-}
-
-/// Simplified exercise for export
-struct DBExerciseForExport: Codable {
-    let id: UUID?
-    let title: String
-    let type: String
-    let durationSeconds: Int
-
-    enum CodingKeys: String, CodingKey {
-        case id, title, type
-        case durationSeconds = "duration_seconds"
-    }
-}
-
-/// EXE-010: Subscription data for comprehensive export
-struct DBSubscriptionForExport: Codable {
-    let id: UUID?
-    let userId: UUID
-    let productId: String?
-    let planType: String?
-    let billingPeriod: String?
-    let status: String?
-    let expiresAt: Date?
-    let createdAt: Date?
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case userId = "user_id"
-        case productId = "product_id"
-        case planType = "plan_type"
-        case billingPeriod = "billing_period"
-        case status
-        case expiresAt = "expires_at"
-        case createdAt = "created_at"
-    }
-}
-
-/// EXE-010: Crisis event for export (keyword + timestamp only, no content for privacy)
-struct DBCrisisEventForExport: Codable {
-    let id: UUID?
-    let userId: UUID
-    let triggerContent: String?  // Only the matched keyword, not actual user content
-    let detectedAt: Date?
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case userId = "user_id"
-        case triggerContent = "trigger_content"
-        case detectedAt = "detected_at"
-    }
-}
-
-// MARK: - Errors
-
-enum DataError: Error, LocalizedError {
-    case notAuthenticated
-    case invalidId
-    case circleNotFound
-    case circleFull
-    case quotaExceeded(used: Int, limit: Int)
-    case operationFailed(String)
-    case hugLimitReached
-    case missingInviteContact
-    case custom(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .notAuthenticated:
-            return "You must be signed in to perform this action"
-        case .invalidId:
-            return "Invalid identifier"
-        case .circleNotFound:
-            return "Circle not found. Check the invite code and try again."
-        case .circleFull:
-            return "This circle is full and cannot accept new members."
-        case .quotaExceeded:
-            return "You've reached your daily AI chat limit. Upgrade to Premium for unlimited chats!"
-        case .operationFailed(let message):
-            return message
-        case .hugLimitReached:
-            return "You've sent the maximum number of hugs to this person today. Try again tomorrow!"
-        case .missingInviteContact:
-            return "Please provide an email or phone number for the invite"
-        case .custom(let message):
-            return message
-        }
-    }
-}
-
-// MARK: - Date Formatter Extension
-
-extension ISO8601DateFormatter {
-    static let dateOnly: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withFullDate]
-        return formatter
-    }()
-}
-
-// MARK: - Structured Programs
-
-extension SupabaseDataService {
-
-    // MARK: - Programs
-
-    /// Fetch all active programs
-    func getPrograms() async throws -> [Program] {
-        let response: [DBProgram] = try await supabase
-            .from(Tables.programs)
-            .select()
-            .eq("is_active", value: true)
-            .order("sort_order")
-            .execute()
-            .value
-
-        return response.map { $0.toProgram() }
-    }
-
-    /// Fetch all days for a program
-    func getProgramDays(programId: String) async throws -> [ProgramDay] {
-        let response: [DBProgramDay] = try await supabase
-            .from(Tables.programDays)
-            .select()
-            .eq("program_id", value: programId)
-            .order("day_number")
-            .execute()
-            .value
-
-        return response.map { $0.toProgramDay() }
-    }
-
-    /// Fetch a specific program day
-    func getProgramDay(programId: String, dayNumber: Int) async throws -> ProgramDay? {
-        let response: [DBProgramDay] = try await supabase
-            .from(Tables.programDays)
-            .select()
-            .eq("program_id", value: programId)
-            .eq("day_number", value: dayNumber)
-            .limit(1)
-            .execute()
-            .value
-
-        return response.first?.toProgramDay()
-    }
-
-    // MARK: - Enrollments
-
-    /// Get user's active enrollment (only one allowed at a time)
-    func getActiveEnrollment() async throws -> ProgramEnrollment? {
-        let currentUserId = try userId
-
-        let response: [DBProgramEnrollment] = try await supabase
-            .from(Tables.programEnrollments)
-            .select("*, programs(*)")
-            .eq("user_id", value: currentUserId)
-            .eq("status", value: "active")
-            .limit(1)
-            .execute()
-            .value
-
-        return response.first?.toEnrollment()
-    }
-
-    /// Get user's enrollment for a specific program (active or paused)
-    func getEnrollment(programId: String) async throws -> ProgramEnrollment? {
-        let currentUserId = try userId
-
-        let response: [DBProgramEnrollment] = try await supabase
-            .from(Tables.programEnrollments)
-            .select("*, programs(*)")
-            .eq("user_id", value: currentUserId)
-            .eq("program_id", value: programId)
-            .in("status", values: ["active", "paused"])
-            .limit(1)
-            .execute()
-            .value
-
-        return response.first?.toEnrollment()
-    }
-
-    /// Get all user enrollments (all statuses)
-    func getAllEnrollments() async throws -> [ProgramEnrollment] {
-        let currentUserId = try userId
-
-        let response: [DBProgramEnrollment] = try await supabase
-            .from(Tables.programEnrollments)
-            .select("*, programs(*)")
-            .eq("user_id", value: currentUserId)
-            .order("started_at", ascending: false)
-            .execute()
-            .value
-
-        return response.map { $0.toEnrollment() }
-    }
-
-    /// Enroll in a program (uses RPC for business logic)
-    /// Note: RPC function uses auth.uid() internally for security
-    func enrollInProgram(programId: String, preferredTime: String = "09:00:00") async throws -> ProgramEnrollment {
-        // Call RPC function - it uses auth.uid() internally for IDOR protection
-        let result: UUID = try await supabase.rpc(
-            "enroll_in_program",
-            params: [
-                "p_program_id": programId,
-                "p_preferred_time": preferredTime
-            ]
-        ).execute().value
-
-        // Fetch the created enrollment with program data
-        let enrollment: [DBProgramEnrollment] = try await supabase
-            .from(Tables.programEnrollments)
-            .select("*, programs(*)")
-            .eq("id", value: result.uuidString)
-            .limit(1)
-            .execute()
-            .value
-
-        guard let created = enrollment.first else {
-            throw DataError.operationFailed("Failed to fetch created enrollment")
-        }
-
-        Analytics.shared.track(.programEnrolled, properties: [
-            "program_id": programId
-        ])
-
-        return created.toEnrollment()
-    }
-
-    /// Pause an enrollment
-    func pauseEnrollment(_ enrollmentId: String) async throws {
-        try await supabase.rpc(
-            "pause_enrollment",
-            params: ["p_enrollment_id": enrollmentId]
-        ).execute()
-
-        Analytics.shared.track(.programPaused, properties: [
-            "enrollment_id": enrollmentId
-        ])
-    }
-
-    /// Resume a paused enrollment
-    func resumeEnrollment(_ enrollmentId: String) async throws {
-        try await supabase.rpc(
-            "resume_enrollment",
-            params: ["p_enrollment_id": enrollmentId]
-        ).execute()
-
-        Analytics.shared.track(.programResumed, properties: [
-            "enrollment_id": enrollmentId
-        ])
-    }
-
-    /// Abandon an enrollment
-    func abandonEnrollment(_ enrollmentId: String) async throws {
-        try await supabase.rpc(
-            "abandon_enrollment",
-            params: ["p_enrollment_id": enrollmentId]
-        ).execute()
-
-        Analytics.shared.track(.programAbandoned, properties: [
-            "enrollment_id": enrollmentId
-        ])
-    }
-
-    // MARK: - Day Progress
-
-    /// Get progress for a specific day
-    func getDayProgress(enrollmentId: String, dayNumber: Int) async throws -> ProgramDayProgress? {
-        let response: [DBProgramDayProgress] = try await supabase
-            .from(Tables.programDayProgress)
-            .select()
-            .eq("enrollment_id", value: enrollmentId)
-            .eq("day_number", value: dayNumber)
-            .limit(1)
-            .execute()
-            .value
-
-        return response.first?.toDayProgress()
-    }
-
-    /// Get all day progress for an enrollment
-    func getAllDayProgress(enrollmentId: String) async throws -> [ProgramDayProgress] {
-        let response: [DBProgramDayProgress] = try await supabase
-            .from(Tables.programDayProgress)
-            .select()
-            .eq("enrollment_id", value: enrollmentId)
-            .order("day_number")
-            .execute()
-            .value
-
-        return response.map { $0.toDayProgress() }
-    }
-
-    /// Save partial program day progress without completing it
-    func saveProgramDayProgress(
-        enrollmentId: String,
-        dayNumber: Int,
-        contentCompleted: [String: Bool],
-        reflectionResponse: String? = nil,
-        applyReport: String? = nil,
-        moodBefore: Int? = nil,
-        moodAfter: Int? = nil
-    ) async throws {
-        // Encode content completed as JSON
-        let contentData = try JSONEncoder().encode(contentCompleted)
-        let contentJson = String(data: contentData, encoding: .utf8) ?? "{}"
-
-        let params: [String: AnyEncodable] = [
-            "p_enrollment_id": AnyEncodable(enrollmentId),
-            "p_day_number": AnyEncodable(dayNumber),
-            "p_content_completed": AnyEncodable(contentJson),
-            "p_reflection_response": AnyEncodable(reflectionResponse),
-            "p_apply_report": AnyEncodable(applyReport),
-            "p_mood_before": AnyEncodable(moodBefore),
-            "p_mood_after": AnyEncodable(moodAfter)
-        ]
-
-        _ = try await supabase.rpc(
-            "save_program_day_progress",
-            params: params
-        ).execute()
-    }
-
-    /// Complete a program day (uses RPC for business logic)
-    func completeProgramDay(
-        enrollmentId: String,
-        dayNumber: Int,
-        contentCompleted: [String: Bool],
-        reflectionResponse: String? = nil,
-        applyReport: String? = nil,
-        moodBefore: Int? = nil,
-        moodAfter: Int? = nil
-    ) async throws -> CompleteProgramDayResult {
-        // Encode content completed as JSON
-        let contentData = try JSONEncoder().encode(contentCompleted)
-        let contentJson = String(data: contentData, encoding: .utf8) ?? "{}"
-
-        let params: [String: AnyEncodable] = [
-            "p_enrollment_id": AnyEncodable(enrollmentId),
-            "p_day_number": AnyEncodable(dayNumber),
-            "p_content_completed": AnyEncodable(contentJson),
-            "p_reflection_response": AnyEncodable(reflectionResponse),
-            "p_apply_report": AnyEncodable(applyReport),
-            "p_mood_before": AnyEncodable(moodBefore),
-            "p_mood_after": AnyEncodable(moodAfter)
-        ]
-        let result: CompleteProgramDayResult = try await supabase.rpc(
-            "complete_program_day",
-            params: params
-        ).execute().value
-
-        Analytics.shared.track(.programDayCompleted, properties: [
-            "enrollment_id": enrollmentId,
-            "day_number": dayNumber,
-            "program_complete": result.programComplete
-        ])
-
-        return result
-    }
-
-    /// Skip a program day (uses RPC for business logic)
-    func skipProgramDay(
-        enrollmentId: String,
-        dayNumber: Int,
-        reason: String? = nil
-    ) async throws -> SkipProgramDayResult {
-        let skipParams: [String: AnyEncodable] = [
-            "p_enrollment_id": AnyEncodable(enrollmentId),
-            "p_day_number": AnyEncodable(dayNumber),
-            "p_reason": AnyEncodable(reason)
-        ]
-        let result: SkipProgramDayResult = try await supabase.rpc(
-            "skip_program_day",
-            params: skipParams
-        ).execute().value
-
-        Analytics.shared.track(.programDaySkipped, properties: [
-            "enrollment_id": enrollmentId,
-            "day_number": dayNumber,
-            "skips_remaining": result.skipsRemaining
-        ])
-
-        return result
-    }
-
-    // MARK: - Certificates
-
-    /// Get all user's program certificates
-    func getCertificates() async throws -> [ProgramCertificate] {
-        let currentUserId = try userId
-
-        let response: [DBProgramCertificate] = try await supabase
-            .from(Tables.programCertificates)
-            .select("*, programs(*)")
-            .eq("user_id", value: currentUserId)
-            .order("issued_at", ascending: false)
-            .execute()
-            .value
-
-        return response.map { $0.toCertificate() }
-    }
-
-    /// Get certificate by ID
-    func getCertificate(id: String) async throws -> ProgramCertificate? {
-        let response: [DBProgramCertificate] = try await supabase
-            .from(Tables.programCertificates)
-            .select("*, programs(*)")
-            .eq("id", value: id)
-            .limit(1)
-            .execute()
-            .value
-
-        return response.first?.toCertificate()
-    }
-
-    /// Mark certificate as shared to circle
-    func shareCertificateToCircle(certificateId: String) async throws {
-        try await supabase
-            .from(Tables.programCertificates)
-            .update(["shared_to_circle": true])
-            .eq("id", value: certificateId)
-            .execute()
-
-        Analytics.shared.track(.certificateShared, properties: [
-            "certificate_id": certificateId,
-            "channel": "circle"
-        ])
-    }
-
-    /// Mark certificate as shared externally
-    func shareCertificateExternally(certificateId: String) async throws {
-        try await supabase
-            .from(Tables.programCertificates)
-            .update(["shared_externally": true])
-            .eq("id", value: certificateId)
-            .execute()
-
-        Analytics.shared.track(.certificateShared, properties: [
-            "certificate_id": certificateId,
-            "channel": "external"
-        ])
-    }
 
     // MARK: - Stats
 
@@ -4279,5 +3647,190 @@ extension SupabaseDataService {
         ).execute().value
 
         return result
+    }
+
+    // MARK: - Error Classification
+
+    private func classifySupabaseError(_ error: Error) -> APIError {
+        let description = error.localizedDescription.lowercased()
+
+        // Transient errors
+        if description.contains("timeout") ||
+           description.contains("connection") ||
+           description.contains("network") {
+            return .networkError(error.localizedDescription)
+        }
+
+        // Server errors (potentially transient)
+        if description.contains("500") ||
+           description.contains("502") ||
+           description.contains("503") ||
+           description.contains("gateway") {
+            return .serverError(error.localizedDescription)
+        }
+
+        // Permanent errors
+        return .badRequest(error.localizedDescription)
+    }
+
+    // MARK: - Progress Stories
+
+    /// Fetch existing weekly story for a given week start
+    /// - Parameter weekStart: Monday of the week in "YYYY-MM-DD" format
+    /// - Returns: WeeklyStory if exists, nil if not found
+    func getWeeklyStory(weekStart: String) async throws -> WeeklyStory? {
+        let uid = try userId
+
+        let response: [WeeklyStory] = try await supabase
+            .from(Tables.weeklyStories)
+            .select()
+            .eq("user_id", value: uid)
+            .eq("week_start", value: weekStart)
+            .limit(1)
+            .execute()
+            .value
+
+        return response.first
+    }
+
+    /// Get recent weekly stories for the user (last 4 weeks)
+    /// - Returns: Array of WeeklyStory sorted by week_start descending
+    func getRecentWeeklyStories(limit: Int = 4) async throws -> [WeeklyStory] {
+        let uid = try userId
+
+        let response: [WeeklyStory] = try await supabase
+            .from(Tables.weeklyStories)
+            .select()
+            .eq("user_id", value: uid)
+            .order("week_start", ascending: false)
+            .limit(limit)
+            .execute()
+            .value
+
+        return response
+    }
+
+    /// Generate a new weekly story via Edge Function
+    /// - Parameter weekStart: Monday of the week in "YYYY-MM-DD" format
+    /// - Returns: Generated WeeklyStory
+    func generateWeeklyStory(weekStart: String) async throws -> WeeklyStory {
+        let session = try await supabase.auth.session
+
+        let response: GenerateWeeklyStoryResponse
+        do {
+            response = try await supabase.functions.invoke(
+                "generate-weekly-story",
+                options: .init(
+                    method: .post,
+                    headers: ["Authorization": "Bearer \(session.accessToken)"],
+                    body: ["weekStart": weekStart]
+                )
+            )
+        } catch {
+            throw classifySupabaseError(error)
+        }
+
+        if !response.success {
+            throw StoryGenerationError.internalError
+        }
+
+        // Fetch the persisted story from database
+        guard let story = try await getWeeklyStory(weekStart: weekStart) else {
+            // If not found in DB, construct from response
+            return WeeklyStory(
+                id: UUID(),
+                userId: response.userId,
+                weekStart: response.weekStart,
+                cards: response.cards,
+                createdAt: response.generatedAt,
+                updatedAt: response.generatedAt
+            )
+        }
+
+        Analytics.shared.track(.weeklyStoryGenerated, properties: [
+            "week_start": weekStart,
+            "card_count": response.cards.count
+        ])
+
+        return story
+    }
+
+    /// Share a story card to a circle
+    /// - Parameters:
+    ///   - imageUrl: URL of the uploaded story card image in Supabase Storage
+    ///   - circleId: ID of the circle to post to
+    ///   - caption: Optional caption for the post
+    func shareStoryToCircle(imageUrl: String, circleId: UUID, caption: String?) async throws {
+        let uid = try userId
+
+        // Create a circle post of kind 'story'
+        let post: [String: AnyEncodable] = [
+            "circle_id": AnyEncodable(circleId),
+            "user_id": AnyEncodable(uid),
+            "kind": AnyEncodable("story"),
+            "content": AnyEncodable(caption ?? ""),
+            "story_image_url": AnyEncodable(imageUrl)
+        ]
+
+        try await supabase
+            .from(Tables.circlePosts)
+            .insert(post)
+            .execute()
+
+        Analytics.shared.track(.weeklyStorySharedToCircle, properties: [
+            "circle_id": circleId.uuidString,
+            "has_caption": caption != nil
+        ])
+    }
+
+    /// Upload story card image to Supabase Storage
+    /// - Parameters:
+    ///   - imageData: PNG image data
+    ///   - weekStart: Week start for filename
+    ///   - cardIndex: Card index for filename
+    /// - Returns: Public URL of the uploaded image
+    func uploadStoryCardImage(imageData: Data, weekStart: String, cardIndex: Int) async throws -> String {
+        // Validate image size (max 5MB)
+        let maxSizeBytes = 5 * 1024 * 1024
+        guard imageData.count <= maxSizeBytes else {
+            throw DataError.operationFailed("Image too large (\(imageData.count) bytes, max \(maxSizeBytes))")
+        }
+
+        let uid = try userId
+        let filename = "story_\(weekStart)_card\(cardIndex).png"
+        let path = "\(uid.uuidString)/stories/\(filename)"
+
+        // Perform upload with error handling
+        let uploadResponse = try await supabase.storage
+            .from("user-content")
+            .upload(path, data: imageData, options: .init(contentType: "image/png", upsert: true))
+
+        // Verify upload result is not nil
+        guard uploadResponse != nil else {
+            throw DataError.operationFailed("Upload returned empty response")
+        }
+
+        // Get and validate public URL
+        let publicUrl = supabase.storage
+            .from("user-content")
+            .getPublicURL(path: path)
+
+        guard publicUrl.absoluteString.count > 0 else {
+            throw DataError.operationFailed("Generated URL is empty")
+        }
+
+        // Optionally verify the URL is accessible
+        let urlSession = URLSession.shared
+        var request = URLRequest(url: publicUrl)
+        request.httpMethod = "HEAD"
+        request.timeoutInterval = 5
+
+        let (_, response) = try await urlSession.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else {
+            throw DataError.operationFailed("Uploaded file not accessible")
+        }
+
+        return publicUrl.absoluteString
     }
 }

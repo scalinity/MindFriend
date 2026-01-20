@@ -6,7 +6,8 @@ struct BadgesView: View {
     @EnvironmentObject var container: DependencyContainer
 
     var earnedBadges: [Badge] {
-        appState.currentUser?.badges ?? []
+        // TODO: Get earned badges from AchievementService
+        []
     }
 
     var body: some View {

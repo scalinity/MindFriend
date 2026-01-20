@@ -2,20 +2,12 @@ import Foundation
 import Supabase
 import OSLog
 
-// MARK: - Supabase Client Protocol (for dependency injection)
-protocol SupabaseClientProtocol {
-    func from(_ table: String) -> PostgrestQueryBuilder
-    var auth: Auth { get }
-}
-
-extension SupabaseClient: SupabaseClientProtocol {}
-
 /// Service for outcome tracking and clinical assessments
 /// Manages PHQ-9, GAD-7, and other standardized assessment instruments
 @MainActor
 final class OutcomeTrackingService: ObservableObject {
 
-    private let supabase: SupabaseClientProtocol
+    private let supabase: SupabaseClient
     private let authService: SupabaseAuthService
     private let logger = Logger(subsystem: "com.mindfriend", category: "OutcomeTrackingService")
 
@@ -30,7 +22,7 @@ final class OutcomeTrackingService: ObservableObject {
 
     // MARK: - Initialization
 
-    init(supabase: SupabaseClientProtocol, authService: SupabaseAuthService) {
+    init(supabase: SupabaseClient, authService: SupabaseAuthService) {
         self.supabase = supabase
         self.authService = authService
     }
@@ -178,7 +170,7 @@ final class OutcomeTrackingService: ObservableObject {
                 type: type,
                 responseId: UUID(),  // Will be created server-side
                 severity: .critical,
-                context: ["score": totalScore, "severity": severityLevel]
+                context: ["score": totalScore]
             )
         }
 
@@ -563,7 +555,7 @@ final class OutcomeTrackingService: ObservableObject {
 
     /// Calculate trend direction
     func calculateTrend(responses: [AssessmentResponse]) -> TrendDirection {
-        guard responses.count >= 2 else { return .noData }
+        guard responses.count >= 2 else { return .stable } // No data = treat as stable
 
         let scores = responses.reversed().map { $0.totalScore }
         let firstHalf = scores.prefix(scores.count / 2).reduce(0, +) / max(1, scores.count / 2)
@@ -611,19 +603,6 @@ enum OutcomeTrackingError: LocalizedError {
 }
 
 // MARK: - Trend Direction Helper
-
-enum TrendDirection {
-    case improving
-    case stable
-    case declining
-    case noData
-
-    var description: String {
-        switch self {
-        case .improving: return "Improving"
-        case .stable: return "Stable"
-        case .declining: return "Declining"
-        case .noData: return "Insufficient data"
-        }
-    }
-}
+// NOTE: Uses TrendDirection from PredictiveModels.swift
+// Mapping for local use: .improving -> .up, .stable -> .stable, .declining -> .down
+typealias OutcomeTrendDirection = TrendDirection

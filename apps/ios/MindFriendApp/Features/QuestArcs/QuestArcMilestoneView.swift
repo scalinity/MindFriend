@@ -113,7 +113,7 @@ struct QuestArcMilestoneView: View {
 
             // Confetti overlay
             if showConfetti {
-                ConfettiView()
+                QuestArcConfettiView()
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
             }
@@ -148,8 +148,8 @@ struct QuestArcMilestoneView: View {
 
 // MARK: - Confetti View
 
-private struct ConfettiView: View {
-    @State private var particles: [ConfettiParticle] = []
+private struct QuestArcConfettiView: View {
+    @State private var particles: [QuestArcConfettiParticle] = []
 
     var body: some View {
         TimelineView(.animation) { timeline in
@@ -185,10 +185,10 @@ private struct ConfettiView: View {
 
     private func generateParticles() {
         let colors: [Color] = [.yellow, .orange, .red, .pink, .purple, .blue, .green]
-        var newParticles: [ConfettiParticle] = []
+        var newParticles: [QuestArcConfettiParticle] = []
 
         for _ in 0..<50 {
-            newParticles.append(ConfettiParticle(
+            newParticles.append(QuestArcConfettiParticle(
                 startX: CGFloat.random(in: 50...350),
                 startY: CGFloat.random(in: -50...0),
                 velocityX: CGFloat.random(in: -50...50),
@@ -205,7 +205,7 @@ private struct ConfettiView: View {
     }
 }
 
-private struct ConfettiParticle {
+private struct QuestArcConfettiParticle {
     let startX: CGFloat
     let startY: CGFloat
     let velocityX: CGFloat
@@ -328,7 +328,7 @@ struct QuestArcCompletionView: View {
             }
 
             if showConfetti {
-                ConfettiView()
+                QuestArcConfettiView()
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
             }

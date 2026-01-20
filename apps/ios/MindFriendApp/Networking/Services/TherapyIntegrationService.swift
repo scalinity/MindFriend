@@ -85,22 +85,22 @@ final class TherapyIntegrationService: ObservableObject {
         shareExercises: Bool? = nil,
         crisisAlerts: Bool? = nil
     ) async throws {
-        var updates: [String: Any] = [:]
+        var updates: [String: AnyEncodable] = [:]
 
         if let shareMood = shareMood {
-            updates["share_mood"] = shareMood
+            updates["share_mood"] = AnyEncodable(shareMood)
         }
         if let shareJournal = shareJournal {
-            updates["share_journal"] = shareJournal
+            updates["share_journal"] = AnyEncodable(shareJournal)
         }
         if let shareAssessments = shareAssessments {
-            updates["share_assessments"] = shareAssessments
+            updates["share_assessments"] = AnyEncodable(shareAssessments)
         }
         if let shareExercises = shareExercises {
-            updates["share_exercises"] = shareExercises
+            updates["share_exercises"] = AnyEncodable(shareExercises)
         }
         if let crisisAlerts = crisisAlerts {
-            updates["crisis_alerts_enabled"] = crisisAlerts
+            updates["crisis_alerts_enabled"] = AnyEncodable(crisisAlerts)
         }
 
         try await supabase
@@ -117,13 +117,13 @@ final class TherapyIntegrationService: ObservableObject {
         var query = supabase
             .from("therapist_assignments")
             .select("*")
-            .order("created_at", ascending: false)
 
         if let connectionId = connectionId {
             query = query.eq("connection_id", value: connectionId.uuidString)
         }
 
         let assignments: [TherapistAssignment] = try await query
+            .order("created_at", ascending: false)
             .execute()
             .value
 
@@ -137,7 +137,7 @@ final class TherapyIntegrationService: ObservableObject {
             .update([
                 "status": "completed",
                 "completed_at": ISO8601DateFormatter().string(from: Date()),
-                "client_notes": notes ?? NSNull()
+                "client_notes": notes as Any?
             ])
             .eq("id", value: id.uuidString)
             .execute()

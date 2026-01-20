@@ -1,0 +1,580 @@
+//
+//  QuestArcDetailView.swift
+//  MindFriendApp
+//
+//  Detail view for a quest arc with enrollment and progress tracking
+//
+
+import SwiftUI
+
+struct QuestArcDetailView: View {
+    @EnvironmentObject private var container: DependencyContainer
+    @Environment(\.dismiss) private var dismiss
+
+    let arc: QuestArc
+    let activeArc: UserQuestArc?
+    let onUpdate: () async -> Void
+
+    @State private var isEnrolling = false
+    @State private var isPausing = false
+    @State private var isExiting = false
+    @State private var showExitConfirmation = false
+    @State private var errorMessage: String?
+    @State private var showMilestonePreview = false
+
+    private var isEnrolled: Bool {
+        activeArc?.arcId == arc.id
+    }
+
+    private var hasOtherActiveArc: Bool {
+        guard let active = activeArc else { return false }
+        return active.arcId != arc.id
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    // Header
+                    headerSection
+
+                    // Progress (if enrolled)
+                    if isEnrolled, let userArc = activeArc {
+                        progressSection(userArc)
+                    }
+
+                    // Description
+                    descriptionSection
+
+                    // Milestones
+                    milestonesSection
+
+                    // What You'll Learn
+                    benefitsSection
+
+                    // Error message
+                    if let error = errorMessage {
+                        errorBanner(error)
+                    }
+
+                    // Action Button
+                    actionSection
+                }
+                .padding()
+            }
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+            .confirmationDialog(
+                "Exit Journey?",
+                isPresented: $showExitConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Exit Journey", role: .destructive) {
+                    Task { await exitArc() }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Your progress will be lost. You can start this journey again later.")
+            }
+        }
+    }
+
+    // MARK: - Header
+
+    private var headerSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                categoryIcon
+                Spacer()
+                if arc.isPremium {
+                    premiumBadge
+                }
+            }
+
+            Text(arc.title)
+                .font(.title.weight(.bold))
+
+            HStack(spacing: 16) {
+                Label("\(arc.durationDays) days", systemImage: "calendar")
+                Label("\(arc.milestoneDays.count) milestones", systemImage: "flag.fill")
+            }
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    private var categoryIcon: some View {
+        Image(systemName: iconName(for: arc.category))
+            .font(.title)
+            .foregroundStyle(color(for: arc.category))
+            .frame(width: 56, height: 56)
+            .background(color(for: arc.category).opacity(0.15))
+            .clipShape(Circle())
+    }
+
+    private var premiumBadge: some View {
+        Label("Premium", systemImage: "star.fill")
+            .font(.subheadline.weight(.medium))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Color.orange.opacity(0.15))
+            .foregroundStyle(.orange)
+            .clipShape(Capsule())
+    }
+
+    // MARK: - Progress Section
+
+    private func progressSection(_ userArc: UserQuestArc) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Your Progress")
+                    .font(.headline)
+                Spacer()
+                Text("Day \(userArc.currentDay) of \(userArc.snapshotDurationDays)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            ProgressView(value: userArc.progressPercentage)
+                .tint(color(for: arc.category))
+
+            if userArc.status == "paused" {
+                HStack {
+                    Image(systemName: "pause.circle.fill")
+                        .foregroundStyle(.orange)
+                    Text("Paused")
+                        .font(.subheadline.weight(.medium))
+                    if let pausedAt = userArc.pausedAt {
+                        Text("- Resume within 30 days")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            // Next milestone
+            if let nextMilestone = userArc.nextMilestoneDay {
+                HStack {
+                    Image(systemName: "flag.fill")
+                        .foregroundStyle(.orange)
+                    Text("Next milestone in \(nextMilestone - userArc.currentDay) days")
+                        .font(.subheadline)
+                }
+            }
+        }
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    // MARK: - Description
+
+    private var descriptionSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("About This Journey")
+                .font(.headline)
+
+            Text(arc.description)
+                .font(.body)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    // MARK: - Milestones
+
+    private var milestonesSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Milestones")
+                    .font(.headline)
+                Spacer()
+                Button {
+                    showMilestonePreview = true
+                } label: {
+                    Text("Preview")
+                        .font(.subheadline)
+                }
+            }
+
+            ForEach(Array(arc.milestoneDays.enumerated()), id: \.offset) { index, day in
+                milestoneRow(index: index + 1, day: day)
+            }
+        }
+        .sheet(isPresented: $showMilestonePreview) {
+            MilestonePreviewSheet(arc: arc)
+        }
+    }
+
+    private func milestoneRow(index: Int, day: Int) -> some View {
+        HStack(spacing: 12) {
+            let isCompleted = isEnrolled && (activeArc?.currentDay ?? 0) >= day
+
+            ZStack {
+                Circle()
+                    .fill(isCompleted ? color(for: arc.category) : Color(.systemGray4))
+                    .frame(width: 32, height: 32)
+
+                if isCompleted {
+                    Image(systemName: "checkmark")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.white)
+                } else {
+                    Text("\(index)")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Milestone \(index)")
+                    .font(.subheadline.weight(.medium))
+                Text("Day \(day)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            if isCompleted {
+                Image(systemName: "star.fill")
+                    .foregroundStyle(.yellow)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    // MARK: - Benefits
+
+    private var benefitsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("What You'll Experience")
+                .font(.headline)
+
+            ForEach(benefitsFor(arc.category), id: \.self) { benefit in
+                HStack(spacing: 12) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(color(for: arc.category))
+                    Text(benefit)
+                        .font(.subheadline)
+                }
+            }
+        }
+    }
+
+    private func benefitsFor(_ category: String) -> [String] {
+        switch category {
+        case "stress":
+            return [
+                "Daily calming exercises",
+                "Stress-relief techniques",
+                "Mindful breathing practices",
+                "Progressive relaxation skills"
+            ]
+        case "sleep":
+            return [
+                "Better sleep hygiene habits",
+                "Evening wind-down routines",
+                "Relaxation techniques for rest",
+                "Sleep quality tracking"
+            ]
+        case "confidence":
+            return [
+                "Self-affirmation practices",
+                "Positive self-talk exercises",
+                "Goal-setting frameworks",
+                "Celebrating small wins"
+            ]
+        case "focus":
+            return [
+                "Concentration exercises",
+                "Distraction management",
+                "Mindful attention training",
+                "Productivity techniques"
+            ]
+        case "resilience":
+            return [
+                "Emotional regulation skills",
+                "Coping strategy development",
+                "Growth mindset cultivation",
+                "Bouncing back from setbacks"
+            ]
+        default:
+            return ["Daily wellness exercises", "Progress tracking", "Milestone celebrations"]
+        }
+    }
+
+    // MARK: - Error Banner
+
+    private func errorBanner(_ message: String) -> some View {
+        HStack {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.red)
+            Text(message)
+                .font(.subheadline)
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.red.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    // MARK: - Action Section
+
+    private var actionSection: some View {
+        VStack(spacing: 12) {
+            if isEnrolled {
+                enrolledActions
+            } else if hasOtherActiveArc {
+                otherArcActiveMessage
+            } else {
+                startButton
+            }
+        }
+        .padding(.top)
+    }
+
+    private var enrolledActions: some View {
+        VStack(spacing: 12) {
+            if activeArc?.status == "paused" {
+                Button {
+                    Task { await resumeArc() }
+                } label: {
+                    HStack {
+                        if isPausing {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Image(systemName: "play.fill")
+                        }
+                        Text("Resume Journey")
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(color(for: arc.category))
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .disabled(isPausing)
+            } else {
+                Button {
+                    Task { await pauseArc() }
+                } label: {
+                    HStack {
+                        if isPausing {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "pause.fill")
+                        }
+                        Text("Pause Journey")
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color(.secondarySystemBackground))
+                    .foregroundStyle(.primary)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .disabled(isPausing)
+            }
+
+            Button {
+                showExitConfirmation = true
+            } label: {
+                HStack {
+                    if isExiting {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "xmark.circle")
+                    }
+                    Text("Exit Journey")
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .foregroundStyle(.red)
+            }
+            .disabled(isExiting)
+        }
+    }
+
+    private var otherArcActiveMessage: some View {
+        VStack(spacing: 8) {
+            Text("You have an active journey")
+                .font(.subheadline.weight(.medium))
+            Text("Complete or exit your current journey to start this one.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding()
+        .frame(maxWidth: .infinity)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var startButton: some View {
+        Button {
+            Task { await startArc() }
+        } label: {
+            HStack {
+                if isEnrolling {
+                    ProgressView()
+                        .tint(.white)
+                } else {
+                    Image(systemName: "play.fill")
+                }
+                Text("Start Journey")
+            }
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(color(for: arc.category))
+            .foregroundStyle(.white)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .disabled(isEnrolling)
+    }
+
+    // MARK: - Actions
+
+    private func startArc() async {
+        isEnrolling = true
+        errorMessage = nil
+
+        do {
+            _ = try await container.questArcsService.startQuestArc(arcId: arc.id)
+            await onUpdate()
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+
+        isEnrolling = false
+    }
+
+    private func pauseArc() async {
+        isPausing = true
+        errorMessage = nil
+
+        do {
+            _ = try await container.questArcsService.pauseQuestArc(userArcId: activeArc?.id)
+            await onUpdate()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+
+        isPausing = false
+    }
+
+    private func resumeArc() async {
+        isPausing = true
+        errorMessage = nil
+
+        do {
+            guard let userArcId = activeArc?.id else { return }
+            _ = try await container.questArcsService.resumeQuestArc(userArcId: userArcId)
+            await onUpdate()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+
+        isPausing = false
+    }
+
+    private func exitArc() async {
+        isExiting = true
+        errorMessage = nil
+
+        do {
+            _ = try await container.questArcsService.exitQuestArc(userArcId: activeArc?.id)
+            await onUpdate()
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+
+        isExiting = false
+    }
+
+    // MARK: - Helpers
+
+    private func iconName(for category: String) -> String {
+        switch category {
+        case "stress": return "leaf.fill"
+        case "sleep": return "moon.zzz.fill"
+        case "confidence": return "star.fill"
+        case "focus": return "target"
+        case "resilience": return "flame.fill"
+        default: return "sparkles"
+        }
+    }
+
+    private func color(for category: String) -> Color {
+        switch category {
+        case "stress": return .green
+        case "sleep": return .indigo
+        case "confidence": return .orange
+        case "focus": return .blue
+        case "resilience": return .red
+        default: return .accentColor
+        }
+    }
+}
+
+// MARK: - Milestone Preview Sheet
+
+private struct MilestonePreviewSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let arc: QuestArc
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    Text("When you reach a milestone, you'll see a celebration and can share your achievement with your circles.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    // Preview of milestone celebration
+                    QuestArcMilestoneView(
+                        arcTitle: arc.title,
+                        milestoneNumber: 1,
+                        totalMilestones: arc.milestoneDays.count,
+                        dayNumber: arc.milestoneDays.first ?? 7,
+                        onDismiss: {},
+                        onShare: {}
+                    )
+                }
+                .padding()
+            }
+            .navigationTitle("Milestone Preview")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+#Preview {
+    QuestArcDetailView(
+        arc: QuestArc(
+            id: UUID(),
+            title: "Stress Relief Journey",
+            description: "A 14-day program to help you manage stress through proven techniques.",
+            category: "stress",
+            durationDays: 14,
+            milestoneDays: [3, 7, 14],
+            isPremium: false,
+            isActive: true,
+            createdAt: Date()
+        ),
+        activeArc: nil,
+        onUpdate: {}
+    )
+    .environmentObject(DependencyContainer())
+}

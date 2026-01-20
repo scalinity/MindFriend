@@ -6,41 +6,15 @@ import SwiftUI
 
 // MARK: - User
 
-struct UserProfile: Codable, Identifiable, Equatable {
-    let id: String
-    let handle: String
-    let displayName: String
-    let email: String?
-    let timezone: String
-    var preferredLanguage: String?
-    let createdAt: Date
-    var settings: UserSettings
-    var stats: UserStats
-    var entitlements: Entitlements
-    var badges: [Badge]
-    var wellnessFocus: WellnessFocus?
-    var onboardingCompletedAt: Date?
+public struct UserProfile: Codable, Identifiable, Equatable {
+    public let id: UUID
+    public let displayName: String?
+    public let avatarUrl: String?
 
-    /// Returns true if the user hasn't completed onboarding yet
-    var needsOnboarding: Bool {
-        onboardingCompletedAt == nil
-    }
-
-    /// Returns the user's highest priority premium badge (if any)
-    var premiumBadge: Badge? {
-        // Priority: family_champion > annual_achiever > premium_supporter
-        if let familyBadge = badges.first(where: { $0.code == "family_champion" }) {
-            return familyBadge
-        }
-        if let annualBadge = badges.first(where: { $0.code == "annual_achiever" }) {
-            return annualBadge
-        }
-        return badges.first(where: { $0.code == "premium_supporter" })
-    }
-
-    /// Returns all premium badges the user has earned
-    var premiumBadges: [Badge] {
-        badges.filter { $0.isPremiumBadge }
+    enum CodingKeys: String, CodingKey {
+        case id
+        case displayName = "display_name"
+        case avatarUrl = "avatar_url"
     }
 }
 
@@ -61,6 +35,15 @@ struct UserSettings: Codable, Equatable {
     var notifyStreakRisk: Bool?
     var notifyWeeklySummary: Bool?
     var preferredNotifyHour: Int?
+
+    // Smart notification system v2 (optional for backwards compatibility)
+    var smartNotificationsEnabled: Bool?
+    var notificationMaxPerDay: Int?
+    var notificationFrequency: String?  // "minimal", "moderate", "frequent"
+    var enabledNotificationTypes: [String]?
+    var syncQuietHoursWithSleep: Bool?
+    var betaNotificationsOptIn: Bool?
+    var manualDndEnabled: Bool?
 
     // Recovery mode fields (optional for backwards compatibility)
     var recoveryModeActive: Bool?
@@ -1402,12 +1385,51 @@ struct CirclePost: Codable, Identifiable, Equatable {
     let bodyText: String?
     let localDate: String
     let createdAt: Date
+    let ritualId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case userDisplayName = "user_display_name"
+        case kind
+        case moodEmoji = "mood_emoji"
+        case bodyText = "body_text"
+        case localDate = "local_date"
+        case createdAt = "created_at"
+        case ritualId = "ritual_id"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        userId = try container.decode(String.self, forKey: .userId)
+        userDisplayName = try container.decodeIfPresent(String.self, forKey: .userDisplayName) ?? "Unknown"
+        kind = try container.decode(PostKind.self, forKey: .kind)
+        moodEmoji = try container.decodeIfPresent(String.self, forKey: .moodEmoji)
+        bodyText = try container.decodeIfPresent(String.self, forKey: .bodyText)
+        localDate = try container.decode(String.self, forKey: .localDate)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        ritualId = try container.decodeIfPresent(String.self, forKey: .ritualId)
+    }
+
+    init(id: String, circleId: String, userId: String, kind: PostKind, moodEmoji: String?, bodyText: String?, localDate: String, createdAt: Date, userDisplayName: String, ritualId: String? = nil) {
+        self.id = id
+        self.userId = userId
+        self.userDisplayName = userDisplayName
+        self.kind = kind
+        self.moodEmoji = moodEmoji
+        self.bodyText = bodyText
+        self.localDate = localDate
+        self.createdAt = createdAt
+        self.ritualId = ritualId
+    }
 }
 
 enum PostKind: String, Codable {
     case checkin
     case milestone
     case challengeComplete = "challenge_complete"
+    case ritualRecap = "ritual_recap"
 }
 
 // MARK: - Circle Virality
@@ -4260,5 +4282,201 @@ struct ExitQuestArcResponse: Codable {
     let abandonedAt: String
 }
 
+// MARK: - Progress Stories
 
+/// Weekly story containing 3-5 visual story cards for progress recaps
+struct WeeklyStory: Codable, Identifiable, Equatable {
+    let id: UUID
+    let userId: UUID
+    let weekStart: String // "YYYY-MM-DD" format (Monday)
+    let cards: [StoryCard]
+    let createdAt: Date
+    let updatedAt: Date
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case weekStart = "week_start"
+        case cards
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+}
 
+/// Individual story card with visual variant and type-specific data
+struct StoryCard: Codable, Identifiable, Equatable {
+    let id: UUID
+    let cardType: StoryCardType
+    let variant: StoryCardVariant
+    let data: StoryCardData
+    let generatedAt: Date
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case cardType = "cardType"
+        case variant
+        case data
+        case generatedAt = "generatedAt"
+    }
+}
+
+/// Card types for story cards
+enum StoryCardType: String, Codable, Equatable {
+    case streak
+    case mood
+    case exercise
+    case quest
+    case insight
+    case minimal
+    case milestone
+    
+    /// Display name for the card type
+    var displayName: String {
+        switch self {
+        case .streak: return "Streak"
+        case .mood: return "Mood"
+        case .exercise: return "Exercise"
+        case .quest: return "Quest"
+        case .insight: return "Insight"
+        case .minimal: return "Encouragement"
+        case .milestone: return "Milestone"
+        }
+    }
+    
+    /// SF Symbol icon for the card type
+    var iconName: String {
+        switch self {
+        case .streak: return "flame.fill"
+        case .mood: return "face.smiling"
+        case .exercise: return "figure.run"
+        case .quest: return "checkmark.circle.fill"
+        case .insight: return "lightbulb.fill"
+        case .minimal: return "sparkles"
+        case .milestone: return "trophy.fill"
+        }
+    }
+}
+
+/// Visual variants for story cards
+enum StoryCardVariant: String, Codable, Equatable {
+    case `default`
+    case celebration
+    case encouragement
+    case milestone
+    
+    /// Background gradient colors for the variant
+    var gradientColors: [Color] {
+        switch self {
+        case .default:
+            return [Color.blue.opacity(0.8), Color.purple.opacity(0.8)]
+        case .celebration:
+            return [Color.orange, Color.pink]
+        case .encouragement:
+            return [Color.teal, Color.blue]
+        case .milestone:
+            return [Color.yellow, Color.orange]
+        }
+    }
+}
+
+/// Unified card data structure that handles all card types
+struct StoryCardData: Codable, Equatable {
+    // Common fields
+    let headline: String
+    let message: String
+    
+    // Stat fields (optional)
+    let stat: String?
+    let statLabel: String?
+    
+    // Icon field for minimal cards
+    let icon: String?
+    
+    // Call to action (for minimal cards)
+    let callToAction: String?
+    
+    // Streak-specific
+    let streakDays: Int?
+    
+    // Mood-specific
+    let trend: String?
+    let checkinCount: Int?
+    let moodMin: Double?
+    let moodMax: Double?
+    
+    // Exercise-specific
+    let exerciseCount: Int?
+    let exerciseMinutes: Int?
+    
+    // Quest-specific
+    let questCount: Int?
+    
+    // Insight-specific
+    let aiGenerated: Bool?
+    
+    // Milestone-specific
+    let milestoneType: String?
+}
+
+/// Response from generate-weekly-story Edge Function
+struct GenerateWeeklyStoryResponse: Codable {
+    let success: Bool
+    let userId: UUID
+    let weekStart: String
+    let cards: [StoryCard]
+    let generatedAt: Date
+    
+    enum CodingKeys: String, CodingKey {
+        case success
+        case userId = "userId"
+        case weekStart = "weekStart"
+        case cards
+        case generatedAt = "generatedAt"
+    }
+}
+
+/// Error codes from generate-weekly-story Edge Function
+enum StoryGenerationError: String, Error {
+    case unauthorized = "UNAUTHORIZED"
+    case invalidToken = "INVALID_TOKEN"
+    case missingWeekStart = "MISSING_WEEK_START"
+    case invalidDateFormat = "INVALID_DATE_FORMAT"
+    case notMonday = "NOT_MONDAY"
+    case futureDate = "FUTURE_DATE"
+    case internalError = "INTERNAL_ERROR"
+    
+    var localizedDescription: String {
+        switch self {
+        case .unauthorized, .invalidToken:
+            return "Please sign in again to view your story."
+        case .missingWeekStart:
+            return "Week start date is required."
+        case .invalidDateFormat:
+            return "Invalid date format."
+        case .notMonday:
+            return "Week must start on Monday."
+        case .futureDate:
+            return "Cannot generate story for future weeks."
+        case .internalError:
+            return "Unable to generate story. Please try again."
+        }
+    }
+}
+
+/// Helper to get the Monday of a given week
+extension Date {
+    /// Returns the Monday of the week containing this date
+    var weekStartMonday: Date {
+        let calendar = Calendar(identifier: .iso8601)
+        let components = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: self)
+        return calendar.date(from: components) ?? self
+    }
+    
+    /// Returns the week start as a string in "YYYY-MM-DD" format
+    var weekStartString: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        return formatter.string(from: weekStartMonday)
+    }
+}

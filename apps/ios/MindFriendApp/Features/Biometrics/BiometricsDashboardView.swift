@@ -215,7 +215,12 @@ struct BiometricsDashboardView: View {
             }
 
             ForEach(insights.prefix(2)) { insight in
-                InsightCard(insight: insight)
+                InsightCard(
+                    icon: "lightbulb.fill",
+                    title: insight.title,
+                    description: insight.description,
+                    color: .blue
+                )
                     .onTapGesture {
                         selectedInsight = insight
                     }
@@ -471,49 +476,6 @@ struct BiometricAlertCard: View {
         case .info: return .blue
         case .warning: return .orange
         case .urgent: return .red
-        }
-    }
-}
-
-// MARK: - Insight Card
-
-struct InsightCard: View {
-    let insight: BiometricInsight
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: insight.insightCategory.icon)
-                    .foregroundStyle(categoryColor)
-                Text(insight.title)
-                    .font(.subheadline.bold())
-                Spacer()
-                if let label = insight.correlationLabel {
-                    Text(label)
-                        .font(.caption2)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(categoryColor.opacity(0.2))
-                        .clipShape(Capsule())
-                }
-            }
-
-            Text(insight.description)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(insight.insightCategory.displayName) insight: \(insight.title). \(insight.description)")
-    }
-
-    private var categoryColor: Color {
-        switch insight.insightCategory {
-        case .sleep: return .indigo
-        case .activity: return .green
-        case .stress: return .orange
-        case .general: return .blue
         }
     }
 }

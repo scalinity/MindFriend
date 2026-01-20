@@ -309,6 +309,8 @@ struct CircleDetailView: View {
     @State private var showCheckin = false
     @State private var showCreateChallenge = false
     @State private var showInviteMember = false
+    @State private var showCreateRitual = false
+    @State private var selectedRitual: CircleRitual?
 
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -335,6 +337,19 @@ struct CircleDetailView: View {
                     )
                     .padding(.horizontal)
                 }
+
+                // Rituals
+                RitualScheduleCard(
+                    circleId: UUID(uuidString: circle.id) ?? UUID(),
+                    isOwner: circle.role == .owner,
+                    onJoinRitual: { ritual in
+                        selectedRitual = ritual
+                    },
+                    onCreateRitual: {
+                        showCreateRitual = true
+                    }
+                )
+                .padding(.horizontal)
 
                 // Action buttons row
                 HStack(spacing: 12) {
@@ -413,13 +428,21 @@ struct CircleDetailView: View {
                             .padding(.horizontal)
 
                         ForEach(posts) { post in
-                            CirclePostRowWithReactions(
-                                post: post,
-                                reactions: Binding(
-                                    get: { postReactions[post.id] ?? [] },
-                                    set: { postReactions[post.id] = $0 }
+                            if post.kind == .ritualRecap {
+                                RitualRecapCard(
+                                    post: post,
+                                    ritualId: post.ritualId.flatMap { UUID(uuidString: $0) }
                                 )
-                            )
+                                .padding(.horizontal)
+                            } else {
+                                CirclePostRowWithReactions(
+                                    post: post,
+                                    reactions: Binding(
+                                        get: { postReactions[post.id] ?? [] },
+                                        set: { postReactions[post.id] = $0 }
+                                    )
+                                )
+                            }
                         }
                     }
                 }
@@ -444,6 +467,17 @@ struct CircleDetailView: View {
                 onInviteSent: { invite in
                     pendingInvites.insert(invite, at: 0)
                 }
+            )
+        }
+        .sheet(isPresented: $showCreateRitual) {
+            CreateRitualSheet(circleId: UUID(uuidString: circle.id) ?? UUID()) { ritual in
+                selectedRitual = ritual
+            }
+        }
+        .fullScreenCover(item: $selectedRitual) { ritual in
+            RitualSessionView(
+                ritual: ritual,
+                isCreator: ritual.createdBy.uuidString == appState.currentUser?.id
             )
         }
         .refreshable {

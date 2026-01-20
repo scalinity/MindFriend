@@ -11,7 +11,7 @@ import Supabase
 
 @MainActor
 class LocalizationService: ObservableObject {
-    static let shared = LocalizationService()
+    static let shared = LocalizationService(supabase: nil)
 
     // MARK: - Published Properties
 
@@ -22,11 +22,11 @@ class LocalizationService: ObservableObject {
 
     private var cachedTranslations: [String: String] = [:]
     private var contentTranslationsCache: [String: ContentTranslation] = [:]
-    private let supabase: SupabaseClient
+    private let supabase: SupabaseClient?
 
     // MARK: - Initialization
 
-    init(supabase: SupabaseClient = SupabaseClient.shared) {
+    init(supabase: SupabaseClient? = nil) {
         self.supabase = supabase
         loadSavedLanguage()
     }
@@ -58,10 +58,11 @@ class LocalizationService: ObservableObject {
 
         // Update server preference (if authenticated)
         do {
-            let session = try await supabase.auth.session
+            let session = try await supabase?.auth.session
+            guard let session = session else { return }
             let userId = session.user.id
 
-            try await supabase
+            try await supabase?
                 .from("profiles")
                 .update(["preferred_language": languageCode])
                 .eq("id", value: userId.uuidString)
@@ -85,7 +86,7 @@ class LocalizationService: ObservableObject {
 
     /// Load all UI translations from server for current language
     func loadTranslations() async throws {
-        let translations: [UITranslation] = try await supabase
+        let translations: [UITranslation] = try await supabase?
             .from("ui_translations")
             .select()
             .eq("language_code", value: currentLanguage)
@@ -180,7 +181,7 @@ class LocalizationService: ObservableObject {
         id: UUID,
         language: String
     ) async throws -> ContentTranslation? {
-        let result: [ContentTranslation] = try await supabase
+        let result: [ContentTranslation] = try await supabase?
             .from("content_translations")
             .select()
             .eq("content_type", value: type)
@@ -215,7 +216,7 @@ class LocalizationService: ObservableObject {
         let countryCode = Locale.current.region?.identifier ?? "US"
 
         // Try to fetch localized resources
-        let result: [LocalizedCrisisResources] = try await supabase
+        let result: [LocalizedCrisisResources] = try await supabase?
             .from("localized_crisis_resources")
             .select()
             .eq("country_code", value: countryCode)
@@ -230,7 +231,7 @@ class LocalizationService: ObservableObject {
 
         // Fallback to English for same country
         if currentLanguage != "en" {
-            let englishResult: [LocalizedCrisisResources] = try await supabase
+            let englishResult: [LocalizedCrisisResources] = try await supabase?
                 .from("localized_crisis_resources")
                 .select()
                 .eq("country_code", value: countryCode)
@@ -252,7 +253,7 @@ class LocalizationService: ObservableObject {
 
     /// Fetch list of active languages for language picker
     func fetchAvailableLanguages() async throws -> [SupportedLanguage] {
-        let languages: [SupportedLanguage] = try await supabase
+        let languages: [SupportedLanguage] = try await supabase?
             .from("supported_languages")
             .select()
             .eq("is_active", value: true)

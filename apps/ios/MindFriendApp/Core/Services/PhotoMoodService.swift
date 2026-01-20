@@ -35,10 +35,8 @@ final class PhotoMoodService: ObservableObject {
     /// - Returns: UUID of authenticated user
     /// - Throws: PhotoMoodError.authenticationRequired if session invalid
     private func getAuthenticatedUserId() async throws -> UUID {
-        guard let session = try? await supabase.auth.session,
-              let userId = session.user.id else {
-            throw PhotoMoodError.authenticationRequired
-        }
+        let session = try await supabase.auth.session
+        let userId = session.user.id
         return userId
     }
 
@@ -116,7 +114,7 @@ final class PhotoMoodService: ObservableObject {
         // Step 4: Upload full photo
         await MainActor.run { uploadProgress = 0.4 }
         do {
-            let _: EmptyResponse = try await supabase.storage
+            _ = try await supabase.storage
                 .from(bucketName)
                 .upload(
                     path: photoPath,
@@ -132,7 +130,7 @@ final class PhotoMoodService: ObservableObject {
         var finalThumbPath: String?
         if let thumbData = thumbnailData {
             do {
-                let _: EmptyResponse = try await supabase.storage
+                _ = try await supabase.storage
                     .from(bucketName)
                     .upload(
                         path: thumbPath,
@@ -151,14 +149,14 @@ final class PhotoMoodService: ObservableObject {
         let trimmedCaption = caption?.trimmingCharacters(in: .whitespacesAndNewlines)
         let finalCaption = trimmedCaption?.isEmpty == true ? nil : trimmedCaption
 
-        let insertData: [String: any Sendable] = [
-            "user_id": userId.uuidString,
-            "mood_score": moodScore,
-            "caption": finalCaption as Any,
-            "emotion_tags": emotions.map { $0.rawValue },
-            "location_name": locationName as Any,
-            "photo_storage_path": photoPath,
-            "photo_thumbnail_path": finalThumbPath as Any
+        let insertData: [String: AnyEncodable] = [
+            "user_id": AnyEncodable(userId.uuidString),
+            "mood_score": AnyEncodable(moodScore),
+            "caption": AnyEncodable(finalCaption),
+            "emotion_tags": AnyEncodable(emotions.map { $0.rawValue }),
+            "location_name": AnyEncodable(locationName),
+            "photo_storage_path": AnyEncodable(photoPath),
+            "photo_thumbnail_path": AnyEncodable(finalThumbPath)
         ]
 
         do {
@@ -197,19 +195,21 @@ final class PhotoMoodService: ObservableObject {
     func fetchPhotoMoods(limit: Int = 50, offset: Int = 0, moodFilter: Int? = nil) async throws {
         let userId = try await getAuthenticatedUserId()
 
-        var query = supabase
-            .from("photo_moods")
-            .select()
-            .eq("user_id", value: userId.uuidString)
-            .order("logged_at", ascending: false)
-            .range(from: offset, to: offset + limit - 1)
-
-        if let filter = moodFilter {
-            query = query.eq("mood_score", value: filter)
-        }
-
         do {
-            let moods: [PhotoMood] = try await query.execute().value
+            var baseQuery = supabase
+                .from("photo_moods")
+                .select()
+                .eq("user_id", value: userId.uuidString)
+
+            if let filter = moodFilter {
+                baseQuery = baseQuery.eq("mood_score", value: filter)
+            }
+
+            let moods: [PhotoMood] = try await baseQuery
+                .order("logged_at", ascending: false)
+                .range(from: offset, to: offset + limit - 1)
+                .execute()
+                .value
 
             await MainActor.run {
                 if offset == 0 {
@@ -291,7 +291,7 @@ final class PhotoMoodService: ObservableObject {
         }
 
         do {
-            let _: EmptyResponse = try await supabase.storage
+            _ = try await supabase.storage
                 .from(bucketName)
                 .remove(paths: pathsToDelete)
         } catch {
@@ -362,7 +362,7 @@ final class PhotoMoodService: ObservableObject {
 
             // Process batch with proper error handling
             do {
-                let _: EmptyResponse = try await supabase.storage
+                _ = try await supabase.storage
                     .from(bucketName)
                     .remove(paths: batchPaths)
 

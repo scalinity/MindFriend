@@ -506,10 +506,14 @@ private struct MilestonePreviewSheet: View {
             description: "A 14-day program to help you manage stress through proven techniques.",
             category: "stress",
             durationDays: 14,
-            milestoneDays: [3, 7, 14],
+            difficultyLevel: "intermediate",
             isPremium: false,
-            isActive: true,
-            createdAt: Date()
+            milestoneDays: [3, 7, 14],
+            iconName: "brain.head.profile",
+            stepCount: 5,
+            userEnrolled: false,
+            userCompleted: false,
+            userProgress: nil
         ),
         activeArc: nil,
         onUpdate: {}

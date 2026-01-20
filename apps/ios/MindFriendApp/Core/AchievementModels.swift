@@ -591,7 +591,14 @@ struct SkillTreeNode: Identifiable {
         self.position = db.position
         self.prerequisiteNodeIds = db.prerequisiteNodes ?? []
         self.unlockType = db.unlockType
-        self.xpRequired = (db.unlockConfig["xp_required"]?.value as? Int) ?? 0
+        
+        // Extract xp_required from AnyCodable dictionary
+        var xpRequired = 0
+        if case .int(let value) = db.unlockConfig["xp_required"] {
+            xpRequired = value
+        }
+        self.xpRequired = xpRequired
+        
         self.xpReward = db.xpReward
         self.badgeRewardId = db.badgeRewardId
     }

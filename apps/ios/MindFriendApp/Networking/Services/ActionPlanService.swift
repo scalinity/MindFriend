@@ -12,6 +12,20 @@ final class ActionPlanService {
         self.supabase = supabase
     }
 
+    // MARK: - Helper for encoding dynamic values
+
+    private struct AnyEncodable: Encodable {
+        private let value: any Encodable
+
+        init(_ value: any Encodable) {
+            self.value = value
+        }
+
+        func encode(to encoder: Encoder) throws {
+            try value.encode(to: encoder)
+        }
+    }
+
     private struct ActionPlanRow: Codable {
         let id: UUID
         let userId: UUID
@@ -146,12 +160,19 @@ final class ActionPlanService {
     ) async throws -> (ActionPlan, [ActionPlanItem], Int?) {
         _ = try userId
 
-        let request: [String: AnyEncodable] = [
-            "sourceType": AnyEncodable(sourceType.rawValue),
-            "planSize": AnyEncodable(planSize.rawValue),
-            "timezone": AnyEncodable(timezone),
-            "regenerate": AnyEncodable(regenerate)
-        ]
+        struct GenerateRequest: Codable {
+            let sourceType: String
+            let planSize: String
+            let timezone: String
+            let regenerate: Bool
+        }
+
+        let request = GenerateRequest(
+            sourceType: sourceType.rawValue,
+            planSize: planSize.rawValue,
+            timezone: timezone,
+            regenerate: regenerate
+        )
 
         struct Response: Codable {
             let planId: String
@@ -198,7 +219,7 @@ final class ActionPlanService {
         let localDate = Self.localDateString(timezone: timezone)
         let plan = ActionPlan(
             id: response.planId,
-            userId: authService.userId ?? "",
+            userId: authService.userId?.uuidString ?? "",
             sourceType: sourceType,
             planSize: planSize,
             localDate: localDate,
@@ -322,7 +343,7 @@ final class ActionPlanService {
 
         let plan = ActionPlan(
             id: response.plan.id,
-            userId: authService.userId ?? "",
+            userId: authService.userId?.uuidString ?? "",
             sourceType: response.plan.sourceType,
             planSize: response.plan.planSize,
             localDate: response.plan.localDate,
@@ -357,12 +378,4 @@ private extension Date {
     var iso8601String: String {
         ISO8601DateFormatter().string(from: self)
     }
-}
-
-private extension ISO8601DateFormatter {
-    static let dateOnly: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withFullDate]
-        return formatter
-    }()
 }

@@ -12,7 +12,7 @@ struct QuestArcProgressCard: View {
     let onTap: () -> Void
 
     private var arc: QuestArc? {
-        userArc.questArc
+        userArc.arc
     }
 
     var body: some View {
@@ -74,7 +74,7 @@ struct QuestArcProgressCard: View {
                 .padding(.top, 4)
 
                 // Status badge for paused arcs
-                if userArc.status == "paused" {
+                if userArc.status == .paused {
                     pausedBadge
                 }
             }
@@ -254,24 +254,29 @@ struct NoActiveArcCard: View {
             id: UUID(),
             userId: UUID(),
             arcId: UUID(),
-            status: "active",
             currentDay: 5,
-            snapshotDurationDays: 14,
-            snapshotMilestoneDays: [3, 7, 14],
+            status: .active,
             startedAt: Date(),
             pausedAt: nil,
             completedAt: nil,
             abandonedAt: nil,
-            questArc: QuestArc(
+            lastQuestCompletedAt: nil,
+            snapshotDurationDays: 14,
+            snapshotMilestoneDays: [3, 7, 14],
+            arc: QuestArc(
                 id: UUID(),
                 title: "Stress Relief Journey",
                 description: "A 14-day program",
                 category: "stress",
                 durationDays: 14,
-                milestoneDays: [3, 7, 14],
+                difficultyLevel: "beginner",
                 isPremium: false,
-                isActive: true,
-                createdAt: Date()
+                milestoneDays: [3, 7, 14],
+                iconName: "brain.head.profile",
+                stepCount: 5,
+                userEnrolled: true,
+                userCompleted: false,
+                userProgress: 5
             )
         ),
         onTap: {}

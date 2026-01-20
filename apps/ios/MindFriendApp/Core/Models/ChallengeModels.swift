@@ -65,29 +65,6 @@ public enum ChallengeStatus: String {
     }
 }
 
-public enum ExerciseType: String, Codable, CaseIterable {
-    case breathing = "breathing"
-    case meditation = "meditation"
-    case grounding = "grounding"
-    case journaling = "journaling"
-    case movement = "movement"
-
-    var displayName: String {
-        switch self {
-        case .breathing:
-            return "Breathing"
-        case .meditation:
-            return "Meditation"
-        case .grounding:
-            return "Grounding"
-        case .journaling:
-            return "Journaling"
-        case .movement:
-            return "Movement"
-        }
-    }
-}
-
 // MARK: - Models
 
 public struct SocialChallenge: Identifiable, Codable {
@@ -375,7 +352,7 @@ struct DBSocialChallenge: Codable {
             throw ChallengeError.loadFailed
         }
 
-        let finalizedAtDate = finalizedAt.flatMap { iso8601Formatter.date(from: $0) }
+        let finalizedAtDate = finalized_at.flatMap { iso8601Formatter.date(from: $0) }
 
         return SocialChallenge(
             id: id,
