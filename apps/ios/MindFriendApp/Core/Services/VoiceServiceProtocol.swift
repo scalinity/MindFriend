@@ -13,6 +13,7 @@ enum VoiceServiceEvent {
     case userSpeechEnded
     case assistantSpeechStarted
     case assistantSpeechEnded
+    case bargeInTriggered      // User interrupted AI with speech or tap
     case transcriptUpdated(String)
     case quotaUpdated(Double)
     case error(VoiceError)

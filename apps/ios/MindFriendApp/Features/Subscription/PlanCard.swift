@@ -110,6 +110,8 @@ struct PlanCard: View {
     }
 }
 
+// TODO: Re-enable preview once BusinessModels.swift is added to project
+/*
 #Preview {
     VStack(spacing: 16) {
         PlanCard(
@@ -135,3 +137,4 @@ struct PlanCard: View {
     }
     .padding()
 }
+*/

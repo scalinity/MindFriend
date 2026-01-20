@@ -562,6 +562,12 @@ struct VoiceChatView: View {
                 role: .assistant,
                 content: trimmed
             )
+
+            // Generate a title for the conversation based on the transcript
+            _ = try await container.chatService.generateConversationTitle(
+                conversationId: conversationId,
+                content: trimmed
+            )
         } catch {
             errorMessage = "Couldn't save transcript. \(error.localizedDescription)"
             showError = true

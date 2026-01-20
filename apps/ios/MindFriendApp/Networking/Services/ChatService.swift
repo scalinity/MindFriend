@@ -65,4 +65,9 @@ final class ChatService: ObservableObject {
     func insertMessage(conversationId: String, role: MessageRole, content: String) async throws -> Message {
         try await dataService.insertMessage(conversationId: conversationId, role: role, content: content)
     }
+
+    /// Generate a title for a conversation based on content (used for voice mode)
+    func generateConversationTitle(conversationId: String, content: String) async throws -> String {
+        try await dataService.generateConversationTitle(conversationId: conversationId, content: content)
+    }
 }

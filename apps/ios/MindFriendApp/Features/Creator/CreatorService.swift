@@ -59,11 +59,11 @@ final class CreatorService: ObservableObject {
         try await supabase
             .from("creators")
             .update([
-                "display_name": displayName,
-                "bio": bio as Any,
-                "profile_image_url": profileImageUrl as Any,
-                "website_url": websiteUrl as Any,
-                "social_links": socialLinks as Any
+                "display_name": CreatorAnyEncodable(displayName),
+                "bio": CreatorAnyEncodable(bio),
+                "profile_image_url": CreatorAnyEncodable(profileImageUrl),
+                "website_url": CreatorAnyEncodable(websiteUrl),
+                "social_links": CreatorAnyEncodable(socialLinks)
             ])
             .eq("id", value: creatorId.uuidString)
             .execute()
@@ -106,13 +106,13 @@ final class CreatorService: ObservableObject {
         let content: DBCreatorContent = try await supabase
             .from("creator_content")
             .insert([
-                "creator_id": creatorId.uuidString,
-                "title": title,
-                "content_type": contentType.rawValue,
-                "format": format.rawValue,
-                "category": category,
-                "description": description as Any,
-                "status": "draft"
+                "creator_id": CreatorAnyEncodable(creatorId.uuidString),
+                "title": CreatorAnyEncodable(title),
+                "content_type": CreatorAnyEncodable(contentType.rawValue),
+                "format": CreatorAnyEncodable(format.rawValue),
+                "category": CreatorAnyEncodable(category),
+                "description": CreatorAnyEncodable(description),
+                "status": CreatorAnyEncodable("draft")
             ])
             .select()
             .single()
@@ -135,11 +135,11 @@ final class CreatorService: ObservableObject {
             throw CreatorError.notCreator
         }
 
-        var updates: [String: AnyCodable] = [:]
-        if let title = title { updates["title"] = AnyCodable(title) }
-        if let description = description { updates["description"] = AnyCodable(description) }
-        if let category = category { updates["category"] = AnyCodable(category) }
-        if let difficulty = difficulty { updates["difficulty"] = AnyCodable(difficulty.rawValue) }
+        var updates: [String: CreatorAnyEncodable] = [:]
+        if let title = title { updates["title"] = CreatorAnyEncodable(title) }
+        if let description = description { updates["description"] = CreatorAnyEncodable(description) }
+        if let category = category { updates["category"] = CreatorAnyEncodable(category) }
+        if let difficulty = difficulty { updates["difficulty"] = CreatorAnyEncodable(difficulty.rawValue) }
 
         try await supabase
             .from("creator_content")
@@ -183,7 +183,7 @@ final class CreatorService: ObservableObject {
     }
 
     func submitContentForReview(_ contentId: UUID) async throws {
-        let _: [String: AnyCodable] = try await supabase.functions.invoke(
+        _ = try await supabase.functions.invoke(
             "submit-content",
             options: FunctionInvokeOptions(body: ["contentId": contentId.uuidString])
         )
@@ -357,10 +357,10 @@ final class CreatorService: ObservableObject {
         try await supabase
             .from("content_ratings")
             .upsert([
-                "content_id": contentId.uuidString,
-                "user_id": userId.uuidString,
-                "rating": rating,
-                "review": review as Any
+                "content_id": CreatorAnyEncodable(contentId.uuidString),
+                "user_id": CreatorAnyEncodable(userId.uuidString),
+                "rating": CreatorAnyEncodable(rating),
+                "review": CreatorAnyEncodable(review)
             ], onConflict: "content_id,user_id")
             .execute()
     }
@@ -384,16 +384,23 @@ final class CreatorService: ObservableObject {
         try await supabase
             .from("content_engagement")
             .insert([
-                "content_id": contentId.uuidString,
-                "user_id": userId.uuidString,
-                "session_id": sessionId.uuidString,
-                "started_at": ISO8601DateFormatter().string(from: Date()),
-                "duration_seconds": durationSeconds,
-                "completion_percentage": completionPercentage,
-                "user_is_premium": isUserPremium,
-                "engagement_date": today,
-                "engagement_month": month
+                "content_id": CreatorAnyEncodable(contentId.uuidString),
+                "user_id": CreatorAnyEncodable(userId.uuidString),
+                "session_id": CreatorAnyEncodable(sessionId.uuidString),
+                "started_at": CreatorAnyEncodable(ISO8601DateFormatter().string(from: Date())),
+                "duration_seconds": CreatorAnyEncodable(durationSeconds),
+                "completion_percentage": CreatorAnyEncodable(completionPercentage),
+                "user_is_premium": CreatorAnyEncodable(isUserPremium),
+                "engagement_date": CreatorAnyEncodable(String(today)),
+                "engagement_month": CreatorAnyEncodable(month)
             ])
             .execute()
     }
+}
+
+// MARK: - Helper
+private struct CreatorAnyEncodable: Encodable {
+    private let _encode: (Encoder) throws -> Void
+    init<T: Encodable>(_ wrapped: T) { _encode = wrapped.encode }
+    func encode(to encoder: Encoder) throws { try _encode(encoder) }
 }

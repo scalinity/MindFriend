@@ -156,16 +156,40 @@ struct PromoCodeField: View {
     }
 }
 
-#Preview {
-    @State var code = ""
-    @State var validatedPromo: PromoCode? = nil
-    @State var isValidating = false
-
-    return PromoCodeField(
-        billingService: BillingService(authService: SupabaseAuthService()),
-        code: $code,
-        validatedPromo: $validatedPromo,
-        isValidating: $isValidating
-    )
-    .padding()
+// TODO: Re-enable preview once BusinessModels.swift is added to project
+/*
+#Preview("Valid Promo Code") {
+    PromoCodeFieldPreviewWrapper()
 }
+
+private struct PromoCodeFieldPreviewWrapper: View {
+    @State var code = "SAVE50"
+    @State var validatedPromo: PromoCode? = PromoCode(
+        id: UUID(),
+        code: "SAVE50",
+        discountType: .percent,
+        discountValue: 50,
+        trialExtensionDays: nil,
+        applicablePlans: nil,
+        minBillingPeriod: nil,
+        firstTimeOnly: false,
+        maxUses: nil,
+        usesCount: 0,
+        maxUsesPerUser: nil,
+        validFrom: Date(),
+        validUntil: nil,
+        isActive: true,
+        campaignName: "Summer Sale"
+    )
+    @State var isValidating = false
+    
+    var body: some View {
+        PromoCodeField(
+            billingService: BillingService(authService: SupabaseAuthService()),
+            code: $code,
+            validatedPromo: $validatedPromo,
+            isValidating: $isValidating
+        )
+    }
+}
+*/

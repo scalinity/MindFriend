@@ -139,6 +139,9 @@ enum Tables {
     static let biometricBaselines = "biometric_baselines"
     static let biometricAlerts = "biometric_alerts"
     static let moodBiometricCorrelations = "mood_biometric_correlations"
+
+    // Therapist Marketplace
+    static let therapistProfiles = "therapist_profiles"
 }
 
 // MARK: - Database Models (matching Supabase schema)
@@ -545,7 +548,7 @@ struct DBQuestTemplate: Codable {
     let id: UUID
     let title: String
     let description: String
-    let category: String
+    let category: String  // Resolved from either "category" or "type" column
     let estimatedMinutes: Int
     let xpReward: Int
     let isPremium: Bool
@@ -553,9 +556,44 @@ struct DBQuestTemplate: Codable {
 
     enum CodingKeys: String, CodingKey {
         case id, title, description, category, instructions
+        case type  // Legacy column name - fallback for older schemas
         case estimatedMinutes = "estimated_minutes"
         case xpReward = "xp_reward"
         case isPremium = "is_premium"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        description = try container.decode(String.self, forKey: .description)
+
+        // Handle both "category" (new schema) and "type" (old schema)
+        if let categoryValue = try container.decodeIfPresent(String.self, forKey: .category) {
+            category = categoryValue
+        } else if let typeValue = try container.decodeIfPresent(String.self, forKey: .type) {
+            // Map old "type" values to category-like values for display
+            category = typeValue
+        } else {
+            category = "focus"  // Default fallback
+        }
+
+        estimatedMinutes = try container.decodeIfPresent(Int.self, forKey: .estimatedMinutes) ?? 5
+        xpReward = try container.decodeIfPresent(Int.self, forKey: .xpReward) ?? 50
+        isPremium = try container.decodeIfPresent(Bool.self, forKey: .isPremium) ?? false
+        instructions = try container.decodeIfPresent([DBQuestInstruction].self, forKey: .instructions)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encode(description, forKey: .description)
+        try container.encode(category, forKey: .category)
+        try container.encode(estimatedMinutes, forKey: .estimatedMinutes)
+        try container.encode(xpReward, forKey: .xpReward)
+        try container.encode(isPremium, forKey: .isPremium)
+        try container.encodeIfPresent(instructions, forKey: .instructions)
     }
 
     /// Generate default instructions based on quest category and title
@@ -625,10 +663,90 @@ struct DBQuestTemplate: Codable {
             ]
         }
     }
+
+    /// Convert DB model to app's QuestTemplate model
+    func toQuestTemplate() -> QuestTemplate {
+        // Map category string to QuestType, with fallback mapping
+        let questType = mapCategoryToQuestType(category)
+
+        return QuestTemplate(
+            id: id.uuidString,
+            type: questType,
+            title: title,
+            description: description,
+            estimatedMinutes: estimatedMinutes,
+            difficulty: "medium",  // Default, as DB may not have this
+            tags: [],  // Default, as DB may not have this
+            instructions: defaultInstructions(),
+            category: questType
+        )
+    }
+
+    /// Map database category values to QuestType enum
+    private func mapCategoryToQuestType(_ category: String) -> QuestType {
+        switch category.lowercased() {
+        case "mindfulness", "breathing", "focus":
+            return .breathing
+        case "physical", "walk", "stretch":
+            return .walk
+        case "creative", "journal":
+            return .journal
+        case "gratitude":
+            return .gratitude
+        case "reflection":
+            return .focus
+        case "social":
+            return .journal  // Map social to journal as closest match
+        default:
+            return .focus  // Default fallback
+        }
+    }
 }
 
 // Note: DBUserQuest removed - quests now use RPC functions (assign_daily_quest, complete_quest)
 // and DBQuestWithTemplate struct for fetching active quests with template data
+
+/// Quick variant from quest_quick_variants table
+struct DBQuestQuickVariant: Codable {
+    let id: UUID
+    let parentTemplateId: UUID
+    let title: String
+    let description: String
+    let steps: [DBQuestInstruction]?
+    let estimatedMinutes: Int
+    let xpMultiplier: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case parentTemplateId = "parent_template_id"
+        case title, description, steps
+        case estimatedMinutes = "estimated_minutes"
+        case xpMultiplier = "xp_multiplier"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        parentTemplateId = try container.decode(UUID.self, forKey: .parentTemplateId)
+        title = try container.decode(String.self, forKey: .title)
+        description = try container.decode(String.self, forKey: .description)
+        steps = try container.decodeIfPresent([DBQuestInstruction].self, forKey: .steps)
+        estimatedMinutes = try container.decodeIfPresent(Int.self, forKey: .estimatedMinutes) ?? 3
+        xpMultiplier = try container.decodeIfPresent(Double.self, forKey: .xpMultiplier)
+    }
+
+    func toQuestQuickVariant() -> QuestQuickVariant {
+        QuestQuickVariant(
+            id: id,
+            parentTemplateId: parentTemplateId,
+            title: title,
+            description: description,
+            steps: steps?.map { QuestInstruction(step: $0.step, text: $0.text, durationSeconds: nil) } ?? [],
+            estimatedMinutes: estimatedMinutes,
+            xpMultiplier: xpMultiplier ?? 0.5
+        )
+    }
+}
 
 struct DBExerciseInstruction: Codable {
     let step: Int

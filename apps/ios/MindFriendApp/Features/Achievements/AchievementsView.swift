@@ -197,14 +197,14 @@ struct BadgeCollectionView: View {
             // Category Filter
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    CategoryChip(
+                    AchievementCategoryChip(
                         title: "All",
                         isSelected: selectedCategory == nil,
                         action: { selectedCategory = nil }
                     )
 
                     ForEach(categories, id: \.self) { category in
-                        CategoryChip(
+                        AchievementCategoryChip(
                             title: category.displayName,
                             isSelected: selectedCategory == category,
                             action: { selectedCategory = category }
@@ -256,7 +256,7 @@ struct BadgeCollectionView: View {
     }
 }
 
-struct CategoryChip: View {
+struct AchievementCategoryChip: View {
     let title: String
     let isSelected: Bool
     let action: () -> Void

@@ -285,6 +285,10 @@ struct OnboardingAIGreetingView: View {
                     }
                     .padding()
                 }
+                .dismissKeyboardOnSwipe()
+                .onTapGesture {
+                    hideKeyboard()
+                }
                 .onChange(of: messages.count) { _, _ in
                     withAnimation {
                         if isTyping {
@@ -591,6 +595,10 @@ struct OnboardingBuddyInviteView: View {
                 .padding(.horizontal, 24)
                 .padding(.bottom, 32)
             }
+        }
+        .dismissKeyboardOnSwipe()
+        .onTapGesture {
+            hideKeyboard()
         }
         .alert("Invite Sent!", isPresented: $showSuccess) {
             Button("Continue", action: onContinue)

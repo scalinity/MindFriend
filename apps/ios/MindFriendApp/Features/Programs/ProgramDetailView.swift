@@ -315,7 +315,13 @@ struct ProgramDayPreviewRow: View {
             tags: ["anxiety", "calm", "breathing"],
             coverImageUrl: nil,
             estimatedDailyMinutes: 15,
-            sortOrder: 1
+            sortOrder: 1,
+            methodology: nil,
+            evidenceSummary: nil,
+            evidenceUrl: nil,
+            targetConditions: [],
+            requiresBaselineAssessment: false,
+            assessmentType: nil
         ))
     }
     .environmentObject(AppState())

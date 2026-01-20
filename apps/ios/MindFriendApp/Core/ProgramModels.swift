@@ -54,6 +54,51 @@ enum ProgramCategory: String, Codable, CaseIterable {
     }
 }
 
+// MARK: - Therapeutic Methodology
+
+/// Therapeutic methodology for evidence-based programs
+enum TherapeuticMethodology: String, Codable, CaseIterable {
+    case cbt = "cbt"
+    case dbt = "dbt"
+    case act = "act"
+    case mbct = "mbct"
+    case mixed = "mixed"
+    
+    var displayName: String {
+        switch self {
+        case .cbt: return "Cognitive Behavioral Therapy"
+        case .dbt: return "Dialectical Behavior Therapy"
+        case .act: return "Acceptance & Commitment Therapy"
+        case .mbct: return "Mindfulness-Based Cognitive Therapy"
+        case .mixed: return "Integrated Approach"
+        }
+    }
+    
+    var shortName: String {
+        rawValue.uppercased()
+    }
+    
+    var icon: String {
+        switch self {
+        case .cbt: return "brain.head.profile"
+        case .dbt: return "heart.circle"
+        case .act: return "arrow.right.circle"
+        case .mbct: return "leaf"
+        case .mixed: return "squares.leading.rectangle"
+        }
+    }
+    
+    var color: Color {
+        switch self {
+        case .cbt: return .blue
+        case .dbt: return .purple
+        case .act: return .green
+        case .mbct: return .teal
+        case .mixed: return .indigo
+        }
+    }
+}
+
 // MARK: - Program Difficulty
 
 /// Difficulty levels for programs
@@ -84,6 +129,18 @@ struct Program: Codable, Identifiable, Equatable {
     let coverImageUrl: String?
     let estimatedDailyMinutes: Int
     let sortOrder: Int
+    
+    // Therapeutic program fields (nil for general wellness programs)
+    let methodology: TherapeuticMethodology?
+    let evidenceSummary: String?
+    let evidenceUrl: String?
+    let targetConditions: [String]
+    let requiresBaselineAssessment: Bool
+    let assessmentType: String?
+
+    var isTherapeutic: Bool {
+        methodology != nil
+    }
 
     var formattedDuration: String {
         if durationDays == 7 { return "1 week" }
@@ -98,13 +155,18 @@ struct Program: Codable, Identifiable, Equatable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, slug, title, description, tags, category, difficulty
+        case id, slug, title, description, tags, category, difficulty, methodology
         case durationDays = "duration_days"
         case premiumOnly = "premium_only"
         case learningObjectives = "learning_objectives"
         case coverImageUrl = "cover_image_url"
         case estimatedDailyMinutes = "estimated_daily_minutes"
         case sortOrder = "sort_order"
+        case evidenceSummary = "evidence_summary"
+        case evidenceUrl = "evidence_url"
+        case targetConditions = "target_conditions"
+        case requiresBaselineAssessment = "requires_baseline_assessment"
+        case assessmentType = "assessment_type"
     }
 }
 
@@ -450,15 +512,28 @@ struct DBProgram: Codable {
     let coverImageUrl: String?
     let estimatedDailyMinutes: Int
     let sortOrder: Int
+    
+    // Therapeutic program fields
+    let methodology: String?
+    let evidenceSummary: String?
+    let evidenceUrl: String?
+    let targetConditions: [String]?
+    let requiresBaselineAssessment: Bool?
+    let assessmentType: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, slug, title, description, category, difficulty, tags
+        case id, slug, title, description, category, difficulty, tags, methodology
         case durationDays = "duration_days"
         case premiumOnly = "premium_only"
         case learningObjectives = "learning_objectives"
         case coverImageUrl = "cover_image_url"
         case estimatedDailyMinutes = "estimated_daily_minutes"
         case sortOrder = "sort_order"
+        case evidenceSummary = "evidence_summary"
+        case evidenceUrl = "evidence_url"
+        case targetConditions = "target_conditions"
+        case requiresBaselineAssessment = "requires_baseline_assessment"
+        case assessmentType = "assessment_type"
     }
 
     func toProgram() -> Program {
@@ -475,7 +550,13 @@ struct DBProgram: Codable {
             tags: tags,
             coverImageUrl: coverImageUrl,
             estimatedDailyMinutes: estimatedDailyMinutes,
-            sortOrder: sortOrder
+            sortOrder: sortOrder,
+            methodology: methodology.flatMap { TherapeuticMethodology(rawValue: $0) },
+            evidenceSummary: evidenceSummary,
+            evidenceUrl: evidenceUrl,
+            targetConditions: targetConditions ?? [],
+            requiresBaselineAssessment: requiresBaselineAssessment ?? false,
+            assessmentType: assessmentType
         )
     }
 }

@@ -192,7 +192,7 @@ private struct MemberCompletionBadge: View {
 }
 
 /// Sheet for creating a new challenge (owner only)
-struct CreateChallengeSheet: View {
+struct CircleCreateChallengeSheet: View {
     let circleId: String
     let onCreated: (CircleChallenge) -> Void
 

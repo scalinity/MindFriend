@@ -84,8 +84,8 @@ final class AudioPlayerService: NSObject, ObservableObject {
     // MARK: - Playback Control
 
     func play(_ track: AudioTrack, context: String = "browse") async {
-        state.track = track
-        state.isLoading = true
+        state.currentTrack = track
+        state.isBuffering = true
         state.error = nil
 
         // Record playback start in background
@@ -94,7 +94,7 @@ final class AudioPlayerService: NSObject, ObservableObject {
         }
 
         // Check if offline available
-        let audioUrl = cacheManager.getCachedURL(for: track) ?? track.audioUrl
+        let audioUrl = cacheManager.getCachedURL(for: track) ?? URL(string: track.audioUrl)!
 
         let asset = AVURLAsset(url: audioUrl)
         playerItem = AVPlayerItem(asset: asset)
@@ -107,14 +107,18 @@ final class AudioPlayerService: NSObject, ObservableObject {
             .sink { [weak self] status in
                 switch status {
                 case .readyToPlay:
-                    self?.state.isLoading = false
+                    self?.state.isBuffering = false
                     self?.state.duration = self?.playerItem?.duration.seconds ?? 0
                     self?.player?.play()
                     self?.state.isPlaying = true
                     self?.updateNowPlayingInfo()
                 case .failed:
-                    self?.state.isLoading = false
-                    self?.state.error = .decodingError
+                    if let itemError = self?.playerItem?.error {
+                        self?.state.error = "Failed to load audio: \(itemError.localizedDescription)"
+                    } else {
+                        self?.state.error = "Failed to load audio"
+                    }
+                    self?.state.isBuffering = false
                 default:
                     break
                 }
@@ -212,7 +216,7 @@ final class AudioPlayerService: NSObject, ObservableObject {
             return
         }
 
-        let seconds = TimeInterval(duration.minutes * 60)
+        let seconds = TimeInterval(duration.rawValue * 60)
         sleepTimerRemaining = seconds
 
         sleepTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] timer in
@@ -238,27 +242,50 @@ final class AudioPlayerService: NSObject, ObservableObject {
     }
 
     private func fadeOutAndStop() {
-        let fadeSteps = 20
-        let fadeInterval = 3.0 / Double(fadeSteps)
+        fadeOutAndStopWithDuration(3.0)
+    }
+
+    /// Fade out and stop with configurable duration
+    /// - Parameter duration: Fade duration in seconds (default 3, sleep uses 30)
+    /// - Parameter completion: Optional completion handler called when fade finishes
+    func fadeOutAndStopWithDuration(_ duration: TimeInterval, completion: (() -> Void)? = nil) {
+        let fadeSteps = max(20, Int(duration * 2)) // 2 steps per second for smooth fade
+        let fadeInterval = duration / Double(fadeSteps)
         var currentStep = 0
+
+        isSleepFading = true
 
         Timer.scheduledTimer(withTimeInterval: fadeInterval, repeats: true) { [weak self] timer in
             currentStep += 1
-            let volume = 1.0 - (Double(currentStep) / Double(fadeSteps))
-            self?.player?.volume = Float(volume)
+            // Use quadratic fade curve for more natural audio perception
+            let progress = Double(currentStep) / Double(fadeSteps)
+            let volume = Float(pow(1.0 - progress, 2))
+            self?.player?.volume = volume
 
             if currentStep >= fadeSteps {
                 timer.invalidate()
+                self?.isSleepFading = false
                 self?.stop()
                 self?.player?.volume = 1.0
+                completion?()
             }
         }
+    }
+
+    /// Whether a sleep fade is currently in progress
+    private(set) var isSleepFading: Bool = false
+
+    /// Cancel an in-progress sleep fade and stop immediately
+    func cancelSleepFade() {
+        isSleepFading = false
+        stop()
+        player?.volume = 1.0
     }
 
     // MARK: - Now Playing Info
 
     private func updateNowPlayingInfo() {
-        guard let track = state.track else { return }
+        guard let track = state.currentTrack else { return }
 
         var info: [String: Any] = [
             MPMediaItemPropertyTitle: track.title,
@@ -267,16 +294,15 @@ final class AudioPlayerService: NSObject, ObservableObject {
             MPNowPlayingInfoPropertyPlaybackRate: state.isPlaying ? 1.0 : 0.0,
         ]
 
-        if let narrator = track.narrator {
-            info[MPMediaItemPropertyArtist] = narrator.name
+        if let authorName = track.authorName {
+            info[MPMediaItemPropertyArtist] = authorName
         }
 
         info[MPMediaItemPropertyMediaType] = MPMediaType.podcast.rawValue
 
-        // Load artwork async
-        if let coverUrl = track.coverImageUrl {
+        if let imageUrl = track.imageUrl, let url = URL(string: imageUrl) {
             Task {
-                if let data = try? await URLSession.shared.data(from: coverUrl).0,
+                if let data = try? await URLSession.shared.data(from: url).0,
                    let image = UIImage(data: data) {
                     info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
                     MPNowPlayingInfoCenter.default().nowPlayingInfo = info
@@ -296,11 +322,11 @@ final class AudioPlayerService: NSObject, ObservableObject {
     private func recordPlaybackStart(_ track: AudioTrack, context: String) async {
         guard let userId = supabase.auth.currentUser?.id else { return }
 
-        let body: [String: Any] = [
-            "trackId": track.id,
-            "eventType": "start",
-            "positionSeconds": 0,
-            "source": context,
+        let body: [String: AudioPlayerServiceAnyEncodable] = [
+            "trackId": AudioPlayerServiceAnyEncodable(track.id),
+            "eventType": AudioPlayerServiceAnyEncodable("start"),
+            "positionSeconds": AudioPlayerServiceAnyEncodable(0),
+            "source": AudioPlayerServiceAnyEncodable(context),
         ]
 
         do {
@@ -313,13 +339,13 @@ final class AudioPlayerService: NSObject, ObservableObject {
     }
 
     private func recordPlaybackComplete() async {
-        guard let track = state.track else { return }
+        guard let track = state.currentTrack else { return }
 
-        let body: [String: Any] = [
-            "trackId": track.id,
-            "eventType": "complete",
-            "positionSeconds": Int(state.currentTime),
-            "durationListenedSeconds": Int(state.currentTime),
+        let body: [String: AudioPlayerServiceAnyEncodable] = [
+            "trackId": AudioPlayerServiceAnyEncodable(track.id),
+            "eventType": AudioPlayerServiceAnyEncodable("complete"),
+            "positionSeconds": AudioPlayerServiceAnyEncodable(Int(state.currentTime)),
+            "durationListenedSeconds": AudioPlayerServiceAnyEncodable(Int(state.currentTime)),
         ]
 
         do {
@@ -332,13 +358,9 @@ final class AudioPlayerService: NSObject, ObservableObject {
 
     private func handlePlaybackEnd() async {
         await recordPlaybackComplete()
-
-        if let track = state.track, track.isLoopable {
-            seek(to: 0)
-            play()
-        } else {
-            stop()
-        }
+        
+        // Don't loop - play to completion and stop
+        stop()
     }
 
     // MARK: - Favorites
@@ -442,7 +464,7 @@ final class AudioCacheManager {
     }
 
     func getCachedURL(for track: AudioTrack) -> URL? {
-        let localPath = cacheDirectory.appendingPathComponent("\(track.id).\(track.audioFormat)")
+        let localPath = cacheDirectory.appendingPathComponent("\(track.id).m4a")
         return FileManager.default.fileExists(atPath: localPath.path) ? localPath : nil
     }
 
@@ -451,39 +473,38 @@ final class AudioCacheManager {
     }
 
     func download(_ track: AudioTrack) async throws {
-        let localPath = cacheDirectory.appendingPathComponent("\(track.id).\(track.audioFormat)")
+        let localPath = cacheDirectory.appendingPathComponent("\(track.id).m4a")
 
         if FileManager.default.fileExists(atPath: localPath.path) {
             return  // Already cached
         }
 
         // Check cache size before download
-        if totalSize() + (track.fileSizeBytes ?? 0) > maxCacheSizeBytes {
+        if totalSize() > maxCacheSizeBytes * 90 / 100 {
             evictLRU()
         }
 
-        let (tempURL, _) = try await URLSession.shared.download(from: track.audioUrl)
+        guard let url = URL(string: track.audioUrl) else {
+            throw NSError(domain: "AudioCache", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid audio URL"])
+        }
+        let (tempURL, _) = try await URLSession.shared.download(from: url)
         try FileManager.default.moveItem(at: tempURL, to: localPath)
     }
 
     func delete(_ track: AudioTrack) throws {
-        let localPath = cacheDirectory.appendingPathComponent("\(track.id).\(track.audioFormat)")
+        let localPath = cacheDirectory.appendingPathComponent("\(track.id).m4a")
         try FileManager.default.removeItem(at: localPath)
     }
 
     func totalSize() -> Int64 {
-        guard let enumerator = FileManager.default.enumerator(atPath: cacheDirectory.path) else {
-            return 0
-        }
-
-        var totalSize: Int64 = 0
-        for case let file as String in enumerator {
-            let filePath = cacheDirectory.appendingPathComponent(file)
-            if let size = try? FileManager.default.attributesOfItem(atPath: filePath.path)[.size] as? Int64 {
-                totalSize += size
+        guard let files = try? FileManager.default.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: [.fileSizeKey]) else { return 0 }
+        var size: Int64 = 0
+        for file in files {
+            if let fileSize = try? FileManager.default.attributesOfItem(atPath: file.path)[.size] as? Int64 {
+                size += fileSize
             }
         }
-        return totalSize
+        return size
     }
 
     func clearAll() throws {
@@ -526,4 +547,11 @@ final class AudioCacheManager {
             }
         }
     }
+}
+
+// MARK: - Helper
+private struct AudioPlayerServiceAnyEncodable: Encodable {
+    private let _encode: (Encoder) throws -> Void
+    init<T: Encodable>(_ wrapped: T) { _encode = wrapped.encode }
+    func encode(to encoder: Encoder) throws { try _encode(encoder) }
 }

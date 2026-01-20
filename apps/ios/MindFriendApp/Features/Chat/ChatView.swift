@@ -35,6 +35,10 @@ struct ChatView: View {
                     }
                     .padding()
                 }
+                .dismissKeyboardOnSwipe()
+                .onTapGesture {
+                    hideKeyboard()
+                }
                 .onChange(of: messages.count) { _, _ in
                     withAnimation {
                         proxy.scrollTo(messages.last?.id, anchor: .bottom)
@@ -93,10 +97,9 @@ struct ChatView: View {
         }) {
             VoiceChatView(supabase: container.supabaseClient, conversationId: conversation.id)
         }
-        .onDisappear {
-            // Cancel any in-flight send task when view disappears
-            sendTask?.cancel()
-        }
+        // Note: We intentionally do NOT cancel sendTask on disappear.
+        // The server will complete the request and save the message.
+        // When the user returns, they'll see the completed response.
         // Load messages on appearance
         .task {
             await loadMessages()
@@ -185,8 +188,12 @@ struct ChatView: View {
                     }
                 }
             } catch is CancellationError {
-                // Task was cancelled, clean up optimistic message
-                messages.removeAll { $0.id == tempMessageId }
+                // Task was cancelled - don't show error, message will complete on server
+                // User will see the response when they return to the chat
+                Log.chat.debug("Send task cancelled, server will complete request")
+            } catch let urlError as URLError where urlError.code == .cancelled {
+                // URL request was cancelled - same handling as CancellationError
+                Log.chat.debug("URL request cancelled, server will complete request")
             } catch let error as APIError {
                 if case .quotaExceeded = error {
                     appState.showPaywall = true
@@ -221,7 +228,7 @@ struct MessageBubble: View {
                 Text(message.content)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
-                    .background(isUser ? Color.accentColor : Color(.secondarySystemBackground))
+                    .background(isUser ? Color.accentColor : Color(uiColor: .secondarySystemBackground))
                     .foregroundStyle(isUser ? .white : .primary)
                     .cornerRadius(20)
 
@@ -258,7 +265,7 @@ struct TypingIndicator: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .background(Color(.secondarySystemBackground))
+            .background(Color(uiColor: .secondarySystemBackground))
             .cornerRadius(20)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("MindFriend is typing")
@@ -285,7 +292,7 @@ struct ChatInputBar: View {
                 .lineLimit(1...5)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
-                .background(Color(.secondarySystemBackground))
+                .background(Color(uiColor: .secondarySystemBackground))
                 .cornerRadius(20)
                 .submitLabel(.send)
                 .onSubmit {
@@ -307,7 +314,7 @@ struct ChatInputBar: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
-        .background(Color(.systemBackground))
+        .background(Color(uiColor: .systemBackground))
     }
 }
 
@@ -419,7 +426,7 @@ struct NewChatView: View {
         ChatView(conversation: Conversation(
             id: "1",
             title: "Test Chat",
-            status: .active,
+            status: ConversationStatus.active,
             createdAt: Date(),
             updatedAt: Date()
         ))

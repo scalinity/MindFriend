@@ -280,12 +280,14 @@ enum MoodTrend: String, Codable, Equatable {
     case improving
     case stable
     case declining
+    case insufficientData = "insufficient_data"
 
     var icon: String {
         switch self {
         case .improving: return "arrow.up.right"
         case .stable: return "arrow.right"
         case .declining: return "arrow.down.right"
+        case .insufficientData: return "questionmark.circle"
         }
     }
 
@@ -294,6 +296,16 @@ enum MoodTrend: String, Codable, Equatable {
         case .improving: return "green"
         case .stable: return "yellow"
         case .declining: return "orange"
+        case .insufficientData: return "gray"
+        }
+    }
+
+    var emoji: String {
+        switch self {
+        case .improving: return "📈"
+        case .stable: return "➡️"
+        case .declining: return "📉"
+        case .insufficientData: return "❓"
         }
     }
 }

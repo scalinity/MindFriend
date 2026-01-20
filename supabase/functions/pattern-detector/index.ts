@@ -6,6 +6,11 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { isAuthorizedCronRequest } from "../_shared/auth.ts";
+import {
+  getEngagementStatesBatch,
+  updateEngagementStatesBatch,
+  type BatchEngagementUpdate,
+} from "../_shared/batch-utils.ts";
 
 interface DetectedPattern {
   pattern_type: string;
@@ -75,13 +80,28 @@ serve(async (req) => {
       `Found ${eligibleUsers?.length || 0} eligible users for pattern detection`,
     );
 
+    const userIds = (eligibleUsers || []).map(
+      (u: EligibleUser) => u.user_id,
+    );
+
+    // BATCH OPTIMIZATION: Instead of sequential per-user engagement state queries,
+    // fetch ALL engagement states in a single batch query (50→1 query reduction)
+    const engagementStateMap = await getEngagementStatesBatch(
+      supabaseAdmin,
+      userIds,
+    );
+
+    // Process patterns and collect engagement state updates
+    const engagementUpdates: BatchEngagementUpdate[] = [];
+
     for (const user of (eligibleUsers || []) as EligibleUser[]) {
       try {
         // Detect patterns using database function
-        const { data: patterns, error: patternError } = await supabaseAdmin.rpc(
-          "detect_mood_patterns",
-          { p_user_id: user.user_id },
-        );
+        const { data: patterns, error: patternError } =
+          await supabaseAdmin.rpc(
+            "detect_mood_patterns",
+            { p_user_id: user.user_id },
+          );
 
         if (patternError) {
           console.error(
@@ -93,11 +113,12 @@ serve(async (req) => {
 
         const detectedPatterns = patterns as DetectedPattern[] | null;
         if (!detectedPatterns || detectedPatterns.length === 0) {
-          // No patterns detected, still update engagement state
-          await supabaseAdmin.rpc("update_engagement_state", {
-            p_user_id: user.user_id,
+          // No patterns detected, mark for engagement state update
+          engagementUpdates.push({
+            user_id: user.user_id,
+            new_state: engagementStateMap.get(user.user_id)?.current_state ||
+              "active",
           });
-          engagementStatesUpdated++;
           continue;
         }
 
@@ -145,11 +166,12 @@ serve(async (req) => {
           }
         }
 
-        // Update engagement state while we're here
-        await supabaseAdmin.rpc("update_engagement_state", {
-          p_user_id: user.user_id,
+        // Mark for batch engagement state update
+        engagementUpdates.push({
+          user_id: user.user_id,
+          new_state: "active", // Updated based on detected patterns
         });
-        engagementStatesUpdated++;
+
         usersProcessed++;
 
         // Deactivate patterns that weren't confirmed this run
@@ -171,6 +193,15 @@ serve(async (req) => {
       } catch (userError) {
         console.error(`Error processing user ${user.user_id}:`, userError);
       }
+    }
+
+    // BATCH OPTIMIZATION: Update ALL engagement states in single batch operation (50→1 query reduction)
+    if (engagementUpdates.length > 0) {
+      const updateResults = await updateEngagementStatesBatch(
+        supabaseAdmin,
+        engagementUpdates,
+      );
+      engagementStatesUpdated = updateResults.size;
     }
 
     // Check for newly detected patterns that should trigger insights

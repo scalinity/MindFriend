@@ -16,6 +16,8 @@ enum NotificationType: String {
     case streakRisk = "streak_risk"
     case weeklySummary = "weekly_summary"
     case challenge = "challenge"
+    // Sleep feature
+    case bedtimeReminder = "bedtime_reminder"
 }
 
 /// Deep link destinations from notifications
@@ -28,6 +30,7 @@ enum NotificationDeepLink {
     case insights
     case buddy(code: String)
     case micro(templateId: String? = nil)
+    case sleep(contentId: String? = nil)
     case none
 }
 
@@ -251,6 +254,10 @@ final class NotificationManager: NSObject, ObservableObject {
         case "mood_reminder":
             return .mood
 
+        case "bedtime_reminder":
+            let contentId = userInfo["content_id"] as? String
+            return .sleep(contentId: contentId)
+
         default:
             break
         }
@@ -297,6 +304,10 @@ final class NotificationManager: NSObject, ObservableObject {
             if let code = pathComponents.first {
                 return .buddy(code: code)
             }
+
+        case "sleep":
+            let contentId = pathComponents.first
+            return .sleep(contentId: contentId)
 
         default:
             break
@@ -347,6 +358,42 @@ final class NotificationManager: NSObject, ObservableObject {
         let request = UNNotificationRequest(identifier: "daily_quest_reminder", content: content, trigger: trigger)
 
         try await UNUserNotificationCenter.current().add(request)
+    }
+
+    /// Schedule bedtime reminder for sleep feature
+    /// - Parameter time: DateComponents with hour and minute for daily reminder
+    /// - Parameter contentId: Optional specific sleep content to deep link to
+    func scheduleBedtimeReminder(at time: DateComponents, contentId: String? = nil) async throws {
+        let content = UNMutableNotificationContent()
+        content.title = "Time to Wind Down"
+        content.body = "Ready for restful sleep? Start your bedtime routine now."
+        content.sound = .default
+
+        var userInfo: [String: Any] = [
+            "type": NotificationType.bedtimeReminder.rawValue,
+            "deep_link": contentId != nil ? "mindfriend://sleep/\(contentId!)" : "mindfriend://sleep"
+        ]
+        if let contentId = contentId {
+            userInfo["content_id"] = contentId
+        }
+        content.userInfo = userInfo
+
+        let trigger = UNCalendarNotificationTrigger(dateMatching: time, repeats: true)
+        let request = UNNotificationRequest(identifier: "bedtime_reminder", content: content, trigger: trigger)
+
+        try await UNUserNotificationCenter.current().add(request)
+
+        Analytics.shared.track(.featureUsed, properties: [
+            "feature": "sleep",
+            "action": "bedtime_reminder_scheduled",
+            "hour": time.hour ?? -1,
+            "minute": time.minute ?? -1
+        ])
+    }
+
+    /// Cancel bedtime reminder
+    func cancelBedtimeReminder() {
+        cancelNotification(id: "bedtime_reminder")
     }
 
     /// Cancel a scheduled notification

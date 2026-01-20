@@ -89,63 +89,51 @@ final class AudioContentService {
 
     /// Get personalized recommendations based on mood, context, and listening history
     func getRecommendations(context: String? = nil, mood: String? = nil, limit: Int = 10) async throws -> [AudioTrack] {
-        var body: [String: Any] = ["limit": limit]
+        var body: [String: AudioContentServiceAnyEncodable] = ["limit": AudioContentServiceAnyEncodable(limit)]
 
         if let context = context {
-            body["context"] = context
+            body["context"] = AudioContentServiceAnyEncodable(context)
         }
         if let mood = mood {
-            body["mood"] = mood
+            body["mood"] = AudioContentServiceAnyEncodable(mood)
         }
 
-        let response: [String: Any] = try await supabase.functions
+        struct RecommendationResponse: Decodable {
+            let recommendations: [RecommendationItem]
+        }
+        
+        struct RecommendationItem: Decodable {
+            let id: String
+            let title: String
+            let slug: String
+            let description: String?
+            let author_name: String?
+            let image_url: String?
+            let audio_url: String
+            let category: String
+            let audio_duration_seconds: Int
+            let is_featured: Bool?
+            let play_count: Int?
+        }
+
+        let response: RecommendationResponse = try await supabase.functions
             .invoke("get-audio-recommendations", options: .init(body: body))
 
-        guard let recommendations = response["recommendations"] as? [[String: Any]] else {
-            throw AudioServiceError.invalidResponse
-        }
-
         // Convert response to AudioTrack objects
-        let tracks = recommendations.compactMap { dict -> AudioTrack? in
-            guard let id = dict["id"] as? String,
-                  let title = dict["title"] as? String,
-                  let slug = dict["slug"] as? String,
-                  let audioUrl = dict["audio_url"] as? String,
-                  let categoryStr = dict["category"] as? String,
-                  let duration = dict["audio_duration_seconds"] as? Int else {
-                return nil
-            }
-
+        let tracks = response.recommendations.map { item -> AudioTrack in
             return AudioTrack(
-                id: id,
-                title: title,
-                slug: slug,
-                description: dict["description"] as? String,
-                category: AudioCategory(rawValue: categoryStr) ?? .meditation,
-                subcategory: dict["subcategory"] as? String,
-                tags: dict["tags"] as? [String] ?? [],
-                audioUrl: URL(string: audioUrl) ?? URL(fileURLWithPath: ""),
-                duration: TimeInterval(duration),
-                audioFormat: dict["audio_format"] as? String ?? "mp3",
-                audioQuality: dict["audio_quality"] as? String ?? "high",
-                fileSizeBytes: dict["file_size_bytes"] as? Int,
-                previewUrl: nil,
-                coverImageUrl: dict["cover_image_url"].flatMap { URL(string: $0 as? String ?? "") },
-                backgroundImageUrl: nil,
-                primaryColor: nil,
-                secondaryColor: nil,
-                narrator: nil,
-                creatorType: .professional,
-                language: "en",
-                isLoopable: dict["is_loopable"] as? Bool ?? true,
-                hasBackgroundMusic: dict["has_background_music"] as? Bool ?? true,
-                energyLevel: nil,
-                isPremium: dict["is_premium"] as? Bool ?? false,
-                isFeatured: dict["is_featured"] as? Bool ?? false,
-                playCount: dict["play_count"] as? Int ?? 0,
-                completionCount: dict["completion_count"] as? Int ?? 0,
-                averageRating: dict["average_rating"] as? Double,
-                ratingCount: dict["rating_count"] as? Int ?? 0
+                id: item.id,
+                title: item.title,
+                slug: item.slug,
+                description: item.description,
+                authorName: item.author_name,
+                imageUrl: item.image_url,
+                audioUrl: item.audio_url,
+                category: AudioCategory(rawValue: item.category) ?? .meditation,
+                duration: TimeInterval(item.audio_duration_seconds),
+                isFeatured: item.is_featured ?? false,
+                playCount: item.play_count ?? 0,
+                createdAt: Date() // Simplified
             )
         }
 
@@ -156,11 +144,11 @@ final class AudioContentService {
 
     /// Record playback session start
     func recordPlaybackStart(trackId: String, context: String = "browse") async throws {
-        let body: [String: Any] = [
-            "trackId": trackId,
-            "eventType": "start",
-            "positionSeconds": 0,
-            "source": context
+        let body: [String: AudioContentServiceAnyEncodable] = [
+            "trackId": AudioContentServiceAnyEncodable(trackId),
+            "eventType": AudioContentServiceAnyEncodable("start"),
+            "positionSeconds": AudioContentServiceAnyEncodable(0),
+            "source": AudioContentServiceAnyEncodable(context)
         ]
 
         let _: [String: String] = try await supabase.functions
@@ -169,11 +157,11 @@ final class AudioContentService {
 
     /// Record playback completion
     func recordPlaybackComplete(trackId: String, positionSeconds: Int, durationListenedSeconds: Int) async throws {
-        let body: [String: Any] = [
-            "trackId": trackId,
-            "eventType": "complete",
-            "positionSeconds": positionSeconds,
-            "durationListenedSeconds": durationListenedSeconds
+        let body: [String: AudioContentServiceAnyEncodable] = [
+            "trackId": AudioContentServiceAnyEncodable(trackId),
+            "eventType": AudioContentServiceAnyEncodable("complete"),
+            "positionSeconds": AudioContentServiceAnyEncodable(positionSeconds),
+            "durationListenedSeconds": AudioContentServiceAnyEncodable(durationListenedSeconds)
         ]
 
         let _: [String: String] = try await supabase.functions
@@ -286,9 +274,9 @@ final class AudioContentService {
         try await supabase
             .from("audio_ratings")
             .upsert([
-                "user_id": userId.uuidString,
-                "track_id": trackId,
-                "rating": rating
+                "user_id": AudioContentServiceAnyEncodable(userId.uuidString),
+                "track_id": AudioContentServiceAnyEncodable(trackId),
+                "rating": AudioContentServiceAnyEncodable(rating)
             ])
             .execute()
     }
@@ -442,4 +430,13 @@ enum AudioServiceError: LocalizedError {
             return "Network error: \(message)"
         }
     }
+}
+
+
+
+// MARK: - Helper
+private struct AudioContentServiceAnyEncodable: Encodable {
+    private let _encode: (Encoder) throws -> Void
+    init<T: Encodable>(_ wrapped: T) { _encode = wrapped.encode }
+    func encode(to encoder: Encoder) throws { try _encode(encoder) }
 }
