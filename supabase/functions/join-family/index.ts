@@ -110,7 +110,7 @@ serve(async (req: Request): Promise<Response> => {
     });
   }
 
-  const supabase = createClient(
+  const supabaseAdmin = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
@@ -127,10 +127,11 @@ serve(async (req: Request): Promise<Response> => {
     );
   }
 
+  const token = authHeader.replace("Bearer ", "");
   const {
     data: { user },
     error: authError,
-  } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
+  } = await supabaseAdmin.auth.getUser(token);
 
   if (authError || !user) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -141,7 +142,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // Rate limit: 10 requests per minute per user
   // Prevents brute-force enumeration of invite codes
-  const rateLimit = await checkRateLimit(supabase, user.id, "join-family", {
+  const rateLimit = await checkRateLimit(supabaseAdmin, user.id, "join-family", {
     windowMs: 60 * 1000, // 1 minute
     maxRequests: 10,
   });
@@ -164,6 +165,29 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   try {
+    const anonKey =
+      Deno.env.get("SUPABASE_ANON_KEY") ??
+      Deno.env.get("SUPABASE_PUBLISHABLE_KEY");
+
+    if (!anonKey) {
+      return new Response(
+        JSON.stringify({ error: "Missing Supabase anon key" }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    const supabaseUser = createClient(Deno.env.get("SUPABASE_URL")!, anonKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    });
+
     const body: JoinFamilyRequest = await req.json();
     const { inviteCode, nickname, birthDate } = body;
 
@@ -216,11 +240,17 @@ serve(async (req: Request): Promise<Response> => {
     }
 
     // Find family by invite code using validated, normalized code
-    const { data: family, error: familyError } = await supabase
+    const { data: family, error: familyError } = await supabaseAdmin
       .from("family_groups")
       .select("*")
       .eq("invite_code", validationResult.normalized)
       .single();
+
+    console.log(
+      `Found family for code ${validationResult.normalized}:`,
+      JSON.stringify(family),
+      familyError,
+    );
 
     // SECURITY: Use constant-time response to prevent timing attacks
     // Return identical error for all failure modes (invalid code, already member, etc)
@@ -242,14 +272,19 @@ serve(async (req: Request): Promise<Response> => {
       );
     }
 
-    // Check if already a member
-    const { data: existingMember } = await supabase
+    // Check if user is already a member of this family
+    const { data: existingMember } = await supabaseAdmin
       .from("family_members")
       .select("id")
       .eq("family_id", family.id)
       .eq("user_id", user.id)
       .eq("status", "active")
-      .single();
+      .maybeSingle();
+
+    console.log(
+      `Existing member check for family ${family.id}, user ${user.id}:`,
+      JSON.stringify(existingMember),
+    );
 
     if (existingMember) {
       // Use SAME error message for all failure modes (prevent enumeration)
@@ -269,7 +304,7 @@ serve(async (req: Request): Promise<Response> => {
     }
 
     // Check for invitation record to get role and birth date
-    const { data: invitation } = await supabase
+    const { data: invitation } = await supabaseAdmin
       .from("family_invitations")
       .select("*")
       .eq("family_id", family.id)
@@ -283,12 +318,13 @@ serve(async (req: Request): Promise<Response> => {
     let explicitRole = false;
 
     if (invitation) {
-      role = invitation.intended_role || "child";
-      explicitRole = !!invitation.intended_role; // Track if role was explicitly set
+      const invitationRole = invitation.intended_role;
+      role = invitationRole || "child";
+      explicitRole = !!invitationRole && invitationRole !== "child";
       memberBirthDate = memberBirthDate || invitation.intended_birth_date;
 
       // Mark invitation as accepted
-      const { error: inviteUpdateError } = await supabase
+      const { error: inviteUpdateError } = await supabaseAdmin
         .from("family_invitations")
         .update({
           status: "accepted",
@@ -315,7 +351,7 @@ serve(async (req: Request): Promise<Response> => {
 
     // Use atomic RPC to add family member
     // This prevents TOCTOU race condition by checking member limit and inserting in single transaction
-    const { data: rpcResult, error: rpcError } = await supabase.rpc(
+    const { data: rpcResult, error: rpcError } = await supabaseUser.rpc(
       "add_family_member",
       {
         p_family_id: family.id,
@@ -327,8 +363,17 @@ serve(async (req: Request): Promise<Response> => {
     );
 
     if (rpcError || !rpcResult) {
-      console.error("Error calling add_family_member RPC:", rpcError);
-      throw rpcError || new Error("Failed to add family member");
+      console.error("RPC Error adding family member DEBUG:", JSON.stringify(rpcError));
+      return new Response(
+        JSON.stringify({
+          error: "Failed to add family member",
+          debugError: rpcError,
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     // Check if RPC succeeded (could return failure as JSON due to constraints)
@@ -352,7 +397,7 @@ serve(async (req: Request): Promise<Response> => {
     };
 
     // Notify family admins via notification_history table
-    const { data: admins } = await supabase
+    const { data: admins } = await supabaseAdmin
       .from("family_members")
       .select("user_id")
       .eq("family_id", family.id)
@@ -361,7 +406,7 @@ serve(async (req: Request): Promise<Response> => {
     // Send notifications to all admins (non-blocking - failures are logged)
     for (const admin of admins || []) {
       try {
-        await supabase.from("notification_history").insert({
+        await supabaseAdmin.from("notification_history").insert({
           user_id: admin.user_id,
           notification_type: "family_member_joined",
           title: "New Family Member",
@@ -402,12 +447,10 @@ serve(async (req: Request): Promise<Response> => {
       },
     );
   } catch (error) {
-    console.error("Error joining family:", error);
+    console.error("Join family error:", error);
     // Don't expose raw error messages to client - return generic message
     return new Response(
-      JSON.stringify({
-        error: "Failed to join family",
-      }),
+      JSON.stringify({ error: "Internal server error", debugError: error }),
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
