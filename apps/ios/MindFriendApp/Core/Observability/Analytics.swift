@@ -164,6 +164,14 @@ enum AnalyticsEvent: String {
     case privacyLockDisengaged = "privacy_lock_disengaged"
     case privacyAutoLockTriggered = "privacy_auto_lock_triggered"
     case privacySettingsViewed = "privacy_settings_viewed"
+
+    // Weekly Stories (Progress Stories)
+    case weeklyStoryViewed = "weekly_story_viewed"
+    case weeklyStoryGenerated = "weekly_story_generated"
+    case weeklyStoryCardExported = "weekly_story_card_exported"
+    case weeklyStorySavedToPhotos = "weekly_story_saved_to_photos"
+    case weeklyStoryShared = "weekly_story_shared"
+    case weeklyStorySharedToCircle = "weekly_story_shared_to_circle"
 }
 
 /// User properties for segmentation

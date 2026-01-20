@@ -642,7 +642,7 @@ final class HealthKitService: ObservableObject {
 
 // MARK: - DateFormatter Extension
 
-private extension DateFormatter {
+extension DateFormatter {
     static let dateOnly: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"

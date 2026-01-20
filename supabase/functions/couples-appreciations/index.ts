@@ -12,6 +12,7 @@ import {
   canSendAppreciation,
   logRateLimitAttempt,
 } from "../_shared/couples-rate-limit.ts";
+import { sendPartnerNotification } from "../_shared/couples-notifications.ts";
 
 serve(async (req) => {
   try {
@@ -25,7 +26,9 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!supabaseUrl || !supabaseKey) {
       console.error("Missing required environment variables");
-      return CouplesErrors.unexpectedError(new Error("Server configuration error"));
+      return CouplesErrors.unexpectedError(
+        new Error("Server configuration error"),
+      );
     }
 
     // Initialize Supabase client with service role
@@ -78,7 +81,9 @@ serve(async (req) => {
       );
     }
 
-    if (trimmedMessage.length > COUPLES_MODE_CONSTANTS.APPRECIATION_MAX_LENGTH) {
+    if (
+      trimmedMessage.length > COUPLES_MODE_CONSTANTS.APPRECIATION_MAX_LENGTH
+    ) {
       return CouplesErrors.invalidFieldValue(
         "message",
         `must be under ${COUPLES_MODE_CONSTANTS.APPRECIATION_MAX_LENGTH} characters. Current: ${trimmedMessage.length}`,
@@ -122,6 +127,17 @@ serve(async (req) => {
 
     // Log rate limit attempt (successful)
     await logRateLimitAttempt(supabase, userId, "appreciation");
+
+    // Send push notification to partner (best effort, don't fail if it errors)
+    await sendPartnerNotification(supabase, {
+      type: "appreciation_received",
+      recipientUserId: partnerId,
+      senderUserId: userId,
+      data: {
+        appreciationId: appreciation.id,
+        message: trimmedMessage,
+      },
+    });
 
     // Get partner's profile for name
     const { data: partnerProfile } = await supabase

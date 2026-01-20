@@ -62,10 +62,10 @@ struct CouplesExercise: Codable, Identifiable {
     let id: UUID
     let name: String
     let description: String
-    let type: ExerciseType
-    let difficulty: ExerciseDifficulty
+    let type: CouplesExerciseType
+    let difficulty: CouplesExerciseDifficulty
     let durationMinutes: Int
-    let instructions: ExerciseInstructions
+    let instructions: CouplesExerciseInstructions
     let requiresPremium: Bool
     let requiresBothPartners: Bool
     let canDoSolo: Bool
@@ -81,24 +81,35 @@ struct CouplesExercise: Codable, Identifiable {
     }
 }
 
-/// Type of couples exercise
-enum ExerciseType: String, Codable {
+/// Type of couples exercise (COUPLES-SPECIFIC)
+enum CouplesExerciseType: String, Codable {
     case communication = "communication"
     case intimacy = "intimacy"
     case goalSetting = "goal-setting"
     case mindfulness = "mindfulness"
 }
 
-/// Difficulty level of an exercise
-enum ExerciseDifficulty: String, Codable {
+/// Difficulty level of an exercise (couples-specific to avoid ambiguity with Models.ExerciseDifficulty)
+enum CouplesExerciseDifficulty: String, Codable {
     case beginner = "beginner"
     case intermediate = "intermediate"
     case advanced = "advanced"
 }
 
-/// Step-by-step instructions for an exercise
-struct ExerciseInstructions: Codable {
-    let steps: [ExerciseStep]
+/// Role-specific instructions for partners
+struct RoleSpecificInstructions: Codable {
+    let partner1: String?
+    let partner2: String?
+
+    enum CodingKeys: String, CodingKey {
+        case partner1 = "partner_1"
+        case partner2 = "partner_2"
+    }
+}
+
+/// Step-by-step instructions for a couples exercise
+struct CouplesExerciseInstructions: Codable {
+    let steps: [CouplesExerciseStep]
     let materialsNeeded: [String]?
     let tips: String?
     let canDoSolo: Bool
@@ -113,8 +124,8 @@ struct ExerciseInstructions: Codable {
     }
 }
 
-/// Individual step in an exercise
-struct ExerciseStep: Codable {
+/// Individual step in a couples exercise
+struct CouplesExerciseStep: Codable {
     let order: Int
     let title: String
     let description: String
@@ -125,17 +136,6 @@ struct ExerciseStep: Codable {
         case order, title, description
         case durationSeconds = "duration_seconds"
         case roleSpecific = "role_specific"
-    }
-}
-
-/// Role-specific instructions for partners
-struct RoleSpecificInstructions: Codable {
-    let partner1: String?
-    let partner2: String?
-
-    enum CodingKeys: String, CodingKey {
-        case partner1 = "partner_1"
-        case partner2 = "partner_2"
     }
 }
 
@@ -229,7 +229,7 @@ struct InviteCodeResponse: Codable {
 }
 
 /// Response from POST /partner-links/accept
-struct AcceptInviteResponse: Codable {
+struct AcceptPartnerInviteResponse: Codable {
     let partnerLinkId: UUID
     let partnerId: UUID
     let partnerName: String
@@ -429,17 +429,6 @@ enum CouplesModeError: LocalizedError, Identifiable {
 
 // MARK: - View Models (Request/Update Models)
 
-/// Request to update sharing settings
-struct UpdateSharingSettingsRequest: Codable {
-    let shareMood: Bool?
-    let shareExercises: Bool?
-
-    enum CodingKeys: String, CodingKey {
-        case shareMood = "shareMood"
-        case shareExercises = "shareExercises"
-    }
-}
-
 /// Request to update an exercise session
 struct UpdateSessionRequest: Codable {
     enum SessionAction: String, Codable {
@@ -457,4 +446,60 @@ struct UpdateSessionRequest: Codable {
 /// Request to send an appreciation message
 struct SendAppreciationRequest: Codable {
     let message: String
+}
+
+// MARK: - Partner Mode View Models
+
+/// Sharing settings for Partner Mode
+struct SharingSettings: Equatable, Codable {
+    var shareMood: Bool
+    var shareExercises: Bool
+}
+
+/// Partner info for dashboard display
+struct PartnerInfo: Equatable {
+    let partnerId: UUID
+    let partnerName: String
+    let partnerStreak: Int
+    let hasCompletedToday: Bool
+    let lastActive: Date
+    let isSharingMood: Bool
+    let isSharingExercises: Bool
+}
+
+/// State of partner mode view
+enum PartnerState: Equatable {
+    case loading
+    case noPartner
+    case pendingInvite(code: String, expiresAt: Date)
+    case hasPartner(PartnerInfo)
+}
+
+// MARK: - PartnerLink Extensions
+
+extension PartnerLink {
+    /// Returns current user's sharing settings
+    func mySharingSettings(for userId: UUID) -> SharingSettings {
+        if userId == userId1 {
+            return SharingSettings(shareMood: user1ShareMood, shareExercises: user1ShareExercises)
+        } else {
+            return SharingSettings(shareMood: user2ShareMood, shareExercises: user2ShareExercises)
+        }
+    }
+
+    /// Returns partner's sharing settings (what they share with me)
+    func partnerSharingSettings(for userId: UUID) -> SharingSettings {
+        if userId == userId1 {
+            return SharingSettings(shareMood: user2ShareMood, shareExercises: user2ShareExercises)
+        } else {
+            return SharingSettings(shareMood: user1ShareMood, shareExercises: user1ShareExercises)
+        }
+    }
+
+    /// Returns partner's user ID
+    func partnerId(for userId: UUID) -> UUID? {
+        if userId == userId1 { return userId2 }
+        if userId == userId2 { return userId1 }
+        return nil
+    }
 }

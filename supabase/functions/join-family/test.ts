@@ -38,7 +38,9 @@ async function makeRequest(
 
 // Helper: Get test user token
 async function getTestUserToken(): Promise<string> {
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const supabase = createClient<any>(SUPABASE_URL, SUPABASE_ANON_KEY) as ReturnType<typeof createClient<any>>;
+
+
 
   // Try signing in with test account
   const { data, error } = await supabase.auth.signInWithPassword({
@@ -55,19 +57,18 @@ async function getTestUserToken(): Promise<string> {
 
 // Helper: Create test family with invite code
 async function createTestFamily(
-  supabase: ReturnType<typeof createClient>,
+  supabase: ReturnType<typeof createClient<any>>,
 ): Promise<{
   id: string;
   invite_code: string;
   max_members: number;
 }> {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as unknown as any)
     .from("family_groups")
     .insert({
       name: `Test Family ${Date.now()}`,
       invite_code: `TEST${Math.random().toString(36).substring(7).toUpperCase()}`,
       max_members: 5,
-      status: "active",
     })
     .select()
     .single();
@@ -84,7 +85,9 @@ async function createTestFamily(
 // ============================================================================
 
 Deno.test("Join Family - Happy Path", async () => {
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const supabase = createClient<any>(SUPABASE_URL, SUPABASE_ANON_KEY) as ReturnType<typeof createClient<any>>;
+
+
   const token = await getTestUserToken();
   const family = await createTestFamily(supabase);
 
@@ -146,7 +149,9 @@ Deno.test("Join Family - Missing Authorization", async () => {
 });
 
 Deno.test("Join Family - Invalid Nickname (XSS)", async () => {
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const supabase = createClient<any>(SUPABASE_URL, SUPABASE_ANON_KEY) as ReturnType<typeof createClient<any>>;
+
+
   const token = await getTestUserToken();
   const family = await createTestFamily(supabase);
 
@@ -170,7 +175,9 @@ Deno.test("Join Family - Invalid Nickname (XSS)", async () => {
 });
 
 Deno.test("Join Family - Invalid Birth Date", async () => {
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const supabase = createClient<any>(SUPABASE_URL, SUPABASE_ANON_KEY) as ReturnType<typeof createClient<any>>;
+
+
   const token = await getTestUserToken();
   const family = await createTestFamily(supabase);
 
@@ -196,7 +203,9 @@ Deno.test("Join Family - Invalid Birth Date", async () => {
 });
 
 Deno.test("Join Family - Duplicate Membership", async () => {
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const supabase = createClient<any>(SUPABASE_URL, SUPABASE_ANON_KEY) as ReturnType<typeof createClient<any>>;
+
+
   const token = await getTestUserToken();
   const family = await createTestFamily(supabase);
 
@@ -221,7 +230,9 @@ Deno.test("Join Family - Duplicate Membership", async () => {
 });
 
 Deno.test("Join Family - Rate Limiting", async () => {
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const supabase = createClient<any>(SUPABASE_URL, SUPABASE_ANON_KEY) as ReturnType<typeof createClient<any>>;
+
+
   const token = await getTestUserToken();
 
   // Make 10 requests (should succeed, at limit)
@@ -285,7 +296,9 @@ Deno.test("Join Family - CORS Preflight", async () => {
 });
 
 Deno.test("Join Family - Role Assignment from Birth Date", async () => {
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const supabase = createClient<any>(SUPABASE_URL, SUPABASE_ANON_KEY) as ReturnType<typeof createClient<any>>;
+
+
   const token = await getTestUserToken();
   const family = await createTestFamily(supabase);
 
@@ -320,7 +333,9 @@ Deno.test("Join Family - Role Assignment from Birth Date", async () => {
 });
 
 Deno.test("Join Family - Atomic RPC Success", async () => {
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const supabase = createClient<any>(SUPABASE_URL, SUPABASE_ANON_KEY) as ReturnType<typeof createClient<any>>;
+
+
   const token = await getTestUserToken();
   const family = await createTestFamily(supabase);
 
@@ -349,7 +364,9 @@ Deno.test("Join Family - Atomic RPC Success", async () => {
 });
 
 Deno.test("Join Family - Response Includes CORS Headers", async () => {
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const supabase = createClient<any>(SUPABASE_URL, SUPABASE_ANON_KEY) as ReturnType<typeof createClient<any>>;
+
+
   const token = await getTestUserToken();
   const family = await createTestFamily(supabase);
 

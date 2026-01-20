@@ -390,7 +390,8 @@ struct ShareSheet: UIViewControllerRepresentable {
             severityLevel: "moderate",
             isBaseline: true,
             notes: nil,
-            completedAt: Date()
+            completedAt: Date(),
+            createdAt: Date()
         ),
         template: AssessmentTemplate(
             id: UUID(),
@@ -400,9 +401,11 @@ struct ShareSheet: UIViewControllerRepresentable {
             questions: [],
             scoringRanges: [],
             recommendedFrequencyDays: 14,
-            isActive: true
+            isActive: true,
+            createdAt: Date(),
+            updatedAt: Date()
         ),
-        outcomeService: OutcomeTrackingService(supabaseClient: MockSupabaseClient()),
+        outcomeService: OutcomeTrackingService(supabase: .mock, authService: SupabaseAuthService()),
         isPresented: .constant(true)
     )
 }

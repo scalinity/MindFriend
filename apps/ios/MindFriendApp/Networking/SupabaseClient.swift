@@ -147,6 +147,10 @@ enum Tables {
 
     // Therapist Marketplace
     static let therapistProfiles = "therapist_profiles"
+
+    // Weekly Insights & Stories
+    static let weeklySummaries = "weekly_summaries"
+    static let weeklyStories = "weekly_stories"
 }
 
 // MARK: - Database Models (matching Supabase schema)
@@ -1560,3 +1564,16 @@ extension ISO8601DateFormatter {
         return formatter
     }()
 }
+
+// MARK: - Preview Support
+
+#if DEBUG
+extension SupabaseClient {
+    /// Mock Supabase client for SwiftUI previews
+    /// Note: This creates a real client with placeholder credentials - network calls will fail
+    static let mock = SupabaseClient(
+        supabaseURL: URL(string: "https://preview.supabase.co")!,
+        supabaseKey: "preview-key-for-swiftui-previews"
+    )
+}
+#endif

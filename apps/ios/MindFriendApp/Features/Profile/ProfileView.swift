@@ -78,6 +78,21 @@ struct ProfileView: View {
                     }
                 }
 
+                // Social
+                Section("Social") {
+                    NavigationLink {
+                        PartnerModeView()
+                    } label: {
+                        Label("Partner Mode", systemImage: "person.2.fill")
+                    }
+
+                    NavigationLink {
+                        FamilyHubView()
+                    } label: {
+                        Label("Family", systemImage: "figure.2.and.child.holdinghands")
+                    }
+                }
+
                 // Professional / Therapist
                 Section("Professional") {
                     NavigationLink {

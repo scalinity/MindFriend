@@ -66,9 +66,8 @@ final class HabitService: ObservableObject {
         isLoading = true
         defer { isLoading = false }
         
-        guard let userId = try await supabase.auth.session.user.id else {
-            throw HabitServiceError.invalidHabitState("User not authenticated")
-        }
+        let session = try await supabase.auth.session
+        let userId = session.user.id
         
         let response: [Habit] = try await supabase
             .from("habits")
@@ -90,9 +89,8 @@ final class HabitService: ObservableObject {
         difficulty: HabitDifficulty,
         reminderTime: Date?
     ) async throws {
-        guard let userId = try await supabase.auth.session.user.id else {
-            throw HabitServiceError.invalidHabitState("User not authenticated")
-        }
+        let session = try await supabase.auth.session
+        let userId = session.user.id
         
         guard difficulty.defaultDuration > 0 && difficulty.defaultDuration <= HabitDifficulty.maxDuration else {
             throw HabitServiceError.invalidDuration
@@ -128,9 +126,8 @@ final class HabitService: ObservableObject {
         template: HabitTemplate,
         anchor: String
     ) async throws {
-        guard let userId = try await supabase.auth.session.user.id else {
-            throw HabitServiceError.invalidHabitState("User not authenticated")
-        }
+        let session = try await supabase.auth.session
+        let userId = session.user.id
         
         let behavior = template.behaviorTemplate
         
@@ -161,8 +158,21 @@ final class HabitService: ObservableObject {
     
     /// Soft delete a habit (set is_active to false)
     func deleteHabit(_ habit: Habit) async throws {
-        var updated = habit
-        updated.isActive = false
+        let updated = Habit(
+            id: habit.id,
+            userId: habit.userId,
+            name: habit.name,
+            anchor: habit.anchor,
+            behavior: habit.behavior,
+            category: habit.category,
+            difficulty: habit.difficulty,
+            durationSeconds: habit.durationSeconds,
+            reminderTime: habit.reminderTime,
+            reminderMinutesBefore: habit.reminderMinutesBefore,
+            isActive: false,
+            createdAt: habit.createdAt,
+            updatedAt: Date()
+        )
         
         let _: Habit = try await supabase
             .from("habits")
@@ -179,9 +189,8 @@ final class HabitService: ObservableObject {
     /// Mark a habit as completed for today
     /// Handles streak calculation: increments streak if yesterday was completed, resets if skipped or 3+ days gap
     func completeHabit(_ habit: Habit) async throws {
-        guard let userId = try await supabase.auth.session.user.id else {
-            throw HabitServiceError.invalidHabitState("User not authenticated")
-        }
+        let session = try await supabase.auth.session
+        let userId = session.user.id
         
         let today = Calendar.current.startOfDay(for: Date())
         
@@ -227,9 +236,8 @@ final class HabitService: ObservableObject {
     
     /// Skip a habit for today (resets streak to 0)
     func skipHabit(_ habit: Habit, reason: String? = nil) async throws {
-        guard let userId = try await supabase.auth.session.user.id else {
-            throw HabitServiceError.invalidHabitState("User not authenticated")
-        }
+        let session = try await supabase.auth.session
+        let userId = session.user.id
         
         let today = Calendar.current.startOfDay(for: Date())
         
@@ -318,10 +326,9 @@ final class HabitService: ObservableObject {
     }
     
     /// Get current streak for a habit
-    func getCurrentStreak(for habit: Habit) async throws -> StreakInfo {
-        guard let userId = try await supabase.auth.session.user.id else {
-            throw HabitServiceError.invalidHabitState("User not authenticated")
-        }
+    func getCurrentStreak(for habit: Habit) async throws -> HabitStreakInfo {
+        let session = try await supabase.auth.session
+        let userId = session.user.id
 
         let completions: [HabitCompletion] = try await supabase
             .from("habit_completions")
@@ -366,7 +373,7 @@ final class HabitService: ObservableObject {
         // Will reset if not completed today and currently have an active streak
         let willReset = !isCompletedToday && currentStreak > 0
 
-        return StreakInfo(
+        return HabitStreakInfo(
             currentStreak: currentStreak,
             longestStreak: longestStreak,
             lastCompletionDate: lastCompletionDate,
@@ -408,9 +415,8 @@ final class HabitService: ObservableObject {
         isLoading = true
         defer { isLoading = false }
         
-        guard let userId = try await supabase.auth.session.user.id else {
-            throw HabitServiceError.invalidHabitState("User not authenticated")
-        }
+        let session = try await supabase.auth.session
+        let userId = session.user.id
         
         let response: [Routine] = try await supabase
             .from("routines")
@@ -429,9 +435,8 @@ final class HabitService: ObservableObject {
         type: RoutineType,
         targetTime: Date?
     ) async throws {
-        guard let userId = try await supabase.auth.session.user.id else {
-            throw HabitServiceError.invalidHabitState("User not authenticated")
-        }
+        let session = try await supabase.auth.session
+        let userId = session.user.id
         
         let routine = Routine(
             id: UUID(),
@@ -470,7 +475,7 @@ final class HabitService: ObservableObject {
             habitsInRoutine = try await supabase
                 .from("habits")
                 .select()
-                .in_("id", value: habitIds)
+                .in("id", values: habitIds)
                 .execute()
                 .value
         }
@@ -504,9 +509,8 @@ final class HabitService: ObservableObject {
         completedHabitIds: [UUID],
         skippedHabitIds: [UUID]
     ) async throws {
-        guard let userId = try await supabase.auth.session.user.id else {
-            throw HabitServiceError.invalidHabitState("User not authenticated")
-        }
+        let session = try await supabase.auth.session
+        let userId = session.user.id
         
         let today = Calendar.current.startOfDay(for: Date())
         let totalHabits = completedHabitIds.count + skippedHabitIds.count
@@ -516,7 +520,7 @@ final class HabitService: ObservableObject {
         let completedHabits: [Habit] = try await supabase
             .from("habits")
             .select()
-            .in_("id", value: completedHabitIds.map { $0.uuidString })
+            .in("id", values: completedHabitIds.map { $0.uuidString })
             .execute()
             .value
         
@@ -546,9 +550,8 @@ final class HabitService: ObservableObject {
     
     /// Get weekly completion stats for a habit
     func getWeeklyStats(for habit: Habit) async throws -> [Int] {
-        guard let userId = try await supabase.auth.session.user.id else {
-            throw HabitServiceError.invalidHabitState("User not authenticated")
-        }
+        let session = try await supabase.auth.session
+        let userId = session.user.id
         
         let today = Calendar.current.startOfDay(for: Date())
         let weekAgo = Calendar.current.date(byAdding: .day, value: -6, to: today)!

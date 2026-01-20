@@ -373,12 +373,6 @@ struct AssessmentFlowView: View {
     }
 }
 
-extension Array {
-    subscript(safe index: Int) -> Element? {
-        indices.contains(index) ? self[index] : nil
-    }
-}
-
 #Preview {
     AssessmentFlowView(
         template: AssessmentTemplate(
@@ -389,9 +383,11 @@ extension Array {
             questions: [],
             scoringRanges: [],
             recommendedFrequencyDays: 14,
-            isActive: true
+            isActive: true,
+            createdAt: Date(),
+            updatedAt: Date()
         ),
-        outcomeService: OutcomeTrackingService(supabaseClient: MockSupabaseClient()),
+        outcomeService: OutcomeTrackingService(supabase: .mock, authService: SupabaseAuthService()),
         isPresented: .constant(true)
     )
 }
