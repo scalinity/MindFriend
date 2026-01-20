@@ -53,8 +53,20 @@ final class DependencyContainer: ObservableObject {
         AccessibilityService(supabase: self.supabaseClient)
     }()
 
+    lazy var actionPlanService: ActionPlanService = {
+        ActionPlanService(authService: supabaseAuthService, supabase: supabaseClient)
+    }()
+
+    lazy var privacyLockManager: PrivacyLockManager = {
+        PrivacyLockManager.shared
+    }()
+
     lazy var achievementService: AchievementService = {
         AchievementService(supabase: self.supabaseClient)
+    }()
+
+    lazy var photoMoodService: PhotoMoodService = {
+        PhotoMoodService(supabase: self.supabaseClient)
     }()
 
     // TODO: Add CreatorService and FamilyService to Xcode project target
