@@ -60,3 +60,19 @@ verify_jwt = true  # Verify JWT before function invocation (defense-in-depth)
 
 [functions.voice-token]
 verify_jwt = true  # Verify JWT before function invocation (defense-in-depth)
+
+[functions.b2b-stripe-webhook]
+verify_jwt = false
+
+[functions.join-family]
+verify_jwt = false
+
+[functions.join-organization]
+verify_jwt = false
+
+[functions.validate-invite-code]
+verify_jwt = false
+
+[functions.create-organization]
+verify_jwt = false
+

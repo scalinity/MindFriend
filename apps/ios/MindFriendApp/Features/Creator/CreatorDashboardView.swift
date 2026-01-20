@@ -303,34 +303,77 @@ struct StatusBadge: View {
     }
 }
 
-// MARK: - Placeholder Views (to be implemented)
+// MARK: - Creator Onboarding View
 
 struct CreatorOnboardingView: View {
     @ObservedObject var creatorService: CreatorService
+    @State private var showingApplication = false
 
     var body: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "sparkles")
-                .font(.system(size: 60))
-                .foregroundStyle(.blue)
+        ScrollView {
+            VStack(spacing: 24) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 60))
+                    .foregroundStyle(.blue)
+                    .padding(.top, 40)
 
-            Text("Become a Creator")
-                .font(.title)
-                .fontWeight(.bold)
+                Text("Become a Creator")
+                    .font(.title)
+                    .fontWeight(.bold)
 
-            Text("Share your wellness expertise and earn from your content")
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
+                Text("Share your wellness expertise and earn from your content")
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal)
 
-            Button(action: {}) {
-                Text("Apply Now")
-                    .frame(maxWidth: .infinity)
+                // Benefits
+                VStack(alignment: .leading, spacing: 16) {
+                    BenefitRow(
+                        icon: "dollarsign.circle.fill",
+                        title: "Earn Revenue",
+                        description: "70% revenue share on premium content plays"
+                    )
+                    BenefitRow(
+                        icon: "person.2.fill",
+                        title: "Build Audience",
+                        description: "Grow your follower base with discoverable content"
+                    )
+                    BenefitRow(
+                        icon: "checkmark.seal.fill",
+                        title: "Get Verified",
+                        description: "Earn verification badges to build credibility"
+                    )
+                    BenefitRow(
+                        icon: "chart.line.uptrend.xyaxis",
+                        title: "Analytics Dashboard",
+                        description: "Track plays, engagement, and earnings"
+                    )
+                }
+                .padding()
+                .background(Color(.secondarySystemGroupedBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .padding(.horizontal)
+
+                Button {
+                    showingApplication = true
+                } label: {
+                    Text("Apply Now")
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                }
+                .buttonStyle(.borderedProminent)
+                .padding(.horizontal)
+
+                Text("Application review takes 7 business days")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Spacer(minLength: 40)
             }
-            .buttonStyle(.borderedProminent)
-
-            Spacer()
         }
-        .padding()
+        .sheet(isPresented: $showingApplication) {
+            CreatorApplicationView(creatorService: creatorService)
+        }
     }
 }
 

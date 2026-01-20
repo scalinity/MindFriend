@@ -115,12 +115,12 @@ struct OnboardingFlow: View {
 
                 // Set crash reporter context
                 CrashReporter.shared.setUser(
-                    id: profile.id,
+                    id: profile.id.uuidString,
                     email: profile.email,
                     username: profile.handle
                 )
-                Analytics.shared.identify(userId: profile.id)
-                Analytics.shared.setUserProperty(.subscriptionTier, value: profile.entitlements.tier.rawValue)
+                Analytics.shared.identify(userId: profile.id.uuidString)
+                Analytics.shared.setUserProperty(.subscriptionTier, value: profile.entitlements?.subscriptionTier ?? "free")
                 Analytics.shared.track(.onboardingCompleted, properties: [
                     "wellness_focus": focus.rawValue,
                     "skipped_quiz": skippedQuiz

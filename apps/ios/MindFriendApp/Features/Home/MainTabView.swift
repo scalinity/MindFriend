@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MainTabView: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var container: DependencyContainer
 
     var body: some View {
         TabView(selection: $appState.selectedTab) {
@@ -23,7 +24,7 @@ struct MainTabView: View {
                 }
                 .tag(MainTab.chat)
 
-            OutcomeHomeView()
+            OutcomeHomeView(outcomeService: container.outcomeService)
                 .tabItem {
                     Label(MainTab.outcomes.title, systemImage: MainTab.outcomes.icon)
                 }

@@ -75,7 +75,7 @@ struct InterventionView: View {
             ForEach(Array(zip(intervention.suggestedActions.indices, intervention.suggestedActions)), id: \.0) { index, action in
                 ActionButton(
                     action: action,
-                    label: intervention.actionLabels[safe: index] ?? action,
+                    label: index < intervention.actionLabels.count ? intervention.actionLabels[index] : action,
                     isSelected: selectedAction == action
                 ) {
                     selectedAction = action

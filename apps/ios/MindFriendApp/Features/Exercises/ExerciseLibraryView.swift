@@ -385,7 +385,7 @@ struct ExercisePlayerView: View {
 
                 // Check for milestone celebrations (exercise milestones)
                 let milestoneCelebrations = try await container.supabaseDataService.checkMilestoneTriggers(
-                    exerciseCount: profile.stats.totalExercisesCompleted,
+                    exerciseCount: profile.stats?.totalExercisesCompleted ?? 0,
                     newLevel: xpResult.leveledUp ? xpResult.newLevel : nil
                 )
 
@@ -396,8 +396,8 @@ struct ExercisePlayerView: View {
                     }
 
                     // Queue milestone celebrations
-                    if !milestoneCelebrations.isEmpty, let userId = UUID(uuidString: profile.id) {
-                        let celebrations = milestoneCelebrations.map { $0.toCelebrationEvent(userId: userId) }
+                    if !milestoneCelebrations.isEmpty {
+                        let celebrations = milestoneCelebrations.map { $0.toCelebrationEvent(userId: profile.id) }
                         appState.addCelebrations(celebrations)
                     }
 

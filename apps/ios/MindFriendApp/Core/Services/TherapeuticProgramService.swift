@@ -173,7 +173,7 @@ final class TherapeuticProgramService: ObservableObject {
         emotions: [EmotionEntry],
         enrollmentId: String? = nil,
         programDayNumber: Int? = nil
-    ) async throws -> ThoughtRecord {
+    ) async throws -> TherapeuticThoughtRecord {
         guard let userId = supabase.auth.currentUser?.id else {
             throw TherapeuticServiceError.notAuthenticated
         }
@@ -211,7 +211,7 @@ final class TherapeuticProgramService: ObservableObject {
         evidenceAgainst: String,
         balancedThought: String,
         newEmotionIntensity: Int
-    ) async throws -> ThoughtRecord {
+    ) async throws -> TherapeuticThoughtRecord {
         let updates: [String: AnyJSON] = [
             "evidence_for": .string(evidenceFor),
             "evidence_against": .string(evidenceAgainst),
@@ -276,7 +276,7 @@ final class TherapeuticProgramService: ObservableObject {
     func fetchThoughtRecords(
         enrollmentId: String? = nil,
         limit: Int = 20
-    ) async throws -> [ThoughtRecord] {
+    ) async throws -> [TherapeuticThoughtRecord] {
         guard let userId = supabase.auth.currentUser?.id else {
             throw TherapeuticServiceError.notAuthenticated
         }

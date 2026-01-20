@@ -236,7 +236,7 @@ curl -X POST http://localhost:54321/functions/v1/chat \
 cd apps/ios
 xcodebuild test \
   -scheme MindFriendApp \
-  -destination 'platform=iOS Simulator,name=iPhone 15' \
+  -destination 'platform=iOS Simulator,name=iPhone 17' \
   -resultBundlePath TestResults
 ```
 
@@ -832,7 +832,7 @@ supabase functions logs <function-name>
 open http://localhost:54323
 
 # Run iOS tests
-cd apps/ios && xcodebuild test -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 15'
+cd apps/ios && xcodebuild test -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17'
 
 # Generate types from schema
 supabase gen types typescript --local > types/supabase.ts

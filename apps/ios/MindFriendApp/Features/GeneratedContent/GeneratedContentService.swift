@@ -65,14 +65,15 @@ final class GeneratedContentService: ObservableObject {
         var query = supabase
             .from("generated_content")
             .select()
-            .order("created_at", ascending: false)
-            .range(from: offset, to: offset + limit - 1)
 
         if let type = type {
             query = query.eq("content_type", value: type.rawValue)
         }
 
-        let content: [GeneratedContent] = try await query.execute().value
+        let content: [GeneratedContent] = try await query
+            .order("created_at", ascending: false)
+            .range(from: offset, to: offset + limit - 1)
+            .execute().value
         return content
     }
 
@@ -148,13 +149,14 @@ final class GeneratedContentService: ObservableObject {
         var query = supabase
             .from("gen_content_series")
             .select()
-            .order("created_at", ascending: false)
 
         if activeOnly {
             query = query.eq("is_active", value: true)
         }
 
-        let series: [GeneratedContentSeries] = try await query.execute().value
+        let series: [GeneratedContentSeries] = try await query
+            .order("created_at", ascending: false)
+            .execute().value
         return series
     }
 
@@ -194,17 +196,39 @@ final class GeneratedContentService: ObservableObject {
     ) async throws {
         let userId = try await getCurrentUserId()
 
+        struct VoicePreferenceUpdate: Codable {
+            let userId: String
+            let contentType: String
+            let preferredVoiceId: String
+            let preferredSpeed: Double
+            let backgroundSoundEnabled: Bool
+            let backgroundSoundType: String?
+            let backgroundSoundVolume: Double
+
+            enum CodingKeys: String, CodingKey {
+                case userId = "user_id"
+                case contentType = "content_type"
+                case preferredVoiceId = "preferred_voice_id"
+                case preferredSpeed = "preferred_speed"
+                case backgroundSoundEnabled = "background_sound_enabled"
+                case backgroundSoundType = "background_sound_type"
+                case backgroundSoundVolume = "background_sound_volume"
+            }
+        }
+
+        let update = VoicePreferenceUpdate(
+            userId: userId.uuidString,
+            contentType: contentType.rawValue,
+            preferredVoiceId: voiceId,
+            preferredSpeed: speed,
+            backgroundSoundEnabled: backgroundSound != nil,
+            backgroundSoundType: backgroundSound?.rawValue,
+            backgroundSoundVolume: backgroundVolume
+        )
+
         try await supabase
             .from("voice_preferences")
-            .upsert([
-                "user_id": userId.uuidString,
-                "content_type": contentType.rawValue,
-                "preferred_voice_id": voiceId,
-                "preferred_speed": speed,
-                "background_sound_enabled": backgroundSound != nil,
-                "background_sound_type": backgroundSound?.rawValue as Any,
-                "background_sound_volume": backgroundVolume
-            ], onConflict: "user_id,content_type")
+            .upsert(update, onConflict: "user_id,content_type")
             .execute()
     }
 

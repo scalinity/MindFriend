@@ -32,9 +32,7 @@ struct ProfileView: View {
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
 
-                                if let premiumBadge = appState.currentUser?.premiumBadge {
-                                    PremiumBadgeLabel(badge: premiumBadge)
-                                } else if appState.entitlements.tier == .premium {
+                                if appState.entitlements.tier == .premium {
                                     Label("Premium", systemImage: "star.fill")
                                         .font(.caption)
                                         .foregroundStyle(.yellow)
@@ -53,11 +51,11 @@ struct ProfileView: View {
                 // Stats
                 Section("Stats") {
                     HStack {
-                        ProfileStatItem(value: "\(appState.currentUser?.stats.currentStreakDays ?? 0)", label: "Streak")
+                        ProfileStatItem(value: "\(appState.currentUser?.stats?.currentStreakDays ?? 0)", label: "Streak")
                         Divider()
-                        ProfileStatItem(value: "\(appState.currentUser?.stats.totalQuestsCompleted ?? 0)", label: "Quests")
+                        ProfileStatItem(value: "\(appState.currentUser?.stats?.totalQuestsCompleted ?? 0)", label: "Quests")
                         Divider()
-                        ProfileStatItem(value: "\(appState.currentUser?.badges.count ?? 0)", label: "Badges")
+                        ProfileStatItem(value: "\(appState.currentUser?.badges?.count ?? 0)", label: "Badges")
                     }
                     .padding(.vertical, 8)
                 }
@@ -164,7 +162,7 @@ struct ProfileView: View {
                     }
 
                     NavigationLink {
-                        CompanionMemoryView(memoryService: container.companionMemoryService)
+                        CompanionMemoryView()
                     } label: {
                         Label("Memory Vault", systemImage: "archivebox.fill")
                     }
@@ -616,17 +614,8 @@ struct NotificationSettingsView: View {
                 preferredNotifyHour: preferredNotifyHour
             )
 
-            // Update appState to keep in-memory state consistent
-            appState.currentUser?.settings.dailyQuestTimeLocal = formatTime(questTime)
-            appState.currentUser?.settings.quietHoursStartLocal = quietHoursEnabled ? formatTime(quietStart) : nil
-            appState.currentUser?.settings.quietHoursEndLocal = quietHoursEnabled ? formatTime(quietEnd) : nil
-            appState.currentUser?.settings.remindersEnabled = remindersEnabled
-            appState.currentUser?.settings.notifyCircleActivity = notifyCircleActivity
-            appState.currentUser?.settings.notifyHugs = notifyHugs
-            appState.currentUser?.settings.notifyChallenges = notifyChallenges
-            appState.currentUser?.settings.notifyStreakRisk = notifyStreakRisk
-            appState.currentUser?.settings.notifyWeeklySummary = notifyWeeklySummary
-            appState.currentUser?.settings.preferredNotifyHour = preferredNotifyHour
+            // Note: Settings are saved to database. AppState will be refreshed on next fetch.
+            // We could fetch the updated profile here if needed for immediate UI updates.
         } catch {
             appState.showError(.apiError(error.localizedDescription))
         }
@@ -699,7 +688,7 @@ struct AIPreferencesView: View {
         }
         .navigationTitle("AI Preferences")
         .onAppear {
-            selectedTone = appState.currentUser?.settings.aiTone ?? .friendly
+            selectedTone = appState.currentUser?.settings?.aiTone ?? .friendly
         }
     }
 
@@ -714,14 +703,11 @@ struct AIPreferencesView: View {
             do {
                 try await container.supabaseDataService.updateUserSettings(aiTone: tone)
 
-                // Update local state
-                await MainActor.run {
-                    appState.currentUser?.settings.aiTone = tone
-                }
+                // Settings updated in database - will be refreshed on next profile fetch
             } catch {
                 await MainActor.run {
                     // Revert on error
-                    selectedTone = appState.currentUser?.settings.aiTone ?? .friendly
+                    selectedTone = appState.currentUser?.settings?.aiTone ?? .friendly
                     appState.showError(.apiError(error.localizedDescription))
                 }
             }
@@ -793,14 +779,11 @@ struct PrivacySettingsView: View {
 
             do {
                 try await container.supabaseDataService.updateUserSettings(shareMoodInCircles: newValue)
-
-                await MainActor.run {
-                    appState.currentUser?.settings.shareMoodInCircles = newValue
-                }
+                // Settings updated in database - will be refreshed on next profile fetch
             } catch {
                 await MainActor.run {
                     // Revert on error
-                    shareMoodInCircles = appState.currentUser?.settings.shareMoodInCircles ?? true
+                    shareMoodInCircles = appState.currentUser?.settings?.shareMoodInCircles ?? true
                     appState.showError(.apiError(error.localizedDescription))
                 }
             }
@@ -818,10 +801,7 @@ struct PrivacySettingsView: View {
 
             do {
                 try await container.supabaseDataService.updateUserSettings(privacyMode: mode)
-
-                await MainActor.run {
-                    appState.currentUser?.settings.privacyMode = mode
-                }
+                // Settings updated in database - will be refreshed on next profile fetch
             } catch {
                 await MainActor.run {
                     // Revert on error
@@ -1043,7 +1023,7 @@ struct EditProfileView: View {
         }
 
         // If it's the same as current handle, it's valid
-        if trimmed == appState.currentUser?.handle.lowercased() {
+        if trimmed == appState.currentUser?.handle?.lowercased() {
             handleValidation = .valid
             return
         }

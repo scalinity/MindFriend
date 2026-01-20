@@ -36,11 +36,12 @@ final class QuestArcsService {
         }
 
         do {
+            let finalQueryItems = queryItems
             let response: GetQuestArcsResponse = try await supabase.functions.invoke(
                 "get-quest-arcs",
                 options: FunctionInvokeOptions(
                     method: .get,
-                    query: queryItems.isEmpty ? nil : queryItems
+                    query: finalQueryItems.isEmpty ? [] : finalQueryItems
                 )
             )
             return response.arcs

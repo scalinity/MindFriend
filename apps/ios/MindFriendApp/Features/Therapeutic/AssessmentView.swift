@@ -253,14 +253,9 @@ final class AssessmentViewModel: ObservableObject {
             self.questions = PHQ9Question.allCases.map { $0.questionText }
         case .gad7:
             self.questions = GAD7Question.allCases.map { $0.questionText }
-        case .weeklyCheckin:
-            self.questions = [
-                "How would you rate your overall mood this week?",
-                "How well did you sleep this week?",
-                "How much did anxiety affect your daily activities?",
-                "How connected did you feel to others?",
-                "How hopeful do you feel about the future?"
-            ]
+        case .who5, .pss10, .wemwbs:
+            // TODO: Add question templates for WHO-5, PSS-10, and WEMWBS
+            self.questions = []
         }
 
         self.responses = Array(repeating: nil, count: self.questions.count)
@@ -419,8 +414,8 @@ struct AssessmentResultView: View {
             case .moderatelySevere, .severe:
                 return "Your responses suggest significant anxiety. We recommend professional support."
             }
-        case .weeklyCheckin:
-            return "Your weekly check-in has been recorded. Keep tracking your progress."
+        case .who5, .pss10, .wemwbs:
+            return "Your assessment has been recorded. Continue tracking your progress."
         }
     }
 }

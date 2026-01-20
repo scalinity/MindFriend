@@ -162,7 +162,7 @@ private struct VoiceRow: View {
 
                 if isSelected {
                     Image(systemName: "checkmark")
-                        .foregroundStyle(.accentColor)
+                        .foregroundStyle(Color.accentColor)
                 }
             }
         }
@@ -189,7 +189,7 @@ private struct BackgroundSoundRow: View {
 
                 if isSelected {
                     Image(systemName: "checkmark")
-                        .foregroundStyle(.accentColor)
+                        .foregroundStyle(Color.accentColor)
                 }
             }
         }

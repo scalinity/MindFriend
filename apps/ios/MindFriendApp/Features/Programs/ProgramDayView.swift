@@ -217,12 +217,7 @@ struct ProgramDayView: View {
             )
 
             let result = try await container.supabaseDataService.completeProgramDay(
-                enrollmentId: enrollment.id,
-                dayNumber: enrollment.currentDay,
-                contentCompleted: contentDict,
-                reflectionResponse: reflectionText.isEmpty ? nil : reflectionText,
-                applyReport: applyText.isEmpty ? nil : applyText,
-                moodBefore: moodBefore
+                enrollmentId: enrollment.id
             )
 
             if result.programComplete {
@@ -256,7 +251,7 @@ struct ProgramDayView: View {
 
     private func pauseEnrollment() async {
         do {
-            try await container.supabaseDataService.pauseEnrollment(enrollment.id)
+            try await container.supabaseDataService.pauseEnrollment(enrollmentId: enrollment.id)
             dismiss()
         } catch {
             appState.showError(.apiError(error.localizedDescription))

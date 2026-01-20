@@ -154,19 +154,16 @@ struct ProgramHeaderView: View {
             // Stats row
             HStack(spacing: 24) {
                 StatItem(
-                    icon: "calendar",
                     value: program.formattedDuration,
                     label: "Duration"
                 )
 
                 StatItem(
-                    icon: "clock",
                     value: "\(program.estimatedDailyMinutes) min",
                     label: "Daily"
                 )
 
                 StatItem(
-                    icon: "chart.bar",
                     value: program.difficulty.displayName,
                     label: "Level"
                 )
@@ -191,31 +188,6 @@ struct ProgramHeaderView: View {
             }
         }
         .frame(maxWidth: .infinity)
-    }
-}
-
-struct StatItem: View {
-    let icon: String
-    let value: String
-    let label: String
-
-    var body: some View {
-        VStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-
-            Text(value)
-                .font(.subheadline)
-                .fontWeight(.semibold)
-
-            Text(label)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(label): \(value)")
     }
 }
 

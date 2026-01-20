@@ -57,7 +57,7 @@ struct PrivacyLockSettingsView: View {
             }
 
             if appLockEnabled {
-                Section("Auto-Lock") {
+                Section {
                     Picker("Lock after", selection: $selectedTimeout) {
                         ForEach(AutoLockTimeout.allCases) { timeout in
                             Text(timeout.displayName).tag(timeout)
@@ -65,13 +65,17 @@ struct PrivacyLockSettingsView: View {
                     }
                     .pickerStyle(.menu)
                     .onChange(of: selectedTimeout) { _, _ in
-                        saveSettings()
+                        Task {
+                            await saveSettings()
+                        }
                     }
+                } header: {
+                    Text("Auto-Lock")
                 } footer: {
                     Text("The app will automatically lock after the selected period of inactivity.")
                 }
 
-                Section("Quick Lock") {
+                Section {
                     Picker("Method", selection: $quickLockMethod) {
                         ForEach(PrivacyLockSettings.QuickLockMethod.allCases, id: \.self) { method in
                             Text(method.displayName).tag(method)
@@ -79,15 +83,21 @@ struct PrivacyLockSettingsView: View {
                     }
                     .pickerStyle(.menu)
                     .onChange(of: quickLockMethod) { _, _ in
-                        saveSettings()
+                        Task {
+                            await saveSettings()
+                        }
                     }
 
                     if quickLockMethod == .tripleTap {
                         Toggle("Enable Triple-Tap", isOn: $tripleTapEnabled)
                             .onChange(of: tripleTapEnabled) { _, _ in
-                                saveSettings()
+                                Task {
+                                    await saveSettings()
+                                }
                             }
                     }
+                } header: {
+                    Text("Quick Lock")
                 } footer: {
                     Text(quickLockMethod.description)
                 }
@@ -184,9 +194,6 @@ struct PrivacyLockSettingsView: View {
 
         do {
             try await lockManager.updateSettings(newSettings)
-            await MainActor.run {
-                lockManager.settings = newSettings
-            }
         } catch {
             showError = true
             errorMessage = error.localizedDescription

@@ -392,10 +392,10 @@ struct EmotionEntry: Codable, Equatable, Hashable {
     }
 }
 
-// MARK: - Thought Record
+// MARK: - Therapeutic Thought Record
 
-/// A CBT thought record entry
-struct ThoughtRecord: Codable, Identifiable, Equatable {
+/// A CBT thought record entry for therapeutic programs
+struct TherapeuticThoughtRecord: Codable, Identifiable, Equatable {
     let id: String
     let userId: String
     let enrollmentId: String?
@@ -512,8 +512,8 @@ struct DBThoughtRecord: Codable {
         case updatedAt = "updated_at"
     }
 
-    func toThoughtRecord() -> ThoughtRecord {
-        ThoughtRecord(
+    func toThoughtRecord() -> TherapeuticThoughtRecord {
+        TherapeuticThoughtRecord(
             id: id.uuidString,
             userId: userId.uuidString,
             enrollmentId: enrollmentId?.uuidString,

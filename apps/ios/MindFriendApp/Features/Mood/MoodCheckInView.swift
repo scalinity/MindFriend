@@ -1,4 +1,5 @@
 import SwiftUI
+import MindFriendApp
 
 struct MoodCheckInView: View {
     @EnvironmentObject var appState: AppState
@@ -39,7 +40,10 @@ struct MoodCheckInView: View {
                         Text(moodEmojis[Int(moodScore) - 1])
                             .font(.system(size: 80))
 
-                        MoodSlider(value: $moodScore, labels: moodEmojis)
+                        MoodSlider(value: Binding(
+                            get: { Int(moodScore) },
+                            set: { moodScore = Double($0) }
+                        ), label: "How are you feeling?")
                     }
 
                     // Advanced options toggle
@@ -131,13 +135,13 @@ struct MoodCheckInView: View {
             .onAppear {
                 if let mood = existingMood {
                     // Clamp scores to valid range [1, 5] to prevent array index out of bounds
-                    moodScore = Double(max(1, min(5, mood.moodScore)))
+                    moodScore = Double(max(1, min(5, Int(mood.moodScore))))
                     if let anxiety = mood.anxietyScore {
-                        anxietyScore = Double(max(1, min(5, anxiety)))
+                        anxietyScore = Double(max(1, min(5, Int(anxiety))))
                         showAdvanced = true
                     }
                     if let energy = mood.energyScore {
-                        energyScore = Double(max(1, min(5, energy)))
+                        energyScore = Double(max(1, min(5, Int(energy))))
                         showAdvanced = true
                     }
                     if let existingNote = mood.note {

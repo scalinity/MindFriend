@@ -109,17 +109,17 @@ struct StoryCardView: View {
 
     @ViewBuilder
     private var cardIcon: some View {
-        let iconName: String
-        if let dataIcon = card.data.icon, !dataIcon.isEmpty {
-            iconName = dataIconToSFSymbol(dataIcon)
-        } else {
-            iconName = card.cardType.iconName
-        }
-
-        Image(systemName: iconName)
+        Image(systemName: resolvedIconName)
             .font(.system(size: isExport ? 120 : 60, weight: .medium))
             .foregroundStyle(.white)
             .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
+    }
+
+    private var resolvedIconName: String {
+        if let dataIcon = card.data.icon, !dataIcon.isEmpty {
+            return dataIconToSFSymbol(dataIcon)
+        }
+        return card.cardType.iconName
     }
 
     private func dataIconToSFSymbol(_ icon: String) -> String {

@@ -143,7 +143,7 @@ struct QuestArcDetailView: View {
             ProgressView(value: userArc.progressPercentage)
                 .tint(QuestArcCategory.color(for: arc.category))
 
-            if userArc.status == "paused" {
+            if userArc.status == .paused {
                 HStack {
                     Image(systemName: "pause.circle.fill")
                         .foregroundStyle(.orange)
@@ -299,7 +299,7 @@ struct QuestArcDetailView: View {
 
     private var enrolledActions: some View {
         VStack(spacing: 12) {
-            if activeArc?.status == "paused" {
+            if activeArc?.status == .paused {
                 Button {
                     Task { await resumeArc() }
                 } label: {

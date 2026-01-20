@@ -239,15 +239,15 @@ final class ForumService: ObservableObject {
             .select()
             .eq("thread_id", value: threadId.uuidString)
             .eq("status", value: "approved")
-            .order("created_at", ascending: true) // Chronological order
 
         if let cursor = cursor {
             query = query.gt("created_at", value: cursor.ISO8601Format())
         }
 
-        query = query.limit(limit)
-
-        let replies: [ForumReply] = try await query.execute().value
+        let replies: [ForumReply] = try await query
+            .order("created_at", ascending: true) // Chronological order
+            .limit(limit)
+            .execute().value
 
         // Fetch helpful state for each reply
         var repliesWithState = replies
@@ -405,14 +405,15 @@ final class ForumService: ObservableObject {
             .from("forum_threads")
             .select(query)
             .eq("forum_saved.user_id", value: userId.uuidString)
-            .order("forum_saved.created_at", ascending: false)
-            .limit(limit)
 
         if let cursor = cursor {
             request = request.lt("forum_saved.created_at", value: cursor.ISO8601Format())
         }
 
-        return try await request.execute().value
+        return try await request
+            .order("forum_saved.created_at", ascending: false)
+            .limit(limit)
+            .execute().value
     }
 
     // MARK: - Follow
@@ -530,9 +531,7 @@ final class ForumService: ObservableObject {
             request = request.lt("created_at", value: cursor.ISO8601Format())
         }
 
-        request = request.limit(limit)
-
-        return try await request.execute().value
+        return try await request.limit(limit).execute().value
     }
 
     // MARK: - Moderator Functions
@@ -543,15 +542,15 @@ final class ForumService: ObservableObject {
             .from("forum_reports")
             .select()
             .eq("status", value: "pending")
-            .order("created_at", ascending: true) // Oldest first
 
         if let cursor = cursor {
             query = query.gt("created_at", value: cursor.ISO8601Format())
         }
 
-        query = query.limit(limit)
-
-        return try await query.execute().value
+        return try await query
+            .order("created_at", ascending: true) // Oldest first
+            .limit(limit)
+            .execute().value
     }
 
     /// Fetch low confidence threads (0.3-0.8 score, moderators only)
@@ -561,15 +560,15 @@ final class ForumService: ObservableObject {
             .select()
             .gte("moderation_confidence", value: 0.3)
             .lte("moderation_confidence", value: 0.8)
-            .order("created_at", ascending: true)
 
         if let cursor = cursor {
             query = query.gt("created_at", value: cursor.ISO8601Format())
         }
 
-        query = query.limit(limit)
-
-        return try await query.execute().value
+        return try await query
+            .order("created_at", ascending: true)
+            .limit(limit)
+            .execute().value
     }
 
     /// Fetch crisis events (isCrisis=true, moderators only)
@@ -578,15 +577,15 @@ final class ForumService: ObservableObject {
             .from("forum_threads")
             .select()
             .eq("is_crisis", value: true)
-            .order("created_at", ascending: false) // Newest first
 
         if let cursor = cursor {
             query = query.lt("created_at", value: cursor.ISO8601Format())
         }
 
-        query = query.limit(limit)
-
-        return try await query.execute().value
+        return try await query
+            .order("created_at", ascending: false) // Newest first
+            .limit(limit)
+            .execute().value
     }
 
     /// Review report and take action (moderators only)
@@ -644,7 +643,7 @@ final class ForumService: ObservableObject {
                     .execute()
             }
 
-        case .ban:
+        case .banUser:
             // Reject content and ban the author
             let authorId: UUID
             if let threadId = report.threadId {
@@ -704,14 +703,14 @@ final class ForumService: ObservableObject {
         title: String?,
         content: String
     ) async throws {
-        var body: [String: Any] = [
-            "contentType": contentType,
-            "contentId": contentId.uuidString,
-            "content": content,
+        var body: [String: AnyEncodable] = [
+            "contentType": AnyEncodable(contentType),
+            "contentId": AnyEncodable(contentId.uuidString),
+            "content": AnyEncodable(content),
         ]
 
         if let title = title {
-            body["title"] = title
+            body["title"] = AnyEncodable(title)
         }
 
         // Fire and forget - moderation happens asynchronously

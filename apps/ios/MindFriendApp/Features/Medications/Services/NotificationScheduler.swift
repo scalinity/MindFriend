@@ -1,5 +1,9 @@
 import UserNotifications
 import Foundation
+import OSLog
+#if canImport(UIKit)
+import UIKit
+#endif
 
 protocol NotificationSchedulerProtocol {
     func schedule(medication: Medication) async
@@ -10,6 +14,7 @@ protocol NotificationSchedulerProtocol {
 @MainActor
 final class NotificationScheduler: NotificationSchedulerProtocol {
     private let notificationCenter = UNUserNotificationCenter.current()
+    private let logger = Logger(subsystem: "com.mindfriend", category: "Notifications")
 
     func schedule(medication: Medication) async {
         guard medication.reminderEnabled else { return }
@@ -21,7 +26,7 @@ final class NotificationScheduler: NotificationSchedulerProtocol {
                 _ = try await notificationCenter.requestAuthorization(options: [.alert, .sound, .badge])
             }
         } catch {
-            Logger.error("Failed to request notification permission: \(error)")
+            logger.error("Failed to request notification permission: \(error.localizedDescription)")
             return
         }
 
@@ -62,9 +67,9 @@ final class NotificationScheduler: NotificationSchedulerProtocol {
 
             do {
                 try await notificationCenter.add(request)
-                Logger.info("Scheduled medication notification: \(identifier)")
+                logger.info("Scheduled medication notification: \(identifier)")
             } catch {
-                Logger.error("Failed to schedule notification: \(error)")
+                logger.error("Failed to schedule notification: \(error.localizedDescription)")
             }
         }
     }
@@ -78,7 +83,7 @@ final class NotificationScheduler: NotificationSchedulerProtocol {
             .map { $0.identifier }
 
         center.removePendingNotificationRequests(withIdentifiers: toRemove)
-        Logger.info("Cancelled \(toRemove.count) notifications for medication: \(medicationId)")
+        logger.info("Cancelled \(toRemove.count) notifications for medication: \(medicationId.uuidString)")
     }
 
     func reschedule(medication: Medication) async {

@@ -64,10 +64,28 @@ enum GeneratedContentType: String, Codable, CaseIterable, Identifiable {
 
     var supportsAudio: Bool {
         switch self {
-        case .sleepStory, .meditation, .breathing, .grounding, .mindfulness, .affirmation:
+        case .sleepStory, .meditation, .breathing, .grounding, .mindfulness,
+             .affirmation, .cbt, .journaling:
             return true
-        case .cbt, .journaling:
-            return false
+        }
+    }
+
+    var audioStyle: AudioPlaybackStyle {
+        switch self {
+        case .sleepStory:
+            return .continuous(narrative: true)
+        case .meditation, .mindfulness:
+            return .pausable
+        case .breathing:
+            return .paced(interval: 4)
+        case .grounding:
+            return .pausable
+        case .cbt:
+            return .interactive
+        case .journaling:
+            return .interactive
+        case .affirmation:
+            return .continuous(narrative: false)
         }
     }
 
@@ -85,6 +103,14 @@ enum GeneratedContentType: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+/// Audio playback style for different content types
+enum AudioPlaybackStyle {
+    case continuous(narrative: Bool)  // Sleep stories, affirmations
+    case pausable                      // Meditations, grounding
+    case paced(interval: Int)         // Breathing exercises
+    case interactive                   // CBT, journaling prompts
+}
+
 // MARK: - Content Status
 
 enum GeneratedContentStatus: String, Codable {
@@ -99,13 +125,54 @@ enum GeneratedContentStatus: String, Codable {
 
 // MARK: - Voice Models
 
+/// Supported languages for voice synthesis
+enum VoiceLanguage: String, Codable, CaseIterable, Identifiable {
+    case english = "en"
+    case spanish = "es"
+    case portuguese = "pt"
+    case french = "fr"
+    case german = "de"
+    case italian = "it"
+    case japanese = "ja"
+    case mandarin = "zh"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .english: return "English"
+        case .spanish: return "Spanish"
+        case .portuguese: return "Portuguese"
+        case .french: return "French"
+        case .german: return "German"
+        case .italian: return "Italian"
+        case .japanese: return "Japanese"
+        case .mandarin: return "Mandarin Chinese"
+        }
+    }
+
+    var flagEmoji: String {
+        switch self {
+        case .english: return "🇺🇸"
+        case .spanish: return "🇪🇸"
+        case .portuguese: return "🇧🇷"
+        case .french: return "🇫🇷"
+        case .german: return "🇩🇪"
+        case .italian: return "🇮🇹"
+        case .japanese: return "🇯🇵"
+        case .mandarin: return "🇨🇳"
+        }
+    }
+}
+
 struct VoiceOption: Codable, Identifiable, Equatable {
     let id: String
     let name: String
     let gender: VoiceGender
     let style: String
-    let language: String
+    let language: VoiceLanguage
     let previewUrl: String?
+    let sampleText: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -114,13 +181,8 @@ struct VoiceOption: Codable, Identifiable, Equatable {
         case style
         case language
         case previewUrl = "preview_url"
+        case sampleText = "sample_text"
     }
-}
-
-enum VoiceGender: String, Codable {
-    case male
-    case female
-    case neutral
 }
 
 struct VoicePreference: Codable, Identifiable {
@@ -455,13 +517,15 @@ struct ContentQuotaStatus: Codable {
 // MARK: - Default Voices
 
 enum DefaultVoice {
+    // English voices
     static let sarah = VoiceOption(
         id: "EXAVITQu4vr4xnSDxMaL",
         name: "Sarah",
         gender: .female,
         style: "calm",
-        language: "en",
-        previewUrl: nil
+        language: .english,
+        previewUrl: "https://assets.mindfriend.app/audio/voices/sarah_preview.mp3",
+        sampleText: "Welcome to MindFriend. Take a deep breath and relax."
     )
 
     static let josh = VoiceOption(
@@ -469,8 +533,9 @@ enum DefaultVoice {
         name: "Josh",
         gender: .male,
         style: "warm",
-        language: "en",
-        previewUrl: nil
+        language: .english,
+        previewUrl: "https://assets.mindfriend.app/audio/voices/josh_preview.mp3",
+        sampleText: "Let's explore some calming exercises together."
     )
 
     static let adam = VoiceOption(
@@ -478,8 +543,9 @@ enum DefaultVoice {
         name: "Adam",
         gender: .male,
         style: "deep",
-        language: "en",
-        previewUrl: nil
+        language: .english,
+        previewUrl: "https://assets.mindfriend.app/audio/voices/adam_preview.mp3",
+        sampleText: "Focus on your breath and let go of tension."
     )
 
     static let rachel = VoiceOption(
@@ -487,8 +553,9 @@ enum DefaultVoice {
         name: "Rachel",
         gender: .female,
         style: "soothing",
-        language: "en",
-        previewUrl: nil
+        language: .english,
+        previewUrl: "https://assets.mindfriend.app/audio/voices/rachel_preview.mp3",
+        sampleText: "Close your eyes and imagine a peaceful place."
     )
 
     static let elli = VoiceOption(
@@ -496,14 +563,110 @@ enum DefaultVoice {
         name: "Elli",
         gender: .female,
         style: "whisper",
-        language: "en",
-        previewUrl: nil
+        language: .english,
+        previewUrl: "https://assets.mindfriend.app/audio/voices/elli_preview.mp3",
+        sampleText: "You're safe here. Let yourself relax completely."
     )
 
-    static let all: [VoiceOption] = [sarah, josh, adam, rachel, elli]
+    // Spanish voices
+    static let carla = VoiceOption(
+        id: "N2lvsShYGNwcfxAqe4Df",
+        name: "Carla",
+        gender: .female,
+        style: "warm",
+        language: .spanish,
+        previewUrl: "https://assets.mindfriend.app/audio/voices/carla_preview.mp3",
+        sampleText: "Bienvenido a MindFriend. Respira profundamente y relájate."
+    )
+
+    static let diego = VoiceOption(
+        id: "RPpA2eJQ3GfrTqxDrM7K",
+        name: "Diego",
+        gender: .male,
+        style: "calm",
+        language: .spanish,
+        previewUrl: "https://assets.mindfriend.app/audio/voices/diego_preview.mp3",
+        sampleText: "Cierra los ojos y imagina un lugar tranquilo."
+    )
+
+    // Portuguese voices
+    static let maria = VoiceOption(
+        id: "gDkYD8K7X4kT3q8fW2nP",
+        name: "Maria",
+        gender: .female,
+        style: "gentle",
+        language: .portuguese,
+        previewUrl: "https://assets.mindfriend.app/audio/voices/maria_preview.mp3",
+        sampleText: "Bem-vindo ao MindFriend. Respire profundamente e relaxe."
+    )
+
+    static let pedro = VoiceOption(
+        id: "hEmBf9L5S6mT4rUhW8oQ",
+        name: "Pedro",
+        gender: .male,
+        style: "soothing",
+        language: .portuguese,
+        previewUrl: "https://assets.mindfriend.app/audio/voices/pedro_preview.mp3",
+        sampleText: "Foque na sua respiração e deixe a tensão ir embora."
+    )
+
+    // French voices
+    static let amelie = VoiceOption(
+        id: "vHpA8cL2M4nT7yWb3zK",
+        name: "Amélie",
+        gender: .female,
+        style: "melodic",
+        language: .french,
+        previewUrl: "https://assets.mindfriend.app/audio/voices/amelie_preview.mp3",
+        sampleText: "Bienvenue sur MindFriend. Respirez profondément et détendez-vous."
+    )
+
+    // German voices
+    static let greta = VoiceOption(
+        id: "kLqC9nO1P3sV5xZb8tD7",
+        name: "Greta",
+        gender: .female,
+        style: "clear",
+        language: .german,
+        previewUrl: "https://assets.mindfriend.app/audio/voices/greta_preview.mp3",
+        sampleText: "Willkommen bei MindFriend. Atmen Sie tief durch und entspannen Sie sich."
+    )
+
+    static let lukas = VoiceOption(
+        id: "mNrE7fQ2R4uW7yAc9fH5",
+        name: "Lukas",
+        gender: .male,
+        style: "calm",
+        language: .german,
+        previewUrl: "https://assets.mindfriend.app/audio/voices/lukas_preview.mp3",
+        sampleText: "Schließen Sie die Augen und stellen Sie sich einen friedlichen Ort vor."
+    )
+
+    // All voices organized by language
+    static let all: [VoiceOption] = [
+        sarah, josh, adam, rachel, elli,
+        carla, diego, maria, pedro, amelie, greta, lukas
+    ]
+
+    static func voices(for language: VoiceLanguage) -> [VoiceOption] {
+        all.filter { $0.language == language }
+    }
 
     static func voice(for id: String) -> VoiceOption? {
         all.first { $0.id == id }
+    }
+
+    static func previewText(for language: VoiceLanguage) -> String {
+        switch language {
+        case .english: return "Welcome to MindFriend. Take a deep breath and relax."
+        case .spanish: return "Bienvenido a MindFriend. Respira profundamente y relájate."
+        case .portuguese: return "Bem-vindo ao MindFriend. Respire profundamente e relaxe."
+        case .french: return "Bienvenue sur MindFriend. Respirez profondément et détendez-vous."
+        case .german: return "Willkommen bei MindFriend. Atmen Sie tief durch und entspannen Sie sich."
+        case .italian: return "Benvenuto su MindFriend. Respira profondamente e rilassati."
+        case .japanese: return "MindFriendへようこそ。深呼吸してリラックスしてください。"
+        case .mandarin: return "欢迎来到MindFriend。深呼吸，放松身心。"
+        }
     }
 }
 

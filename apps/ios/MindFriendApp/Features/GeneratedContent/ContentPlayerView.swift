@@ -79,7 +79,7 @@ struct ContentPlayerView: View {
                 RoundedRectangle(cornerRadius: 20)
                     .fill(
                         LinearGradient(
-                            colors: [.accentColor.opacity(0.6), .accentColor.opacity(0.2)],
+                            colors: [Color.accentColor.opacity(0.6), Color.accentColor.opacity(0.2)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -155,7 +155,7 @@ struct ContentPlayerView: View {
                         }
                     }
                 )
-                .tint(.accentColor)
+                .tint(Color.accentColor)
 
                 HStack {
                     Text(viewModel.currentTimeString)
@@ -411,7 +411,7 @@ private struct FlagContentSheet: View {
                         Spacer()
                         if selectedReason == reason {
                             Image(systemName: "checkmark")
-                                .foregroundStyle(.accentColor)
+                                .foregroundStyle(Color.accentColor)
                         }
                     }
                     .padding()

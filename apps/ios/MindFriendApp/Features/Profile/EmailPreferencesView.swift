@@ -91,7 +91,10 @@ struct EmailPreferencesView: View {
                     .foregroundColor(.accentColor)
                 }
 
-                Slider(value: Double($viewModel.preferredSendHour), in: 0...23, step: 1)
+                Slider(value: Binding(
+                    get: { Double(viewModel.preferredSendHour) },
+                    set: { viewModel.preferredSendHour = Int($0) }
+                ), in: 0...23, step: 1)
                   .tint(.accentColor)
               }
             }

@@ -77,6 +77,22 @@ final class DependencyContainer: ObservableObject {
         TherapyIntegrationService(supabase: self.supabaseClient)
     }()
 
+    lazy var therapistService: TherapistService = {
+        TherapistService(supabase: self.supabaseClient)
+    }()
+
+    lazy var familyService: FamilyService = {
+        FamilyService(supabase: self.supabaseClient)
+    }()
+
+    lazy var sleepService: SleepService = {
+        SleepService(supabase: self.supabaseClient)
+    }()
+
+    lazy var audioPlayerService: AudioPlayerService = {
+        AudioPlayerService(supabase: self.supabaseClient)
+    }()
+
     // MARK: - Medication Services
     lazy var medicationRepository: MedicationRepository = {
         SupabaseMedicationRepository(supabase: supabaseClient)
@@ -121,6 +137,16 @@ final class DependencyContainer: ObservableObject {
 
     lazy var predictiveService: PredictiveService = {
         PredictiveService(authService: supabaseAuthService)
+    }()
+
+    lazy var outcomeService: OutcomeTrackingService = {
+        OutcomeTrackingService(supabase: supabaseClient, authService: supabaseAuthService)
+    }()
+
+    // MARK: - SOS Services
+
+    lazy var sosCoordinator: SOSCoordinator = {
+        SOSCoordinator(supabase: supabaseClient)
     }()
 
     // MARK: - Smart Notification Services
@@ -179,15 +205,12 @@ final class DependencyContainer: ObservableObject {
         )
     }()
 
-    // TODO: Add CreatorService and FamilyService to Xcode project target
-    // These services exist on disk but need to be added to the project's pbxproj file
-    // lazy var creatorService: CreatorService = {
-    //     CreatorService(supabase: supabaseClient)
-    // }()
-    //
-    // lazy var familyService: FamilyService = {
-    //     FamilyService(supabase: supabaseClient)
-    // }()
+    // MARK: - Creator Services
+
+    /// Service for content creator platform (profiles, content, earnings, marketplace)
+    lazy var creatorService: CreatorService = {
+        CreatorService(supabase: supabaseClient)
+    }()
 
     // MARK: - Incomplete Feature Services (TODO: Add when features are ready)
     // lazy var microMomentsService: MicroMomentsService

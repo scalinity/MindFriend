@@ -44,7 +44,7 @@ struct TherapistApplicationView: View {
 
                     Text("\(viewModel.bio.count)/50 characters minimum")
                         .font(.caption)
-                        .foregroundStyle(viewModel.bio.count >= 50 ? .secondary : .red)
+                        .foregroundStyle(viewModel.bio.count >= 50 ? .secondary : Color.red)
                 }
 
                 // Credentials Section

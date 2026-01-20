@@ -115,7 +115,7 @@ final class PrivacyLockManager: ObservableObject {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
 
-        if let token = try? await SupabaseAuthService.shared.ensureValidSession()?.accessToken {
+        if let token = try? await supabase.auth.session.accessToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 
@@ -147,7 +147,7 @@ final class PrivacyLockManager: ObservableObject {
         request.httpMethod = "PUT"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        if let token = try? await SupabaseAuthService.shared.ensureValidSession()?.accessToken {
+        if let token = try? await supabase.auth.session.accessToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 

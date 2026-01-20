@@ -12,8 +12,18 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "http://localhost:54321";
 const SUPABASE_ANON_KEY =
+  Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ||
+  Deno.env.get("SUPABASE_ANON_KEY_REMOTE") ||
   Deno.env.get("SUPABASE_ANON_KEY") ||
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test";
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+const SUPABASE_AUTH_KEY = Deno.env.get("SUPABASE_PUBLISHABLE_KEY") || SUPABASE_ANON_KEY;
+const SUPABASE_FUNCTIONS_KEY =
+  Deno.env.get("SUPABASE_FUNCTIONS_KEY") ||
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ||
+  Deno.env.get("SUPABASE_ANON_KEY_REMOTE") ||
+  Deno.env.get("SUPABASE_ANON_KEY") ||
+  SUPABASE_AUTH_KEY;
 const FUNCTION_URL = `${SUPABASE_URL}/functions/v1/validate-invite-code`;
 
 interface InviteValidationResponse {
@@ -33,6 +43,7 @@ async function callValidateInvite(
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
+      apikey: SUPABASE_FUNCTIONS_KEY,
     },
     body: JSON.stringify({ inviteCode: code }),
   });
@@ -45,18 +56,36 @@ async function callValidateInvite(
 
 // Helper to get test user token
 async function getTestUserToken(): Promise<string> {
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const email = Deno.env.get("SUPABASE_TEST_EMAIL") ?? "test@example.com";
+  const password = Deno.env.get("SUPABASE_TEST_PASSWORD") ?? "TestPassword123!";
 
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: "test@example.com",
-    password: "TestPassword123!",
-  });
+  const response = await fetch(
+    `${SUPABASE_URL}/auth/v1/token?grant_type=password`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_AUTH_KEY,
+      },
+      body: JSON.stringify({ email, password }),
+    },
+  );
 
-  if (error || !data?.session?.access_token) {
-    throw new Error(`Failed to get test token: ${error?.message}`);
+  const data = await response.json();
+  if (!response.ok || !data?.access_token) {
+    throw new Error(`Failed to get test token: ${data?.message || response.status}`);
   }
 
-  return data.session.access_token;
+  return data.access_token;
+}
+
+function getServiceRoleClient() {
+  if (!SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY for test setup");
+  }
+  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
 }
 
 // ============================================================================
@@ -123,7 +152,7 @@ Deno.test(
 // TEST 3.4: Validation increments uses counter
 // ============================================================================
 Deno.test("validate-invite-code increments uses_count on success", async () => {
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const supabase = getServiceRoleClient();
   const testToken = await getTestUserToken();
   const testCode = "COUNTERCODE";
 
@@ -157,27 +186,31 @@ Deno.test("validate-invite-code increments uses_count on success", async () => {
 // TEST 3.5: Duplicate invite codes are rejected (UNIQUE constraint)
 // ============================================================================
 Deno.test("organization_invites rejects duplicate invite_code", async () => {
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const supabase = getServiceRoleClient();
   const uniqueCode = `UNIQUE${Date.now()}`;
+  const organizationId = "00000000-0000-0000-0000-000000000001";
+  const adminId = "00000000-0000-0000-0000-000000000011";
 
   // First insert should succeed
   const { error: firstError } = await supabase
     .from("organization_invites")
     .insert({
-      organization_id: "test-org-id-1",
+      organization_id: organizationId,
       invite_code: uniqueCode,
       max_uses: 100,
       expires_at: new Date(Date.now() + 86400000).toISOString(),
+      created_by_admin_id: adminId,
     });
 
   // Second insert with same code should fail
   const { error: secondError } = await supabase
     .from("organization_invites")
     .insert({
-      organization_id: "test-org-id-2",
+      organization_id: organizationId,
       invite_code: uniqueCode, // Same code
       max_uses: 100,
       expires_at: new Date(Date.now() + 86400000).toISOString(),
+      created_by_admin_id: adminId,
     });
 
   assertExists(secondError, "Should have error on duplicate code");
@@ -244,6 +277,7 @@ Deno.test("validate-invite-code returns 401 without auth", async () => {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      apikey: SUPABASE_FUNCTIONS_KEY,
     },
     body: JSON.stringify({ inviteCode: "ANYCODE" }),
   });

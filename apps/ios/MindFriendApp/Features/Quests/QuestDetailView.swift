@@ -118,15 +118,15 @@ struct QuestDetailView: View {
 
                 // Check for milestone celebrations
                 let milestoneCelebrations = try await container.supabaseDataService.checkMilestoneTriggers(
-                    streak: profile.stats.currentStreakDays,
-                    questCount: profile.stats.totalQuestsCompleted,
+                    streak: profile.stats?.currentStreakDays ?? 0,
+                    questCount: profile.stats?.totalQuestsCompleted ?? 0,
                     exerciseCount: nil,
                     newLevel: xpResult.leveledUp ? xpResult.newLevel : nil,
                     badgeId: nil
                 )
 
                 await MainActor.run {
-                    appState.currentStreak = profile.stats.currentStreakDays
+                    appState.currentStreak = profile.stats?.currentStreakDays ?? 0
                     appState.currentUser = profile
                     showReflection = false
 
@@ -136,8 +136,8 @@ struct QuestDetailView: View {
                     }
 
                     // Queue milestone celebrations (shown after level-up if both occur)
-                    if !milestoneCelebrations.isEmpty, let userId = UUID(uuidString: profile.id) {
-                        let celebrations = milestoneCelebrations.map { $0.toCelebrationEvent(userId: userId) }
+                    if !milestoneCelebrations.isEmpty {
+                        let celebrations = milestoneCelebrations.map { $0.toCelebrationEvent(userId: profile.id) }
                         appState.addCelebrations(celebrations)
                     }
 
@@ -146,7 +146,7 @@ struct QuestDetailView: View {
                         questId: quest.id,
                         status: .completed,
                         completedAt: Date(),
-                        streakDays: profile.stats.currentStreakDays,
+                        streakDays: profile.stats?.currentStreakDays ?? 0,
                         badgesEarned: []
                     )
                 }
@@ -169,20 +169,23 @@ struct QuestDetailView: View {
 
         // Update user stats
         if var user = appState.currentUser {
+            let currentStats = user.stats ?? UserStats(currentStreakDays: 0, longestStreakDays: 0, totalQuestsCompleted: 0, totalExercisesCompleted: 0)
             user = UserProfile(
                 id: user.id,
                 handle: user.handle,
                 displayName: user.displayName,
                 email: user.email,
+                avatarUrl: user.avatarUrl,
                 timezone: user.timezone,
                 createdAt: user.createdAt,
-                settings: user.settings,
+                onboardingCompletedAt: user.onboardingCompletedAt,
                 stats: UserStats(
                     currentStreakDays: newStreak,
-                    longestStreakDays: max(user.stats.longestStreakDays, newStreak),
-                    totalQuestsCompleted: user.stats.totalQuestsCompleted + 1,
-                    totalExercisesCompleted: user.stats.totalExercisesCompleted
+                    longestStreakDays: max(currentStats.longestStreakDays, newStreak),
+                    totalQuestsCompleted: currentStats.totalQuestsCompleted + 1,
+                    totalExercisesCompleted: currentStats.totalExercisesCompleted
                 ),
+                settings: user.settings,
                 entitlements: user.entitlements,
                 badges: user.badges
             )
@@ -532,6 +535,7 @@ extension QuestCompletion: Identifiable {
             localDate: "2024-01-15",
             status: .assigned,
             assignedAt: Date(),
+            completedAt: nil,
             template: QuestTemplate(
                 id: "t1",
                 type: .breathing,

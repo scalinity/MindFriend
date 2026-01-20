@@ -538,6 +538,7 @@ enum OfflineCacheKey: String {
     case exerciseLibrary = "exercise_library"
     case userProfile = "user_profile"
     case programProgress = "program_progress"
+    case safetyPlan = "safety_plan"
     case downloadedContentIndex = "downloaded_content_index"
     case syncQueue = "sync_queue"
     case downloadSettings = "download_settings"
@@ -554,7 +555,7 @@ enum OfflineCacheKey: String {
             return 24 * 60 * 60 // 24 hours
         case .programProgress:
             return 24 * 60 * 60 // 24 hours
-        case .downloadedContentIndex, .syncQueue, .downloadSettings:
+        case .safetyPlan, .downloadedContentIndex, .syncQueue, .downloadSettings:
             return .infinity // Never expires
         }
     }

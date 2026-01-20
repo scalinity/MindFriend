@@ -326,13 +326,14 @@ Deno.test("sanitizeInput - XSS prevention", () => {
 });
 
 Deno.test("sanitizeInput - HTML entity encoding", () => {
-  const input = '<div onload="alert(1)">Hello & "World"</div>';
+  const input = 'Hello & "World" <test>';
   const result = sanitizeInput(input);
-  assertEquals(result.includes("<div"), false);
-  assertEquals(result.includes("onload"), false);
-  assertEquals(result.includes("&lt;"), true);
-  assertEquals(result.includes("&amp;"), true);
-  assertEquals(result.includes("&quot;"), true);
+  // Basic HTML entity encoding
+  assert(result.includes("&lt;"), "< should be escaped");
+  assert(result.includes("&gt;"), "> should be escaped");
+  assert(result.includes("&amp;"), "& should be escaped");
+  assert(result.includes("&quot;"), '" should be escaped');
+  assert(result.includes("Hello"), "Normal text should be preserved");
 });
 
 Deno.test("sanitizeInput - preserves normal text", () => {

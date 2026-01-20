@@ -237,7 +237,7 @@ struct NoActiveArcCard: View {
                     Text("Browse Journeys")
                         .font(.subheadline.weight(.medium))
                 }
-                .foregroundStyle(.accentColor)
+                .foregroundStyle(Color.accentColor)
             }
             .padding()
             .frame(maxWidth: .infinity)

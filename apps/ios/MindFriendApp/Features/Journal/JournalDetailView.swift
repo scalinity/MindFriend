@@ -170,10 +170,10 @@ struct JournalDetailView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                if let characterCount = entry.characterCount {
+                if entry.moodBefore != nil {
                     Text("•")
                         .foregroundStyle(.secondary)
-                    Text("\(characterCount) characters")
+                    Text("\(entry.characterCount) characters")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -301,12 +301,12 @@ struct JournalDetailView: View {
                     Text(entry.createdAt.formatted(date: .abbreviated, time: .shortened))
                 }
 
-                if let updatedAt = entry.updatedAt, updatedAt != entry.createdAt {
+                if entry.updatedAt != entry.createdAt {
                     HStack {
                         Text("Last edited:")
                             .foregroundStyle(.secondary)
                         Spacer()
-                        Text(updatedAt.formatted(date: .abbreviated, time: .shortened))
+                        Text(entry.updatedAt.formatted(date: .abbreviated, time: .shortened))
                     }
                 }
 

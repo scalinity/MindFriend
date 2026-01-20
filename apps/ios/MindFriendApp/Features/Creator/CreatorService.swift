@@ -22,6 +22,25 @@ final class CreatorService: ObservableObject {
         self.supabase = supabase
     }
 
+    // MARK: - Creator Application
+
+    func submitApplication(
+        applicationData: String
+    ) async throws {
+        guard let userId = supabase.auth.currentUser?.id else {
+            throw CreatorError.notAuthenticated
+        }
+
+        try await supabase
+            .from("creator_applications")
+            .insert([
+                "user_id": userId.uuidString,
+                "application_data": applicationData,
+                "status": "pending"
+            ])
+            .execute()
+    }
+
     // MARK: - Creator Profile Management
 
     func loadCreatorProfile() async throws {
@@ -395,6 +414,79 @@ final class CreatorService: ObservableObject {
                 "engagement_month": CreatorAnyEncodable(month)
             ])
             .execute()
+    }
+
+    // MARK: - Public Creator Access
+
+    func getCreatorById(_ creatorId: UUID) async throws -> Creator? {
+        let creator: DBCreator? = try await supabase
+            .from("creators")
+            .select()
+            .eq("id", value: creatorId.uuidString)
+            .single()
+            .execute()
+            .value
+
+        return creator.map { Creator(from: $0) }
+    }
+
+    // MARK: - Application Status
+
+    func checkApplicationStatus() async throws -> CreatorApplicationStatus? {
+        guard let userId = supabase.auth.currentUser?.id else {
+            throw CreatorError.notAuthenticated
+        }
+
+        struct ApplicationRow: Decodable {
+            let id: UUID
+            let status: String
+            let created_at: String
+            let reviewed_at: String?
+        }
+
+        let application: ApplicationRow? = try await supabase
+            .from("creator_applications")
+            .select("id, status, created_at, reviewed_at")
+            .eq("user_id", value: userId.uuidString)
+            .order("created_at", ascending: false)
+            .limit(1)
+            .single()
+            .execute()
+            .value
+
+        guard let app = application else { return nil }
+
+        return CreatorApplicationStatus(
+            id: app.id,
+            status: ApplicationStatus(rawValue: app.status) ?? .pending,
+            submittedAt: ISO8601DateFormatter().date(from: app.created_at),
+            reviewedAt: app.reviewed_at.flatMap { ISO8601DateFormatter().date(from: $0) }
+        )
+    }
+}
+
+// MARK: - Application Status Types
+
+struct CreatorApplicationStatus: Sendable {
+    let id: UUID
+    let status: ApplicationStatus
+    let submittedAt: Date?
+    let reviewedAt: Date?
+}
+
+enum ApplicationStatus: String, Sendable {
+    case pending
+    case underReview = "under_review"
+    case approved
+    case rejected
+
+    var displayName: String {
+        switch self {
+        case .pending: return "Pending Review"
+        case .underReview: return "Under Review"
+        case .approved: return "Approved"
+        case .rejected: return "Rejected"
+        }
     }
 }
 

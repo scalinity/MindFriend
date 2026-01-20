@@ -47,6 +47,8 @@ What you're feeling matters, and you don't have to face this alone. Please reach
 **International Association for Suicide Prevention**
 - https://www.iasp.info/resources/Crisis_Centres/
 
+If you already have a Safety Plan in MindFriend, open it for personalized steps you chose for yourself.
+
 These trained counselors are here to listen without judgment and can provide the support you need right now.
 
 I care about you. Please reach out to one of these resources.`;

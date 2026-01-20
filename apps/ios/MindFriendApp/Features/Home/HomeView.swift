@@ -45,8 +45,8 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack {
-            // Conditionally show Recovery Mode or Standard Home
-            if recoveryModeState.isActive {
+            Group {
+                if recoveryModeState.isActive {
                 RecoveryModeHomeView(
                     recoveryState: recoveryModeState,
                     onExitRecoveryMode: {
@@ -162,9 +162,9 @@ struct HomeView: View {
                     // Streak with shields
                     StreakCardWithShields(
                         currentStreak: appState.currentStreak,
-                        longestStreak: appState.currentUser?.stats.longestStreakDays ?? 0,
-                        shieldsRemaining: shieldStatus?.shieldsRemaining ?? appState.currentUser?.stats.streakShieldsRemaining ?? 1,
-                        shieldsMax: shieldStatus?.shieldsMax ?? appState.currentUser?.stats.streakShieldsMax ?? 1,
+                        longestStreak: appState.currentUser?.stats?.longestStreakDays ?? 0,
+                        shieldsRemaining: shieldStatus?.shieldsRemaining ?? appState.currentUser?.stats?.streakShieldsRemaining ?? 1,
+                        shieldsMax: shieldStatus?.shieldsMax ?? appState.currentUser?.stats?.streakShieldsMax ?? 1,
                         recoveryAvailable: shieldStatus?.recoveryQuestAvailable ?? false,
                         streakBeforeBreak: shieldStatus?.streakBeforeBreak,
                         recoveryExpiresAt: shieldStatus?.recoveryQuestExpiresAt,
@@ -254,12 +254,13 @@ struct HomeView: View {
                     .environmentObject(container)
             }
             } // End of else block for standard home
-        }
+            } // End of Group
+        } // End of NavigationStack
         // Load data on appear
         .task {
             await loadData()
         }
-    }
+    } // End of body
 
     // MARK: - Recovery Mode Exit
 
@@ -432,7 +433,7 @@ struct HomeView: View {
             let questResult = try await questTask
             let profileResult = try await profileTask
             let actionPlanResult = try? await container.actionPlanService.fetchLatestPlan(
-                timezone: profileResult.timezone
+                timezone: profileResult.timezone ?? "America/New_York"
             )
             let events = await eventsTask ?? []
             let participation = await participationTask ?? []
@@ -444,7 +445,17 @@ struct HomeView: View {
             let questArcResult = await questArcTask ?? nil
 
             // Compute level info from profile
-            let levelResult = UserLevel.from(stats: profileResult.stats)
+            let defaultStats = UserStats(
+                currentStreakDays: 0,
+                longestStreakDays: 0,
+                totalQuestsCompleted: 0,
+                totalExercisesCompleted: 0,
+                xpTotal: 0,
+                xpThisWeek: 0,
+                level: 1,
+                levelTitle: "Beginner"
+            )
+            let levelResult = UserLevel.from(stats: profileResult.stats ?? defaultStats)
 
             await MainActor.run {
                 // Track load time for stale state prevention
@@ -468,8 +479,15 @@ struct HomeView: View {
 
                 // Update user profile
                 appState.currentUser = profileResult
-                appState.currentStreak = profileResult.stats.currentStreakDays
-                appState.entitlements = profileResult.entitlements
+                appState.currentStreak = profileResult.stats?.currentStreakDays ?? 0
+
+                // Convert UserEntitlements to Entitlements
+                if let userEntitlements = profileResult.entitlements {
+                    let tier: Tier = userEntitlements.subscriptionTier == "premium" ? .premium : .free
+                    appState.entitlements = Entitlements(tier: tier, dailyAiQuota: tier == .premium ? 9999 : 20, dailyAiUsed: 0)
+                } else {
+                    appState.entitlements = .free
+                }
 
                 // Set level info
                 userLevel = levelResult
@@ -551,9 +569,12 @@ struct HomeView: View {
         // Simulate network delay
         try? await Task.sleep(nanoseconds: 500_000_000)
 
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+
         let mockQuest = Quest(
             id: "mock-quest-1",
-            localDate: ISO8601DateFormatter.dateOnly.string(from: Date()),
+            localDate: dateFormatter.string(from: Date()),
             status: .assigned,
             assignedAt: Date(),
             completedAt: nil,
@@ -892,6 +913,7 @@ struct StreakCard: View {
 
 struct QuickActionsSection: View {
     @EnvironmentObject var container: DependencyContainer
+    @AppStorage("safety_plan.pinned_quick_actions") private var pinnedSafetyPlan = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -966,6 +988,19 @@ struct QuickActionsSection: View {
                         color: .teal,
                         action: {}
                     )
+                }
+
+                if pinnedSafetyPlan {
+                    NavigationLink {
+                        SafetyPlanView()
+                    } label: {
+                        HomeQuickActionButton(
+                            title: "Safety Plan",
+                            icon: "heart.shield.fill",
+                            color: .red,
+                            action: {}
+                        )
+                    }
                 }
 
                 Spacer()

@@ -98,7 +98,7 @@ struct InsightLabHomeCard: View {
                         .font(.caption)
                         .fontWeight(.medium)
                 }
-                .foregroundStyle(.accentColor)
+                .foregroundStyle(.blue)
                 .padding(.vertical, 8)
                 .frame(maxWidth: .infinity)
                 .background(Color.accentColor.opacity(0.1))
@@ -136,7 +136,7 @@ struct InsightLabHomeCard: View {
                 Image(systemName: "arrow.right")
                     .font(.caption2)
             }
-            .foregroundStyle(.accentColor)
+            .foregroundStyle(.blue)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .background(Color.accentColor.opacity(0.1))

@@ -80,26 +80,26 @@ final class AudioMixerEngine: ObservableObject {
 
     /// Load background sound from URL
     private func loadBackgroundSoundFrom(url: URL, isLoopable: Bool) {
-        do {
 #if os(iOS)
+        do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
             try AVAudioSession.sharedInstance().setActive(true)
-#endif
-            backgroundAsset = AVAsset(url: url)
-            backgroundPlayerItem = AVPlayerItem(asset: backgroundAsset!)
-            backgroundPlayer = AVPlayer(playerItem: backgroundPlayerItem!)
-
-            if isLoopable {
-                backgroundPlayer?.actionAtItemEnd = .none
-                NotificationCenter.default.addObserver(
-                    self,
-                    selector: #selector(backgroundPlayerDidFinishPlaying),
-                    name: .AVPlayerItemDidPlayToEndTime,
-                    object: backgroundPlayerItem
-                )
-            }
         } catch {
-            print("Failed to load background sound: \(error)")
+            print("Failed to configure audio session: \(error)")
+        }
+#endif
+        backgroundAsset = AVAsset(url: url)
+        backgroundPlayerItem = AVPlayerItem(asset: backgroundAsset!)
+        backgroundPlayer = AVPlayer(playerItem: backgroundPlayerItem!)
+
+        if isLoopable {
+            backgroundPlayer?.actionAtItemEnd = .none
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(backgroundPlayerDidFinishPlaying),
+                name: .AVPlayerItemDidPlayToEndTime,
+                object: backgroundPlayerItem
+            )
         }
     }
 
@@ -216,6 +216,7 @@ final class AudioMixerEngine: ObservableObject {
 enum AudioSessionHelper {
     /// Configure audio session for voice playback with background sounds
     static func configureForPlayback() {
+#if os(iOS)
         do {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
@@ -223,10 +224,12 @@ enum AudioSessionHelper {
         } catch {
             print("Failed to configure audio session: \(error)")
         }
+#endif
     }
 
     /// Configure audio session for ambient/background playback
     static func configureForBackground() {
+#if os(iOS)
         do {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.ambient, mode: .default)
@@ -234,6 +237,7 @@ enum AudioSessionHelper {
         } catch {
             print("Failed to configure audio session: \(error)")
         }
+#endif
     }
 }
 

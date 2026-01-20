@@ -249,6 +249,42 @@ enum BreathingPattern: String, Codable, CaseIterable, Identifiable {
         }
     }
 
+    /// Duration for inhale phase in seconds
+    var inhaleSeconds: Int {
+        switch self {
+        case .boxBreathing: return 4
+        case .simple: return 4
+        case .calm478: return 4
+        }
+    }
+
+    /// Duration for hold after inhale in seconds (0 if no hold)
+    var holdAfterInhaleSeconds: Int {
+        switch self {
+        case .boxBreathing: return 4
+        case .simple: return 0
+        case .calm478: return 7
+        }
+    }
+
+    /// Duration for exhale phase in seconds
+    var exhaleSeconds: Int {
+        switch self {
+        case .boxBreathing: return 4
+        case .simple: return 4
+        case .calm478: return 8
+        }
+    }
+
+    /// Duration for hold after exhale in seconds (0 if no hold)
+    var holdAfterExhaleSeconds: Int {
+        switch self {
+        case .boxBreathing: return 4
+        case .simple: return 0
+        case .calm478: return 0
+        }
+    }
+
     /// Total duration of one complete cycle in seconds
     var cycleDuration: TimeInterval {
         phases.reduce(0) { $0 + $1.duration }

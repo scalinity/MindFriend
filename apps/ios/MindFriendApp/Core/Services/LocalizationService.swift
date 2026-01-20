@@ -86,12 +86,12 @@ class LocalizationService: ObservableObject {
 
     /// Load all UI translations from server for current language
     func loadTranslations() async throws {
-        let translations: [UITranslation] = try await supabase?
+        let translations: [UITranslation] = (try await supabase?
             .from("ui_translations")
             .select()
             .eq("language_code", value: currentLanguage)
             .execute()
-            .value
+            .value) ?? []
 
         // Populate cache
         cachedTranslations = Dictionary(
@@ -181,7 +181,7 @@ class LocalizationService: ObservableObject {
         id: UUID,
         language: String
     ) async throws -> ContentTranslation? {
-        let result: [ContentTranslation] = try await supabase?
+        let result: [ContentTranslation] = (try await supabase?
             .from("content_translations")
             .select()
             .eq("content_type", value: type)
@@ -189,7 +189,7 @@ class LocalizationService: ObservableObject {
             .eq("language_code", value: language)
             .eq("is_verified", value: true)
             .execute()
-            .value
+            .value) ?? []
 
         return result.first
     }
@@ -216,14 +216,14 @@ class LocalizationService: ObservableObject {
         let countryCode = Locale.current.region?.identifier ?? "US"
 
         // Try to fetch localized resources
-        let result: [LocalizedCrisisResources] = try await supabase?
+        let result: [LocalizedCrisisResources] = (try await supabase?
             .from("localized_crisis_resources")
             .select()
             .eq("country_code", value: countryCode)
             .eq("language_code", value: currentLanguage)
             .eq("is_active", value: true)
             .execute()
-            .value
+            .value) ?? []
 
         if let resource = result.first {
             return CrisisResources(from: resource)
@@ -231,14 +231,14 @@ class LocalizationService: ObservableObject {
 
         // Fallback to English for same country
         if currentLanguage != "en" {
-            let englishResult: [LocalizedCrisisResources] = try await supabase?
+            let englishResult: [LocalizedCrisisResources] = (try await supabase?
                 .from("localized_crisis_resources")
                 .select()
                 .eq("country_code", value: countryCode)
                 .eq("language_code", value: "en")
                 .eq("is_active", value: true)
                 .execute()
-                .value
+                .value) ?? []
 
             if let resource = englishResult.first {
                 return CrisisResources(from: resource)
@@ -253,13 +253,13 @@ class LocalizationService: ObservableObject {
 
     /// Fetch list of active languages for language picker
     func fetchAvailableLanguages() async throws -> [SupportedLanguage] {
-        let languages: [SupportedLanguage] = try await supabase?
+        let languages: [SupportedLanguage] = (try await supabase?
             .from("supported_languages")
             .select()
             .eq("is_active", value: true)
             .order("name", ascending: true)
             .execute()
-            .value
+            .value) ?? []
 
         return languages
     }

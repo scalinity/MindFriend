@@ -57,11 +57,14 @@ struct CopingKitsView: View {
                 CopingKitDetailView(viewModel: viewModel, kit: kit)
             }
         }
-        .sheet(item: $selectedProgress) { progress in
-            Task {
-                await viewModel.resumeKit(progress)
-                await MainActor.run {
-                    showingDetail = true
+        .onChange(of: selectedProgress) { oldValue, newValue in
+            if let progress = newValue {
+                Task {
+                    await viewModel.resumeKit(progress)
+                    await MainActor.run {
+                        showingDetail = true
+                        selectedProgress = nil
+                    }
                 }
             }
         }

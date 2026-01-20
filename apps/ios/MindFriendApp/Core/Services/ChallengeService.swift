@@ -167,8 +167,17 @@ final class ChallengeService: ObservableObject {
             {
                 let userProfile = UserProfile(
                     id: uuid,
+                    handle: nil,
                     displayName: displayName,
-                    avatarUrl: entry.user_avatar_url
+                    email: nil,
+                    avatarUrl: entry.user_avatar_url,
+                    timezone: nil,
+                    createdAt: nil,
+                    onboardingCompletedAt: nil,
+                    stats: nil,
+                    settings: nil,
+                    entitlements: nil,
+                    badges: nil
                 )
 
                 let participant = ChallengeParticipant(

@@ -367,10 +367,10 @@ struct SOSPrivacyInfoView: View {
                     Text("What we store")
                         .font(.headline)
 
-                    BulletPoint("When you use the SOS feature")
-                    BulletPoint("Which exercises you complete")
-                    BulletPoint("Your helpfulness ratings")
-                    BulletPoint("Your mood before and after")
+                    BulletPoint(text: "When you use the SOS feature")
+                    BulletPoint(text: "Which exercises you complete")
+                    BulletPoint(text: "Your helpfulness ratings")
+                    BulletPoint(text: "Your mood before and after")
                 }
 
                 // Why
@@ -378,9 +378,9 @@ struct SOSPrivacyInfoView: View {
                     Text("Why we store this")
                         .font(.headline)
 
-                    BulletPoint("To track what helps you most")
-                    BulletPoint("To personalize recommendations")
-                    BulletPoint("To show you patterns over time")
+                    BulletPoint(text: "To track what helps you most")
+                    BulletPoint(text: "To personalize recommendations")
+                    BulletPoint(text: "To show you patterns over time")
                 }
 
                 // What we don't store
@@ -388,9 +388,9 @@ struct SOSPrivacyInfoView: View {
                     Text("What we don't store")
                         .font(.headline)
 
-                    BulletPoint("Exact location data")
-                    BulletPoint("Recording of your sessions")
-                    BulletPoint("Your conversations during crisis")
+                    BulletPoint(text: "Exact location data")
+                    BulletPoint(text: "Recording of your sessions")
+                    BulletPoint(text: "Your conversations during crisis")
                 }
 
                 // Control
@@ -398,9 +398,9 @@ struct SOSPrivacyInfoView: View {
                     Text("You're in control")
                         .font(.headline)
 
-                    BulletPoint("View your history anytime")
-                    BulletPoint("Delete individual entries")
-                    BulletPoint("Export or delete all data")
+                    BulletPoint(text: "View your history anytime")
+                    BulletPoint(text: "Delete individual entries")
+                    BulletPoint(text: "Export or delete all data")
                 }
 
                 Spacer(minLength: 40)
@@ -409,6 +409,21 @@ struct SOSPrivacyInfoView: View {
         }
         .navigationTitle("Privacy")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - BulletPoint Component
+fileprivate struct BulletPoint: View {
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text("•")
+                .foregroundColor(.secondary)
+            Text(text)
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
     }
 }
 

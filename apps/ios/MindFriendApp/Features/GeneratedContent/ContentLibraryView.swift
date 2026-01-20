@@ -118,13 +118,13 @@ struct ContentLibraryView: View {
     private var filterChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                FilterChip(
+                ContentFilterChip(
                     title: "All",
                     isSelected: viewModel.filterType == nil,
                     action: { viewModel.filterType = nil }
                 )
 
-                FilterChip(
+                ContentFilterChip(
                     title: "Favorites",
                     icon: "heart.fill",
                     isSelected: viewModel.showFavoritesOnly,
@@ -132,7 +132,7 @@ struct ContentLibraryView: View {
                 )
 
                 ForEach(GeneratedContentType.allCases) { type in
-                    FilterChip(
+                    ContentFilterChip(
                         title: type.displayName,
                         icon: type.icon,
                         isSelected: viewModel.filterType == type,
@@ -185,7 +185,7 @@ struct ContentLibraryView: View {
 
 // MARK: - Filter Chip
 
-private struct FilterChip: View {
+private struct ContentFilterChip: View {
     let title: String
     var icon: String? = nil
     let isSelected: Bool
@@ -238,7 +238,7 @@ private struct ContentCard: View {
 
                 Image(systemName: content.contentType.icon)
                     .font(.title)
-                    .foregroundStyle(.accentColor)
+                    .foregroundStyle(Color.accentColor)
             }
 
             Text(content.title)
@@ -270,7 +270,7 @@ private struct ContentCard: View {
 
                 Image(systemName: content.contentType.icon)
                     .font(.title2)
-                    .foregroundStyle(.accentColor)
+                    .foregroundStyle(Color.accentColor)
             }
 
             // Details

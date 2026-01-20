@@ -57,7 +57,7 @@ struct OfflineStorageSettingsView: View {
                     .onChange(of: autoDeleteEnabled) { _, newValue in
                         Task {
                             var settings = offlineService.getDownloadSettings()
-                            settings.autoDeleteOldContent = newValue
+                            settings.autoDeleteUnused = newValue
                             await offlineService.updateDownloadSettings(settings)
                         }
                     }
@@ -152,7 +152,7 @@ struct OfflineStorageSettingsView: View {
     private func loadSettings() async {
         let settings = offlineService.getDownloadSettings()
         wifiOnlyEnabled = settings.wifiOnlyDownloads
-        autoDeleteEnabled = settings.autoDeleteOldContent
+        autoDeleteEnabled = settings.autoDeleteUnused
 
         // Find matching storage limit option
         let currentLimit = offlineService.storageLimit
@@ -216,7 +216,7 @@ private struct StorageLimitRow: View {
 
                 if isSelected {
                     Image(systemName: "checkmark")
-                        .foregroundStyle(.accent)
+                        .foregroundStyle(.blue)
                         .fontWeight(.semibold)
                 }
             }
@@ -350,15 +350,11 @@ private extension OfflineContentType {
         switch self {
         case .exercise:
             return .blue
-        case .meditation:
-            return .purple
-        case .sleepContent:
+        case .sleepStory:
             return .indigo
-        case .journalPrompt:
-            return .orange
-        case .audioContent:
+        case .soundscape:
             return .green
-        case .programContent:
+        case .programModule:
             return .teal
         }
     }
@@ -369,18 +365,14 @@ private extension OfflineContentType {
 private extension StorageLimitOption {
     var description: String {
         switch self {
-        case .mb100:
+        case .small:
             return "Minimal storage use"
-        case .mb500:
-            return "Good for limited device storage"
-        case .gb1:
+        case .medium:
             return "Recommended for most users"
-        case .gb2:
+        case .large:
             return "More content available offline"
-        case .gb5:
+        case .extraLarge:
             return "Maximum offline content"
-        case .unlimited:
-            return "No storage limit"
         }
     }
 }

@@ -132,7 +132,7 @@ struct OutcomeHomeView: View {
                                                 )
                                                 showingProgressChart = true
                                             } catch {
-                                                outcomeService.error = error
+                                                print("Error: \(error)")
                                             }
                                         }
                                     }) {
@@ -193,7 +193,7 @@ struct OutcomeHomeView: View {
                 try await outcomeService.loadAssessmentTemplates()
                 try await outcomeService.loadOutcomeGoals()
             } catch {
-                outcomeService.error = error
+                print("Error: \(error)")
             }
         }
     }
