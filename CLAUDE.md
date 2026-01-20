@@ -633,9 +633,10 @@ Do not implement in MVP:
 - HealthKit / wearable sync
 - Human coaching workflows
 - Advanced analytics pipelines
-- Multi-language localization beyond scaffolding
 - Complex notification types beyond daily quest + inactivity
 - A/B testing infrastructure
+
+**Note:** Multi-language localization (Spanish, Portuguese) is now IN SCOPE for MVP as of 2026-01-19 (see decisions.md #2026-01-19-001).
 
 If you believe something beyond MVP is required for correctness, document it in `decisions.md` and keep implementation minimal.
 

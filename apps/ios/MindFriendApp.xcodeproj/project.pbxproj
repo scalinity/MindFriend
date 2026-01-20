@@ -7,8 +7,22 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		67641D749BE1458BAD0C086B /* BusinessModels_Stub.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D1A654547DA49C8BCA9299D /* BusinessModels_Stub.swift */; };
-		5E63AE9A31A045FA88777CEC /* BusinessModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DF368405FBD4B2BB0B5426B /* BusinessModels.swift */; };
+		8622B7EA03834C908DF3C73E /* SleepTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0F0EDB3A00A4A3FBACDB3A6 /* SleepTabView.swift */; };
+
+		CF8C5C49D5C0444297F48F1A /* OutcomeHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AE6FEFA98BE49A796F3BF4B /* OutcomeHomeView.swift */; };
+
+		5A389AB71E7948BCB223D716 /* ConnectivityMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 968945CB48AD4975A9F5E7A1 /* ConnectivityMonitor.swift */; };
+		27331F763B884B11A22A6EDE /* DownloadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D46413DB5C24D50BA6AC9E8 /* DownloadManager.swift */; };
+		6D5FCD3A847A44CC91EBE5DE /* OfflineCacheService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8229B4747AC44CE3BB179029 /* OfflineCacheService.swift */; };
+		3BA1700126624EDCA0E9FF06 /* OfflineStorageManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4844B7217104608BC0D1BC6 /* OfflineStorageManager.swift */; };
+		2F4CCF3304D648C89840E0A5 /* SyncQueueManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F41F8BDD9DD44D74A70741E9 /* SyncQueueManager.swift */; };
+		96F6F3967E79405AB5E7517A /* OfflineModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8844282BF69C4E3DBD80B765 /* OfflineModels.swift */; };
+
+		D40072DE69EC42BCB097332F /* KeyboardDismiss.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9A02B7D82C84FB79889E6CA /* KeyboardDismiss.swift */; };
+
+		42EC1F448DC6433087CFB9BD /* DeepLinkRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 219972BF73DD42EB9EE1A2D7 /* DeepLinkRouter.swift */; };
+
+		49AE1697D083A666AA70CC1C /* BusinessModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EB98EB2D79BAFB7DE13F08C /* BusinessModels.swift */; };
 		F890AACB0D254C97B759B424 /* ChallengeModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4D0906BCC6040BAAE874A45 /* ChallengeModels.swift */; };
 		0B3B447E00E9419B919AA7B1 /* OutcomeModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E29ECACEC31946F5B06633D8 /* OutcomeModels.swift */; };
 		763CE9B8CCB548518B327072 /* JournalModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2362F52FA9224DB9AC01A6C4 /* JournalModels.swift */; };
@@ -182,8 +196,22 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		2D1A654547DA49C8BCA9299D /* BusinessModels_Stub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BusinessModels_Stub.swift; sourceTree = "<group>"; };
-		0DF368405FBD4B2BB0B5426B /* BusinessModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BusinessModels.swift; sourceTree = "<group>"; };
+		B0F0EDB3A00A4A3FBACDB3A6 /* SleepTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SleepTabView.swift; path = MindFriendApp/Features/Sleep/SleepTabView.swift; sourceTree = "<group>"; };
+
+		6AE6FEFA98BE49A796F3BF4B /* OutcomeHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = OutcomeHomeView.swift; path = MindFriendApp/Features/Outcomes/OutcomeHomeView.swift; sourceTree = "<group>"; };
+
+		968945CB48AD4975A9F5E7A1 /* ConnectivityMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityMonitor.swift; sourceTree = "<group>"; };
+		2D46413DB5C24D50BA6AC9E8 /* DownloadManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadManager.swift; sourceTree = "<group>"; };
+		8229B4747AC44CE3BB179029 /* OfflineCacheService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineCacheService.swift; sourceTree = "<group>"; };
+		F4844B7217104608BC0D1BC6 /* OfflineStorageManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineStorageManager.swift; sourceTree = "<group>"; };
+		F41F8BDD9DD44D74A70741E9 /* SyncQueueManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncQueueManager.swift; sourceTree = "<group>"; };
+		8844282BF69C4E3DBD80B765 /* OfflineModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineModels.swift; sourceTree = "<group>"; };
+
+		A9A02B7D82C84FB79889E6CA /* KeyboardDismiss.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardDismiss.swift; sourceTree = "<group>"; };
+
+		219972BF73DD42EB9EE1A2D7 /* DeepLinkRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLinkRouter.swift; sourceTree = "<group>"; };
+
+		0EB98EB2D79BAFB7DE13F08C /* BusinessModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BusinessModels.swift; sourceTree = "<group>"; };
 		C4D0906BCC6040BAAE874A45 /* ChallengeModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChallengeModels.swift; sourceTree = "<group>"; };
 		E29ECACEC31946F5B06633D8 /* OutcomeModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutcomeModels.swift; sourceTree = "<group>"; };
 		2362F52FA9224DB9AC01A6C4 /* JournalModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalModels.swift; sourceTree = "<group>"; };
@@ -716,7 +744,10 @@
 		E07BD077743F197383217159 /* Core */ = {
 			isa = PBXGroup;
 			children = (
-				BEED60DF5D864744832EF07D /* Accessibility */,
+																15A073A2E7AF45F38EDD02F2 /* Offline */,
+A9A02B7D82C84FB79889E6CA /* KeyboardDismiss.swift */,
+219972BF73DD42EB9EE1A2D7 /* DeepLinkRouter.swift */,
+BEED60DF5D864744832EF07D /* Accessibility */,
 				D1E2F3A405162738495A6B8C /* Services */,
 				3EE683BCB5BF2C0266169127 /* Extensions */,
 				VIEWSGRP01493347E53EC5C77,
@@ -724,6 +755,7 @@
 				8E548C5CC1A91C74F13CA751 /* Utilities */,
 				CONST01493347E53EC5C762,
 				590C1A661399CE9EC2A66F1C /* Models.swift */,
+				0EB98EB2D79BAFB7DE13F08C /* BusinessModels.swift */,
 				CELMD01493347E53EC5C762,
 				PRGMD01493347E53EC5C762,
 				BIOMD01493347E53EC5C762,
@@ -850,6 +882,19 @@
 				WKINS02493347E53EC5C762,
 			);
 			path = Insights;
+			sourceTree = "<group>";
+		};
+		15A073A2E7AF45F38EDD02F2 /* Offline */ = {
+			isa = PBXGroup;
+			children = (
+				968945CB48AD4975A9F5E7A1 /* ConnectivityMonitor.swift */,
+				2D46413DB5C24D50BA6AC9E8 /* DownloadManager.swift */,
+				8229B4747AC44CE3BB179029 /* OfflineCacheService.swift */,
+				F4844B7217104608BC0D1BC6 /* OfflineStorageManager.swift */,
+				F41F8BDD9DD44D74A70741E9 /* SyncQueueManager.swift */,
+				8844282BF69C4E3DBD80B765 /* OfflineModels.swift */,
+			);
+			path = Offline;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -981,9 +1026,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-																67641D749BE1458BAD0C086B /* BusinessModels_Stub.swift in Sources */,
-5E63AE9A31A045FA88777CEC /* BusinessModels.swift in Sources */,
-				F890AACB0D254C97B759B424 /* ChallengeModels.swift in Sources */,
+F890AACB0D254C97B759B424 /* ChallengeModels.swift in Sources */,
 				0B3B447E00E9419B919AA7B1 /* OutcomeModels.swift in Sources */,
 				763CE9B8CCB548518B327072 /* JournalModels.swift in Sources */,
 				AD73076B102147E6858F5150 /* SleepModels.swift in Sources */,
@@ -1013,6 +1056,17 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+																								8622B7EA03834C908DF3C73E /* SleepTabView.swift in Sources */,
+CF8C5C49D5C0444297F48F1A /* OutcomeHomeView.swift in Sources */,
+5A389AB71E7948BCB223D716 /* ConnectivityMonitor.swift in Sources */,
+				27331F763B884B11A22A6EDE /* DownloadManager.swift in Sources */,
+				6D5FCD3A847A44CC91EBE5DE /* OfflineCacheService.swift in Sources */,
+				3BA1700126624EDCA0E9FF06 /* OfflineStorageManager.swift in Sources */,
+				2F4CCF3304D648C89840E0A5 /* SyncQueueManager.swift in Sources */,
+				96F6F3967E79405AB5E7517A /* OfflineModels.swift in Sources */,
+D40072DE69EC42BCB097332F /* KeyboardDismiss.swift in Sources */,
+42EC1F448DC6433087CFB9BD /* DeepLinkRouter.swift in Sources */,
+49AE1697D083A666AA70CC1C /* BusinessModels.swift in Sources */,
 				00EE7C42BC23C3C719CD3C9F /* AccessibilityHelpers.swift in Sources */,
 				ASVC02BC23C3C719CD3C9F,
 				ASMD02BC23C3C719CD3C9F,

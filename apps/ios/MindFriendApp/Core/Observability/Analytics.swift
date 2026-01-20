@@ -151,6 +151,14 @@ enum AnalyticsEvent: String {
     case interventionResponse = "intervention_response"
     case interventionRated = "intervention_rated"
     case dataDeletionRequested = "data_deletion_requested"
+
+    // Privacy Lock
+    case privacyLockEnabled = "privacy_lock_enabled"
+    case privacyLockDisabled = "privacy_lock_disabled"
+    case privacyLockEngaged = "privacy_lock_engaged"
+    case privacyLockDisengaged = "privacy_lock_disengaged"
+    case privacyAutoLockTriggered = "privacy_auto_lock_triggered"
+    case privacySettingsViewed = "privacy_settings_viewed"
 }
 
 /// User properties for segmentation

@@ -13,6 +13,10 @@ struct MoodCheckInView: View {
     @State private var note: String = ""
     @State private var showAdvanced = false
     @State private var isSaving = false
+    @State private var showActionPlanSheet = false
+    @State private var actionPlan: ActionPlan?
+    @State private var actionPlanItems: [ActionPlanItem] = []
+    @State private var planSize: ActionPlanSize = .quick
 
     private let moodEmojis = ["😢", "😔", "😐", "🙂", "😊"]
     private let anxietyLabels = ["Very Low", "Low", "Moderate", "High", "Very High"]

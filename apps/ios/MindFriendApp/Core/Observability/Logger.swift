@@ -52,7 +52,10 @@ enum Log {
     
     /// Biometrics and health data logs
     static let biometrics = Logger(subsystem: subsystem, category: "Biometrics")
-    
+
+    /// Privacy and security logs
+    static let privacy = Logger(subsystem: subsystem, category: "Privacy")
+
     /// Social and community logs
     static let social = Logger(subsystem: subsystem, category: "Social")
     

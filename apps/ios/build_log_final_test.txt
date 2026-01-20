@@ -1,0 +1,1125 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project MindFriendApp.xcodeproj -scheme MindFriendApp -destination "platform=iOS Simulator,name=iPhone 17" build
+
+Resolve Package Graph
+
+
+Resolved source packages:
+  xctest-dynamic-overlay: https://github.com/pointfreeco/xctest-dynamic-overlay @ 1.8.1
+  swift-asn1: https://github.com/apple/swift-asn1.git @ 1.5.1
+  GoogleUtilities: https://github.com/google/GoogleUtilities.git @ 8.1.0
+  Supabase: https://github.com/supabase/supabase-swift @ 2.40.0
+  swift-crypto: https://github.com/apple/swift-crypto.git @ 4.2.0
+  swift-clocks: https://github.com/pointfreeco/swift-clocks @ 1.0.6
+  swift-http-types: https://github.com/apple/swift-http-types.git @ 1.5.1
+  GTMSessionFetcher: https://github.com/google/gtm-session-fetcher.git @ 3.5.0
+  Sentry: https://github.com/getsentry/sentry-cocoa @ 9.1.0
+  swift-concurrency-extras: https://github.com/pointfreeco/swift-concurrency-extras @ 1.3.2
+  AppCheck: https://github.com/google/app-check.git @ 11.2.0
+  Promises: https://github.com/google/promises.git @ 2.4.0
+  GTMAppAuth: https://github.com/google/GTMAppAuth.git @ 4.1.1
+  AppAuth: https://github.com/openid/AppAuth-iOS.git @ 1.7.6
+  GoogleSignIn: https://github.com/google/GoogleSignIn-iOS @ 8.0.0
+
+ComputePackagePrebuildTargetDependencyGraph
+
+Prepare packages
+
+CreateBuildRequest
+
+SendProjectDescription
+
+CreateBuildOperation
+
+ComputeTargetDependencyGraph
+note: Building targets in dependency order
+note: Target dependency graph (57 targets)
+    Target 'MindFriendApp' in project 'MindFriendApp'
+        ➜ Explicit dependency on target 'GoogleSignIn' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'Sentry' in project 'Sentry'
+        ➜ Explicit dependency on target 'SentrySwiftUI' in project 'Sentry'
+        ➜ Explicit dependency on target 'Supabase' in project 'Supabase'
+    Target 'Supabase' in project 'Supabase'
+        ➜ Explicit dependency on target 'Supabase' in project 'Supabase'
+        ➜ Explicit dependency on target 'Functions' in project 'Supabase'
+        ➜ Explicit dependency on target 'PostgREST' in project 'Supabase'
+        ➜ Explicit dependency on target 'Auth' in project 'Supabase'
+        ➜ Explicit dependency on target 'Realtime' in project 'Supabase'
+        ➜ Explicit dependency on target 'Storage' in project 'Supabase'
+        ➜ Explicit dependency on target 'Helpers' in project 'Supabase'
+        ➜ Explicit dependency on target 'ConcurrencyExtras' in project 'swift-concurrency-extras'
+        ➜ Explicit dependency on target 'HTTPTypes' in project 'swift-http-types'
+        ➜ Explicit dependency on target 'Clocks' in project 'swift-clocks'
+        ➜ Explicit dependency on target 'XCTestDynamicOverlay' in project 'xctest-dynamic-overlay'
+        ➜ Explicit dependency on target 'Crypto' in project 'swift-crypto'
+        ➜ Explicit dependency on target 'IssueReporting' in project 'xctest-dynamic-overlay'
+    Target 'Supabase' in project 'Supabase'
+        ➜ Explicit dependency on target 'Helpers' in project 'Supabase'
+        ➜ Explicit dependency on target 'Auth' in project 'Supabase'
+        ➜ Explicit dependency on target 'Functions' in project 'Supabase'
+        ➜ Explicit dependency on target 'PostgREST' in project 'Supabase'
+        ➜ Explicit dependency on target 'Realtime' in project 'Supabase'
+        ➜ Explicit dependency on target 'Storage' in project 'Supabase'
+        ➜ Explicit dependency on target 'ConcurrencyExtras' in project 'swift-concurrency-extras'
+        ➜ Explicit dependency on target 'HTTPTypes' in project 'swift-http-types'
+        ➜ Explicit dependency on target 'Clocks' in project 'swift-clocks'
+        ➜ Explicit dependency on target 'XCTestDynamicOverlay' in project 'xctest-dynamic-overlay'
+        ➜ Explicit dependency on target 'Crypto' in project 'swift-crypto'
+        ➜ Explicit dependency on target 'IssueReporting' in project 'xctest-dynamic-overlay'
+    Target 'Storage' in project 'Supabase'
+        ➜ Explicit dependency on target 'Helpers' in project 'Supabase'
+        ➜ Explicit dependency on target 'ConcurrencyExtras' in project 'swift-concurrency-extras'
+        ➜ Explicit dependency on target 'HTTPTypes' in project 'swift-http-types'
+        ➜ Explicit dependency on target 'Clocks' in project 'swift-clocks'
+        ➜ Explicit dependency on target 'XCTestDynamicOverlay' in project 'xctest-dynamic-overlay'
+    Target 'Realtime' in project 'Supabase'
+        ➜ Explicit dependency on target 'Helpers' in project 'Supabase'
+        ➜ Explicit dependency on target 'ConcurrencyExtras' in project 'swift-concurrency-extras'
+        ➜ Explicit dependency on target 'HTTPTypes' in project 'swift-http-types'
+        ➜ Explicit dependency on target 'Clocks' in project 'swift-clocks'
+        ➜ Explicit dependency on target 'XCTestDynamicOverlay' in project 'xctest-dynamic-overlay'
+        ➜ Explicit dependency on target 'IssueReporting' in project 'xctest-dynamic-overlay'
+    Target 'PostgREST' in project 'Supabase'
+        ➜ Explicit dependency on target 'Helpers' in project 'Supabase'
+        ➜ Explicit dependency on target 'ConcurrencyExtras' in project 'swift-concurrency-extras'
+        ➜ Explicit dependency on target 'HTTPTypes' in project 'swift-http-types'
+        ➜ Explicit dependency on target 'Clocks' in project 'swift-clocks'
+        ➜ Explicit dependency on target 'XCTestDynamicOverlay' in project 'xctest-dynamic-overlay'
+    Target 'Functions' in project 'Supabase'
+        ➜ Explicit dependency on target 'Helpers' in project 'Supabase'
+        ➜ Explicit dependency on target 'ConcurrencyExtras' in project 'swift-concurrency-extras'
+        ➜ Explicit dependency on target 'HTTPTypes' in project 'swift-http-types'
+        ➜ Explicit dependency on target 'Clocks' in project 'swift-clocks'
+        ➜ Explicit dependency on target 'XCTestDynamicOverlay' in project 'xctest-dynamic-overlay'
+    Target 'Auth' in project 'Supabase'
+        ➜ Explicit dependency on target 'Helpers' in project 'Supabase'
+        ➜ Explicit dependency on target 'ConcurrencyExtras' in project 'swift-concurrency-extras'
+        ➜ Explicit dependency on target 'HTTPTypes' in project 'swift-http-types'
+        ➜ Explicit dependency on target 'Clocks' in project 'swift-clocks'
+        ➜ Explicit dependency on target 'XCTestDynamicOverlay' in project 'xctest-dynamic-overlay'
+        ➜ Explicit dependency on target 'Crypto' in project 'swift-crypto'
+    Target 'Crypto' in project 'swift-crypto'
+        ➜ Explicit dependency on target 'Crypto' in project 'swift-crypto'
+        ➜ Explicit dependency on target 'swift-crypto_Crypto' in project 'swift-crypto'
+    Target 'Crypto' in project 'swift-crypto'
+        ➜ Explicit dependency on target 'swift-crypto_Crypto' in project 'swift-crypto'
+    Target 'swift-crypto_Crypto' in project 'swift-crypto' (no dependencies)
+    Target 'Helpers' in project 'Supabase'
+        ➜ Explicit dependency on target 'ConcurrencyExtras' in project 'swift-concurrency-extras'
+        ➜ Explicit dependency on target 'HTTPTypes' in project 'swift-http-types'
+        ➜ Explicit dependency on target 'Clocks' in project 'swift-clocks'
+        ➜ Explicit dependency on target 'XCTestDynamicOverlay' in project 'xctest-dynamic-overlay'
+    Target 'XCTestDynamicOverlay' in project 'xctest-dynamic-overlay'
+        ➜ Explicit dependency on target 'XCTestDynamicOverlay' in project 'xctest-dynamic-overlay'
+        ➜ Explicit dependency on target 'IssueReportingPackageSupport' in project 'xctest-dynamic-overlay'
+        ➜ Explicit dependency on target 'IssueReporting' in project 'xctest-dynamic-overlay'
+    Target 'XCTestDynamicOverlay' in project 'xctest-dynamic-overlay'
+        ➜ Explicit dependency on target 'IssueReportingPackageSupport' in project 'xctest-dynamic-overlay'
+        ➜ Explicit dependency on target 'IssueReporting' in project 'xctest-dynamic-overlay'
+    Target 'Clocks' in project 'swift-clocks'
+        ➜ Explicit dependency on target 'Clocks' in project 'swift-clocks'
+        ➜ Explicit dependency on target 'ConcurrencyExtras' in project 'swift-concurrency-extras'
+        ➜ Explicit dependency on target 'IssueReporting' in project 'xctest-dynamic-overlay'
+    Target 'Clocks' in project 'swift-clocks'
+        ➜ Explicit dependency on target 'ConcurrencyExtras' in project 'swift-concurrency-extras'
+        ➜ Explicit dependency on target 'IssueReporting' in project 'xctest-dynamic-overlay'
+    Target 'IssueReporting' in project 'xctest-dynamic-overlay'
+        ➜ Explicit dependency on target 'IssueReporting' in project 'xctest-dynamic-overlay'
+        ➜ Explicit dependency on target 'IssueReportingPackageSupport' in project 'xctest-dynamic-overlay'
+    Target 'IssueReporting' in project 'xctest-dynamic-overlay'
+        ➜ Explicit dependency on target 'IssueReportingPackageSupport' in project 'xctest-dynamic-overlay'
+    Target 'IssueReportingPackageSupport' in project 'xctest-dynamic-overlay' (no dependencies)
+    Target 'HTTPTypes' in project 'swift-http-types'
+        ➜ Explicit dependency on target 'HTTPTypes' in project 'swift-http-types'
+    Target 'HTTPTypes' in project 'swift-http-types' (no dependencies)
+    Target 'ConcurrencyExtras' in project 'swift-concurrency-extras'
+        ➜ Explicit dependency on target 'ConcurrencyExtras' in project 'swift-concurrency-extras'
+    Target 'ConcurrencyExtras' in project 'swift-concurrency-extras' (no dependencies)
+    Target 'SentrySwiftUI' in project 'Sentry'
+        ➜ Explicit dependency on target 'SentrySwiftUI' in project 'Sentry'
+        ➜ Explicit dependency on target 'SentryCppHelper' in project 'Sentry'
+        ➜ Explicit dependency on target 'SentryInternal' in project 'Sentry'
+    Target 'SentrySwiftUI' in project 'Sentry'
+        ➜ Explicit dependency on target 'SentryInternal' in project 'Sentry'
+    Target 'SentryInternal' in project 'Sentry' (no dependencies)
+    Target 'Sentry' in project 'Sentry'
+        ➜ Explicit dependency on target 'SentryCppHelper' in project 'Sentry'
+    Target 'SentryCppHelper' in project 'Sentry' (no dependencies)
+    Target 'GoogleSignIn' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'GoogleSignIn' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'GoogleSignIn_GoogleSignIn' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'AppAuth' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppCheckCore' in project 'AppCheck'
+        ➜ Explicit dependency on target 'GTMAppAuth' in project 'GTMAppAuth'
+        ➜ Explicit dependency on target 'GTMSessionFetcherCore' in project 'GTMSessionFetcher'
+    Target 'GoogleSignIn' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'GoogleSignIn_GoogleSignIn' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'AppAuth' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppCheckCore' in project 'AppCheck'
+        ➜ Explicit dependency on target 'GTMAppAuth' in project 'GTMAppAuth'
+        ➜ Explicit dependency on target 'GTMSessionFetcherCore' in project 'GTMSessionFetcher'
+    Target 'GTMAppAuth' in project 'GTMAppAuth'
+        ➜ Explicit dependency on target 'GTMAppAuth' in project 'GTMAppAuth'
+        ➜ Explicit dependency on target 'GTMAppAuth_GTMAppAuth' in project 'GTMAppAuth'
+        ➜ Explicit dependency on target 'GTMSessionFetcherCore' in project 'GTMSessionFetcher'
+        ➜ Explicit dependency on target 'AppAuthCore' in project 'AppAuth'
+    Target 'GTMAppAuth' in project 'GTMAppAuth'
+        ➜ Explicit dependency on target 'GTMAppAuth_GTMAppAuth' in project 'GTMAppAuth'
+        ➜ Explicit dependency on target 'GTMSessionFetcherCore' in project 'GTMSessionFetcher'
+        ➜ Explicit dependency on target 'AppAuthCore' in project 'AppAuth'
+    Target 'AppAuthCore' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppAuthCore' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppAuth_AppAuthCore' in project 'AppAuth'
+    Target 'GTMSessionFetcherCore' in project 'GTMSessionFetcher'
+        ➜ Explicit dependency on target 'GTMSessionFetcherCore' in project 'GTMSessionFetcher'
+        ➜ Explicit dependency on target 'GTMSessionFetcher_GTMSessionFetcherCore' in project 'GTMSessionFetcher'
+    Target 'GTMSessionFetcherCore' in project 'GTMSessionFetcher'
+        ➜ Explicit dependency on target 'GTMSessionFetcher_GTMSessionFetcherCore' in project 'GTMSessionFetcher'
+    Target 'GTMSessionFetcher_GTMSessionFetcherCore' in project 'GTMSessionFetcher' (no dependencies)
+    Target 'GTMAppAuth_GTMAppAuth' in project 'GTMAppAuth' (no dependencies)
+    Target 'AppCheckCore' in project 'AppCheck'
+        ➜ Explicit dependency on target 'AppCheckCore' in project 'AppCheck'
+        ➜ Explicit dependency on target 'FBLPromises' in project 'Promises'
+        ➜ Explicit dependency on target 'GULEnvironment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULUserDefaults' in project 'GoogleUtilities'
+    Target 'AppCheckCore' in project 'AppCheck'
+        ➜ Explicit dependency on target 'FBLPromises' in project 'Promises'
+        ➜ Explicit dependency on target 'GULEnvironment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULUserDefaults' in project 'GoogleUtilities'
+    Target 'GULUserDefaults' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-UserDefaults' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities_GoogleUtilities-UserDefaults' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'third-party-IsAppEncrypted' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Environment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Logger' in project 'GoogleUtilities'
+    Target 'GoogleUtilities-UserDefaults' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities_GoogleUtilities-UserDefaults' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'third-party-IsAppEncrypted' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Environment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Logger' in project 'GoogleUtilities'
+    Target 'GoogleUtilities-Logger' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities_GoogleUtilities-Logger' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'third-party-IsAppEncrypted' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Environment' in project 'GoogleUtilities'
+    Target 'GoogleUtilities_GoogleUtilities-Logger' in project 'GoogleUtilities' (no dependencies)
+    Target 'GoogleUtilities_GoogleUtilities-UserDefaults' in project 'GoogleUtilities' (no dependencies)
+    Target 'GULEnvironment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Environment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities_GoogleUtilities-Environment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'third-party-IsAppEncrypted' in project 'GoogleUtilities'
+    Target 'GoogleUtilities-Environment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities_GoogleUtilities-Environment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'third-party-IsAppEncrypted' in project 'GoogleUtilities'
+    Target 'third-party-IsAppEncrypted' in project 'GoogleUtilities' (no dependencies)
+    Target 'GoogleUtilities_GoogleUtilities-Environment' in project 'GoogleUtilities' (no dependencies)
+    Target 'FBLPromises' in project 'Promises'
+        ➜ Explicit dependency on target 'FBLPromises' in project 'Promises'
+        ➜ Explicit dependency on target 'Promises_FBLPromises' in project 'Promises'
+    Target 'FBLPromises' in project 'Promises'
+        ➜ Explicit dependency on target 'Promises_FBLPromises' in project 'Promises'
+    Target 'Promises_FBLPromises' in project 'Promises' (no dependencies)
+    Target 'AppAuth' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppAuth' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppAuth_AppAuth' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppAuthCore' in project 'AppAuth'
+    Target 'AppAuth' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppAuth_AppAuth' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppAuthCore' in project 'AppAuth'
+    Target 'AppAuthCore' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppAuth_AppAuthCore' in project 'AppAuth'
+    Target 'AppAuth_AppAuthCore' in project 'AppAuth' (no dependencies)
+    Target 'AppAuth_AppAuth' in project 'AppAuth' (no dependencies)
+    Target 'GoogleSignIn_GoogleSignIn' in project 'GoogleSignIn' (no dependencies)
+
+GatherProvisioningInputs
+
+CreateBuildDescription
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -arch arm64 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk -x objective-c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc --version
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/xcstringstool compile --dry-run --output-directory /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Resources/Localizable.xcstrings
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --print-asset-tag-combinations --output-format xml1 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Resources/Assets.xcassets
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --version --output-format xml1
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -arch arm64 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
+
+ReadFileContents /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/share/docc/features.json
+
+Build description signature: baf83154e2bf4745d2b3efa7bc6a44da
+Build description path: /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/XCBuildData/baf83154e2bf4745d2b3efa7bc6a44da.xcbuilddata
+ClangStatCache /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk /Users/danny/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphonesimulator26.1-23B77-3885c01c3e6b6a337905948deab2002e90cf18a4295e390e64c810bc6bd7acbc.sdkstatcache
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp.xcodeproj
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk -o /Users/danny/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphonesimulator26.1-23B77-3885c01c3e6b6a337905948deab2002e90cf18a4295e390e64c810bc6bd7acbc.sdkstatcache
+
+ProcessInfoPlistFile /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/swift-crypto_Crypto.bundle/Info.plist /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/swift-crypto.build/Debug-iphonesimulator/swift-crypto_Crypto.build/empty-swift-crypto_Crypto.plist (in target 'swift-crypto_Crypto' from project 'swift-crypto')
+    cd /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/swift-crypto
+    builtin-infoPlistUtility /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/swift-crypto.build/Debug-iphonesimulator/swift-crypto_Crypto.build/empty-swift-crypto_Crypto.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/swift-crypto_Crypto.bundle/Info.plist
+
+ProcessInfoPlistFile /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/Promises_FBLPromises.bundle/Info.plist /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/Promises.build/Debug-iphonesimulator/Promises_FBLPromises.build/empty-Promises_FBLPromises.plist (in target 'Promises_FBLPromises' from project 'Promises')
+    cd /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/promises
+    builtin-infoPlistUtility /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/Promises.build/Debug-iphonesimulator/Promises_FBLPromises.build/empty-Promises_FBLPromises.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/Promises_FBLPromises.bundle/Info.plist
+
+ProcessInfoPlistFile /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/GoogleUtilities_GoogleUtilities-UserDefaults.bundle/Info.plist /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GoogleUtilities.build/Debug-iphonesimulator/GoogleUtilities_GoogleUtilities-UserDefaults.build/empty-GoogleUtilities_GoogleUtilities-UserDefaults.plist (in target 'GoogleUtilities_GoogleUtilities-UserDefaults' from project 'GoogleUtilities')
+    cd /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/GoogleUtilities
+    builtin-infoPlistUtility /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GoogleUtilities.build/Debug-iphonesimulator/GoogleUtilities_GoogleUtilities-UserDefaults.build/empty-GoogleUtilities_GoogleUtilities-UserDefaults.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/GoogleUtilities_GoogleUtilities-UserDefaults.bundle/Info.plist
+
+ProcessInfoPlistFile /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/GoogleUtilities_GoogleUtilities-Environment.bundle/Info.plist /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GoogleUtilities.build/Debug-iphonesimulator/GoogleUtilities_GoogleUtilities-Environment.build/empty-GoogleUtilities_GoogleUtilities-Environment.plist (in target 'GoogleUtilities_GoogleUtilities-Environment' from project 'GoogleUtilities')
+    cd /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/GoogleUtilities
+    builtin-infoPlistUtility /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GoogleUtilities.build/Debug-iphonesimulator/GoogleUtilities_GoogleUtilities-Environment.build/empty-GoogleUtilities_GoogleUtilities-Environment.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/GoogleUtilities_GoogleUtilities-Environment.bundle/Info.plist
+
+ProcessInfoPlistFile /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/GTMAppAuth_GTMAppAuth.bundle/Info.plist /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GTMAppAuth.build/Debug-iphonesimulator/GTMAppAuth_GTMAppAuth.build/empty-GTMAppAuth_GTMAppAuth.plist (in target 'GTMAppAuth_GTMAppAuth' from project 'GTMAppAuth')
+    cd /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/GTMAppAuth
+    builtin-infoPlistUtility /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GTMAppAuth.build/Debug-iphonesimulator/GTMAppAuth_GTMAppAuth.build/empty-GTMAppAuth_GTMAppAuth.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/GTMAppAuth_GTMAppAuth.bundle/Info.plist
+
+ProcessInfoPlistFile /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/AppAuth_AppAuthCore.bundle/Info.plist /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/AppAuth.build/Debug-iphonesimulator/AppAuth_AppAuthCore.build/empty-AppAuth_AppAuthCore.plist (in target 'AppAuth_AppAuthCore' from project 'AppAuth')
+    cd /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/AppAuth-iOS
+    builtin-infoPlistUtility /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/AppAuth.build/Debug-iphonesimulator/AppAuth_AppAuthCore.build/empty-AppAuth_AppAuthCore.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/AppAuth_AppAuthCore.bundle/Info.plist
+
+ProcessInfoPlistFile /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/GoogleSignIn_GoogleSignIn.bundle/Info.plist /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GoogleSignIn.build/Debug-iphonesimulator/GoogleSignIn_GoogleSignIn.build/empty-GoogleSignIn_GoogleSignIn.plist (in target 'GoogleSignIn_GoogleSignIn' from project 'GoogleSignIn')
+    cd /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/GoogleSignIn-iOS
+    builtin-infoPlistUtility /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GoogleSignIn.build/Debug-iphonesimulator/GoogleSignIn_GoogleSignIn.build/empty-GoogleSignIn_GoogleSignIn.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/GoogleSignIn_GoogleSignIn.bundle/Info.plist
+
+ProcessInfoPlistFile /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/GTMSessionFetcher_GTMSessionFetcherCore.bundle/Info.plist /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GTMSessionFetcher.build/Debug-iphonesimulator/GTMSessionFetcher_GTMSessionFetcherCore.build/empty-GTMSessionFetcher_GTMSessionFetcherCore.plist (in target 'GTMSessionFetcher_GTMSessionFetcherCore' from project 'GTMSessionFetcher')
+    cd /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/gtm-session-fetcher
+    builtin-infoPlistUtility /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GTMSessionFetcher.build/Debug-iphonesimulator/GTMSessionFetcher_GTMSessionFetcherCore.build/empty-GTMSessionFetcher_GTMSessionFetcherCore.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/GTMSessionFetcher_GTMSessionFetcherCore.bundle/Info.plist
+
+ProcessInfoPlistFile /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/AppAuth_AppAuth.bundle/Info.plist /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/AppAuth.build/Debug-iphonesimulator/AppAuth_AppAuth.build/empty-AppAuth_AppAuth.plist (in target 'AppAuth_AppAuth' from project 'AppAuth')
+    cd /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/AppAuth-iOS
+    builtin-infoPlistUtility /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/AppAuth.build/Debug-iphonesimulator/AppAuth_AppAuth.build/empty-AppAuth_AppAuth.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/AppAuth_AppAuth.bundle/Info.plist
+
+ProcessInfoPlistFile /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/GoogleUtilities_GoogleUtilities-Logger.bundle/Info.plist /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GoogleUtilities.build/Debug-iphonesimulator/GoogleUtilities_GoogleUtilities-Logger.build/empty-GoogleUtilities_GoogleUtilities-Logger.plist (in target 'GoogleUtilities_GoogleUtilities-Logger' from project 'GoogleUtilities')
+    cd /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/GoogleUtilities
+    builtin-infoPlistUtility /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GoogleUtilities.build/Debug-iphonesimulator/GoogleUtilities_GoogleUtilities-Logger.build/empty-GoogleUtilities_GoogleUtilities-Logger.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/GoogleUtilities_GoogleUtilities-Logger.bundle/Info.plist
+
+SwiftDriver MindFriendApp normal arm64 com.apple.xcode.tools.swift.compiler (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    builtin-SwiftDriver -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name MindFriendApp -Onone -enforce-exclusivity\=checked @/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/Objects-normal/arm64/MindFriendApp.SwiftFileList -DDEBUG -Xcc -fmodule-map-file\=/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/AppAuth.modulemap -Xcc -fmodule-map-file\=/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/GoogleUtilities-Logger.modulemap -Xcc -fmodule-map-file\=/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/GoogleUtilities-Environment.modulemap -Xcc -fmodule-map-file\=/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/third-party-IsAppEncrypted.modulemap -Xcc -fmodule-map-file\=/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/GoogleUtilities-UserDefaults.modulemap -Xcc -fmodule-map-file\=/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/AppCheckCore.modulemap -Xcc -fmodule-map-file\=/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/AppAuthCore.modulemap -Xcc -fmodule-map-file\=/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/GTMSessionFetcherCore.modulemap -Xcc -fmodule-map-file\=/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/GoogleSignIn.modulemap -Xcc -fmodule-map-file\=/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/SentryInternal.modulemap -enable-bare-slash-regex -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk -target arm64-apple-ios17.0-simulator -g -module-cache-path /Users/danny/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator -emit-localized-strings -emit-localized-strings-path /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/Objects-normal/arm64 -c -j14 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /Users/danny/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphonesimulator26.1-23B77-3885c01c3e6b6a337905948deab2002e90cf18a4295e390e64c810bc6bd7acbc.sdkstatcache -output-file-map /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/Objects-normal/arm64/MindFriendApp-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /Users/danny/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -sdk-module-cache-path /Users/danny/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/Objects-normal/arm64/MindFriendApp.swiftmodule -validate-clang-modules-once -clang-build-session-file /Users/danny/Library/Developer/Xcode/DerivedData/ModuleCache.noindex/Session.modulevalidation -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/Objects-normal/arm64/MindFriendApp_const_extract_protocols.json -Xcc -iquote -Xcc /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/MindFriendApp-generated-files.hmap -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/MindFriendApp-own-target-headers.hmap -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/MindFriendApp-all-non-framework-target-headers.hmap -Xcc -ivfsoverlay -Xcc /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp-70092ba647d9066fcc9bfeff3d696c9b-VFS-iphonesimulator/all-product-headers.yaml -Xcc -iquote -Xcc /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/MindFriendApp-project-headers.hmap -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/AppAuth-iOS/Sources/AppAuth -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/promises/Sources/FBLPromises/include -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/GoogleUtilities/GoogleUtilities/Logger/Public -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/GoogleUtilities/GoogleUtilities/Environment/Public -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/GoogleUtilities/third_party/IsAppEncrypted/Public -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/GoogleUtilities/GoogleUtilities/UserDefaults/Public -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/app-check/AppCheckCore/Sources/Public -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/AppAuth-iOS/Sources/AppAuthCore -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/gtm-session-fetcher/Sources/Core/Public -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/GoogleSignIn-iOS/GoogleSignIn/Sources/Public -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/sentry-cocoa/Sources/SentrySwiftUI/SentryInternal -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/include -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/DerivedSources-normal/arm64 -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/DerivedSources/arm64 -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/Objects-normal/arm64/MindFriendApp-Swift.h -working-directory /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios -experimental-emit-module-separately -disable-cmo
+
+CompileAssetCatalogVariant thinned /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Resources/Assets.xcassets (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    /Applications/Xcode.app/Contents/Developer/usr/bin/actool /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Resources/Assets.xcassets --compile /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/assetcatalog_output/thinned --output-format human-readable-text --notices --warnings --export-dependency-info /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/assetcatalog_dependencies_thinned --output-partial-info-plist /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/assetcatalog_generated_info.plist_thinned --app-icon AppIcon --accent-color AccentColor --compress-pngs --enable-on-demand-resources YES --filter-for-thinning-device-configuration iPhone18,3 --filter-for-device-os-version 26.1 --development-region en --target-device iphone --target-device ipad --minimum-deployment-target 17.0 --platform iphonesimulator
+/* com.apple.actool.compilation-results */
+/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/assetcatalog_generated_info.plist_thinned
+/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/assetcatalog_output/thinned/AppIcon60x60@2x.png
+/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/assetcatalog_output/thinned/AppIcon76x76@2x~ipad.png
+/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/assetcatalog_output/thinned/Assets.car
+
+
+ExtractAppIntentsMetadata (in target 'Auth' from project 'Supabase')
+    cd /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/supabase-swift
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.2.54.0.z1yOK5/Metal.xctoolchain --module-name Auth --sdk-root /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk --xcode-version 17B55 --platform-family iOS --deployment-target 13.0 --bundle-identifier supabase-swift.Auth --output /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/Auth.appintents --target-triple arm64-apple-ios13.0-simulator --binary-file /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/Auth.o --dependency-file /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/arm64/Auth_dependency_info.dat --stringsdata-file /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/arm64/Auth.SwiftFileList --metadata-file-list /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Auth.DependencyMetadataFileList --static-metadata-file-list /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Auth.DependencyStaticMetadataFileList --swift-const-vals-list /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/arm64/Auth.SwiftConstValuesFileList --force --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2026-01-19 20:24:28.450 appintentsmetadataprocessor[47059:8307709] Starting appintentsmetadataprocessor export
+2026-01-19 20:24:28.522 appintentsmetadataprocessor[47059:8307709] Extracted no relevant App Intents symbols, skipping writing output
+
+RegisterExecutionPolicyException /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/Auth.o (in target 'Auth' from project 'Supabase')
+    cd /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/supabase-swift
+    builtin-RegisterExecutionPolicyException /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/Auth.o
+
+Ld /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/Supabase.o normal (in target 'Supabase' from project 'Supabase')
+    cd /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/supabase-swift
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-ios13.0-simulator -r -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk -O0 -w -L/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -L/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator -L/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator -iframework /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -iframework /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk/Developer/Library/Frameworks -filelist /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Supabase.build/Objects-normal/arm64/Supabase.LinkFileList -nostdlib -Xlinker -object_path_lto -Xlinker /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Supabase.build/Objects-normal/arm64/Supabase_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -objc_abi_version -Xlinker 2 -Xlinker -dependency_info -Xlinker /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Supabase.build/Objects-normal/arm64/Supabase_dependency_info.dat -fobjc-link-runtime -L/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/iphonesimulator -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Supabase.build/Objects-normal/arm64/Supabase.swiftmodule @/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Supabase.build/Objects-normal/arm64/Supabase-linker-args.resp -o /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/Supabase.o
+
+ExtractAppIntentsMetadata (in target 'Supabase' from project 'Supabase')
+    cd /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/supabase-swift
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.2.54.0.z1yOK5/Metal.xctoolchain --module-name Supabase --sdk-root /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk --xcode-version 17B55 --platform-family iOS --deployment-target 13.0 --bundle-identifier supabase-swift.Supabase --output /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/Supabase.appintents --target-triple arm64-apple-ios13.0-simulator --binary-file /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/Supabase.o --dependency-file /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Supabase.build/Objects-normal/arm64/Supabase_dependency_info.dat --stringsdata-file /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Supabase.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Supabase.build/Objects-normal/arm64/Supabase.SwiftFileList --metadata-file-list /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Supabase.build/Supabase.DependencyMetadataFileList --static-metadata-file-list /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Supabase.build/Supabase.DependencyStaticMetadataFileList --swift-const-vals-list /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Supabase.build/Objects-normal/arm64/Supabase.SwiftConstValuesFileList --force --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2026-01-19 20:24:28.593 appintentsmetadataprocessor[47063:8307747] Starting appintentsmetadataprocessor export
+2026-01-19 20:24:28.681 appintentsmetadataprocessor[47063:8307747] Extracted no relevant App Intents symbols, skipping writing output
+
+RegisterExecutionPolicyException /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/Supabase.o (in target 'Supabase' from project 'Supabase')
+    cd /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/supabase-swift
+    builtin-RegisterExecutionPolicyException /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/Supabase.o
+
+Ld /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app/__preview.dylib normal (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-ios17.0-simulator -dynamiclib -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk -O0 -L/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator -install_name @rpath/MindFriendApp.debug.dylib -dead_strip -rdynamic -Xlinker -no_deduplicate -Xlinker -objc_abi_version -Xlinker 2 -Xlinker -dependency_info -Xlinker /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/Objects-normal/arm64/MindFriendApp_dependency_info.dat -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __entitlements -Xlinker /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/MindFriendApp.app-Simulated.xcent -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __ents_der -Xlinker /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/MindFriendApp.app-Simulated.xcent.der -Xlinker -no_adhoc_codesign -o /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app/__preview.dylib
+
+CpResource /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app/PrivacyInfo.xcprivacy /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/PrivacyInfo.xcprivacy (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/PrivacyInfo.xcprivacy /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app
+
+Copy /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app/Promises_FBLPromises.bundle /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/Promises_FBLPromises.bundle (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/Promises_FBLPromises.bundle /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app
+
+Copy /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app/swift-crypto_Crypto.bundle /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/swift-crypto_Crypto.bundle (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/swift-crypto_Crypto.bundle /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app
+
+Copy /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app/GoogleSignIn_GoogleSignIn.bundle /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/GoogleSignIn_GoogleSignIn.bundle (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/GoogleSignIn_GoogleSignIn.bundle /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app
+
+Copy /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app/GTMSessionFetcher_GTMSessionFetcherCore.bundle /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/GTMSessionFetcher_GTMSessionFetcherCore.bundle (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/GTMSessionFetcher_GTMSessionFetcherCore.bundle /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app
+
+Copy /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app/GoogleUtilities_GoogleUtilities-UserDefaults.bundle /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/GoogleUtilities_GoogleUtilities-UserDefaults.bundle (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/GoogleUtilities_GoogleUtilities-UserDefaults.bundle /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app
+
+Copy /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app/GTMAppAuth_GTMAppAuth.bundle /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/GTMAppAuth_GTMAppAuth.bundle (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/GTMAppAuth_GTMAppAuth.bundle /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app
+
+Copy /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app/GoogleUtilities_GoogleUtilities-Environment.bundle /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/GoogleUtilities_GoogleUtilities-Environment.bundle (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/GoogleUtilities_GoogleUtilities-Environment.bundle /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app
+
+Copy /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app/GoogleUtilities_GoogleUtilities-Logger.bundle /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/GoogleUtilities_GoogleUtilities-Logger.bundle (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/GoogleUtilities_GoogleUtilities-Logger.bundle /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app
+
+Copy /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app/AppAuth_AppAuthCore.bundle /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/AppAuth_AppAuthCore.bundle (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/AppAuth_AppAuthCore.bundle /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app
+
+Copy /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app/Frameworks/Sentry.framework /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/artifacts/sentry-cocoa/Sentry/Sentry.xcframework/ios-arm64_x86_64-simulator/Sentry.framework (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks -remove-static-executable /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/artifacts/sentry-cocoa/Sentry/Sentry.xcframework/ios-arm64_x86_64-simulator/Sentry.framework /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app/Frameworks
+note: Injecting stub binary into codeless framework (in target 'MindFriendApp' from project 'MindFriendApp')
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk -x c -c /dev/null -target arm64-apple-ios100.0-simulator -o /private/var/folders/9l/9gqfqftn3lnckh6dzmyq5j4m0000gn/T/swbuild.tmp.Egpc059q/Data.noindex/arm64-apple.o
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk -dynamiclib -Xlinker -adhoc_codesign -target arm64-apple-ios100.0-simulator -o /private/var/folders/9l/9gqfqftn3lnckh6dzmyq5j4m0000gn/T/swbuild.tmp.Egpc059q/Data.noindex/arm64-apple /private/var/folders/9l/9gqfqftn3lnckh6dzmyq5j4m0000gn/T/swbuild.tmp.Egpc059q/Data.noindex/arm64-apple.o
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/lipo -create -output /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app/Frameworks/Sentry.framework/Sentry /private/var/folders/9l/9gqfqftn3lnckh6dzmyq5j4m0000gn/T/swbuild.tmp.Egpc059q/Data.noindex/arm64-apple
+
+Copy /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app/AppAuth_AppAuth.bundle /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/AppAuth_AppAuth.bundle (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/AppAuth_AppAuth.bundle /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app
+
+CompileXCStrings /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/ /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Resources/Localizable.xcstrings (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcstringstool compile --output-directory /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Resources/Localizable.xcstrings
+
+CopyStringsFile /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app/en.lproj/Localizable.strings /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/en.lproj/Localizable.strings (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    builtin-copyStrings --validate --outputencoding binary --outfilename Localizable.strings --outdir /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app/en.lproj -- /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/en.lproj/Localizable.strings
+/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/en.lproj/Localizable.strings:1:1: note: detected encoding of input file as Unicode (UTF-8) (in target 'MindFriendApp' from project 'MindFriendApp')
+
+CopyStringsFile /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app/en.lproj/Localizable.stringsdict /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/en.lproj/Localizable.stringsdict (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    builtin-copyStrings --validate --outputencoding binary --outfilename Localizable.stringsdict --outdir /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app/en.lproj -- /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/en.lproj/Localizable.stringsdict
+/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/en.lproj/Localizable.stringsdict:1:1: note: detected encoding of input file as Unicode (UTF-8) (in target 'MindFriendApp' from project 'MindFriendApp')
+
+CodeSign /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app/Frameworks/Sentry.framework (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app/Frameworks/Sentry.framework
+
+SwiftCompile normal arm64 Compiling\ BillingService.swift,\ ChatListView.swift,\ ChatService.swift,\ GrokVoiceService.swift,\ FlowLayout.swift,\ AchievementModels.swift,\ AchievementService.swift,\ AchievementsView.swift,\ BadgeEarnedView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/BillingService.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Chat/ChatListView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/ChatService.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Services/GrokVoiceService.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Views/FlowLayout.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/AchievementModels.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Services/AchievementService.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Achievements/AchievementsView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Achievements/BadgeEarnedView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/BillingService.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Chat/ChatListView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/ChatService.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Services/GrokVoiceService.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Views/FlowLayout.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/AchievementModels.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Services/AchievementService.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Achievements/AchievementsView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Achievements/BadgeEarnedView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 Compiling\ AccessibilityHelpers.swift,\ AccessibilityService.swift,\ AccessibilityModels.swift,\ AccessibilitySettingsView.swift,\ CaptionsView.swift,\ TranscriptView.swift,\ LanguageSettingsView.swift,\ TextSizeSettingsView.swift,\ VisualAccessibilityView.swift,\ SignLanguageView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/AccessibilityHelpers.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/AccessibilityService.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/AccessibilityModels.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/AccessibilitySettingsView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/CaptionsView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/TranscriptView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/LanguageSettingsView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/TextSizeSettingsView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/VisualAccessibilityView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/SignLanguageView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/AccessibilityHelpers.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/AccessibilityService.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/AccessibilityModels.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/AccessibilitySettingsView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/CaptionsView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/TranscriptView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/LanguageSettingsView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/TextSizeSettingsView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/VisualAccessibilityView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/SignLanguageView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 Compiling\ VoiceServiceProtocol.swift,\ VoiceCoordinator.swift,\ VoiceWebSocketManager.swift,\ VoiceAudioCapture.swift,\ VoiceAudioPlayback.swift,\ ChatView.swift,\ VoiceChatView.swift,\ CirclesListView.swift,\ ChallengeCard.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Services/VoiceServiceProtocol.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/VoiceMode/VoiceCoordinator.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Services/Voice/VoiceWebSocketManager.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Services/Voice/VoiceAudioCapture.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Services/Voice/VoiceAudioPlayback.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Chat/ChatView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Chat/VoiceChatView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Circles/CirclesListView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Circles/ChallengeCard.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Services/VoiceServiceProtocol.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/VoiceMode/VoiceCoordinator.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Services/Voice/VoiceWebSocketManager.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Services/Voice/VoiceAudioCapture.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Services/Voice/VoiceAudioPlayback.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Chat/ChatView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Chat/VoiceChatView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Circles/CirclesListView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Circles/ChallengeCard.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 Compiling\ SupabaseAuthService.swift,\ SupabaseClient.swift,\ SupabaseDataService.swift,\ WeeklyInsightsView.swift,\ PatternsView.swift,\ ProactiveSettingsView.swift,\ BadgesView.swift,\ EvidenceBadge.swift,\ MethodologyInfoSheet.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/SupabaseAuthService.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/SupabaseClient.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/SupabaseDataService.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Insights/WeeklyInsightsView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Insights/PatternsView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/ProactiveSettingsView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Badges/BadgesView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Exercises/EvidenceBadge.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Exercises/MethodologyInfoSheet.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/SupabaseAuthService.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/SupabaseClient.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/SupabaseDataService.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Insights/WeeklyInsightsView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Insights/PatternsView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/ProactiveSettingsView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Badges/BadgesView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Exercises/EvidenceBadge.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Exercises/MethodologyInfoSheet.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 Compiling\ PrivacyBanner.swift,\ OurApproachView.swift,\ TestimonialsCarousel.swift,\ Logger.swift,\ Constants.swift,\ SubscriptionView.swift,\ PromoCodeField.swift,\ GiftPurchaseSheet.swift,\ HSAFSAInfoView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/PrivacyBanner.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/OurApproachView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Onboarding/TestimonialsCarousel.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Observability/Logger.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Constants.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/SubscriptionView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Subscription/PromoCodeField.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Subscription/GiftPurchaseSheet.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Subscription/HSAFSAInfoView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/PrivacyBanner.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/OurApproachView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Onboarding/TestimonialsCarousel.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Observability/Logger.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Constants.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/SubscriptionView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Subscription/PromoCodeField.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Subscription/GiftPurchaseSheet.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Subscription/HSAFSAInfoView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 Compiling\ CelebrationView.swift,\ ShareCardSheet.swift,\ CelebrationReactionsBar.swift,\ CelebrationModels.swift,\ ProgramModels.swift,\ LiveService.swift,\ CreativeExpressionService.swift,\ BiometricModels.swift,\ HealthKitService.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Celebration/CelebrationView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Celebration/ShareCardSheet.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Celebration/CelebrationReactionsBar.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/CelebrationModels.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/ProgramModels.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/LiveService.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/CreativeExpressionService.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/BiometricModels.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Services/HealthKitService.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Celebration/CelebrationView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Celebration/ShareCardSheet.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Celebration/CelebrationReactionsBar.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/CelebrationModels.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/ProgramModels.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/LiveService.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/CreativeExpressionService.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/BiometricModels.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Services/HealthKitService.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 Compiling\ BiometricsSettingsView.swift,\ BiometricsDashboardView.swift,\ HealthKitConnectionSheet.swift,\ InsightsListView.swift,\ ArtGeneratorView.swift,\ CreativeHubView.swift,\ CreativeGalleryView.swift,\ DrawingCanvasView.swift,\ VoiceJournalRecorderView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Biometrics/BiometricsSettingsView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Biometrics/BiometricsDashboardView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Biometrics/HealthKitConnectionSheet.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Biometrics/InsightsListView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Creative/ArtGeneratorView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Creative/CreativeHubView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Creative/CreativeGalleryView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Creative/DrawingCanvasView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Creative/VoiceJournalRecorderView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Biometrics/BiometricsSettingsView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Biometrics/BiometricsDashboardView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Biometrics/HealthKitConnectionSheet.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Biometrics/InsightsListView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Creative/ArtGeneratorView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Creative/CreativeHubView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Creative/CreativeGalleryView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Creative/DrawingCanvasView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Creative/VoiceJournalRecorderView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 Compiling\ MainTabView.swift,\ StreakShieldIndicator.swift,\ StreakCardWithShields.swift,\ RecoveryQuestBanner.swift,\ RecoveryQuestView.swift,\ MindFriendApp.swift,\ Models.swift,\ MoodCheckInView.swift,\ MoodHistoryView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Home/MainTabView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Home/StreakShieldIndicator.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Home/StreakCardWithShields.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Home/RecoveryQuestBanner.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Quests/RecoveryQuestView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/App/MindFriendApp.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Models.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Mood/MoodCheckInView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Mood/MoodHistoryView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Home/MainTabView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Home/StreakShieldIndicator.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Home/StreakCardWithShields.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Home/RecoveryQuestBanner.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Quests/RecoveryQuestView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/App/MindFriendApp.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Models.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Mood/MoodCheckInView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Mood/MoodHistoryView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 Compiling\ FeatureComparisonView.swift,\ PlanCard.swift,\ FamilyManagementView.swift,\ AudioLevelMeter.swift,\ OrbView.swift,\ VoiceModeView.swift,\ VoiceStateMachine.swift,\ WelcomeBackView.swift,\ WhatYouMissedCard.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Subscription/FeatureComparisonView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Subscription/PlanCard.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/FamilyManagementView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/VoiceMode/AudioLevelMeter.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/VoiceMode/OrbView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/VoiceMode/VoiceModeView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/VoiceMode/VoiceStateMachine.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Home/WelcomeBackView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Home/WhatYouMissedCard.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Subscription/FeatureComparisonView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Subscription/PlanCard.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/FamilyManagementView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/VoiceMode/AudioLevelMeter.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/VoiceMode/OrbView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/VoiceMode/VoiceModeView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/VoiceMode/VoiceStateMachine.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Home/WelcomeBackView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Home/WhatYouMissedCard.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 Compiling\ NotificationManager.swift,\ OnboardingFlow.swift,\ PaywallView.swift,\ ProfileView.swift,\ VoiceSettingsView.swift,\ MemorySettingsView.swift,\ QuestDetailView.swift,\ QuestChoiceView.swift,\ SignInView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Observability/NotificationManager.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Onboarding/OnboardingFlow.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Paywall/PaywallView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/ProfileView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/VoiceSettingsView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/MemorySettingsView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Quests/QuestDetailView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Quests/QuestChoiceView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Auth/SignInView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Observability/NotificationManager.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Onboarding/OnboardingFlow.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Paywall/PaywallView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/ProfileView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/VoiceSettingsView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/MemorySettingsView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Quests/QuestDetailView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Quests/QuestChoiceView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Auth/SignInView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 Compiling\ InviteMemberSheet.swift,\ SendHugButton.swift,\ ReactionPicker.swift,\ CrashReporter.swift,\ SentryReplayMasking.swift,\ CrisisResourcesView.swift,\ DependencyContainer.swift,\ ExerciseLibraryView.swift,\ HomeView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Circles/InviteMemberSheet.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Circles/SendHugButton.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Circles/ReactionPicker.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Observability/CrashReporter.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Observability/SentryReplayMasking.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Crisis/CrisisResourcesView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/App/DependencyContainer.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Exercises/ExerciseLibraryView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Home/HomeView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Circles/InviteMemberSheet.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Circles/SendHugButton.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Circles/ReactionPicker.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Observability/CrashReporter.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Observability/SentryReplayMasking.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Crisis/CrisisResourcesView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/App/DependencyContainer.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Exercises/ExerciseLibraryView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Home/HomeView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftEmitModule normal arm64 Emitting\ module\ for\ MindFriendApp (in target 'MindFriendApp' from project 'MindFriendApp')
+Failed frontend command:
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift-frontend -frontend -emit-module -experimental-skip-non-inlinable-function-bodies-without-types /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/AccessibilityHelpers.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/AccessibilityService.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/AccessibilityModels.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/AccessibilitySettingsView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/CaptionsView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/TranscriptView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/LanguageSettingsView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/TextSizeSettingsView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/VisualAccessibilityView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/SignLanguageView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/AccessibilityFeedbackView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/AppearanceSettingsView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Observability/Analytics.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Progression/LevelUpCelebration.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Progression/LevelProgressView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Progression/SeasonalEventCard.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Progression/SkillTreeView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/App/AppDelegate.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/App/AppState.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/BillingService.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Chat/ChatListView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/ChatService.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Services/GrokVoiceService.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Views/FlowLayout.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/AchievementModels.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Services/AchievementService.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Achievements/AchievementsView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Achievements/BadgeEarnedView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Services/VoiceServiceProtocol.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/VoiceMode/VoiceCoordinator.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Services/Voice/VoiceWebSocketManager.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Services/Voice/VoiceAudioCapture.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Services/Voice/VoiceAudioPlayback.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Chat/ChatView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Chat/VoiceChatView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Circles/CirclesListView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Circles/ChallengeCard.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Circles/InviteMemberSheet.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Circles/SendHugButton.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Circles/ReactionPicker.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Observability/CrashReporter.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Observability/SentryReplayMasking.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Crisis/CrisisResourcesView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/App/DependencyContainer.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Exercises/ExerciseLibraryView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Home/HomeView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Home/MainTabView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Home/StreakShieldIndicator.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Home/StreakCardWithShields.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Home/RecoveryQuestBanner.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Quests/RecoveryQuestView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/App/MindFriendApp.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Models.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Mood/MoodCheckInView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Mood/MoodHistoryView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Observability/NotificationManager.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Onboarding/OnboardingFlow.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Paywall/PaywallView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/ProfileView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/VoiceSettingsView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/MemorySettingsView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Quests/QuestDetailView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Quests/QuestChoiceView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Auth/SignInView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/SupabaseAuthService.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/SupabaseClient.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/SupabaseDataService.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Insights/WeeklyInsightsView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Insights/PatternsView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/ProactiveSettingsView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Badges/BadgesView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Exercises/EvidenceBadge.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Exercises/MethodologyInfoSheet.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/PrivacyBanner.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/OurApproachView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Onboarding/TestimonialsCarousel.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Observability/Logger.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Constants.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/SubscriptionView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Subscription/PromoCodeField.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Subscription/GiftPurchaseSheet.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Subscription/HSAFSAInfoView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Subscription/FeatureComparisonView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Subscription/PlanCard.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/FamilyManagementView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/VoiceMode/AudioLevelMeter.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/VoiceMode/OrbView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/VoiceMode/VoiceModeView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/VoiceMode/VoiceStateMachine.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Home/WelcomeBackView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Home/WhatYouMissedCard.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Celebration/CelebrationView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Celebration/ShareCardSheet.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Celebration/CelebrationReactionsBar.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/CelebrationModels.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/ProgramModels.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/LiveService.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/CreativeExpressionService.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/BiometricModels.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Services/HealthKitService.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Biometrics/BiometricsSettingsView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Biometrics/BiometricsDashboardView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Biometrics/HealthKitConnectionSheet.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Biometrics/InsightsListView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Creative/ArtGeneratorView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Creative/CreativeHubView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Creative/CreativeGalleryView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Creative/DrawingCanvasView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Creative/VoiceJournalRecorderView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/LiveSessions/LiveSessionsView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/LiveSessions/ActiveSessionView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Buddy/InviteBuddySheet.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Programs/ProgramsLibraryView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Programs/ProgramDetailView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Programs/ProgramDayView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Programs/EnrollmentSheet.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Programs/CertificateView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/PersonalizationModels.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Services/PersonalizationService.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Personalization/ForYouView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Personalization/PersonalizedInsightsView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Personalization/PersonalizationSettingsView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Personalization/QuietHoursView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Personalization/ScheduleSuggestionsView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Personalization/ContentTypePickerView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Personalization/CategoryPickerView.swift /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/DerivedSources/GeneratedAssetSymbols.swift -target arm64-apple-ios17.0-simulator -module-can-import-version DeveloperToolsSupport 23.0.4 23.0.4 -disable-cross-import-overlay-search -swift-module-cross-import AuthenticationServices /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/System/Cryptexes/OS/System/Library/Frameworks/AuthenticationServices.framework/Modules/AuthenticationServices.swiftcrossimport/SwiftUI.swiftoverlay -swift-module-cross-import AuthenticationServices /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk/System/Library/Frameworks/AuthenticationServices.framework/Modules/AuthenticationServices.swiftcrossimport/SwiftUI.swiftoverlay -swift-module-cross-import StoreKit /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/System/Library/Frameworks/StoreKit.framework/Modules/StoreKit.swiftcrossimport/SwiftUI.swiftoverlay -swift-module-cross-import StoreKit /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk/System/Library/Frameworks/StoreKit.framework/Modules/StoreKit.swiftcrossimport/SwiftUI.swiftoverlay -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/lib/swift/host/plugins/libFoundationMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin/swift-plugin-server\#FoundationMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/lib/swift/host/plugins/libObservationMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin/swift-plugin-server\#ObservationMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/lib/swift/host/plugins/libPreviewsMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin/swift-plugin-server\#PreviewsMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/lib/swift/host/plugins/libSwiftMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin/swift-plugin-server\#SwiftMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/lib/swift/host/plugins/libSwiftUIMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin/swift-plugin-server\#SwiftUIMacros -disable-implicit-swift-modules -Xcc -fno-implicit-modules -Xcc -fno-implicit-module-maps -explicit-swift-module-map-file /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/Objects-normal/arm64/MindFriendApp-dependencies-1.json -Xllvm -aarch64-use-tbi -enable-objc-interop -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk -I /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator -no-color-diagnostics -Xcc -fno-color-diagnostics -enable-testing -g -debug-info-format\=dwarf -dwarf-version\=4 -module-cache-path /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -swift-version 5 -enforce-exclusivity\=checked -Onone -D DEBUG -serialize-debugging-options -const-gather-protocols-file /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/Objects-normal/arm64/MindFriendApp_const_extract_protocols.json -enable-experimental-feature DebugDescriptionMacro -enable-bare-slash-regex -empty-abi-descriptor -validate-clang-modules-once -clang-build-session-file /Users/danny/Library/Developer/Xcode/DerivedData/ModuleCache.noindex/Session.modulevalidation -Xcc -working-directory -Xcc /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios -enable-anonymous-context-mangled-names -file-compilation-dir /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios -Xcc -fmodule-map-file\=/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/AppAuth.modulemap -Xcc -fmodule-map-file\=/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/GoogleUtilities-Logger.modulemap -Xcc -fmodule-map-file\=/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/GoogleUtilities-Environment.modulemap -Xcc -fmodule-map-file\=/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/third-party-IsAppEncrypted.modulemap -Xcc -fmodule-map-file\=/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/GoogleUtilities-UserDefaults.modulemap -Xcc -fmodule-map-file\=/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/AppCheckCore.modulemap -Xcc -fmodule-map-file\=/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/AppAuthCore.modulemap -Xcc -fmodule-map-file\=/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/GTMSessionFetcherCore.modulemap -Xcc -fmodule-map-file\=/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/GoogleSignIn.modulemap -Xcc -fmodule-map-file\=/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/SentryInternal.modulemap -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -Xcc -ivfsstatcache -Xcc /Users/danny/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphonesimulator26.1-23B77-3885c01c3e6b6a337905948deab2002e90cf18a4295e390e64c810bc6bd7acbc.sdkstatcache -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/swift-overrides.hmap -Xcc -iquote -Xcc /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/MindFriendApp-generated-files.hmap -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/MindFriendApp-own-target-headers.hmap -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/MindFriendApp-all-non-framework-target-headers.hmap -Xcc -ivfsoverlay -Xcc /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp-70092ba647d9066fcc9bfeff3d696c9b-VFS-iphonesimulator/all-product-headers.yaml -Xcc -iquote -Xcc /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/MindFriendApp-project-headers.hmap -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/AppAuth-iOS/Sources/AppAuth -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/promises/Sources/FBLPromises/include -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/GoogleUtilities/GoogleUtilities/Logger/Public -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/GoogleUtilities/GoogleUtilities/Environment/Public -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/GoogleUtilities/third_party/IsAppEncrypted/Public -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/GoogleUtilities/GoogleUtilities/UserDefaults/Public -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/app-check/AppCheckCore/Sources/Public -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/AppAuth-iOS/Sources/AppAuthCore -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/gtm-session-fetcher/Sources/Core/Public -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/GoogleSignIn-iOS/GoogleSignIn/Sources/Public -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/SourcePackages/checkouts/sentry-cocoa/Sources/SentrySwiftUI/SentryInternal -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/include -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/DerivedSources-normal/arm64 -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/DerivedSources/arm64 -Xcc -I/Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/DerivedSources -Xcc -DDEBUG\=1 -no-auto-bridging-header-chaining -module-name MindFriendApp -frontend-parseable-output -disable-clang-spi -target-sdk-version 26.1 -target-sdk-name iphonesimulator26.1 -clang-target arm64-apple-ios26.1-simulator -in-process-plugin-server-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/libSwiftInProcPluginServer.dylib -emit-module-doc-path /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/Objects-normal/arm64/MindFriendApp.swiftdoc -emit-module-source-info-path /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/Objects-normal/arm64/MindFriendApp.swiftsourceinfo -emit-objc-header-path /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/Objects-normal/arm64/MindFriendApp-Swift.h -serialize-diagnostics-path /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/Objects-normal/arm64/MindFriendApp-primary-emit-module.dia -emit-dependencies-path /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/Objects-normal/arm64/MindFriendApp-primary-emit-module.d -o /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/Objects-normal/arm64/MindFriendApp.swiftmodule -emit-abi-descriptor-path /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/Objects-normal/arm64/MindFriendApp.abi.json
+
+EmitSwiftModule normal arm64 (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/BillingService.swift:19:50: error: cannot find type 'SubscriptionPlan' in scope
+    @Published private(set) var availablePlans: [SubscriptionPlan] = []
+                                                 ^~~~~~~~~~~~~~~~
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/BillingService.swift:20:53: error: cannot find type 'PromoCode' in scope
+    @Published private(set) var validatedPromoCode: PromoCode?
+                                                    ^~~~~~~~~
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/BillingService.swift:21:45: error: cannot find type 'GiftSubscription' in scope
+    @Published private(set) var activeGift: GiftSubscription?
+                                            ^~~~~~~~~~~~~~~~
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/BillingService.swift:22:44: error: cannot find type 'HSAFSARecord' in scope
+    @Published private(set) var hsaRecord: HSAFSARecord?
+                                           ^~~~~~~~~~~~
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/BillingService.swift:49:43: error: cannot find type 'PlanType' in scope
+    static let productPlanTypes: [String: PlanType] = [
+                                          ^~~~~~~~
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/BillingService.swift:59:48: error: cannot find type 'BillingPeriod' in scope
+    static let productBillingPeriods: [String: BillingPeriod] = [
+                                               ^~~~~~~~~~~~~
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/BillingService.swift:113:33: error: cannot find type 'PlanType' in scope
+    func products(for planType: PlanType) -> [Product] {
+                                ^~~~~~~~
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/BillingService.swift:118:38: error: cannot find type 'BillingPeriod' in scope
+    func products(for billingPeriod: BillingPeriod) -> [Product] {
+                                     ^~~~~~~~~~~~~
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/BillingService.swift:123:32: error: cannot find type 'PlanType' in scope
+    func product(for planType: PlanType, billingPeriod: BillingPeriod) -> Product? {
+                               ^~~~~~~~
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/BillingService.swift:123:57: error: cannot find type 'BillingPeriod' in scope
+    func product(for planType: PlanType, billingPeriod: BillingPeriod) -> Product? {
+                                                        ^~~~~~~~~~~~~
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/BillingService.swift:565:60: error: cannot find type 'PromoCode' in scope
+    func validatePromoCode(_ code: String) async throws -> PromoCode {
+                                                           ^~~~~~~~~
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/BillingService.swift:594:89: error: cannot find type 'GiftSubscription' in scope
+    func purchaseGift(plan: SubscriptionPlan, recipient: GiftRecipient) async throws -> GiftSubscription {
+                                                                                        ^~~~~~~~~~~~~~~~
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/BillingService.swift:594:29: error: cannot find type 'SubscriptionPlan' in scope
+    func purchaseGift(plan: SubscriptionPlan, recipient: GiftRecipient) async throws -> GiftSubscription {
+                            ^~~~~~~~~~~~~~~~
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/BillingService.swift:144:27: error: cannot find type 'PlanFeatures' in scope
+            let features: PlanFeatures
+                          ^~~~~~~~~~~~
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/BillingService.swift:134:16: error: type 'DBPlan' does not conform to protocol 'Decodable'
+        struct DBPlan: Codable {
+               ^
+Swift.Decodable.init:2:1: note: protocol requires initializer 'init(from:)' with type 'Decodable'
+init(from decoder: any Decoder) throws}
+^
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/BillingService.swift:144:17: note: cannot automatically synthesize 'Decodable' because 'PlanFeatures' does not conform to 'Decodable'
+            let features: PlanFeatures
+                ^
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/BillingService.swift:134:16: error: type 'DBPlan' does not conform to protocol 'Encodable'
+        struct DBPlan: Codable {
+               ^
+Swift.Encodable.encode:2:6: note: protocol requires function 'encode(to:)' with type 'Encodable'
+func encode(to encoder: any Encoder) throws}
+     ^
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/BillingService.swift:144:17: note: cannot automatically synthesize 'Encodable' because 'PlanFeatures' does not conform to 'Encodable'
+            let features: PlanFeatures
+                ^
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/BillingService.swift:176:39: error: cannot find 'BillingPeriod' in scope
+            guard let billingPeriod = BillingPeriod(rawValue: dbPlan.billingPeriod),
+                                      ^~~~~~~~~~~~~
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/BillingService.swift:177:34: error: cannot find 'PlanType' in scope
+                  let planType = PlanType(rawValue: dbPlan.planType),
+                                 ^~~~~~~~
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/BillingService.swift:182:20: error: cannot find 'SubscriptionPlan' in scope
+            return SubscriptionPlan(
+                   ^~~~~~~~~~~~~~~~
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/BillingService.swift:175:32: error: generic parameter 'ElementOfResult' could not be inferred
+        availablePlans = plans.compactMap { dbPlan in
+                               ^
+Swift.Sequence.compactMap:2:24: note: in call to function 'compactMap'
+@inlinable public func compactMap<ElementOfResult>(_ transform: (Self.Element) throws -> ElementOfResult?) rethrows -> [ElementOfResult]}
+                       ^
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/BillingService.swift:626:21: error: cannot find type 'GiftPurchaseResponse' in scope
+        let result: GiftPurchaseResponse = try await supabase.functions.invoke(
+                    ^~~~~~~~~~~~~~~~~~~~
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Networking/Services/BillingService.swift:699:21: error: cannot find type 'HSAReceiptResponse' in scope
+        let result: HSAReceiptResponse = try await supabase.functions.invoke(
+                    ^~~~~~~~~~~~~~~~~~
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/App/MindFriendApp.swift:12:47: error: cannot find 'DeepLinkRouter' in scope
+    @StateObject private var deepLinkRouter = DeepLinkRouter.shared
+                                              ^~~~~~~~~~~~~~
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Models.swift:495:19: error: cannot find type 'PlanType' in scope
+    let planType: PlanType
+                  ^~~~~~~~
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Models.swift:496:24: error: cannot find type 'BillingPeriod' in scope
+    let billingPeriod: BillingPeriod
+                       ^~~~~~~~~~~~~
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Models.swift:489:8: error: type 'Subscription' does not conform to protocol 'Decodable'
+struct Subscription: Codable, Identifiable, Equatable {
+       ^
+Swift.Decodable.init:2:1: note: protocol requires initializer 'init(from:)' with type 'Decodable'
+init(from decoder: any Decoder) throws}
+^
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Models.swift:495:9: note: cannot automatically synthesize 'Decodable' because 'PlanType' does not conform to 'Decodable'
+    let planType: PlanType
+        ^
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Models.swift:496:9: note: cannot automatically synthesize 'Decodable' because 'BillingPeriod' does not conform to 'Decodable'
+    let billingPeriod: BillingPeriod
+        ^
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Models.swift:489:8: error: type 'Subscription' does not conform to protocol 'Encodable'
+struct Subscription: Codable, Identifiable, Equatable {
+       ^
+Swift.Encodable.encode:2:6: note: protocol requires function 'encode(to:)' with type 'Encodable'
+func encode(to encoder: any Encoder) throws}
+     ^
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Models.swift:495:9: note: cannot automatically synthesize 'Encodable' because 'PlanType' does not conform to 'Encodable'
+    let planType: PlanType
+        ^
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Models.swift:496:9: note: cannot automatically synthesize 'Encodable' because 'BillingPeriod' does not conform to 'Encodable'
+    let billingPeriod: BillingPeriod
+        ^
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Models.swift:489:8: error: type 'Subscription' does not conform to protocol 'Equatable'
+struct Subscription: Codable, Identifiable, Equatable {
+       ^
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Models.swift:495:9: note: stored property type '<<error type>>' does not conform to protocol 'Equatable', preventing synthesized conformance of 'Subscription' to 'Equatable'
+    let planType: PlanType
+        ^
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Models.swift:496:9: note: stored property type '<<error type>>' does not conform to protocol 'Equatable', preventing synthesized conformance of 'Subscription' to 'Equatable'
+    let billingPeriod: BillingPeriod
+        ^
+Swift.==:1:24: note: candidate would match if 'Subscription' conformed to 'RawRepresentable'
+@inlinable public func == <T>(lhs: T, rhs: T) -> Bool where T : RawRepresentable, T.RawValue : Equatable
+                       ^
+Swift.FloatingPoint.==:2:20: note: candidate would match if 'Subscription' conformed to 'FloatingPoint'
+public static func == (lhs: Self, rhs: Self) -> Bool}
+                   ^
+Swift.BinaryInteger.==:2:20: note: candidate would match if 'Subscription' conformed to 'BinaryInteger'
+public static func == <Other>(lhs: Self, rhs: Other) -> Bool where Other : BinaryInteger}
+                   ^
+Swift._Pointer.==:2:20: note: candidate would match if 'Subscription' conformed to '_Pointer'
+public static func == (lhs: Self, rhs: Self) -> Bool}
+                   ^
+Swift._Pointer.==:2:31: note: candidate would match if 'Subscription' conformed to '_Pointer'
+@inlinable public static func == <Other>(lhs: Self, rhs: Other) -> Bool where Other : _Pointer}
+                              ^
+Swift.Strideable.==:2:31: note: candidate would match if 'Subscription' conformed to 'Strideable'
+@inlinable public static func == (x: Self, y: Self) -> Bool}
+                              ^
+Swift.StringProtocol.==:2:31: note: candidate would match if 'Subscription' conformed to 'StringProtocol'
+@inlinable public static func == <RHS>(lhs: Self, rhs: RHS) -> Bool where RHS : StringProtocol}
+                              ^
+Swift.SIMD.==:2:20: note: candidate would match if 'Subscription' conformed to 'SIMD'
+public static func == (a: Self, b: Self) -> Bool}
+                   ^
+Foundation.AttributedStringProtocol.==:2:20: note: candidate would match if 'Subscription' conformed to 'AttributedStringProtocol'
+public static func == <RHS>(lhs: Self, rhs: RHS) -> Bool where RHS : AttributedStringProtocol}
+                   ^
+Foundation._BridgedStoredNSError.==:2:20: note: candidate would match if 'Subscription' conformed to '_BridgedStoredNSError'
+public static func == (lhs: Self, rhs: Self) -> Bool}
+                   ^
+CoreFoundation._CFObject.==:2:20: note: candidate would match if 'Subscription' conformed to '_CFObject'
+public static func == (left: Self, right: Self) -> Bool}
+                   ^
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Models.swift:489:8: note: add stubs for conformance
+struct Subscription: Codable, Identifiable, Equatable {
+       ^
+Swift.Equatable.==:2:13: note: protocol requires function '==' with type '(Subscription, Subscription) -> Bool'
+static func == (lhs: Self, rhs: Self) -> Bool}
+            ^
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Paywall/PaywallView.swift:16:40: error: cannot find type 'PromoCode' in scope
+    @State private var validatedPromo: PromoCode?
+                                       ^~~~~~~~~
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/SubscriptionView.swift:9:42: error: cannot find type 'PlanType' in scope
+    @State private var selectedPlanType: PlanType = .individual
+                                         ^~~~~~~~
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/SubscriptionView.swift:10:47: error: cannot find type 'BillingPeriod' in scope
+    @State private var selectedBillingPeriod: BillingPeriod = .monthly
+                                              ^~~~~~~~~~~~~
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/SubscriptionView.swift:471:19: error: cannot find type 'PlanType' in scope
+    let planType: PlanType
+                  ^~~~~~~~
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/SubscriptionView.swift:534:17: error: cannot find type 'BillingPeriod' in scope
+    let period: BillingPeriod
+                ^~~~~~~~~~~~~
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/SubscriptionView.swift:715:11: error: cannot find type 'PlanType' in scope
+extension PlanType {
+          ^~~~~~~~
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Subscription/PromoCodeField.swift:12:34: error: cannot find type 'PromoCode' in scope
+    @Binding var validatedPromo: PromoCode?
+                                 ^~~~~~~~~
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Subscription/GiftPurchaseSheet.swift:12:38: error: cannot find type 'SubscriptionPlan' in scope
+    @State private var selectedPlan: SubscriptionPlan?
+                                     ^~~~~~~~~~~~~~~~
+/Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Subscription/PlanCard.swift:5:15: error: cannot find type 'SubscriptionPlan' in scope
+    let plan: SubscriptionPlan
+              ^~~~~~~~~~~~~~~~
+
+SwiftCompile normal arm64 Compiling\ AccessibilityFeedbackView.swift,\ AppearanceSettingsView.swift,\ Analytics.swift,\ LevelUpCelebration.swift,\ LevelProgressView.swift,\ SeasonalEventCard.swift,\ SkillTreeView.swift,\ AppDelegate.swift,\ AppState.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/AccessibilityFeedbackView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/AppearanceSettingsView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Observability/Analytics.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Progression/LevelUpCelebration.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Progression/LevelProgressView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Progression/SeasonalEventCard.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Progression/SkillTreeView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/App/AppDelegate.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/App/AppState.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Accessibility/AccessibilityFeedbackView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Profile/AppearanceSettingsView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/Observability/Analytics.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Progression/LevelUpCelebration.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Progression/LevelProgressView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Progression/SeasonalEventCard.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Progression/SkillTreeView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/App/AppDelegate.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/App/AppState.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 Compiling\ LiveSessionsView.swift,\ ActiveSessionView.swift,\ InviteBuddySheet.swift,\ ProgramsLibraryView.swift,\ ProgramDetailView.swift,\ ProgramDayView.swift,\ EnrollmentSheet.swift,\ CertificateView.swift,\ PersonalizationModels.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/LiveSessions/LiveSessionsView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/LiveSessions/ActiveSessionView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Buddy/InviteBuddySheet.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Programs/ProgramsLibraryView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Programs/ProgramDetailView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Programs/ProgramDayView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Programs/EnrollmentSheet.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Programs/CertificateView.swift /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/PersonalizationModels.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/LiveSessions/LiveSessionsView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/LiveSessions/ActiveSessionView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Buddy/InviteBuddySheet.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Programs/ProgramsLibraryView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Programs/ProgramDetailView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Programs/ProgramDayView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Programs/EnrollmentSheet.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Features/Programs/CertificateView.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+SwiftCompile normal arm64 /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Core/PersonalizationModels.swift (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    
+
+LinkAssetCatalog /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios/MindFriendApp/Resources/Assets.xcassets (in target 'MindFriendApp' from project 'MindFriendApp')
+    cd /Users/danny/Documents/Codez/Apps/MindFriend/apps/ios
+    builtin-linkAssetCatalog --thinned /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/assetcatalog_output/thinned --thinned-dependencies /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/assetcatalog_dependencies_thinned --thinned-info-plist-content /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/assetcatalog_generated_info.plist_thinned --unthinned /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/assetcatalog_output/unthinned --unthinned-dependencies /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/assetcatalog_dependencies_unthinned --unthinned-info-plist-content /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/assetcatalog_generated_info.plist_unthinned --output /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app --plist-output /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Intermediates.noindex/MindFriendApp.build/Debug-iphonesimulator/MindFriendApp.build/assetcatalog_generated_info.plist
+note: Emplaced /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app/AppIcon60x60@2x.png (in target 'MindFriendApp' from project 'MindFriendApp')
+note: Emplaced /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app/Assets.car (in target 'MindFriendApp' from project 'MindFriendApp')
+note: Emplaced /Users/danny/Library/Developer/Xcode/DerivedData/MindFriendApp-aumxnvdaniltzdgtjwyrdxxofksm/Build/Products/Debug-iphonesimulator/MindFriendApp.app/AppIcon76x76@2x~ipad.png (in target 'MindFriendApp' from project 'MindFriendApp')
+
+** BUILD FAILED **
+
+
+The following build commands failed:
+	SwiftEmitModule normal arm64 Emitting\ module\ for\ MindFriendApp (in target 'MindFriendApp' from project 'MindFriendApp')
+	EmitSwiftModule normal arm64 (in target 'MindFriendApp' from project 'MindFriendApp')
+	Building project MindFriendApp with scheme MindFriendApp
+(3 failures)

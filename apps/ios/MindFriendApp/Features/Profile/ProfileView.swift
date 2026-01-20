@@ -121,6 +121,12 @@ struct ProfileView: View {
                     }
 
                     NavigationLink {
+                        PrivacyLockSettingsView()
+                    } label: {
+                        Label("App Lock", systemImage: "faceid")
+                    }
+
+                    NavigationLink {
                         MemorySettingsView()
                     } label: {
                         Label("AI Memory", systemImage: "brain.head.profile")
@@ -130,6 +136,13 @@ struct ProfileView: View {
                         AppearanceSettingsView()
                     } label: {
                         Label("Appearance", systemImage: "circle.lefthalf.filled")
+                    }
+
+                    NavigationLink {
+                        LanguageSettingsView()
+                            .environmentObject(container.localizationService)
+                    } label: {
+                        Label("Language", systemImage: "globe")
                     }
 
                     NavigationLink {

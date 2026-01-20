@@ -722,6 +722,23 @@ final class SupabaseDataService: ObservableObject {
         Analytics.shared.track(.chatConversationDeleted)
     }
 
+    /// Generate a conversation title based on content using Edge Function
+    func generateConversationTitle(conversationId: String, content: String) async throws -> String {
+        struct TitleResponse: Codable {
+            let title: String
+        }
+
+        let response: TitleResponse = try await supabase.functions.invoke(
+            "generate-conversation-title",
+            options: .init(body: [
+                "conversationId": conversationId,
+                "content": content
+            ])
+        )
+
+        return response.title
+    }
+
     func getMessages(conversationId: String, limit: Int = 50) async throws -> [Message] {
         guard let convId = UUID(uuidString: conversationId) else { return [] }
 
