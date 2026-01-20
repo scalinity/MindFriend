@@ -139,6 +139,7 @@ enum PhotoMoodError: LocalizedError {
     case permissionDenied(String)
     case invalidMoodScore
     case captionTooLong
+    case locationNameTooLong
     case tooManyEmotions
     case networkRequired
     case photoTooLarge
@@ -164,6 +165,8 @@ enum PhotoMoodError: LocalizedError {
             return "Please select how you're feeling (1-5)."
         case .captionTooLong:
             return "Caption must be 500 characters or less."
+        case .locationNameTooLong:
+            return "Location name must be 100 characters or less."
         case .tooManyEmotions:
             return "Maximum 5 emotions per mood."
         case .networkRequired:

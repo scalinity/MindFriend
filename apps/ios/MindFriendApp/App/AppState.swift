@@ -28,6 +28,8 @@ final class AppState: ObservableObject {
     // MARK: - Today's Data
     @Published var todayQuest: Quest?
     @Published var todayMood: MoodEntry?
+    @Published var todayActionPlan: ActionPlan?
+    @Published var todayActionPlanItems: [ActionPlanItem] = []
     @Published var currentStreak: Int = 0
 
     // MARK: - Navigation
@@ -75,6 +77,8 @@ final class AppState: ObservableObject {
         self.entitlements = .free
         self.todayQuest = nil
         self.todayMood = nil
+        self.todayActionPlan = nil
+        self.todayActionPlanItems = []
         self.currentStreak = 0
         self.authState = .unauthenticated
         self.hasCompletedInitialAuth = true

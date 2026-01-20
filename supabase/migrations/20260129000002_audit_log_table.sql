@@ -30,14 +30,44 @@ BEGIN
 END $$;
 
 -- Index for efficient audit queries
-CREATE INDEX IF NOT EXISTS idx_audit_log_user_id ON audit_log(user_id);
-CREATE INDEX IF NOT EXISTS idx_audit_log_table_name ON audit_log(table_name);
-CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at);
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'audit_log' AND column_name = 'user_id'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_audit_log_user_id ON audit_log(user_id);
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'audit_log' AND column_name = 'table_name'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_audit_log_table_name ON audit_log(table_name);
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'audit_log' AND column_name = 'created_at'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at);
+  END IF;
+END $$;
 
 -- Retention: Keep audit logs for 2 years (GDPR requirement)
-SELECT cron.schedule(
-  'cleanup-audit-logs-2years',
-  '0 5 * * 0',  -- 5 AM on Sundays
-  $$DELETE FROM audit_log 
-    WHERE created_at < NOW() - INTERVAL '730 days'$$
-);
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'cron'
+    AND p.proname = 'schedule'
+    AND p.pronargs = 3
+  ) THEN
+    PERFORM cron.schedule(
+      'cleanup-audit-logs-2years',
+      '0 5 * * 0',  -- 5 AM on Sundays
+      'DELETE FROM audit_log WHERE created_at < NOW() - INTERVAL ''730 days''' 
+    );
+  END IF;
+END $$;

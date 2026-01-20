@@ -56,8 +56,17 @@ final class PhotoMoodService: ObservableObject {
             throw PhotoMoodError.captionTooLong
         }
 
+        if let location = locationName, location.count > 100 {
+            throw PhotoMoodError.locationNameTooLong
+        }
+
         if emotions.count > 5 {
             throw PhotoMoodError.tooManyEmotions
+        }
+
+        // Validate image can be converted to CGImage
+        guard image.cgImage != nil else {
+            throw PhotoMoodError.invalidPhotoFormat
         }
 
         isUploading = true
@@ -70,15 +79,20 @@ final class PhotoMoodService: ObservableObject {
         // Get current user ID
         let userId = try await supabase.auth.session.user.id
 
-        // Step 1: Prepare full image (strip EXIF, compress)
-        uploadProgress = 0.2
-        guard let imageData = image.compressToLimit() else {
-            throw PhotoMoodError.photoTooLarge
-        }
+        // Step 1: Prepare full image (strip EXIF, compress) - background processing
+        await MainActor.run { uploadProgress = 0.2 }
 
-        // Step 2: Generate thumbnail
-        uploadProgress = 0.3
-        let thumbnailData = image.generateThumbnail()
+        // Process image on background queue to avoid blocking main thread
+        let (imageData, thumbnailData) = try await Task.detached(priority: .userInitiated) {
+            guard let compressed = image.compressToLimit() else {
+                throw PhotoMoodError.photoTooLarge
+            }
+            let thumbnail = image.generateThumbnail()
+            return (compressed, thumbnail)
+        }.value
+
+        // Step 2: Thumbnail generation completed
+        await MainActor.run { uploadProgress = 0.3 }
 
         // Step 3: Generate file paths
         let timestamp = Int(Date().timeIntervalSince1970)
@@ -86,7 +100,7 @@ final class PhotoMoodService: ObservableObject {
         let thumbPath = "\(userId.uuidString)/thumb_\(timestamp).jpg"
 
         // Step 4: Upload full photo
-        uploadProgress = 0.4
+        await MainActor.run { uploadProgress = 0.4 }
         do {
             let _: EmptyResponse = try await supabase.storage
                 .from(bucketName)
@@ -100,7 +114,7 @@ final class PhotoMoodService: ObservableObject {
         }
 
         // Step 5: Upload thumbnail (non-fatal if fails)
-        uploadProgress = 0.6
+        await MainActor.run { uploadProgress = 0.6 }
         var finalThumbPath: String?
         if let thumbData = thumbnailData {
             do {
@@ -119,7 +133,7 @@ final class PhotoMoodService: ObservableObject {
         }
 
         // Step 6: Create database record
-        uploadProgress = 0.8
+        await MainActor.run { uploadProgress = 0.8 }
         let trimmedCaption = caption?.trimmingCharacters(in: .whitespacesAndNewlines)
         let finalCaption = trimmedCaption?.isEmpty == true ? nil : trimmedCaption
 
@@ -142,8 +156,10 @@ final class PhotoMoodService: ObservableObject {
                 .execute()
                 .value
 
-            uploadProgress = 1.0
-            photoMoods.insert(photoMood, at: 0)
+            await MainActor.run {
+                uploadProgress = 1.0
+                photoMoods.insert(photoMood, at: 0)
+            }
             return photoMood
         } catch {
             // Cleanup: delete uploaded files if DB insert fails
@@ -181,10 +197,12 @@ final class PhotoMoodService: ObservableObject {
         do {
             let moods: [PhotoMood] = try await query.execute().value
 
-            if offset == 0 {
-                photoMoods = moods
-            } else {
-                photoMoods.append(contentsOf: moods)
+            await MainActor.run {
+                if offset == 0 {
+                    photoMoods = moods
+                } else {
+                    photoMoods.append(contentsOf: moods)
+                }
             }
         } catch {
             throw PhotoMoodError.fetchFailed("Failed to fetch photo moods: \(error.localizedDescription)")
@@ -257,7 +275,9 @@ final class PhotoMoodService: ObservableObject {
                 .eq("id", value: photoMood.id.uuidString)
                 .execute()
 
-            photoMoods.removeAll { $0.id == photoMood.id }
+            await MainActor.run {
+                photoMoods.removeAll { $0.id == photoMood.id }
+            }
         } catch {
             throw PhotoMoodError.deleteFailed("Failed to delete mood record: \(error.localizedDescription)")
         }
@@ -284,29 +304,41 @@ final class PhotoMoodService: ObservableObject {
 
         guard !moods.isEmpty else { return } // Nothing to delete
 
-        // Step 2: Collect all paths
-        var paths: [String] = []
-        for mood in moods {
-            paths.append(mood.photoStoragePath)
+        // Step 2: Collect all paths efficiently with functional approach
+        let paths = moods.flatMap { mood -> [String] in
+            var result = [mood.photoStoragePath]
             if let thumbPath = mood.photoThumbnailPath {
-                paths.append(thumbPath)
+                result.append(thumbPath)
             }
+            return result
         }
 
-        // Step 3: Delete in batches (100 per batch)
+        // Step 3: Delete in batches (100 per batch) with memory-efficient processing
         let batchSize = 100
-        for batch in stride(from: 0, to: paths.count, by: batchSize) {
+        let totalBatches = (paths.count + batchSize - 1) / batchSize
+
+        for (index, batch) in stride(from: 0, to: paths.count, by: batchSize).enumerated() {
             let endIndex = min(batch + batchSize, paths.count)
             let batchPaths = Array(paths[batch..<endIndex])
 
+            // Process batch with proper error handling
             do {
                 let _: EmptyResponse = try await supabase.storage
                     .from(bucketName)
                     .remove(paths: batchPaths)
+
+                // Update progress for large operations
+                if totalBatches > 1 {
+                    let progress = Double(index + 1) / Double(totalBatches)
+                    print("🗑️ Batch deletion progress: \(Int(progress * 100))%")
+                }
             } catch {
                 // Log but continue - orphaned files will be cleaned by cron
-                print("⚠️ Batch delete failed: \(error)")
+                print("⚠️ Batch \(index + 1)/\(totalBatches) delete failed: \(error)")
             }
+
+            // Yield to allow other tasks to run and prevent blocking
+            await Task.yield()
         }
 
         // Step 4: Delete all database records
@@ -316,6 +348,8 @@ final class PhotoMoodService: ObservableObject {
             .eq("user_id", value: userId.uuidString)
             .execute()
 
-        photoMoods = []
+        await MainActor.run {
+            photoMoods = []
+        }
     }
 }
