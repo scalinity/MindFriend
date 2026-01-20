@@ -48,7 +48,8 @@ class CoachService: ObservableObject {
             "is_enabled": settings.isEnabled,
             "sensitivity_level": settings.sensitivityLevel.rawValue,
             "disabled_distortions": settings.disabledDistortions,
-            "show_patterns": settings.showPatterns
+            "show_patterns": settings.showPatterns,
+            "timezone": settings.timezone
         ]
 
         // Convert Date to TIME format (HH:MM:SS)
@@ -123,15 +124,24 @@ class CoachService: ObservableObject {
     // MARK: - Pattern Analytics
 
     func getMyPatterns() async throws -> PatternAnalytics {
-        // TODO: Call my-patterns Edge Function when implemented
-        // For now, return empty data
-        return PatternAnalytics(
-            totalEncounters: 0,
-            last7Days: 0,
-            last30Days: 0,
-            mostCommon: [],
-            byDistortionType: []
+        guard let userId = try await supabase.auth.session.user.id else {
+            throw CoachError.notAuthenticated
+        }
+
+        let response = try await supabase.functions.invoke(
+            "my-patterns",
+            options: FunctionInvokeOptions()
         )
+
+        guard let data = response.data else {
+            throw CoachError.decodingError
+        }
+
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        decoder.dateDecodingStrategy = .iso8601
+
+        return try decoder.decode(PatternAnalytics.self, from: data)
     }
 
     func getWeeklySummary() async throws -> WeeklyPatternSummary? {

@@ -67,6 +67,7 @@ struct CoachSettings: Codable {
     var silentHoursEnd: Date?
     var disabledDistortions: [String]
     var showPatterns: Bool
+    var timezone: String  // IANA timezone identifier (e.g., "America/Los_Angeles")
 
     enum SensitivityLevel: String, Codable, CaseIterable {
         case minimal
@@ -97,6 +98,7 @@ struct CoachSettings: Codable {
         case silentHoursEnd = "silent_hours_end"
         case disabledDistortions = "disabled_distortions"
         case showPatterns = "show_patterns"
+        case timezone
     }
 
     static var defaultSettings: CoachSettings {
@@ -106,7 +108,8 @@ struct CoachSettings: Codable {
             silentHoursStart: nil,
             silentHoursEnd: nil,
             disabledDistortions: [],
-            showPatterns: true
+            showPatterns: true,
+            timezone: TimeZone.current.identifier  // Auto-detect user's timezone
         )
     }
 }
