@@ -133,6 +133,12 @@ struct ProfileView: View {
                     }
 
                     NavigationLink {
+                        CompanionMemoryView(memoryService: container.companionMemoryService)
+                    } label: {
+                        Label("Memory Vault", systemImage: "archivebox.fill")
+                    }
+
+                    NavigationLink {
                         AppearanceSettingsView()
                     } label: {
                         Label("Appearance", systemImage: "circle.lefthalf.filled")
