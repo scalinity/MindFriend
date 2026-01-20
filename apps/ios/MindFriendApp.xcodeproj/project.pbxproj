@@ -45,6 +45,7 @@
 		135DA5E67317554B0DE6B7EB /* VaultEntryEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37AFF8508CE682D0AAEE32EA /* VaultEntryEditorView.swift */; };
 		139497275231192F04F07A67 /* QuickCheckInSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA320F266B86462B2E649BEE /* QuickCheckInSheet.swift */; };
 		15F6CFBB4E38847A17B835B1 /* ProactiveSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3DD7B1B13781201A211FAED /* ProactiveSettingsView.swift */; };
+		16276E364C3878FB9C146457 /* counting.ahap in Resources */ = {isa = PBXBuildFile; fileRef = 3CA142FF7FAD5CEEF249E374 /* counting.ahap */; };
 		165B1837D5B442FBC57753D4 /* BoundaryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F6417DB87EE35A7DABD819D /* BoundaryModels.swift */; };
 		16F17E9DA68101170AEDF12B /* EngagementTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E5AA2F7E6CEABDF3237D256 /* EngagementTracker.swift */; };
 		1845DA2A1446D853201D0088 /* FamilyHubViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 810CB05C44D15BF64A7254BB /* FamilyHubViewModel.swift */; };
@@ -145,6 +146,7 @@
 		4C1DF9812D3AAA53EBDC531D /* TestimonialsCarousel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88CFC3F39DF01519CCF58719 /* TestimonialsCarousel.swift */; };
 		4CE866331753B8E80BB2FFD9 /* AudioLevelMeter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91837837463DA56604F352D /* AudioLevelMeter.swift */; };
 		4E3F8311B5A0AA4C30E834CB /* SessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8E53CE3AA8692C0FDB795ED /* SessionView.swift */; };
+		4EDB83D7F7E6557EDB966D94 /* wave.ahap in Resources */ = {isa = PBXBuildFile; fileRef = 74596BFC714E518415E0B1A9 /* wave.ahap */; };
 		4FA8B4377D7B1BA6E2907634 /* GeneratedContentServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27DD86BC771C3413A72D1040 /* GeneratedContentServiceTests.swift */; };
 		4FFE7CA536CEEB831356D766 /* ReportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97C9CE074CC52641F4F1306D /* ReportView.swift */; };
 		501A3408CB6858402345BCD2 /* CelebrationReactionsBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECD7294DD562D641ED4F8344 /* CelebrationReactionsBar.swift */; };
@@ -160,6 +162,7 @@
 		57B33C030F70DA022CE261B5 /* SleepHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 528FD474E40F988597D23C24 /* SleepHomeView.swift */; };
 		57D92B8344346BB53E71B85A /* PredictiveModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2349D86AAF8CBC573B125FD8 /* PredictiveModels.swift */; };
 		58AFC7468F5F58D3A4257F18 /* String+Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49FAF291F82A4CADD682B926 /* String+Localization.swift */; };
+		58D0D1593DCAB245BF5CE3B3 /* earth_pulse.ahap in Resources */ = {isa = PBXBuildFile; fileRef = 8E05890B3E618C15ECA82B7E /* earth_pulse.ahap */; };
 		59225E8388D68A98DD99432A /* RiskInsightCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE05928B6978B2F214E54417 /* RiskInsightCard.swift */; };
 		598864DCB4087377839E5660 /* SOSGroundingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2934969368777A8A2F0ECA2 /* SOSGroundingView.swift */; };
 		5A4E9CF1F04561C11D70F94F /* EncouragementPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF6AE3D1450F38447F0D1E7E /* EncouragementPickerSheet.swift */; };
@@ -186,6 +189,7 @@
 		62EA3C13501F0966A16F2923 /* RitualServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 722CCBA6C4DD54CE67519924 /* RitualServiceTests.swift */; };
 		6307F8CC4ED8079105F9C86C /* RitualSessionViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79C523C9A05A245E8FD53340 /* RitualSessionViewModelTests.swift */; };
 		6338412CCC1C033676AC007B /* LockScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50FA3CF2D456A20A670AF935 /* LockScreenView.swift */; };
+		63944A100B4B913D40BFF427 /* heartbeat.ahap in Resources */ = {isa = PBXBuildFile; fileRef = FCEFE80EB5DC9102E9FCFC0D /* heartbeat.ahap */; };
 		64416E625872A550F564DCA8 /* UIImage+Privacy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CF721F73DE7F49FAD056008 /* UIImage+Privacy.swift */; };
 		646C41C8AEE4D07F3345152C /* MedicationRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2EC285919570907C12DF8D0 /* MedicationRepository.swift */; };
 		65599434F1098F7F2B7319AF /* View+Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 580514ABDA39D14605E225D5 /* View+Localization.swift */; };
@@ -244,6 +248,7 @@
 		84C841618DA679FFE8973F89 /* WeeklyWellbeingViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11A38F148D5782947AB9E59 /* WeeklyWellbeingViewModel.swift */; };
 		8563F3D7F9F630DFD6A8BB24 /* CrashReporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1CA472EDC79CE2F1DD3C6EA /* CrashReporterTests.swift */; };
 		856F3FABC217D4E50E18F53A /* SPEC15_TESTS_README.md in Resources */ = {isa = PBXBuildFile; fileRef = 0BBEF2C808BEE6A47C055FBF /* SPEC15_TESTS_README.md */; };
+		85EAF4F915F398198D4A3D58 /* sos.ahap in Resources */ = {isa = PBXBuildFile; fileRef = FEFEFFF0FDA3CC4C0BFFA354 /* sos.ahap */; };
 		863079F7EABDE2F146C2492D /* EmailModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8675BF108ADDCFB5A8CC690F /* EmailModels.swift */; };
 		877624449BAA0829B6E4D1C2 /* VaultViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23DBA6CFE004C7783D202959 /* VaultViewModel.swift */; };
 		87A8E17695FDABA7AFC58216 /* QuestArcProgressCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D4876A40D9A85B6B0819C9B /* QuestArcProgressCard.swift */; };
@@ -310,6 +315,7 @@
 		AE2B5475EE2F22352485F298 /* VaultEncryptionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97339318923002E8216D1432 /* VaultEncryptionTests.swift */; };
 		AEC364F88F69BE73CD89C25E /* ThreadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 661E9B7E27B7B5B04B86C1FF /* ThreadView.swift */; };
 		AF12FD69F79A12F534000EBF /* SharedExercisesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71CDCA5A146D6F9572DDC3C2 /* SharedExercisesView.swift */; };
+		AF20A13CC4AC250C4FEA1E17 /* breath_cue.ahap in Resources */ = {isa = PBXBuildFile; fileRef = 8F09320E6115F124066FD0D0 /* breath_cue.ahap */; };
 		AF4311AD9FE9B5E6CE2FF67F /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87258741D4EE156264C73C1E /* MainTabView.swift */; };
 		AF4713E8B28085C58996E5AA /* CrisisInterventionModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = B259DD3451BA4917CF3AAE43 /* CrisisInterventionModal.swift */; };
 		AF651547031D587D3F8ABD89 /* OfflineBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C5C34A2948EEBE422EB0284 /* OfflineBanner.swift */; };
@@ -601,6 +607,7 @@
 		3B1D0D64A2BC281EC4DED95F /* SharedDataStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedDataStore.swift; sourceTree = "<group>"; };
 		3C45900E4356C7E0822E2621 /* ShareCardSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareCardSheet.swift; sourceTree = "<group>"; };
 		3C80BF27DC055159E653E7BF /* ActionPlanFeedbackSheet.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ActionPlanFeedbackSheet.swift; sourceTree = "<group>"; };
+		3CA142FF7FAD5CEEF249E374 /* counting.ahap */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.json; path = counting.ahap; sourceTree = "<group>"; };
 		3CE2E051982EF4F020A4D2C5 /* CoachingSupportingViews.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CoachingSupportingViews.swift; sourceTree = "<group>"; };
 		3E300F5A835D11047D8DF990 /* VaultEncryptionService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VaultEncryptionService.swift; sourceTree = "<group>"; };
 		3E45CEB52EE17661CDAEB6F1 /* SignaturePatternCard.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SignaturePatternCard.swift; sourceTree = "<group>"; };
@@ -706,6 +713,7 @@
 		72CDAE51A23CE3616E2572AA /* InsightLabModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = InsightLabModels.swift; sourceTree = "<group>"; };
 		72D4A47C7E90EB5B57631FB1 /* PartnerStatusCard.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PartnerStatusCard.swift; sourceTree = "<group>"; };
 		7365E756D09C60F3075E9CF3 /* OnboardingFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFlow.swift; sourceTree = "<group>"; };
+		74596BFC714E518415E0B1A9 /* wave.ahap */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.json; path = wave.ahap; sourceTree = "<group>"; };
 		74758D8702F7028E3775C783 /* BiometricsDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiometricsDashboardView.swift; sourceTree = "<group>"; };
 		74BED6F5952652346150B8FA /* CopingKitsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CopingKitsView.swift; sourceTree = "<group>"; };
 		75913D2DA15F48212D0E4681 /* RecoveryModeHomeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecoveryModeHomeView.swift; sourceTree = "<group>"; };
@@ -746,9 +754,11 @@
 		8C55AD802856B6A57C5CB97B /* SOSSettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SOSSettingsView.swift; sourceTree = "<group>"; };
 		8D4876A40D9A85B6B0819C9B /* QuestArcProgressCard.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QuestArcProgressCard.swift; sourceTree = "<group>"; };
 		8DCDA3711D8FBA8DEEC525F9 /* HabitService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HabitService.swift; sourceTree = "<group>"; };
+		8E05890B3E618C15ECA82B7E /* earth_pulse.ahap */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.json; path = earth_pulse.ahap; sourceTree = "<group>"; };
 		8E5AA2F7E6CEABDF3237D256 /* EngagementTracker.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EngagementTracker.swift; sourceTree = "<group>"; };
 		8E905DE766813B40BCAC9A72 /* WelcomeBackView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeBackView.swift; sourceTree = "<group>"; };
 		8EC69EB934807D5E4157632B /* ActionPlanProgressSheet.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ActionPlanProgressSheet.swift; sourceTree = "<group>"; };
+		8F09320E6115F124066FD0D0 /* breath_cue.ahap */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.json; path = breath_cue.ahap; sourceTree = "<group>"; };
 		8F3698237E382AB468F9ADDE /* MedicationDetailView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MedicationDetailView.swift; sourceTree = "<group>"; };
 		8F6C96B1314DD92211F6CAD4 /* MindFriendAppTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MindFriendAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		8FDEDE8B67E2F79A6B56B550 /* CreateFamilySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateFamilySheet.swift; sourceTree = "<group>"; };
@@ -946,8 +956,10 @@
 		FA24B03C3D6E238CB7F057ED /* TactilePatternService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TactilePatternService.swift; sourceTree = "<group>"; };
 		FB80BA1DF3AD0BDC29F8422A /* SOSInterventionView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SOSInterventionView.swift; sourceTree = "<group>"; };
 		FC955FE85990CEC2BC27587F /* XCTestCase+JSON.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "XCTestCase+JSON.swift"; sourceTree = "<group>"; };
+		FCEFE80EB5DC9102E9FCFC0D /* heartbeat.ahap */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.json; path = heartbeat.ahap; sourceTree = "<group>"; };
 		FD9696B9AAA22EEABC63E332 /* OfflineContentService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OfflineContentService.swift; sourceTree = "<group>"; };
 		FE09D12DB8CB12972867C69C /* NotificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationTests.swift; sourceTree = "<group>"; };
+		FEFEFFF0FDA3CC4C0BFFA354 /* sos.ahap */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.json; path = sos.ahap; sourceTree = "<group>"; };
 		FF14EF27E2E298F89E3D0233 /* HabitModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HabitModels.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -1351,6 +1363,20 @@
 			path = Creator;
 			sourceTree = "<group>";
 		};
+		4A953352448C4DE2AD1E4576 /* Haptics */ = {
+			isa = PBXGroup;
+			children = (
+				FCEFE80EB5DC9102E9FCFC0D /* heartbeat.ahap */,
+				8E05890B3E618C15ECA82B7E /* earth_pulse.ahap */,
+				74596BFC714E518415E0B1A9 /* wave.ahap */,
+				8F09320E6115F124066FD0D0 /* breath_cue.ahap */,
+				3CA142FF7FAD5CEEF249E374 /* counting.ahap */,
+				FEFEFFF0FDA3CC4C0BFFA354 /* sos.ahap */,
+			);
+			name = Haptics;
+			path = Haptics;
+			sourceTree = "<group>";
+		};
 		4ABFD909D4F5EA0B08EDA25B /* Paywall */ = {
 			isa = PBXGroup;
 			children = (
@@ -1419,6 +1445,15 @@
 			children = (
 			);
 			path = "Preview Content";
+			sourceTree = "<group>";
+		};
+		54C0F5E45ED83838D893F8B0 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				4A953352448C4DE2AD1E4576 /* Haptics */,
+			);
+			name = Resources;
+			path = Resources;
 			sourceTree = "<group>";
 		};
 		54E900DAD8A639540452EDC2 /* QuestArcs */ = {
@@ -1836,6 +1871,7 @@
 				01F32B135675686AD002DF76 /* Networking */,
 				81ED85A8A3A579D757112F83 /* Tests */,
 				326FD86DA8EE2B5EFBF757E1 /* App */,
+				54C0F5E45ED83838D893F8B0 /* Resources */,
 			);
 			name = MindFriendApp;
 			path = MindFriendApp;
@@ -2522,6 +2558,12 @@
 				68D87E1C574A556BB7B8B4B2 /* Assets.xcassets in Resources */,
 				9AEE776A21837E570BA0273D /* Localizable.xcstrings in Resources */,
 				C7DEAB17670F693A69D83D63 /* PrivacyInfo.xcprivacy in Resources */,
+				63944A100B4B913D40BFF427 /* heartbeat.ahap in Resources */,
+				58D0D1593DCAB245BF5CE3B3 /* earth_pulse.ahap in Resources */,
+				4EDB83D7F7E6557EDB966D94 /* wave.ahap in Resources */,
+				AF20A13CC4AC250C4FEA1E17 /* breath_cue.ahap in Resources */,
+				16276E364C3878FB9C146457 /* counting.ahap in Resources */,
+				85EAF4F915F398198D4A3D58 /* sos.ahap in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
