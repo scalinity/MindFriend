@@ -129,6 +129,94 @@ final class SupabaseDataService: ObservableObject {
         return result
     }
 
+    // MARK: - Recovery Mode
+
+    /// Fetches the current recovery mode state for the authenticated user
+    /// Returns active status, entry time, and reason for entering recovery mode
+    func fetchRecoveryModeState() async throws -> RecoveryModeState {
+        _ = try userId
+
+        struct SettingsResult: Codable {
+            let recoveryModeActive: Bool?
+            let recoveryModeEnteredAt: Date?
+            let recoveryModeReason: String?
+
+            enum CodingKeys: String, CodingKey {
+                case recoveryModeActive = "recovery_mode_active"
+                case recoveryModeEnteredAt = "recovery_mode_entered_at"
+                case recoveryModeReason = "recovery_mode_reason"
+            }
+        }
+
+        let results: [SettingsResult] = try await supabase
+            .from("user_settings")
+            .select("recovery_mode_active, recovery_mode_entered_at, recovery_mode_reason")
+            .eq("user_id", value: try userId)
+            .execute()
+            .value
+
+        guard let settings = results.first else {
+            return .inactive
+        }
+
+        let reason: RecoveryModeReason? = settings.recoveryModeReason.flatMap {
+            RecoveryModeReason(rawValue: $0)
+        }
+
+        return RecoveryModeState(
+            isActive: settings.recoveryModeActive ?? false,
+            enteredAt: settings.recoveryModeEnteredAt,
+            reason: reason
+        )
+    }
+
+    /// Toggles recovery mode on or off for the authenticated user
+    /// When enabling: Sets recovery_mode_active=true with manual reason
+    /// When disabling: Enforces 24h minimum duration rule
+    /// Returns the result of the toggle operation
+    func toggleRecoveryMode(enable: Bool) async throws -> ToggleRecoveryModeResult {
+        _ = try userId
+
+        struct RPCResult: Codable {
+            let success: Bool
+            let errorMessage: String?
+            let newState: Bool
+            let enteredAt: Date?
+
+            enum CodingKeys: String, CodingKey {
+                case success
+                case errorMessage = "error_message"
+                case newState = "new_state"
+                case enteredAt = "entered_at"
+            }
+        }
+
+        let results: [RPCResult] = try await supabase
+            .rpc("toggle_recovery_mode", params: ["p_enable": enable])
+            .execute()
+            .value
+
+        guard let result = results.first else {
+            return ToggleRecoveryModeResult(
+                success: false,
+                errorMessage: "No result from server",
+                newState: .inactive
+            )
+        }
+
+        let newState = RecoveryModeState(
+            isActive: result.newState,
+            enteredAt: result.enteredAt,
+            reason: enable ? .manual : nil
+        )
+
+        return ToggleRecoveryModeResult(
+            success: result.success,
+            errorMessage: result.errorMessage,
+            newState: newState
+        )
+    }
+
     // MARK: - Quests
 
     func getTodayQuest() async throws -> Quest? {
