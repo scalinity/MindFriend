@@ -37,14 +37,14 @@ Implemented Real-Time Cognitive Bias Coach: keyword-based detection (12 distorti
 
 ---
 
-## [2026-01-20] Boundary & Needs Planner - Phase 0 Foundation (Database + Core Edge Functions)
+## [2026-01-20] Boundary & Needs Planner - Backend Complete (Database + All 9 Edge Functions)
 
 **Type:** Feature
-**Status:** In Progress (Foundation Complete, Backend and iOS Implementation Pending)
+**Status:** Backend Complete (iOS Implementation Pending)
 
 ### Summary
 
-Completed foundational infrastructure for Boundary & Needs Planner feature: database schema with RLS policies, practice count synchronization trigger, Swift models, and core Edge Functions (needs assessment, boundary generation). Establishes pattern for template-based script generation and tier limit enforcement.
+Completed all backend infrastructure for Boundary & Needs Planner feature: database schema with RLS policies, practice count synchronization trigger, Swift models, and ALL 9 Edge Functions implementing complete business logic (assessment, boundary creation, script generation, state machine, follow-ups). Backend ready for iOS integration.
 
 ### Changes
 
@@ -66,6 +66,17 @@ Completed foundational infrastructure for Boundary & Needs Planner feature: data
 | `supabase/functions/generate-boundary/index.ts`                         | POST /generate-boundary: Boundary creation with validation (10-500 char statement/whyMatters)                                                                       |
 |                                                                         | Server-side tier limit enforcement (free: 3 boundaries max, premium: unlimited)                                                                                     |
 |                                                                         | Expected impact generation based on boundary type                                                                                                                   |
+| `supabase/functions/generate-scripts/index.ts`                          | POST /generate-scripts: Template-based script generation with 3-tier fallback (exact → 'other' → 'en')                                                              |
+|                                                                         | 4 placeholder replacement: [boundary], [why_matters], [stakeholder], [contact_method]                                                                               |
+|                                                                         | Premium filtering, practice prompts generation                                                                                                                      |
+| `supabase/functions/save-boundary/index.ts`                             | POST /save-boundary: Boundary status updates with complete state machine validation (6 states, 7 transitions)                                                       |
+|                                                                         | Auto-transition ready → practiced when practice_count ≥ 3                                                                                                           |
+|                                                                         | Returns allowed states and error messages for invalid transitions                                                                                                   |
+| `supabase/functions/list-boundaries/index.ts`                           | GET /list-boundaries: Query with status filter, pagination (limit/offset), hasFollowUp flag                                                                         |
+| `supabase/functions/schedule-followup/index.ts`                         | POST /schedule-followup: Create check-in with validation (future date, defaults to +24h)                                                                            |
+| `supabase/functions/record-outcome/index.ts`                            | POST /record-outcome: Record outcome with encouragement generation, auto-adjust status if challenged/ignored                                                        |
+| `supabase/functions/get-assessment/index.ts`                            | GET /get-assessment/:id: Fetch specific needs assessment                                                                                                            |
+| `supabase/functions/get-templates/index.ts`                             | GET /get-templates: Query templates with filters (boundaryType, relationshipType, locale)                                                                           |
 | **Specifications**                                                      |                                                                                                                                                                     |
 | `minimax-specs/04-boundary-planner-spec-formal.md`                      | 1,000+ line formal specification (READY verdict, 10/10 completeness): database schema, 9 API endpoints, state machine, localization (75 strings), test requirements |
 | `minimax-specs/04-boundary-planner-implementation-plan.md`              | 1,309-line implementation plan: 24 new files, 5 modified files, 5-phase sequence, test strategy, risk assessment, rollback procedures                               |
