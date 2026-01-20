@@ -4140,5 +4140,222 @@ struct MedicationMoodCorrelation: Codable {
     }
 }
 
+// MARK: - Quest Arcs
+
+/// A multi-day quest program with themed journey and milestones
+struct QuestArc: Codable, Identifiable, Equatable {
+    let id: UUID
+    let title: String
+    let description: String
+    let category: String
+    let durationDays: Int
+    let difficultyLevel: String
+    let isPremium: Bool
+    let milestoneDays: [Int]
+    let iconName: String?
+    let stepCount: Int
+    var userEnrolled: Bool
+    var userCompleted: Bool
+    var userProgress: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, description, category
+        case durationDays = "durationDays"
+        case difficultyLevel = "difficultyLevel"
+        case isPremium = "isPremium"
+        case milestoneDays = "milestoneDays"
+        case iconName = "iconName"
+        case stepCount = "stepCount"
+        case userEnrolled = "userEnrolled"
+        case userCompleted = "userCompleted"
+        case userProgress = "userProgress"
+    }
+
+    var progressPercentage: Double {
+        guard let progress = userProgress, durationDays > 0 else { return 0 }
+        return Double(progress) / Double(durationDays)
+    }
+
+    var categoryIcon: String {
+        if let iconName = iconName, !iconName.isEmpty {
+            return iconName
+        }
+        switch category {
+        case "stress": return "brain.head.profile"
+        case "sleep": return "moon.zzz.fill"
+        case "confidence": return "star.fill"
+        case "focus": return "scope"
+        case "resilience": return "shield.fill"
+        default: return "sparkles"
+        }
+    }
+
+    var categoryColor: Color {
+        switch category {
+        case "stress": return .purple
+        case "sleep": return .indigo
+        case "confidence": return .orange
+        case "focus": return .blue
+        case "resilience": return .green
+        default: return .gray
+        }
+    }
+
+    var difficultyLabel: String {
+        switch difficultyLevel {
+        case "easy": return "Beginner"
+        case "medium": return "Intermediate"
+        case "hard": return "Advanced"
+        default: return difficultyLevel.capitalized
+        }
+    }
+
+    var daysRemaining: Int {
+        guard let progress = userProgress else { return durationDays }
+        return max(0, durationDays - progress)
+    }
+}
+
+/// A single day's quest within an arc
+struct QuestArcStep: Codable, Identifiable, Equatable {
+    let id: UUID
+    let arcId: UUID
+    let dayNumber: Int
+    let questTemplateId: UUID
+    let customTitle: String?
+    let customDescription: String?
+    let isMilestone: Bool
+    let milestoneXpBonus: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case arcId = "arc_id"
+        case dayNumber = "day_number"
+        case questTemplateId = "quest_template_id"
+        case customTitle = "custom_title"
+        case customDescription = "custom_description"
+        case isMilestone = "is_milestone"
+        case milestoneXpBonus = "milestone_xp_bonus"
+    }
+}
+
+/// User's enrollment in a quest arc
+struct UserQuestArc: Codable, Identifiable, Equatable {
+    let id: UUID
+    let userId: UUID
+    let arcId: UUID
+    var currentDay: Int
+    var status: ArcStatus
+    let startedAt: Date
+    var pausedAt: Date?
+    var completedAt: Date?
+    var abandonedAt: Date?
+    var lastQuestCompletedAt: Date?
+    let snapshotDurationDays: Int
+    let snapshotMilestoneDays: [Int]
+
+    // Joined data from API
+    var arc: QuestArc?
+
+    enum ArcStatus: String, Codable {
+        case active
+        case paused
+        case completed
+        case abandoned
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case arcId = "arc_id"
+        case currentDay = "current_day"
+        case status
+        case startedAt = "started_at"
+        case pausedAt = "paused_at"
+        case completedAt = "completed_at"
+        case abandonedAt = "abandoned_at"
+        case lastQuestCompletedAt = "last_quest_completed_at"
+        case snapshotDurationDays = "snapshot_duration_days"
+        case snapshotMilestoneDays = "snapshot_milestone_days"
+        case arc = "quest_arcs"
+    }
+
+    var progressPercentage: Double {
+        guard snapshotDurationDays > 0 else { return 0 }
+        return Double(currentDay) / Double(snapshotDurationDays)
+    }
+
+    var daysRemaining: Int {
+        return max(0, snapshotDurationDays - currentDay)
+    }
+
+    var isExpired: Bool {
+        guard status == .paused, let pausedAt = pausedAt else { return false }
+        let thirtyDaysAgo = Calendar.current.date(byAdding: .day, value: -30, to: Date())!
+        return pausedAt < thirtyDaysAgo
+    }
+
+    var expiresAt: Date? {
+        guard status == .paused, let pausedAt = pausedAt else { return nil }
+        return Calendar.current.date(byAdding: .day, value: 30, to: pausedAt)
+    }
+
+    var nextMilestone: Int? {
+        snapshotMilestoneDays.first { $0 > currentDay }
+    }
+
+    var daysToNextMilestone: Int? {
+        guard let next = nextMilestone else { return nil }
+        return next - currentDay
+    }
+}
+
+// MARK: - Quest Arc API Response Types
+
+struct GetQuestArcsResponse: Codable {
+    let arcs: [QuestArc]
+}
+
+struct StartQuestArcResponse: Codable {
+    let success: Bool
+    let userArcId: String?
+    let arc: QuestArc?
+    let firstQuestTemplate: QuestTemplate?
+    let error: String?
+    let code: String?
+    let paywallContext: PaywallContext?
+    let currentArc: CurrentArcInfo?
+
+    struct PaywallContext: Codable {
+        let arcTitle: String
+        let arcDescription: String
+        let benefits: [String]
+    }
+
+    struct CurrentArcInfo: Codable {
+        let id: String
+        let title: String
+        let currentDay: Int
+    }
+}
+
+struct PauseQuestArcResponse: Codable {
+    let success: Bool
+    let pausedAt: String
+    let currentDay: Int
+    let expiresAt: String
+}
+
+struct ResumeQuestArcResponse: Codable {
+    let success: Bool
+    let currentDay: Int
+    let nextQuestTemplate: QuestTemplate?
+}
+
+struct ExitQuestArcResponse: Codable {
+    let success: Bool
+    let abandonedAt: String
+}
+
 
 
