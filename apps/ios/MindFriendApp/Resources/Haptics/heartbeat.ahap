@@ -1,0 +1,60 @@
+{
+  "Version": 1.0,
+  "Metadata": {
+    "Project": "MindFriend Sensory Toolkit",
+    "Created": "2026-01-20",
+    "Description": "60 BPM heartbeat pulse pattern for grounding"
+  },
+  "Pattern": [
+    {
+      "Event": {
+        "Time": 0.0,
+        "EventType": "HapticTransient",
+        "EventParameters": [
+          {"ParameterID": "HapticIntensity", "ParameterValue": 0.8},
+          {"ParameterID": "HapticSharpness", "ParameterValue": 0.3}
+        ]
+      }
+    },
+    {
+      "Event": {
+        "Time": 1.0,
+        "EventType": "HapticTransient",
+        "EventParameters": [
+          {"ParameterID": "HapticIntensity", "ParameterValue": 0.8},
+          {"ParameterID": "HapticSharpness", "ParameterValue": 0.3}
+        ]
+      }
+    },
+    {
+      "Event": {
+        "Time": 2.0,
+        "EventType": "HapticTransient",
+        "EventParameters": [
+          {"ParameterID": "HapticIntensity", "ParameterValue": 0.8},
+          {"ParameterID": "HapticSharpness", "ParameterValue": 0.3}
+        ]
+      }
+    },
+    {
+      "Event": {
+        "Time": 3.0,
+        "EventType": "HapticTransient",
+        "EventParameters": [
+          {"ParameterID": "HapticIntensity", "ParameterValue": 0.8},
+          {"ParameterID": "HapticSharpness", "ParameterValue": 0.3}
+        ]
+      }
+    },
+    {
+      "Event": {
+        "Time": 4.0,
+        "EventType": "HapticTransient",
+        "EventParameters": [
+          {"ParameterID": "HapticIntensity", "ParameterValue": 0.8},
+          {"ParameterID": "HapticSharpness", "ParameterValue": 0.3}
+        ]
+      }
+    }
+  ]
+}

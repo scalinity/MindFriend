@@ -1,0 +1,284 @@
+{
+  "sensory.home.title": {
+    "comment": "Title for the Sensory Regulation Toolkit home screen"
+  },
+  "sensory.home.subtitle": {
+    "comment": "Subtitle explaining the sensory toolkit"
+  },
+  "sensory.modality.tactile": {
+    "comment": "Tactile modality display name"
+  },
+  "sensory.modality.visual": {
+    "comment": "Visual modality display name"
+  },
+  "sensory.modality.audio": {
+    "comment": "Audio modality display name"
+  },
+  "sensory.modality.tactile.subtitle": {
+    "comment": "Tactile modality subtitle"
+  },
+  "sensory.modality.visual.subtitle": {
+    "comment": "Visual modality subtitle"
+  },
+  "sensory.modality.audio.subtitle": {
+    "comment": "Audio modality subtitle"
+  },
+  "sensory.pattern.heartbeat.name": {
+    "comment": "Name of the heartbeat tactile pattern"
+  },
+  "sensory.pattern.heartbeat.description": {
+    "comment": "Description of the heartbeat tactile pattern"
+  },
+  "sensory.pattern.earth_pulse.name": {
+    "comment": "Name of the earth pulse tactile pattern"
+  },
+  "sensory.pattern.earth_pulse.description": {
+    "comment": "Description of the earth pulse tactile pattern"
+  },
+  "sensory.pattern.wave.name": {
+    "comment": "Name of the wave tactile pattern"
+  },
+  "sensory.pattern.wave.description": {
+    "comment": "Description of the wave tactile pattern"
+  },
+  "sensory.pattern.breath_cue.name": {
+    "comment": "Name of the breath cue tactile pattern"
+  },
+  "sensory.pattern.breath_cue.description": {
+    "comment": "Description of the breath cue tactile pattern"
+  },
+  "sensory.pattern.counting.name": {
+    "comment": "Name of the counting tactile pattern"
+  },
+  "sensory.pattern.counting.description": {
+    "comment": "Description of the counting tactile pattern"
+  },
+  "sensory.pattern.sos.name": {
+    "comment": "Name of the SOS tactile pattern"
+  },
+  "sensory.pattern.sos.description": {
+    "comment": "Description of the SOS tactile pattern"
+  },
+  "sensory.animation.expanding_circle.name": {
+    "comment": "Name of the expanding circle visual animation"
+  },
+  "sensory.animation.expanding_circle.description": {
+    "comment": "Description of the expanding circle visual animation"
+  },
+  "sensory.animation.pulsing_square.name": {
+    "comment": "Name of the pulsing square visual animation"
+  },
+  "sensory.animation.pulsing_square.description": {
+    "comment": "Description of the pulsing square visual animation"
+  },
+  "sensory.animation.wave.name": {
+    "comment": "Name of the wave visual animation"
+  },
+  "sensory.animation.wave.description": {
+    "comment": "Description of the wave visual animation"
+  },
+  "sensory.animation.bouncing_dot.name": {
+    "comment": "Name of the bouncing dot visual animation"
+  },
+  "sensory.animation.bouncing_dot.description": {
+    "comment": "Description of the bouncing dot visual animation"
+  },
+  "sensory.animation.spiral.name": {
+    "comment": "Name of the spiral visual animation"
+  },
+  "sensory.animation.spiral.description": {
+    "comment": "Description of the spiral visual animation"
+  },
+  "sensory.animation.flower_bloom.name": {
+    "comment": "Name of the flower bloom visual animation"
+  },
+  "sensory.animation.flower_bloom.description": {
+    "comment": "Description of the flower bloom visual animation"
+  },
+  "sensory.animation.dot_grid.name": {
+    "comment": "Name of the dot grid visual animation"
+  },
+  "sensory.animation.dot_grid.description": {
+    "comment": "Description of the dot grid visual animation"
+  },
+  "sensory.animation.ribbon_flow.name": {
+    "comment": "Name of the ribbon flow visual animation"
+  },
+  "sensory.animation.ribbon_flow.description": {
+    "comment": "Description of the ribbon flow visual animation"
+  },
+  "sensory.soundscape.rain.name": {
+    "comment": "Name of the rain audio soundscape"
+  },
+  "sensory.soundscape.rain.description": {
+    "comment": "Description of the rain audio soundscape"
+  },
+  "sensory.soundscape.ocean_waves.name": {
+    "comment": "Name of the ocean waves audio soundscape"
+  },
+  "sensory.soundscape.ocean_waves.description": {
+    "comment": "Description of the ocean waves audio soundscape"
+  },
+  "sensory.category.grounding": {
+    "comment": "Grounding category display name"
+  },
+  "sensory.category.calming": {
+    "comment": "Calming category display name"
+  },
+  "sensory.category.energizing": {
+    "comment": "Energizing category display name"
+  },
+  "sensory.category.focus": {
+    "comment": "Focus category display name"
+  },
+  "sensory.speed.slow": {
+    "comment": "Slow speed preset display name"
+  },
+  "sensory.speed.medium": {
+    "comment": "Medium speed preset display name"
+  },
+  "sensory.speed.fast": {
+    "comment": "Fast speed preset display name"
+  },
+  "sensory.session.timer.format": {
+    "comment": "Format string for session timer display (MM:SS)"
+  },
+  "sensory.session.play": {
+    "comment": "Play button label"
+  },
+  "sensory.session.pause": {
+    "comment": "Pause button label"
+  },
+  "sensory.session.stop": {
+    "comment": "Stop button label"
+  },
+  "sensory.session.end": {
+    "comment": "End session button label"
+  },
+  "sensory.session.heart_rate": {
+    "comment": "Heart rate label (BPM)"
+  },
+  "sensory.error.premium_required": {
+    "comment": "Error message when premium subscription is required"
+  },
+  "sensory.error.session_in_progress": {
+    "comment": "Error message when trying to start a session while one is already active"
+  },
+  "sensory.error.max_duration_exceeded": {
+    "comment": "Error message when 30-minute session limit is reached"
+  },
+  "sensory.error.pattern_not_found": {
+    "comment": "Error message when a pattern cannot be found"
+  },
+  "sensory.error.haptics_not_supported": {
+    "comment": "Error message when device doesn't support haptics"
+  },
+  "sensory.error.ahap_file_not_found": {
+    "comment": "Error message when AHAP pattern file is missing"
+  },
+  "sensory.error.engine_failure": {
+    "comment": "Error message when haptic engine fails"
+  },
+  "sensory.error.animation_not_found": {
+    "comment": "Error message when animation cannot be found"
+  },
+  "sensory.error.render_failure": {
+    "comment": "Error message when visual or audio rendering fails"
+  },
+  "sensory.error.network_error": {
+    "comment": "Error message for network-related errors"
+  },
+  "sensory.tip.best_results.title": {
+    "comment": "Title for the best results tip"
+  },
+  "sensory.tip.best_results.message": {
+    "comment": "Message for the best results tip"
+  },
+  "sensory.tip.session_length.title": {
+    "comment": "Title for the session length tip"
+  },
+  "sensory.tip.session_length.message": {
+    "comment": "Message for the session length tip"
+  },
+  "sensory.recent_sessions.title": {
+    "comment": "Title for recent sessions section"
+  },
+  "sensory.patterns_available": {
+    "comment": "Label showing number of patterns available (e.g., '6 patterns available')"
+  },
+  "sensory.library.tactile.title": {
+    "comment": "Title for tactile patterns library"
+  },
+  "sensory.library.tactile.subtitle": {
+    "comment": "Subtitle for tactile patterns library"
+  },
+  "sensory.library.visual.title": {
+    "comment": "Title for visual animations library"
+  },
+  "sensory.library.visual.subtitle": {
+    "comment": "Subtitle for visual animations library"
+  },
+  "sensory.library.audio.title": {
+    "comment": "Title for audio soundscapes library"
+  },
+  "sensory.library.audio.subtitle": {
+    "comment": "Subtitle for audio soundscapes library"
+  },
+  "sensory.dashboard.title": {
+    "comment": "Title for sensory toolkit dashboard card on home screen"
+  },
+  "sensory.dashboard.subtitle": {
+    "comment": "Subtitle for sensory toolkit dashboard card"
+  },
+  "sensory.loopable": {
+    "comment": "Label indicating a soundscape can loop"
+  },
+  "sensory.duration.minutes": {
+    "comment": "Format for duration in minutes (e.g., '10 min')"
+  },
+  "sensory.settings.title": {
+    "comment": "Title for sensory settings screen"
+  },
+  "sensory.settings.default_speed": {
+    "comment": "Label for default speed setting"
+  },
+  "sensory.settings.haptic_intensity": {
+    "comment": "Label for haptic intensity setting"
+  },
+  "sensory.settings.enable_auto_pause": {
+    "comment": "Label for enable auto-pause setting"
+  },
+  "sensory.settings.default_session_duration": {
+    "comment": "Label for default session duration setting"
+  },
+  "sensory.achievement.first_session.name": {
+    "comment": "Name of the 'First Session' achievement"
+  },
+  "sensory.achievement.first_session.description": {
+    "comment": "Description of the 'First Session' achievement"
+  },
+  "sensory.achievement.ten_sessions.name": {
+    "comment": "Name of the '10 Sessions' achievement"
+  },
+  "sensory.achievement.ten_sessions.description": {
+    "comment": "Description of the '10 Sessions' achievement"
+  },
+  "sensory.achievement.all_modalities.name": {
+    "comment": "Name of the 'All 3 Modalities' achievement"
+  },
+  "sensory.achievement.all_modalities.description": {
+    "comment": "Description of the 'All 3 Modalities' achievement"
+  },
+  "sensory.achievement.thirty_minute_session.name": {
+    "comment": "Name of the '30-Minute Session' achievement"
+  },
+  "sensory.achievement.thirty_minute_session.description": {
+    "comment": "Description of the '30-Minute Session' achievement"
+  },
+  "sensory.achievement.seven_day_streak.name": {
+    "comment": "Name of the '7-Day Streak' achievement"
+  },
+  "sensory.achievement.seven_day_streak.description": {
+    "comment": "Description of the '7-Day Streak' achievement"
+  }
+}
