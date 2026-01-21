@@ -82,6 +82,7 @@ The spec-analyzer identified the specification as 40% complete with 5 critical b
 **JSONB Schema Definitions:**
 
 1. **user_values.values_data**
+
    ```json
    {
      "phase1_selections": ["autonomy", "growth", "family", "creativity", ...],
@@ -101,6 +102,7 @@ The spec-analyzer identified the specification as 40% complete with 5 critical b
    ```
 
 2. **user_values.values_categories**
+
    ```json
    {
      "personal": ["growth", "autonomy"],
@@ -111,6 +113,7 @@ The spec-analyzer identified the specification as 40% complete with 5 critical b
    ```
 
 3. **user_decisions.options**
+
    ```json
    [
      {
@@ -119,7 +122,7 @@ The spec-analyzer identified the specification as 40% complete with 5 critical b
        "user_notes": "Higher pay but longer commute"
      },
      {
-       "id": "opt2", 
+       "id": "opt2",
        "label": "Stay at current job",
        "user_notes": "Comfortable but limited growth"
      }
@@ -131,19 +134,39 @@ The spec-analyzer identified the specification as 40% complete with 5 critical b
    {
      "opt1": {
        "aligned_values": [
-         {"value": "growth", "reason": "New challenges and learning opportunities", "strength": 0.9},
-         {"value": "autonomy", "reason": "More decision-making authority", "strength": 0.7}
+         {
+           "value": "growth",
+           "reason": "New challenges and learning opportunities",
+           "strength": 0.9
+         },
+         {
+           "value": "autonomy",
+           "reason": "More decision-making authority",
+           "strength": 0.7
+         }
        ],
        "conflicting_values": [
-         {"value": "security", "reason": "Uncertain new environment", "severity": 0.6}
+         {
+           "value": "security",
+           "reason": "Uncertain new environment",
+           "severity": 0.6
+         }
        ]
      },
      "opt2": {
        "aligned_values": [
-         {"value": "security", "reason": "Known environment and stability", "strength": 0.8}
+         {
+           "value": "security",
+           "reason": "Known environment and stability",
+           "strength": 0.8
+         }
        ],
        "conflicting_values": [
-         {"value": "growth", "reason": "Limited advancement opportunities", "severity": 0.8}
+         {
+           "value": "growth",
+           "reason": "Limited advancement opportunities",
+           "severity": 0.8
+         }
        ]
      },
      "confidence_score": 0.65,
@@ -161,6 +184,7 @@ The spec-analyzer identified the specification as 40% complete with 5 critical b
 **API Request/Response Schemas:**
 
 All Edge Functions implement:
+
 - Standard error format: `{error: 'ERROR_CODE', message: 'Human-readable', details?: any}`
 - HTTP status codes: 200 (success), 400 (validation), 401 (auth), 429 (rate limit), 500 (server error)
 - Rate limiting: 10 req/min for `values-discovery`, 20 req/min for `analyze-decision`, 30 req/min for journal operations
@@ -1145,6 +1169,131 @@ Added fields and constraints:
 - Haptic engagement: 50% of sessions use haptics
 - Helpful ratings: 4.0/5.0 average
 - Crisis usage: 20% report using during stressful moments
+
+---
+
+## 2026-01-20: Client vs Server-Side Distortion Detection
+
+**Decision:** Server-side detection only (Edge Function via `chat` endpoint).
+
+**Rationale:** Already implemented in production. Avoids exposing detection patterns, enables centralized updates without app releases, ensures consistent behavior across platforms (iOS, future Android/web).
+
+**Alternatives considered:**
+
+- Client-side detection: Rejected - exposes patterns, inconsistent updates
+- Hybrid approach: Rejected - unnecessary complexity
+
+**Implications:** Coaching requires network connectivity; detection latency ~200ms; offline messages won't trigger coaching until synced.
+
+---
+
+## 2026-01-20: Dismissal Behavior (Coach Card)
+
+**Decision:** Temporary 30-minute suppression per dismissal; no permanent per-card persistence.
+
+**Rationale:** Implemented in `CoachViewModel.swift:46`. Prevents fatigue while keeping feature discoverable. Spec supports global disable (settings) and per-distortion disable, but not per-card persistence.
+
+**Alternatives considered:**
+
+- Permanent dismissal: Rejected - spec doesn't support it
+- No suppression: Rejected - too intrusive
+- 2-hour suppression: Rejected - too long
+
+**Implications:** Suppression is in-memory only (lost on app restart); dismissal tracked in `coach_interactions.action='dismissed'`.
+
+---
+
+## 2026-01-20: Timezone Handling for Silent Hours
+
+**Decision:** Store `coach_settings.timezone` as IANA identifier (e.g., "America/Los_Angeles"), convert to user's local time on server using Intl API.
+
+**Rationale:** Already implemented in migration `20260120231503_add_timezone_to_coach_settings.sql`. Handles midnight wrap (22:00-02:00) and DST transitions correctly.
+
+**Alternatives considered:**
+
+- Store in user's local time: Rejected - ambiguous during DST transitions
+- Client-side conversion: Rejected - inconsistent if client detection fails
+
+**Implications:** Timezone must be set on first use (default to device timezone); Edge Function uses Deno `Intl` API (well-supported).
+
+---
+
+## 2026-01-20: Anonymization and Privacy
+
+**Decision:** Store `original_message_preview` (first 200 chars) in `distortion_encounters`; no full message content.
+
+**Rationale:** Implemented in `chat/index.ts:851`. Balances analytics value with privacy. GDPR-compliant (user can request deletion via account deletion).
+
+**Alternatives considered:**
+
+- Store full message: Rejected - privacy risk
+- Store only code: Rejected - insufficient for debugging
+- Hash message: Rejected - not reversible
+
+**Implications:** Weekly summaries aggregate only counts, not message content; preview length (200 chars) is arbitrary but sufficient for most messages.
+
+---
+
+## 2026-01-20: Multi-Distortion Handling (One Message, Multiple Patterns)
+
+**Decision:** Show 1 card per message (highest confidence distortion).
+
+**Rationale:** Prevents UI clutter and cognitive overload. Current implementation in `chat/index.ts:830` returns single result sorted by confidence.
+
+**Alternatives considered:**
+
+- Show all distortions: Rejected - too overwhelming
+- Randomize: Rejected - unpredictable UX
+- Show top 2: Rejected - added complexity
+
+**Implications:** Users with multiple distortions see only top-confidence reframe; enhancement for v2 could show "View all patterns detected" expansion.
+
+---
+
+## 2026-01-20: Network Failure Error Handling
+
+**Decision:** Graceful degradation - chat message succeeds, coaching card silently fails with console log.
+
+**Rationale:** Implemented in `chat/index.ts:883-886`. Coaching is non-critical; chat must always work. No user-facing error (avoids confusion).
+
+**Alternatives considered:**
+
+- Show error state: Rejected - noisy UX
+- Retry logic: Rejected - adds latency
+- Offline queue: Rejected - over-engineered for MVP
+
+**Implications:** Users won't know if coaching failed; error logged for monitoring; future enhancement: client-side retry on next message.
+
+---
+
+## 2026-01-20: Conflict Resolution Priority (Multiple Settings Active)
+
+**Decision:** Settings override detection: `is_enabled=false` blocks all coaching, `disabled_distortions` blocks specific codes, `silent_hours` blocks time-based.
+
+**Rationale:** User consent is paramount. Explicit settings take priority over algorithmic detection. Follows "principle of least surprise."
+
+**Alternatives considered:**
+
+- Detection overrides settings: Rejected - violates user consent
+- Silent hours as "suggestion": Rejected - undermines trust
+
+**Implications:** Clear precedence: `is_enabled` > `silent_hours` > `disabled_distortions` > detection threshold; fully user-controlled experience.
+
+---
+
+## 2026-01-20: Weekly Insight Generation Trigger
+
+**Decision:** Cron job runs hourly, checks `get_users_for_weekly_summary` RPC to find users at Sunday 6 PM local time. Supports on-demand trigger via authenticated Edge Function call.
+
+**Rationale:** Already implemented in `generate-weekly-summary/index.ts:200-221`. Hourly check ensures delivery within 1 hour of target time across timezones. On-demand trigger allows manual refresh.
+
+**Alternatives considered:**
+
+- Daily cron at midnight UTC: Rejected - wrong time for most
+- Per-user scheduled notifications: Rejected - expensive
+- Client-side generation: Rejected - unreliable
+
+**Implications:** Requires Supabase cron job in `config.toml`; `weekly_pattern_summaries` table stores aggregated `distortion_counts`; notification sent via `send-notification` Edge Function.
 
 ---
 
