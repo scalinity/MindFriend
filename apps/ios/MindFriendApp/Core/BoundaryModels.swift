@@ -7,6 +7,8 @@
 //
 
 import Foundation
+import LocalizedStringKey
+import SwiftUI
 
 // MARK: - Assessment Models
 
@@ -162,6 +164,24 @@ struct BoundaryScript: Codable {
         case text
         case toneDescription = "tone_description"
         case templateId = "template_id"
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        // Try to decode variation as enum first, then as string
+        if let variationEnum = try container.decodeIfPresent(ScriptVariation.self, forKey: .variation) {
+            self.variation = variationEnum
+        } else if let variationString = try container.decodeIfPresent(String.self, forKey: .variation),
+                  let variationEnum = ScriptVariation(rawValue: variationString) {
+            self.variation = variationEnum
+        } else {
+            throw DecodingError.dataCorruptedError(forKey: .variation, in: container, debugDescription: "Cannot decode variation")
+        }
+        
+        self.text = try container.decode(String.self, forKey: .text)
+        self.toneDescription = try container.decode(String.self, forKey: .toneDescription)
+        self.templateId = try container.decodeIfPresent(UUID.self, forKey: .templateId)
     }
 }
 
@@ -354,6 +374,31 @@ struct ScriptResponse: Codable {
     let script: String
     let toneDescription: String
     let tips: [String]
+    
+    enum CodingKeys: String, CodingKey {
+        case variation
+        case script
+        case toneDescription = "tone_description"
+        case tips
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        // Try to decode variation as enum first, then as string
+        if let variationEnum = try container.decodeIfPresent(ScriptVariation.self, forKey: .variation) {
+            self.variation = variationEnum
+        } else if let variationString = try container.decodeIfPresent(String.self, forKey: .variation),
+                  let variationEnum = ScriptVariation(rawValue: variationString) {
+            self.variation = variationEnum
+        } else {
+            throw DecodingError.dataCorruptedError(forKey: .variation, in: container, debugDescription: "Cannot decode variation")
+        }
+        
+        self.script = try container.decode(String.self, forKey: .script)
+        self.toneDescription = try container.decode(String.self, forKey: .toneDescription)
+        self.tips = try container.decode([String].self, forKey: .tips)
+    }
 }
 
 struct SaveBoundaryResponse: Codable {
@@ -387,6 +432,7 @@ struct BoundaryListItem: Codable, Identifiable {
     let statementText: String
     let whyMatters: String?
     let stakeholder: String?
+    let expectedImpact: String?
     let status: BoundaryStatus
     let practiceCount: Int
     let createdAt: Date
@@ -399,6 +445,7 @@ struct BoundaryListItem: Codable, Identifiable {
         case statementText = "statement_text"
         case whyMatters = "why_matters"
         case stakeholder
+        case expectedImpact = "expected_impact"
         case status
         case practiceCount = "practice_count"
         case createdAt = "created_at"
@@ -421,8 +468,6 @@ struct RecordOutcomeResponse: Codable {
 }
 
 // MARK: - SwiftUI Extensions
-
-import SwiftUI
 
 extension BoundaryType {
     var colorScheme: Color {
