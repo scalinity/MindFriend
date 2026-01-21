@@ -27,7 +27,7 @@ interface Boundary {
 function validateTransition(
   currentStatus: string,
   newStatus: string,
-  boundary: Boundary,
+  boundary: any,
 ): { valid: boolean; error?: string; allowedStates?: string[] } {
   // Allow archiving from any state
   if (newStatus === "archived") {
@@ -39,7 +39,7 @@ function validateTransition(
     if (!boundary.scripts || boundary.scripts.length === 0) {
       return {
         valid: false,
-        error: "Scripts must be generated before marking as ready",
+        error: "Cannot transition to 'ready' without scripts",
         allowedStates: ["draft", "archived"],
       };
     }
@@ -167,46 +167,63 @@ serve(async (req) => {
       });
     }
 
-    // Check for auto-transition to practiced
-    if (shouldAutoTransitionToPracticed(boundary)) {
-      // Auto-update to practiced status
-      const { error: autoUpdateError } = await supabase
+    const originalStatus = boundary.status;
+
+    // Check if auto-transition is eligible (but don't apply yet)
+    const canAutoTransition = shouldAutoTransitionToPracticed(boundary);
+
+    // If user explicitly requests practiced and auto-transition is ready, allow it
+    if (canAutoTransition && body.status === "practiced") {
+      const { data: updatedBoundary, error: updateError } = await supabase
         .from("defined_boundaries")
         .update({ status: "practiced" })
-        .eq("id", body.boundaryId);
+        .eq("id", body.boundaryId)
+        .eq("status", "ready")
+        .select()
+        .single();
 
-      if (!autoUpdateError) {
-        boundary.status = "practiced";
+      if (!updateError && updatedBoundary) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            boundary: {
+              id: updatedBoundary.id,
+              status: updatedBoundary.status,
+              updated_at: updatedBoundary.updated_at,
+            },
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
       }
     }
 
-    // Validate state transition
-    const validation = validateTransition(
-      boundary.status,
-      body.status,
-      boundary,
-    );
+    // Validate transition from ORIGINAL status (not auto-transitioned)
+    const validation = validateTransition(originalStatus, body.status, boundary);
 
     if (!validation.valid) {
+      const allowedStates = validation.allowedStates || [];
+      if (canAutoTransition && !allowedStates.includes("practiced")) {
+        allowedStates.push("practiced");
+      }
+
       return new Response(
         JSON.stringify({
           error: validation.error,
-          current: boundary.status,
+          current: originalStatus,
           requested: body.status,
-          allowed: validation.allowedStates,
+          allowed: allowedStates,
+          autoTransitionAvailable: canAutoTransition,
         }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    // Update boundary status
+    // Apply user-requested transition with defensive WHERE clause
     const { data: updatedBoundary, error: updateError } = await supabase
       .from("defined_boundaries")
       .update({ status: body.status })
       .eq("id", body.boundaryId)
+      .eq("status", originalStatus)
       .select()
       .single();
 

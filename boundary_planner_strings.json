@@ -1,0 +1,1013 @@
+{
+  "assessment.title": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Needs Assessment" } }
+    }
+  },
+  "assessment.analyzing": {
+    "localizations": {
+      "en": {
+        "stringUnit": { "state": "new", "value": "Analyzing your needs..." }
+      }
+    }
+  },
+  "assessment.error_title": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Error" } }
+    }
+  },
+  "assessment.step1_prompt": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "What's draining your energy?"
+        }
+      }
+    }
+  },
+  "assessment.step1_description": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "Select all that apply. There are no wrong answers."
+        }
+      }
+    }
+  },
+  "assessment.drain_work_stress": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Work stress" } }
+    }
+  },
+  "assessment.drain_relationship_conflict": {
+    "localizations": {
+      "en": {
+        "stringUnit": { "state": "new", "value": "Relationship conflict" }
+      }
+    }
+  },
+  "assessment.drain_overcommitment": {
+    "localizations": {
+      "en": {
+        "stringUnit": { "state": "new", "value": "Too many commitments" }
+      }
+    }
+  },
+  "assessment.drain_lack_rest": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Lack of rest" } }
+    }
+  },
+  "assessment.drain_financial_worry": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Financial worry" } }
+    }
+  },
+  "assessment.drain_health_concern": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Health concerns" } }
+    }
+  },
+  "assessment.step2_prompt": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "How important are these needs to you?"
+        }
+      }
+    }
+  },
+  "assessment.step2_description": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "Rate each need on a scale of low to high importance."
+        }
+      }
+    }
+  },
+  "assessment.need_autonomy": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Autonomy" } }
+    }
+  },
+  "assessment.need_rest": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Rest" } }
+    }
+  },
+  "assessment.need_connection": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Connection" } }
+    }
+  },
+  "assessment.need_achievement": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Achievement" } }
+    }
+  },
+  "assessment.need_safety": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Safety" } }
+    }
+  },
+  "assessment.need_creativity": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Creativity" } }
+    }
+  },
+  "assessment.importance_low": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Low" } }
+    }
+  },
+  "assessment.importance_medium": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Medium" } }
+    }
+  },
+  "assessment.importance_high": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "High" } }
+    }
+  },
+  "assessment.step3_prompt": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "How well are these needs currently being met?"
+        }
+      }
+    }
+  },
+  "assessment.step3_description": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "Be honest with yourself about where you are right now."
+        }
+      }
+    }
+  },
+  "assessment.currently_met_no": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "No" } }
+    }
+  },
+  "assessment.currently_met_sometimes": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Sometimes" } }
+    }
+  },
+  "assessment.currently_met_yes": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Yes" } }
+    }
+  },
+  "assessment.step4_prompt": {
+    "localizations": {
+      "en": {
+        "stringUnit": { "state": "new", "value": "Confirm your priority needs" }
+      }
+    }
+  },
+  "assessment.step4_description": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "These are the needs with the biggest gaps. Select the ones you want to focus on."
+        }
+      }
+    }
+  },
+  "assessment.submit": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Complete Assessment" } }
+    }
+  },
+  "common.cancel": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Cancel" } }
+    }
+  },
+  "common.ok": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "OK" } }
+    }
+  },
+  "common.next": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Next" } }
+    }
+  },
+  "common.back": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Back" } }
+    }
+  },
+  "list.title": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Boundaries" } }
+    }
+  },
+  "list.button_new": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "New Boundary" } }
+    }
+  },
+  "list.empty_state": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "You haven't created any boundaries yet. Start with a needs assessment to identify where boundaries could help."
+        }
+      }
+    }
+  },
+  "list.filter_all": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "All" } }
+    }
+  },
+  "list.filter_active": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Active" } }
+    }
+  },
+  "list.practice_count": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "%lld practices" } }
+    }
+  },
+  "list.has_followup": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Follow-up due" } }
+    }
+  },
+  "definition.title": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Define Boundary" } }
+    }
+  },
+  "definition.type_label": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Boundary Type" } }
+    }
+  },
+  "definition.type_header": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Type" } }
+    }
+  },
+  "definition.type_time": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Time" } }
+    }
+  },
+  "definition.type_emotional": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Emotional" } }
+    }
+  },
+  "definition.type_digital": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Digital" } }
+    }
+  },
+  "definition.type_physical": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Physical" } }
+    }
+  },
+  "definition.type_financial": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Financial" } }
+    }
+  },
+  "definition.type_time_description": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "Protect your time and schedule"
+        }
+      }
+    }
+  },
+  "definition.type_emotional_description": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "Set limits on emotional labor and energy"
+        }
+      }
+    }
+  },
+  "definition.type_digital_description": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "Manage screen time and digital demands"
+        }
+      }
+    }
+  },
+  "definition.type_physical_description": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "Maintain personal space and physical limits"
+        }
+      }
+    }
+  },
+  "definition.type_financial_description": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "Set limits on spending and financial requests"
+        }
+      }
+    }
+  },
+  "definition.statement_header": {
+    "localizations": {
+      "en": {
+        "stringUnit": { "state": "new", "value": "Your Boundary Statement" }
+      }
+    }
+  },
+  "definition.statement_placeholder": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "I need to..." } }
+    }
+  },
+  "definition.statement_footer": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "Be specific and clear about what you need"
+        }
+      }
+    }
+  },
+  "definition.why_matters_header": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Why It Matters" } }
+    }
+  },
+  "definition.why_matters_placeholder": {
+    "localizations": {
+      "en": {
+        "stringUnit": { "state": "new", "value": "This matters because..." }
+      }
+    }
+  },
+  "definition.why_matters_footer": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "Understanding why helps you stay committed"
+        }
+      }
+    }
+  },
+  "definition.stakeholder_header": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Who (Optional)" } }
+    }
+  },
+  "definition.stakeholder_placeholder": {
+    "localizations": {
+      "en": {
+        "stringUnit": { "state": "new", "value": "My partner, my boss, etc." }
+      }
+    }
+  },
+  "definition.stakeholder_footer": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "Who will this boundary affect?"
+        }
+      }
+    }
+  },
+  "definition.templates_header": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Templates" } }
+    }
+  },
+  "definition.generate": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Generate Scripts" } }
+    }
+  },
+  "definition.error_title": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Error" } }
+    }
+  },
+  "scripts.title": {
+    "localizations": {
+      "en": {
+        "stringUnit": { "state": "new", "value": "Communication Scripts" }
+      }
+    }
+  },
+  "scripts.error_title": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Error" } }
+    }
+  },
+  "scripts.practice": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Practice" } }
+    }
+  },
+  "scripts.relationship_type_label": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Relationship Type" } }
+    }
+  },
+  "scripts.relationship_type_header": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "Who will you communicate this to?"
+        }
+      }
+    }
+  },
+  "scripts.relationship_type_footer": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "We'll tailor the script to this relationship"
+        }
+      }
+    }
+  },
+  "scripts.variations_header": {
+    "localizations": {
+      "en": {
+        "stringUnit": { "state": "new", "value": "Communication Styles" }
+      }
+    }
+  },
+  "scripts.variations_footer": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "Select all that you want to see"
+        }
+      }
+    }
+  },
+  "scripts.variation_direct": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Direct" } }
+    }
+  },
+  "scripts.variation_gentle": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Gentle" } }
+    }
+  },
+  "scripts.variation_assertive": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Assertive" } }
+    }
+  },
+  "scripts.variation_email": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Email" } }
+    }
+  },
+  "scripts.variation_direct_description": {
+    "localizations": {
+      "en": {
+        "stringUnit": { "state": "new", "value": "Clear and straightforward" }
+      }
+    }
+  },
+  "scripts.variation_gentle_description": {
+    "localizations": {
+      "en": {
+        "stringUnit": { "state": "new", "value": "Soft and considerate" }
+      }
+    }
+  },
+  "scripts.variation_assertive_description": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Firm and confident" } }
+    }
+  },
+  "scripts.variation_email_description": {
+    "localizations": {
+      "en": {
+        "stringUnit": { "state": "new", "value": "Written communication" }
+      }
+    }
+  },
+  "scripts.generate": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Generate Scripts" } }
+    }
+  },
+  "scripts.generating": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Generating..." } }
+    }
+  },
+  "scripts.generated_count": {
+    "localizations": {
+      "en": {
+        "stringUnit": { "state": "new", "value": "Generated %lld scripts" }
+      }
+    }
+  },
+  "scripts.practice_prompts_header": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Practice Prompts" } }
+    }
+  },
+  "scripts.copied": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Copied" } }
+    }
+  },
+  "scripts.copy": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Copy" } }
+    }
+  },
+  "followup.title": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Check-In" } }
+    }
+  },
+  "followup.outcome_label": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "How did it go?" } }
+    }
+  },
+  "followup.outcome_header": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Outcome" } }
+    }
+  },
+  "followup.outcome_successful": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Successful" } }
+    }
+  },
+  "followup.outcome_partially_successful": {
+    "localizations": {
+      "en": {
+        "stringUnit": { "state": "new", "value": "Partially Successful" }
+      }
+    }
+  },
+  "followup.outcome_challenged": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Challenged" } }
+    }
+  },
+  "followup.outcome_ignored": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Not Respected" } }
+    }
+  },
+  "followup.outcome_successful_description": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "The boundary was respected and felt good"
+        }
+      }
+    }
+  },
+  "followup.outcome_partially_successful_description": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "It mostly worked but could be improved"
+        }
+      }
+    }
+  },
+  "followup.outcome_challenged_description": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "Someone pushed back or tested the boundary"
+        }
+      }
+    }
+  },
+  "followup.outcome_ignored_description": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "The boundary wasn't respected"
+        }
+      }
+    }
+  },
+  "followup.notes_header": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "What Happened?" } }
+    }
+  },
+  "followup.notes_placeholder": {
+    "localizations": {
+      "en": {
+        "stringUnit": { "state": "new", "value": "Describe what happened..." }
+      }
+    }
+  },
+  "followup.notes_footer": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "Record the details for future reference"
+        }
+      }
+    }
+  },
+  "followup.reflection_header": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "How Do You Feel?" } }
+    }
+  },
+  "followup.reflection_placeholder": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "I feel..." } }
+    }
+  },
+  "followup.reflection_footer": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "Reflect on your emotions and reactions"
+        }
+      }
+    }
+  },
+  "followup.next_action_header": {
+    "localizations": {
+      "en": {
+        "stringUnit": { "state": "new", "value": "Next Steps (Optional)" }
+      }
+    }
+  },
+  "followup.next_action_placeholder": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "I will..." } }
+    }
+  },
+  "followup.next_action_footer": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "What adjustments might help?"
+        }
+      }
+    }
+  },
+  "followup.submit": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Save Check-In" } }
+    }
+  },
+  "followup.recording": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Saving..." } }
+    }
+  },
+  "followup.success_title": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Check-In Saved" } }
+    }
+  },
+  "followup.suggestions_header": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Suggestions" } }
+    }
+  },
+  "followup.error_title": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Error" } }
+    }
+  },
+  "priority_matrix.title": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Your Needs" } }
+    }
+  },
+  "priority_matrix.subtitle": {
+    "localizations": {
+      "en": {
+        "stringUnit": { "state": "new", "value": "Based on your assessment" }
+      }
+    }
+  },
+  "priority_matrix.identified_needs_header": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Priority Needs" } }
+    }
+  },
+  "priority_matrix.gap_score": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Gap: %lld" } }
+    }
+  },
+  "priority_matrix.importance": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Importance" } }
+    }
+  },
+  "priority_matrix.currently_met": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Currently Met" } }
+    }
+  },
+  "priority_matrix.recommendations_header": {
+    "localizations": {
+      "en": {
+        "stringUnit": { "state": "new", "value": "Boundary Recommendations" }
+      }
+    }
+  },
+  "priority_matrix.next_steps_header": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Next Steps" } }
+    }
+  },
+  "priority_matrix.next_step_define": {
+    "localizations": {
+      "en": {
+        "stringUnit": { "state": "new", "value": "Define Your Boundary" }
+      }
+    }
+  },
+  "priority_matrix.next_step_define_description": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "Create a clear boundary statement"
+        }
+      }
+    }
+  },
+  "priority_matrix.next_step_scripts": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Generate Scripts" } }
+    }
+  },
+  "priority_matrix.next_step_scripts_description": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "Get communication scripts for different situations"
+        }
+      }
+    }
+  },
+  "priority_matrix.next_step_practice": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Practice" } }
+    }
+  },
+  "priority_matrix.next_step_practice_description": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "Rehearse your boundary conversation"
+        }
+      }
+    }
+  },
+  "priority_matrix.navigation_title": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Needs Assessment" } }
+    }
+  },
+  "practice.title": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Practice" } }
+    }
+  },
+  "practice.context_header": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Your Boundary" } }
+    }
+  },
+  "practice.options_header": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "How Would You Like to Practice?"
+        }
+      }
+    }
+  },
+  "practice.option_guided_title": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Guided Practice" } }
+    }
+  },
+  "practice.option_guided_description": {
+    "localizations": {
+      "en": {
+        "stringUnit": { "state": "new", "value": "Follow step-by-step prompts" }
+      }
+    }
+  },
+  "practice.option_free_title": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Free Practice" } }
+    }
+  },
+  "practice.option_free_description": {
+    "localizations": {
+      "en": {
+        "stringUnit": { "state": "new", "value": "Practice at your own pace" }
+      }
+    }
+  },
+  "practice.option_roleplay_title": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Role Play with AI" } }
+    }
+  },
+  "practice.option_roleplay_description": {
+    "localizations": {
+      "en": {
+        "stringUnit": { "state": "new", "value": "Simulate the conversation" }
+      }
+    }
+  },
+  "practice.recommended_badge": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Recommended" } }
+    }
+  },
+  "practice.history_header": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Practice History" } }
+    }
+  },
+  "practice.history_count": {
+    "localizations": {
+      "en": {
+        "stringUnit": { "state": "new", "value": "Practiced %lld times" }
+      }
+    }
+  },
+  "practice.history_ready_badge": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Ready to Set" } }
+    }
+  },
+  "practice.tips_header": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Tips" } }
+    }
+  },
+  "practice.tip_start_simple": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "Start with easier conversations before tackling difficult ones"
+        }
+      }
+    }
+  },
+  "practice.tip_repetition": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "Repetition builds confidence and makes it feel more natural"
+        }
+      }
+    }
+  },
+  "practice.tip_body_language": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "Practice your body language and tone, not just the words"
+        }
+      }
+    }
+  },
+  "practice.tip_self_compassion": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "Be kind to yourself - setting boundaries takes courage"
+        }
+      }
+    }
+  },
+  "detail.title": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Boundary" } }
+    }
+  },
+  "detail.not_found_title": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Boundary Not Found" } }
+    }
+  },
+  "detail.not_found_description": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "new",
+          "value": "This boundary may have been deleted"
+        }
+      }
+    }
+  },
+  "detail.statement_header": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Statement" } }
+    }
+  },
+  "detail.why_matters_header": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Why It Matters" } }
+    }
+  },
+  "detail.progress_header": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Progress" } }
+    }
+  },
+  "detail.status": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Status" } }
+    }
+  },
+  "detail.practice_count": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Practice Count" } }
+    }
+  },
+  "detail.actions_header": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Actions" } }
+    }
+  },
+  "detail.action_scripts": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Generate Scripts" } }
+    }
+  },
+  "detail.action_practice": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Practice" } }
+    }
+  },
+  "detail.action_followup": {
+    "localizations": {
+      "en": { "stringUnit": { "state": "new", "value": "Schedule Check-In" } }
+    }
+  }
+}

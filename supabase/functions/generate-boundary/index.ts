@@ -48,7 +48,7 @@ async function checkTierLimit(
   supabase: any,
   userId: string,
 ): Promise<{ allowed: boolean; count: number }> {
-  // Check user's subscription tier
+  // Check subscription tier
   const { data: subscription } = await supabase
     .from("subscriptions")
     .select("subscription_tier")
@@ -57,12 +57,12 @@ async function checkTierLimit(
 
   const tier = subscription?.subscription_tier || "free";
 
-  // Premium users have no limit
+  // Premium users have unlimited boundaries
   if (tier === "premium") {
     return { allowed: true, count: 0 };
   }
 
-  // Count existing non-archived boundaries
+  // Count non-archived boundaries for free tier users
   const { count, error } = await supabase
     .from("defined_boundaries")
     .select("*", { count: "exact", head: true })
@@ -71,12 +71,11 @@ async function checkTierLimit(
 
   if (error) {
     console.error("Error counting boundaries:", error);
-    return { allowed: true, count: 0 }; // Fail open
+    // Fail closed - deny access if we can't verify tier
+    throw new Error("Unable to verify tier limits. Please try again.");
   }
 
   const currentCount = count || 0;
-
-  // Free tier: max 3 boundaries
   return { allowed: currentCount < 3, count: currentCount };
 }
 
