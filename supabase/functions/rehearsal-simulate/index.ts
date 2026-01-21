@@ -246,17 +246,10 @@ async function handleCreateScenario(
     throw new Error("Must have 1-5 key points");
   }
 
-  // Check weekly quota
-  const quota = await checkRehearsalQuota(userId, supabaseUser, supabaseAdmin);
-  if (!quota.canCreate) {
-    return {
-      error: "quota_exceeded",
-      message: "Weekly rehearsal limit reached",
-      upgradePrompt: true,
-      quotaUsed: quota.used,
-      quotaLimit: quota.limit,
-    };
-  }
+  // Bug fix #9: Removed quota check from scenario creation
+  // Creating scenarios is FREE (just planning). Quota only consumed when starting session (actual AI usage).
+  // This fixes double-charging bug: was 1 quota for create + 1 for start = 2 total
+  // Now: 0 for create + 1 for start = 1 total (correct)
 
   // Crisis detection
   const fullText = `${title} ${description} ${keyPoints.join(" ")} ${desiredOutcome}`;
@@ -277,16 +270,26 @@ async function handleCreateScenario(
     };
   }
 
-  // Create scenario
+  // SECURITY: Sanitize all scenario fields to prevent prompt injection
+  // These fields are later injected into AI system prompts, so must be sanitized
+  const sanitizedTitle = sanitizeForPrompt(title.trim());
+  const sanitizedPersonRole = sanitizeForPrompt(personRole.trim());
+  const sanitizedDescription = sanitizeForPrompt(description.trim());
+  const sanitizedKeyPoints = keyPoints.map((kp: string) =>
+    sanitizeForPrompt(kp),
+  );
+  const sanitizedDesiredOutcome = sanitizeForPrompt(desiredOutcome.trim());
+
+  // Create scenario with sanitized data
   const { data: scenario, error } = await supabaseUser
     .from("custom_scenarios")
     .insert({
       user_id: userId,
-      title: title.trim(),
-      other_party_role: personRole.trim(),
-      situation_summary: description.trim(),
-      key_points: keyPoints,
-      desired_outcome: desiredOutcome.trim(),
+      title: sanitizedTitle,
+      other_party_role: sanitizedPersonRole,
+      situation_summary: sanitizedDescription,
+      key_points: sanitizedKeyPoints,
+      desired_outcome: sanitizedDesiredOutcome,
       situation_type: situationType || "other",
     })
     .select()
@@ -478,8 +481,12 @@ async function handleSendMessage(
   const scenario = session.conversation_scenarios || session.custom_scenarios;
   const systemPrompt = ROLE_SIMULATION_PROMPT(scenario);
 
-  // Parse existing transcript
-  const transcript = session.transcript ? JSON.parse(session.transcript) : [];
+  // Parse existing transcript (with null safety)
+  let transcript = session.transcript ? JSON.parse(session.transcript) : [];
+  // Bug fix #10: Ensure transcript is actually an array (handles corrupted "null", "{}", etc.)
+  if (!Array.isArray(transcript)) {
+    transcript = [];
+  }
   transcript.push({
     role: "user",
     content: message,
@@ -812,4 +819,15 @@ function getCrisisResources() {
       available: "24/7",
     },
   ];
+}
+
+// Sanitize user input before using in AI prompts to prevent prompt injection
+function sanitizeForPrompt(input: string): string {
+  const MAX_LENGTH = 1000;
+  return input
+    .replace(/[\x00-\x1F\x7F]/g, "") // Remove control characters
+    .replace(/\{system\}/gi, "[system]") // Escape system markers
+    .replace(/\{assistant\}/gi, "[assistant]") // Escape assistant markers
+    .replace(/\{user\}/gi, "[user]") // Escape user markers
+    .slice(0, MAX_LENGTH); // Enforce length limit
 }
