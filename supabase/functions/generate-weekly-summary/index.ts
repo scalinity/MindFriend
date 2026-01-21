@@ -399,6 +399,78 @@ async function processUserWithInsights(
 
   const aiInsight = await generateAIInsight(insightContext, xaiApiKey);
 
+  // Aggregate cognitive distortions for this week
+  const { data: distortionData, error: distortionError } = await supabase
+    .from("distortion_encounters")
+    .select("distortion_code")
+    .eq("user_id", userId)
+    .gte("occurred_at", `${weekStartStr}T00:00:00Z`)
+    .lt(
+      "occurred_at",
+      new Date(
+        new Date(weekStartStr).getTime() + 7 * 24 * 60 * 60 * 1000,
+      ).toISOString(),
+    );
+
+  if (distortionError) {
+    console.error("Error fetching distortions for", userId, distortionError);
+  }
+
+  // Count distortions by code
+  const distortionCounts: Record<string, number> = {};
+  (distortionData || []).forEach((encounter: { distortion_code: string }) => {
+    distortionCounts[encounter.distortion_code] =
+      (distortionCounts[encounter.distortion_code] || 0) + 1;
+  });
+
+  // Determine new patterns (distortions not seen in previous weeks)
+  const { data: previousWeekDistortions } = await supabase
+    .from("distortion_encounters")
+    .select("DISTINCT distortion_code")
+    .eq("user_id", userId)
+    .lt("occurred_at", `${weekStartStr}T00:00:00Z`);
+
+  const previousCodes = new Set(
+    (previousWeekDistortions || []).map(
+      (d: { distortion_code: string }) => d.distortion_code,
+    ),
+  );
+
+  const newPatterns = Object.keys(distortionCounts).filter(
+    (code) => !previousCodes.has(code),
+  );
+
+  // Upsert into weekly_pattern_summaries if there are distortions
+  if (Object.keys(distortionCounts).length > 0) {
+    const { error: patternError } = await supabase
+      .from("weekly_pattern_summaries")
+      .upsert(
+        {
+          user_id: userId,
+          week_start: weekStartStr,
+          distortion_counts: distortionCounts,
+          new_patterns: newPatterns,
+          total_encounters: Object.values(distortionCounts).reduce(
+            (a, b) => a + b,
+            0,
+          ),
+          generated_at: now.toISOString(),
+        },
+        {
+          onConflict: "user_id,week_start",
+        },
+      );
+
+    if (patternError) {
+      console.error(
+        "Error upserting pattern summary for",
+        userId,
+        patternError,
+      );
+      // Don't throw - this is secondary data, don't block weekly summary
+    }
+  }
+
   // Upsert weekly summary with all extended data
   const { error: upsertError } = await supabase.from("weekly_summaries").upsert(
     {
