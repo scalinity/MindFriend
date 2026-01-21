@@ -769,6 +769,15 @@ serve(async (req) => {
       // Fetch coach settings for this user (with 5-minute cache)
       const coachSettings = await getCachedCoachSettings(supabaseAdmin, user.id);
 
+      // Fetch user's language preference
+      const { data: userProfile } = await supabaseAdmin
+        .from("profiles")
+        .select("preferred_language")
+        .eq("id", user.id)
+        .single();
+
+      const userLanguage = userProfile?.preferred_language || "en";
+
       // Check if coach is enabled
       const isCoachEnabled = coachSettings?.is_enabled !== false; // Default to enabled
 
@@ -818,7 +827,7 @@ serve(async (req) => {
             const threshold = getSensitivityThreshold(sensitivityLevel);
 
             // Run detection on user's message
-            const detection = detectDistortion(trimmedContent, "en", threshold);
+            const detection = detectDistortion(trimmedContent, userLanguage, threshold);
 
             if (detection) {
               // Check if this distortion is disabled
@@ -829,7 +838,7 @@ serve(async (req) => {
                   supabaseAdmin,
                   detection.distortionCode,
                   trimmedContent,
-                  "en" // TODO: Use user's language preference
+                  userLanguage
                 );
 
                 if (reframe) {
