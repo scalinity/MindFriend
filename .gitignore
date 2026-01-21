@@ -99,3 +99,10 @@ MindFriend_*_Changes.md
 # Work-in-progress docs and migrations
 docs/specs/
 logo.png
+
+# Large ML training files and Python environments
+emotion_model_training/venv/
+emotion_model_training/
+venv311/
+ravdess.zip
+*.zip

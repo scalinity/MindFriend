@@ -260,6 +260,10 @@ final class BoundaryPracticeViewModel: ObservableObject {
 
     @Published var showRehearsalStudio = false
     @Published var selectedPracticeMode: PracticeMode?
+    @Published var isLoading = false
+    @Published var error: Error?
+    @Published var selectedScenarioId: String?
+    @Published var showPracticeMode = false
 
     var practiceCount: Int {
         boundary.practiceCount
