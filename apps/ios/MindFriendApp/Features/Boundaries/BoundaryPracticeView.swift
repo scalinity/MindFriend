@@ -286,21 +286,47 @@ final class BoundaryPracticeViewModel: ObservableObject {
     }
 
     private func createCustomScenarioAndNavigate() {
-        // TODO: Create custom_scenarios record via Supabase
-        // This will trigger the practice count increment via database trigger
-        // Then navigate to Conversation Rehearsal Studio with the scenario ID
-
-        // For now, just show the sheet
-        showRehearsalStudio = true
-
-        // Implementation note:
-        // 1. Call Supabase to create custom_scenarios record:
-        //    - source_feature: "boundary_planner"
-        //    - source_id: boundary.id
-        //    - scenario_type: based on selectedPracticeMode
-        //    - context: boundary statement + script
-        // 2. Database trigger will auto-increment boundary.practice_count
-        // 3. Navigate to Conversation Rehearsal with scenario ID
+        isLoading = true
+        Task {
+            do {
+                let supabase = DependencyContainer.shared.supabaseClient
+                guard let userId = supabase.auth.currentUser?.id.uuidString else {
+                    throw BoundaryPlannerError.unauthorized
+                }
+                
+                // Create custom scenario record in custom_scenarios table
+                let scenarioData: [String: AnyCodable] = [
+                    "user_id": .init(userId),
+                    "scenario_type": .init("boundary_practice"),
+                    "title": .init(boundary.statementText),
+                    "description": .init("Practice: " + boundary.statementText),
+                    "context": .init(boundary.expectedImpact ?? ""),
+                    "difficulty_level": .init("medium"),
+                    "source_feature": .init("boundary_planner"),
+                    "source_id": .init(boundary.id.uuidString)
+                ]
+                
+                let response = try await supabase
+                    .from("custom_scenarios")
+                    .insert(scenarioData)
+                    .select()
+                    .single()
+                    .execute()
+                
+                if let data = response.data {
+                    if let scenarioId = data["id"] as? String {
+                        selectedScenarioId = scenarioId
+                        showPracticeMode = true
+                        // Practice count will be auto-incremented by trigger
+                    }
+                }
+                
+                isLoading = false
+            } catch {
+                self.error = error
+                isLoading = false
+            }
+        }
     }
 }
 

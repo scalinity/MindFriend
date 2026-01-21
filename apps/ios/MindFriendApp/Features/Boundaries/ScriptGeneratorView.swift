@@ -174,53 +174,75 @@ struct ScriptGeneratorView: View {
 
 struct ScriptCard: View {
     let script: BoundaryScript
-
-    @State private var isCopied = false
-
+    @State var isCopied = false
+    
+    var variation: ScriptVariation {
+        switch script.variation.lowercased() {
+        case "direct": return .direct
+        case "gentle": return .gentle
+        case "assertive": return .assertive
+        case "collaborative": return .collaborative
+        default: return .direct
+        }
+    }
+    
+    var variationColor: Color {
+        switch variation {
+        case .direct: return .red
+        case .gentle: return .green
+        case .assertive: return .orange
+        case .collaborative: return .blue
+        }
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Variation badge
             HStack {
-                Text(script.variation.displayName)
+                Text(variation.displayName)
                     .font(.caption)
                     .fontWeight(.semibold)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(script.variation.color.opacity(0.2))
-                    .foregroundStyle(script.variation.color)
-                    .cornerRadius(8)
-
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(variationColor)
+                    .cornerRadius(6)
+                
                 Spacer()
-
-                Button {
-                    UIPasteboard.general.string = script.scriptText
-                    isCopied = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                        isCopied = false
-                    }
-                } label: {
-                    Label(
-                        isCopied ? "scripts.copied" : "scripts.copy",
-                        systemImage: isCopied ? "checkmark" : "doc.on.doc"
-                    )
-                    .font(.caption)
+                
+                Button(action: { copyScript() }) {
+                    Image(systemName: isCopied ? "checkmark.circle.fill" : "doc.on.doc")
+                        .foregroundColor(variationColor)
                 }
-                .buttonStyle(.bordered)
             }
-
-            // Script text
-            Text(script.scriptText)
+            
+            Text(script.text)
                 .font(.body)
-                .foregroundStyle(.primary)
-                .padding()
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.gray.opacity(0.1))
-                .cornerRadius(8)
+                .lineLimit(nil)
+            
+            if let tips = script.tips {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Tips:")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                    ForEach(tips, id: \.self) { tip in
+                        Label(tip, systemImage: "lightbulb.fill")
+                            .font(.caption)
+                    }
+                }
+                .padding(.top, 8)
+            }
         }
         .padding()
-        .background(Color.white)
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+        .background(Color(.systemGray6))
+        .cornerRadius(10)
+    }
+    
+    private func copyScript() {
+        UIPasteboard.general.string = script.text
+        isCopied = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            isCopied = false
+        }
     }
 }
 
@@ -266,9 +288,7 @@ final class ScriptGeneratorViewModel: ObservableObject {
     }
 
     func navigateToPractice() {
-        // Navigate to Conversation Rehearsal with this boundary
-        // TODO: Integrate with Conversation Rehearsal feature
-        print("Navigate to practice with boundary: \(boundaryId)")
+        showPracticeView = true
     }
 }
 
@@ -278,26 +298,26 @@ extension ScriptVariation {
     var displayName: LocalizedStringKey {
         switch self {
         case .direct:
-            return "scripts.variation_direct"
+            return "scripts.variation.direct"
         case .gentle:
-            return "scripts.variation_gentle"
+            return "scripts.variation.gentle"
         case .assertive:
-            return "scripts.variation_assertive"
-        case .email:
-            return "scripts.variation_email"
+            return "scripts.variation.assertive"
+        case .collaborative:
+            return "scripts.variation.collaborative"
         }
     }
 
     var description: LocalizedStringKey {
         switch self {
         case .direct:
-            return "scripts.variation_direct_description"
+            return "scripts.variation.direct.description"
         case .gentle:
-            return "scripts.variation_gentle_description"
+            return "scripts.variation.gentle.description"
         case .assertive:
-            return "scripts.variation_assertive_description"
-        case .email:
-            return "scripts.variation_email_description"
+            return "scripts.variation.assertive.description"
+        case .collaborative:
+            return "scripts.variation.collaborative.description"
         }
     }
 
@@ -309,7 +329,7 @@ extension ScriptVariation {
             return .green
         case .assertive:
             return .orange
-        case .email:
+        case .collaborative:
             return .purple
         }
     }
