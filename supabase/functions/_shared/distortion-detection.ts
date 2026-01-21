@@ -189,6 +189,371 @@ const DISTORTION_PATTERNS_EN: DistortionKeywords[] = [
   },
 ];
 
+// Spanish (ES) patterns with culturally appropriate keywords
+const DISTORTION_PATTERNS_ES: DistortionKeywords[] = [
+  {
+    code: "AON",
+    keywords: {
+      siempre: 1.0,
+      nunca: 1.0,
+      todos: 0.9,
+      nadie: 0.9,
+      todo: 0.8,
+      nada: 0.8,
+      completamente: 0.7,
+      totalmente: 0.7,
+      jamás: 1.0,
+    },
+    phraseMultipliers: [
+      { pattern: /\b(siempre|nunca|jamás)\b/i, multiplier: 1.5 },
+      { pattern: /\b(todos|nadie)\b/i, multiplier: 1.4 },
+    ],
+  },
+  {
+    code: "CAT",
+    keywords: {
+      desastre: 1.0,
+      terrible: 0.8,
+      horrible: 0.8,
+      espantoso: 0.8,
+      peor: 1.0,
+      "todo va a": 0.7,
+      "se va a arruinar": 1.2,
+      arruinado: 1.0,
+      condenado: 1.0,
+      "caer todo": 1.2,
+    },
+    phraseMultipliers: [
+      { pattern: /\bpeor\s+(caso|escenario)\b/i, multiplier: 1.6 },
+      { pattern: /\b(arruinar|destruir)\b/i, multiplier: 1.5 },
+    ],
+  },
+  {
+    code: "MIND",
+    keywords: {
+      "piensan que": 1.0,
+      "deben pensar": 1.2,
+      "probablemente piensan": 1.2,
+      juzgando: 1.0,
+      "deben saber": 1.0,
+      "seguro piensan": 1.2,
+    },
+    phraseMultipliers: [
+      { pattern: /\b(deben|probablemente)\s+pensar\b/i, multiplier: 1.5 },
+    ],
+  },
+  {
+    code: "FORT",
+    keywords: {
+      "nunca voy a": 1.2,
+      "no va a funcionar": 1.0,
+      "va a fracasar": 1.2,
+      "sé que": 0.7,
+      "va a salir mal": 1.0,
+      "definitivamente va": 0.8,
+    },
+    phraseMultipliers: [
+      { pattern: /\bnunca\s+(voy|vas|va)\s+a\b/i, multiplier: 1.5 },
+      { pattern: /\bsé\s+que\s+(va|voy)\b/i, multiplier: 1.4 },
+    ],
+  },
+  {
+    code: "LAB",
+    keywords: {
+      "soy un": 0.9,
+      "soy una": 0.9,
+      perdedor: 1.0,
+      idiota: 1.0,
+      fracaso: 1.0,
+      "no valgo": 1.2,
+      estúpido: 0.9,
+      inútil: 1.0,
+    },
+    phraseMultipliers: [
+      { pattern: /\bsoy\s+(un|una)\s+\w+\b/i, multiplier: 1.4 },
+      { pattern: /\bno\s+valgo\b/i, multiplier: 1.5 },
+    ],
+  },
+  {
+    code: "SHO",
+    keywords: {
+      debería: 1.0,
+      debo: 1.0,
+      debemos: 0.9,
+      "tengo que": 0.8,
+      "se supone": 0.8,
+      obligado: 0.7,
+    },
+    phraseMultipliers: [
+      { pattern: /\b(debería|debo|debemos)\b/i, multiplier: 1.3 },
+    ],
+  },
+  {
+    code: "EMF",
+    keywords: {
+      "me siento": 1.0,
+      "se siente como": 0.9,
+      "debe ser": 0.8,
+      "tiene que ser": 0.8,
+    },
+    phraseMultipliers: [
+      {
+        pattern: /\bme\s+siento\s+\w+,?\s+entonces\s+(debe|tiene que)\b/i,
+        multiplier: 1.6,
+      },
+    ],
+  },
+  {
+    code: "MINS",
+    keywords: {
+      "no cuenta": 1.2,
+      "no importa": 0.9,
+      "solo suerte": 1.0,
+      casualidad: 1.0,
+      "fue suerte": 1.0,
+    },
+    phraseMultipliers: [
+      { pattern: /\bno\s+cuenta\b/i, multiplier: 1.5 },
+    ],
+  },
+  {
+    code: "BLAME",
+    keywords: {
+      "culpa de ellos": 1.2,
+      "toda mi culpa": 1.2,
+      "por culpa de": 1.0,
+      "si ellos": 0.8,
+      "me hicieron": 1.0,
+      "ellos me obligaron": 1.2,
+    },
+    phraseMultipliers: [
+      { pattern: /\btoda\s+(mi|su)\s+culpa\b/i, multiplier: 1.5 },
+    ],
+  },
+  {
+    code: "COMP",
+    keywords: {
+      "todos los demás": 1.0,
+      "mejor que": 0.8,
+      "peor que": 0.8,
+      "los demás": 0.9,
+    },
+    phraseMultipliers: [
+      { pattern: /\btodos\s+los\s+demás\b/i, multiplier: 1.4 },
+    ],
+  },
+  {
+    code: "RG",
+    keywords: {
+      "no debería haber": 1.2,
+      "si solo": 1.2,
+      "debería haber": 1.0,
+      lamento: 1.0,
+      ojalá: 0.8,
+      "me arrepiento": 1.2,
+    },
+    phraseMultipliers: [
+      { pattern: /\bsi\s+solo\b/i, multiplier: 1.5 },
+      { pattern: /\bdebería\s+haber\b/i, multiplier: 1.3 },
+    ],
+  },
+  {
+    code: "WHAT",
+    keywords: {
+      "qué tal si": 1.5,
+      "qué pasa si": 1.5,
+      "y si": 1.5,
+      podría: 0.6,
+      quizás: 0.5,
+    },
+    phraseMultipliers: [
+      { pattern: /\b(qué|y)\s+(tal\s+)?si\b/i, multiplier: 1.7 },
+    ],
+  },
+];
+
+// Portuguese (PT-BR) patterns with culturally appropriate keywords
+const DISTORTION_PATTERNS_PT_BR: DistortionKeywords[] = [
+  {
+    code: "AON",
+    keywords: {
+      sempre: 1.0,
+      nunca: 1.0,
+      todos: 0.9,
+      ninguém: 0.9,
+      tudo: 0.8,
+      nada: 0.8,
+      completamente: 0.7,
+      totalmente: 0.7,
+      jamais: 1.0,
+    },
+    phraseMultipliers: [
+      { pattern: /\b(sempre|nunca|jamais)\b/i, multiplier: 1.5 },
+      { pattern: /\b(todos|ninguém)\b/i, multiplier: 1.4 },
+    ],
+  },
+  {
+    code: "CAT",
+    keywords: {
+      desastre: 1.0,
+      terrível: 0.8,
+      horrível: 0.8,
+      péssimo: 0.8,
+      pior: 1.0,
+      "tudo vai": 0.7,
+      "vai arruinar": 1.2,
+      arruinado: 1.0,
+      condenado: 1.0,
+      "vai dar errado": 1.2,
+    },
+    phraseMultipliers: [
+      { pattern: /\bpior\s+(caso|cenário)\b/i, multiplier: 1.6 },
+      { pattern: /\b(arruinar|destruir)\b/i, multiplier: 1.5 },
+    ],
+  },
+  {
+    code: "MIND",
+    keywords: {
+      "pensam que": 1.0,
+      "devem pensar": 1.2,
+      "provavelmente pensam": 1.2,
+      julgando: 1.0,
+      "devem saber": 1.0,
+      "com certeza pensam": 1.2,
+    },
+    phraseMultipliers: [
+      { pattern: /\b(devem|provavelmente)\s+pensar\b/i, multiplier: 1.5 },
+    ],
+  },
+  {
+    code: "FORT",
+    keywords: {
+      "nunca vou": 1.2,
+      "não vai funcionar": 1.0,
+      "vai fracassar": 1.2,
+      "sei que": 0.7,
+      "vai dar errado": 1.0,
+      "definitivamente vai": 0.8,
+    },
+    phraseMultipliers: [
+      { pattern: /\bnunca\s+(vou|vai)\b/i, multiplier: 1.5 },
+      { pattern: /\bsei\s+que\s+(vai|vou)\b/i, multiplier: 1.4 },
+    ],
+  },
+  {
+    code: "LAB",
+    keywords: {
+      "sou um": 0.9,
+      "sou uma": 0.9,
+      perdedor: 1.0,
+      idiota: 1.0,
+      fracasso: 1.0,
+      "não valho": 1.2,
+      estúpido: 0.9,
+      inútil: 1.0,
+    },
+    phraseMultipliers: [
+      { pattern: /\bsou\s+(um|uma)\s+\w+\b/i, multiplier: 1.4 },
+      { pattern: /\bnão\s+valho\b/i, multiplier: 1.5 },
+    ],
+  },
+  {
+    code: "SHO",
+    keywords: {
+      deveria: 1.0,
+      devo: 1.0,
+      devemos: 0.9,
+      "tenho que": 0.8,
+      "é suposto": 0.8,
+      obrigado: 0.7,
+    },
+    phraseMultipliers: [
+      { pattern: /\b(deveria|devo|devemos)\b/i, multiplier: 1.3 },
+    ],
+  },
+  {
+    code: "EMF",
+    keywords: {
+      "me sinto": 1.0,
+      "sente como": 0.9,
+      "deve ser": 0.8,
+      "tem que ser": 0.8,
+    },
+    phraseMultipliers: [
+      {
+        pattern: /\bme\s+sinto\s+\w+,?\s+então\s+(deve|tem que)\b/i,
+        multiplier: 1.6,
+      },
+    ],
+  },
+  {
+    code: "MINS",
+    keywords: {
+      "não conta": 1.2,
+      "não importa": 0.9,
+      "só sorte": 1.0,
+      acaso: 1.0,
+      "foi sorte": 1.0,
+    },
+    phraseMultipliers: [
+      { pattern: /\bnão\s+conta\b/i, multiplier: 1.5 },
+    ],
+  },
+  {
+    code: "BLAME",
+    keywords: {
+      "culpa deles": 1.2,
+      "toda minha culpa": 1.2,
+      "por culpa de": 1.0,
+      "se eles": 0.8,
+      "me fizeram": 1.0,
+      "eles me obrigaram": 1.2,
+    },
+    phraseMultipliers: [
+      { pattern: /\btoda\s+(minha|sua)\s+culpa\b/i, multiplier: 1.5 },
+    ],
+  },
+  {
+    code: "COMP",
+    keywords: {
+      "todos os outros": 1.0,
+      "melhor que": 0.8,
+      "pior que": 0.8,
+      "os outros": 0.9,
+    },
+    phraseMultipliers: [
+      { pattern: /\btodos\s+os\s+outros\b/i, multiplier: 1.4 },
+    ],
+  },
+  {
+    code: "RG",
+    keywords: {
+      "não deveria ter": 1.2,
+      "se apenas": 1.2,
+      "deveria ter": 1.0,
+      lamento: 1.0,
+      queria: 0.8,
+      "me arrependo": 1.2,
+    },
+    phraseMultipliers: [
+      { pattern: /\bse\s+apenas\b/i, multiplier: 1.5 },
+      { pattern: /\bdeveria\s+ter\b/i, multiplier: 1.3 },
+    ],
+  },
+  {
+    code: "WHAT",
+    keywords: {
+      "e se": 1.5,
+      "o que se": 1.5,
+      poderia: 0.6,
+      talvez: 0.5,
+    },
+    phraseMultipliers: [
+      { pattern: /\be\s+se\b/i, multiplier: 1.7 },
+    ],
+  },
+];
+
 /**
  * Detects cognitive distortions in a message
  *
@@ -210,9 +575,11 @@ export function detectDistortion(
     return null;
   }
 
-  // TODO: Support ES/PT patterns (for now, fallback to EN)
+  // Select pattern set based on language
   const patterns =
-    language === "en" ? DISTORTION_PATTERNS_EN : DISTORTION_PATTERNS_EN;
+    language === "es" ? DISTORTION_PATTERNS_ES :
+    language === "pt-BR" ? DISTORTION_PATTERNS_PT_BR :
+    DISTORTION_PATTERNS_EN;
 
   // Calculate confidence for each distortion type
   const scores: { code: string; confidence: number; keywords: string[] }[] = [];
