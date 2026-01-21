@@ -184,6 +184,7 @@ final class BoundaryDefinitionViewModel: ObservableObject {
     @Published var stakeholder = ""
 
     @Published var templates: [BoundaryScriptTemplate] = []
+    @Published var isLoadingTemplates = false
     @Published var isGenerating = false
     @Published var error: Error?
     @Published var showError = false
@@ -199,19 +200,21 @@ final class BoundaryDefinitionViewModel: ObservableObject {
         self.service = service
     }
 
-    func loadTemplates() async {
+    func loadTemplates() {
         isLoadingTemplates = true
-        error = nil
-
-        do {
-            templates = try await service.getTemplates(boundaryType: selectedType)
-        } catch {
-            self.error = error
-            self.showError = true
-            print("Failed to load templates: \(error)")
+        Task {
+            do {
+                let service = DependencyContainer.shared.boundaryPlannerService
+                templates = try await service.getTemplates(
+                    boundaryType: selectedType.rawValue,
+                    relationshipType: stakeholder
+                )
+                isLoadingTemplates = false
+            } catch {
+                self.error = error as? BoundaryPlannerError ?? .unknown
+                isLoadingTemplates = false
+            }
         }
-
-        isLoadingTemplates = false
     }
 
     func applyTemplate(_ template: BoundaryScriptTemplate) {

@@ -361,8 +361,8 @@ struct Step3CurrentlyMetView: View {
 
 struct CurrentlyMetCard: View {
     let title: LocalizedStringKey
-    let status: CurrentlyMetStatus
-    let onStatusChange: (CurrentlyMetStatus) -> Void
+    let status: MetLevel
+    let onStatusChange: (MetLevel) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -371,7 +371,7 @@ struct CurrentlyMetCard: View {
                 .fontWeight(.medium)
 
             HStack(spacing: 8) {
-                ForEach([CurrentlyMetStatus.no, .sometimes, .yes], id: \.self) { statusOption in
+                ForEach([MetLevel.no, .sometimes, .yes], id: \.self) { statusOption in
                     Button {
                         onStatusChange(statusOption)
                     } label: {
@@ -501,7 +501,7 @@ final class NeedsAssessmentViewModel: ObservableObject {
     @Published var selectedAssessmentType: BoundaryAssessmentType = .work
     @Published var step1DrainTriggers: [String] = []
     @Published var step2ImportanceRatings: [String: ImportanceLevel] = [:]
-    @Published var step3CurrentlyMet: [String: CurrentlyMetStatus] = [:]
+    @Published var step3CurrentlyMet: [String: MetLevel] = [:]
     @Published var step4PriorityNeeds: [String] = []
 
     @Published var isSubmitting = false
@@ -546,7 +546,7 @@ final class NeedsAssessmentViewModel: ObservableObject {
         step2ImportanceRatings[need] = rating
     }
 
-    func setCurrentlyMet(_ need: String, status: CurrentlyMetStatus) {
+    func setCurrentlyMet(_ need: String, status: MetLevel) {
         step3CurrentlyMet[need] = status
     }
 
@@ -602,7 +602,7 @@ final class NeedsAssessmentViewModel: ObservableObject {
         isSubmitting = false
     }
 
-    private func calculateGapScore(importance: ImportanceLevel, currentlyMet: CurrentlyMetStatus) -> Int {
+    private func calculateGapScore(importance: ImportanceLevel, currentlyMet: MetLevel) -> Int {
         // Gap score matrix matching Edge Function logic
         switch (importance, currentlyMet) {
         case (.high, .no): return 9
@@ -640,30 +640,17 @@ enum ImportanceLevel: String, Codable {
     }
 }
 
-enum CurrentlyMetStatus: String, Codable {
-    case no, sometimes, yes
-
+extension BoundaryAssessmentType {
     var displayName: LocalizedStringKey {
         switch self {
-        case .no: return "assessment.currently_met_no"
-        case .sometimes: return "assessment.currently_met_sometimes"
-        case .yes: return "assessment.currently_met_yes"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .no: return "xmark"
-        case .sometimes: return "minus"
-        case .yes: return "checkmark"
-        }
-    }
-
-    var color: Color {
-        switch self {
-        case .no: return .red
-        case .sometimes: return .orange
-        case .yes: return .green
+        case .work:
+            return "assessment.type.work"
+        case .relationships:
+            return "assessment.type.relationships"
+        case .family:
+            return "assessment.type.family"
+        case .friends:
+            return "assessment.type.friends"
         }
     }
 }
