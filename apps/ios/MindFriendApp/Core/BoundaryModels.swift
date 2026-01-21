@@ -10,7 +10,7 @@ import Foundation
 
 // MARK: - Assessment Models
 
-enum AssessmentType: String, Codable, CaseIterable {
+enum BoundaryAssessmentType: String, Codable, CaseIterable {
     case work
     case relationships
     case family
@@ -46,7 +46,7 @@ struct AssessmentResponses: Codable {
 struct NeedsAssessment: Codable, Identifiable {
     let id: UUID
     let userId: UUID
-    let assessmentType: AssessmentType
+    let assessmentType: BoundaryAssessmentType
     let responses: AssessmentResponses
     let topNeeds: [String]
     let createdAt: Date
@@ -95,7 +95,7 @@ enum BoundaryType: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-enum BoundaryStatus: String, Codable {
+enum BoundaryStatus: String, Codable, CaseIterable {
     case draft
     case ready
     case practiced
@@ -381,10 +381,12 @@ struct ListBoundariesResponse: Codable {
     let offset: Int
 }
 
-struct BoundaryListItem: Codable {
+struct BoundaryListItem: Codable, Identifiable {
     let id: UUID
     let boundaryType: BoundaryType
     let statementText: String
+    let whyMatters: String?
+    let stakeholder: String?
     let status: BoundaryStatus
     let practiceCount: Int
     let createdAt: Date
@@ -393,13 +395,15 @@ struct BoundaryListItem: Codable {
 
     enum CodingKeys: String, CodingKey {
         case id
-        case boundaryType = "boundaryType"
-        case statementText = "statementText"
+        case boundaryType = "boundary_type"
+        case statementText = "statement_text"
+        case whyMatters = "why_matters"
+        case stakeholder
         case status
-        case practiceCount = "practiceCount"
-        case createdAt
-        case updatedAt
-        case hasFollowUp
+        case practiceCount = "practice_count"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case hasFollowUp = "has_follow_up"
     }
 }
 

@@ -132,21 +132,21 @@ CREATE OR REPLACE FUNCTION increment_boundary_practice_count()
 RETURNS TRIGGER AS $$
 BEGIN
     IF NEW.source_feature = 'boundary_planner' THEN
+        -- Only update if boundary belongs to same user (ownership check)
         UPDATE defined_boundaries
         SET practice_count = practice_count + 1,
             updated_at = NOW()
-        WHERE id = NEW.source_id;
+        WHERE id = NEW.source_id
+        AND user_id = auth.uid();
     END IF;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS sync_boundary_practice_count ON custom_scenarios;
-CREATE TRIGGER sync_boundary_practice_count
-AFTER INSERT ON custom_scenarios
-FOR EACH ROW
-WHEN (NEW.source_feature = 'boundary_planner')
-EXECUTE FUNCTION increment_boundary_practice_count();
+CREATE TRIGGER increment_practice_count_trigger
+    AFTER INSERT ON custom_scenarios
+    FOR EACH ROW
+    EXECUTE FUNCTION increment_boundary_practice_count();
 
 -- ============================================================================
 -- ROW LEVEL SECURITY (RLS)
