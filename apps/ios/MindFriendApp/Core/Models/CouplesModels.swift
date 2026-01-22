@@ -148,7 +148,7 @@ struct CouplesExerciseSession: Codable, Identifiable {
     let exerciseId: UUID
     let userId1: UUID
     let userId2: UUID?
-    let status: SessionStatus
+    let status: CouplesSessionStatus
     let user1Rating: Int?
     let user2Rating: Int?
     let user1Notes: String?
@@ -180,13 +180,15 @@ struct CouplesExerciseSession: Codable, Identifiable {
 }
 
 /// Status of an exercise session
-enum SessionStatus: String, Codable {
+enum CouplesSessionStatus: String, Codable {
     case pending = "pending"
     case inProgress = "in_progress"
     case paused = "paused"
     case completed = "completed"
     case abandoned = "abandoned"
 }
+
+// Note: Use CouplesSessionStatus for couples exercises, RehearsalSessionStatus for rehearsals
 
 // MARK: - Appreciation Message Models
 
@@ -272,11 +274,11 @@ struct ExercisesListResponse: Codable {
 }
 
 /// Response from POST /couples-exercise-sessions
-struct StartSessionResponse: Codable {
+struct CouplesStartSessionResponse: Codable {
     let sessionId: UUID
     let exerciseId: UUID
     let exerciseName: String
-    let status: SessionStatus
+    let status: CouplesSessionStatus
     let invitedPartnerId: UUID?
     let invitedPartnerName: String?
     let expiresAt: Date
@@ -294,10 +296,12 @@ struct StartSessionResponse: Codable {
     }
 }
 
+// Note: Use CouplesStartSessionResponse for couples, RehearsalModels.StartSessionResponse for rehearsals
+
 /// Response from PATCH /couples-exercise-sessions/{id}
 struct UpdateSessionResponse: Codable {
     let sessionId: UUID
-    let status: SessionStatus
+    let status: CouplesSessionStatus
     let user1Rating: Int?
     let user2Rating: Int?
     let completedAt: Date?

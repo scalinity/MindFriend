@@ -509,5 +509,46 @@ struct SearchBar: View {
 }
 
 #Preview {
-    MyPatternsView(coachService: MockCoachService())
+    MyPatternsView(coachService: MockCoachServicePreview())
+}
+
+// MARK: - Preview Mock
+private class MockCoachServicePreview: CoachServiceProtocol {
+    func getSettings() async throws -> CoachSettings {
+        CoachSettings.defaultSettings
+    }
+    
+    func updateSettings(_ settings: CoachSettings) async throws {}
+    
+    func recordInteraction(encounterId: UUID?, distortionCode: String, action: CoachInteraction.Action, confidence: Double?) async throws {}
+    
+    func getMyPatterns() async throws -> PatternAnalytics {
+        PatternAnalytics(
+            totalEncounters: 24,
+            last7Days: 8,
+            last30Days: 24,
+            mostCommon: [
+                PatternAnalytics.DistortionStat(code: "catastrophizing", name: "Catastrophizing", count: 8, percentage: 33.3, trend: .stable, helpfulRate: 0.6),
+                PatternAnalytics.DistortionStat(code: "all_or_nothing", name: "All-or-Nothing Thinking", count: 5, percentage: 20.8, trend: .decreasing, helpfulRate: 0.4),
+                PatternAnalytics.DistortionStat(code: "should_statements", name: "Should Statements", count: 4, percentage: 16.7, trend: .stable, helpfulRate: 0.5)
+            ],
+            byDistortionType: []
+        )
+    }
+    
+    func getWeeklySummary() async throws -> WeeklyPatternSummary? {
+        nil
+    }
+    
+    func getDistortionLibrary() async throws -> [CognitiveDistortionDefinition] {
+        []
+    }
+    
+    func getDistortion(code: String) async throws -> CognitiveDistortionDefinition? {
+        nil
+    }
+    
+    func getEncounters(limit: Int) async throws -> [DistortionEncounter] {
+        []
+    }
 }

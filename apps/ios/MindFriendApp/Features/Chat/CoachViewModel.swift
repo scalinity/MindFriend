@@ -1,14 +1,16 @@
 import Foundation
 import SwiftUI
+import OSLog
 
 @MainActor
 class CoachViewModel: ObservableObject {
     @Published var suppressedUntil: Date?
     @Published var isAcknowledged = false
+    @Published var interactionError: String?
 
-    private let coachService: CoachService
+    private let coachService: CoachServiceProtocol
 
-    init(coachService: CoachService) {
+    init(coachService: CoachServiceProtocol) {
         self.coachService = coachService
     }
 
@@ -35,18 +37,14 @@ class CoachViewModel: ObservableObject {
                     confidence: confidence
                 )
 
-                // Handle side effects
+                // Handle side effects (no need for MainActor.run - already MainActor)
                 switch action {
                 case .helpful:
-                    await MainActor.run {
-                        isAcknowledged = true
-                    }
+                    isAcknowledged = true
 
                 case .dismissed:
-                    await MainActor.run {
-                        suppressFor(minutes: 30)
-                        isAcknowledged = true
-                    }
+                    suppressFor(minutes: 30)
+                    isAcknowledged = true
 
                 case .learnMore:
                     // Navigation handled by view
@@ -57,7 +55,9 @@ class CoachViewModel: ObservableObject {
                     break
                 }
             } catch {
-                print("Failed to record coach interaction: \(error)")
+                // Use structured logging instead of print
+                Logger(subsystem: "com.mindfriend.coach", category: "interaction").error("Failed to record coach interaction: \(error.localizedDescription)")
+                interactionError = error.localizedDescription
             }
         }
     }

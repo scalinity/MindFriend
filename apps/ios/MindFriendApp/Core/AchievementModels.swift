@@ -83,6 +83,7 @@ enum StreakType: String, Codable, CaseIterable {
         case .exercise: return "Exercise"
         case .meditation: return "Meditation"
         case .checkin: return "Check-in"
+        case .sensory: return "Sensory"
         case .appOpen: return "Daily App Open"
         }
     }

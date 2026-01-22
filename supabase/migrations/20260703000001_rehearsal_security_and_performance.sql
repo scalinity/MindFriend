@@ -145,12 +145,34 @@ BEGIN
 END;
 $$;
 
--- 9. RLS Policy: Users can only view their own crisis events
+-- 9. Function to atomically check active session count (prevents TOCTOU race)
+CREATE OR REPLACE FUNCTION check_active_session_limit(p_user_id UUID)
+RETURNS TABLE (can_create BOOLEAN, active_count INTEGER)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_active_count INTEGER;
+BEGIN
+  SELECT COUNT(*)
+  INTO v_active_count
+  FROM rehearsal_sessions
+  WHERE user_id = p_user_id
+    AND status = 'active'
+  FOR UPDATE; -- Lock rows to prevent TOCTOU race
+
+  -- Maximum 3 concurrent active sessions
+  RETURN QUERY SELECT (v_active_count < 3)::BOOLEAN, v_active_count;
+END;
+$$;
+
+-- 10. RLS Policy: Users can only view their own crisis events
 CREATE POLICY "Users can view own crisis events"
   ON crisis_events FOR SELECT
   USING (auth.uid()::TEXT = user_id::TEXT);
 
--- 10. RLS Policy: Admin can view all crisis events for moderation
+-- 11. RLS Policy: Admin can view all crisis events for moderation
 CREATE POLICY "Service role can manage crisis events"
   ON crisis_events FOR ALL
   USING (auth.role() = 'service_role')

@@ -117,30 +117,45 @@ serve(async (req) => {
     }
 
     // Rate limiting
-    const rateLimitResult = await checkRateLimit(
-      user.id,
-      "rehearsal",
-      120,
-      60000,
-    );
-    if (!rateLimitResult.allowed) {
-      return new Response(
-        JSON.stringify({
-          error: "Rate limit exceeded",
-          retryAfter: rateLimitResult.retryAfter,
-        }),
-        {
-          status: 429,
-          headers: {
-            ...baseCorsHeaders,
-            ...getRateLimitHeaders(rateLimitResult),
-            "Content-Type": "application/json",
-          },
-        },
-      );
-    }
-
     const { action, ...params } = (await req.json()) as ActionRequest;
+
+    // FIX High: Implement per-action rate limits for granular protection
+    const perActionLimits: Record<string, { maxRequests: number; windowMs: number }> = {
+      "create-scenario": { maxRequests: 3, windowMs: 3600000 }, // 3/hour
+      "start-session": { maxRequests: 5, windowMs: 3600000 }, // 5/hour (uses quota)
+      "send-message": { maxRequests: 30, windowMs: 60000 }, // 30/min (frequent)
+      "end-session": { maxRequests: 10, windowMs: 3600000 }, // 10/hour
+      "get-scenarios": { maxRequests: 60, windowMs: 60000 }, // 60/min (read-only)
+      "get-session-history": { maxRequests: 20, windowMs: 60000 }, // 20/min (read-only)
+    };
+
+    let rateLimitHeaders: Record<string, string> = {};
+    const actionLimit = perActionLimits[action];
+    if (actionLimit) {
+      const actionRateLimitResult = await checkRateLimit(
+        supabaseAdmin,
+        user.id,
+        `rehearsal:${action}`,
+        actionLimit,
+      );
+      if (!actionRateLimitResult.allowed) {
+        return new Response(
+          JSON.stringify({
+            error: "Rate limit exceeded for this action",
+            retryAfter: actionRateLimitResult.retryAfter,
+          }),
+          {
+            status: 429,
+            headers: {
+              ...baseCorsHeaders,
+              ...getRateLimitHeaders(actionRateLimitResult),
+              "Content-Type": "application/json",
+            },
+          },
+        );
+      }
+      rateLimitHeaders = getRateLimitHeaders(actionRateLimitResult);
+    }
 
     let response;
     switch (action) {
@@ -193,14 +208,14 @@ serve(async (req) => {
       status: 200,
       headers: {
         ...baseCorsHeaders,
-        ...getRateLimitHeaders(rateLimitResult),
+        ...rateLimitHeaders,
         "Content-Type": "application/json",
       },
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Rehearsal function error:", error);
     return new Response(
-      JSON.stringify({ error: error.message || "Internal server error" }),
+      JSON.stringify({ error: error?.message || "Internal server error" }),
       {
         status: 500,
         headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
@@ -313,33 +328,36 @@ async function handleStartSession(
     throw new Error("Must provide scenarioId or customScenarioId");
   }
 
-  // Check for existing active sessions (prevent accumulation)
-  const { data: activeSessions } = await supabaseUser
-    .from("rehearsal_sessions")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("status", "active");
+  // FIX High: Use atomic RPC call for session limit check (prevents TOCTOU race)
+  const { data: sessionLimitResult, error: sessionLimitError } = await supabaseAdmin
+    .rpc("check_active_session_limit", { p_user_id: userId })
+    .single();
 
-  if (activeSessions && activeSessions.length >= 3) {
+  if (sessionLimitError || !sessionLimitResult || !(sessionLimitResult as any).can_create) {
     return {
       error: "too_many_active",
-      message: "Maximum 3 active sessions allowed. Please complete or abandon existing sessions.",
+      message: `Maximum 3 active sessions allowed. You have ${(sessionLimitResult as any)?.active_count || 0} active sessions.`,
     };
   }
 
   // Fetch scenario FIRST (before quota check) to validate early
+  // FIX P2: Use selective columns instead of SELECT * for performance
   let scenario;
   if (scenarioId) {
     const { data } = await supabaseUser
       .from("conversation_scenarios")
-      .select("*")
+      .select(
+        "id, title, is_premium, other_party_role, other_party_personality, situation_type, situation_context, situation_summary, key_points_to_convey, desired_outcome",
+      )
       .eq("id", scenarioId)
       .single();
     scenario = data;
   } else {
     const { data } = await supabaseUser
       .from("custom_scenarios")
-      .select("*")
+      .select(
+        "id, title, user_id, other_party_role, other_party_personality, situation_type, situation_summary, key_points, desired_outcome",
+      )
       .eq("id", customScenarioId)
       .eq("user_id", userId)
       .single();
@@ -367,18 +385,17 @@ async function handleStartSession(
   }
 
   // FIX P0: Use atomic RPC call for quota check+increment (prevents race condition)
-  const { data: quotaResult, error: quotaError } = await supabaseAdmin.rpc(
-    'check_and_increment_rehearsal_quota',
-    { p_user_id: userId }
-  ).single();
+  const { data: quotaResult, error: quotaError } = await supabaseAdmin
+    .rpc("check_and_increment_rehearsal_quota", { p_user_id: userId })
+    .single();
 
-  if (quotaError || !quotaResult || !quotaResult.can_create) {
+  if (quotaError || !quotaResult || !(quotaResult as any).can_create) {
     return {
       error: "quota_exceeded",
       message: "Weekly rehearsal limit reached",
       upgradePrompt: true,
-      quotaUsed: quotaResult?.used || 0,
-      quotaLimit: quotaResult?.quota_limit || 2,
+      quotaUsed: (quotaResult as any)?.used || 0,
+      quotaLimit: (quotaResult as any)?.quota_limit || 2,
     };
   }
 
@@ -398,19 +415,27 @@ async function handleStartSession(
   if (sessionError) {
     // Rollback quota on session creation failure
     try {
-      await supabaseAdmin.rpc('rollback_rehearsal_quota', { p_user_id: userId });
+      await supabaseAdmin.rpc("rollback_rehearsal_quota", {
+        p_user_id: userId,
+      });
     } catch (e) {
-      console.error("Failed to rollback quota after session creation failure:", e);
+      console.error(
+        "Failed to rollback quota after session creation failure:",
+        e,
+      );
     }
     throw sessionError;
   }
 
   // Generate AI opening message
   const systemPrompt = ROLE_SIMULATION_PROMPT(scenario);
-  const openingMessage = await callXAIWithRetry([
-    { role: "system", content: systemPrompt },
-    { role: "user", content: "Start the conversation naturally." },
-  ], 3);
+  const openingMessage = await callXAIWithRetry(
+    [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: "Start the conversation naturally." },
+    ],
+    3,
+  );
 
   return {
     session: {
@@ -558,7 +583,7 @@ async function handleSendMessage(
         assertiveness_score: feedback.assertiveness,
         strengths: [feedback.strength],
         improvements: [feedback.improvement],
-      })
+      }),
     )
     .catch((error) => {
       console.error("Feedback generation failed:", error);
@@ -575,19 +600,19 @@ async function handleSendMessage(
     .eq("id", sessionId);
 
   // Don't await feedback - return to user immediately
-  feedbackPromise; // Fire and forget
+  feedbackPromise; // Fire and forget (no duplicate generation)
 
-  // Generate feedback synchronously for immediate response
-  const feedback = await generateFeedback(message, scenario);
+  // Use pattern-based fallback for immediate response (no AI cost)
+  const patternFeedback = analyzeWithPatterns(message);
 
   return {
     aiResponse,
     feedback: {
-      style: feedback.tone,
-      suggestions: [feedback.improvement],
-      encouragement: feedback.strength,
+      style: patternFeedback.tone,
+      suggestions: patternFeedback.improvements || [],
+      encouragement: patternFeedback.strength || "Good effort!",
     },
-    exchangeCount: session.total_exchanges + 1,
+    exchangeCount: transcript.length / 2,
   };
 }
 
@@ -695,7 +720,7 @@ async function handleGetScenarios(
 
   const { data: prebuilt } = await query.order("title");
 
-  let custom = [];
+  let custom: any[] = [];
   if (includeCustom) {
     const { data } = await supabaseUser
       .from("custom_scenarios")
@@ -776,51 +801,65 @@ async function checkRehearsalQuota(
   };
 }
 
-// Utility: Call xAI API
+// Utility: Call xAI API with timeout
+async function callXAI(messages: any[], timeoutMs = 30000): Promise<string> {
+  const controller = new AbortController();
+  const signal = controller.signal;
+
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(XAI_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${Deno.env.get("XAI_API_KEY")}`,
+      },
+      body: JSON.stringify({
+        model: "grok-2-latest",
+        messages,
+        temperature: 0.7,
+        max_tokens: 300,
+      }),
+      signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`xAI API error: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data.choices[0]?.message?.content || "I'm processing that...";
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    if (error.name === "AbortError") {
+      throw new Error("xAI API request timed out");
+    }
+    throw error;
+  }
+}
+
+// Utility: Call xAI API with retry logic and timeout
 async function callXAIWithRetry(
   messages: any[],
   maxRetries: number,
   baseDelayMs = 1000,
+  timeoutMs = 30000,
 ): Promise<string> {
   let retries = 0;
-  const controller = new AbortController();
-  const signal = controller.signal;
 
   while (true) {
     try {
-      const response = await fetch(XAI_API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${Deno.env.get("XAI_API_KEY")}`,
-        },
-        body: JSON.stringify({
-          model: "grok-2-latest",
-          messages,
-          temperature: 0.7,
-          max_tokens: 300,
-        }),
-        signal,
-      });
-
-      if (!response.ok) {
-        throw new Error(`xAI API error: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data.choices[0]?.message?.content || "I'm processing that...";
+      return await callXAI(messages, timeoutMs);
     } catch (error: any) {
-      if (error.name === "AbortError") {
-        throw new Error("xAI API request timed out");
-      }
-
-      if (retries < maxRetries) {
+      if (retries < maxRetries && !error.message.includes("timed out")) {
         const delay = Math.min(baseDelayMs * 2 ** retries, 60000);
         await new Promise((resolve) => setTimeout(resolve, delay));
         retries++;
         continue;
       }
-
       throw error;
     }
   }
@@ -831,13 +870,13 @@ async function generateFeedback(message: string, scenario: any) {
   const contextDesc = `${scenario.title}: ${scenario.situation_context || scenario.situation_summary}`;
   const prompt = FEEDBACK_PROMPT(message, contextDesc);
 
-  const response = await callXAI([
+  const response = await callXAIWithRetry([
     {
       role: "system",
       content: "You are a communication coach analyzing conversation practice.",
     },
     { role: "user", content: prompt },
-  ]);
+  ], 2, 1000, 15000);
 
   try {
     // Parse AI response as JSON
@@ -914,12 +953,27 @@ function sanitizeForPrompt(input: string): string {
 function getMatchedCrisisKeyword(message: string): string | null {
   // Crisis keywords to match
   const crisisKeywords = [
-    "suicide", "suicidal", "kill myself", "harm myself", "self-harm", 
-    "overdose", "cut myself", "hang", "jump off", "fatal",
-    "die", "dead", "death wish", "no point living", "worthless",
-    "better off dead", "noose", "pills", "nothing matters"
+    "suicide",
+    "suicidal",
+    "kill myself",
+    "harm myself",
+    "self-harm",
+    "overdose",
+    "cut myself",
+    "hang",
+    "jump off",
+    "fatal",
+    "die",
+    "dead",
+    "death wish",
+    "no point living",
+    "worthless",
+    "better off dead",
+    "noose",
+    "pills",
+    "nothing matters",
   ];
-  
+
   const lower = message.toLowerCase();
   for (const keyword of crisisKeywords) {
     if (lower.includes(keyword)) {

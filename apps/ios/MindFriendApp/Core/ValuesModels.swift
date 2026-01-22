@@ -226,61 +226,28 @@ struct AnalyzeDecisionResponse: Codable {
 
 // MARK: - Journal Models
 
-struct JournalEntry: Identifiable, Codable {
+/// Represents a user's entry in their values journal
+struct ValuesJournalEntry: Identifiable, Codable {
     let id: String
     let userId: String
     let valueKey: String
-    let valueName: String? // Joined from values_cards
-    let entryType: EntryType
-    let description: String
-    let impactLevel: Int?
+    let reflectionText: String
     let createdAt: Date
-
+    let updatedAt: Date?
+    let isPrivate: Bool
+    
     enum CodingKeys: String, CodingKey {
         case id
         case userId = "user_id"
         case valueKey = "value_key"
-        case valueName = "valueName"
-        case entryType = "entry_type"
-        case description
-        case impactLevel = "impact_level"
+        case reflectionText = "reflection_text"
         case createdAt = "created_at"
-    }
-
-    enum EntryType: String, Codable {
-        case action
-        case conflict
-        case alignment
-        case growth
-
-        var displayName: String {
-            switch self {
-            case .action: return "Action"
-            case .conflict: return "Conflict"
-            case .alignment: return "Alignment"
-            case .growth: return "Growth"
-            }
-        }
-
-        var icon: String {
-            switch self {
-            case .action: return "checkmark.circle.fill"
-            case .conflict: return "exclamationmark.triangle.fill"
-            case .alignment: return "arrow.up.right.circle.fill"
-            case .growth: return "leaf.fill"
-            }
-        }
-
-        var color: String {
-            switch self {
-            case .action: return "green"
-            case .conflict: return "orange"
-            case .alignment: return "blue"
-            case .growth: return "purple"
-            }
-        }
+        case updatedAt = "updated_at"
+        case isPrivate = "is_private"
     }
 }
+
+// Note: Use ValuesJournalEntry for values-related entries, JournalEntry (in JournalModels) for general journal
 
 struct GapAnalysis: Codable {
     let hasGap: Bool
@@ -293,7 +260,7 @@ struct GapAnalysis: Codable {
 
 struct GetJournalEntriesResponse: Codable {
     let success: Bool
-    let entries: [JournalEntry]?
+    let entries: [ValuesJournalEntry]?
     let gapAnalysis: [String: GapAnalysis]? // value_key -> analysis
     let error: String?
 

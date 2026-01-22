@@ -1,5 +1,6 @@
 import Foundation
 import Supabase
+import os.log
 
 protocol ActionCardServiceProtocol {
     func generateActionCards(_ request: GenerateActionCardsRequest) async throws -> GenerateActionCardsResponse
@@ -10,40 +11,56 @@ protocol ActionCardServiceProtocol {
 @MainActor
 final class ActionCardService: ActionCardServiceProtocol {
     private let supabase: SupabaseClient
-    private let logger = Logger(subsystem: "ActionCardService", category: "chat")
+    private let logger = Logger(subsystem: "com.mindfriend.ios", category: "ActionCard")
 
     init(supabase: SupabaseClient) {
         self.supabase = supabase
     }
 
     func generateActionCards(_ request: GenerateActionCardsRequest) async throws -> GenerateActionCardsResponse {
-        return try await supabase.functions.invoke(
+        let encoder = JSONEncoder()
+        guard let bodyData = try? encoder.encode(request),
+              let body = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any] else {
+            throw NSError(domain: "ActionCardService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to encode request"])
+        }
+        
+        let response = try await supabase.functions.invoke(
             "generate-action-cards",
-            options: .init(
-                body: EncodableValue(request),
-                headers: ["Content-Type": "application/json"]
-            )
-        ).value
+            options: FunctionInvokeOptions(body: body)
+        )
+        
+        guard let responseData = try? JSONSerialization.data(withJSONObject: response) else {
+            throw NSError(domain: "ActionCardService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid response"])
+        }
+        
+        let decoder = JSONDecoder()
+        return try decoder.decode(GenerateActionCardsResponse.self, from: responseData)
     }
 
     func recordActionTaken(_ request: CardActionRequest) async throws {
-        let _: EmptyResponse = try await supabase.functions.invoke(
+        let encoder = JSONEncoder()
+        guard let bodyData = try? encoder.encode(request),
+              let body = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any] else {
+            throw NSError(domain: "ActionCardService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to encode request"])
+        }
+        
+        _ = try await supabase.functions.invoke(
             "card-action-taken",
-            options: .init(
-                body: EncodableValue(request),
-                headers: ["Content-Type": "application/json"]
-            )
-        ).value
+            options: FunctionInvokeOptions(body: body)
+        )
     }
 
     func dismissCard(_ request: DismissCardRequest) async throws {
-        let _: EmptyResponse = try await supabase.functions.invoke(
+        let encoder = JSONEncoder()
+        guard let bodyData = try? encoder.encode(request),
+              let body = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any] else {
+            throw NSError(domain: "ActionCardService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to encode request"])
+        }
+        
+        _ = try await supabase.functions.invoke(
             "dismiss-card",
-            options: .init(
-                body: EncodableValue(request),
-                headers: ["Content-Type": "application/json"]
-            )
-        ).value
+            options: FunctionInvokeOptions(body: body)
+        )
     }
 }
 

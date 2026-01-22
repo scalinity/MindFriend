@@ -7,7 +7,6 @@
 //
 
 import Foundation
-import LocalizedStringKey
 import SwiftUI
 
 // MARK: - Assessment Models
