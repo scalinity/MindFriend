@@ -253,41 +253,16 @@ struct NextStepCard: View {
         PriorityMatrixView(assessment: NeedsAssessment(
             id: UUID(),
             userId: UUID(),
-            assessmentType: .selfGuided,
+            assessmentType: .work,
             responses: AssessmentResponses(
                 step1DrainTriggers: ["work_stress"],
-                step2ImportanceRatings: ["autonomy": "high", "rest": "medium"],
-                step3CurrentlyMet: ["autonomy": "no", "rest": "sometimes"],
+                step2ImportanceRatings: ["autonomy": .high, "rest": .medium],
+                step3CurrentlyMet: ["autonomy": .no, "rest": .sometimes],
                 step4PriorityNeeds: ["autonomy", "rest"]
             ),
-            identifiedNeeds: [
-                IdentifiedNeed(
-                    id: UUID(),
-                    assessmentId: UUID(),
-                    needCategory: "Autonomy",
-                    importanceLevel: "high",
-                    currentlyMet: "no",
-                    gapScore: 9,
-                    whyMatters: "I need control over my decisions and schedule to feel fulfilled."
-                ),
-                IdentifiedNeed(
-                    id: UUID(),
-                    assessmentId: UUID(),
-                    needCategory: "Rest",
-                    importanceLevel: "medium",
-                    currentlyMet: "sometimes",
-                    gapScore: 4,
-                    whyMatters: "I need adequate rest to maintain my energy and focus."
-                )
-            ],
-            boundaryRecommendations: [
-                BoundaryRecommendation(
-                    type: "time",
-                    suggestion: "Set clear work hours and protect personal time",
-                    rationale: "Your autonomy need suggests protecting time boundaries will help you feel more in control."
-                )
-            ],
-            createdAt: Date()
+            topNeeds: ["autonomy", "rest"],
+            createdAt: Date(),
+            updatedAt: Date()
         ))
     }
 }

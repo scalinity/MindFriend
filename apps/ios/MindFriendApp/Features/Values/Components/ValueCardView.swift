@@ -13,7 +13,7 @@ struct ValueCardView: View {
     let rank: Int? // 1-5 for ranked cards
     let onTap: () -> Void
 
-    var body: View {
+    var body: some View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 12) {
                 // Icon and rank badge

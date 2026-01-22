@@ -25,6 +25,18 @@ final class VoiceAudioCapture {
     private let noiseFloorDb: Float = -60.0
     private let ceilingDb: Float = -10.0
 
+    // MARK: - Emotion Analysis Support
+
+    /// Rolling buffer of recent audio samples for emotion analysis
+    /// Stores Float samples at capture sample rate (24kHz)
+    private var rollingAudioBuffer: [Float] = []
+
+    /// Maximum buffer duration in seconds (keep last 5 seconds)
+    private let maxBufferDuration: Double = 5.0
+
+    /// Maximum samples to keep in buffer (5s at 24kHz = 120,000 samples)
+    private var maxBufferSamples: Int { Int(sampleRate * maxBufferDuration) }
+
     // Callbacks
     var onAudioData: ((Data) -> Void)?
     var onMicLevelUpdate: ((Float) -> Void)?
@@ -200,6 +212,10 @@ final class VoiceAudioCapture {
         var sumSquares: Float = 0
         var maxSample: Int16 = 0
 
+        // Also accumulate float samples for emotion analysis buffer
+        var floatSamples: [Float] = []
+        floatSamples.reserveCapacity(frameCount)
+
         for i in 0..<frameCount {
             let originalSample = samples[i]
             let amplified = Int32(Float(originalSample) * audioGain)
@@ -213,7 +229,13 @@ final class VoiceAudioCapture {
 
             var sample = clippedSample
             amplifiedData.append(Data(bytes: &sample, count: 2))
+
+            // Normalize to [-1, 1] for emotion analysis buffer
+            floatSamples.append(Float(clippedSample) / 32768.0)
         }
+
+        // Add to rolling buffer for emotion analysis
+        appendToRollingBuffer(floatSamples)
 
         let rms = sqrt(sumSquares / Float(frameCount))
         let rmsDb = 20 * log10(max(rms, 1) / 32768.0)
@@ -224,6 +246,82 @@ final class VoiceAudioCapture {
 
         // Send audio data
         onAudioData?(amplifiedData)
+    }
+
+    // MARK: - Rolling Buffer Management
+
+    /// Append audio samples to the rolling buffer, maintaining maximum size
+    private func appendToRollingBuffer(_ samples: [Float]) {
+        rollingAudioBuffer.append(contentsOf: samples)
+
+        // Trim buffer if it exceeds maximum size
+        if rollingAudioBuffer.count > maxBufferSamples {
+            let excess = rollingAudioBuffer.count - maxBufferSamples
+            rollingAudioBuffer.removeFirst(excess)
+        }
+    }
+
+    /// Get recent audio buffer for emotion analysis
+    /// - Parameter duration: Duration in seconds (must be <= maxBufferDuration)
+    /// - Returns: Array of Float samples at 24kHz, or nil if insufficient data
+    func getRecentAudioBuffer(duration: Double = 3.0) -> [Float]? {
+        let requiredSamples = Int(sampleRate * duration)
+
+        guard rollingAudioBuffer.count >= requiredSamples else {
+            #if DEBUG
+            Log.voice.debug("[AudioCapture] Insufficient buffer: \(self.rollingAudioBuffer.count) samples, need \(requiredSamples)")
+            #endif
+            return nil
+        }
+
+        // Return the most recent samples
+        let startIndex = rollingAudioBuffer.count - requiredSamples
+        return Array(rollingAudioBuffer[startIndex...])
+    }
+
+    /// Get the current buffer duration in seconds
+    var currentBufferDuration: Double {
+        Double(rollingAudioBuffer.count) / sampleRate
+    }
+
+    /// Clear the rolling audio buffer
+    func clearRollingBuffer() {
+        rollingAudioBuffer.removeAll(keepingCapacity: true)
+    }
+
+    /// Resample audio buffer from capture rate (24kHz) to emotion analysis rate (16kHz)
+    /// - Parameter inputBuffer: Audio at 24kHz
+    /// - Returns: Audio resampled to 16kHz
+    func resampleForEmotionAnalysis(_ inputBuffer: [Float]) -> [Float] {
+        // Guard against empty input to prevent division issues
+        guard !inputBuffer.isEmpty else {
+            return []
+        }
+
+        let inputRate: Double = sampleRate       // 24000
+        let outputRate: Double = 16000.0         // EmotionAnalyzer rate
+        let ratio = inputRate / outputRate       // 1.5
+
+        let outputLength = Int(Double(inputBuffer.count) / ratio)
+        
+        // Guard against degenerate case where output would be empty
+        guard outputLength > 0 else {
+            return []
+        }
+        
+        var outputBuffer = [Float](repeating: 0, count: outputLength)
+
+        // Simple linear interpolation resampling
+        for i in 0..<outputLength {
+            let sourceIndex = Double(i) * ratio
+            let lowerIndex = Int(sourceIndex)
+            let upperIndex = min(lowerIndex + 1, inputBuffer.count - 1)
+            let fraction = Float(sourceIndex - Double(lowerIndex))
+
+            outputBuffer[i] = inputBuffer[lowerIndex] * (1 - fraction) + inputBuffer[upperIndex] * fraction
+        }
+
+        return outputBuffer
     }
 
     // MARK: - Level Processing

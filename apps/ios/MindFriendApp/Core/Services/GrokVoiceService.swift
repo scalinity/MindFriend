@@ -79,6 +79,17 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
         }
     }
 
+    // MARK: - Emotion State
+
+    /// Current detected emotion (nil if no emotion detected or analysis disabled)
+    @Published private(set) var currentEmotion: EmotionAnalyzer.EmotionResult?
+
+    /// Emotion history for current session
+    @Published private(set) var emotionHistory: [EmotionSnapshot] = []
+
+    /// Confidence score for current emotion (0.0 - 1.0)
+    @Published private(set) var emotionConfidence: Double = 0
+
     // MARK: - Delegate
 
     weak var delegate: VoiceServiceDelegate?
@@ -91,6 +102,15 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
     private let webSocketManager = VoiceWebSocketManager()
     private let audioCapture = VoiceAudioCapture()
     private let audioPlayback = VoiceAudioPlayback()
+
+    // Emotion analysis
+    private let emotionAnalyzer = EmotionAnalyzer()
+    private var emotionAnalysisEnabled: Bool = false
+    private var emotionSensitivityThreshold: Double = 0.6
+    private var lastEmotionAnalysisTime: Date?
+    private let emotionAnalysisCooldown: TimeInterval = 2.0  // Min 2s between analyses
+    private var emotionAnalysisTask: Task<Void, Never>?
+    private let maxEmotionHistorySize = 100  // Cap history at ~3 minutes at 2s intervals
 
     // Session tracking
     private var sessionId: String?
@@ -124,6 +144,8 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
     init(supabase: SupabaseClient) {
         self.supabase = supabase
         setupComponentCallbacks()
+        // DO NOT auto-grant consent - consent is granted only when user enables emotion analysis
+        // This ensures proper opt-in compliance with privacy regulations
     }
     
     private func setupComponentCallbacks() {
@@ -263,6 +285,10 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
         audioPlayback.stop()
         stopUsageTimer()
 
+        // Cancel emotion analysis task
+        emotionAnalysisTask?.cancel()
+        emotionAnalysisTask = nil
+
         // Cancel any pending timeout tasks first
         sessionCreatedTimeoutTask?.cancel()
         sessionCreatedTimeoutTask = nil
@@ -288,6 +314,13 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
         sessionId = nil
         sessionStartTime = nil
         isWaitingForResponse = false
+
+        // Clear emotion state
+        currentEmotion = nil
+        emotionConfidence = 0
+        emotionHistory = []
+        lastEmotionAnalysisTime = nil
+        audioCapture.clearRollingBuffer()
     }
 
     /// Start listening for voice input
@@ -423,6 +456,37 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
         }
 
         try await saveVoicePreference(voice)
+    }
+
+    // MARK: - Emotion Settings
+
+    /// Enable or disable emotion analysis
+    /// Consent is granted/revoked based on this setting for privacy compliance
+    func setEmotionAnalysisEnabled(_ enabled: Bool) {
+        emotionAnalysisEnabled = enabled
+
+        // Grant or revoke consent based on user preference
+        emotionAnalyzer.setVoiceConsent(enabled)
+
+        if !enabled {
+            // Clear all emotion state when disabled
+            currentEmotion = nil
+            emotionConfidence = 0
+            emotionHistory = []  // Clear history to respect user's privacy choice
+            lastEmotionAnalysisTime = nil
+            audioCapture.clearRollingBuffer()
+        }
+        #if DEBUG
+        Log.voice.debug("[Voice] Emotion analysis \(enabled ? "enabled" : "disabled"), consent \(enabled ? "granted" : "revoked")")
+        #endif
+    }
+
+    /// Set emotion sensitivity threshold (0.4 - 0.8)
+    func setEmotionSensitivity(_ threshold: Double) {
+        emotionSensitivityThreshold = max(0.4, min(0.8, threshold))
+        #if DEBUG
+        Log.voice.debug("[Voice] Emotion sensitivity set to \(self.emotionSensitivityThreshold)")
+        #endif
     }
 
     // MARK: - Private Methods - Connection
@@ -770,6 +834,9 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
             // 2. Automatically create a response
             // We don't need to do anything here - just wait for the response
 
+            // Trigger emotion analysis (async, non-blocking)
+            analyzeEmotionIfNeeded()
+
         case "input_audio_buffer.committed":
             #if DEBUG
             // Log details for debugging multi-turn issues
@@ -981,6 +1048,120 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
                 "updated_at": ISO8601DateFormatter().string(from: Date()),
             ])
             .execute()
+    }
+
+    // MARK: - Private Methods - Emotion Analysis
+
+    /// Analyze emotion from recent audio buffer after speech ends
+    /// Runs asynchronously without blocking voice flow
+    private func analyzeEmotionIfNeeded() {
+        // Check if analysis is enabled
+        guard emotionAnalysisEnabled else {
+            #if DEBUG
+            Log.voice.debug("[Voice] Emotion analysis skipped: disabled")
+            #endif
+            return
+        }
+
+        // Check cooldown
+        if let lastTime = lastEmotionAnalysisTime,
+           Date().timeIntervalSince(lastTime) < emotionAnalysisCooldown {
+            #if DEBUG
+            Log.voice.debug("[Voice] Emotion analysis skipped: cooldown")
+            #endif
+            return
+        }
+
+        // Get audio buffer
+        guard let audioBuffer = audioCapture.getRecentAudioBuffer(duration: 3.0) else {
+            #if DEBUG
+            Log.voice.debug("[Voice] Emotion analysis skipped: insufficient audio (<3s)")
+            #endif
+            return
+        }
+
+        // Cancel any pending analysis
+        emotionAnalysisTask?.cancel()
+        emotionAnalysisTask = nil
+
+        // Capture analysis start time (will only be recorded on success to fix race condition)
+        let analysisStartTime = Date()
+
+        // Start analysis in background
+        emotionAnalysisTask = Task { [weak self] in
+            guard let self = self else { return }
+
+            // Check cancellation early before expensive operations
+            guard !Task.isCancelled else { return }
+
+            // Verify still connected before analysis
+            guard self.connectionState.isConnected else { return }
+
+            do {
+                // Resample from 24kHz to 16kHz for EmotionAnalyzer
+                let resampledBuffer = self.audioCapture.resampleForEmotionAnalysis(audioBuffer)
+
+                // Check cancellation before expensive ML inference
+                guard !Task.isCancelled else { return }
+
+                #if DEBUG
+                Log.voice.debug("[Voice] Analyzing emotion from \(resampledBuffer.count) samples")
+                #endif
+
+                // Run analysis (this is async and won't block the main thread)
+                let result = try await self.emotionAnalyzer.analyzeAudioBuffer(resampledBuffer)
+
+                // Check if task was cancelled after analysis
+                guard !Task.isCancelled else { return }
+
+                // Check confidence threshold
+                guard result.confidence >= self.emotionSensitivityThreshold else {
+                    #if DEBUG
+                    Log.voice.debug("[Voice] Emotion detected but below threshold: \(result.emotion) @ \(result.confidence)")
+                    #endif
+                    return
+                }
+
+                // Update state on main actor - only update cooldown on SUCCESS
+                await MainActor.run {
+                    // Update cooldown time only on successful analysis (fixes race condition)
+                    self.lastEmotionAnalysisTime = analysisStartTime
+                    self.handleEmotionResult(result)
+                }
+            } catch {
+                #if DEBUG
+                Log.voice.debug("[Voice] Emotion analysis failed: \(error)")
+                #endif
+                // Fail silently - emotion analysis errors should never interrupt voice
+            }
+        }
+    }
+
+    /// Handle successful emotion analysis result
+    private func handleEmotionResult(_ result: EmotionAnalyzer.EmotionResult) {
+        currentEmotion = result
+        emotionConfidence = result.confidence
+
+        // Add to history with timestamp (fallback to Date() if session not started)
+        let startTime = sessionStartTime ?? Date()
+        let snapshot = EmotionSnapshot(
+            from: result,
+            sessionStartTime: startTime,
+            transcript: nil
+        )
+        emotionHistory.append(snapshot)
+
+        // Enforce max history size (FIFO - remove oldest entries)
+        if emotionHistory.count > maxEmotionHistorySize {
+            emotionHistory.removeFirst(emotionHistory.count - maxEmotionHistorySize)
+        }
+
+        // Emit event to delegate
+        delegate?.voiceService(self, didEmit: .emotionDetected(result))
+
+        #if DEBUG
+        Log.voice.debug("[Voice] Emotion detected: \(result.emotion) @ \(result.confidence) (history: \(self.emotionHistory.count))")
+        #endif
     }
 }
 

@@ -77,7 +77,7 @@ struct AnimationCard: View {
                 // Preview area with gradient
                 ZStack {
                     LinearGradient(
-                        colors: animation.colors.map { Color(hex: $0) },
+                        colors: animation.colors.compactMap { Color(hex: $0) },
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )

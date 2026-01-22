@@ -26,13 +26,11 @@ final class RewriteService: RewriteServiceProtocol {
             locale: nil
         )
 
-        return try await supabase.functions.invoke(
+        let response: GenerateRewritesResponse = try await supabase.functions.invoke(
             "generate-rewrites",
-            options: .init(
-                body: EncodableValue(request),
-                headers: ["Content-Type": "application/json"]
-            )
-        ).value
+            options: .init(body: request)
+        )
+        return response
     }
 
     func applyRewrite(conversationId: String, messageId: String, rewrittenText: String, rewriteHistoryId: String) async throws -> ApplyRewriteResponse {
@@ -43,41 +41,38 @@ final class RewriteService: RewriteServiceProtocol {
             rewriteHistoryId: rewriteHistoryId
         )
 
-        return try await supabase.functions.invoke(
+        let response: ApplyRewriteResponse = try await supabase.functions.invoke(
             "apply-rewrite",
-            options: .init(
-                body: EncodableValue(request),
-                headers: ["Content-Type": "application/json"]
-            )
-        ).value
+            options: .init(body: request)
+        )
+        return response
     }
 
     func fetchHistory(limit: Int, offset: Int, rewriteType: RewriteType?, appliedOnly: Bool?) async throws -> RewriteHistoryResponse {
-        var queryItems = [
-            URLQueryItem(name: "limit", value: String(limit)),
-            URLQueryItem(name: "offset", value: String(offset))
-        ]
-
+        var query = supabase
+            .from("rewrite_history")
+            .select()
+        
         if let rewriteType = rewriteType {
-            queryItems.append(URLQueryItem(name: "rewriteType", value: rewriteType.rawValue))
+            query = query.eq("rewrite_type", value: rewriteType.rawValue)
         }
-
+        
         if let appliedOnly = appliedOnly {
-            queryItems.append(URLQueryItem(name: "wasApplied", value: String(appliedOnly)))
+            query = query.eq("was_applied", value: appliedOnly)
         }
-
-        let url = supabase.functions.url.absoluteString + "/rewrite-history?" + queryItems.map { $0.name + "=" + ($0.value ?? "") }.joined(separator: "&")
-
-        var request = URLRequest(url: URL(string: url)!)
-        request.httpMethod = "GET"
-        request.setValue("Bearer \(try await supabase.auth.session().accessToken)", forHTTPHeaderField: "Authorization")
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            throw URLError(.badServerResponse)
-        }
-
-        return try JSONDecoder().decode(RewriteHistoryResponse.self, from: data)
+        
+        let entries: [RewriteHistoryEntry] = try await query
+            .order("created_at", ascending: false)
+            .range(from: offset, to: offset + limit - 1)
+            .execute()
+            .value
+        
+        return RewriteHistoryResponse(
+            entries: entries,
+            total: entries.count,
+            hasMore: entries.count == limit,
+            stats: RewriteStats(totalRewrites: entries.count, appliedCount: entries.filter { $0.wasApplied }.count, averageRating: nil, favoriteType: nil)
+        )
     }
 
     func submitFeedback(rewriteHistoryId: String, rating: Int, comment: String?) async throws -> RewriteFeedbackResponse {
@@ -87,48 +82,48 @@ final class RewriteService: RewriteServiceProtocol {
             comment: comment
         )
 
-        return try await supabase.functions.invoke(
+        let response: RewriteFeedbackResponse = try await supabase.functions.invoke(
             "rewrite-feedback",
-            options: .init(
-                body: EncodableValue(request),
-                headers: ["Content-Type": "application/json"]
-            )
-        ).value
+            options: .init(body: request)
+        )
+        return response
     }
 
     func getQuota() async throws -> RewriteQuota {
         // Check premium status
         let userId = try await supabase.auth.user().id
 
-        let subscriptionResponse: SubscriptionResponse? = try await supabase
+        let subscriptions: [SubscriptionResponse] = try await supabase
             .from("subscriptions")
             .select("status")
-            .eq("user_id", userId)
-            .in("status", ["active", "trialing"])
-            .single()
-            .value()
+            .eq("user_id", value: userId)
+            .in("status", value: ["active", "trialing"])
+            .execute()
+            .value
 
-        let isPremium = subscriptionResponse?.status == "active" || subscriptionResponse?.status == "trialing"
+        let isPremium = subscriptions.first?.status == "active" || subscriptions.first?.status == "trialing"
 
         if isPremium {
             return RewriteQuota(dailyCount: 0, lastResetAt: Date(), isPremium: true)
         }
 
         // Check quota for free users
-        let quotaResponse: QuotaResponse? = try await supabase
+        let quotas: [QuotaResponse] = try await supabase
             .from("rewrite_quota")
             .select("daily_count, last_reset_at")
-            .eq("user_id", userId)
-            .single()
-            .value()
+            .eq("user_id", value: userId)
+            .execute()
+            .value
 
-        let lastReset = quotaResponse?.lastResetAt ?? Date(timeIntervalSince1970: 0)
-        let today = Calendar.current.startOfDay(for: Date())
-        let resetDay = Calendar.current.startOfDay(for: lastReset)
+        guard let quota = quotas.first else {
+            return RewriteQuota(dailyCount: 100, lastResetAt: Date(), isPremium: false)
+        }
 
-        let dailyCount = resetDay == today ? (quotaResponse?.dailyCount ?? 0) : 0
-
-        return RewriteQuota(dailyCount: dailyCount, lastResetAt: lastReset, isPremium: false)
+        return RewriteQuota(
+            dailyCount: quota.dailyCount ?? 100,
+            lastResetAt: quota.lastResetAt ?? Date(),
+            isPremium: false
+        )
     }
 }
 

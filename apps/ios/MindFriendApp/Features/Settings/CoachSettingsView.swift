@@ -311,11 +311,11 @@ class MockCoachService: CoachServiceProtocol {
         return nil
     }
 
-    func getDistortionLibrary() async throws -> [CognitiveDistortion] {
+    func getDistortionLibrary() async throws -> [CognitiveDistortionDefinition] {
         return []
     }
 
-    func getDistortion(code: String) async throws -> CognitiveDistortion? {
+    func getDistortion(code: String) async throws -> CognitiveDistortionDefinition? {
         return nil
     }
 

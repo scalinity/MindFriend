@@ -43,10 +43,16 @@ enum RewriteType: String, CaseIterable, Codable {
     }
 }
 
-struct RewriteOption: Identifiable, Codable {
+struct RewriteOption: Identifiable, Codable, Equatable {
     let id: String
     let text: String
     let explanation: String
+
+    // MARK: - Equatable
+
+    static func == (lhs: RewriteOption, rhs: RewriteOption) -> Bool {
+        lhs.id == rhs.id && lhs.text == rhs.text && lhs.explanation == rhs.explanation
+    }
 }
 
 struct RewriteSession: Codable {

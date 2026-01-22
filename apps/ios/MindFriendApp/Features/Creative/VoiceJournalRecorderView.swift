@@ -491,7 +491,7 @@ struct VoiceJournalAnalysisView: View {
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: 8) {
                 ForEach(Array(analysis.emotions.asDictionary.sorted(by: { $0.value > $1.value })), id: \.key) { emotion, value in
-                    EmotionBadge(emotion: emotion, value: value)
+                    AnalysisEmotionBadge(emotion: emotion, value: value)
                 }
             }
         }
@@ -584,7 +584,45 @@ struct VoiceJournalAnalysisView: View {
     }
 }
 
-struct EmotionBadge: View {
+// MARK: - Analysis Emotion Badge
+
+/// Compact emotion badge for voice analysis display
+/// Different from VoiceMode EmotionBadge which handles EmotionSnapshot
+private struct AnalysisEmotionBadge: View {
+    let emotion: String
+    let value: Double
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(emotionEmoji)
+            Text(emotion.capitalized)
+                .font(.caption)
+            Text("\(Int(value * 100))%")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color(.tertiarySystemBackground))
+        .cornerRadius(12)
+    }
+
+    private var emotionEmoji: String {
+        switch emotion.lowercased() {
+        case "joy": return "😊"
+        case "sadness": return "😢"
+        case "anger": return "😠"
+        case "fear": return "😨"
+        case "surprise": return "😮"
+        case "trust": return "🤝"
+        case "anticipation": return "🤔"
+        case "disgust": return "😖"
+        default: return "😐"
+        }
+    }
+}
+
+struct EmotionPercentageBadge: View {
     let emotion: String
     let value: Double
 
