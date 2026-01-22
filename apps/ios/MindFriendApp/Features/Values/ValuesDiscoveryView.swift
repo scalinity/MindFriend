@@ -15,7 +15,7 @@ struct ValuesDiscoveryView: View {
         _viewModel = StateObject(wrappedValue: ValuesDiscoveryViewModel(valuesService: valuesService))
     }
 
-    var body: View {
+    var body: some View {
         NavigationStack {
             ZStack {
                 switch viewModel.currentPhase {

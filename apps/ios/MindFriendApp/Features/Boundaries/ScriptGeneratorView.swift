@@ -292,49 +292,6 @@ final class ScriptGeneratorViewModel: ObservableObject {
     }
 }
 
-// MARK: - Script Variation Extensions
-
-extension ScriptVariation {
-    var displayName: LocalizedStringKey {
-        switch self {
-        case .direct:
-            return "scripts.variation.direct"
-        case .gentle:
-            return "scripts.variation.gentle"
-        case .assertive:
-            return "scripts.variation.assertive"
-        case .collaborative:
-            return "scripts.variation.collaborative"
-        }
-    }
-
-    var description: LocalizedStringKey {
-        switch self {
-        case .direct:
-            return "scripts.variation.direct.description"
-        case .gentle:
-            return "scripts.variation.gentle.description"
-        case .assertive:
-            return "scripts.variation.assertive.description"
-        case .collaborative:
-            return "scripts.variation.collaborative.description"
-        }
-    }
-
-    var color: Color {
-        switch self {
-        case .direct:
-            return .blue
-        case .gentle:
-            return .green
-        case .assertive:
-            return .orange
-        case .collaborative:
-            return .purple
-        }
-    }
-}
-
 // MARK: - Previews
 
 #Preview {

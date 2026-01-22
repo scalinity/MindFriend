@@ -30,6 +30,9 @@ struct VoiceModeView: View {
     // Animation state
     @State private var isAnimating = false
 
+    // Emotion state
+    @State private var showEmotionDetail = false
+
     // MARK: - Callbacks
 
     private let onDismiss: (() -> Void)?
@@ -97,6 +100,16 @@ struct VoiceModeView: View {
         }
         .sheet(isPresented: $showUpgradeSheet) {
             SubscriptionView()
+        }
+        .sheet(isPresented: $showEmotionDetail) {
+            EmotionDetailSheet(
+                currentEmotion: voiceService.currentEmotion,
+                emotionHistory: voiceService.emotionHistory,
+                isPresented: $showEmotionDetail,
+                onDisableEmotions: {
+                    voiceService.setEmotionAnalysisEnabled(false)
+                }
+            )
         }
         .alert("Voice Error", isPresented: $showError) {
             Button("OK", role: .cancel) {}
@@ -319,15 +332,34 @@ struct VoiceModeView: View {
             reducedMotion: reduceMotion
         )
 
-        return OrbContainerView(
-            config: orbConfig,
-            size: size,
-            onTap: {
-                handleOrbTap()
+        return ZStack {
+            OrbContainerView(
+                config: orbConfig,
+                size: size,
+                onTap: {
+                    handleOrbTap()
+                }
+            )
+
+            // Emotion badge overlay (positioned bottom-right of orb)
+            // Use emotionHistory.last directly from service instead of duplicate state
+            if let snapshot = voiceService.emotionHistory.last {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        EmotionBadge(emotion: snapshot) {
+                            showEmotionDetail = true
+                        }
+                        .offset(x: 8, y: 8)
+                    }
+                }
+                .frame(width: size, height: size)
             }
-        )
+        }
         .shadow(color: orbShadowColor.opacity(0.4), radius: 40, x: 0, y: 20)
         .animation(.spring(response: 0.4), value: stateMachine.state)
+        .animation(.spring(response: 0.3), value: voiceService.emotionHistory.last?.emotion)
     }
 
     private var orbShadowColor: Color {

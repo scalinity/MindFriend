@@ -117,18 +117,22 @@ final class AudioSoundscapeService: NSObject, ObservableObject {
 // MARK: - AVAudioPlayerDelegate
 
 extension AudioSoundscapeService: AVAudioPlayerDelegate {
-    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         // Only update state if not looping
         if player.numberOfLoops == 0 {
-            isPlaying = false
-            currentSoundscape = nil
+            Task { @MainActor in
+                self.isPlaying = false
+                self.currentSoundscape = nil
+            }
         }
     }
 
-    func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
+    nonisolated func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
         print("Audio player decode error: \(error?.localizedDescription ?? "unknown")")
-        self.error = .renderFailure
-        isPlaying = false
-        currentSoundscape = nil
+        Task { @MainActor in
+            self.error = .renderFailure
+            self.isPlaying = false
+            self.currentSoundscape = nil
+        }
     }
 }

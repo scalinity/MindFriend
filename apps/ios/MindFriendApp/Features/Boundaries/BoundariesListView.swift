@@ -161,7 +161,7 @@ struct BoundaryRowView: View {
                 StatusBadge(status: boundary.status)
 
                 if boundary.practiceCount > 0 {
-                    Text("list.practice_count", arguments: [boundary.practiceCount])
+                    Text("\(boundary.practiceCount) practices")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -271,7 +271,7 @@ struct BoundaryDetailView: View {
 
             // Why It Matters
             Section {
-                Text(boundary.whyMatters)
+                Text(boundary.whyMatters ?? "")
                     .font(.body)
             } header: {
                 Text("detail.why_matters_header")

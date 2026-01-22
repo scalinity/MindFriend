@@ -16,7 +16,7 @@ struct ValuesCompassView: View {
         _viewModel = StateObject(wrappedValue: ValuesCompassViewModel(valuesService: valuesService))
     }
 
-    var body: View {
+    var body: some View {
         ScrollView {
             VStack(spacing: 24) {
                 // Title

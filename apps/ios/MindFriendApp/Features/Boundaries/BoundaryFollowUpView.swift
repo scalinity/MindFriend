@@ -219,62 +219,6 @@ final class BoundaryFollowUpViewModel: ObservableObject {
     }
 }
 
-// MARK: - Follow-Up Outcome Extensions
-
-extension FollowUpOutcome {
-    var displayName: LocalizedStringKey {
-        switch self {
-        case .successful:
-            return "followup.outcome_successful"
-        case .partiallySuccessful:
-            return "followup.outcome_partially_successful"
-        case .challenged:
-            return "followup.outcome_challenged"
-        case .ignored:
-            return "followup.outcome_ignored"
-        }
-    }
-
-    var description: LocalizedStringKey {
-        switch self {
-        case .successful:
-            return "followup.outcome_successful_description"
-        case .partiallySuccessful:
-            return "followup.outcome_partially_successful_description"
-        case .challenged:
-            return "followup.outcome_challenged_description"
-        case .ignored:
-            return "followup.outcome_ignored_description"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .successful:
-            return "checkmark.circle.fill"
-        case .partiallySuccessful:
-            return "checkmark.circle"
-        case .challenged:
-            return "exclamationmark.triangle.fill"
-        case .ignored:
-            return "xmark.circle.fill"
-        }
-    }
-
-    var color: Color {
-        switch self {
-        case .successful:
-            return .green
-        case .partiallySuccessful:
-            return .orange
-        case .challenged:
-            return .yellow
-        case .ignored:
-            return .red
-        }
-    }
-}
-
 // MARK: - Previews
 
 #Preview {

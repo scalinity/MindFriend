@@ -137,8 +137,11 @@ struct ProgressStoryPreviewCard: View {
         defer { isLoading = false }
 
         do {
-            let weekStart = Date().weekStartString
-            story = try await container.supabaseDataService.getWeeklyStory(weekStart: weekStart)
+            let weekStart = Date()
+            // Note: getWeeklyStory is a stub returning [String: Any]? 
+            // When implemented, this will need proper type decoding
+            _ = try await container.supabaseDataService.getWeeklyStory(weekStart: weekStart)
+            // For now, story remains nil since the stub returns nil
         } catch {
             // Silently fail - card will show "no story" state
         }
