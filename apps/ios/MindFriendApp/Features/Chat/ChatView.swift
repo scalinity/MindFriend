@@ -52,11 +52,35 @@ struct ChatView: View {
                                             action,
                                             encounterId: coachData.encounterId,
                                             distortionCode: coachData.distortionCode,
-                                            confidence: coachData.confidence
+                                            confidence: coachData.confidence ?? 0.0
                                         )
                                     }
                                 }
                             )
+                        }
+
+                        // Coach error feedback
+                        if let error = coachViewModel.interactionError {
+                            HStack {
+                                Image(systemName: "exclamationmark.circle.fill")
+                                    .foregroundStyle(.orange)
+                                Text(error)
+                                    .font(.caption)
+                                Spacer()
+                                Button {
+                                    coachViewModel.interactionError = nil
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.caption)
+                                }
+                                .accessibilityLabel("Dismiss error")
+                            }
+                            .padding()
+                            .background(Color.orange.opacity(0.1))
+                            .cornerRadius(8)
+                            .padding()
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel("Coach error: \(error)")
                         }
 
                         if isSending {

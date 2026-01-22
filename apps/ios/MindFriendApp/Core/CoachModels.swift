@@ -2,7 +2,7 @@ import Foundation
 
 // MARK: - Cognitive Distortion
 
-struct CognitiveDistortion: Codable, Identifiable {
+struct CognitiveDistortionData: Codable, Identifiable {
     let id: UUID
     let code: String
     let name: String
@@ -25,6 +25,9 @@ struct CognitiveDistortion: Codable, Identifiable {
         case displayOrder = "display_order"
     }
 }
+
+// Alias for backward compatibility with protocol definitions
+typealias CognitiveDistortionDefinition = CognitiveDistortionData
 
 // MARK: - Distortion Encounter
 
@@ -181,6 +184,7 @@ struct PatternAnalytics: Codable {
         let code: String
         let name: String
         let count: Int
+        let percentage: Double
         let trend: Trend?
         let helpfulRate: Double?
 
@@ -194,6 +198,7 @@ struct PatternAnalytics: Codable {
             case code
             case name
             case count
+            case percentage
             case trend
             case helpfulRate = "helpful_rate"
         }

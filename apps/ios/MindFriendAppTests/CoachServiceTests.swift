@@ -2,18 +2,15 @@ import XCTest
 @testable import MindFriendApp
 
 final class CoachServiceTests: XCTestCase {
-    var sut: CoachService!
-    var mockSupabase: MockSupabaseClient!
+    var sut: MockCoachService!
 
     override func setUp() {
         super.setUp()
-        mockSupabase = MockSupabaseClient()
-        sut = CoachService(supabase: mockSupabase)
+        sut = MockCoachService()
     }
 
     override func tearDown() {
         sut = nil
-        mockSupabase = nil
         super.tearDown()
     }
 
@@ -29,7 +26,7 @@ final class CoachServiceTests: XCTestCase {
             showPatterns: true
         )
 
-        mockSupabase.mockSettings = expectedSettings
+        sut.mockSettings = expectedSettings
 
         let settings = try await sut.getSettings()
 
@@ -39,8 +36,8 @@ final class CoachServiceTests: XCTestCase {
     }
 
     func testGetSettingsNetworkError() async {
-        mockSupabase.shouldThrowError = true
-        mockSupabase.mockError = "Network error"
+        sut.shouldThrowError = true
+        sut.mockError = "Network error"
 
         do {
             _ = try await sut.getSettings()
@@ -62,13 +59,11 @@ final class CoachServiceTests: XCTestCase {
             showPatterns: false
         )
 
-        mockSupabase.mockSettings = updatedSettings
-
         try await sut.updateSettings(updatedSettings)
 
-        XCTAssertEqual(mockSupabase.lastUpdatedSettings?.isEnabled, false)
-        XCTAssertEqual(mockSupabase.lastUpdatedSettings?.sensitivityLevel, .minimal)
-        XCTAssertEqual(mockSupabase.lastUpdatedSettings?.disabledDistortions?.count, 2)
+        XCTAssertEqual(sut.lastUpdatedSettings?.isEnabled, false)
+        XCTAssertEqual(sut.lastUpdatedSettings?.sensitivityLevel, .minimal)
+        XCTAssertEqual(sut.lastUpdatedSettings?.disabledDistortions?.count, 2)
     }
 
     // MARK: - Record Interaction Tests
@@ -84,8 +79,8 @@ final class CoachServiceTests: XCTestCase {
             confidence: 0.85
         )
 
-        XCTAssertEqual(mockSupabase.lastRecordedInteraction?.action, .helpful)
-        XCTAssertEqual(mockSupabase.lastRecordedInteraction?.distortionCode, distortionCode)
+        XCTAssertEqual(sut.lastRecordedInteraction?.action, .helpful)
+        XCTAssertEqual(sut.lastRecordedInteraction?.distortionCode, distortionCode)
     }
 
     func testRecordInteractionDismissed() async throws {
@@ -98,7 +93,7 @@ final class CoachServiceTests: XCTestCase {
             confidence: 0.72
         )
 
-        XCTAssertEqual(mockSupabase.lastRecordedInteraction?.action, .dismissed)
+        XCTAssertEqual(sut.lastRecordedInteraction?.action, .dismissed)
     }
 
     // MARK: - Get Patterns Tests
@@ -109,13 +104,13 @@ final class CoachServiceTests: XCTestCase {
             last7Days: 8,
             last30Days: 15,
             mostCommon: [
-                DistortionStat(code: "AON", name: "All-or-Nothing", count: 5, trend: "stable", helpfulRate: 0.8),
-                DistortionStat(code: "CAT", name: "Catastrophizing", count: 3, trend: "decreasing", helpfulRate: 0.67),
+                DistortionStat(code: "AON", name: "All-or-Nothing", count: 5, percentage: 33.3, trend: "stable", helpfulRate: 0.8),
+                DistortionStat(code: "CAT", name: "Catastrophizing", count: 3, percentage: 20.0, trend: "decreasing", helpfulRate: 0.67),
             ],
             byDistortionType: []
         )
 
-        mockSupabase.mockAnalytics = expectedAnalytics
+        sut.mockAnalytics = expectedAnalytics
 
         let patterns = try await sut.getMyPatterns()
 
@@ -134,7 +129,7 @@ final class CoachServiceTests: XCTestCase {
             byDistortionType: []
         )
 
-        mockSupabase.mockAnalytics = emptyAnalytics
+        sut.mockAnalytics = emptyAnalytics
 
         let patterns = try await sut.getMyPatterns()
 
@@ -146,7 +141,7 @@ final class CoachServiceTests: XCTestCase {
 
     func testGetDistortionLibrary() async throws {
         let mockLibrary = [
-            CognitiveDistortion(
+            CognitiveDistortionDefinition(
                 code: "AON",
                 name: "All-or-Nothing Thinking",
                 shortDescription: "Black and white thinking",
@@ -154,12 +149,11 @@ final class CoachServiceTests: XCTestCase {
                 examples: ["If I'm not perfect, I'm a failure"],
                 questionsToChallenge: ["What evidence contradicts this?"],
                 reframeTemplates: ["Perfection isn't possible"],
-                severityWeight: 1,
                 displayOrder: 1
             ),
         ]
 
-        mockSupabase.mockLibrary = mockLibrary
+        sut.mockLibrary = mockLibrary
 
         let library = try await sut.getDistortionLibrary()
 
@@ -171,7 +165,7 @@ final class CoachServiceTests: XCTestCase {
     // MARK: - Get Specific Distortion Tests
 
     func testGetDistortionByCode() async throws {
-        let distortion = CognitiveDistortion(
+        let distortion = CognitiveDistortionDefinition(
             code: "CAT",
             name: "Catastrophizing",
             shortDescription: "Expecting the worst",
@@ -179,11 +173,10 @@ final class CoachServiceTests: XCTestCase {
             examples: ["One mistake means everything fails"],
             questionsToChallenge: ["How likely is this?"],
             reframeTemplates: ["What's actually most likely?"],
-            severityWeight: 1,
             displayOrder: 2
         )
 
-        mockSupabase.mockDistortion = distortion
+        sut.mockDistortion = distortion
 
         let result = try await sut.getDistortion(code: "CAT")
 
@@ -192,7 +185,7 @@ final class CoachServiceTests: XCTestCase {
     }
 
     func testGetDistortionNotFound() async throws {
-        mockSupabase.mockDistortion = nil
+        sut.mockDistortion = nil
 
         let result = try await sut.getDistortion(code: "INVALID")
 
@@ -227,7 +220,7 @@ final class CoachServiceTests: XCTestCase {
             ),
         ]
 
-        mockSupabase.mockEncounters = mockEncounters
+        sut.mockEncounters = mockEncounters
 
         let encounters = try await sut.getEncounters(limit: 10)
 
@@ -237,24 +230,97 @@ final class CoachServiceTests: XCTestCase {
     }
 }
 
-// MARK: - Mock Supabase Client
+// MARK: - Mock Coach Service
 
-class MockSupabaseClient {
+@MainActor
+class MockCoachService: CoachServiceProtocol {
     var mockSettings: CoachSettings?
     var mockAnalytics: PatternAnalytics?
-    var mockLibrary: [CognitiveDistortion] = []
-    var mockDistortion: CognitiveDistortion?
+    var mockLibrary: [CognitiveDistortionDefinition] = []
+    var mockDistortion: CognitiveDistortionDefinition?
     var mockEncounters: [DistortionEncounter] = []
+    var mockWeeklySummary: WeeklyPatternSummary?
     var shouldThrowError = false
     var mockError: String?
 
     var lastUpdatedSettings: CoachSettings?
     var lastRecordedInteraction: CoachInteraction?
 
-    func throwIfNeeded() throws {
+    func getSettings() async throws -> CoachSettings {
         if shouldThrowError {
-            throw CoachError.networkError(mockError ?? "Mock error")
+            throw CoachError.networkError
         }
+        return mockSettings ?? CoachSettings(
+            isEnabled: true,
+            sensitivityLevel: .balanced,
+            silentHoursStart: nil,
+            silentHoursEnd: nil,
+            disabledDistortions: nil,
+            showPatterns: true
+        )
+    }
+
+    func updateSettings(_ settings: CoachSettings) async throws {
+        if shouldThrowError {
+            throw CoachError.networkError
+        }
+        lastUpdatedSettings = settings
+    }
+
+    func recordInteraction(encounterId: UUID?, distortionCode: String, action: CoachInteraction.Action, confidence: Double?) async throws {
+        if shouldThrowError {
+            throw CoachError.networkError
+        }
+        lastRecordedInteraction = CoachInteraction(
+            id: UUID(),
+            userId: UUID(),
+            encounterId: encounterId,
+            distortionCode: distortionCode,
+            action: action,
+            confidence: confidence,
+            occurredAt: Date()
+        )
+    }
+
+    func getMyPatterns() async throws -> PatternAnalytics {
+        if shouldThrowError {
+            throw CoachError.networkError
+        }
+        return mockAnalytics ?? PatternAnalytics(
+            totalEncounters: 0,
+            last7Days: 0,
+            last30Days: 0,
+            mostCommon: [],
+            byDistortionType: []
+        )
+    }
+
+    func getWeeklySummary() async throws -> WeeklyPatternSummary? {
+        if shouldThrowError {
+            throw CoachError.networkError
+        }
+        return mockWeeklySummary
+    }
+
+    func getDistortionLibrary() async throws -> [CognitiveDistortionDefinition] {
+        if shouldThrowError {
+            throw CoachError.networkError
+        }
+        return mockLibrary
+    }
+
+    func getDistortion(code: String) async throws -> CognitiveDistortionDefinition? {
+        if shouldThrowError {
+            throw CoachError.networkError
+        }
+        return mockDistortion
+    }
+
+    func getEncounters(limit: Int) async throws -> [DistortionEncounter] {
+        if shouldThrowError {
+            throw CoachError.networkError
+        }
+        return mockEncounters.prefix(limit).map { $0 }
     }
 }
 
