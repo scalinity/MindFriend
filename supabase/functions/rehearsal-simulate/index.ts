@@ -11,7 +11,7 @@ import {
 type UntypedSupabaseClient = SupabaseClient<any, "public", any>;
 
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { detectCrisis, CRISIS_RESPONSE } from "../_shared/crisis.ts";
+import { detectCrisis, getMatchedCrisisKeyword, CRISIS_RESPONSE } from "../_shared/crisis.ts";
 import { checkRateLimit, getRateLimitHeaders } from "../_shared/ratelimit.ts";
 
 // Constants
@@ -271,10 +271,12 @@ async function handleCreateScenario(
   const crisisDetected = await detectCrisis(fullText);
 
   if (crisisDetected) {
+    // FIX P0: Store only matched keyword, not full scenario text (PII protection)
+    const matchedKeyword = getMatchedCrisisKeyword(fullText);
     await supabaseAdmin.from("crisis_events").insert({
       user_id: userId,
       event_type: "rehearsal_scenario_creation",
-      content: fullText,
+      matched_keyword: matchedKeyword || "detected",
       detected_at: new Date().toISOString(),
     });
 
@@ -333,10 +335,18 @@ async function handleStartSession(
     .rpc("check_active_session_limit", { p_user_id: userId })
     .single();
 
-  if (sessionLimitError || !sessionLimitResult || !(sessionLimitResult as any).can_create) {
+  if (sessionLimitError || !sessionLimitResult) {
     return {
       error: "too_many_active",
-      message: `Maximum 3 active sessions allowed. You have ${(sessionLimitResult as any)?.active_count || 0} active sessions.`,
+      message: "Could not verify session limit",
+    };
+  }
+
+  const sessionLimit = sessionLimitResult as { can_create: boolean; active_count: number };
+  if (!sessionLimit.can_create) {
+    return {
+      error: "too_many_active",
+      message: `Maximum 3 active sessions allowed. You have ${sessionLimit.active_count} active sessions.`,
     };
   }
 
@@ -389,13 +399,21 @@ async function handleStartSession(
     .rpc("check_and_increment_rehearsal_quota", { p_user_id: userId })
     .single();
 
-  if (quotaError || !quotaResult || !(quotaResult as any).can_create) {
+  if (quotaError || !quotaResult) {
+    return {
+      error: "quota_check_failed",
+      message: "Could not verify quota status",
+    };
+  }
+
+  const quota = quotaResult as { can_create: boolean; used: number; quota_limit: number };
+  if (!quota.can_create) {
     return {
       error: "quota_exceeded",
       message: "Weekly rehearsal limit reached",
       upgradePrompt: true,
-      quotaUsed: (quotaResult as any)?.used || 0,
-      quotaLimit: (quotaResult as any)?.quota_limit || 2,
+      quotaUsed: quota.used,
+      quotaLimit: quota.quota_limit,
     };
   }
 
@@ -752,55 +770,6 @@ async function handleGetSessionHistory(
   return { sessions: sessions || [] };
 }
 
-// Utility: Check rehearsal quota
-async function checkRehearsalQuota(
-  userId: string,
-  supabaseUser: UntypedSupabaseClient,
-  supabaseAdmin: UntypedSupabaseClient,
-) {
-  const { data: settings } = await supabaseUser
-    .from("user_settings")
-    .select("rehearsals_used_this_week, rehearsals_quota_reset_at")
-    .eq("user_id", userId)
-    .single();
-
-  const { data: profile } = await supabaseUser
-    .from("profiles")
-    .select("subscription_tier")
-    .eq("id", userId)
-    .single();
-
-  // Premium users have unlimited
-  if (profile?.subscription_tier === "premium") {
-    return { canCreate: true, used: 0, limit: Infinity };
-  }
-
-  // Check if quota needs reset (weekly)
-  const now = new Date();
-  const resetAt = new Date(settings?.rehearsals_quota_reset_at || now);
-  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-
-  if (resetAt < weekAgo) {
-    // Reset quota
-    await supabaseAdmin
-      .from("user_settings")
-      .update({
-        rehearsals_used_this_week: 0,
-        rehearsals_quota_reset_at: now.toISOString(),
-      })
-      .eq("user_id", userId);
-
-    return { canCreate: true, used: 0, limit: FREE_TIER_WEEKLY_QUOTA };
-  }
-
-  const used = settings?.rehearsals_used_this_week || 0;
-  return {
-    canCreate: used < FREE_TIER_WEEKLY_QUOTA,
-    used,
-    limit: FREE_TIER_WEEKLY_QUOTA,
-  };
-}
-
 // Utility: Call xAI API with timeout
 async function callXAI(messages: any[], timeoutMs = 30000): Promise<string> {
   const controller = new AbortController();
@@ -889,7 +858,7 @@ async function generateFeedback(message: string, scenario: any) {
 }
 
 // Utility: Pattern-based feedback fallback
-async function analyzeWithPatterns(message: string) {
+function analyzeWithPatterns(message: string) {
   // Simple keyword-based analysis
   const lower = message.toLowerCase();
 
@@ -947,38 +916,4 @@ function sanitizeForPrompt(input: string): string {
     .replace(/<\/?s>/gi, "[s]") // Escape sentence markers
     .normalize("NFKC") // Normalize unicode to prevent homoglyph attacks
     .slice(0, MAX_LENGTH); // Enforce length limit
-}
-
-// Extract matched crisis keyword from message (for logging, not storing message content)
-function getMatchedCrisisKeyword(message: string): string | null {
-  // Crisis keywords to match
-  const crisisKeywords = [
-    "suicide",
-    "suicidal",
-    "kill myself",
-    "harm myself",
-    "self-harm",
-    "overdose",
-    "cut myself",
-    "hang",
-    "jump off",
-    "fatal",
-    "die",
-    "dead",
-    "death wish",
-    "no point living",
-    "worthless",
-    "better off dead",
-    "noose",
-    "pills",
-    "nothing matters",
-  ];
-
-  const lower = message.toLowerCase();
-  for (const keyword of crisisKeywords) {
-    if (lower.includes(keyword)) {
-      return keyword;
-    }
-  }
-  return null;
 }
