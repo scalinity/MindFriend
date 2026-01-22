@@ -215,7 +215,7 @@ struct RehearsalSession: Identifiable, Codable, Hashable {
     }
 }
 
-enum SessionStatus: String, Codable {
+enum RehearsalSessionStatus: String, Codable {
     case active
     case completed
     case abandoned
@@ -230,6 +230,8 @@ enum SessionStatus: String, Codable {
         }
     }
 }
+
+// Note: Use RehearsalSessionStatus for rehearsal sessions, CouplesSessionStatus for couples exercises
 
 enum CommunicationStyle: String, Codable {
     case defensive

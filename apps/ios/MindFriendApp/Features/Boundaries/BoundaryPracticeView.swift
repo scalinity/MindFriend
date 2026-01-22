@@ -353,6 +353,7 @@ enum PracticeMode {
             statementText: "I need to stop working at 6pm to have family time.",
             whyMatters: "Family time is important for my well-being.",
             stakeholder: "My manager",
+            expectedImpact: "Better work-life balance",
             status: .ready,
             practiceCount: 2,
             createdAt: Date(),
