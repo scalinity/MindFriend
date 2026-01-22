@@ -313,19 +313,21 @@ async function handleStartSession(
     throw new Error("Must provide scenarioId or customScenarioId");
   }
 
-  // Check quota
-  const quota = await checkRehearsalQuota(userId, supabaseUser, supabaseAdmin);
-  if (!quota.canCreate) {
+  // Check for existing active sessions (prevent accumulation)
+  const { data: activeSessions } = await supabaseUser
+    .from("rehearsal_sessions")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("status", "active");
+
+  if (activeSessions && activeSessions.length >= 3) {
     return {
-      error: "quota_exceeded",
-      message: "Weekly rehearsal limit reached",
-      upgradePrompt: true,
-      quotaUsed: quota.used,
-      quotaLimit: quota.limit,
+      error: "too_many_active",
+      message: "Maximum 3 active sessions allowed. Please complete or abandon existing sessions.",
     };
   }
 
-  // Fetch scenario
+  // Fetch scenario FIRST (before quota check) to validate early
   let scenario;
   if (scenarioId) {
     const { data } = await supabaseUser
@@ -364,8 +366,24 @@ async function handleStartSession(
     }
   }
 
-  // Create session
-  const { data: session, error } = await supabaseUser
+  // FIX P0: Use atomic RPC call for quota check+increment (prevents race condition)
+  const { data: quotaResult, error: quotaError } = await supabaseAdmin.rpc(
+    'check_and_increment_rehearsal_quota',
+    { p_user_id: userId }
+  ).single();
+
+  if (quotaError || !quotaResult || !quotaResult.can_create) {
+    return {
+      error: "quota_exceeded",
+      message: "Weekly rehearsal limit reached",
+      upgradePrompt: true,
+      quotaUsed: quotaResult?.used || 0,
+      quotaLimit: quotaResult?.quota_limit || 2,
+    };
+  }
+
+  // Create session (quota already atomically incremented)
+  const { data: session, error: sessionError } = await supabaseUser
     .from("rehearsal_sessions")
     .insert({
       user_id: userId,
@@ -377,26 +395,28 @@ async function handleStartSession(
     .select()
     .single();
 
-  if (error) throw error;
-
-  // Increment quota
-  await supabaseAdmin
-    .from("user_settings")
-    .update({ rehearsals_used_this_week: quota.used + 1 })
-    .eq("user_id", userId);
+  if (sessionError) {
+    // Rollback quota on session creation failure
+    try {
+      await supabaseAdmin.rpc('rollback_rehearsal_quota', { p_user_id: userId });
+    } catch (e) {
+      console.error("Failed to rollback quota after session creation failure:", e);
+    }
+    throw sessionError;
+  }
 
   // Generate AI opening message
   const systemPrompt = ROLE_SIMULATION_PROMPT(scenario);
-  const openingMessage = await callXAI([
+  const openingMessage = await callXAIWithRetry([
     { role: "system", content: systemPrompt },
     { role: "user", content: "Start the conversation naturally." },
-  ]);
+  ], 3);
 
   return {
     session: {
       id: session.id,
       scenarioTitle: scenario.title,
-      keyPoints: scenario.key_points_to_convey || scenario.key_points,
+      keyPoints: scenario.key_points_to_convey || scenario.key_points || [],
       goal: scenario.desired_outcome,
     },
     openingMessage,
@@ -455,13 +475,15 @@ async function handleSendMessage(
     };
   }
 
-  // Crisis detection
+  // Crisis detection (using KEYWORD only, not full message)
   const crisisDetected = await detectCrisis(message);
   if (crisisDetected) {
+    // FIX P0: Store only matched keyword, not full user message (PII protection)
+    const matchedKeyword = getMatchedCrisisKeyword(message);
     await supabaseAdmin.from("crisis_events").insert({
       user_id: userId,
       event_type: "rehearsal_message",
-      content: message,
+      matched_keyword: matchedKeyword || "detected",
       detected_at: new Date().toISOString(),
     });
 
@@ -478,22 +500,38 @@ async function handleSendMessage(
     };
   }
 
+  // FIX P0: Sanitize user message to prevent prompt injection
+  const sanitizedMessage = sanitizeForPrompt(message);
+
   const scenario = session.conversation_scenarios || session.custom_scenarios;
   const systemPrompt = ROLE_SIMULATION_PROMPT(scenario);
 
-  // Parse existing transcript (with null safety)
-  let transcript = session.transcript ? JSON.parse(session.transcript) : [];
-  // Bug fix #10: Ensure transcript is actually an array (handles corrupted "null", "{}", etc.)
-  if (!Array.isArray(transcript)) {
+  // FIX P0: Parse existing transcript with proper error handling (prevents crash)
+  let transcript: any[] = [];
+  try {
+    const parsed = session.transcript ? JSON.parse(session.transcript) : [];
+    transcript = Array.isArray(parsed) ? parsed : [];
+  } catch (parseError) {
+    console.error("Transcript parse error, resetting:", parseError);
     transcript = [];
   }
+
+  // Enforce max exchanges to prevent DoS via transcript bloat
+  const MAX_EXCHANGES = 100;
+  if (transcript.length >= MAX_EXCHANGES * 2) {
+    return {
+      error: "exchange_limit",
+      message: `Session exchange limit reached (${MAX_EXCHANGES} exchanges max)`,
+    };
+  }
+
   transcript.push({
     role: "user",
-    content: message,
+    content: sanitizedMessage,
     timestamp: new Date().toISOString(),
   });
 
-  // Get AI response
+  // Get AI response with retry logic
   const conversationHistory = [
     { role: "system", content: systemPrompt },
     ...transcript
@@ -501,15 +539,31 @@ async function handleSendMessage(
       .map((t: any) => ({ role: t.role, content: t.content })),
   ];
 
-  const aiResponse = await callXAI(conversationHistory);
+  const aiResponse = await callXAIWithRetry(conversationHistory, 3);
   transcript.push({
     role: "assistant",
     content: aiResponse,
     timestamp: new Date().toISOString(),
   });
 
-  // Generate feedback
-  const feedback = await generateFeedback(message, scenario);
+  // Generate feedback asynchronously (don't block response)
+  const feedbackPromise = generateFeedback(message, scenario)
+    .then((feedback) =>
+      supabaseAdmin.from("rehearsal_feedback").insert({
+        session_id: sessionId,
+        feedback_type: "per_message",
+        tone: feedback.tone,
+        clarity_score: feedback.clarity,
+        empathy_score: feedback.empathy,
+        assertiveness_score: feedback.assertiveness,
+        strengths: [feedback.strength],
+        improvements: [feedback.improvement],
+      })
+    )
+    .catch((error) => {
+      console.error("Feedback generation failed:", error);
+      // Continue - don't block user response
+    });
 
   // Update session
   await supabaseUser
@@ -520,17 +574,11 @@ async function handleSendMessage(
     })
     .eq("id", sessionId);
 
-  // Store feedback
-  await supabaseAdmin.from("rehearsal_feedback").insert({
-    session_id: sessionId,
-    feedback_type: "per_message",
-    tone: feedback.tone,
-    clarity_score: feedback.clarity,
-    empathy_score: feedback.empathy,
-    assertiveness_score: feedback.assertiveness,
-    strengths: [feedback.strength],
-    improvements: [feedback.improvement],
-  });
+  // Don't await feedback - return to user immediately
+  feedbackPromise; // Fire and forget
+
+  // Generate feedback synchronously for immediate response
+  const feedback = await generateFeedback(message, scenario);
 
   return {
     aiResponse,
@@ -582,13 +630,13 @@ async function handleEndSession(
 
   const avgClarity =
     feedbacks?.reduce((sum, f) => sum + (f.clarity_score || 0), 0) /
-    (feedbacks?.length || 1);
+    Math.max(1, feedbacks?.length || 1);
   const avgEmpathy =
     feedbacks?.reduce((sum, f) => sum + (f.empathy_score || 0), 0) /
-    (feedbacks?.length || 1);
+    Math.max(1, feedbacks?.length || 1);
   const avgAssertiveness =
     feedbacks?.reduce((sum, f) => sum + (f.assertiveness_score || 0), 0) /
-    (feedbacks?.length || 1);
+    Math.max(1, feedbacks?.length || 1);
 
   const allStrengths = feedbacks?.flatMap((f) => f.strengths || []) || [];
   const allImprovements = feedbacks?.flatMap((f) => f.improvements || []) || [];
@@ -729,27 +777,53 @@ async function checkRehearsalQuota(
 }
 
 // Utility: Call xAI API
-async function callXAI(messages: any[]): Promise<string> {
-  const response = await fetch(XAI_API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${Deno.env.get("XAI_API_KEY")}`,
-    },
-    body: JSON.stringify({
-      model: "grok-2-latest",
-      messages,
-      temperature: 0.7,
-      max_tokens: 300,
-    }),
-  });
+async function callXAIWithRetry(
+  messages: any[],
+  maxRetries: number,
+  baseDelayMs = 1000,
+): Promise<string> {
+  let retries = 0;
+  const controller = new AbortController();
+  const signal = controller.signal;
 
-  if (!response.ok) {
-    throw new Error(`xAI API error: ${response.statusText}`);
+  while (true) {
+    try {
+      const response = await fetch(XAI_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${Deno.env.get("XAI_API_KEY")}`,
+        },
+        body: JSON.stringify({
+          model: "grok-2-latest",
+          messages,
+          temperature: 0.7,
+          max_tokens: 300,
+        }),
+        signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`xAI API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data.choices[0]?.message?.content || "I'm processing that...";
+    } catch (error: any) {
+      if (error.name === "AbortError") {
+        throw new Error("xAI API request timed out");
+      }
+
+      if (retries < maxRetries) {
+        const delay = Math.min(baseDelayMs * 2 ** retries, 60000);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        retries++;
+        continue;
+      }
+
+      throw error;
+    }
   }
-
-  const data = await response.json();
-  return data.choices[0]?.message?.content || "I'm processing that...";
 }
 
 // Utility: Generate feedback using AI
@@ -825,9 +899,32 @@ function getCrisisResources() {
 function sanitizeForPrompt(input: string): string {
   const MAX_LENGTH = 1000;
   return input
-    .replace(/[\x00-\x1F\x7F]/g, "") // Remove control characters
+    .replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/g, "") // Remove control chars except \t, \n, \r
     .replace(/\{system\}/gi, "[system]") // Escape system markers
     .replace(/\{assistant\}/gi, "[assistant]") // Escape assistant markers
     .replace(/\{user\}/gi, "[user]") // Escape user markers
+    .replace(/\[(INST|\/INST)\]/gi, "[$1]") // Escape LLM instruction markers
+    .replace(/<\|?(im_start|im_end)\|?>/gi, "[$1]") // Escape xAI tokens
+    .replace(/<\/?s>/gi, "[s]") // Escape sentence markers
+    .normalize("NFKC") // Normalize unicode to prevent homoglyph attacks
     .slice(0, MAX_LENGTH); // Enforce length limit
+}
+
+// Extract matched crisis keyword from message (for logging, not storing message content)
+function getMatchedCrisisKeyword(message: string): string | null {
+  // Crisis keywords to match
+  const crisisKeywords = [
+    "suicide", "suicidal", "kill myself", "harm myself", "self-harm", 
+    "overdose", "cut myself", "hang", "jump off", "fatal",
+    "die", "dead", "death wish", "no point living", "worthless",
+    "better off dead", "noose", "pills", "nothing matters"
+  ];
+  
+  const lower = message.toLowerCase();
+  for (const keyword of crisisKeywords) {
+    if (lower.includes(keyword)) {
+      return keyword;
+    }
+  }
+  return null;
 }
