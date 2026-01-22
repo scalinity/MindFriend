@@ -219,6 +219,9 @@ struct VoiceStateMachine {
         case audioPlaybackStarted
         case audioPlaybackFinished
 
+        // Emotion Events
+        case emotionDetected(String, Double)  // emotion name, confidence
+
         // System Events
         case audioInterruptedBegin
         case audioInterruptedEnd
@@ -515,6 +518,13 @@ struct VoiceStateMachine {
         case (_, .sessionTimeout):
             state = .error("Session timed out")
 
+        // MARK: - Emotion Events (no state change, just logging)
+
+        case (_, .emotionDetected):
+            // Emotion detection doesn't cause state transitions
+            // Just used for logging/debugging purposes
+            break
+
         // MARK: - Default (no transition)
 
         default:
@@ -634,6 +644,9 @@ extension VoiceStateMachine.Event: CustomStringConvertible {
         // Audio Events
         case .audioPlaybackStarted: return "audioPlaybackStarted"
         case .audioPlaybackFinished: return "audioPlaybackFinished"
+
+        // Emotion Events
+        case .emotionDetected(let emotion, let confidence): return "emotionDetected(\(emotion), \(String(format: "%.2f", confidence)))"
 
         // System Events
         case .audioInterruptedBegin: return "audioInterruptedBegin"

@@ -620,26 +620,6 @@ final class NeedsAssessmentViewModel: ObservableObject {
 
 // MARK: - Supporting Types
 
-enum ImportanceLevel: String, Codable {
-    case low, medium, high
-
-    var displayName: LocalizedStringKey {
-        switch self {
-        case .low: return "assessment.importance_low"
-        case .medium: return "assessment.importance_medium"
-        case .high: return "assessment.importance_high"
-        }
-    }
-
-    var color: Color {
-        switch self {
-        case .low: return .gray
-        case .medium: return .orange
-        case .high: return .red
-        }
-    }
-}
-
 extension BoundaryAssessmentType {
     var displayName: LocalizedStringKey {
         switch self {

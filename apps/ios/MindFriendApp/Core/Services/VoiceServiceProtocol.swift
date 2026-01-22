@@ -16,6 +16,7 @@ enum VoiceServiceEvent {
     case bargeInTriggered      // User interrupted AI with speech or tap
     case transcriptUpdated(String)
     case quotaUpdated(Double)
+    case emotionDetected(EmotionAnalyzer.EmotionResult)  // Emotion detected from voice
     case error(VoiceError)
 }
 
@@ -74,6 +75,14 @@ protocol VoiceServiceProtocol: ObservableObject {
     var playbackLevel: Float { get }
     var isPremium: Bool { get }
 
+    // MARK: - Emotion State
+
+    /// Current detected emotion (nil if no emotion detected or analysis disabled)
+    var currentEmotion: EmotionAnalyzer.EmotionResult? { get }
+
+    /// Emotion history for current session
+    var emotionHistory: [EmotionSnapshot] { get }
+
     // MARK: - Connection Management
 
     /// Connect to voice service
@@ -100,6 +109,14 @@ protocol VoiceServiceProtocol: ObservableObject {
 
     /// Change the AI voice (premium only for non-ara voices)
     func setVoice(_ voice: GrokVoice) async throws
+
+    // MARK: - Emotion Settings
+
+    /// Enable or disable emotion analysis
+    func setEmotionAnalysisEnabled(_ enabled: Bool)
+
+    /// Set emotion sensitivity threshold (0.4 - 0.8)
+    func setEmotionSensitivity(_ threshold: Double)
 }
 
 /// Mock voice service for testing
@@ -120,6 +137,10 @@ final class MockVoiceService: VoiceServiceProtocol {
     @Published var playbackLevel: Float = 0
     @Published var isPremium = false
 
+    // Emotion state
+    @Published private(set) var currentEmotion: EmotionAnalyzer.EmotionResult?
+    @Published private(set) var emotionHistory: [EmotionSnapshot] = []
+
     // Test hooks
     var connectCalled = false
     var disconnectCalled = false
@@ -127,6 +148,8 @@ final class MockVoiceService: VoiceServiceProtocol {
     var stopListeningCalled = false
     var interruptPlaybackCalled = false
     var setVoiceCalled = false
+    var setEmotionEnabledCalled = false
+    var setEmotionSensitivityCalled = false
 
     var shouldThrowOnConnect = false
     var connectError: Error?
@@ -144,6 +167,8 @@ final class MockVoiceService: VoiceServiceProtocol {
         connectionState = .disconnected
         isListening = false
         isSpeaking = false
+        currentEmotion = nil
+        emotionHistory = []
     }
 
     func startListening() throws {
@@ -168,5 +193,26 @@ final class MockVoiceService: VoiceServiceProtocol {
     func setVoice(_ voice: GrokVoice) async throws {
         setVoiceCalled = true
         currentVoice = voice
+    }
+
+    func setEmotionAnalysisEnabled(_ enabled: Bool) {
+        setEmotionEnabledCalled = true
+    }
+
+    func setEmotionSensitivity(_ threshold: Double) {
+        setEmotionSensitivityCalled = true
+    }
+
+    // Test helpers
+    func simulateEmotionDetected(_ result: EmotionAnalyzer.EmotionResult) {
+        currentEmotion = result
+        let snapshot = EmotionSnapshot(
+            emotion: result.emotion,
+            confidence: result.confidence,
+            allProbabilities: result.allProbabilities,
+            timestamp: 0
+        )
+        emotionHistory.append(snapshot)
+        delegate?.voiceService(self, didEmit: .emotionDetected(result))
     }
 }

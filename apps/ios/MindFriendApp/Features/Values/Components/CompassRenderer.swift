@@ -23,7 +23,7 @@ struct CompassRenderer: View {
         let rank: Int // 1-5
     }
 
-    var body: View {
+    var body: some View {
         GeometryReader { geometry in
             let size = min(geometry.size.width, geometry.size.height)
             let center = CGPoint(x: size / 2, y: size / 2)

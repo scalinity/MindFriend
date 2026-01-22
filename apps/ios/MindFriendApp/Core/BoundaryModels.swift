@@ -30,6 +30,40 @@ enum MetLevel: String, Codable {
     case no
 }
 
+/// A need identified from the assessment with gap analysis
+struct IdentifiedNeed: Codable, Identifiable {
+    let id: UUID
+    let needCategory: String
+    let gapScore: Int  // 1-10 scale
+    let importanceLevel: String
+    let currentlyMet: String
+    let whyMatters: String?
+    
+    init(id: UUID = UUID(), needCategory: String, gapScore: Int, importanceLevel: String, currentlyMet: String, whyMatters: String? = nil) {
+        self.id = id
+        self.needCategory = needCategory
+        self.gapScore = gapScore
+        self.importanceLevel = importanceLevel
+        self.currentlyMet = currentlyMet
+        self.whyMatters = whyMatters
+    }
+}
+
+/// A recommended boundary based on assessment findings
+struct BoundaryRecommendation: Codable, Identifiable {
+    let id: UUID
+    let type: String
+    let suggestion: String
+    let rationale: String
+    
+    init(id: UUID = UUID(), type: String, suggestion: String, rationale: String) {
+        self.id = id
+        self.type = type
+        self.suggestion = suggestion
+        self.rationale = rationale
+    }
+}
+
 struct AssessmentResponses: Codable {
     let step1DrainTriggers: [String]
     let step2ImportanceRatings: [String: ImportanceLevel]
@@ -52,6 +86,10 @@ struct NeedsAssessment: Codable, Identifiable {
     let topNeeds: [String]
     let createdAt: Date
     let updatedAt: Date
+    
+    // Properties for PriorityMatrixView
+    var identifiedNeeds: [IdentifiedNeed]
+    var boundaryRecommendations: [BoundaryRecommendation]
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -61,6 +99,20 @@ struct NeedsAssessment: Codable, Identifiable {
         case topNeeds = "top_needs"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case identifiedNeeds = "identified_needs"
+        case boundaryRecommendations = "boundary_recommendations"
+    }
+    
+    init(id: UUID, userId: UUID, assessmentType: BoundaryAssessmentType, responses: AssessmentResponses, topNeeds: [String], createdAt: Date, updatedAt: Date, identifiedNeeds: [IdentifiedNeed] = [], boundaryRecommendations: [BoundaryRecommendation] = []) {
+        self.id = id
+        self.userId = userId
+        self.assessmentType = assessmentType
+        self.responses = responses
+        self.topNeeds = topNeeds
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.identifiedNeeds = identifiedNeeds
+        self.boundaryRecommendations = boundaryRecommendations
     }
 }
 
@@ -135,10 +187,19 @@ enum ScriptVariation: String, Codable, CaseIterable {
 
     var displayName: LocalizedStringKey {
         switch self {
-        case .direct: return "scripts.variation_direct"
-        case .gentle: return "scripts.variation_gentle"
-        case .assertive: return "scripts.variation_assertive"
-        case .collaborative: return "scripts.variation_collaborative"
+        case .direct: return "scripts.variation.direct"
+        case .gentle: return "scripts.variation.gentle"
+        case .assertive: return "scripts.variation.assertive"
+        case .collaborative: return "scripts.variation.collaborative"
+        }
+    }
+
+    var description: LocalizedStringKey {
+        switch self {
+        case .direct: return "scripts.variation.direct.description"
+        case .gentle: return "scripts.variation.gentle.description"
+        case .assertive: return "scripts.variation.assertive.description"
+        case .collaborative: return "scripts.variation.collaborative.description"
         }
     }
 
@@ -148,6 +209,15 @@ enum ScriptVariation: String, Codable, CaseIterable {
         case .gentle: return "leaf"
         case .assertive: return "exclamationmark.triangle"
         case .collaborative: return "person.2"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .direct: return .blue
+        case .gentle: return .green
+        case .assertive: return .orange
+        case .collaborative: return .purple
         }
     }
 }
@@ -163,6 +233,13 @@ struct BoundaryScript: Codable {
         case text
         case toneDescription = "tone_description"
         case templateId = "template_id"
+    }
+    
+    init(variation: ScriptVariation, text: String, toneDescription: String, templateId: UUID? = nil) {
+        self.variation = variation
+        self.text = text
+        self.toneDescription = toneDescription
+        self.templateId = templateId
     }
     
     init(from decoder: Decoder) throws {
@@ -234,18 +311,27 @@ enum FollowUpOutcome: String, Codable {
 
     var displayName: LocalizedStringKey {
         switch self {
-        case .successful: return "followup.outcome_success"
-        case .partiallySuccessful: return "followup.outcome_partial"
-        case .challenged: return "followup.outcome_needs_work"
-        case .ignored: return "followup.outcome_needs_work"
+        case .successful: return "followup.outcome_successful"
+        case .partiallySuccessful: return "followup.outcome_partially_successful"
+        case .challenged: return "followup.outcome_challenged"
+        case .ignored: return "followup.outcome_ignored"
+        }
+    }
+
+    var description: LocalizedStringKey {
+        switch self {
+        case .successful: return "followup.outcome_successful_description"
+        case .partiallySuccessful: return "followup.outcome_partially_successful_description"
+        case .challenged: return "followup.outcome_challenged_description"
+        case .ignored: return "followup.outcome_ignored_description"
         }
     }
 
     var icon: String {
         switch self {
         case .successful: return "checkmark.circle.fill"
-        case .partiallySuccessful: return "exclamationmark.circle.fill"
-        case .challenged: return "xmark.circle.fill"
+        case .partiallySuccessful: return "checkmark.circle"
+        case .challenged: return "exclamationmark.triangle.fill"
         case .ignored: return "xmark.circle.fill"
         }
     }
@@ -254,7 +340,7 @@ enum FollowUpOutcome: String, Codable {
         switch self {
         case .successful: return .green
         case .partiallySuccessful: return .orange
-        case .challenged: return .red
+        case .challenged: return .yellow
         case .ignored: return .red
         }
     }

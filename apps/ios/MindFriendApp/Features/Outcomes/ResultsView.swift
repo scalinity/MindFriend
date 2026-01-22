@@ -294,7 +294,7 @@ struct ResultsView: View {
             )
         }
         .sheet(isPresented: $isSharing) {
-            ShareSheet(
+            ResultsShareSheet(
                 items: [generatePDF()]
             )
         }
@@ -369,7 +369,7 @@ struct ResourceLink: View {
     }
 }
 
-struct ShareSheet: UIViewControllerRepresentable {
+struct ResultsShareSheet: UIViewControllerRepresentable {
     let items: [Any]
     
     func makeUIViewController(context: Context) -> UIActivityViewController {

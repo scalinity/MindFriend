@@ -1,0 +1,301 @@
+{
+  "reviewTimestamp": "2026-01-22T00:00:00Z",
+  "filePath": "/Users/danny/Documents/Codez/Apps/MindFriend/supabase/functions/rehearsal-simulate/index.ts",
+  "overallAssessment": "GOOD - Function has received extensive security and performance fixes. Several P0 and P1 issues have been addressed. Remaining issues are primarily type safety and defensive programming improvements.",
+  "dimensions": {
+    "errorHandling": {
+      "score": 8,
+      "feedback": [
+        {
+          "severity": "MEDIUM",
+          "line": 277,
+          "issue": "Generic catch block uses 'any' type for error parameter",
+          "fix": "Use typed error: catch (error: unknown) { const err = error as Error; ... }"
+        },
+        {
+          "severity": "MEDIUM",
+          "line": 895,
+          "issue": "XAI API response structure not validated before accessing nested properties",
+          "currentCode": "const rawContent = data.choices[0]?.message?.content || \"I'm processing that...\"",
+          "fix": "Add validation: if (!data?.choices?.[0]?.message?.content) { throw new Error('Invalid XAI API response format'); } const rawContent = data.choices[0].message.content;"
+        },
+        {
+          "severity": "LOW",
+          "line": 622,
+          "issue": "Transcript parse error silently resets to empty array - should log or alert monitoring",
+          "fix": "Add structured logging: console.error('Transcript corruption detected', { sessionId, userId, error: parseError.message });"
+        },
+        {
+          "severity": "LOW",
+          "line": 949,
+          "issue": "JSON.parse fallback doesn't validate feedback structure after parsing",
+          "fix": "Add validation: const feedback = JSON.parse(response); if (!feedback.tone || typeof feedback.clarity !== 'number') { throw new Error('Invalid feedback format'); }"
+        }
+      ],
+      "strengths": [
+        "Comprehensive error handling for database operations (lines 372, 491-503, 558, 693-696, 785-788)",
+        "Rollback logic for quota on session creation failure (lines 493-503)",
+        "Crisis update error logged but doesn't block response (lines 593-596)",
+        "Timeout handling in XAI API calls (lines 867-905)"
+      ]
+    },
+    "performance": {
+      "score": 9,
+      "feedback": [
+        {
+          "severity": "LOW",
+          "line": 922,
+          "issue": "Exponential backoff retry has no jitter - predictable retry timing allows timing attacks",
+          "currentCode": "const delay = Math.min(baseDelayMs * 2 ** retries, 60000);",
+          "fix": "Add jitter: const delay = Math.min(baseDelayMs * 2 ** retries + Math.random() * 1000, 60000);"
+        },
+        {
+          "severity": "LOW",
+          "line": 414,
+          "issue": "Repeated scenario fetches could benefit from short-lived cache (5-10 min TTL)",
+          "fix": "Consider implementing: const scenarioCache = new Map(); // with TTL eviction"
+        }
+      ],
+      "strengths": [
+        "Selective column queries instead of SELECT * (lines 417, 425, 548, 723, 743, 815, 853)",
+        "Conversation history limited to last 10 messages (line 646)",
+        "MAX_EXCHANGES cap prevents DoS via transcript bloat (line 629)",
+        "Fire-and-forget async feedback generation doesn't block response (lines 658-677)",
+        "Pattern-based fallback avoids redundant AI calls (line 680)",
+        "Atomic database RPCs prevent race conditions (lines 391, 456, 684)"
+      ]
+    },
+    "security": {
+      "score": 10,
+      "feedback": [],
+      "strengths": [
+        "Comprehensive input sanitization via sanitizeForPrompt (lines 1002-1014)",
+        "AI response sanitization prevents XSS and prompt injection (lines 106-128)",
+        "Per-action rate limiting with granular limits (lines 184-220)",
+        "Atomic quota check and increment prevents race conditions (lines 456-458)",
+        "Crisis event logging stores only matched keyword, not PII (lines 1018-1041)",
+        "All scenario fields sanitized before database insert (lines 349-355)",
+        "Authorization validated via Supabase auth.getUser (lines 169-179)",
+        "CORS headers properly configured with whitelist (getCorsHeaders)",
+        "Session ownership validated with user_id equality checks",
+        "Premium entitlement gating implemented (lines 440-453)"
+      ]
+    },
+    "defensiveProgramming": {
+      "score": 8,
+      "feedback": [
+        {
+          "severity": "MEDIUM",
+          "line": 291,
+          "issue": "Handler function params typed as 'any' - no runtime validation of required fields structure",
+          "fix": "Define interface: interface CreateScenarioParams { title: string; description: string; personRole: string; situationType?: string; keyPoints: string[]; desiredOutcome: string; } and validate: const params = req.body as CreateScenarioParams; if (!params.title || typeof params.title !== 'string') throw new Error('Invalid title');"
+        },
+        {
+          "severity": "MEDIUM",
+          "line": 132,
+          "issue": "ActionRequest interface uses index signature [key: string]: any - no type safety for params",
+          "fix": "Use discriminated union: type ActionRequest = { action: 'create-scenario'; title: string; ... } | { action: 'start-session'; scenarioId?: string; ... } | ..."
+        },
+        {
+          "severity": "LOW",
+          "line": 610,
+          "issue": "Scenario array extraction assumes structure but could benefit from validation",
+          "currentCode": "const scenarioArray = session.conversation_scenarios || session.custom_scenarios;",
+          "fix": "Add validation: const scenarioArray = session.conversation_scenarios || session.custom_scenarios; if (!scenarioArray) throw new Error('Session missing scenario reference');"
+        },
+        {
+          "severity": "LOW",
+          "line": 934,
+          "issue": "Context description concatenation could fail if fields are undefined",
+          "currentCode": "const contextDesc = `${scenario.title}: ${scenario.situation_context || scenario.situation_summary}`;",
+          "fix": "Add null coalescing: const contextDesc = `${scenario.title || 'Unknown'}: ${scenario.situation_context || scenario.situation_summary || 'No description'}`;"
+        }
+      ],
+      "strengths": [
+        "Comprehensive input validation with length checks (lines 305-324)",
+        "Null checks for scenario existence (lines 434-436, 612-614)",
+        "Session status validation (lines 561-563)",
+        "Exchange limit enforcement (lines 569-578, 629-634)",
+        "Transcript parsing with try-catch and array validation (lines 618-625)",
+        "Guard against undefined feedbacks and NaN in calculations (lines 749-758)",
+        "Premium scenario check with type narrowing (lines 440-453)",
+        "Session ownership validation (lines 554, 727, 782)",
+        "Active session limit check via atomic RPC (lines 391-408)"
+      ]
+    },
+    "asyncAwait": {
+      "score": 9,
+      "feedback": [
+        {
+          "severity": "LOW",
+          "line": 677,
+          "issue": "Statement 'feedbackPromise;' does nothing - unclear intent",
+          "currentCode": "feedbackPromise; // Fire and forget (no duplicate generation)",
+          "fix": "Use void operator or comment: void feedbackPromise; // Fire and forget - explicitly discard promise"
+        }
+      ],
+      "strengths": [
+        "All async functions properly use await",
+        "Fire-and-forget pattern used correctly for non-blocking feedback (lines 658-677)",
+        "Rollback logic properly awaited in catch block (lines 493-503)",
+        "No dangling promises or unhandled rejections",
+        "Timeout handling with AbortController for external API calls (lines 867-905)",
+        "Sequential operations properly chained with await"
+      ]
+    },
+    "typeSafety": {
+      "score": 6,
+      "feedback": [
+        {
+          "severity": "HIGH",
+          "line": 291,
+          "issue": "Function parameter 'params' typed as 'any' - repeated in lines 379, 530, 710, 807, 845",
+          "fix": "Define specific interfaces for each action's params and use them: handleCreateScenario(params: CreateScenarioParams, ...)"
+        },
+        {
+          "severity": "HIGH",
+          "line": 277,
+          "issue": "Error catch block uses 'any' type",
+          "fix": "Use 'unknown' type and narrow: catch (error: unknown) { const err = error instanceof Error ? error : new Error(String(error)); ... }"
+        },
+        {
+          "severity": "MEDIUM",
+          "line": 132,
+          "issue": "ActionRequest uses index signature with 'any' - loses type safety for action-specific params",
+          "fix": "Use discriminated union types: type CreateScenarioAction = { action: 'create-scenario'; title: string; description: string; ... }; type ActionRequest = CreateScenarioAction | StartSessionAction | ..."
+        },
+        {
+          "severity": "MEDIUM",
+          "line": 618,
+          "issue": "Variable 'transcript' typed as 'any[]' instead of specific interface",
+          "fix": "Define interface: interface TranscriptEntry { role: 'user' | 'assistant' | 'system'; content: string; timestamp: string; } and type as: let transcript: TranscriptEntry[] = [];"
+        },
+        {
+          "severity": "MEDIUM",
+          "line": 10,
+          "issue": "UntypedSupabaseClient uses 'any' type parameters - loses type safety for database operations",
+          "fix": "Generate types from Supabase schema: supabase gen types typescript --local > types/database.ts and use: SupabaseClient<Database>"
+        },
+        {
+          "severity": "LOW",
+          "line": 933,
+          "issue": "Function parameter 'scenario' typed as 'any'",
+          "fix": "Use ScenarioUnion type: async function generateFeedback(message: string, scenario: ScenarioUnion)"
+        },
+        {
+          "severity": "LOW",
+          "line": 866,
+          "issue": "Function parameter 'messages' typed as 'any[]",
+          "fix": "Define type: interface ChatMessage { role: 'system' | 'user' | 'assistant'; content: string; } and use: async function callXAI(messages: ChatMessage[], ...)"
+        }
+      ],
+      "strengths": [
+        "Good scenario type definitions with union types (lines 68-92)",
+        "Type-safe normalizeScenario function (lines 95-102)",
+        "Proper type narrowing for premium check (lines 440-453)",
+        "Return types implicitly clear from response objects",
+        "Proper use of optional chaining for safety (line 895)"
+      ]
+    }
+  },
+  "criticalIssues": [
+    {
+      "severity": "P1",
+      "title": "Type Safety: Extensive use of 'any' types reduces compile-time safety",
+      "lines": [10, 132, 277, 291, 379, 530, 618, 710, 866, 933],
+      "description": "Multiple function parameters and variables use 'any' type, eliminating TypeScript's type checking benefits. This increases runtime error risk.",
+      "recommendation": "Define specific interfaces for all request params, database types, and function parameters. Generate types from Supabase schema.",
+      "effort": "Medium (4-6 hours to define all interfaces and update function signatures)"
+    },
+    {
+      "severity": "P2",
+      "title": "Missing validation of external API response structure",
+      "lines": [895, 949],
+      "description": "XAI API responses are accessed without validating structure. Malformed responses could cause runtime errors.",
+      "recommendation": "Add schema validation before accessing nested properties. Use Zod or similar for runtime validation.",
+      "effort": "Low (1-2 hours)"
+    },
+    {
+      "severity": "P3",
+      "title": "No jitter in retry backoff allows predictable timing attacks",
+      "lines": [922],
+      "description": "Exponential backoff uses deterministic delays. Multiple clients retrying simultaneously could create thundering herd.",
+      "recommendation": "Add random jitter: baseDelayMs * 2 ** retries + Math.random() * 1000",
+      "effort": "Trivial (5 minutes)"
+    }
+  ],
+  "recommendations": [
+    {
+      "priority": "HIGH",
+      "title": "Replace all 'any' types with specific interfaces",
+      "description": "Generate Supabase types and define request/response interfaces for all handlers. This will catch errors at compile time instead of runtime.",
+      "estimatedImpact": "Prevents entire class of runtime type errors"
+    },
+    {
+      "priority": "MEDIUM",
+      "title": "Add runtime validation library (Zod) for request params",
+      "description": "Use Zod schemas to validate and type-narrow request parameters at runtime. Provides both type safety and validation.",
+      "estimatedImpact": "Catches invalid requests before processing, improves error messages"
+    },
+    {
+      "priority": "MEDIUM",
+      "title": "Implement structured logging with correlation IDs",
+      "description": "Add request IDs to all log statements and errors for traceability across async operations.",
+      "estimatedImpact": "Significantly improves debugging and monitoring"
+    },
+    {
+      "priority": "LOW",
+      "title": "Add short-lived cache for frequently accessed scenarios",
+      "description": "Cache prebuilt scenarios with 5-10 min TTL to reduce database load.",
+      "estimatedImpact": "Minor performance improvement for high-traffic scenarios"
+    }
+  ],
+  "securityAudit": {
+    "passedChecks": [
+      "Input sanitization (prompt injection protection)",
+      "Output sanitization (XSS protection)",
+      "Rate limiting (per-action granular limits)",
+      "Authentication validation",
+      "Authorization checks (session ownership)",
+      "PII protection in crisis logging",
+      "CORS configuration",
+      "Atomic database operations (race condition prevention)",
+      "Premium entitlement gating",
+      "SQL injection protection (parameterized queries via Supabase)"
+    ],
+    "notes": "Security posture is excellent. All critical vulnerabilities from previous audits have been addressed."
+  },
+  "testingGaps": [
+    "No unit tests for sanitizeAIResponse function",
+    "No integration tests for race condition scenarios",
+    "No tests for XAI API timeout handling",
+    "No tests for transcript corruption recovery",
+    "No tests for concurrent session creation (session limit enforcement)",
+    "No tests for quota rollback on session creation failure"
+  ],
+  "codeQualityMetrics": {
+    "linesOfCode": 1057,
+    "functions": 19,
+    "averageFunctionLength": 55,
+    "complexityHotspots": [
+      {
+        "function": "handleSendMessage",
+        "lines": "529-707",
+        "complexity": "HIGH",
+        "reason": "Multiple async operations, crisis detection, AI calls, feedback generation, and atomic updates"
+      },
+      {
+        "function": "handleStartSession",
+        "lines": "377-526",
+        "complexity": "MEDIUM",
+        "reason": "Quota checks, scenario fetching, premium validation, and AI call"
+      },
+      {
+        "function": "handleEndSession",
+        "lines": "709-804",
+        "complexity": "MEDIUM",
+        "reason": "Feedback aggregation, score calculations, and session finalization"
+      }
+    ]
+  }
+}

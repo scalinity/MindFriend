@@ -164,7 +164,7 @@ struct RehearsalSession: Identifiable, Codable, Hashable {
     let userId: UUID
     let scenarioId: UUID?
     let customScenarioId: UUID?
-    let status: SessionStatus
+    let status: RehearsalSessionStatus
     let startedAt: Date
     let completedAt: Date?
     let confidenceRating: Int?
@@ -452,13 +452,13 @@ struct StartSessionResponse: Codable {
     }
 }
 
-struct SendMessageResponse: Codable {
+struct RehearsalSendMessageResponse: Codable {
     let aiResponse: String
     let feedback: MessageFeedback?
     let exchangeCount: Int
     let crisis: Bool?
     let message: String?
-    let resources: [CrisisResource]?
+    let resources: [RehearsalCrisisResource]?
     let sessionEnded: Bool?
     let error: String?
     let upgradePrompt: Bool?
@@ -470,7 +470,7 @@ struct SendMessageResponse: Codable {
     }
 }
 
-struct CrisisResource: Codable {
+struct RehearsalCrisisResource: Codable {
     let name: String
     let phone: String?
     let sms: String?

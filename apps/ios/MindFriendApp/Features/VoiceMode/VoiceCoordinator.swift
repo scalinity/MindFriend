@@ -62,6 +62,11 @@ final class VoiceCoordinator: ObservableObject, VoiceServiceDelegate {
             // Quota display is bound directly to service property
             break
 
+        case .emotionDetected:
+            // Emotion state is managed directly by service and view
+            // No state machine event needed
+            break
+
         case .error(let error):
             handleError(error)
         }

@@ -5011,7 +5011,7 @@ enum ConversationMode: String, Codable, CaseIterable, Identifiable {
 /// Type of cognitive distortion for thought records
 enum CognitiveDistortion: String, Codable, CaseIterable, Identifiable {
     case allOrNothing = "all_or_nothing"           // Black or white thinking
-    case catrophizing = "catastrophizing"             // Magnifying negatives, minimizing positives
+    case catastrophizing = "catastrophizing"          // Magnifying negatives, minimizing positives
     case emotionalReasoning = "emotional_reasoning" // Assuming feelings reflect reality
     case mindReading = "mind_reading"              // Assuming others' thoughts
     case overgeneralization = "overgeneralization" // Single event = always happens

@@ -191,7 +191,7 @@ struct ForYouView: View {
             }
 
             ForEach(recommendations) { rec in
-                RecommendationCard(recommendation: rec) {
+                ContentRecommendationCard(recommendation: rec) {
                     Task {
                         try? await personalizationService.logRecommendationClick(contentId: rec.contentId)
                     }
@@ -309,7 +309,7 @@ struct ForYouView: View {
 
 // MARK: - Recommendation Card
 
-struct RecommendationCard: View {
+struct ContentRecommendationCard: View {
     let recommendation: ContentRecommendation
     let onTap: () -> Void
 

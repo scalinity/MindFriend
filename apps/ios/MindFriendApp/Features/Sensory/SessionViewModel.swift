@@ -51,7 +51,7 @@ final class SessionViewModel: ObservableObject {
         self.patternId = patternId
         self.sensoryService = sensoryService
         self.tactileService = tactileService
-        self.visualService = visualAnimationService
+        self.visualService = visualService
         self.audioService = audioService
 
         setupBindings()

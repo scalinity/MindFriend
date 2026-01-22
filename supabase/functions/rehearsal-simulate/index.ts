@@ -14,6 +14,69 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { detectCrisis, getMatchedCrisisKeyword, CRISIS_RESPONSE } from "../_shared/crisis.ts";
 import { checkRateLimit, getRateLimitHeaders } from "../_shared/ratelimit.ts";
 
+// TYPE DEFINITIONS
+interface PrebuiltScenario {
+  id: string;
+  category: string;
+  title: string;
+  description: string;
+  situation_context: string;
+  other_party_role: string;
+  other_party_personality?: string;
+  key_points_to_convey: string[];
+  desired_outcome: string;
+  difficulty_level: string;
+  estimated_minutes: number;
+  tips_for_user?: string[];
+  tags?: string[];
+  is_premium: boolean;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+interface CustomScenarioData {
+  id: string;
+  user_id: string;
+  title: string;
+  other_party_role: string;
+  situation_summary: string;
+  key_points: string[];
+  desired_outcome: string;
+  situation_type: string;
+  context_details?: Record<string, string>;
+  is_public: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+type ScenarioUnion = PrebuiltScenario | CustomScenarioData;
+
+interface CreateScenarioParams {
+  title: string;
+  description: string;
+  personRole: string;
+  situationType: string;
+  keyPoints: string[];
+  desiredOutcome: string;
+}
+
+interface StartSessionParams {
+  scenarioId?: string;
+  customScenarioId?: string;
+}
+
+interface SendMessageParams {
+  sessionId: string;
+  message: string;
+}
+
+interface EndSessionParams {
+  sessionId: string;
+  confidenceRating?: number;
+  notes?: string;
+}
+
 // Constants
 const MAX_MESSAGE_LENGTH = 1000; // Rehearsal messages are shorter
 const FREE_TIER_WEEKLY_QUOTA = 2;
@@ -22,20 +85,28 @@ const XAI_API_URL = "https://api.x.ai/v1/chat/completions";
 
 // AI Prompts for role simulation
 const ROLE_SIMULATION_PROMPT = (
-  scenario: any,
-) => `You are role-playing as ${scenario.other_party_role} in a ${scenario.situation_type} conversation.
+  scenario: ScenarioUnion,
+) => `You are role-playing as ${scenario.other_party_role} in a ${
+  "situation_type" in scenario ? scenario.situation_type : "conversation"
+}.
 
-Scenario context: ${scenario.situation_context || scenario.situation_summary}
-Your personality: ${scenario.other_party_personality || "neutral and realistic"}
+Scenario context: ${
+  "situation_context" in scenario ? scenario.situation_context : scenario.situation_summary
+}
+Your personality: ${
+  "other_party_personality" in scenario && scenario.other_party_personality
+    ? scenario.other_party_personality
+    : "neutral and realistic"
+}
 
 Guidelines:
-- Stay in character throughout the conversation
-- Respond naturally as this person would
-- Be realistic - don't make it too easy or too hard
-- Keep responses concise (1-3 sentences)
-- React to the user's tone and approach
-- Show appropriate emotions for the situation
-- If unclear, ask clarifying questions as the character would
+-- Stay in character throughout the conversation
+-- Respond naturally as this person would
+-- Be realistic - don't make it too easy or too hard
+-- Keep responses concise (1-3 sentences)
+-- React to the user's tone and approach
+-- Show appropriate emotions for the situation
+-- If unclear, ask clarifying questions as the character would
 
 Remember: You are helping the user practice. Be realistic but constructive.`;
 
@@ -64,6 +135,51 @@ Format your response as JSON:
   "strength": "Clear use of 'I' statements",
   "improvement": "Consider acknowledging their perspective first"
 }`;
+
+// Helper to normalize scenario fields across both types
+function normalizeScenario(scenario: ScenarioUnion): {
+  title: string;
+  role: string;
+  personality: string;
+  context: string;
+} {
+  return {
+    title: scenario.title,
+    role: scenario.other_party_role,
+    personality:
+      scenario.other_party_personality || "neutral and realistic",
+    context:
+      "situation_context" in scenario
+        ? scenario.situation_context
+        : scenario.situation_summary,
+  };
+}
+
+// FIX P0: Sanitize AI responses to prevent XSS and prompt injection
+// Removes control characters, HTML tags, and suspicious patterns
+function sanitizeAIResponse(content: string): string {
+  if (!content) return "";
+  
+  // Remove control characters and null bytes
+  let sanitized = content.replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/g, "");
+  
+  // Remove HTML tags to prevent injection if rendered in WebView
+  sanitized = sanitized.replace(/<[^>]*>/g, "");
+  
+  // Remove common LLM markers that could be prompt injection attempts
+  sanitized = sanitized
+    .replace(/\[SYSTEM\]/gi, "")
+    .replace(/\[INSTRUCTION\]/gi, "")
+    .replace(/\[JAILBREAK\]/gi, "")
+    .replace(/```[\s\S]*?```/g, ""); // Remove code blocks
+  
+  // Normalize unicode to prevent homoglyph attacks
+  sanitized = sanitized.normalize("NFKC");
+  
+  // Truncate to max length (prevent memory exhaustion)
+  const MAX_RESPONSE_LENGTH = 5000;
+  return sanitized.slice(0, MAX_RESPONSE_LENGTH).trim();
+}
 
 interface ActionRequest {
   action: string;
@@ -226,7 +342,7 @@ serve(async (req) => {
 
 // Handler: Create custom scenario
 async function handleCreateScenario(
-  params: any,
+  params: CreateScenarioParams,
   userId: string,
   supabaseUser: UntypedSupabaseClient,
   supabaseAdmin: UntypedSupabaseClient,
@@ -272,13 +388,8 @@ async function handleCreateScenario(
 
   if (crisisDetected) {
     // FIX P0: Store only matched keyword, not full scenario text (PII protection)
-    const matchedKeyword = getMatchedCrisisKeyword(fullText);
-    await supabaseAdmin.from("crisis_events").insert({
-      user_id: userId,
-      event_type: "rehearsal_scenario_creation",
-      matched_keyword: matchedKeyword || "detected",
-      detected_at: new Date().toISOString(),
-    });
+    // FIX P1: Use extracted helper function to reduce duplication
+    await logCrisisEvent(supabaseAdmin, userId, fullText);
 
     return {
       crisis: true,
@@ -309,7 +420,7 @@ async function handleCreateScenario(
       desired_outcome: sanitizedDesiredOutcome,
       situation_type: situationType || "other",
     })
-    .select()
+    .select("id, title, other_party_role, other_party_personality, situation_type, situation_summary, key_points, desired_outcome")
     .single();
 
   if (error) throw error;
@@ -319,7 +430,7 @@ async function handleCreateScenario(
 
 // Handler: Start rehearsal session
 async function handleStartSession(
-  params: any,
+  params: StartSessionParams,
   userId: string,
   supabaseUser: UntypedSupabaseClient,
   supabaseAdmin: UntypedSupabaseClient,
@@ -338,7 +449,7 @@ async function handleStartSession(
   if (sessionLimitError || !sessionLimitResult) {
     return {
       error: "too_many_active",
-      message: "Could not verify session limit",
+      message: "Unable to check session limit. Please try again.",
     };
   }
 
@@ -379,7 +490,8 @@ async function handleStartSession(
   }
 
   // Check if premium scenario and user has entitlement
-  if (scenarioId && scenario.is_premium) {
+  // Type narrowing: is_premium only exists on PrebuiltScenario (scenarioId case)
+  if (scenarioId && "is_premium" in scenario && scenario.is_premium) {
     const { data: profile } = await supabaseUser
       .from("profiles")
       .select("subscription_tier")
@@ -402,7 +514,7 @@ async function handleStartSession(
   if (quotaError || !quotaResult) {
     return {
       error: "quota_check_failed",
-      message: "Could not verify quota status",
+      message: "Unable to verify your quota. Please try again.",
     };
   }
 
@@ -427,7 +539,7 @@ async function handleStartSession(
       status: "active",
       transcript: "",
     })
-    .select()
+    .select("id, user_id, status, started_at, completed_at, transcript, total_exchanges, crisis_detected")
     .single();
 
   if (sessionError) {
@@ -469,7 +581,7 @@ async function handleStartSession(
 
 // Handler: Send message in rehearsal
 async function handleSendMessage(
-  params: any,
+  params: SendMessageParams,
   userId: string,
   supabaseUser: UntypedSupabaseClient,
   supabaseAdmin: UntypedSupabaseClient,
@@ -484,16 +596,20 @@ async function handleSendMessage(
     throw new Error(`Message too long (max ${MAX_MESSAGE_LENGTH} characters)`);
   }
 
-  // Get session and scenario
-  const { data: session } = await supabaseUser
+  // Get session and scenario with selective columns (no SELECT *)
+  const { data: session, error: sessionError } = await supabaseUser
     .from("rehearsal_sessions")
-    .select("*, conversation_scenarios(*), custom_scenarios(*)")
+    .select(`
+      id, user_id, status, transcript, total_exchanges, started_at, completed_at, crisis_detected,
+      conversation_scenarios(id, title, other_party_role, other_party_personality, situation_type, situation_context, key_points_to_convey, desired_outcome, is_premium),
+      custom_scenarios(id, title, other_party_role, other_party_personality, situation_type, situation_summary, key_points, desired_outcome)
+    `)
     .eq("id", sessionId)
     .eq("user_id", userId)
     .single();
 
-  if (!session) {
-    throw new Error("Session not found");
+  if (sessionError || !session) {
+    throw new Error(`Session query failed: ${sessionError?.message || "Session not found"}`);
   }
 
   if (session.status !== "active") {
@@ -501,14 +617,11 @@ async function handleSendMessage(
   }
 
   // Check exchange limit for free tier
-  const { data: profile } = await supabaseUser
-    .from("profiles")
-    .select("subscription_tier")
-    .eq("id", userId)
-    .single();
+  // FIX P1: Use extracted helper function to reduce duplication
+  const subscriptionTier = await getProfileSubscriptionTier(supabaseUser, userId);
 
   if (
-    profile?.subscription_tier !== "premium" &&
+    subscriptionTier !== "premium" &&
     session.total_exchanges >= FREE_TIER_EXCHANGES_LIMIT
   ) {
     return {
@@ -522,18 +635,24 @@ async function handleSendMessage(
   const crisisDetected = await detectCrisis(message);
   if (crisisDetected) {
     // FIX P0: Store only matched keyword, not full user message (PII protection)
-    const matchedKeyword = getMatchedCrisisKeyword(message);
-    await supabaseAdmin.from("crisis_events").insert({
-      user_id: userId,
-      event_type: "rehearsal_message",
-      matched_keyword: matchedKeyword || "detected",
-      detected_at: new Date().toISOString(),
-    });
+    // FIX P1: Use extracted helper function to reduce duplication
+    await logCrisisEvent(supabaseAdmin, userId, message);
 
-    await supabaseUser
-      .from("rehearsal_sessions")
-      .update({ status: "crisis_ended", crisis_detected: true })
-      .eq("id", sessionId);
+    // FIX P0: Atomically update session to crisis_ended with row-level lock
+    const { data: crisisUpdateResult, error: crisisUpdateError } = await supabaseUser
+      .rpc("update_session_crisis_status_atomic", {
+        p_session_id: sessionId,
+        p_user_id: userId,
+      })
+      .single();
+
+    if (crisisUpdateError || !crisisUpdateResult?.success) {
+      console.error(
+        "Crisis session status update failed:",
+        crisisUpdateError || crisisUpdateResult?.error_message,
+      );
+      // Continue with crisis response regardless of status update failure
+    }
 
     return {
       crisis: true,
@@ -546,7 +665,12 @@ async function handleSendMessage(
   // FIX P0: Sanitize user message to prevent prompt injection
   const sanitizedMessage = sanitizeForPrompt(message);
 
-  const scenario = session.conversation_scenarios || session.custom_scenarios;
+  // FIX P0: Extract first element from nested query arrays (Supabase returns arrays)
+  const scenarioArray = session.conversation_scenarios || session.custom_scenarios;
+  const scenario = Array.isArray(scenarioArray) ? scenarioArray[0] : scenarioArray;
+  if (!scenario) {
+    throw new Error("Scenario not found or was deleted");
+  }
   const systemPrompt = ROLE_SIMULATION_PROMPT(scenario);
 
   // FIX P0: Parse existing transcript with proper error handling (prevents crash)
@@ -608,26 +732,33 @@ async function handleSendMessage(
       // Continue - don't block user response
     });
 
-  // Update session
-  await supabaseUser
-    .from("rehearsal_sessions")
-    .update({
-      transcript: JSON.stringify(transcript),
-      total_exchanges: session.total_exchanges + 1,
-    })
-    .eq("id", sessionId);
-
   // Don't await feedback - return to user immediately
   feedbackPromise; // Fire and forget (no duplicate generation)
 
   // Use pattern-based fallback for immediate response (no AI cost)
   const patternFeedback = analyzeWithPatterns(message);
 
+  // FIX P0: Add error handling for session update (prevent data inconsistency)
+  // FIX P0: Use atomic RPC call for session update (prevents race condition from concurrent messages)
+  const { data: updateResult, error: updateError } = await supabaseUser
+    .rpc("update_session_transcript_atomic", {
+      p_session_id: sessionId,
+      p_user_id: userId,
+      p_transcript_json: JSON.stringify(transcript),
+      p_total_exchanges: session.total_exchanges + 1,
+    })
+    .single();
+
+  if (updateError || !updateResult?.success) {
+    console.error("Session transcript update failed:", updateError || updateResult?.error_message);
+    throw new Error(updateResult?.error_message || "Failed to update session transcript");
+  }
+
   return {
     aiResponse,
     feedback: {
       style: patternFeedback.tone,
-      suggestions: patternFeedback.improvements || [],
+      suggestions: patternFeedback.improvement ? [patternFeedback.improvement] : [],
       encouragement: patternFeedback.strength || "Good effort!",
     },
     exchangeCount: transcript.length / 2,
@@ -636,7 +767,7 @@ async function handleSendMessage(
 
 // Handler: End session with summary
 async function handleEndSession(
-  params: any,
+  params: EndSessionParams,
   userId: string,
   supabaseUser: UntypedSupabaseClient,
   supabaseAdmin: UntypedSupabaseClient,
@@ -647,9 +778,10 @@ async function handleEndSession(
     throw new Error("Missing sessionId");
   }
 
+  // FIX P1: Specify columns instead of SELECT * (performance optimization)
   const { data: session } = await supabaseUser
     .from("rehearsal_sessions")
-    .select("*")
+    .select("id, user_id, status, started_at, total_exchanges, transcript")
     .eq("id", sessionId)
     .eq("user_id", userId)
     .single();
@@ -666,51 +798,61 @@ async function handleEndSession(
   );
 
   // Get feedback summary
+  // FIX P1: Specify columns instead of SELECT * (performance optimization)
   const { data: feedbacks } = await supabaseAdmin
     .from("rehearsal_feedback")
-    .select("*")
+    .select("id, clarity_score, empathy_score, assertiveness_score, strengths, improvements")
     .eq("session_id", sessionId);
 
-  const avgClarity =
-    feedbacks?.reduce((sum, f) => sum + (f.clarity_score || 0), 0) /
-    Math.max(1, feedbacks?.length || 1);
-  const avgEmpathy =
-    feedbacks?.reduce((sum, f) => sum + (f.empathy_score || 0), 0) /
-    Math.max(1, feedbacks?.length || 1);
-  const avgAssertiveness =
-    feedbacks?.reduce((sum, f) => sum + (f.assertiveness_score || 0), 0) /
-    Math.max(1, feedbacks?.length || 1);
+  // FIX P0: Guard against undefined feedbacks and NaN in calculations
+  const feedbackCount = feedbacks?.length || 0;
+  const avgClarity = feedbackCount > 0
+    ? feedbacks!.reduce((sum, f) => sum + (f.clarity_score || 0), 0) / feedbackCount
+    : 0;
+  const avgEmpathy = feedbackCount > 0
+    ? feedbacks!.reduce((sum, f) => sum + (f.empathy_score || 0), 0) / feedbackCount
+    : 0;
+  const avgAssertiveness = feedbackCount > 0
+    ? feedbacks!.reduce((sum, f) => sum + (f.assertiveness_score || 0), 0) / feedbackCount
+    : 0;
 
   const allStrengths = feedbacks?.flatMap((f) => f.strengths || []) || [];
   const allImprovements = feedbacks?.flatMap((f) => f.improvements || []) || [];
 
   // Update session
-  await supabaseUser
-    .from("rehearsal_sessions")
-    .update({
-      status: "completed",
-      completed_at: completedAt.toISOString(),
-      total_duration_seconds: durationSeconds,
-      confidence_rating: confidenceRating,
-      notes: notes || null,
-      feedback_summary: JSON.stringify({
-        avgClarity,
-        avgEmpathy,
-        avgAssertiveness,
-        strengths: allStrengths.slice(0, 3),
-        improvements: allImprovements.slice(0, 2),
-      }),
+  // FIX P0: Use atomic RPC to prevent session finalization race conditions
+  const feedbackSummary = JSON.stringify({
+    avgClarity: Number(avgClarity.toFixed(1)),
+    avgEmpathy: Number(avgEmpathy.toFixed(1)),
+    avgAssertiveness: Number(avgAssertiveness.toFixed(1)),
+    strengths: allStrengths.slice(0, 3),
+    improvements: allImprovements.slice(0, 2),
+  });
+
+  const { data: endSessionResult, error: endSessionError } = await supabaseUser
+    .rpc("end_session_atomic", {
+      p_session_id: sessionId,
+      p_user_id: userId,
+      p_status: "completed",
+      p_confidence_rating: confidenceRating,
+      p_notes: notes || null,
+      p_feedback_summary: feedbackSummary,
+      p_communication_style: null,
     })
-    .eq("id", sessionId);
+    .single();
+
+  if (endSessionError || !endSessionResult?.success) {
+    throw new Error(endSessionResult?.error_message || endSessionError?.message || "Failed to complete session");
+  }
 
   return {
     summary: {
       duration: durationSeconds,
       exchangesCount: session.total_exchanges,
       avgScores: {
-        clarity: avgClarity.toFixed(1),
-        empathy: avgEmpathy.toFixed(1),
-        assertiveness: avgAssertiveness.toFixed(1),
+        clarity: Number(avgClarity.toFixed(1)),
+        empathy: Number(avgEmpathy.toFixed(1)),
+        assertiveness: Number(avgAssertiveness.toFixed(1)),
       },
       strengths: allStrengths.slice(0, 3),
       growthAreas: allImprovements.slice(0, 2),
@@ -727,9 +869,12 @@ async function handleGetScenarios(
 ) {
   const { category, includeCustom } = params;
 
+  // FIX P2: Use selective columns instead of SELECT * for performance
   let query = supabaseUser
     .from("conversation_scenarios")
-    .select("*")
+    .select(
+      "id, title, category, description, is_premium, other_party_role, situation_type, difficulty_level, estimated_minutes",
+    )
     .eq("is_active", true);
 
   if (category) {
@@ -742,7 +887,9 @@ async function handleGetScenarios(
   if (includeCustom) {
     const { data } = await supabaseUser
       .from("custom_scenarios")
-      .select("*")
+      .select(
+        "id, title, user_id, other_party_role, situation_type, situation_summary, key_points, desired_outcome, created_at",
+      )
       .eq("user_id", userId)
       .is("deleted_at", null)
       .order("created_at", { ascending: false });
@@ -760,9 +907,12 @@ async function handleGetSessionHistory(
 ) {
   const { limit = 20 } = params;
 
+  // FIX P2: Use selective columns instead of SELECT * for performance
   const { data: sessions } = await supabaseUser
     .from("rehearsal_sessions")
-    .select("*, conversation_scenarios(title), custom_scenarios(title)")
+    .select(
+      "id, status, started_at, completed_at, total_exchanges, confidence_rating, conversation_scenarios(title), custom_scenarios(title)",
+    )
     .eq("user_id", userId)
     .order("started_at", { ascending: false })
     .limit(limit);
@@ -800,7 +950,10 @@ async function callXAI(messages: any[], timeoutMs = 30000): Promise<string> {
     }
 
     const data = await response.json();
-    return data.choices[0]?.message?.content || "I'm processing that...";
+    const rawContent = data.choices[0]?.message?.content || "I'm processing that...";
+    
+    // FIX P0: Sanitize AI response to prevent XSS/prompt injection
+    return sanitizeAIResponse(rawContent);
   } catch (error: any) {
     clearTimeout(timeoutId);
     if (error.name === "AbortError") {
@@ -887,8 +1040,35 @@ function analyzeWithPatterns(message: string) {
   };
 }
 
+interface CrisisResource {
+  name: string;
+  phone?: string;
+  sms?: string;
+  available: string;
+}
+
+// RESPONSE TYPES - Unified format for all API responses
+interface ErrorResponse {
+  error: string;
+  message: string;
+  sessionEnded?: boolean;
+}
+
+interface SuccessResponse<T = Record<string, unknown>> {
+  success: true;
+  data: T;
+  sessionEnded?: boolean;
+}
+
+interface CrisisResponse {
+  crisis: true;
+  message: string;
+  resources: CrisisResource[];
+  sessionEnded?: boolean;
+}
+
 // Utility: Get crisis resources
-function getCrisisResources() {
+function getCrisisResources(): CrisisResource[] {
   return [
     {
       name: "National Suicide Prevention Lifeline",
@@ -916,4 +1096,46 @@ function sanitizeForPrompt(input: string): string {
     .replace(/<\/?s>/gi, "[s]") // Escape sentence markers
     .normalize("NFKC") // Normalize unicode to prevent homoglyph attacks
     .slice(0, MAX_LENGTH); // Enforce length limit
+}
+
+// FIX P1: Extract duplicated crisis logging into helper function (DRY principle)
+// Used in both createScenario and handleSendMessage to avoid duplication
+async function logCrisisEvent(
+  supabaseAdmin: UntypedSupabaseClient,
+  userId: string,
+  content: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const matchedKeyword = getMatchedCrisisKeyword(content);
+    const { error: crisisError } = await supabaseAdmin.from("crisis_events").insert({
+      user_id: userId,
+      matched_keyword: matchedKeyword || "detected",
+      detected_at: new Date().toISOString(),
+    });
+
+    if (crisisError) {
+      console.error("Crisis event logging failed:", crisisError);
+      return { success: false, error: crisisError.message };
+    }
+
+    return { success: true };
+  } catch (crisisLogError) {
+    console.error("Crisis event insertion error:", crisisLogError);
+    return { success: false, error: String(crisisLogError) };
+  }
+}
+
+// FIX P1: Extract duplicated profile query into helper function
+// Subscription tier check is repeated in multiple handlers
+async function getProfileSubscriptionTier(
+  supabaseUser: UntypedSupabaseClient,
+  userId: string,
+): Promise<string | undefined> {
+  const { data: profile } = await supabaseUser
+    .from("profiles")
+    .select("subscription_tier")
+    .eq("id", userId)
+    .single();
+
+  return profile?.subscription_tier;
 }

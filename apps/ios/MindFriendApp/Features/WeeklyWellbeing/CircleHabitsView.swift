@@ -345,7 +345,8 @@ struct UpcomingCheckinCard: View {
 
     private func dayAbbreviation(_ day: Int) -> String {
         // Convert 1-based day (1-7) to 0-based index (0-6)
-        let symbols = Self.dayFormatter.shortWeekdaySymbols
+        let symbols = Self.dayFormatter.shortWeekdaySymbols ?? []
+        guard !symbols.isEmpty else { return "?" }
         return String(symbols[((day - 1) % 7)].prefix(2))
     }
 }

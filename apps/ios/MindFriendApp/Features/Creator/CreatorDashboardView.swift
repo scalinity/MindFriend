@@ -185,7 +185,7 @@ struct ContentListView: View {
                             Spacer()
 
                             VStack(alignment: .trailing, spacing: 4) {
-                                StatusBadge(status: content.status)
+                                CreatorStatusBadge(status: content.status)
 
                                 if content.status == .published {
                                     Text("\(content.playCount)")
@@ -288,7 +288,7 @@ struct EarningsView: View {
     }
 }
 
-struct StatusBadge: View {
+struct CreatorStatusBadge: View {
     let status: ContentStatus
 
     var body: some View {

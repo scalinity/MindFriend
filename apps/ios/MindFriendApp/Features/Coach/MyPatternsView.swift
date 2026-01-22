@@ -6,7 +6,7 @@ final class MyPatternsViewModel: ObservableObject {
     @Published var analytics: PatternAnalytics?
     @Published var isLoading = false
     @Published var errorMessage: String?
-    @Published var distortionLibrary: [CognitiveDistortion] = []
+    @Published var distortionLibrary: [CognitiveDistortionDefinition] = []
 
     private let coachService: CoachServiceProtocol
 
@@ -22,7 +22,7 @@ final class MyPatternsViewModel: ObservableObject {
             async let analyticsTask = coachService.getMyPatterns()
             async let libraryTask = coachService.getDistortionLibrary()
 
-            let (loadedAnalytics, loadedLibrary) = await (analyticsTask, libraryTask)
+            let (loadedAnalytics, loadedLibrary) = try await (analyticsTask, libraryTask)
 
             await MainActor.run {
                 self.analytics = loadedAnalytics
@@ -120,7 +120,7 @@ struct MyPatternsView: View {
                                             count: stat.count,
                                             percentage: stat.percentage,
                                             color: viewModel.getDistortionColor(for: index),
-                                            trend: stat.trend
+                                            trend: stat.trend?.rawValue ?? "stable"
                                         )
                                     }
                                 }
@@ -354,10 +354,10 @@ struct DistortionBarView: View {
 // MARK: - Distortion Library View
 
 struct DistortionLibraryView: View {
-    let library: [CognitiveDistortion]
+    let library: [CognitiveDistortionDefinition]
     @State private var searchText = ""
 
-    var filteredLibrary: [CognitiveDistortion] {
+    var filteredLibrary: [CognitiveDistortionDefinition] {
         if searchText.isEmpty {
             return library
         }
@@ -393,7 +393,7 @@ struct DistortionLibraryView: View {
 // MARK: - Distortion Detail View
 
 struct DistortionDetailView: View {
-    let distortion: CognitiveDistortion
+    let distortion: CognitiveDistortionDefinition
 
     var body: some View {
         ScrollView {

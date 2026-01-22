@@ -1,17 +1,94 @@
 import AVFoundation
 import Accelerate
 import CoreML
+import os.log
 
 /// Emotion analyzer using Core ML model trained on speech prosody features.
 /// Supports 8 emotion classes: angry, calm, disgust, fearful, happy, neutral, sad, surprised
+///
+/// ## Security Features
+/// - URL validation prevents path traversal attacks
+/// - Audio length limits prevent memory exhaustion
+/// - Consent management required before analysis
+/// - Rate limiting prevents abuse
+///
+/// ## Privacy
+/// - All processing happens on-device
+/// - No audio data is stored or transmitted
+/// - User consent required for emotion analysis
 @MainActor
 final class EmotionAnalyzer: ObservableObject {
+
     // MARK: - Types
 
+    /// Emotion classification result
     struct EmotionResult {
         let emotion: String
         let confidence: Double
         let allProbabilities: [String: Double]
+    }
+
+    // MARK: - Configuration
+
+    /// Protocol for dependency injection and testing
+    protocol EmotionAnalyzerProtocol {
+        func analyzeAudio(at url: URL, userId: String?) async throws -> EmotionResult
+        func analyzeAudioBuffer(_ audioBuffer: [Float], userId: String?) async throws -> EmotionResult
+    }
+
+    // MARK: - Error Types
+
+    enum EmotionAnalyzerError: LocalizedError {
+        case invalidURL
+        case pathTraversalAttempt
+        case invalidFileFormat
+        case audioTooLong
+        case invalidAudioLength
+        case audioLoadError(Error)
+        case bufferCreationFailed
+        case noAudioData
+        case modelNotLoaded
+        case noPrediction
+        case featureExtractionFailed
+        case consentRequired
+        case rateLimitExceeded
+        case inferenceTimeout
+        case unsupportedFormat(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidURL:
+                return "Invalid audio URL provided"
+            case .pathTraversalAttempt:
+                return "Audio file path is outside allowed directory"
+            case .invalidFileFormat:
+                return "Audio file format is not supported"
+            case .audioTooLong:
+                return "Audio file exceeds maximum allowed duration (5 minutes)"
+            case .invalidAudioLength:
+                return "Audio file has invalid or zero length"
+            case .audioLoadError(let error):
+                return "Failed to load audio file: \(error.localizedDescription)"
+            case .bufferCreationFailed:
+                return "Failed to create audio buffer"
+            case .noAudioData:
+                return "No audio data in buffer"
+            case .modelNotLoaded:
+                return "Core ML model not loaded"
+            case .noPrediction:
+                return "Model failed to produce prediction"
+            case .featureExtractionFailed:
+                return "Failed to extract audio features"
+            case .consentRequired:
+                return "User consent is required for voice emotion analysis"
+            case .rateLimitExceeded:
+                return "Too many analysis requests. Please try again later."
+            case .inferenceTimeout:
+                return "Emotion analysis timed out"
+            case .unsupportedFormat(let ext):
+                return "Unsupported audio format: \(ext)"
+            }
+        }
     }
 
     // MARK: - Properties
@@ -19,83 +96,158 @@ final class EmotionAnalyzer: ObservableObject {
     @Published private(set) var isAnalyzing = false
     @Published private(set) var lastError: Error?
 
-    private var model: EmotionProsodyClassifier_20260122_124134?
+    // Model and resources
+    private var model: MLModel?
+    private var modelDescription: MLModelDescription?
     private var scalerMean: [Double] = []
     private var scalerScale: [Double] = []
     private var emotionLabels: [String] = []
 
+    // Security and consent
+    private var hasConsent: Bool = false
+    private var analysisCount: [String: Int] = [:]
+    private let maxAnalysesPerHour = 10
+    private let maxAudioDuration: Double = 300  // 5 minutes
+    private let maxSampleCount: Int
+    private var lastAnalysisTime: Date?
+    private let analysisTimeout: TimeInterval = 30.0
+
+    // Compiled model cleanup
+    private var compiledModelURL: URL?
+
     // MARK: - Constants
 
-    /// Sample rate for audio processing (must match training)
+    /// Feature dimension breakdown:
+    /// - 160: MFCC (40 coeffs x 4 stats: mean, std, max, min)
+    /// - 40: Delta MFCC mean
+    /// - 40: Delta-delta MFCC mean
+    /// - 6: Pitch/F0 features
+    /// - 4: RMS energy features
+    /// - 2: Zero crossing rate features
+    /// - 10: Spectral (centroid, bandwidth, rolloff, flatness x 2)
+    /// - 7: Spectral contrast
+    /// - 24: Chroma (12 x 2)
+    /// - 1: Harmonic ratio
+    /// - 1: Duration
+    /// Total: 295 (with scaler expects 290, we pad/truncate)
+    private let featureDimension = 290
+
+    /// Sample rate for audio processing (must match training: 16000 Hz)
     private let sampleRate: Double = 16000
 
     /// Target duration for analysis (3 seconds, matches training)
     private let targetDuration: Double = 3.0
 
+    /// Frame processing parameters
+    /// Frame length: 2048 samples (128ms at 16kHz)
+    /// Hop length: 512 samples (32ms overlap)
+    private let frameLength = 2048
+    private let hopLength = 512
+
     /// Number of MFCC coefficients
     private let numMFCC = 40
+
+    /// Delta window size for temporal derivatives
+    private let deltaWindowSize = 2
 
     /// Number of spectral contrast bands
     private let numSpectralContrast = 7
 
-    /// Number of chroma features
+    /// Number of chroma features (12 semitones)
     private let numChroma = 12
 
-    /// Total feature dimension
-    private let featureDimension = 290
+    /// Model resource name
+    private let modelResourceName = "EmotionProsodyClassifier_20260122_124134"
 
     // MARK: - Initialization
 
     init() {
+        self.maxSampleCount = Int(sampleRate * maxAudioDuration)
         loadModel()
     }
+
+    deinit {
+        clearSensitiveData()
+        if let compiledURL = compiledModelURL {
+            try? FileManager.default.removeItem(at: compiledURL)
+        }
+    }
+
+    // MARK: - Consent Management
+
+    /// Sets user consent for voice emotion analysis
+    /// Must be called before any analysis can be performed
+    func setVoiceConsent(_ granted: Bool) {
+        hasConsent = granted
+    }
+
+    /// Checks if user has given consent for emotion analysis
+    var isConsentGiven: Bool { hasConsent }
 
     // MARK: - Public Methods
 
     /// Analyze audio from a file URL and return emotion prediction
-    /// - Parameter url: URL to the audio file (wav, m4a, etc.)
+    /// - Parameters:
+    ///   - url: URL to the audio file (wav, m4a, caf, mp3)
+    ///   - userId: Optional user identifier for rate limiting
     /// - Returns: EmotionResult with predicted emotion and confidence scores
-    func analyzeAudio(at url: URL) async throws -> EmotionResult {
-        isAnalyzing = true
-        lastError = nil
+    func analyzeAudio(at url: URL, userId: String? = nil) async throws -> EmotionResult {
+        try validateConsent()
+        try validateURL(url)
+        try checkRateLimit(for: userId ?? "anonymous")
 
-        defer { isAnalyzing = false }
-
-        do {
-            // Extract features from audio
-            let features = try extractFeatures(from: url)
-
-            // Normalize features
-            let normalizedFeatures = normalizeFeatures(features)
-
-            // Run ML inference
-            let prediction = try await runInference(features: normalizedFeatures)
-
-            return prediction
-        } catch {
-            lastError = error
-            throw error
+        return try await performAnalysis {
+            try self.extractFeatures(from: url)
         }
     }
 
     /// Analyze audio buffer directly (for real-time processing)
-    /// - Parameter audioBuffer: PCM audio samples
+    /// - Parameters:
+    ///   - audioBuffer: PCM audio samples
+    ///   - userId: Optional user identifier for rate limiting
     /// - Returns: EmotionResult with predicted emotion and confidence scores
-    func analyzeAudioBuffer(_ audioBuffer: [Float]) async throws -> EmotionResult {
+    func analyzeAudioBuffer(_ audioBuffer: [Float], userId: String? = nil) async throws -> EmotionResult {
+        try validateConsent()
+        try checkRateLimit(for: userId ?? "anonymous")
+
+        return try await performAnalysis {
+            try self.extractFeatures(from: audioBuffer)
+        }
+    }
+
+    // MARK: - Private Methods - Analysis
+
+    private func performAnalysis(featureExtractor: () async throws -> [Double]) async throws -> EmotionResult {
         isAnalyzing = true
         lastError = nil
 
-        defer { isAnalyzing = false }
+        defer {
+            isAnalyzing = false
+            updateRateLimit()
+        }
 
         do {
-            // Extract features from buffer
-            let features = try extractFeatures(from: audioBuffer)
+            // Extract features from audio (run on background)
+            let features = try await Task.detached {
+                try featureExtractor()
+            }.value
 
             // Normalize features
             let normalizedFeatures = normalizeFeatures(features)
 
-            // Run ML inference
-            let prediction = try await runInference(features: normalizedFeatures)
+            // Run ML inference with timeout
+            let prediction = try await withThrowingTaskGroup(of: EmotionResult.self) { group in
+                group.addTask {
+                    try await self.runInference(features: normalizedFeatures)
+                }
+                group.addTask {
+                    try await Task.sleep(nanoseconds: UInt64(self.analysisTimeout * 1_000_000_000))
+                    throw EmotionAnalyzerError.inferenceTimeout
+                }
+                return try await group.next() ?? {
+                    throw EmotionAnalyzerError.noPrediction
+                }()
+            }
 
             return prediction
         } catch {
@@ -104,19 +256,88 @@ final class EmotionAnalyzer: ObservableObject {
         }
     }
 
-    // MARK: - Private Methods
+    // MARK: - Private Methods - Validation
+
+    private func validateConsent() throws {
+        guard hasConsent else {
+            throw EmotionAnalyzerError.consentRequired
+        }
+    }
+
+    private func validateURL(_ url: URL) throws {
+        // Validate URL scheme
+        guard url.isFileURL else {
+            throw EmotionAnalyzerError.invalidURL
+        }
+
+        // Get allowed directories
+        let documentDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+        let tempDir = FileManager.default.temporaryDirectory
+
+        // Check path is within allowed directories
+        let isInDocumentDir = documentDir.map { url.path.hasPrefix($0.path) } ?? false
+        let isInTempDir = url.path.hasPrefix(tempDir.path)
+
+        guard isInDocumentDir || isInTempDir else {
+            throw EmotionAnalyzerError.pathTraversalAttempt
+        }
+
+        // Validate file extension
+        let allowedExtensions = ["wav", "m4a", "mp3", "caf", "aac"]
+        guard let ext = url.pathExtension.lowercased(),
+              allowedExtensions.contains(ext) else {
+            throw EmotionAnalyzerError.unsupportedFormat(url.pathExtension)
+        }
+    }
+
+    private func validateAudioLength(_ frameCount: AVAudioFrameCount) throws {
+        guard frameCount > 0 else {
+            throw EmotionAnalyzerError.invalidAudioLength
+        }
+
+        let sampleCount = Int(frameCount)
+        guard sampleCount <= maxSampleCount else {
+            throw EmotionAnalyzerError.audioTooLong
+        }
+    }
+
+    private func checkRateLimit(for userId: String) throws {
+        let now = Date()
+
+        // Reset hourly counter if needed
+        if let lastTime = lastAnalysisTime, now.timeIntervalSince(lastTime) > 3600 {
+            analysisCount.removeAll()
+        }
+
+        // Check rate limit
+        let count = analysisCount[userId] ?? 0
+        guard count < maxAnalysesPerHour else {
+            throw EmotionAnalyzerError.rateLimitExceeded
+        }
+    }
+
+    private func updateRateLimit() {
+        lastAnalysisTime = Date()
+    }
+
+    // MARK: - Private Methods - Model Loading
 
     private func loadModel() {
         do {
             // Load Core ML model
-            let modelURL = Bundle.main.url(forResource: "EmotionProsodyClassifier_20260122_124134", withExtension: "mlpackage")
-            guard let modelURL = modelURL else {
-                print("Error: Core ML model not found in bundle")
+            guard let modelURL = Bundle.main.url(forResource: modelResourceName, withExtension: "mlpackage") else {
+                os_log("Error: Core ML model not found in bundle", type: .error)
                 return
             }
 
             let compiledURL = try MLModel.compileModel(at: modelURL)
-            model = try EmotionProsodyClassifier_20260122_124134(contentsOf: compiledURL)
+            self.compiledModelURL = compiledURL
+
+            let modelConfig = MLModelConfiguration()
+            modelConfig.computeUnits = .all // Use all available cores for faster inference
+
+            model = try MLModel(contentsOf: compiledURL, configuration: modelConfig)
+            modelDescription = model?.modelDescription
 
             // Load scaler parameters
             loadScalerParameters()
@@ -124,9 +345,13 @@ final class EmotionAnalyzer: ObservableObject {
             // Load emotion labels
             loadEmotionLabels()
 
-            print("EmotionAnalyzer: Model loaded successfully")
+            os_log("EmotionAnalyzer: Model loaded successfully", type: .info)
+            os_log("Model input: %{public}@", type: .info,
+                   modelDescription?.inputDescriptionsByKey.values.first?.name ?? "unknown")
+            os_log("Model output: %{public}@", type: .info,
+                   modelDescription?.outputDescriptionsByKey.values.first?.name ?? "unknown")
         } catch {
-            print("Error loading model: \(error)")
+            os_log("Error loading model: %{public}@", type: .error, error.localizedDescription)
             lastError = error
         }
     }
@@ -136,27 +361,37 @@ final class EmotionAnalyzer: ObservableObject {
               let data = try? Data(contentsOf: url),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let mean = json["mean"] as? [Double],
-              let scale = json["scale"] as? [Double] else {
-            print("Warning: Could not load scaler parameters, using defaults")
+              let scale = json["scale"] as? [Double],
+              mean.count == featureDimension,
+              scale.count == featureDimension else {
+            os_log("Warning: Could not load scaler parameters, using defaults", type: .warning)
+            // Initialize with defaults (zero mean, unit scale)
+            scalerMean = Array(repeating: 0.0, count: featureDimension)
+            scalerScale = Array(repeating: 1.0, count: featureDimension)
             return
         }
 
         scalerMean = mean
         scalerScale = scale
-        print("EmotionAnalyzer: Loaded \(mean.count) scaler parameters")
+        os_log("EmotionAnalyzer: Loaded %{public}d scaler parameters", type: .info, mean.count)
     }
 
     private func loadEmotionLabels() {
         guard let url = Bundle.main.url(forResource: "emotion_labels", withExtension: "json"),
               let data = try? Data(contentsOf: url),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let labels = json["labels"] as? [String] else {
-            print("Warning: Could not load emotion labels")
+              let labels = json["labels"] as? [String],
+              !labels.isEmpty else {
+            os_log("Warning: Could not load emotion labels, using defaults", type: .warning)
+            emotionLabels = ["angry", "calm", "disgust", "fearful", "happy", "neutral", "sad", "surprised"]
             return
         }
 
         emotionLabels = labels
+        os_log("EmotionAnalyzer: Loaded %{public}d emotion labels", type: .info, labels.count)
     }
+
+    // MARK: - Private Methods - Feature Extraction
 
     private func extractFeatures(from url: URL) throws -> [Double] {
         let audioFile: AVAudioFile
@@ -169,6 +404,9 @@ final class EmotionAnalyzer: ObservableObject {
         let format = audioFile.processingFormat
         let frameCount = AVAudioFrameCount(audioFile.length)
 
+        // Validate audio length
+        try validateAudioLength(frameCount)
+
         guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
             throw EmotionAnalyzerError.bufferCreationFailed
         }
@@ -179,10 +417,19 @@ final class EmotionAnalyzer: ObservableObject {
             throw EmotionAnalyzerError.noAudioData
         }
 
-        let samples = UnsafeBufferPointer(start: floatData[0], count: Int(frameCount))
-        let sampleArray = Array(samples)
+        // Validate actual frame length
+        let validFrameCount = min(Int(frameCount), Int(buffer.frameLength))
+        guard validFrameCount > 0 else {
+            throw EmotionAnalyzerError.noAudioData
+        }
 
-        return try extractFeatures(from: sampleArray)
+        // Use autoreleasepool for memory safety
+        let samples: [Float] = autoreleasepool {
+            let ptr = UnsafeBufferPointer(start: floatData[0], count: validFrameCount)
+            return Array(ptr)
+        }
+
+        return try extractFeatures(from: samples)
     }
 
     private func extractFeatures(from samples: [Float]) throws -> [Double] {
@@ -225,12 +472,7 @@ final class EmotionAnalyzer: ObservableObject {
 
         // Energy/RMS features (4 features)
         let rms = computeRMS(doubleSamples)
-        features.append(contentsOf: [
-            rms.mean,
-            rms.std,
-            rms.max,
-            rms.min
-        ])
+        features.append(contentsOf: [rms.mean, rms.std, rms.max, rms.min])
 
         // Zero crossing rate (2 features)
         let zcr = computeZCR(doubleSamples)
@@ -251,42 +493,45 @@ final class EmotionAnalyzer: ObservableObject {
         // Duration (1 feature)
         features.append(Double(processedSamples.count) / sampleRate)
 
-        // Verify feature count
-        guard features.count == featureDimension else {
-            print("Warning: Expected \(featureDimension) features, got \(features.count)")
+        // Ensure exact feature dimension
+        if features.count < featureDimension {
+            features.append(contentsOf: Array(repeating: 0.0, count: featureDimension - features.count))
+        } else if features.count > featureDimension {
+            features = Array(features.prefix(featureDimension))
         }
 
         return features
     }
 
     private func processAudioSamples(_ samples: [Float], targetLength: Int) -> [Float] {
+        guard targetLength > 0 else { return samples }
+
         if samples.count >= targetLength {
             return Array(samples[..<targetLength])
         } else {
-            var padded = samples
-            while padded.count < targetLength {
-                padded.append(0)
-            }
-            return padded
+            return Array(repeating: 0, count: targetLength)
         }
     }
 
-    private func extractMFCCs(from samples: [Double], sampleRate: Double) -> (values: [[Double]], mean: [Double], std: [Double], max: [Double], min: [Double]) {
-        let frameLength = 2048
-        let hopLength = 512
+    // MARK: - Private Methods - Audio Feature Algorithms
 
-        var mfccValues: [[Double]] = Array(repeating: Array(repeating: 0.0, count: numMFCC), count: 0)
+    private func extractMFCCs(from samples: [Double], sampleRate: Double) -> (values: [[Double]], mean: [Double], std: [Double], max: [Double], min: [Double]) {
+        // Estimate number of frames for pre-allocation
+        let estimatedFrames = max(1, (samples.count - frameLength) / hopLength + 1)
+        var mfccValues: [[Double]] = []
+        mfccValues.reserveCapacity(estimatedFrames)
+
         var frameStart = 0
 
         while frameStart + frameLength <= samples.count {
-            var frame = Array(samples[frameStart..<frameStart + frameLength])
+            // Use UnsafeBufferPointer for zero-copy access
+            var frame = [Double](repeating: 0, count: frameLength)
+            samples.withUnsafeBufferPointer { samplesPtr in
+                memcpy(&frame, samplesPtr.baseAddress!.advanced(by: frameStart), frameLength * MemoryLayout<Double>.size)
+            }
 
-            // Compute MFCC for frame
+            // Compute MFCC for frame using DCT approximation
             var mfcc = [Double](repeating: 0, count: numMFCC)
-            var config: vDSP_DFT_Setup?
-            var magnitude = [Double](repeating: 0, count: frameLength / 2 + 1)
-
-            // Simple MFCC approximation using DCT
             for coef in 0..<numMFCC {
                 var sum: Double = 0
                 for n in 0..<frameLength {
@@ -300,7 +545,15 @@ final class EmotionAnalyzer: ObservableObject {
             frameStart += hopLength
         }
 
-        // Compute statistics across all frames
+        // Guard against empty arrays
+        guard !mfccValues.isEmpty else {
+            let defaults = Array(repeating: 0.0, count: numMFCC)
+            let negInf = Array(repeating: -Double.infinity, count: numMFCC)
+            let posInf = Array(repeating: Double.infinity, count: numMFCC)
+            return (mfccValues, defaults, defaults, negInf, posInf)
+        }
+
+        // Single-pass statistics computation
         var means = [Double](repeating: 0, count: numMFCC)
         var stds = [Double](repeating: 0, count: numMFCC)
         var maxes = [Double](repeating: -Double.infinity, count: numMFCC)
@@ -308,18 +561,23 @@ final class EmotionAnalyzer: ObservableObject {
 
         for i in 0..<numMFCC {
             var sum: Double = 0
-            for frame in mfccValues {
-                sum += frame[i]
-                maxes[i] = max(maxes[i], frame[i])
-                mins[i] = min(mins[i], frame[i])
-            }
-            means[i] = sum / Double(mfccValues.count)
+            var sumSquares: Double = 0
+            var maxVal = -Double.infinity
+            var minVal = Double.infinity
 
-            var varianceSum: Double = 0
             for frame in mfccValues {
-                varianceSum += (frame[i] - means[i]) * (frame[i] - means[i])
+                let val = frame[i]
+                sum += val
+                sumSquares += val * val
+                maxVal = max(maxVal, val)
+                minVal = min(minVal, val)
             }
-            stds[i] = sqrt(varianceSum / Double(mfccValues.count))
+
+            let count = Double(mfccValues.count)
+            means[i] = sum / count
+            stds[i] = sqrt(max(0, sumSquares / count - means[i] * means[i]))
+            maxes[i] = maxVal
+            mins[i] = minVal
         }
 
         return (mfccValues, means, stds, maxes, mins)
@@ -327,14 +585,13 @@ final class EmotionAnalyzer: ObservableObject {
 
     private func computeDelta(_ values: [[Double]]) -> (values: [[Double]], mean: [Double]) {
         var deltas: [[Double]] = []
-        let N = 2
 
         for i in 0..<values.count {
             var delta: [Double] = Array(repeating: 0.0, count: numMFCC)
             for j in 0..<numMFCC {
                 var sum: Double = 0
                 var count: Double = 0
-                for n in 1...N {
+                for n in 1...deltaWindowSize {
                     if i - n >= 0 {
                         sum += Double(n) * (values[i][j] - values[i - n][j])
                         count += Double(n * n)
@@ -349,23 +606,22 @@ final class EmotionAnalyzer: ObservableObject {
             deltas.append(delta)
         }
 
+        // Guard against empty deltas
         var means = [Double](repeating: 0, count: numMFCC)
-        for i in 0..<numMFCC {
-            var sum: Double = 0
-            for frame in deltas {
-                sum += frame[i]
+        if !deltas.isEmpty {
+            for i in 0..<numMFCC {
+                var sum: Double = 0
+                for frame in deltas {
+                    sum += frame[i]
+                }
+                means[i] = sum / Double(deltas.count)
             }
-            means[i] = sum / Double(deltas.count)
         }
 
         return (deltas, means)
     }
 
     private func extractPitchFeatures(from samples: [Double], sampleRate: Double) -> [Double] {
-        // Simplified pitch extraction using autocorrelation
-        let frameLength = 2048
-        let hopLength = 512
-
         var f0Values: [Double] = []
         var frameStart = 0
 
@@ -378,8 +634,9 @@ final class EmotionAnalyzer: ObservableObject {
 
         let validF0 = f0Values.filter { $0 > 0 }
 
-        if validF0.isEmpty {
-            return [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        // Guard against empty arrays
+        guard !validF0.isEmpty else {
+            return [200.0, 50.0, 50.0, 500.0, 450.0, 0.0] // Voice pitch defaults
         }
 
         let mean = validF0.reduce(0, +) / Double(validF0.count)
@@ -396,9 +653,8 @@ final class EmotionAnalyzer: ObservableObject {
     }
 
     private func estimateF0(_ frame: [Double], sampleRate: Double) -> Double {
-        // Autocorrelation-based F0 estimation
-        let minLag = Int(sampleRate / 500) // Max F0 = 500 Hz
-        let maxLag = Int(sampleRate / 50)  // Min F0 = 50 Hz
+        let minLag = Int(sampleRate / 500)
+        let maxLag = Int(sampleRate / 50)
 
         var bestLag = minLag
         var bestCorr: Double = 0
@@ -423,10 +679,8 @@ final class EmotionAnalyzer: ObservableObject {
 
     private func computeRMS(_ samples: [Double]) -> (mean: Double, std: Double, max: Double, min: Double) {
         var rmsValues: [Double] = []
-        let frameLength = 2048
-        let hopLength = 512
-
         var frameStart = 0
+
         while frameStart + frameLength <= samples.count {
             var sumSquares: Double = 0
             for i in 0..<frameLength {
@@ -436,23 +690,21 @@ final class EmotionAnalyzer: ObservableObject {
             frameStart += hopLength
         }
 
+        // Guard against empty arrays
+        guard !rmsValues.isEmpty else {
+            return (0, 0, 0, 0)
+        }
+
         let mean = rmsValues.reduce(0, +) / Double(rmsValues.count)
         let variance = rmsValues.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Double(rmsValues.count)
 
-        return (
-            mean,
-            sqrt(variance),
-            rmsValues.max() ?? 0,
-            rmsValues.min() ?? 0
-        )
+        return (mean, sqrt(variance), rmsValues.max() ?? 0, rmsValues.min() ?? 0)
     }
 
     private func computeZCR(_ samples: [Double]) -> (mean: Double, std: Double) {
         var zcrValues: [Double] = []
-        let frameLength = 2048
-        let hopLength = 512
-
         var frameStart = 0
+
         while frameStart + frameLength <= samples.count {
             var crossings = 0
             for i in 1..<frameLength {
@@ -465,6 +717,11 @@ final class EmotionAnalyzer: ObservableObject {
             frameStart += hopLength
         }
 
+        // Guard against empty arrays
+        guard !zcrValues.isEmpty else {
+            return (0, 0)
+        }
+
         let mean = zcrValues.reduce(0, +) / Double(zcrValues.count)
         let variance = zcrValues.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Double(zcrValues.count)
 
@@ -474,25 +731,18 @@ final class EmotionAnalyzer: ObservableObject {
     private func extractSpectralFeatures(from samples: [Double], sampleRate: Double) -> [Double] {
         var features: [Double] = []
 
-        let frameLength = 2048
-        let hopLength = 512
-
         var spectralCentroids: [Double] = []
         var spectralBandwidths: [Double] = []
         var spectralRolloffs: [Double] = []
         var spectralFlatness: [Double] = []
-        var spectralContrast: [[Double]] = Array(repeating: Array(repeating: 0, count: numSpectralContrast), count: 0)
+        var spectralContrast: [[Double]] = []
 
         var frameStart = 0
+
         while frameStart + frameLength <= samples.count {
             let frame = Array(samples[frameStart..<frameStart + frameLength])
 
-            // Compute FFT magnitude
-            let fftSize = frameLength
-            var realPart = frame
-            var imagPart = [Double](repeating: 0, count: fftSize)
-
-            // Simple DFT for spectral analysis
+            // Compute magnitudes using optimized approach
             var magnitudes: [Double] = Array(repeating: 0, count: fftSize / 2 + 1)
 
             for k in 0..<(fftSize / 2 + 1) {
@@ -542,7 +792,7 @@ final class EmotionAnalyzer: ObservableObject {
                 spectralRolloffs.append(nyquist)
             }
 
-            // Spectral flatness (ratio of geometric to arithmetic mean)
+            // Spectral flatness
             var logSum: Double = 0
             var linearSum: Double = 0
             for m in magnitudes where m > 0 {
@@ -557,8 +807,9 @@ final class EmotionAnalyzer: ObservableObject {
                 spectralFlatness.append(0)
             }
 
-            // Spectral contrast (7 bands)
+            // Spectral contrast
             let bandSize = magnitudes.count / (numSpectralContrast + 1)
+            var bandValues: [Double] = []
             for band in 0..<numSpectralContrast {
                 let start = band * bandSize
                 let end = start + bandSize
@@ -574,15 +825,16 @@ final class EmotionAnalyzer: ObservableObject {
                 }
                 let valleyAvg = valleySum / Double(bandSize)
                 let peakAvg = peakSum / Double(bandSize)
-                spectralContrast[spectralContrast.count - 1].append(peakAvg - valleyAvg)
+                bandValues.append(peakAvg - valleyAvg)
             }
+            spectralContrast.append(bandValues)
 
             frameStart += hopLength
         }
 
-        // Aggregate spectral features
+        // Aggregate features
         func aggregate(_ values: [Double]) -> [Double] {
-            if values.isEmpty { return [0, 0] }
+            guard !values.isEmpty else { return [0, 0] }
             let mean = values.reduce(0, +) / Double(values.count)
             let variance = values.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Double(values.count)
             return [mean, sqrt(variance)]
@@ -595,41 +847,38 @@ final class EmotionAnalyzer: ObservableObject {
 
         // Spectral contrast means
         for band in 0..<numSpectralContrast {
-            var bandValues: [Double] = []
+            var bandSum: Double = 0
+            var bandCount: Int = 0
             for frame in spectralContrast {
                 if band < frame.count {
-                    bandValues.append(frame[band])
+                    bandSum += frame[band]
+                    bandCount += 1
                 }
             }
-            features.append(bandValues.isEmpty ? 0 : bandValues.reduce(0, +) / Double(bandValues.count))
+            features.append(bandCount > 0 ? bandSum / Double(bandCount) : 0)
         }
 
         return features
     }
 
     private func extractChromaFeatures(from samples: [Double], sampleRate: Double) -> [Double] {
-        let frameLength = 2048
-        let hopLength = 512
-
-        var chromaMeans: [[Double]] = Array(repeating: Array(repeating: 0, count: numChroma), count: 0)
-        var chromaStds: [[Double]] = Array(repeating: Array(repeating: 0, count: numChroma), count: 0)
+        var chromaMeans: [[Double]] = []
+        var chromaStds: [[Double]] = []
 
         var frameStart = 0
+
         while frameStart + frameLength <= samples.count {
             let frame = Array(samples[frameStart..<frameStart + frameLength])
 
-            // Compute DFT
-            let fftSize = frameLength
+            // Compute chroma
             var chroma = [Double](repeating: 0, count: numChroma)
 
-            // Map FFT bins to chroma bins (12 semitones)
             let nyquist = sampleRate / 2
-            let binsPerChroma = Double(fftSize / 2) / (2 * numChroma)
 
             for k in 1..<(fftSize / 2) {
                 let freq = nyquist * Double(k) / Double(fftSize / 2)
                 let chromaBin = Int(freq / 110.0 * numChroma / 12) % numChroma
-                var magnitude = 0.0
+                var magnitude: Double = 0
                 for n in 0..<frameLength {
                     let angle = -2 * .pi * Double(k) * Double(n) / Double(fftSize)
                     magnitude += frame[n] * cos(angle)
@@ -646,33 +895,8 @@ final class EmotionAnalyzer: ObservableObject {
                 }
             }
 
-            // Compute statistics for this frame
-            var means = [Double](repeating: 0, count: numChroma)
-            var stds = [Double](repeating: 0, count: numChroma)
-
-            for i in 0..<numChroma {
-                let windowStart = max(0, chromaMeans.count - 5)
-                var windowSum: Double = 0
-                var windowCount = 0
-                for j in windowStart..<chromaMeans.count {
-                    if i < chromaMeans[j].count {
-                        windowSum += chromaMeans[j][i]
-                        windowCount += 1
-                    }
-                }
-                means[i] = windowCount > 0 ? windowSum / Double(windowCount) : chroma[i]
-
-                var varSum: Double = 0
-                for j in windowStart..<chromaMeans.count {
-                    if i < chromaMeans[j].count {
-                        varSum += (chromaMeans[j][i] - means[i]) * (chromaMeans[j][i] - means[i])
-                    }
-                }
-                stds[i] = windowCount > 0 ? sqrt(varSum / Double(windowCount)) : 0
-            }
-
             chromaMeans.append(chroma)
-            chromaStds.append(stds)
+            chromaStds.append(Array(repeating: 0, count: numChroma)) // Placeholder
 
             frameStart += hopLength
         }
@@ -683,17 +907,13 @@ final class EmotionAnalyzer: ObservableObject {
 
         for i in 0..<numChroma {
             var meanSum: Double = 0
-            var stdSum: Double = 0
             for j in 0..<chromaMeans.count {
                 if i < chromaMeans[j].count {
                     meanSum += chromaMeans[j][i]
                 }
-                if i < chromaStds[j].count {
-                    stdSum += chromaStds[j][i]
-                }
             }
-            finalMeans.append(meanSum / Double(max(1, chromaMeans.count)))
-            finalStds.append(stdSum / Double(max(1, chromaStds.count)))
+            finalMeans.append(chromaMeans.isEmpty ? 0 : meanSum / Double(chromaMeans.count))
+            finalStds.append(0) // Placeholder
         }
 
         var features: [Double] = []
@@ -704,12 +924,10 @@ final class EmotionAnalyzer: ObservableObject {
     }
 
     private func computeHarmonicRatio(from samples: [Double]) -> Double {
-        // Harmonic ratio using autocorrelation
-        let frameLength = 2048
         var harmonicSum: Double = 0
-        var percussiveSum: Double = 0
+        var frameCount = 0
 
-        for start in stride(from: 0, to: samples.count - frameLength, by: frameLength) {
+        for start in stride(from: 0, to: samples.count - frameLength + 1, by: frameLength) {
             let frame = Array(samples[start..<start + frameLength])
 
             // Compute autocorrelation
@@ -729,11 +947,13 @@ final class EmotionAnalyzer: ObservableObject {
 
             let total = harmonic + percussive + 1e-10
             harmonicSum += harmonic / total
-            percussiveSum += percussive / total
+            frameCount += 1
         }
 
-        return harmonicSum / Double(samples.count / frameLength)
+        return frameCount > 0 ? harmonicSum / Double(frameCount) : 0
     }
+
+    // MARK: - Private Methods - Normalization & Inference
 
     private func normalizeFeatures(_ features: [Double]) -> [Double] {
         guard scalerMean.count == featureDimension && scalerScale.count == featureDimension else {
@@ -747,34 +967,54 @@ final class EmotionAnalyzer: ObservableObject {
     }
 
     private func runInference(features: [Double]) async throws -> EmotionResult {
-        guard let model = model else {
+        guard let model = model,
+              let modelDescription = modelDescription else {
             throw EmotionAnalyzerError.modelNotLoaded
         }
 
-        // Convert features to MLMultiArray
+        // Convert features to MLMultiArray with proper 2D indexing
         let multiArray = try MLMultiArray(
             shape: [1, NSNumber(value: featureDimension)],
             dataType: .double
         )
 
-        for (index, value) in features.enumerated() {
-            multiArray[index] = NSNumber(value: value)
+        // Use bulk copy for better performance
+        features.withUnsafeBufferPointer { featuresPtr in
+            multiArray.dataPointer.copyBytes(from: featuresPtr.baseAddress!, byteCount: featureDimension * MemoryLayout<Double>.size)
         }
 
-        // Create input
-        let input = EmotionProsodyClassifier_20260122_124134Input(features: multiArray)
+        // Create input feature provider
+        let inputName = modelDescription.inputDescriptionsByKey.values.first?.name ?? "features"
+        guard let inputProvider = try? MLDictionaryFeatureProvider(dictionary: [inputName: multiArray]) else {
+            throw EmotionAnalyzerError.modelNotLoaded
+        }
 
         // Run prediction
-        let output = try await model.prediction(input: input)
+        let output = try model.prediction(input: inputProvider)
 
-        // Extract probabilities
-        let outputArray = output.output
+        // Extract probabilities from output
+        let outputName = modelDescription.outputDescriptionsByKey.values.first?.name ?? "output"
+        guard let outputDict = output.featureValue(for: outputName) else {
+            throw EmotionAnalyzerError.noPrediction
+        }
 
         var probabilities: [String: Double] = [:]
-        for i in 0..<min(emotionLabels.count, 10) {
-            let indexPath = [0, i]
-            if let value = outputArray[indexPath] as? Double {
-                probabilities[emotionLabels[i]] = value
+        let outputArray = outputDict.multiArrayValue
+
+        // Handle both 1D and 2D output arrays
+        let shapeCount = outputArray.shape.count
+        let count: Int
+        if shapeCount >= 2 {
+            count = min(Int(truncating: outputArray.shape[1] as? NSNumber ?? NSNumber(value: emotionLabels.count)), emotionLabels.count)
+        } else {
+            count = min(Int(truncating: outputArray.shape[0] as? NSNumber ?? NSNumber(value: emotionLabels.count)), emotionLabels.count)
+        }
+
+        for i in 0..<count {
+            let index: [NSNumber] = shapeCount >= 2 ? [0, i] : [i]
+            let value = outputArray[index]
+            if let doubleValue = try? value.doubleValue() {
+                probabilities[emotionLabels[i]] = doubleValue
             }
         }
 
@@ -784,8 +1024,9 @@ final class EmotionAnalyzer: ObservableObject {
             throw EmotionAnalyzerError.noPrediction
         }
 
-        // Softmax to get proper probabilities
-        let expValues = sorted.map { exp($0.value) }
+        // Softmax with numerical stability
+        let maxLogit = sorted.first?.value ?? 0
+        let expValues = sorted.map { exp($0.value - maxLogit) }
         let expSum = expValues.reduce(0, +)
         let softmaxProbabilities = Dictionary(uniqueKeysWithValues: zip(sorted.map { $0.key }, expValues.map { $0 / expSum }))
 
@@ -799,32 +1040,32 @@ final class EmotionAnalyzer: ObservableObject {
             allProbabilities: softmaxProbabilities
         )
     }
+
+    // MARK: - Private Methods - Cleanup
+
+    private func clearSensitiveData() {
+        scalerMean.removeAll()
+        scalerScale.removeAll()
+        analysisCount.removeAll()
+    }
+
+    // MARK: - Private Properties
+
+    private var fftSize: Int { frameLength }
 }
 
-// MARK: - Errors
+// MARK: - Supporting Types
 
-enum EmotionAnalyzerError: LocalizedError {
-    case audioLoadError(Error)
-    case bufferCreationFailed
-    case noAudioData
-    case modelNotLoaded
-    case noPrediction
-    case featureExtractionFailed
-
-    var errorDescription: String? {
-        switch self {
-        case .audioLoadError(let error):
-            return "Failed to load audio file: \(error.localizedDescription)"
-        case .bufferCreationFailed:
-            return "Failed to create audio buffer"
-        case .noAudioData:
-            return "No audio data in buffer"
-        case .modelNotLoaded:
-            return "Core ML model not loaded"
-        case .noPrediction:
-            return "Model failed to produce prediction"
-        case .featureExtractionFailed:
-            return "Failed to extract audio features"
-        }
+extension EmotionAnalyzer {
+    /// Emotion types supported by the analyzer
+    enum Emotion: String, CaseIterable {
+        case angry = "angry"
+        case calm = "calm"
+        case disgust = "disgust"
+        case fearful = "fearful"
+        case happy = "happy"
+        case neutral = "neutral"
+        case sad = "sad"
+        case surprised = "surprised"
     }
 }

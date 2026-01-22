@@ -82,13 +82,13 @@ struct SensoryHomeView: View {
                             .font(.headline)
                             .padding(.horizontal)
 
-                        TipCard(
+                        SensoryTipCard(
                             icon: "headphones",
                             title: "Best Results",
                             message: "Use headphones for audio soundscapes and find a quiet space for tactile patterns."
                         )
 
-                        TipCard(
+                        SensoryTipCard(
                             icon: "moon.fill",
                             title: "Session Length",
                             message: "Start with 5-10 minutes. Sessions auto-pause at 30 minutes to prevent overuse."
@@ -201,7 +201,7 @@ struct RecentSessionRow: View {
 
 // MARK: - Tip Card
 
-struct TipCard: View {
+struct SensoryTipCard: View {
     let icon: String
     let title: String
     let message: String

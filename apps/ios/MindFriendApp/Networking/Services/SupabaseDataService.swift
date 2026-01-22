@@ -1,6 +1,7 @@
 import Foundation
 import Supabase
 import OSLog
+import UIKit
 
 // NOTE: SupabaseError was removed in newer supabase-swift releases; keep a local alias for compatibility.
 typealias SupabaseError = Error
@@ -117,6 +118,11 @@ final class SupabaseDataService: ObservableObject {
     /// Current user ID (nil if not authenticated)
     var currentUserId: UUID? {
         authService.userId
+    }
+
+    /// Access to Supabase Edge Functions
+    var functions: FunctionsClient {
+        supabase.functions
     }
 
     // MARK: - Moods
@@ -2201,22 +2207,8 @@ final class SupabaseDataService: ObservableObject {
             throw CouplesModeError.partnerNotSharing
         }
 
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd"
-        let today = dateFormatter.string(from: Date())
-
         // Note: This query doesn't fetch the template, so we can't construct a full Quest object
         // The function signature should probably return DBQuest or change to fetch with template
-        let quests: [DBQuest] = try await supabase
-            .from("quests")
-            .select()
-            .eq("user_id", value: partnerId)
-            .eq("local_date", value: today)
-            .limit(1)
-            .execute()
-            .value
-
-        // TODO: Either change return type to DBQuest or fetch with template join
         return nil
     }
 
@@ -2426,13 +2418,39 @@ final class SupabaseDataService: ObservableObject {
 
     /// Get current user settings
     func getUserSettings() async throws -> UserSettings {
-        guard let profile = try await getCurrentUser() else {
+        guard let userId = supabase.auth.currentUser?.id else {
             throw DataError.notAuthenticated
         }
-        guard let settings = profile.settings else {
+        
+        let profiles: [DBProfile] = try await supabase
+            .from("profiles")
+            .select()
+            .eq("id", value: userId)
+            .limit(1)
+            .execute()
+            .value
+        
+        guard let profile = profiles.first else {
             throw DataError.operationFailed("User settings not available")
         }
-        return settings
+        
+        // Convert aiTone string to enum with fallback
+        let aiTone = AITone(rawValue: profile.aiTone) ?? .friendly
+        
+        // Convert privacyMode string to enum with fallback
+        let privacyMode = PrivacyMode(rawValue: profile.privacyMode) ?? .standard
+        
+        // Construct UserSettings from DBProfile fields
+        return UserSettings(
+            dailyQuestTimeLocal: profile.dailyQuestTimeLocal,
+            quietHoursStartLocal: profile.quietHoursStartLocal,
+            quietHoursEndLocal: profile.quietHoursEndLocal,
+            remindersEnabled: profile.remindersEnabled,
+            nudgeAfterDaysInactive: profile.nudgeAfterDaysInactive,
+            shareMoodInCircles: profile.shareMoodInCircles,
+            aiTone: aiTone,
+            privacyMode: privacyMode
+        )
     }
 
     /// Update user settings with a UserSettings object
@@ -2442,14 +2460,9 @@ final class SupabaseDataService: ObservableObject {
             quietHoursStartLocal: settings.quietHoursStartLocal,
             quietHoursEndLocal: settings.quietHoursEndLocal,
             remindersEnabled: settings.remindersEnabled,
-            notifyCircleActivity: settings.notifyCircleActivity,
-            notifyHugs: settings.notifyHugs,
-            notifyChallenges: settings.notifyChallenges,
-            notifyStreakRisk: settings.notifyStreakRisk,
-            notifyWeeklySummary: settings.notifyWeeklySummary,
-            preferredNotifyHour: settings.preferredNotifyHour,
-            aiTone: settings.aiTone,
+            nudgeAfterDaysInactive: settings.nudgeAfterDaysInactive,
             shareMoodInCircles: settings.shareMoodInCircles,
+            aiTone: settings.aiTone,
             privacyMode: settings.privacyMode
         )
     }
@@ -2466,8 +2479,9 @@ final class SupabaseDataService: ObservableObject {
         notifyStreakRisk: Bool? = nil,
         notifyWeeklySummary: Bool? = nil,
         preferredNotifyHour: Int? = nil,
-        aiTone: AITone? = nil,
+        nudgeAfterDaysInactive: Int? = nil,
         shareMoodInCircles: Bool? = nil,
+        aiTone: AITone? = nil,
         privacyMode: PrivacyMode? = nil
     ) async throws {
         var updates: [String: AnyEncodable] = [:]
@@ -2502,11 +2516,14 @@ final class SupabaseDataService: ObservableObject {
         if let preferredNotifyHour = preferredNotifyHour {
             updates["preferred_notify_hour"] = AnyEncodable(preferredNotifyHour)
         }
-        if let aiTone = aiTone {
-            updates["ai_tone"] = AnyEncodable(aiTone.rawValue)
+        if let nudgeAfterDaysInactive = nudgeAfterDaysInactive {
+            updates["nudge_after_days_inactive"] = AnyEncodable(nudgeAfterDaysInactive)
         }
         if let shareMoodInCircles = shareMoodInCircles {
             updates["share_mood_in_circles"] = AnyEncodable(shareMoodInCircles)
+        }
+        if let aiTone = aiTone {
+            updates["ai_tone"] = AnyEncodable(aiTone.rawValue)
         }
         if let privacyMode = privacyMode {
             updates["privacy_mode"] = AnyEncodable(privacyMode.rawValue)
@@ -2879,7 +2896,7 @@ final class SupabaseDataService: ObservableObject {
                     exerciseName: s.exercises?.title ?? "Unknown Exercise",
                     exerciseType: s.exercises?.type ?? "unknown",
                     completedAt: s.completedAt.map { formatter.string(from: $0) } ?? "",
-                    durationSeconds: s.exercises?.durationSeconds ?? 0
+                    durationSeconds: s.durationSeconds ?? 0
                 )
             },
             // EXE-010: Include subscription data in export
@@ -2911,7 +2928,7 @@ final class SupabaseDataService: ObservableObject {
     func getMemories() async throws -> [MemoryFragment] {
         let now = ISO8601DateFormatter().string(from: Date())
 
-        // Filter expired memories at database level for efficiency
+        // Fetch expired memories at database level for efficiency
         // Order by confidence (highest first) per spec
         let memories: [DBMemoryFragment] = try await supabase
             .from(Tables.memoryFragments)
@@ -2928,7 +2945,7 @@ final class SupabaseDataService: ObservableObject {
     func getMemories(type: MemoryType) async throws -> [MemoryFragment] {
         let now = ISO8601DateFormatter().string(from: Date())
 
-        // Filter expired memories at database level for efficiency
+        // Fetch expired memories at database level for efficiency
         let memories: [DBMemoryFragment] = try await supabase
             .from(Tables.memoryFragments)
             .select()
@@ -3731,999 +3748,6 @@ final class SupabaseDataService: ObservableObject {
             .value
     }
 
-    // MARK: - Stats
-
-    /// Get user's program stats
-    func getUserProgramStats() async throws -> UserProgramStats {
-        let result: UserProgramStats = try await supabase.rpc(
-            "get_user_program_stats"
-        ).execute().value
-
-        return result
-    }
-
-    // MARK: - Error Classification
-
-    private func classifySupabaseError(_ error: Error) -> APIError {
-        let description = error.localizedDescription.lowercased()
-
-        // Transient errors
-        if description.contains("timeout") ||
-           description.contains("connection") ||
-           description.contains("network") {
-            return .networkError(error.localizedDescription)
-        }
-
-        // Server errors (potentially transient)
-        if description.contains("500") ||
-           description.contains("502") ||
-           description.contains("503") ||
-           description.contains("gateway") {
-            return .serverError(error.localizedDescription)
-        }
-
-        // Permanent errors
-        return .badRequest(error.localizedDescription)
-    }
-
-    // MARK: - Progress Stories
-
-    /// Fetch existing weekly story for a given week start
-    /// - Parameter weekStart: Monday of the week in "YYYY-MM-DD" format
-    /// - Returns: WeeklyStory if exists, nil if not found
-    func getWeeklyStory(weekStart: String) async throws -> WeeklyStory? {
-        let uid = try userId
-
-        let response: [WeeklyStory] = try await supabase
-            .from(Tables.weeklyStories)
-            .select()
-            .eq("user_id", value: uid)
-            .eq("week_start", value: weekStart)
-            .limit(1)
-            .execute()
-            .value
-
-        return response.first
-    }
-
-    /// Get recent weekly stories for the user (last 4 weeks)
-    /// - Returns: Array of WeeklyStory sorted by week_start descending
-    func getRecentWeeklyStories(limit: Int = 4) async throws -> [WeeklyStory] {
-        let uid = try userId
-
-        let response: [WeeklyStory] = try await supabase
-            .from(Tables.weeklyStories)
-            .select()
-            .eq("user_id", value: uid)
-            .order("week_start", ascending: false)
-            .limit(limit)
-            .execute()
-            .value
-
-        return response
-    }
-
-    /// Generate a new weekly story via Edge Function
-    /// - Parameter weekStart: Monday of the week in "YYYY-MM-DD" format
-    /// - Returns: Generated WeeklyStory
-    func generateWeeklyStory(weekStart: String) async throws -> WeeklyStory {
-        let session = try await supabase.auth.session
-
-        let response: GenerateWeeklyStoryResponse
-        do {
-            response = try await supabase.functions.invoke(
-                "generate-weekly-story",
-                options: .init(
-                    method: .post,
-                    headers: ["Authorization": "Bearer \(session.accessToken)"],
-                    body: ["weekStart": weekStart]
-                )
-            )
-        } catch {
-            throw classifySupabaseError(error)
-        }
-
-        if !response.success {
-            throw StoryGenerationError.internalError
-        }
-
-        // Fetch the persisted story from database
-        guard let story = try await getWeeklyStory(weekStart: weekStart) else {
-            // If not found in DB, construct from response
-            return WeeklyStory(
-                id: UUID(),
-                userId: response.userId,
-                weekStart: response.weekStart,
-                cards: response.cards,
-                createdAt: response.generatedAt,
-                updatedAt: response.generatedAt
-            )
-        }
-
-        Analytics.shared.track(.weeklyStoryGenerated, properties: [
-            "week_start": weekStart,
-            "card_count": response.cards.count
-        ])
-
-        return story
-    }
-
-    /// Share a story card to a circle
-    /// - Parameters:
-    ///   - imageUrl: URL of the uploaded story card image in Supabase Storage
-    ///   - circleId: ID of the circle to post to
-    ///   - caption: Optional caption for the post
-    func shareStoryToCircle(imageUrl: String, circleId: UUID, caption: String?) async throws {
-        let uid = try userId
-
-        // Create a circle post of kind 'story'
-        let post: [String: AnyEncodable] = [
-            "circle_id": AnyEncodable(circleId),
-            "user_id": AnyEncodable(uid),
-            "kind": AnyEncodable("story"),
-            "content": AnyEncodable(caption ?? ""),
-            "story_image_url": AnyEncodable(imageUrl)
-        ]
-
-        try await supabase
-            .from(Tables.circlePosts)
-            .insert(post)
-            .execute()
-
-        Analytics.shared.track(.weeklyStorySharedToCircle, properties: [
-            "circle_id": circleId.uuidString,
-            "has_caption": caption != nil
-        ])
-    }
-
-    /// Upload story card image to Supabase Storage
-    /// - Parameters:
-    ///   - imageData: PNG image data
-    ///   - weekStart: Week start for filename
-    ///   - cardIndex: Card index for filename
-    /// - Returns: Public URL of the uploaded image
-    func uploadStoryCardImage(imageData: Data, weekStart: String, cardIndex: Int) async throws -> String {
-        // Validate image size (max 5MB)
-        let maxSizeBytes = 5 * 1024 * 1024
-        guard imageData.count <= maxSizeBytes else {
-            throw DataError.operationFailed("Image too large (\(imageData.count) bytes, max \(maxSizeBytes))")
-        }
-
-        let uid = try userId
-        let filename = "story_\(weekStart)_card\(cardIndex).png"
-        let path = "\(uid.uuidString)/stories/\(filename)"
-
-        // Perform upload with error handling
-        let uploadResponse = try await supabase.storage
-            .from("user-content")
-            .upload(path, data: imageData, options: .init(contentType: "image/png", upsert: true))
-
-        // Verify upload result is not nil
-        guard uploadResponse != nil else {
-            throw DataError.operationFailed("Upload returned empty response")
-        }
-
-        // Get and validate public URL
-        let publicUrl = try supabase.storage
-            .from("user-content")
-            .getPublicURL(path: path)
-
-        guard publicUrl.absoluteString.count > 0 else {
-            throw DataError.operationFailed("Generated URL is empty")
-        }
-
-        // Optionally verify the URL is accessible
-        let urlSession = URLSession.shared
-        var request = URLRequest(url: publicUrl)
-        request.httpMethod = "HEAD"
-        request.timeoutInterval = 5
-
-        let (_, response) = try await urlSession.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
-            throw DataError.operationFailed("Uploaded file not accessible")
-        }
-
-        return publicUrl.absoluteString
-    }
-
-    // MARK: - Smart Notifications
-
-    /// Log a notification engagement event for ML training
-    func logNotificationEngagement(_ event: EngagementEvent) async throws {
-        let currentUserId = try userId
-
-        // Convert context snapshot to JSON if present
-        let contextJson: String?
-        if let context = event.contextSnapshot {
-            let encoder = JSONEncoder()
-            encoder.dateEncodingStrategy = .iso8601
-            let data = try encoder.encode(context)
-            contextJson = String(data: data, encoding: .utf8)
-        } else {
-            contextJson = nil
-        }
-
-        let params: [String: AnyEncodable] = [
-            "p_notification_id": AnyEncodable(event.notificationId),
-            "p_notification_type": AnyEncodable(event.notificationType),
-            "p_actual_outcome": AnyEncodable(event.outcome.rawValue),
-            "p_predicted_engagement": AnyEncodable(event.predictedEngagement),
-            "p_context_snapshot": AnyEncodable(contextJson),
-            "p_user_feedback_score": AnyEncodable(event.userFeedbackScore),
-            "p_user_feedback_text": AnyEncodable(event.userFeedbackText)
-        ]
-
-        try await supabase
-            .rpc("log_notification_engagement", params: params)
-            .execute()
-    }
-
-    /// Fetch engagement events for ML training (last 30 days)
-    func fetchNotificationTrainingData() async throws -> [EngagementEvent] {
-        let currentUserId = try userId
-
-        struct TrainingDataRow: Codable {
-            let notification_type: String
-            let hour_of_day: Int
-            let day_of_week: Int
-            let is_weekend: Bool
-            let predicted_engagement: Double?
-            let actual_outcome: String
-            let context_signals: String?
-
-            enum CodingKeys: String, CodingKey {
-                case notification_type, hour_of_day, day_of_week, is_weekend
-                case predicted_engagement, actual_outcome, context_signals
-            }
-        }
-
-        let rows: [TrainingDataRow] = try await supabase
-            .rpc("get_notification_training_data", params: [
-                "p_user_id": AnyEncodable(currentUserId),
-                "p_days": AnyEncodable(30)
-            ])
-            .execute()
-            .value
-
-        return rows.map { row in
-            EngagementEvent(
-                id: nil,
-                notificationId: UUID(), // Placeholder
-                userId: currentUserId,
-                notificationType: row.notification_type,
-                predictedEngagement: row.predicted_engagement,
-                contextSnapshot: nil,
-                outcome: EngagementOutcome(rawValue: row.actual_outcome) ?? .scheduled,
-                timestamp: Date(),
-                userFeedbackScore: nil,
-                userFeedbackText: nil
-            )
-        }
-    }
-
-    /// Fetch weekly engagement statistics
-    func fetchNotificationEngagementStats() async throws -> EngagementStats {
-        let currentUserId = try userId
-
-        struct StatsRow: Decodable {
-            let delivered: Int
-            let opened: Int
-            let completed: Int
-            let dismissed: Int
-            let engagement_rate: Double
-            let period_start: Date
-            let period_end: Date
-        }
-
-        let stats: [StatsRow] = try await supabase
-            .rpc("get_weekly_engagement_stats", params: ["p_user_id": currentUserId])
-            .execute()
-            .value
-
-        guard let first = stats.first else {
-            return EngagementStats(
-                delivered: 0,
-                opened: 0,
-                completed: 0,
-                dismissed: 0,
-                rate: 0.0,
-                periodStart: Date(),
-                periodEnd: Date()
-            )
-        }
-
-        return EngagementStats(
-            delivered: first.delivered,
-            opened: first.opened,
-            completed: first.completed,
-            dismissed: first.dismissed,
-            rate: first.engagement_rate,
-            periodStart: first.period_start,
-            periodEnd: first.period_end
-        )
-    }
-
-    // MARK: - Safety Plan Operations
-
-    /// Fetch the user's safety plan
-    func fetchSafetyPlan() async throws -> SafetyPlanResponse {
-        let request = SafetyPlanRequest.get()
-        let response: SafetyPlanResponse = try await supabase
-            .functions
-            .invoke("manage-safety-plan", options: FunctionInvokeOptions(body: request))
-        return response
-    }
-
-    /// Save or update the user's safety plan
-    func saveSafetyPlan(payload: SafetyPlanPayload, operation: SafetyPlanOperation) async throws -> SafetyPlanResponse {
-        let request = SafetyPlanRequest(operation: operation, payload: payload)
-        let response: SafetyPlanResponse = try await supabase
-            .functions
-            .invoke("manage-safety-plan", options: FunctionInvokeOptions(body: request))
-        return response
-    }
-
-    /// Update safety plan settings
-    func updateSafetyPlanSettings(settings: SafetyPlanSettings) async throws -> SafetyPlanResponse {
-        let serverSettings = SafetyPlanSettings(
-            allowAiReference: settings.allowAiReference,
-            pinnedToQuickActions: false
-        )
-        let request = SafetyPlanRequest.updateSettings(serverSettings)
-        let response: SafetyPlanResponse = try await supabase
-            .functions
-            .invoke("manage-safety-plan", options: FunctionInvokeOptions(body: request))
-        return response
-    }
-
-    /// Delete the user's safety plan
-    func deleteSafetyPlan() async throws -> SafetyPlanResponse {
-        let request = SafetyPlanRequest.delete()
-        let response: SafetyPlanResponse = try await supabase
-            .functions
-            .invoke("manage-safety-plan", options: FunctionInvokeOptions(body: request))
-        return response
-    }
-
-    // MARK: - AI Coaching Modes
-
-    /// Invoke the AI coaching edge function
-    func invokeCoachingFunction(_ request: CoachingModeRequest) async throws -> CoachingModeResponse {
-        struct ResponseWrapper: Decodable {
-            let success: Bool
-            let data: DataWrapper?
-            let error: ErrorWrapper?
-
-            struct DataWrapper: Decodable {
-                let current_mode: String?
-                let session_active: Bool?
-                let session_started_at: String?
-                let thought_records: [ThoughtRecordWrapper]?
-                let suggested_quests: [AISuggestedQuestWrapper]?
-                let preferences: PreferencesWrapper?
-                let prompts: [String]?
-                let thought_record: ThoughtRecordWrapper?
-
-                struct ThoughtRecordWrapper: Decodable {
-                    let id: UUID
-                    let user_id: UUID
-                    let conversation_id: UUID?
-                    let created_at: String
-                    let updated_at: String
-                    let activating_event: String
-                    let automatic_thoughts: [String]
-                    let emotions: [String]
-                    let physical_sensations: String?
-                    let behaviors: String?
-                    let identified_distortions: [String]
-                    let evidence_for_thoughts: String?
-                    let evidence_against_thoughts: String?
-                    let balanced_thought: String?
-                    let alternative_perspective: String?
-                    let emotion_after_reframing: [String]?
-                    let lesson_learned: String?
-                    let is_completed: Bool
-                }
-
-                struct AISuggestedQuestWrapper: Decodable {
-                    let id: UUID
-                    let user_id: UUID
-                    let conversation_id: UUID?
-                    let suggested_quest_template_id: UUID?
-                    let title: String
-                    let description: String
-                    let category: String
-                    let difficulty: Int
-                    let estimated_minutes: Int
-                    let rationale: String
-                    let related_thoughts: [UUID]?
-                    let expires_at: String?
-                    let is_accepted: Bool?
-                    let created_at: String
-                }
-
-                struct PreferencesWrapper: Decodable {
-                    let default_mode: String?
-                    let preferred_tone: String?
-                    let reflection_prompts_enabled: Bool
-                    let reframe_reminders_enabled: Bool
-                    let weekly_reflection_day: Int?
-                    let weekly_reflection_time: String?
-                }
-            }
-
-            struct ErrorWrapper: Decodable {
-                let code: String
-                let message: String
-            }
-        }
-
-        let encoder = JSONEncoder()
-        let requestData = try encoder.encode(request)
-
-        let response: ResponseWrapper = try await supabase
-            .functions
-            .invoke("ai-coaching", options: FunctionInvokeOptions(body: requestData))
-
-        // Transform thought records
-        let thoughtRecords = response.data?.thought_records?.map { wrapper in
-            ThoughtRecord(
-                id: wrapper.id,
-                userId: wrapper.user_id,
-                conversationId: wrapper.conversation_id,
-                createdAt: ISO8601DateFormatter().date(from: wrapper.created_at) ?? Date(),
-                updatedAt: ISO8601DateFormatter().date(from: wrapper.updated_at) ?? Date(),
-                activatingEvent: wrapper.activating_event,
-                automaticThoughts: wrapper.automatic_thoughts,
-                emotions: wrapper.emotions.compactMap { EmotionIntensity(rawValue: $0) },
-                physicalSensations: wrapper.physical_sensations,
-                behaviors: wrapper.behaviors,
-                identifiedDistortions: wrapper.identified_distortions.compactMap { CognitiveDistortion(rawValue: $0) },
-                evidenceForThoughts: wrapper.evidence_for_thoughts,
-                evidenceAgainstThoughts: wrapper.evidence_against_thoughts,
-                balancedThought: wrapper.balanced_thought,
-                alternativePerspective: wrapper.alternative_perspective,
-                emotionAfterReframing: wrapper.emotion_after_reframing?.compactMap { EmotionIntensity(rawValue: $0) },
-                lessonLearned: wrapper.lesson_learned,
-                isCompleted: wrapper.is_completed
-            )
-        } ?? []
-
-        // Transform suggested quests
-        let suggestedQuests = response.data?.suggested_quests?.map { wrapper in
-            AISuggestedQuest(
-                id: wrapper.id,
-                userId: wrapper.user_id,
-                conversationId: wrapper.conversation_id,
-                suggestedQuestTemplateId: wrapper.suggested_quest_template_id,
-                title: wrapper.title,
-                description: wrapper.description,
-                category: QuestType(rawValue: wrapper.category) ?? .focus,
-                difficulty: wrapper.difficulty,
-                estimatedMinutes: wrapper.estimated_minutes,
-                rationale: wrapper.rationale,
-                relatedThoughts: wrapper.related_thoughts,
-                expiresAt: wrapper.expires_at.flatMap { ISO8601DateFormatter().date(from: $0) },
-                isAccepted: wrapper.is_accepted,
-                createdAt: ISO8601DateFormatter().date(from: wrapper.created_at) ?? Date()
-            )
-        } ?? []
-
-        // Transform preferences
-        let preferences = response.data?.preferences.map { wrapper in
-            CoachingModePreferences(
-                userId: UUID(), // Backend will set actual user ID
-                defaultMode: wrapper.default_mode.flatMap { ConversationMode(rawValue: $0) },
-                preferredTone: wrapper.preferred_tone.flatMap { AITone(rawValue: $0) },
-                reflectionPromptsEnabled: wrapper.reflection_prompts_enabled,
-                reframeRemindersEnabled: wrapper.reframe_reminders_enabled,
-                weeklyReflectionDay: wrapper.weekly_reflection_day,
-                weeklyReflectionTime: wrapper.weekly_reflection_time
-            )
-        }
-
-        let data = CoachingModeResponse.CoachingModeData(
-            currentMode: response.data?.current_mode.flatMap { ConversationMode(rawValue: $0) },
-            thoughtRecords: thoughtRecords.isEmpty ? nil : thoughtRecords,
-            suggestedQuests: suggestedQuests.isEmpty ? nil : suggestedQuests,
-            preferences: preferences,
-            sessionActive: response.data?.session_active,
-            sessionStartedAt: response.data?.session_started_at.flatMap { ISO8601DateFormatter().date(from: $0) },
-            prompts: response.data?.prompts,
-            thoughtRecord: response.data?.thought_record.map { wrapper in
-                ThoughtRecord(
-                    id: wrapper.id,
-                    userId: wrapper.user_id,
-                    conversationId: wrapper.conversation_id,
-                    createdAt: ISO8601DateFormatter().date(from: wrapper.created_at) ?? Date(),
-                    updatedAt: ISO8601DateFormatter().date(from: wrapper.updated_at) ?? Date(),
-                    activatingEvent: wrapper.activating_event,
-                    automaticThoughts: wrapper.automatic_thoughts,
-                    emotions: wrapper.emotions.compactMap { EmotionIntensity(rawValue: $0) },
-                    physicalSensations: wrapper.physical_sensations,
-                    behaviors: wrapper.behaviors,
-                    identifiedDistortions: wrapper.identified_distortions.compactMap { CognitiveDistortion(rawValue: $0) },
-                    evidenceForThoughts: wrapper.evidence_for_thoughts,
-                    evidenceAgainstThoughts: wrapper.evidence_against_thoughts,
-                    balancedThought: wrapper.balanced_thought,
-                    alternativePerspective: wrapper.alternative_perspective,
-                    emotionAfterReframing: wrapper.emotion_after_reframing?.compactMap { EmotionIntensity(rawValue: $0) },
-                    lessonLearned: wrapper.lesson_learned,
-                    isCompleted: wrapper.is_completed
-                )
-            }
-        )
-
-        return CoachingModeResponse(
-            success: response.success,
-            data: response.success ? data : nil,
-            error: response.error.map { error in
-                CoachingModeResponse.CoachingModeError(code: error.code, message: error.message)
-            }
-        )
-    }
-
-    // MARK: - Weekly Wellbeing
-
-    /// Submit weekly wellbeing check
-    func submitWeeklyWellbeing(_ request: WeeklyWellbeingRequest) async throws -> WeeklyWellbeingResponse {
-        struct ResponseWrapper: Decodable {
-            let success: Bool
-            let data: DataWrapper?
-            let error: ErrorWrapper?
-
-            struct DataWrapper: Decodable {
-                let check: CheckWrapper
-                let previous_trend: [TrendWrapper]
-                let insights: [String]
-
-                struct CheckWrapper: Decodable {
-                    let id: UUID
-                    let user_id: UUID
-                    let week_start_date: String
-                    let created_at: String
-                    let overall_mood: Int
-                    let energy_level: Int
-                    let stress_level: Int
-                    let sleep_quality: Int
-                    let social_connection: Int
-                    let sense_of_purpose: Int
-                    let highlight_of_week: String?
-                    let challenge_of_week: String?
-                    let gratitude_note: String?
-                    let total_score: Int
-                    let previous_week_score: Int?
-                    let trend: String
-                }
-
-                struct TrendWrapper: Decodable {
-                    let category: String
-                    let current: Int
-                    let previous: Int?
-                    let trend: String
-                }
-            }
-
-            struct ErrorWrapper: Decodable {
-                let code: String
-                let message: String
-            }
-        }
-
-        let encoder = JSONEncoder()
-        let requestData = try encoder.encode(request)
-
-        let response: ResponseWrapper = try await supabase
-            .functions
-            .invoke("weekly-wellbeing", options: FunctionInvokeOptions(body: requestData))
-
-        guard response.success, let data = response.data else {
-            return WeeklyWellbeingResponse(
-                success: false,
-                data: nil,
-                error: response.error.map { WeeklyWellbeingResponse.WeeklyWellbeingError(code: $0.code, message: $0.message) }
-            )
-        }
-
-        let check = WeeklyWellbeingCheck(
-            id: data.check.id,
-            userId: data.check.user_id,
-            weekStartDate: ISO8601DateFormatter().date(from: data.check.week_start_date) ?? Date(),
-            createdAt: ISO8601DateFormatter().date(from: data.check.created_at) ?? Date(),
-            overallMood: data.check.overall_mood,
-            energyLevel: data.check.energy_level,
-            stressLevel: data.check.stress_level,
-            sleepQuality: data.check.sleep_quality,
-            socialConnection: data.check.social_connection,
-            senseOfPurpose: data.check.sense_of_purpose,
-            highlightOfWeek: data.check.highlight_of_week,
-            challengeOfWeek: data.check.challenge_of_week,
-            gratitudeNote: data.check.gratitude_note,
-            totalScore: data.check.total_score,
-            previousWeekScore: data.check.previous_week_score,
-            trend: WellbeingTrend(rawValue: data.check.trend) ?? .stable
-        )
-
-        let previousTrendData = data.previous_trend.map { wrapper in
-            WeeklyWellbeingResponse.WellbeingTrendData(
-                category: wrapper.category,
-                current: wrapper.current,
-                previous: wrapper.previous,
-                trend: wrapper.trend
-            )
-        }
-
-        return WeeklyWellbeingResponse(
-            success: true,
-            data: WeeklyWellbeingResponse.WeeklyWellbeingData(
-                check: check,
-                previousTrend: previousTrendData,
-                insights: data.insights
-            ),
-            error: nil
-        )
-    }
-
-    // MARK: - Circle Habits
-
-    /// Invoke the circle habits edge function
-    func invokeCircleHabitsFunction(_ request: CircleHabitsRequest) async throws -> CircleHabitsResponse {
-        struct ResponseWrapper: Decodable {
-            let success: Bool
-            let data: DataWrapper?
-            let error: ErrorWrapper?
-
-            struct DataWrapper: Decodable {
-                let templates: [TemplateWrapper]?
-                let nudges: [NudgeWrapper]?
-                let settings: SettingsWrapper?
-                let recap: RecapWrapper?
-                let checkin: CheckinWrapper?
-                let streak_status: StreakWrapper?
-
-                struct TemplateWrapper: Decodable {
-                    let id: UUID
-                    let circle_id: UUID
-                    let name: String
-                    let description: String?
-                    let questions: [QuestionWrapper]
-                    let reminder_days: [Int]
-                    let reminder_time: String
-                    let is_active: Bool
-                    let created_at: String
-
-                    struct QuestionWrapper: Decodable {
-                        let id: UUID
-                        let question_text: String
-                        let prompt_type: String
-                        let order: Int
-                        let is_required: Bool
-                    }
-                }
-
-                struct NudgeWrapper: Decodable {
-                    let id: UUID
-                    let circle_id: UUID
-                    let template_id: UUID
-                    let missed_checkin_id: UUID?
-                    let nudge_type: String
-                    let message: String
-                    let sent_at: String?
-                    let acknowledged_at: String?
-                    let expires_at: String
-                }
-
-                struct SettingsWrapper: Decodable {
-                    let user_id: UUID
-                    let circle_id: UUID
-                    let nudges_enabled: Bool
-                    let max_nudges_per_week: Int
-                    let quiet_hours_enabled: Bool
-                    let quiet_hours_start: String?
-                    let quiet_hours_end: String?
-                }
-
-                struct RecapWrapper: Decodable {
-                    let id: UUID
-                    let user_id: UUID
-                    let circle_id: UUID
-                    let week_start_date: String
-                    let total_checkins: Int
-                    let member_participations: [MemberParticipationWrapper]
-                    let shared_highlights: [HighlightWrapper]
-                    let streak_status: StreakWrapper
-                    let generated_at: String
-
-                    struct MemberParticipationWrapper: Decodable {
-                        let member_id: UUID
-                        let member_name: String
-                        let member_avatar: String?
-                        let checkins_completed: Int
-                        let was_active: Bool
-                    }
-
-                    struct HighlightWrapper: Decodable {
-                        let id: UUID
-                        let member_id: UUID
-                        let member_name: String
-                        let content: String
-                        let type: String
-                        let reactions: [String]
-                    }
-                }
-
-                struct CheckinWrapper: Decodable {
-                    let id: UUID
-                    let circle_id: UUID
-                    let template_id: UUID
-                    let user_id: UUID
-                    let responses: [ResponseWrapper]
-                    let mood: Int?
-                    let submitted_at: String
-
-                    struct ResponseWrapper: Decodable {
-                        let id: UUID
-                        let question_id: UUID
-                        let response_value: String
-                        let response_type: String
-                    }
-                }
-
-                struct StreakWrapper: Decodable {
-                    let current_streak: Int
-                    let longest_streak: Int
-                    let last_checkin_date: String?
-                    let is_at_risk: Bool
-                }
-            }
-
-            struct ErrorWrapper: Decodable {
-                let code: String
-                let message: String
-            }
-        }
-
-        let encoder = JSONEncoder()
-        let requestData = try encoder.encode(request)
-
-        let response: ResponseWrapper = try await supabase
-            .functions
-            .invoke("circle-habits", options: FunctionInvokeOptions(body: requestData))
-
-        // Transform templates
-        let templates = response.data?.templates?.map { wrapper in
-            CircleTemplate(
-                id: wrapper.id,
-                circleId: wrapper.circle_id,
-                name: wrapper.name,
-                description: wrapper.description,
-                questions: wrapper.questions.map { q in
-                    TemplateQuestion(
-                        id: q.id,
-                        questionText: q.question_text,
-                        promptType: QuestionPromptType(rawValue: q.prompt_type) ?? .freeform,
-                        order: q.order,
-                        isRequired: q.is_required
-                    )
-                },
-                reminderDays: wrapper.reminder_days,
-                reminderTime: wrapper.reminder_time,
-                isActive: wrapper.is_active,
-                createdAt: ISO8601DateFormatter().date(from: wrapper.created_at) ?? Date()
-            )
-        }
-
-        // Transform nudges
-        let nudges = response.data?.nudges?.map { wrapper in
-            CircleNudge(
-                id: wrapper.id,
-                circleId: wrapper.circle_id,
-                templateId: wrapper.template_id,
-                missedCheckinId: wrapper.missed_checkin_id,
-                nudgeType: NudgeType(rawValue: wrapper.nudge_type) ?? .reminder,
-                message: wrapper.message,
-                sentAt: wrapper.sent_at.flatMap { ISO8601DateFormatter().date(from: $0) },
-                acknowledgedAt: wrapper.acknowledged_at.flatMap { ISO8601DateFormatter().date(from: $0) },
-                expiresAt: ISO8601DateFormatter().date(from: wrapper.expires_at) ?? Date()
-            )
-        }
-
-        // Transform settings
-        let settings = response.data?.settings.map { wrapper in
-            CircleNudgeSettings(
-                userId: wrapper.user_id,
-                circleId: wrapper.circle_id,
-                nudgesEnabled: wrapper.nudges_enabled,
-                maxNudgesPerWeek: wrapper.max_nudges_per_week,
-                quietHoursEnabled: wrapper.quiet_hours_enabled,
-                quietHoursStart: wrapper.quiet_hours_start,
-                quietHoursEnd: wrapper.quiet_hours_end
-            )
-        }
-
-        // Transform streak status
-        let streakStatus = response.data?.streak_status.map { wrapper in
-            StreakStatus(
-                currentStreak: wrapper.current_streak,
-                longestStreak: wrapper.longest_streak,
-                lastCheckinDate: wrapper.last_checkin_date.flatMap { ISO8601DateFormatter().date(from: $0) },
-                isAtRisk: wrapper.is_at_risk
-            )
-        }
-
-        return CircleHabitsResponse(
-            success: response.success,
-            data: response.success ? CircleHabitsResponse.CircleHabitsData(
-                templates: templates,
-                nudges: nudges,
-                settings: settings,
-                recap: nil,
-                checkin: nil,
-                streakStatus: streakStatus
-            ) : nil,
-            error: response.error.map { error in
-                CircleHabitsResponse.CircleHabitsError(code: error.code, message: error.message)
-            }
-        )
-    }
-
-    // MARK: - Generic Helper Methods
-
-    /// Get the current authenticated user
-    func getCurrentUser() async throws -> UserProfile? {
-        let currentUserId = currentUserId
-        guard let uid = currentUserId else { return nil }
-
-        let profiles: [UserProfile] = try await supabase
-            .from(Tables.profiles)
-            .select()
-            .eq("id", value: uid)
-            .execute()
-            .value
-
-        return profiles.first
-    }
-
-    /// Generic method to fetch a single record with filters
-    func fetchSingle<T: Decodable>(
-        from table: String,
-        filters: [(String, String, Any)]
-    ) async throws -> T {
-        var query = supabase.from(table).select()
-
-        for (column, op, value) in filters {
-            switch op {
-            case "eq":
-                if let stringValue = value as? String {
-                    query = query.eq(column, value: stringValue)
-                } else if let uuidValue = value as? UUID {
-                    query = query.eq(column, value: uuidValue)
-                } else if let intValue = value as? Int {
-                    query = query.eq(column, value: intValue)
-                } else if let boolValue = value as? Bool {
-                    query = query.eq(column, value: boolValue)
-                }
-            case "neq":
-                if let stringValue = value as? String {
-                    query = query.neq(column, value: stringValue)
-                } else if let uuidValue = value as? UUID {
-                    query = query.neq(column, value: uuidValue)
-                }
-            default:
-                break
-            }
-        }
-
-        let results: [T] = try await query
-            .execute()
-            .value
-
-        guard let result = results.first else {
-            throw DataError.operationFailed("No record found")
-        }
-
-        return result
-    }
-
-    /// Generic method to update records with typed values
-    func update<T: Encodable>(
-        table: String,
-        filters: [(String, String, Any)],
-        values: T
-    ) async throws {
-        var query = try supabase.from(table).update(values)
-
-        for (column, op, value) in filters {
-            switch op {
-            case "eq":
-                if let stringValue = value as? String {
-                    query = query.eq(column, value: stringValue)
-                } else if let uuidValue = value as? UUID {
-                    query = query.eq(column, value: uuidValue)
-                } else if let intValue = value as? Int {
-                    query = query.eq(column, value: intValue)
-                }
-            default:
-                break
-            }
-        }
-
-        try await query.execute()
-    }
-
-    /// Generic method to update records with raw dictionary values
-    func updateRaw(
-        table: String,
-        filters: [(String, String, Any)],
-        values: [String: Any]
-    ) async throws {
-        // Convert values to AnyEncodable for Supabase
-        // Most common types (String, Int, Bool, NSNull, etc.) are already Encodable
-        var encodableValues: [String: AnyEncodable] = [:]
-        for (key, value) in values {
-            if let encodable = value as? any Encodable {
-                encodableValues[key] = AnyEncodable(encodable)
-            }
-        }
-
-        var query = try supabase.from(table).update(encodableValues)
-
-        for (column, op, value) in filters {
-            switch op {
-            case "eq":
-                if let stringValue = value as? String {
-                    query = query.eq(column, value: stringValue)
-                } else if let uuidValue = value as? UUID {
-                    query = query.eq(column, value: uuidValue)
-                } else if let intValue = value as? Int {
-                    query = query.eq(column, value: intValue)
-                }
-            default:
-                break
-            }
-        }
-
-        try await query.execute()
-    }
-
-    // MARK: - Certificate Methods
-
-    /// Get user's earned certificates
-    func getCertificates() async throws -> [ProgramCertificate] {
-        guard let userId = currentUserId else {
-            throw DataError.notAuthenticated
-        }
-
-        let certificates: [ProgramCertificate] = try await supabase
-            .from("program_certificates")
-            .select()
-            .eq("user_id", value: userId)
-            .order("issued_at", ascending: false)
-            .execute()
-            .value
-
-        return certificates
-    }
-
-    /// Share certificate to user's circle
-    func shareCertificateToCircle(certificateId: String) async throws {
-        try await supabase
-            .from("program_certificates")
-            .update(["shared_to_circle": true])
-            .eq("id", value: certificateId)
-            .execute()
-    }
-
-    /// Mark certificate as shared externally
-    func shareCertificateExternally(certificateId: String) async throws {
-        try await supabase
-            .from("program_certificates")
-            .update(["shared_externally": true])
-            .eq("id", value: certificateId)
-            .execute()
-    }
-
     // MARK: - Program Enrollment Methods
 
     /// Enroll user in a program
@@ -4827,6 +3851,12 @@ final class SupabaseDataService: ObservableObject {
         return nil
     }
 
+    // MARK: - Programs (stub - not implemented yet)
+    
+    func getPrograms() async throws -> [Program] {
+        throw DataError.notImplemented("Programs feature not yet implemented")
+    }
+    
     // MARK: - Stress Signature
 
     /// Fetch stress signature patterns for current user
@@ -4897,6 +3927,130 @@ final class SupabaseDataService: ObservableObject {
                     peakTimes: pattern.data.peakTimes
                 )
             }
+        )
+    }
+
+    // MARK: - Progress Stories (Post-MVP)
+
+    /// Fetch weekly progress story for a given week
+    func getWeeklyStory(weekStart: Date) async throws -> [String: Any]? {
+        // Post-MVP feature - stub implementation
+        return nil
+    }
+
+    /// Generate a new weekly progress story
+    func generateWeeklyStory(weekStart: Date) async throws -> [String: Any] {
+        // Post-MVP feature - stub implementation
+        throw DataError.notImplemented("Weekly story generation not yet implemented")
+    }
+
+    /// Upload a story card image
+    func uploadStoryCardImage(_ image: UIImage) async throws -> URL {
+        // Post-MVP feature - stub implementation
+        throw DataError.notImplemented("Story card image upload not yet implemented")
+    }
+
+    /// Share a story to a circle
+    func shareStoryToCircle(_ imageUrl: String?, circleId: UUID, caption: String?) async throws {
+        // Post-MVP feature - stub implementation
+        throw DataError.notImplemented("Story circle sharing not yet implemented")
+    }
+    
+    // MARK: - Certificates
+    
+    /// Get user's certificates
+    func getCertificates() async throws -> [ProgramCertificate] {
+        // Post-MVP feature - stub implementation
+        return []
+    }
+    
+    /// Share certificate to circle
+    func shareCertificateToCircle(certificateId: String, circleId: UUID? = nil, caption: String? = nil) async throws {
+        // Post-MVP feature - stub implementation
+        throw DataError.notImplemented("Certificate circle sharing not yet implemented")
+    }
+    
+    /// Share certificate externally
+    func shareCertificateExternally(certificateId: String) async throws -> String {
+        // Post-MVP feature - stub implementation
+        throw DataError.notImplemented("External certificate sharing not yet implemented")
+    }
+    
+    // MARK: - Safety Plan
+    
+    /// Fetch user's safety plan
+    func fetchSafetyPlan() async throws -> SafetyPlanResponse {
+        // Post-MVP feature - stub implementation
+        throw DataError.notImplemented("Safety plan fetching not yet implemented")
+    }
+    
+    /// Save user's safety plan
+    func saveSafetyPlan(payload: SafetyPlanPayload, operation: SafetyPlanOperation) async throws -> SafetyPlanResponse {
+        // Post-MVP feature - stub implementation
+        throw DataError.notImplemented("Safety plan saving not yet implemented")
+    }
+    
+    /// Update safety plan settings
+    func updateSafetyPlanSettings(settings: SafetyPlanSettings) async throws -> SafetyPlanResponse {
+        // Post-MVP feature - stub implementation
+        throw DataError.notImplemented("Safety plan settings update not yet implemented")
+    }
+    
+    /// Delete user's safety plan
+    func deleteSafetyPlan() async throws -> SafetyPlanResponse {
+        // Post-MVP feature - stub implementation
+        throw DataError.notImplemented("Safety plan deletion not yet implemented")
+    }
+    
+    // MARK: - AI Coaching
+    
+    /// Invoke coaching function
+    func invokeCoachingFunction(_ request: CoachingModeRequest) async throws -> CoachingModeResponse {
+        // Post-MVP feature - stub implementation
+        throw DataError.notImplemented("AI coaching function invocation not yet implemented")
+    }
+    
+    // MARK: - Weekly Wellbeing
+    
+    /// Submit weekly wellbeing response
+    func submitWeeklyWellbeing(_ request: WeeklyWellbeingRequest) async throws -> WeeklyWellbeingResponse {
+        // Post-MVP feature - stub implementation
+        throw DataError.notImplemented("Weekly wellbeing submission not yet implemented")
+    }
+
+    // MARK: - Circle Habits
+    
+    /// Invoke circle habits function
+    func invokeCircleHabitsFunction(_ request: CircleHabitsRequest) async throws -> CircleHabitsResponse {
+        // Post-MVP feature - stub implementation
+        throw DataError.notImplemented("Circle habits function invocation not yet implemented")
+    }
+    
+    // MARK: - Notification Engagement
+    
+    /// Log notification engagement event
+    func logNotificationEngagement(_ event: EngagementEvent) async throws {
+        // Post-MVP feature - stub implementation
+        throw DataError.notImplemented("Notification engagement logging not yet implemented")
+    }
+    
+    /// Fetch notification training data for smart scheduling
+    func fetchNotificationTrainingData() async throws -> [EngagementEvent] {
+        // Post-MVP feature - stub implementation
+        return []
+    }
+    
+    /// Fetch notification engagement statistics
+    func fetchNotificationEngagementStats() async throws -> EngagementStats {
+        // Post-MVP feature - stub implementation
+        return EngagementStats(
+            delivered: 0,
+            opened: 0,
+            completed: 0,
+            dismissed: 0,
+            rate: 0.0,
+            periodStart: Date(),
+            periodEnd: Date()
         )
     }
 }

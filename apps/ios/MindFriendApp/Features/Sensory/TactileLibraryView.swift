@@ -36,7 +36,7 @@ struct TactileLibraryView: View {
                 // Pattern grid
                 LazyVGrid(columns: columns, spacing: 16) {
                     ForEach(TactilePattern.library) { pattern in
-                        PatternCard(
+                        TactilePatternCard(
                             name: pattern.name,
                             description: pattern.description,
                             category: pattern.category.displayName,
@@ -81,7 +81,7 @@ struct TactileLibraryView: View {
 
 // MARK: - Pattern Card Component
 
-struct PatternCard: View {
+struct TactilePatternCard: View {
     let name: String
     let description: String
     let category: String

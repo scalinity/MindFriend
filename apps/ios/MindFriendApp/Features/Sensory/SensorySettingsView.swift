@@ -127,23 +127,14 @@ struct SensorySettingsView: View {
 
     private func loadSettings() async {
         isLoading = true
-
-        let service = SensorySessionService(supabase: container.supabase)
-        settings = try? await service.fetchSettings()
-
-        if let settings = settings {
-            defaultSpeed = settings.defaultSpeed
-            hapticIntensity = settings.hapticIntensity
-            enableAutoPause = settings.enableAutoPause
-            defaultSessionDuration = settings.defaultSessionDuration
-        } else {
-            // Use defaults if no settings found
-            let defaults = SensorySettings.default
-            defaultSpeed = defaults.defaultSpeed
-            hapticIntensity = defaults.hapticIntensity
-            enableAutoPause = defaults.enableAutoPause
-            defaultSessionDuration = defaults.defaultSessionDuration
-        }
+        
+        // Use default settings for MVP
+        let defaults = SensorySettings.default
+        settings = defaults
+        defaultSpeed = defaults.defaultSpeed
+        hapticIntensity = defaults.hapticIntensity
+        enableAutoPause = defaults.enableAutoPause
+        defaultSessionDuration = defaults.defaultSessionDuration
 
         isLoading = false
     }
@@ -164,14 +155,9 @@ struct SensorySettingsView: View {
             return
         }
 
-        let service = SensorySessionService(supabase: container.supabase)
-
-        do {
-            _ = try await service.updateSettings(newSettings)
-            dismiss()
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        // TODO: Persist settings to backend when service is available
+        settings = newSettings
+        dismiss()
 
         isSaving = false
     }
