@@ -1,3 +1,47 @@
+## [2026-01-22] Circadian Vulnerability Shield (N002) - Complete
+
+**Type:** Novel Feature (Proactive Mood Crash Prevention)
+**Status:** Complete
+
+### Summary
+
+Implemented proactive mood crash prevention system using MSFsc chronotype algorithm to predict vulnerable windows for mood crashes and deliver preventive "armor interventions" 15-30 minutes before predicted periods.
+
+### Changes
+
+- **Database:** circadian_profiles + vulnerable_windows tables (RLS, JSONB validation, FK constraints)
+- **ChronotypeClassifier:** MSFsc algorithm (5+ days sleep data, Roenneberg 2003)
+- **VulnerabilityPredictor:** 2-4 windows/day (circadian trough, social jet lag, chronotype patterns)
+- **VulnerabilityRefiner:** Rule-based learning (>70% crash→upgrade, <30%→remove, 3+ crashes→pattern)
+- **CircadianVulnerabilityEngine:** Orchestrator (timezone, HealthKit auth, fallback cascade)
+- **ArmorScheduler:** Notification scheduling (15-30min lead time based on severity)
+- **HealthKitService:** fetchSleepRecords() (90-day cap, midnight-crossing fix)
+- **SupabaseDataService:** 7 CRUD methods for profiles/windows
+- **DependencyContainer:** Registered circadian services
+
+### Critical Fixes
+
+- ✅ Fixed MSFsc sleep debt correction (subtraction → addition)
+- ✅ Fixed midpointOfSleep for midnight-crossing sleep
+- ✅ Extracted 12+ magic numbers to constants
+- ✅ Added DELETE RLS policies + JSONB validation + FK constraints
+
+### Testing
+
+- [x] Database migration applied
+- [x] All files compile without errors
+- [x] Files added to Xcode project
+- [ ] Unit tests (classifier, predictor, refiner)
+- [ ] UI components (profile, windows, armor delivery)
+
+### Notes
+
+- Client-side prediction only (Edge Functions → Phase 2)
+- Rule-based refinement (ML → Phase 2)
+- Committed in d403047f7
+
+---
+
 ## [2026-01-23] Nervous System State Engine (N001) - COMPLETE
 
 **Type:** Novel Feature (Polyvagal Theory Implementation)
