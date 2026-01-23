@@ -13,6 +13,31 @@ import type {
   MatchedExercise,
 } from "./types.ts";
 
+const OPERATION_TIMEOUT_MS = 15000; // 15s timeout for DB operations
+
+/**
+ * Wrap a promise with a timeout
+ */
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  errorMessage: string,
+): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(errorMessage)), timeoutMs),
+    ),
+  ]);
+}
+
+/**
+ * Hash user ID for logging (privacy-safe)
+ */
+function hashUserId(userId: string): string {
+  return userId.substring(0, 8) + "...";
+}
+
 // Intervention content templates
 const INTERVENTION_TEMPLATES: Record<InterventionType, InterventionContent> = {
   rest_suggestion: {
@@ -90,6 +115,7 @@ function determineInterventionType(
 
 /**
  * Match an exercise based on intervention type
+ * Optimized: Uses parallel queries and early termination
  */
 async function matchExercise(
   supabase: ReturnType<typeof createClient>,
@@ -102,37 +128,53 @@ async function matchExercise(
     return null;
   }
 
-  // Find an exercise from the matching category that user hasn't done recently
-  const { data: exercises, error } = await supabase
-    .from("exercises")
-    .select("id, title, type, duration_minutes")
-    .eq("type", template.exerciseCategory)
-    .eq("is_premium", false) // Start with free exercises
-    .order("duration_minutes", { ascending: true }) // Prefer shorter exercises
-    .limit(5);
+  const sevenDaysAgo = new Date(
+    Date.now() - 7 * 24 * 60 * 60 * 1000,
+  ).toISOString();
+
+  // Run both queries in parallel (optimizes N+1 issue)
+  const [exercisesResult, sessionsResult] = await Promise.all([
+    withTimeout(
+      supabase
+        .from("exercises")
+        .select("id, title, type, duration_minutes")
+        .eq("type", template.exerciseCategory)
+        .eq("is_premium", false)
+        .order("duration_minutes", { ascending: true })
+        .limit(5),
+      OPERATION_TIMEOUT_MS,
+      "Exercise query timeout",
+    ),
+    withTimeout(
+      supabase
+        .from("exercise_sessions")
+        .select("exercise_id")
+        .eq("user_id", userId)
+        .gte("completed_at", sevenDaysAgo),
+      OPERATION_TIMEOUT_MS,
+      "Sessions query timeout",
+    ),
+  ]);
+
+  const { data: exercises, error } = exercisesResult;
+  const { data: recentSessions } = sessionsResult;
 
   if (error || !exercises || exercises.length === 0) {
     // Fallback: get any short exercise
-    const { data: fallback } = await supabase
-      .from("exercises")
-      .select("id, title, type, duration_minutes")
-      .eq("is_premium", false)
-      .lte("duration_minutes", 10)
-      .order("duration_minutes", { ascending: true })
-      .limit(1);
+    const { data: fallback } = await withTimeout(
+      supabase
+        .from("exercises")
+        .select("id, title, type, duration_minutes")
+        .eq("is_premium", false)
+        .lte("duration_minutes", 10)
+        .order("duration_minutes", { ascending: true })
+        .limit(1),
+      OPERATION_TIMEOUT_MS,
+      "Fallback query timeout",
+    );
 
     return fallback?.[0] || null;
   }
-
-  // Get exercises user has done in last 7 days
-  const { data: recentSessions } = await supabase
-    .from("exercise_sessions")
-    .select("exercise_id")
-    .eq("user_id", userId)
-    .gte(
-      "completed_at",
-      new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-    );
 
   const recentExerciseIds = new Set(
     (recentSessions || []).map((s) => s.exercise_id),
@@ -142,7 +184,7 @@ async function matchExercise(
   const unseenExercise = exercises.find((e) => !recentExerciseIds.has(e.id));
   const selectedExercise = unseenExercise || exercises[0];
 
-  // Defensive check - should never hit due to line 114 check
+  // Defensive check - should never hit due to earlier check
   if (!selectedExercise) {
     return null;
   }
@@ -204,10 +246,16 @@ serve(async (req) => {
   }
 
   try {
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    if (!supabaseUrl) {
+      console.error("CRITICAL: Missing SUPABASE_URL");
+      return new Response(
+        JSON.stringify({ error: "Server configuration error" }),
+        { status: 500, headers },
+      );
+    }
+
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
     // Parse and validate request body
     let request: InterventionRequest;
@@ -343,9 +391,9 @@ serve(async (req) => {
       }
     }
 
+    // Log without PII (use hashed user ID)
     console.log("Intervention created:", {
-      userId: request.userId,
-      predictionId: request.predictionId,
+      userHash: hashUserId(request.userId),
       interventionType,
       exerciseId: exercise?.id,
       notificationSent,

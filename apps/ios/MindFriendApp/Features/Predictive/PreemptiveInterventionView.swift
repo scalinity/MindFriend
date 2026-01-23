@@ -11,6 +11,14 @@ struct PreemptiveInterventionView: View {
     @State private var showFeedbackSheet = false
     @State private var feedbackText = ""
 
+    private var headerAccessibilityLabel: String {
+        var label = intervention.interventionType.title
+        if let prediction = prediction {
+            label += ". Today's outlook: \(prediction.outlookLabel)"
+        }
+        return label
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Header
@@ -25,6 +33,7 @@ struct PreemptiveInterventionView: View {
                             .font(.title2)
                             .foregroundColor(.secondary)
                     }
+                    .accessibilityLabel("Close and provide feedback")
                 }
                 .padding(.horizontal)
 
@@ -39,6 +48,7 @@ struct PreemptiveInterventionView: View {
                             .font(.system(size: 36))
                             .foregroundColor(intervention.interventionType.color)
                     }
+                    .accessibilityHidden(true)
 
                     Text(intervention.interventionType.title)
                         .font(.title2)
@@ -51,6 +61,8 @@ struct PreemptiveInterventionView: View {
                     }
                 }
                 .padding(.bottom, 8)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(headerAccessibilityLabel)
             }
             .padding(.top, 24)
 
@@ -139,6 +151,7 @@ struct PreemptiveInterventionView: View {
             } label: {
                 HStack {
                     Image(systemName: "sparkles")
+                        .accessibilityHidden(true)
                     Text("Start Recommended Exercise")
                 }
                 .font(.headline)
@@ -148,6 +161,8 @@ struct PreemptiveInterventionView: View {
                 .background(intervention.interventionType.color)
                 .cornerRadius(16)
             }
+            .accessibilityLabel("Start recommended exercise")
+            .accessibilityHint("Begins the suggested wellness exercise")
             .padding()
         }
         .background(Color(.systemBackground))
@@ -173,12 +188,15 @@ struct InterventionFactorRow: View {
             Image(systemName: factor.icon)
                 .foregroundColor(factor.impactColor)
                 .frame(width: 24)
+                .accessibilityHidden(true)
 
             Text(factor.description)
                 .font(.subheadline)
 
             Spacer()
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(factor.description)
     }
 }
 
@@ -218,6 +236,7 @@ struct SuggestedExerciseCard: View {
                         .font(.title2)
                         .foregroundColor(interventionType.color)
                 }
+                .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Recommended for You")
@@ -238,12 +257,16 @@ struct SuggestedExerciseCard: View {
                 Image(systemName: "play.circle.fill")
                     .font(.title)
                     .foregroundColor(interventionType.color)
+                    .accessibilityHidden(true)
             }
             .padding()
             .background(Color(.secondarySystemBackground))
             .cornerRadius(16)
         }
         .buttonStyle(PlainButtonStyle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Recommended for you: \(exerciseTitle), \(exerciseDuration)")
+        .accessibilityHint("Double tap to start exercise")
     }
 }
 
@@ -266,6 +289,7 @@ struct AlternativeActionButton: View {
                     Image(systemName: icon)
                         .foregroundColor(color)
                 }
+                .accessibilityHidden(true)
 
                 Text(title)
                     .font(.caption)
@@ -273,6 +297,8 @@ struct AlternativeActionButton: View {
             }
         }
         .buttonStyle(PlainButtonStyle())
+        .accessibilityLabel(title)
+        .accessibilityHint("Double tap to open \(title)")
     }
 }
 
@@ -387,6 +413,7 @@ struct FeedbackButton: View {
                         .font(.title2)
                         .foregroundColor(color)
                 }
+                .accessibilityHidden(true)
 
                 Text(label)
                     .font(.caption)
@@ -394,6 +421,8 @@ struct FeedbackButton: View {
             }
         }
         .buttonStyle(PlainButtonStyle())
+        .accessibilityLabel(label)
+        .accessibilityHint("Submit \(label.lowercased()) as feedback")
     }
 }
 

@@ -84,9 +84,31 @@ struct MoodPredictionCard: View {
             .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
         }
         .buttonStyle(PlainButtonStyle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityHint(prediction.isLowMoodPredicted ? "Double tap for preparation tips" : "Double tap for details")
         .sheet(isPresented: $showDetailSheet) {
             PredictionDetailSheet(prediction: prediction)
         }
+    }
+
+    private var accessibilityLabel: String {
+        var components = [
+            "Today's outlook: \(prediction.outlookLabel)",
+            "Predicted mood: \(String(format: "%.1f", prediction.predictedMoodValue)) out of 10",
+            "\(prediction.confidencePercent) percent confidence"
+        ]
+
+        if !prediction.factors.isEmpty {
+            let factorDescriptions = prediction.factors.prefix(3).map { $0.description }
+            components.append("Contributing factors: \(factorDescriptions.joined(separator: ", "))")
+        }
+
+        if prediction.isLowMoodPredicted {
+            components.append("Preparation tips available")
+        }
+
+        return components.joined(separator: ". ")
     }
 }
 
@@ -118,6 +140,8 @@ struct ConfidenceBadge: View {
         .padding(.vertical, 4)
         .background(color.opacity(0.1))
         .cornerRadius(8)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(confidence) percent confidence, \(label)")
     }
 }
 
@@ -132,6 +156,7 @@ struct FactorRow: View {
                 .font(.caption)
                 .foregroundColor(factor.impactColor)
                 .frame(width: 20)
+                .accessibilityHidden(true)
 
             Text(factor.description)
                 .font(.caption)
@@ -145,6 +170,8 @@ struct FactorRow: View {
                 .fontWeight(.medium)
                 .foregroundColor(factor.impactColor)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(factor.description). Impact: \(factor.impactLabel)")
     }
 }
 
@@ -273,6 +300,7 @@ struct DetailedFactorRow: View {
                 Image(systemName: factor.icon)
                     .foregroundColor(factor.impactColor)
             }
+            .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(factor.description)
@@ -291,6 +319,8 @@ struct DetailedFactorRow: View {
                 .foregroundColor(factor.impactColor)
         }
         .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(factor.description). \(factor.isPositive ? "Positive influence" : "Challenging factor"). Impact: \(factor.impactLabel)")
     }
 }
 
@@ -308,6 +338,7 @@ struct TipRow: View {
                 .font(.title3)
                 .foregroundColor(color)
                 .frame(width: 32)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -319,6 +350,8 @@ struct TipRow: View {
                     .foregroundColor(.secondary)
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title). \(description)")
     }
 }
 

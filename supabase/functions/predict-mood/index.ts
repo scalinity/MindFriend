@@ -18,7 +18,31 @@ import type {
 } from "./types.ts";
 
 const BATCH_SIZE = 100; // Process users in batches
-const INTERVENTION_FUNCTION_URL = "/functions/v1/suggest-intervention";
+const USER_TIMEOUT_MS = 30000; // 30s timeout per user
+const BATCH_TIMEOUT_MS = 120000; // 2min timeout per batch
+
+/**
+ * Wrap a promise with a timeout
+ */
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  errorMessage: string,
+): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(errorMessage)), timeoutMs),
+    ),
+  ]);
+}
+
+/**
+ * Hash user ID for logging (privacy-safe)
+ */
+function hashUserId(userId: string): string {
+  return userId.substring(0, 8) + "...";
+}
 
 serve(async (req) => {
   const origin = req.headers.get("Origin");
@@ -57,10 +81,16 @@ serve(async (req) => {
   }
 
   try {
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    if (!supabaseUrl) {
+      console.error("CRITICAL: Missing SUPABASE_URL");
+      return new Response(
+        JSON.stringify({ error: "Server configuration error" }),
+        { status: 500, headers },
+      );
+    }
+
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
     const now = new Date();
     const targetDate = now.toISOString().split("T")[0]; // YYYY-MM-DD
@@ -98,7 +128,9 @@ serve(async (req) => {
 
     for (const batch of batches) {
       const batchPromises = batch.map(async (user) => {
-        try {
+        const userHash = hashUserId(user.user_id);
+
+        const processUser = async () => {
           // Check if prediction already exists for today
           const { data: existing } = await supabaseAdmin
             .from("mood_predictions")
@@ -109,7 +141,7 @@ serve(async (req) => {
 
           if (existing) {
             skippedExisting++;
-            return;
+            return { success: true, skipped: true };
           }
 
           // Get features for this user
@@ -120,11 +152,11 @@ serve(async (req) => {
 
           if (featuresError || !featuresData) {
             console.error(
-              `Error fetching features for ${user.user_id}:`,
-              featuresError,
+              `Features error for user ${userHash}:`,
+              featuresError?.message,
             );
-            errors.push(`Features error for ${user.user_id}`);
-            return;
+            errors.push(`Features error for user ${userHash}`);
+            return { success: false };
           }
 
           const features = featuresData as PredictionFeatures;
@@ -162,11 +194,11 @@ serve(async (req) => {
 
           if (insertError) {
             console.error(
-              `Error inserting prediction for ${user.user_id}:`,
-              insertError,
+              `Insert error for user ${userHash}:`,
+              insertError.message,
             );
-            errors.push(`Insert error for ${user.user_id}`);
-            return;
+            errors.push(`Insert error for user ${userHash}`);
+            return { success: false };
           }
 
           predictionsCreated++;
@@ -179,10 +211,9 @@ serve(async (req) => {
             )
           ) {
             try {
-              // Call suggest-intervention function
-              const interventionResponse = await supabaseAdmin.functions.invoke(
-                "suggest-intervention",
-                {
+              // Call suggest-intervention function with timeout
+              const interventionResponse = await withTimeout(
+                supabaseAdmin.functions.invoke("suggest-intervention", {
                   body: {
                     userId: user.user_id,
                     predictionId: insertedPrediction.id,
@@ -190,34 +221,72 @@ serve(async (req) => {
                     factors: prediction.factors,
                     features: prediction.featuresUsed,
                   },
-                },
+                }),
+                10000, // 10s timeout for intervention
+                `Intervention timeout for user ${userHash}`,
               );
 
               if (interventionResponse.error) {
                 console.error(
-                  `Intervention error for ${user.user_id}:`,
-                  interventionResponse.error,
+                  `Intervention error for user ${userHash}:`,
+                  interventionResponse.error.message,
                 );
               } else {
                 interventionsTriggered++;
               }
             } catch (interventionError) {
               console.error(
-                `Failed to trigger intervention for ${user.user_id}:`,
-                interventionError,
+                `Intervention failed for user ${userHash}:`,
+                interventionError instanceof Error
+                  ? interventionError.message
+                  : "Unknown error",
               );
             }
           }
 
           usersProcessed++;
+          return { success: true };
+        };
+
+        // Wrap user processing with timeout
+        try {
+          return await withTimeout(
+            processUser(),
+            USER_TIMEOUT_MS,
+            `Timeout processing user ${userHash}`,
+          );
         } catch (userError) {
-          console.error(`Error processing user ${user.user_id}:`, userError);
-          errors.push(`Processing error for ${user.user_id}`);
+          console.error(
+            `Error for user ${userHash}:`,
+            userError instanceof Error ? userError.message : "Unknown error",
+          );
+          errors.push(`Error for user ${userHash}`);
+          return { success: false };
         }
       });
 
-      // Wait for batch to complete
-      await Promise.all(batchPromises);
+      // Use Promise.allSettled for batch failure isolation
+      const batchResults = await withTimeout(
+        Promise.allSettled(batchPromises),
+        BATCH_TIMEOUT_MS,
+        "Batch processing timeout",
+      ).catch(() => {
+        console.error("Batch timeout - some users may not have been processed");
+        return [];
+      });
+
+      // Log batch statistics
+      const settled = batchResults.filter(
+        (r) => r.status === "fulfilled",
+      ).length;
+      const rejected = batchResults.filter(
+        (r) => r.status === "rejected",
+      ).length;
+      if (rejected > 0) {
+        console.warn(
+          `Batch completed: ${settled} succeeded, ${rejected} failed`,
+        );
+      }
     }
 
     console.log("Mood prediction complete:", {
