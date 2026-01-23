@@ -313,6 +313,105 @@ struct StreakShieldStatus: Codable, Equatable {
     }
 }
 
+// MARK: - Vacation Mode
+
+/// Represents a vacation mode period that freezes streak progression
+struct VacationMode: Codable, Identifiable {
+    let id: UUID
+    let userId: UUID
+    var isActive: Bool
+    let startDate: Date
+    let endDate: Date
+    let reason: String?
+    let streakAtStart: Int?
+    let createdAt: Date
+    let deactivatedAt: Date?
+
+    /// Number of days remaining in vacation
+    var daysRemaining: Int {
+        Calendar.current.dateComponents([.day], from: Date(), to: endDate).day ?? 0
+    }
+
+    /// Whether this vacation is currently protecting the streak
+    var isCurrentlyActive: Bool {
+        let today = Calendar.current.startOfDay(for: Date())
+        let start = Calendar.current.startOfDay(for: startDate)
+        let end = Calendar.current.startOfDay(for: endDate)
+        return isActive && today >= start && today <= end
+    }
+
+    /// Total duration of the vacation in days
+    var totalDays: Int {
+        Calendar.current.dateComponents([.day], from: startDate, to: endDate).day ?? 0
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case isActive = "is_active"
+        case startDate = "start_date"
+        case endDate = "end_date"
+        case reason
+        case streakAtStart = "streak_at_start"
+        case createdAt = "created_at"
+        case deactivatedAt = "deactivated_at"
+    }
+}
+
+// MARK: - Shield Events
+
+/// Represents a shield event (earned, used, reset, etc.)
+struct ShieldEvent: Codable, Identifiable {
+    let id: UUID
+    let userId: UUID
+    let eventType: ShieldEventType
+    let streakProtected: Int?
+    let shieldsRemaining: Int?
+    let metadata: [String: AnyCodable]?
+    let createdAt: Date
+
+    /// Human-readable event title
+    var title: String {
+        switch eventType {
+        case .earned: return "Shield Earned"
+        case .used: return "Shield Used"
+        case .reset: return "Weekly Reset"
+        case .expired: return "Shield Expired"
+        case .purchased: return "Shield Purchased"
+        }
+    }
+
+    /// Icon name for this event type
+    var iconName: String {
+        switch eventType {
+        case .earned: return "shield.fill"
+        case .used: return "shield.lefthalf.filled"
+        case .reset: return "arrow.clockwise"
+        case .expired: return "xmark.shield"
+        case .purchased: return "cart.fill"
+        }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case eventType = "event_type"
+        case streakProtected = "streak_protected"
+        case shieldsRemaining = "shields_remaining"
+        case metadata
+        case createdAt = "created_at"
+    }
+}
+
+/// Types of shield events
+enum ShieldEventType: String, Codable {
+    case earned
+    case used
+    case reset
+    case expired
+    case purchased
+}
+
 // MARK: - Recovery Quest
 
 /// Status of a recovery quest attempt
