@@ -91,7 +91,7 @@ struct SubscriptionPlan: Codable, Identifiable, Equatable, Hashable {
         id: UUID(uuidString: "00000000-0000-0000-0000-000000000002") ?? UUID(),
         name: "Premium Annual",
         description: "Save 2 months with annual billing",
-        priceCents: 7799,
+        priceCents: 7999,
         currency: "USD",
         billingPeriod: .yearly,
         billingPeriodMonths: 12,
