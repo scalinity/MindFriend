@@ -328,20 +328,22 @@ final class HealthKitService: ObservableObject {
         return (durationMinutes, qualityScore, startTime, endTime, timeInBed)
     }
 
-    /// Fetch structured sleep records for chronotype analysis
-    /// - Parameter days: Number of days to fetch (default: 30)
-    /// - Returns: Array of SleepRecord with weekend detection and midpoint calculation
+    /// Fetch sleep records from HealthKit for chronotype analysis
+    /// - Parameter days: Number of days to fetch (default 30, capped at 90)
+    /// - Returns: Array of SleepRecord objects with midpoint calculations
     func fetchSleepRecords(days: Int = 30) async throws -> [SleepRecord] {
+        // Cap at 90 days to prevent excessive memory usage
+        let cappedDays = min(days, 90)
         let calendar = Calendar.current
         let endDate = Date()
-        guard let startDate = calendar.date(byAdding: .day, value: -days, to: endDate) else {
+        guard let startDate = calendar.date(byAdding: .day, value: -cappedDays, to: endDate) else {
             return []
         }
 
         var records: [SleepRecord] = []
-
-        // Fetch sleep data day-by-day
-        for dayOffset in 0..<days {
+        
+        // Process day-by-day for accurate per-day records
+        for dayOffset in 0..<cappedDays {
             guard let dayStart = calendar.date(byAdding: .day, value: -dayOffset, to: endDate) else {
                 continue
             }
@@ -399,6 +401,7 @@ final class HealthKitService: ObservableObject {
 
             // Create SleepRecord
             let record = SleepRecord(
+                id: UUID(),
                 date: dayStartOfDay,
                 startTime: sleepStartDate,
                 endTime: sleepEndDate,

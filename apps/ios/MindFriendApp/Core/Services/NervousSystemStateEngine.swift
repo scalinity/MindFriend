@@ -25,6 +25,10 @@ final class NervousSystemStateEngine: ObservableObject {
     // Configuration
     private let latencyBudget: TimeInterval = 0.8 // 800ms
     private let minConfidenceThreshold = 0.6
+    
+    // PERFORMANCE: Shared encoder instances to avoid repeated allocation
+    private let jsonEncoder = JSONEncoder()
+    private let isoDateFormatter = ISO8601DateFormatter()
 
     // MARK: - Initialization
 
@@ -94,8 +98,10 @@ final class NervousSystemStateEngine: ObservableObject {
         currentConfidence = result.confidence
         lastClassificationTime = timestamp
 
-        // Check for cascade
-        await checkForCascade()
+        // PERFORMANCE: Check for cascade in background to avoid blocking
+        Task.detached { [weak self] in
+            await self?.checkForCascade()
+        }
 
         return result.state
     }
@@ -169,8 +175,8 @@ final class NervousSystemStateEngine: ObservableObject {
             .from("nervous_system_states")
             .select()
             .eq("user_id", value: userId.uuidString)
-            .gte("classified_at", value: ISO8601DateFormatter().string(from: from))
-            .lte("classified_at", value: ISO8601DateFormatter().string(from: to))
+            .gte("classified_at", value: isoDateFormatter.string(from: from))
+            .lte("classified_at", value: isoDateFormatter.string(from: to))
             .order("classified_at", ascending: false)
             .execute()
             .value
@@ -239,10 +245,10 @@ final class NervousSystemStateEngine: ObservableObject {
             return
         }
 
-        // Prepare JSONB fields
-        let voiceJSON = voiceFeatures.flatMap { try? JSONEncoder().encode($0) }
-        let hrvJSON = hrvFeatures.flatMap { try? JSONEncoder().encode($0) }
-        let behavioralJSON = try? JSONEncoder().encode(behavioralFeatures)
+        // Prepare JSONB fields using shared encoder
+        let voiceJSON = voiceFeatures.flatMap { try? jsonEncoder.encode($0) }
+        let hrvJSON = hrvFeatures.flatMap { try? jsonEncoder.encode($0) }
+        let behavioralJSON = try? jsonEncoder.encode(behavioralFeatures)
 
         // Insert record
         struct InsertPayload: Encodable {
@@ -278,7 +284,7 @@ final class NervousSystemStateEngine: ObservableObject {
             behavioralFeatures: behavioralJSON,
             latencyMs: result.latencyMs,
             source: source.rawValue,
-            classifiedAt: ISO8601DateFormatter().string(from: timestamp)
+            classifiedAt: isoDateFormatter.string(from: timestamp)
         )
 
         try await supabase
@@ -333,8 +339,8 @@ final class NervousSystemStateEngine: ObservableObject {
 
         let payload = InsertPayload(
             userId: cascade.userId.uuidString,
-            startedAt: ISO8601DateFormatter().string(from: cascade.startedAt),
-            endedAt: ISO8601DateFormatter().string(from: cascade.endedAt),
+            startedAt: isoDateFormatter.string(from: cascade.startedAt),
+            endedAt: isoDateFormatter.string(from: cascade.endedAt),
             stateSequence: cascade.stateSequence.map { $0.rawValue },
             severity: cascade.severity.rawValue,
             transitionCount: cascade.transitionCount
@@ -355,10 +361,6 @@ final class NervousSystemStateEngine: ObservableObject {
 
     private func getCurrentUserId() async throws -> UUID? {
         let session = try await supabase.auth.session
-        guard let userIdString = session.user.id.uuidString,
-              let uuid = UUID(uuidString: userIdString) else {
-            return nil
-        }
-        return uuid
+        return UUID(uuidString: session.user.id.uuidString)
     }
 }

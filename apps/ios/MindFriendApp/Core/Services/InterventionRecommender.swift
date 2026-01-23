@@ -222,9 +222,9 @@ final class InterventionRecommender {
             .value
 
         // Create efficacy lookup
-        var efficacyMap: [InterventionType: Double] = [:]
+        var efficacyMap: [NervousSystemInterventionType: Double] = [:]
         for entry in efficacyData {
-            if let type = InterventionType(rawValue: entry.interventionType) {
+            if let type = NervousSystemInterventionType(rawValue: entry.interventionType) {
                 efficacyMap[type] = entry.avgEfficacy
             }
         }

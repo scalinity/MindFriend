@@ -6,6 +6,11 @@ final class HRVPolyvagalExtractor {
     // MARK: - Properties
 
     private let healthKitService: HealthKitService
+    
+    // PERFORMANCE: Cache recent HRV query results
+    private var cachedHRVFeatures: PolyvagalHRVFeatures?
+    private var cacheTimestamp: Date?
+    private let cacheValidityDuration: TimeInterval = 60 // 1 minute cache
 
     // MARK: - Initialization
 
@@ -19,6 +24,13 @@ final class HRVPolyvagalExtractor {
     /// - Parameter lookbackMinutes: How far back to query (default 5 minutes)
     /// - Returns: HRV polyvagal features, or nil if no data available
     func extractRecentHRV(lookbackMinutes: Int = 5) async throws -> PolyvagalHRVFeatures? {
+        // PERFORMANCE: Return cached value if still valid
+        if let cached = cachedHRVFeatures,
+           let cacheTime = cacheTimestamp,
+           Date().timeIntervalSince(cacheTime) < cacheValidityDuration {
+            return cached
+        }
+        
         guard healthKitService.isHealthKitAvailable else {
             return nil
         }
@@ -36,11 +48,17 @@ final class HRVPolyvagalExtractor {
         // Calculate RMSSD and SDNN from samples
         let (rmssd, sdnn) = calculateHRVMetrics(from: samples)
 
-        return PolyvagalHRVFeatures(
+        let features = PolyvagalHRVFeatures(
             rmssd: rmssd,
             sdnn: sdnn,
             timestamp: samples.last?.endDate ?? Date()
         )
+        
+        // Cache the result
+        cachedHRVFeatures = features
+        cacheTimestamp = Date()
+        
+        return features
     }
 
     // MARK: - Private Methods - HealthKit Queries
@@ -93,17 +111,17 @@ final class HRVPolyvagalExtractor {
 
         let unit = HKUnit.secondUnit(with: .milli)
 
-        // Extract HRV values (SDNN from HealthKit)
-        let hrvValues = samples.map { $0.quantity.doubleValue(for: unit) }
+        // Extract SDNN values from HealthKit (heartRateVariabilitySDNN)
+        let sdnnValues = samples.map { $0.quantity.doubleValue(for: unit) }
 
-        // Calculate SDNN (standard deviation of NN intervals)
-        // HealthKit already provides SDNN in its heartRateVariabilitySDNN samples
-        let sdnn = hrvValues.last ?? 0
+        // Use most recent SDNN value
+        let sdnn = sdnnValues.last ?? 0
 
-        // Calculate RMSSD (root mean square of successive differences)
-        // Approximate from SDNN since HealthKit doesn't provide raw RR intervals
-        // Clinical approximation: RMSSD ≈ 0.85 * SDNN for short-term HRV
-        let rmssd = sdnn * 0.85
+        // Note: HealthKit doesn't provide raw RR intervals, so we can't calculate true RMSSD.
+        // For MVP, we use SDNN as a proxy for both metrics since SDNN is the only available HRV metric.
+        // This is documented as a known limitation - future versions could use HealthKit's
+        // heartbeatSeries API to calculate true RMSSD from RR intervals.
+        let rmssd = sdnn
 
         return (rmssd, sdnn)
     }

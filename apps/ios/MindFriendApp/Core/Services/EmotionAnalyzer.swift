@@ -742,6 +742,11 @@ final class EmotionAnalyzer: ObservableObject {
         var zcrValues: [Double] = []
         var frameStart = 0
 
+        // Guard against frameLength = 1 (division by zero)
+        guard frameLength > 1 else {
+            return (0, 0)
+        }
+
         while frameStart + frameLength <= samples.count {
             var crossings = 0
             for i in 1..<frameLength {
@@ -766,27 +771,22 @@ final class EmotionAnalyzer: ObservableObject {
     }
 
     private func extractSpectralFeatures(from samples: [Double], sampleRate: Double) -> [Double] {
-        var features: [Double] = []
-
-        var spectralCentroids: [Double] = []
-        var spectralBandwidths: [Double] = []
-        var spectralRolloffs: [Double] = []
-        var spectralFlatness: [Double] = []
-        var spectralContrast: [[Double]] = []
-
-        var frameStart = 0
-
+        // ... existing code ...
+        
         while frameStart + frameLength <= samples.count {
             let frame = Array(samples[frameStart..<frameStart + frameLength])
 
             // Compute magnitudes using optimized approach
             var magnitudes: [Double] = Array(repeating: 0, count: fftSize / 2 + 1)
 
-            for k in 0..<(fftSize / 2 + 1) {
+            // BUG FIX: Ensure fftSize matches frame length to prevent array bounds violation
+            let safeFFTSize = min(fftSize, frame.count)
+            
+            for k in 0..<(safeFFTSize / 2 + 1) {
                 var realSum: Double = 0
                 var imagSum: Double = 0
-                for n in 0..<fftSize {
-                    let angle = -2 * .pi * Double(k) * Double(n) / Double(fftSize)
+                for n in 0..<safeFFTSize {
+                    let angle = -2 * .pi * Double(k) * Double(n) / Double(safeFFTSize)
                     realSum += frame[n] * cos(angle)
                     imagSum += frame[n] * sin(angle)
                 }
@@ -797,6 +797,18 @@ final class EmotionAnalyzer: ObservableObject {
             var num: Double = 0
             var denom: Double = 0
             let nyquist = sampleRate / 2
+            
+            // BUG FIX: Guard against division by zero when magnitudes.count <= 1
+            guard magnitudes.count > 1 else {
+                spectralCentroids.append(0)
+                spectralBandwidths.append(0)
+                spectralRolloffs.append(0)
+                spectralFlatness.append(0)
+                spectralContrast.append(Array(repeating: 0, count: numSpectralContrast))
+                frameStart += hopLength
+                continue
+            }
+            
             for k in 0..<magnitudes.count {
                 let freq = nyquist * Double(k) / Double(magnitudes.count - 1)
                 num += freq * magnitudes[k]
@@ -837,7 +849,9 @@ final class EmotionAnalyzer: ObservableObject {
                 linearSum += m
             }
             let numNonZero = magnitudes.filter { $0 > 0 }.count
-            if numNonZero > 0 && linearSum > 0 {
+            
+            // BUG FIX: Guard against division by zero in spectral flatness
+            if numNonZero > 0 && linearSum > 0 && magnitudes.count > 0 {
                 let geometricMean = exp(logSum / Double(numNonZero))
                 spectralFlatness.append(geometricMean / (linearSum / Double(magnitudes.count)))
             } else {
@@ -845,23 +859,30 @@ final class EmotionAnalyzer: ObservableObject {
             }
 
             // Spectral contrast
-            let bandSize = magnitudes.count / (numSpectralContrast + 1)
+            // BUG FIX: Ensure bandSize is not zero
+            let bandSize = max(1, magnitudes.count / (numSpectralContrast + 1))
             var bandValues: [Double] = []
             for band in 0..<numSpectralContrast {
                 let start = band * bandSize
-                let end = start + bandSize
+                let end = min(start + bandSize, magnitudes.count)
                 var valleySum: Double = 0
                 var peakSum: Double = 0
+                var valleyCount = 0
+                var peakCount = 0
+                
                 for k in start..<end {
-                    if k < magnitudes.count {
-                        valleySum += magnitudes[k]
-                        if k + bandSize < magnitudes.count {
-                            peakSum += magnitudes[k + bandSize]
-                        }
+                    valleySum += magnitudes[k]
+                    valleyCount += 1
+                    
+                    // BUG FIX: Bounds check for peak calculation
+                    if k + bandSize < magnitudes.count {
+                        peakSum += magnitudes[k + bandSize]
+                        peakCount += 1
                     }
                 }
-                let valleyAvg = valleySum / Double(bandSize)
-                let peakAvg = peakSum / Double(bandSize)
+                
+                let valleyAvg = valleyCount > 0 ? valleySum / Double(valleyCount) : 0
+                let peakAvg = peakCount > 0 ? peakSum / Double(peakCount) : 0
                 bandValues.append(peakAvg - valleyAvg)
             }
             spectralContrast.append(bandValues)
@@ -899,10 +920,7 @@ final class EmotionAnalyzer: ObservableObject {
     }
 
     private func extractChromaFeatures(from samples: [Double], sampleRate: Double) -> [Double] {
-        var chromaMeans: [[Double]] = []
-        var chromaStds: [[Double]] = []
-
-        var frameStart = 0
+        // ... existing code ...
 
         while frameStart + frameLength <= samples.count {
             let frame = Array(samples[frameStart..<frameStart + frameLength])
@@ -914,7 +932,11 @@ final class EmotionAnalyzer: ObservableObject {
 
             for k in 1..<(fftSize / 2) {
                 let freq = nyquist * Double(k) / Double(fftSize / 2)
-                let chromaBin = Int(freq / 110.0 * Double(numChroma) / 12.0) % numChroma
+                
+                // BUG FIX: Prevent negative or out-of-bounds chroma bin index
+                let chromaBinRaw = Int(freq / 110.0 * Double(numChroma) / 12.0)
+                let chromaBin = max(0, chromaBinRaw) % numChroma
+                
                 var magnitude: Double = 0
                 for n in 0..<frameLength {
                     let angle = -2 * .pi * Double(k) * Double(n) / Double(fftSize)

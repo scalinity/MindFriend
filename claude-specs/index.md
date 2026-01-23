@@ -19,35 +19,35 @@ Specs are numbered 001-027 in optimal implementation order based on:
 
 ## Feature Catalog
 
-| #   | File                                                                                               | Feature                                 | Type     | Phase       |
-| --- | -------------------------------------------------------------------------------------------------- | --------------------------------------- | -------- | ----------- |
-| 001 | [001-nervous-system-state-engine.md](./001-nervous-system-state-engine.md)                         | Nervous System State Engine             | ⭐ NOVEL | Foundation  |
-| 002 | [002-circadian-vulnerability-shield.md](./002-circadian-vulnerability-shield.md)                   | Circadian Vulnerability Shield          | ⭐ NOVEL | Foundation  |
-| 003 | [003-dynamic-difficulty-adjustment.md](./003-dynamic-difficulty-adjustment.md)                     | Dynamic Difficulty Adjustment           | Standard | Foundation  |
-| 004 | [004-daily-wellness-score.md](./004-daily-wellness-score.md)                                       | Daily Wellness Score                    | Standard | Foundation  |
-| 005 | [005-predictive-mood-intelligence.md](./005-predictive-mood-intelligence.md)                       | Predictive Mood Intelligence            | MOONSHOT | Foundation  |
-| 006 | [006-cognitive-distortion-detector.md](./006-cognitive-distortion-detector.md)                     | Cognitive Distortion Detector           | ⭐ NOVEL | Enhancement |
-| 007 | [007-social-vitality-index.md](./007-social-vitality-index.md)                                     | Social Vitality Index                   | ⭐ NOVEL | Enhancement |
-| 008 | [008-progress-narrative.md](./008-progress-narrative.md)                                           | Progress Narrative                      | Standard | Engagement  |
-| 009 | [009-streak-shields-enhancement.md](./009-streak-shields-enhancement.md)                           | Streak Shields Enhancement              | Standard | Engagement  |
-| 010 | [010-achievement-milestones.md](./010-achievement-milestones.md)                                   | Achievement Milestones                  | Standard | Engagement  |
-| 011 | [011-personalized-daily-briefing.md](./011-personalized-daily-briefing.md)                         | Personalized Daily Briefing             | Standard | Engagement  |
-| 012 | [012-wellness-time-capsule.md](./012-wellness-time-capsule.md)                                     | Wellness Time Capsule                   | Standard | Engagement  |
-| 013 | [013-intervention-efficacy-engine.md](./013-intervention-efficacy-engine.md)                       | Intervention Efficacy Engine            | ⭐ NOVEL | Advanced    |
-| 014 | [014-wellbeing-debt-calculator.md](./014-wellbeing-debt-calculator.md)                             | Wellbeing Debt Calculator               | ⭐ NOVEL | Advanced    |
-| 015 | [015-sleep-optimization-system.md](./015-sleep-optimization-system.md)                             | Sleep Optimization System               | Standard | Content     |
-| 016 | [016-ai-generated-exercises.md](./016-ai-generated-exercises.md)                                   | AI-Generated Exercises                  | Standard | Content     |
-| 017 | [017-contextual-micro-interventions.md](./017-contextual-micro-interventions.md)                   | Contextual Micro-Interventions          | Standard | Content     |
-| 018 | [018-life-transition-pathways.md](./018-life-transition-pathways.md)                               | Life Transition Pathways                | Standard | Life        |
-| 019 | [019-mentorship-matching.md](./019-mentorship-matching.md)                                         | Mentorship Matching                     | MOONSHOT | Social      |
-| 020 | [020-community-wisdom-engine.md](./020-community-wisdom-engine.md)                                 | Community Wisdom Engine                 | MOONSHOT | Social      |
-| 021 | [021-ambient-wellness-presence.md](./021-ambient-wellness-presence.md)                             | Ambient Wellness Presence               | MOONSHOT | Platform    |
-| 022 | [022-ar-grounding-exercises.md](./022-ar-grounding-exercises.md)                                   | AR Grounding Exercises                  | MOONSHOT | Platform    |
-| 023 | [023-biofeedback-adaptation.md](./023-biofeedback-adaptation.md)                                   | Biofeedback Adaptation                  | MOONSHOT | Platform    |
-| 024 | [024-autonomous-wellness-agent.md](./024-autonomous-wellness-agent.md)                             | Autonomous Wellness Agent               | MOONSHOT | Autonomous  |
-| 025 | [025-generative-wellness-experiences.md](./025-generative-wellness-experiences.md)                 | Generative Wellness Experiences         | MOONSHOT | Autonomous  |
-| 026 | [026-stress-signature-fingerprint.md](./026-stress-signature-fingerprint.md)                       | Stress Signature Fingerprint            | ⭐ NOVEL | Synthesis   |
-| 027 | [027-longitudinal-mental-health-intelligence.md](./027-longitudinal-mental-health-intelligence.md) | Longitudinal Mental Health Intelligence | MOONSHOT | Synthesis   |
+| #   | File                                                                                                                     | Feature                                 | Type     | Phase       |
+| --- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------- | -------- | ----------- |
+| 001 | [001-nervous-system-state-engine.md](./001-nervous-system-state-engine.md)                                               | Nervous System State Engine             | ⭐ NOVEL | Foundation  |
+| 002 | [002-circadian-vulnerability-shield.md](./002-circadian-vulnerability-shield.md)                                         | Circadian Vulnerability Shield          | ⭐ NOVEL | Foundation  |
+| 003 | [003-dynamic-difficulty-adjustment.md](./003-dynamic-difficulty-adjustment.md)                                           | Dynamic Difficulty Adjustment           | Standard | Foundation  |
+| 004 | [004-daily-wellness-score.md](./004-daily-wellness-score.md)                                                             | Daily Wellness Score                    | Standard | Foundation  |
+| 005 | [005-predictive-mood-intelligence-[MOONSHOT].md](./005-predictive-mood-intelligence-[MOONSHOT].md)                       | Predictive Mood Intelligence            | MOONSHOT | Foundation  |
+| 006 | [006-cognitive-distortion-detector.md](./006-cognitive-distortion-detector.md)                                           | Cognitive Distortion Detector           | ⭐ NOVEL | Enhancement |
+| 007 | [007-social-vitality-index.md](./007-social-vitality-index.md)                                                           | Social Vitality Index                   | ⭐ NOVEL | Enhancement |
+| 008 | [008-progress-narrative.md](./008-progress-narrative.md)                                                                 | Progress Narrative                      | Standard | Engagement  |
+| 009 | [009-streak-shields-enhancement.md](./009-streak-shields-enhancement.md)                                                 | Streak Shields Enhancement              | Standard | Engagement  |
+| 010 | [010-achievement-milestones.md](./010-achievement-milestones.md)                                                         | Achievement Milestones                  | Standard | Engagement  |
+| 011 | [011-personalized-daily-briefing.md](./011-personalized-daily-briefing.md)                                               | Personalized Daily Briefing             | Standard | Engagement  |
+| 012 | [012-wellness-time-capsule.md](./012-wellness-time-capsule.md)                                                           | Wellness Time Capsule                   | Standard | Engagement  |
+| 013 | [013-intervention-efficacy-engine.md](./013-intervention-efficacy-engine.md)                                             | Intervention Efficacy Engine            | ⭐ NOVEL | Advanced    |
+| 014 | [014-wellbeing-debt-calculator.md](./014-wellbeing-debt-calculator.md)                                                   | Wellbeing Debt Calculator               | ⭐ NOVEL | Advanced    |
+| 015 | [015-sleep-optimization-system.md](./015-sleep-optimization-system.md)                                                   | Sleep Optimization System               | Standard | Content     |
+| 016 | [016-ai-generated-exercises.md](./016-ai-generated-exercises.md)                                                         | AI-Generated Exercises                  | Standard | Content     |
+| 017 | [017-contextual-micro-interventions.md](./017-contextual-micro-interventions.md)                                         | Contextual Micro-Interventions          | Standard | Content     |
+| 018 | [018-life-transition-pathways.md](./018-life-transition-pathways.md)                                                     | Life Transition Pathways                | Standard | Life        |
+| 019 | [019-mentorship-matching-[MOONSHOT].md](./019-mentorship-matching-[MOONSHOT].md)                                         | Mentorship Matching                     | MOONSHOT | Social      |
+| 020 | [020-community-wisdom-engine-[MOONSHOT].md](./020-community-wisdom-engine-[MOONSHOT].md)                                 | Community Wisdom Engine                 | MOONSHOT | Social      |
+| 021 | [021-ambient-wellness-presence-[MOONSHOT].md](./021-ambient-wellness-presence-[MOONSHOT].md)                             | Ambient Wellness Presence               | MOONSHOT | Platform    |
+| 022 | [022-ar-grounding-exercises-[MOONSHOT].md](./022-ar-grounding-exercises-[MOONSHOT].md)                                   | AR Grounding Exercises                  | MOONSHOT | Platform    |
+| 023 | [023-biofeedback-adaptation-[MOONSHOT].md](./023-biofeedback-adaptation-[MOONSHOT].md)                                   | Biofeedback Adaptation                  | MOONSHOT | Platform    |
+| 024 | [024-autonomous-wellness-agent-[MOONSHOT].md](./024-autonomous-wellness-agent-[MOONSHOT].md)                             | Autonomous Wellness Agent               | MOONSHOT | Autonomous  |
+| 025 | [025-generative-wellness-experiences-[MOONSHOT].md](./025-generative-wellness-experiences-[MOONSHOT].md)                 | Generative Wellness Experiences         | MOONSHOT | Autonomous  |
+| 026 | [026-stress-signature-fingerprint.md](./026-stress-signature-fingerprint.md)                                             | Stress Signature Fingerprint            | ⭐ NOVEL | Synthesis   |
+| 027 | [027-longitudinal-mental-health-intelligence-[MOONSHOT].md](./027-longitudinal-mental-health-intelligence-[MOONSHOT].md) | Longitudinal Mental Health Intelligence | MOONSHOT | Synthesis   |
 
 ---
 

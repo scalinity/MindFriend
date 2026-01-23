@@ -101,8 +101,15 @@ struct SleepRecord: Codable, Identifiable {
     var midpointOfSleep: TimeInterval {
         let calendar = Calendar.current
         let midpoint = startTime.addingTimeInterval(duration / 2)
-        let midnight = calendar.startOfDay(for: date)
-        return midpoint.timeIntervalSince(midnight)
+        
+        // Use the midnight of the sleep start day as reference
+        // This handles sleep crossing midnight correctly
+        let referenceMidnight = calendar.startOfDay(for: startTime)
+        let secondsSinceMidnight = midpoint.timeIntervalSince(referenceMidnight)
+        
+        // If midpoint is before midnight (e.g., 11pm start + 8h = 7am next day)
+        // we want the time relative to the start day's midnight
+        return secondsSinceMidnight
     }
 
     /// Convert midpoint to hours from midnight
