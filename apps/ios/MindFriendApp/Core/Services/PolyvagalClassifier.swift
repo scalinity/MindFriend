@@ -167,7 +167,11 @@ final class PolyvagalClassifier {
             return combinedScores
         }
 
-        var effectiveWeights = Weights.self
+        var effectiveWeights = EffectiveWeights(
+            voice: Weights.voice,
+            hrv: Weights.hrv,
+            behavioral: Weights.behavioral
+        )
         if voice == nil {
             // No voice: redistribute weight to HRV and behavioral
             let redistribution = Weights.voice / 2.0

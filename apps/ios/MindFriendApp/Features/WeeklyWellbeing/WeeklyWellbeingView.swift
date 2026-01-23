@@ -298,11 +298,12 @@ struct WeeklyWellbeingView: View {
         }
     }
 
-    private func trendIcon(_ trend: WellbeingTrend) -> String {
-        trend.icon
+    private func trendIcon(_ trend: WellbeingTrend?) -> String {
+        trend?.icon ?? "equal.circle.fill"
     }
 
-    private func trendColor(_ trend: WellbeingTrend) -> Color {
+    private func trendColor(_ trend: WellbeingTrend?) -> Color {
+        guard let trend = trend else { return .gray }
         switch trend {
         case .improving: return .green
         case .declining: return .red
@@ -361,7 +362,7 @@ struct WeeklyWellbeingRecapView: View {
                 .foregroundStyle(scoreColor)
 
             HStack {
-                Image(systemName: check.trend.icon)
+                Image(systemName: check.trend?.icon ?? "equal.circle.fill")
                     .foregroundStyle(trendColor)
                 Text(trendDescription)
                     .font(.subheadline)
@@ -482,7 +483,8 @@ struct WeeklyWellbeingRecapView: View {
     }
 
     private var trendColor: Color {
-        switch check.trend {
+        guard let trend = check.trend else { return .gray }
+        switch trend {
         case .improving: return .green
         case .declining: return .red
         case .stable: return .gray
@@ -490,7 +492,8 @@ struct WeeklyWellbeingRecapView: View {
     }
 
     private var trendDescription: String {
-        switch check.trend {
+        guard let trend = check.trend else { return "No previous data" }
+        switch trend {
         case .improving: return "Getting better"
         case .declining: return "Room for improvement"
         case .stable: return "Staying steady"
@@ -545,8 +548,10 @@ struct WeeklyWellbeingHistoryView: View {
 
                         Spacer()
 
-                        Image(systemName: check.trend.icon)
-                            .foregroundStyle(trendColor(check.trend))
+                        if let trend = check.trend {
+                            Image(systemName: trend.icon)
+                                .foregroundStyle(trendColor(trend))
+                        }
                     }
                 }
             }

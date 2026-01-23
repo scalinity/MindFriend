@@ -765,6 +765,7 @@ struct FamilyMember: Codable, Identifiable, Equatable {
     let familyId: String
     let userId: String
     let invitedEmail: String?
+    let invitedPhone: String?
     var status: MemberStatus
     let invitedAt: Date
     let joinedAt: Date?
@@ -789,6 +790,7 @@ struct FamilyMember: Codable, Identifiable, Equatable {
         case familyId = "family_id"
         case userId = "user_id"
         case invitedEmail = "invited_email"
+        case invitedPhone = "invited_phone"
         case status
         case invitedAt = "invited_at"
         case joinedAt = "joined_at"
@@ -910,6 +912,82 @@ enum AITone: String, Codable, CaseIterable {
         case .gentle: return "Extra soft and nurturing"
         }
     }
+}
+
+// MARK: - AI Coaching
+
+/// Conversation mode for AI coaching
+enum ConversationMode: String, Codable, CaseIterable, Identifiable {
+    case supportive = "supportive"
+    case challenging = "challenging"
+    case socratic = "socratic"
+    case empathetic = "empathetic"
+    case reflect = "reflect"
+    case plan = "plan"
+    case reframe = "reframe"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .supportive: return "Supportive"
+        case .challenging: return "Challenging"
+        case .socratic: return "Socratic"
+        case .empathetic: return "Empathetic"
+        case .reflect: return "Reflect"
+        case .plan: return "Plan"
+        case .reframe: return "Reframe"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .supportive: return "Gentle encouragement and validation"
+        case .challenging: return "Direct questions to examine thoughts"
+        case .socratic: return "Guide you to discover answers yourself"
+        case .empathetic: return "Focus on understanding your feelings"
+        case .reflect: return "Reflect on your experiences and patterns"
+        case .plan: return "Create actionable steps and goals"
+        case .reframe: return "Challenge and reframe negative thoughts"
+        }
+    }
+
+    var shortDescription: String {
+        description
+    }
+
+    var icon: String {
+        switch self {
+        case .supportive: return "hand.raised.fill"
+        case .challenging: return "flame.fill"
+        case .socratic: return "questionmark.circle.fill"
+        case .empathetic: return "heart.fill"
+        case .reflect: return "brain.head.profile"
+        case .plan: return "checklist"
+        case .reframe: return "arrow.triangle.2.circlepath"
+        }
+    }
+}
+
+/// User preferences for coaching mode
+struct CoachingModePreferences: Codable, Equatable {
+    var preferredMode: ConversationMode
+    var preferredTone: AITone
+    var useEncouragement: Bool
+    var useChallenges: Bool
+    var defaultMode: ConversationMode
+    var reflectionPromptsEnabled: Bool
+    var reframeRemindersEnabled: Bool
+
+    static let `default` = CoachingModePreferences(
+        preferredMode: .supportive,
+        preferredTone: .friendly,
+        useEncouragement: true,
+        useChallenges: true,
+        defaultMode: .supportive,
+        reflectionPromptsEnabled: true,
+        reframeRemindersEnabled: true
+    )
 }
 
 enum PrivacyMode: String, Codable, CaseIterable {
@@ -4496,10 +4574,10 @@ struct WeeklyStory: Codable, Identifiable, Equatable {
 
         // Extract text from card data
         let text: String
-        if let headline = firstCard.data.headline {
-            text = headline
-        } else if let message = firstCard.data.message {
-            text = message
+        if !firstCard.data.headline.isEmpty {
+            text = firstCard.data.headline
+        } else if !firstCard.data.message.isEmpty {
+            text = firstCard.data.message
         } else {
             text = "Your weekly wellness story"
         }
@@ -5230,5 +5308,460 @@ public struct WellnessScoreTrend: Codable {
         case improving
         case stable
         case declining
+    }
+}
+
+// MARK: - Emotion Label
+
+/// Discrete emotion categories for voice/text emotion detection
+enum EmotionLabel: String, Codable, CaseIterable, Hashable {
+    case angry
+    case calm
+    case disgust
+    case fearful
+    case happy
+    case neutral
+    case sad
+    case surprised
+    
+    var displayName: String {
+        switch self {
+        case .angry: return "Angry"
+        case .calm: return "Calm"
+        case .disgust: return "Disgust"
+        case .fearful: return "Fearful"
+        case .happy: return "Happy"
+        case .neutral: return "Neutral"
+        case .sad: return "Sad"
+        case .surprised: return "Surprised"
+        }
+    }
+}
+
+// MARK: - AI Suggested Quest
+
+/// AI-generated quest recommendation for coaching mode
+struct AISuggestedQuest: Codable, Identifiable, Equatable {
+    let id: String
+    let title: String
+    let description: String
+    let questType: QuestType
+    let estimatedMinutes: Int
+    let rationale: String // Why the AI suggested this quest
+    let confidence: Double // 0.0 to 1.0
+    let generatedAt: Date
+    var isAccepted: Bool? // nil = pending, true = accepted, false = declined
+
+    init(
+        id: String = UUID().uuidString,
+        title: String,
+        description: String,
+        questType: QuestType,
+        estimatedMinutes: Int,
+        rationale: String,
+        confidence: Double = 0.8,
+        generatedAt: Date = Date(),
+        isAccepted: Bool? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.description = description
+        self.questType = questType
+        self.estimatedMinutes = estimatedMinutes
+        self.rationale = rationale
+        self.confidence = confidence
+        self.generatedAt = generatedAt
+        self.isAccepted = isAccepted
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, description
+        case questType = "quest_type"
+        case estimatedMinutes = "estimated_minutes"
+        case rationale, confidence
+        case generatedAt = "generated_at"
+        case isAccepted = "is_accepted"
+    }
+}
+
+// MARK: - Coaching Mode API Types
+
+/// Operation type for coaching mode requests
+enum CoachingModeOperation: String, Codable {
+    case startSession = "start_session"
+    case endSession = "end_session"
+    case getStatus = "get_status"
+    case getState = "get_state"
+    case getThoughtRecords = "get_thought_records"
+    case getSuggestedQuests = "get_suggested_quests"
+}
+
+/// Request for coaching mode Edge Function invocation
+struct CoachingModeRequest: Codable {
+    let operation: CoachingModeOperation
+    let mode: ConversationMode?
+    let userId: String?
+    let conversationId: String?
+    let preferences: CoachingModePreferences?
+    
+    init(operation: CoachingModeOperation, mode: ConversationMode? = nil, userId: String? = nil, conversationId: String? = nil, preferences: CoachingModePreferences? = nil) {
+        self.operation = operation
+        self.mode = mode
+        self.userId = userId
+        self.conversationId = conversationId
+        self.preferences = preferences
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case operation
+        case mode
+        case userId = "user_id"
+        case conversationId = "conversation_id"
+        case preferences
+    }
+}
+
+/// Data payload from coaching mode response
+struct CoachingModeData: Codable {
+    let currentMode: ConversationMode?
+    let sessionActive: Bool?
+    let sessionStartedAt: Date?
+    let sessionId: String?
+    let message: String?
+    let suggestions: [String]?
+    let thoughtRecords: [TherapeuticThoughtRecord]?
+    let suggestedQuests: [AISuggestedQuest]?
+    let preferences: CoachingModePreferences?
+
+    enum CodingKeys: String, CodingKey {
+        case currentMode = "current_mode"
+        case sessionActive = "session_active"
+        case sessionStartedAt = "session_started_at"
+        case sessionId = "session_id"
+        case message
+        case suggestions
+        case thoughtRecords = "thought_records"
+        case suggestedQuests = "suggested_quests"
+        case preferences
+    }
+}
+
+/// Error from coaching mode response
+struct CoachingModeError: Codable {
+    let message: String
+    let code: String?
+}
+
+/// Response from coaching mode Edge Function
+struct CoachingModeResponse: Codable {
+    let success: Bool
+    let data: CoachingModeData?
+    let error: CoachingModeError?
+}
+
+// MARK: - Weekly Wellbeing API Types
+
+/// Request for weekly wellbeing check-in
+struct WeeklyWellbeingRequest: Codable {
+    let metrics: [WellbeingMetricInput]
+    let highlight: String?
+    let challenge: String?
+    let gratitude: String?
+
+    /// Input for a single wellbeing metric
+    struct WellbeingMetricInput: Codable {
+        let category: WellbeingCategory
+        let score: Int
+    }
+}
+
+/// Response from weekly wellbeing submission
+struct WeeklyWellbeingResponse: Codable {
+    let success: Bool
+    let data: WeeklyWellbeingData?
+    let error: String?
+
+    /// Data payload in the response
+    struct WeeklyWellbeingData: Codable {
+        let check: WeeklyWellbeingCheck
+        let insights: String?
+        let recommendations: [String]?
+    }
+}
+
+// MARK: - Weekly Wellbeing Types
+
+/// Category of wellbeing metric
+enum WellbeingCategory: String, Codable, CaseIterable, Hashable {
+    case mood
+    case energy
+    case stress
+    case sleep
+    case social
+    case purpose
+
+    var displayName: String {
+        switch self {
+        case .mood: return "Mood"
+        case .energy: return "Energy"
+        case .stress: return "Stress"
+        case .sleep: return "Sleep"
+        case .social: return "Social"
+        case .purpose: return "Purpose"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .mood: return "face.smiling"
+        case .energy: return "bolt.fill"
+        case .stress: return "brain.head.profile"
+        case .sleep: return "moon.fill"
+        case .social: return "person.2.fill"
+        case .purpose: return "star.fill"
+        }
+    }
+
+    var question: String {
+        switch self {
+        case .mood: return "How would you rate your overall mood this week?"
+        case .energy: return "How was your energy level this week?"
+        case .stress: return "How stressed did you feel this week?"
+        case .sleep: return "How well did you sleep this week?"
+        case .social: return "How connected did you feel to others?"
+        case .purpose: return "How meaningful did your week feel?"
+        }
+    }
+
+    /// Whether higher scores are better for this category
+    var higherIsBetter: Bool {
+        switch self {
+        case .stress: return false  // Lower stress is better
+        default: return true        // For all others, higher is better
+        }
+    }
+}
+
+/// Trend direction for wellbeing metrics
+enum WellbeingTrend: String, Codable {
+    case improving
+    case stable
+    case declining
+    
+    var icon: String {
+        switch self {
+        case .improving: return "arrow.up.circle.fill"
+        case .stable: return "equal.circle.fill"
+        case .declining: return "arrow.down.circle.fill"
+        }
+    }
+}
+
+/// Individual wellbeing metric with score and category
+struct WellbeingMetric: Codable, Identifiable {
+    let id: String
+    let category: WellbeingCategory
+    var score: Int // 1-10
+    let notes: String?
+    let previousScore: Int?
+    let trend: WellbeingTrend?
+
+    init(
+        id: String = UUID().uuidString,
+        category: WellbeingCategory,
+        score: Int,
+        notes: String? = nil,
+        previousScore: Int? = nil,
+        trend: WellbeingTrend? = nil
+    ) {
+        self.id = id
+        self.category = category
+        self.score = score
+        self.notes = notes
+        self.previousScore = previousScore
+        self.trend = trend
+    }
+
+    /// Description of the change from previous score
+    var changeDescription: String {
+        guard let previous = previousScore else {
+            return "First check-in for \(category.displayName)"
+        }
+        let diff = score - previous
+        if diff > 0 {
+            return "Up \(diff) from last week"
+        } else if diff < 0 {
+            return "Down \(abs(diff)) from last week"
+        } else {
+            return "Same as last week"
+        }
+    }
+}
+
+/// Weekly wellbeing check-in record
+struct WeeklyWellbeingCheck: Codable, Identifiable {
+    let id: String
+    let userId: String
+    let weekStartDate: Date
+    let weekEndDate: Date
+    let metrics: [WellbeingMetric]
+    let highlight: String?
+    let challenge: String?
+    let gratitude: String?
+    let overallScore: Int // Calculated from metrics
+    let trend: WellbeingTrend?
+    let previousWeekScore: Int?
+    let createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case weekStartDate = "week_start_date"
+        case weekEndDate = "week_end_date"
+        case metrics
+        case highlight
+        case challenge
+        case gratitude
+        case overallScore = "overall_score"
+        case trend
+        case previousWeekScore = "previous_week_score"
+        case createdAt = "created_at"
+    }
+
+    // MARK: - Convenience Initializers
+
+    /// Initialize with UUID parameters (for preview/testing)
+    init(
+        id: UUID,
+        userId: UUID,
+        weekStartDate: Date,
+        createdAt: Date,
+        overallMood: Int,
+        energyLevel: Int,
+        stressLevel: Int,
+        sleepQuality: Int,
+        socialConnection: Int,
+        senseOfPurpose: Int,
+        highlightOfWeek: String?,
+        challengeOfWeek: String?,
+        gratitudeNote: String?,
+        totalScore: Int,
+        previousWeekScore: Int?,
+        trend: WellbeingTrend?
+    ) {
+        self.id = id.uuidString
+        self.userId = userId.uuidString
+        self.weekStartDate = weekStartDate
+        self.weekEndDate = weekStartDate.addingTimeInterval(7 * 24 * 60 * 60)
+        self.metrics = [
+            WellbeingMetric(category: .mood, score: overallMood),
+            WellbeingMetric(category: .energy, score: energyLevel),
+            WellbeingMetric(category: .stress, score: stressLevel),
+            WellbeingMetric(category: .sleep, score: sleepQuality),
+            WellbeingMetric(category: .social, score: socialConnection),
+            WellbeingMetric(category: .purpose, score: senseOfPurpose)
+        ]
+        self.highlight = highlightOfWeek
+        self.challenge = challengeOfWeek
+        self.gratitude = gratitudeNote
+        self.overallScore = totalScore
+        self.trend = trend
+        self.previousWeekScore = previousWeekScore
+        self.createdAt = createdAt
+    }
+
+    // MARK: - Computed Properties for View Compatibility
+
+    /// Average score across all metrics
+    var averageScore: Double {
+        guard !metrics.isEmpty else { return 0 }
+        return Double(metrics.reduce(0) { $0 + $1.score }) / Double(metrics.count)
+    }
+
+    /// Total score (alias for overallScore)
+    var totalScore: Int {
+        overallScore
+    }
+
+    /// Mood score from metrics
+    var overallMood: Int {
+        metrics.first { $0.category == .mood }?.score ?? 5
+    }
+
+    /// Energy level from metrics
+    var energyLevel: Int {
+        metrics.first { $0.category == .energy }?.score ?? 5
+    }
+
+    /// Stress level from metrics
+    var stressLevel: Int {
+        metrics.first { $0.category == .stress }?.score ?? 5
+    }
+
+    /// Sleep quality from metrics
+    var sleepQuality: Int {
+        metrics.first { $0.category == .sleep }?.score ?? 5
+    }
+
+    /// Social connection from metrics
+    var socialConnection: Int {
+        metrics.first { $0.category == .social }?.score ?? 5
+    }
+
+    /// Sense of purpose from metrics
+    var senseOfPurpose: Int {
+        metrics.first { $0.category == .purpose }?.score ?? 5
+    }
+
+    /// Highlight of week (alias for highlight)
+    var highlightOfWeek: String? {
+        highlight
+    }
+
+    /// Challenge of week (alias for challenge)
+    var challengeOfWeek: String? {
+        challenge
+    }
+
+    /// Gratitude note (alias for gratitude)
+    var gratitudeNote: String? {
+        gratitude
+    }
+}
+
+// MARK: - Peak Performance
+
+/// Represents a peak performance time window for the user
+struct PeakPerformanceWindow: Codable, Identifiable, Equatable {
+    let id: String
+    let startHour: Int // 0-23
+    let endHour: Int // 0-23
+    let dayOfWeek: Int? // 0=Sunday, 6=Saturday (nil = all days)
+    let confidence: Double // 0.0 to 1.0
+    let activityType: String? // "focus", "social", "physical", etc.
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case startHour = "start_hour"
+        case endHour = "end_hour"
+        case dayOfWeek = "day_of_week"
+        case confidence
+        case activityType = "activity_type"
+    }
+    
+    init(
+        id: String = UUID().uuidString,
+        startHour: Int,
+        endHour: Int,
+        dayOfWeek: Int? = nil,
+        confidence: Double = 0.5,
+        activityType: String? = nil
+    ) {
+        self.id = id
+        self.startHour = startHour
+        self.endHour = endHour
+        self.dayOfWeek = dayOfWeek
+        self.confidence = confidence
+        self.activityType = activityType
     }
 }

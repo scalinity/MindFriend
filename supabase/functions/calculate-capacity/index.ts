@@ -1,17 +1,28 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
-import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
+import {
+  createClient,
+  SupabaseClient,
+} from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
-import { zonedTimeToUtc, utcToZonedTime } from "https://esm.sh/date-fns-tz@2.0.0";
-import { addDays, startOfDay } from "https://esm.sh/date-fns@2.30.0";
+import {
+  zonedTimeToUtc,
+  utcToZonedTime,
+} from "https://esm.sh/date-fns-tz@3.0.0";
+import { addDays, startOfDay } from "https://esm.sh/date-fns@3.6.0";
 import type {
   CalculateCapacityRequest,
   CalculateCapacityResponse,
   CapacityInput,
   CapacityOverrideRow,
+  CapacityLevel,
+  CapacityComponents,
+  CapacityOverride,
+  CapacityResult,
   Mood,
   MoodData,
   SleepData,
   SleepLog,
+  StreakData,
   UserCapacityRow,
   CompletionData,
 } from "./types.ts";
@@ -21,6 +32,7 @@ import {
   calculateStreakScore,
   calculateCompletionScore,
   calculateCompositeScore,
+  calculateCapacity,
   smoothCapacity,
   scoreToLevel,
   WEIGHTS,
@@ -47,7 +59,7 @@ async function withQueryTimeout<T>(
       setTimeout(
         () => reject(new Error(`Database query timeout after ${timeoutMs}ms`)),
         timeoutMs,
-      )
+      ),
     ),
   ]);
 }
@@ -70,15 +82,15 @@ const COMPLETION_VOLUME_DIVISOR = 30; // Divisor for volume score calculation (t
 function validateOrigin(req: Request): boolean {
   const allowedOrigin = Deno.env.get("ALLOWED_ORIGIN") || "";
   const origin = req.headers.get("Origin");
-  
+
   // Allow requests without Origin header (direct API calls)
   if (!origin) return true;
-  
+
   // In development (localhost), allow
   if (!Deno.env.get("DENO_REGION") && origin.startsWith("http://localhost")) {
     return true;
   }
-  
+
   // In production, require exact origin match
   return origin === allowedOrigin;
 }
@@ -91,6 +103,9 @@ function validateOrigin(req: Request): boolean {
  * Validate request and authenticate user
  * @returns User ID and validated request data
  * @throws Error if validation fails
+ *
+ * NOTE: Uses admin client to validate tokens since it has permission to validate
+ * tokens from any authentication method (OAuth, email, etc.)
  */
 async function validateAndAuthenticate(
   req: Request,
@@ -114,19 +129,32 @@ async function validateAndAuthenticate(
   // Authenticate user
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) {
+    console.error("Missing Authorization header");
     throw new Error("Missing Authorization header");
   }
 
   const token = authHeader.replace("Bearer ", "");
+  console.log(
+    "Attempting to authenticate user with token length:",
+    token.length,
+  );
+
   const {
     data: { user },
     error: authError,
-  } = await supabaseAuth.auth.getUser(token);
+  } = await supabaseAdmin.auth.getUser(token);
 
-  if (authError || !user) {
-    throw new Error("Authentication failed");
+  if (authError) {
+    console.error("Authentication error:", authError);
+    throw new Error(`Authentication failed: ${authError.message}`);
   }
 
+  if (!user) {
+    console.error("No user returned from auth.getUser");
+    throw new Error("Authentication failed: No user found");
+  }
+
+  console.log("User authenticated successfully:", user.id);
   const userId = user.id;
 
   // Rate limiting
@@ -150,9 +178,12 @@ async function validateAndAuthenticate(
   // Valid formats: Area/Location (e.g., America/New_York, Europe/London)
   // or Area/Location/City (e.g., America/Argentina/Buenos_Aires)
   // or special cases: UTC, GMT
-  const timezoneRegex = /^([A-Z][a-z]+\/[A-Z][a-z_]+(?:\/[A-Z][a-z_]+)?|UTC|GMT)$/;
+  const timezoneRegex =
+    /^([A-Z][a-z]+\/[A-Z][a-z_]+(?:\/[A-Z][a-z_]+)?|UTC|GMT)$/;
   if (!timezoneRegex.test(timezone)) {
-    throw new Error("Invalid timezone format (expected IANA identifier like America/New_York)");
+    throw new Error(
+      "Invalid timezone format (expected IANA identifier like America/New_York)",
+    );
   }
 
   return { userId, localDate, timezone };
@@ -236,7 +267,9 @@ async function checkCachedCapacity(
     () =>
       supabaseAuth
         .from("user_capacity")
-        .select("score, level, components, local_date, calculated_at, expires_at, has_override")
+        .select(
+          "score, level, components, local_date, calculated_at, expires_at, has_override",
+        )
         .eq("user_id", userId)
         .eq("local_date", localDate)
         .maybeSingle(),
@@ -339,16 +372,22 @@ async function getOrCalculateCapacity(
 
   // OPTIMIZATION: Fetch completion data first to get today's completion status
   // This avoids duplicate quest query in fetchStreakData
-  const completionData = await fetchCompletionData(supabaseAdmin, userId, localDate, timezone);
-  
+  const completionData = await fetchCompletionData(
+    supabaseAdmin,
+    userId,
+    localDate,
+    timezone,
+  );
+
   // Fetch remaining data in parallel
-  const [sleepData, moodData, streakData, previousCapacity] =
-    await Promise.all([
+  const [sleepData, moodData, streakData, previousCapacity] = await Promise.all(
+    [
       fetchSleepData(supabaseAdmin, userId, sleepStart, sleepEnd),
       fetchMoodData(supabaseAdmin, userId, moodStart, moodEnd, timezone),
       fetchStreakData(supabaseAdmin, userId, completionData.completedToday),
       fetchPreviousCapacity(supabaseAdmin, userId, localDate),
-    ]);
+    ],
+  );
 
   // Calculate capacity
   const result = calculateCapacity({
@@ -449,13 +488,20 @@ serve(async (req) => {
       name: (error as any).name,
       // Omit stack trace and full error object to prevent PII leakage
     });
+
+    // Determine appropriate status code
+    const statusCode = (error as any).message?.includes("Authentication")
+      ? 401
+      : (error as any).message?.includes("Rate limit")
+        ? 429
+        : 500;
+
     return new Response(
       JSON.stringify({
-        error: "Internal server error",
-        // Don't expose internal error details to client
+        error: (error as any).message || "Internal server error",
       }),
       {
-        status: 500,
+        status: statusCode,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       },
     );
@@ -499,7 +545,11 @@ function getDateRangeInUTC(
 
     // Fallback: use UTC dates
     const now = new Date();
-    const endUtc = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const endUtc = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() + 1,
+    );
     const startUtc = new Date(endUtc);
     startUtc.setDate(startUtc.getDate() - daysBack);
 
@@ -535,15 +585,14 @@ async function fetchSleepData(
   endDate: Date,
 ): Promise<SleepData | null> {
   try {
-    const { data, error } = await withQueryTimeout(
-      () =>
-        supabase
-          .from("sleep_logs")
-          .select("logged_at, fell_asleep_at, woke_up_at, quality")
-          .eq("user_id", userId)
-          .gte("logged_at", startDate.toISOString())
-          .lte("logged_at", endDate.toISOString())
-          .order("logged_at", { ascending: false }),
+    const { data, error } = await withQueryTimeout(() =>
+      supabase
+        .from("sleep_logs")
+        .select("logged_at, fell_asleep_at, woke_up_at, quality")
+        .eq("user_id", userId)
+        .gte("logged_at", startDate.toISOString())
+        .lte("logged_at", endDate.toISOString())
+        .order("logged_at", { ascending: false }),
     );
 
     if (error) {
@@ -619,15 +668,14 @@ async function fetchMoodData(
   );
 
   try {
-    const { data, error } = await withQueryTimeout(
-      () =>
-        supabase
-          .from("moods")
-          .select("logged_at, mood_score")
-          .eq("user_id", userId)
-          .gte("logged_at", start)
-          .lte("logged_at", end)
-          .order("logged_at", { ascending: false }),
+    const { data, error } = await withQueryTimeout(() =>
+      supabase
+        .from("moods")
+        .select("logged_at, mood_score")
+        .eq("user_id", userId)
+        .gte("logged_at", start)
+        .lte("logged_at", end)
+        .order("logged_at", { ascending: false }),
     );
 
     if (error) {
@@ -642,12 +690,13 @@ async function fetchMoodData(
     }
 
     const moodScores = (data as any[]).map((m: any) => m.mood_score);
-    
+
     // FIX: Prevent division by zero
-    const averageMood3d = moodScores.length > 0
-      ? moodScores.reduce((a, b) => a + b, 0) / moodScores.length
-      : 0;
-    
+    const averageMood3d =
+      moodScores.length > 0
+        ? moodScores.reduce((a, b) => a + b, 0) / moodScores.length
+        : 0;
+
     const todayMood = (data as any[])[0]?.mood_score ?? null;
 
     // Calculate trend (simple delta)
@@ -721,7 +770,11 @@ async function fetchCompletionData(
   userId: string,
   localDate: string,
   timezone: string,
-): Promise<{ recentCompletionRate: number; questsCompleted: number; completedToday: boolean }> {
+): Promise<{
+  recentCompletionRate: number;
+  questsCompleted: number;
+  completedToday: boolean;
+}> {
   try {
     // Query 1: Get recent quest completion rate (last 7 days)
     const recentDate = new Date();
@@ -760,13 +813,17 @@ async function fetchCompletionData(
     }
 
     // Calculate completion metrics
-    const completedCount = recentQuests?.filter((q: any) => q.completed).length ?? 0;
+    const completedCount =
+      recentQuests?.filter((q: any) => q.completed).length ?? 0;
     const totalCount = recentQuests?.length ?? 1; // Avoid division by zero
-    const recentCompletionRate = totalCount > 0 ? completedCount / totalCount : 0;
+    const recentCompletionRate =
+      totalCount > 0 ? completedCount / totalCount : 0;
     const questsCompleted = totalCompleted ?? 0;
-    
+
     // OPTIMIZATION: Extract today's completion from recentQuests (avoids duplicate query)
-    const todayQuest = recentQuests?.find((q: any) => q.assigned_date === localDate);
+    const todayQuest = recentQuests?.find(
+      (q: any) => q.assigned_date === localDate,
+    );
     const completedToday = todayQuest?.completed ?? false;
 
     return {
@@ -796,14 +853,13 @@ async function fetchPreviousCapacity(
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayDate = yesterday.toISOString().split("T")[0];
 
-    const { data, error } = await withQueryTimeout(
-      () =>
-        supabase
-          .from("user_capacity")
-          .select("score")
-          .eq("user_id", userId)
-          .eq("local_date", yesterdayDate)
-          .maybeSingle(),
+    const { data, error } = await withQueryTimeout(() =>
+      supabase
+        .from("user_capacity")
+        .select("score")
+        .eq("user_id", userId)
+        .eq("local_date", yesterdayDate)
+        .maybeSingle(),
     );
 
     if (error) {
@@ -829,15 +885,14 @@ async function fetchOverride(
   try {
     const now = new Date().toISOString();
 
-    const { data, error } = await withQueryTimeout(
-      () =>
-        supabase
-          .from("capacity_overrides")
-          .select("*")
-          .eq("user_id", userId)
-          .eq("is_active", true)
-          .gt("expires_at", now)
-          .maybeSingle(),
+    const { data, error } = await withQueryTimeout(() =>
+      supabase
+        .from("capacity_overrides")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("is_active", true)
+        .gt("expires_at", now)
+        .maybeSingle(),
     );
 
     if (error) {
@@ -870,18 +925,17 @@ async function persistCapacity(
     const calculatedAt = new Date().toISOString();
     const expiresAt = getNextMidnight(timezone).toISOString();
 
-    const { error } = await withQueryTimeout(
-      () =>
-        supabase.from("user_capacity").upsert({
-          user_id: userId,
-          score,
-          level,
-          components,
-          local_date: localDate,
-          calculated_at: calculatedAt,
-          expires_at: expiresAt,
-          has_override: hasOverride,
-        }),
+    const { error } = await withQueryTimeout(() =>
+      supabase.from("user_capacity").upsert({
+        user_id: userId,
+        score,
+        level,
+        components,
+        local_date: localDate,
+        calculated_at: calculatedAt,
+        expires_at: expiresAt,
+        has_override: hasOverride,
+      }),
     );
 
     if (error) {
@@ -936,13 +990,12 @@ async function checkRateLimit(
 
   try {
     // RACE CONDITION FIX: Use atomic RPC for rate limit check
-    const { data: result, error } = await withQueryTimeout(
-      () =>
-        supabase.rpc("check_capacity_rate_limit", {
-          p_user_id: userId,
-          p_window_ms: RATE_LIMIT_WINDOW_MS,
-          p_max_requests: RATE_LIMIT_MAX_REQUESTS,
-        }),
+    const { data: result, error } = await withQueryTimeout(() =>
+      supabase.rpc("check_capacity_rate_limit", {
+        p_user_id: userId,
+        p_window_ms: RATE_LIMIT_WINDOW_MS,
+        p_max_requests: RATE_LIMIT_MAX_REQUESTS,
+      }),
     );
 
     if (error) {

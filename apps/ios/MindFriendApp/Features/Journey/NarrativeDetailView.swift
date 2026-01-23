@@ -1,4 +1,5 @@
 import SwiftUI
+import Supabase
 
 /// Detail view for a single weekly story with cards, rating, and favorite actions
 struct NarrativeDetailView: View {
@@ -25,11 +26,9 @@ struct NarrativeDetailView: View {
                 // Header
                 headerSection
 
-                // Story Cards
-                ForEach(Array(viewModel.story.cards.enumerated()), id: \.element.id) { index, card in
-                    StoryCardView(card: card)
-                        .transition(.opacity.combined(with: .slide))
-                        .animation(.easeOut(duration: 0.3).delay(Double(index) * 0.1), value: viewModel.story.cards.count)
+                // Story cards
+                ForEach(viewModel.story.cards) { card in
+                    NarrativeStoryCardView(card: card)
                 }
 
                 // Actions
@@ -41,7 +40,7 @@ struct NarrativeDetailView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showShareSheet) {
-            ShareSheet(activityItems: [viewModel.getShareText()])
+            ShareSheet(items: [viewModel.getShareText()])
         }
         .alert("Error", isPresented: .constant(viewModel.error != nil)) {
             Button("OK") {
@@ -157,7 +156,7 @@ struct NarrativeDetailView: View {
 
 // MARK: - Story Card View
 
-private struct StoryCardView: View {
+private struct NarrativeStoryCardView: View {
     let card: StoryCard
 
     var body: some View {
@@ -168,11 +167,9 @@ private struct StoryCardView: View {
                     .foregroundStyle(.white)
                     .font(.title3)
 
-                if let headline = card.data.headline {
-                    Text(headline)
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                }
+                Text(card.data.headline)
+                    .font(.headline)
+                    .foregroundStyle(.white)
 
                 Spacer()
             }
@@ -191,12 +188,10 @@ private struct StoryCardView: View {
             }
 
             // Message
-            if let message = card.data.message {
-                Text(message)
-                    .font(.body)
-                    .foregroundStyle(.white.opacity(0.95))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            Text(card.data.message)
+                .font(.body)
+                .foregroundStyle(.white.opacity(0.95))
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(20)
@@ -212,18 +207,6 @@ private struct StoryCardView: View {
     }
 }
 
-// MARK: - Share Sheet
-
-struct ShareSheet: UIViewControllerRepresentable {
-    let activityItems: [Any]
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
-    }
-
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
-}
-
 #Preview {
     let sampleCard = StoryCard(
         id: UUID(),
@@ -231,11 +214,12 @@ struct ShareSheet: UIViewControllerRepresentable {
         variant: .celebration,
         data: StoryCardData(
             headline: "Rising Up!",
+            message: "Your mood is trending up! Small steps lead to big changes.",
             stat: "6.8",
             statLabel: "Average Mood",
-            message: "Your mood is trending up! Small steps lead to big changes.",
             icon: nil,
             callToAction: nil,
+            streakDays: nil,
             trend: "improving",
             checkinCount: 5,
             moodMin: 4.0,
@@ -243,7 +227,6 @@ struct ShareSheet: UIViewControllerRepresentable {
             exerciseCount: nil,
             exerciseMinutes: nil,
             questCount: nil,
-            streakDays: nil,
             aiGenerated: nil,
             milestoneType: nil
         ),
@@ -262,9 +245,22 @@ struct ShareSheet: UIViewControllerRepresentable {
     )
 
     NavigationStack {
+        NarrativeDetailViewPreview(story: sampleStory)
+    }
+}
+
+private struct NarrativeDetailViewPreview: View {
+    let story: WeeklyStory
+
+    var body: some View {
         NarrativeDetailView(
-            story: sampleStory,
-            dataService: SupabaseDataService.shared
+            story: story,
+            dataService: createMockDataService()
         )
+    }
+
+    private func createMockDataService() -> SupabaseDataService {
+        let authService = SupabaseAuthService()
+        return SupabaseDataService(authService: authService)
     }
 }

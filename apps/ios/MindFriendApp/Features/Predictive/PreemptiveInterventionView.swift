@@ -323,7 +323,7 @@ struct DismissFeedbackSheet: View {
 
                 // Quick feedback buttons
                 HStack(spacing: 20) {
-                    FeedbackButton(
+                    InterventionFeedbackButton(
                         emoji: "helpful",
                         label: "Helpful",
                         color: .green
@@ -331,7 +331,7 @@ struct DismissFeedbackSheet: View {
                         onDismiss("helpful")
                     }
 
-                    FeedbackButton(
+                    InterventionFeedbackButton(
                         emoji: "not_now",
                         label: "Not Now",
                         color: .yellow
@@ -339,7 +339,7 @@ struct DismissFeedbackSheet: View {
                         onDismiss("not_now")
                     }
 
-                    FeedbackButton(
+                    InterventionFeedbackButton(
                         emoji: "not_helpful",
                         label: "Not Helpful",
                         color: .red
@@ -386,7 +386,7 @@ struct DismissFeedbackSheet: View {
 
 // MARK: - Feedback Button
 
-struct FeedbackButton: View {
+struct InterventionFeedbackButton: View {
     let emoji: String
     let label: String
     let color: Color

@@ -54,6 +54,10 @@ final class VoiceCoordinator: ObservableObject, VoiceServiceDelegate {
         case .bargeInTriggered:
             // Barge-in: user interrupted AI, transition to bargeIn state then userSpeaking
             onStateEvent?(.tapInterrupt)
+        
+        case .idleDisconnected:
+            // WebSocket closed due to inactivity
+            onStateEvent?(.disconnected)
 
         case .transcriptUpdated(let text):
             onTranscriptUpdate?(text)

@@ -530,7 +530,7 @@ struct MemberRowWithHug: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // Avatar
+            // Avatar placeholder (CircleMember doesn't include avatarUrl)
             Circle()
                 .fill(Color.accentColor.opacity(0.15))
                 .frame(width: 40, height: 40)
@@ -539,6 +539,7 @@ struct MemberRowWithHug: View {
                         .font(.headline)
                         .foregroundColor(.accentColor)
                 }
+                .accessibilityLabel("\(member.displayName)'s profile picture")
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {

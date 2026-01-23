@@ -56,13 +56,31 @@ struct AchievementsView: View {
             await achievementService.loadAllAchievementData()
         }
         .task {
-            if achievementService.badges.isEmpty {
+            // Check if data is stale (> 5 minutes old)
+            let shouldRefresh = achievementService.lastLoadTime == nil ||
+                Date().timeIntervalSince(achievementService.lastLoadTime!) > 300
+
+            if shouldRefresh {
                 await achievementService.loadAllAchievementData()
             }
         }
         .overlay {
             if achievementService.isLoading && achievementService.badges.isEmpty {
                 ProgressView("Loading achievements...")
+            }
+        }
+        .overlay(alignment: .top) {
+            if let error = achievementService.error {
+                ErrorBanner(
+                    message: error.localizedDescription,
+                    onRetry: {
+                        Task {
+                            await achievementService.loadAllAchievementData()
+                        }
+                    }
+                )
+                .padding(.top, 8)
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
         // Level-Up Celebration (NEW)
@@ -879,6 +897,44 @@ struct AchievementStreakCard: View {
     }
 }
 
+// MARK: - Error Banner
+
+struct ErrorBanner: View {
+    let message: String
+    let onRetry: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Error Loading Data")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            Spacer()
+
+            Button("Retry") {
+                onRetry()
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
+        .padding(.horizontal)
+    }
+}
+
 // MARK: - Color Extension
 
 extension Color {
@@ -899,5 +955,5 @@ extension Color {
 
 #Preview {
     AchievementsView()
-        .environmentObject(AchievementService(supabase: DependencyContainer.shared.supabase))
+        .environmentObject(AchievementService(supabase: DependencyContainer.shared.supabaseClient, authService: DependencyContainer.shared.supabaseAuthService))
 }

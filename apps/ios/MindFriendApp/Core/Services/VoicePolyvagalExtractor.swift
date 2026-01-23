@@ -89,14 +89,16 @@ final class VoicePolyvagalExtractor {
     private func calculateEmotionScores(from emotions: [EmotionPrediction]) -> [EmotionLabel: Double] {
         var scores: [EmotionLabel: Double] = [:]
 
-        // Average probabilities across recent predictions
-        for emotion in emotions {
-            for prediction in emotion.emotions {
-                scores[prediction.label, default: 0] += prediction.probability
+        // Sum confidence scores for each emotion label
+        for prediction in emotions {
+            guard let label = EmotionLabel(rawValue: prediction.emotion.lowercased()) else {
+                continue
             }
+            scores[label, default: 0] += prediction.confidence
         }
 
         // Normalize by count
+        guard !emotions.isEmpty else { return scores }
         let count = Double(emotions.count)
         for label in scores.keys {
             scores[label]! /= count
@@ -122,9 +124,18 @@ final class VoicePolyvagalExtractor {
 
         let emotionScores = calculateEmotionScores(from: emotions)
 
-        let highVariability = (emotionScores[.fearful] ?? 0) * 30.0 + (emotionScores[.angry] ?? 0) * 25.0 + (emotionScores[.surprised] ?? 0) * 20.0
-        let moderateVariability = (emotionScores[.happy] ?? 0) * 12.0 + (emotionScores[.calm] ?? 0) * 10.0
-        let lowVariability = (emotionScores[.sad] ?? 0) * 3.0 + (emotionScores[.neutral] ?? 0) * 5.0
+        let fearful: Double = (emotionScores[.fearful] ?? 0) * 30.0
+        let angry: Double = (emotionScores[.angry] ?? 0) * 25.0
+        let surprised: Double = (emotionScores[.surprised] ?? 0) * 20.0
+        let highVariability = fearful + angry + surprised
+
+        let happy: Double = (emotionScores[.happy] ?? 0) * 12.0
+        let calm: Double = (emotionScores[.calm] ?? 0) * 10.0
+        let moderateVariability = happy + calm
+
+        let sad: Double = (emotionScores[.sad] ?? 0) * 3.0
+        let neutral: Double = (emotionScores[.neutral] ?? 0) * 5.0
+        let lowVariability = sad + neutral
 
         return highVariability + moderateVariability + lowVariability
     }
@@ -136,9 +147,16 @@ final class VoicePolyvagalExtractor {
 
         let emotionScores = calculateEmotionScores(from: emotions)
 
-        let rapidSpeech = (emotionScores[.fearful] ?? 0) * 200.0 + (emotionScores[.angry] ?? 0) * 180.0
-        let normalSpeech = (emotionScores[.happy] ?? 0) * 130.0 + (emotionScores[.calm] ?? 0) * 110.0 + (emotionScores[.neutral] ?? 0) * 120.0
-        let slowSpeech = (emotionScores[.sad] ?? 0) * 80.0
+        let fearfulRapid: Double = (emotionScores[.fearful] ?? 0) * 200.0
+        let angryRapid: Double = (emotionScores[.angry] ?? 0) * 180.0
+        let rapidSpeech = fearfulRapid + angryRapid
+
+        let happyNormal: Double = (emotionScores[.happy] ?? 0) * 130.0
+        let calmNormal: Double = (emotionScores[.calm] ?? 0) * 110.0
+        let neutralNormal: Double = (emotionScores[.neutral] ?? 0) * 120.0
+        let normalSpeech = happyNormal + calmNormal + neutralNormal
+
+        let slowSpeech: Double = (emotionScores[.sad] ?? 0) * 80.0
 
         return rapidSpeech + normalSpeech + slowSpeech
     }
@@ -147,9 +165,18 @@ final class VoicePolyvagalExtractor {
         // Estimate voice intensity (dB) from emotion activation
         let emotionScores = calculateEmotionScores(from: emotions)
 
-        let highIntensity = (emotionScores[.angry] ?? 0) * 75.0 + (emotionScores[.fearful] ?? 0) * 70.0
-        let moderateIntensity = (emotionScores[.happy] ?? 0) * 65.0 + (emotionScores[.surprised] ?? 0) * 68.0
-        let lowIntensity = (emotionScores[.sad] ?? 0) * 55.0 + (emotionScores[.calm] ?? 0) * 60.0 + (emotionScores[.neutral] ?? 0) * 58.0
+        let angryHigh: Double = (emotionScores[.angry] ?? 0) * 75.0
+        let fearfulHigh: Double = (emotionScores[.fearful] ?? 0) * 70.0
+        let highIntensity = angryHigh + fearfulHigh
+
+        let happyMod: Double = (emotionScores[.happy] ?? 0) * 65.0
+        let surprisedMod: Double = (emotionScores[.surprised] ?? 0) * 68.0
+        let moderateIntensity = happyMod + surprisedMod
+
+        let sadLow: Double = (emotionScores[.sad] ?? 0) * 55.0
+        let calmLow: Double = (emotionScores[.calm] ?? 0) * 60.0
+        let neutralLow: Double = (emotionScores[.neutral] ?? 0) * 58.0
+        let lowIntensity = sadLow + calmLow + neutralLow
 
         return highIntensity + moderateIntensity + lowIntensity
     }

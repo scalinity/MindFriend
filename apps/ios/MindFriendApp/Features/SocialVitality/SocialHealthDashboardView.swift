@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import Supabase
 
 struct SocialHealthDashboardView: View {
     @StateObject private var engine: SocialVitalityEngine
@@ -328,28 +329,44 @@ struct SocialHealthDashboardView: View {
 // MARK: - Preview
 
 #Preview {
-    // Create mock engine for preview
-    struct MockSupabaseClient {}
-    let mockEngine = SocialVitalityEngine(supabase: MockSupabaseClient() as! SupabaseClient)
+    SocialHealthDashboardViewPreview()
+}
 
-    // Set mock dashboard data
-    mockEngine.dashboard = SocialVitalityDashboard(
-        currentScore: 72,
-        trend: .stable,
-        components: SocialVitalityDashboard.ScoreComponents(
-            frequency: 20,
-            depth: 18,
-            reciprocity: 22,
-            diversity: 12
-        ),
-        weeklyChange: -3,
-        topSupporters: [
-            SocialVitalityDashboard.SupporterInfo(id: "1", name: "Sarah", correlation: 0.45),
-            SocialVitalityDashboard.SupporterInfo(id: "2", name: "Mike", correlation: 0.38)
-        ],
-        insight: "Your mood tends to improve after connecting with Sarah.",
-        alertStatus: SocialVitalityDashboard.AlertStatus(enabled: true, supportersConfigured: 2)
-    )
+private struct SocialHealthDashboardViewPreview: View {
+    var body: some View {
+        SocialHealthDashboardView(engine: createMockEngine())
+    }
 
-    return SocialHealthDashboardView(engine: mockEngine)
+    private func createMockEngine() -> SocialVitalityEngine {
+        let engine = SocialVitalityEngine(supabase: createMockClient())
+        // Set mock dashboard data
+        engine.dashboard = SocialVitalityDashboard(
+            currentScore: 72,
+            trend: .stable,
+            components: SocialVitalityDashboard.ScoreComponents(
+                frequency: 20,
+                depth: 18,
+                reciprocity: 22,
+                diversity: 12
+            ),
+            weeklyChange: -3,
+            topSupporters: [
+                SocialVitalityDashboard.SupporterInfo(id: "1", name: "Sarah", correlation: 0.45),
+                SocialVitalityDashboard.SupporterInfo(id: "2", name: "Mike", correlation: 0.38)
+            ],
+            insight: "Your mood tends to improve after connecting with Sarah.",
+            alertStatus: SocialVitalityDashboard.AlertStatus(enabled: true, supportersConfigured: 2)
+        )
+        return engine
+    }
+
+    private func createMockClient() -> SupabaseClient {
+        // Create a mock client using the Supabase.createClient method
+        // This requires a valid URL and key, but for preview purposes,
+        // we use placeholder values
+        return SupabaseClient(
+            supabaseURL: URL(string: "https://example.supabase.co")!,
+            supabaseKey: "placeholder-key"
+        )
+    }
 }

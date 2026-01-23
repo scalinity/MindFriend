@@ -13,6 +13,8 @@ struct SubscriptionView: View {
     @State private var showError = false
     @State private var showFamilyManagement = false
     @State private var showInviteCode = false
+    @State private var showEnterpriseInquiry = false
+    @State private var showGiftSheet = false
 
     private var billingService: BillingService {
         container.billingService
@@ -40,17 +42,23 @@ struct SubscriptionView: View {
                         // Plan Selection
                         planSelectionSection
 
-                        // Billing Period
-                        billingPeriodSection
+                        // Billing Period (hidden for enterprise)
+                        if selectedPlanType != .enterprise && selectedPlanType != .gift {
+                            billingPeriodSection
+                        }
 
-                        // Price Summary
-                        priceSummarySection
+                        // Price Summary (hidden for enterprise and gift)
+                        if selectedPlanType != .enterprise && selectedPlanType != .gift {
+                            priceSummarySection
+                        }
 
                         // Subscribe Button
                         subscribeButton
 
-                        // Restore
-                        restoreButton
+                        // Restore (hidden for enterprise and gift)
+                        if selectedPlanType != .enterprise && selectedPlanType != .gift {
+                            restoreButton
+                        }
                     }
 
                     // Family Section (if applicable)
@@ -92,6 +100,12 @@ struct SubscriptionView: View {
             }
             .sheet(isPresented: $showInviteCode) {
                 EnterInviteCodeSheet()
+            }
+            .sheet(isPresented: $showEnterpriseInquiry) {
+                EnterpriseInquirySheet()
+            }
+            .sheet(isPresented: $showGiftSheet) {
+                GiftPurchaseSheet()
             }
         }
     }
@@ -189,11 +203,25 @@ struct SubscriptionView: View {
                     PlanTypeCard(
                         planType: planType,
                         isSelected: selectedPlanType == planType,
+                        price: priceForPlanType(planType),
+                        billingPeriod: selectedBillingPeriod,
                         onSelect: { selectedPlanType = planType }
                     )
                 }
             }
         }
+    }
+
+    private func priceForPlanType(_ planType: PlanType) -> String? {
+        // Enterprise and Gift don't show prices
+        if planType == .enterprise || planType == .gift {
+            return nil
+        }
+
+        if let product = billingService.product(for: planType, billingPeriod: selectedBillingPeriod) {
+            return product.displayPrice
+        }
+        return nil
     }
 
     // MARK: - Billing Period
@@ -251,7 +279,7 @@ struct SubscriptionView: View {
                     HStack {
                         Image(systemName: "tag.fill")
                             .foregroundStyle(.green)
-                        Text("Save 20% with annual billing")
+                        Text("Save 50% with annual billing")
                             .font(.subheadline)
                             .foregroundStyle(.green)
                         Spacer()
@@ -278,12 +306,24 @@ struct SubscriptionView: View {
 
     private var subscribeButton: some View {
         Button {
-            purchase()
+            if selectedPlanType == .enterprise {
+                showEnterpriseInquiry = true
+            } else if selectedPlanType == .gift {
+                showGiftSheet = true
+            } else {
+                purchase()
+            }
         } label: {
             HStack {
-                if isPurchasing {
+                if isPurchasing && selectedPlanType != .enterprise && selectedPlanType != .gift {
                     ProgressView()
                         .tint(.white)
+                } else if selectedPlanType == .enterprise {
+                    Text("Contact Sales")
+                        .fontWeight(.semibold)
+                } else if selectedPlanType == .gift {
+                    Text("Give as Gift")
+                        .fontWeight(.semibold)
                 } else {
                     Text("Subscribe Now")
                         .fontWeight(.semibold)
@@ -291,11 +331,15 @@ struct SubscriptionView: View {
             }
             .frame(maxWidth: .infinity)
             .padding()
-            .background(selectedProduct != nil ? Color.accentColor : Color.secondary)
+            .background(isSpecialPlanType ? Color.accentColor : (selectedProduct != nil ? Color.accentColor : Color.secondary))
             .foregroundStyle(.white)
             .cornerRadius(12)
         }
-        .disabled(selectedProduct == nil || isPurchasing)
+        .disabled(!isSpecialPlanType && (selectedProduct == nil || isPurchasing))
+    }
+
+    private var isSpecialPlanType: Bool {
+        selectedPlanType == .enterprise || selectedPlanType == .gift
     }
 
     // MARK: - Restore Button
@@ -470,6 +514,8 @@ struct SubscriptionView: View {
 struct PlanTypeCard: View {
     let planType: PlanType
     let isSelected: Bool
+    var price: String?
+    var billingPeriod: BillingPeriod = .monthly
     let onSelect: () -> Void
 
     var body: some View {
@@ -505,10 +551,22 @@ struct PlanTypeCard: View {
 
                 Spacer()
 
-                if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color.accentColor)
+                // Price display (not for enterprise/gift)
+                if let price = price {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(price)
+                            .font(.system(size: 17, weight: .bold))
+                            .foregroundStyle(.primary)
+                        Text(billingPeriod == .monthly ? "/month" : "/year")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
+
+                // Selection indicator
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+                    .font(.title3)
             }
             .padding()
             .background(isSelected ? Color.accentColor.opacity(0.1) : Color(.secondarySystemBackground))
@@ -538,19 +596,21 @@ struct BillingPeriodCard: View {
 
     var body: some View {
         Button(action: onSelect) {
-            VStack(spacing: 8) {
+            VStack(spacing: 4) {
                 Text(period.displayName)
                     .font(.headline)
                     .foregroundStyle(.primary)
 
-                // Always render text to maintain consistent height
-                Text(showSavings ? "Save 20%" : " ")
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(showSavings ? .green : .clear)
+                if showSavings {
+                    Text("Save 50%")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.green)
+                }
             }
-            .frame(maxWidth: .infinity)
-            .padding()
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .padding(.vertical, 16)
+            .padding(.horizontal)
             .background(isSelected ? Color.accentColor.opacity(0.1) : Color(.secondarySystemBackground))
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
@@ -561,7 +621,7 @@ struct BillingPeriodCard: View {
         .buttonStyle(.plain)
         // P3-R7: Accessibility labels
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(period.displayName) billing\(showSavings ? ", Save 20%" : "")")
+        .accessibilityLabel("\(period.displayName) billing\(showSavings ? ", Save 50%" : "")")
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityHint("Double tap to select this billing period")
         .accessibilityAddTraits(isSelected ? .isSelected : [])

@@ -39,8 +39,8 @@ struct ExerciseLibraryView: View {
             // Recommend moderate-length exercises
             return duration <= 15
         case .high:
-            // Recommend longer or advanced exercises
-            return duration >= 10 || exercise.difficultyLevel == "advanced"
+            // Recommend longer exercises for high energy
+            return duration >= 10
         }
     }
 

@@ -13,9 +13,12 @@ class NarrativeListViewModel: ObservableObject {
     @Published var error: String?
     @Published var showFavoritesOnly = false
 
+    // MARK: - Internal Properties
+
+    let dataService: SupabaseDataService
+
     // MARK: - Private Properties
 
-    private let dataService: SupabaseDataService
     private var currentOffset = 0
     private let pageSize = 20
     private var hasMorePages = true

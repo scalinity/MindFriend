@@ -197,43 +197,72 @@ struct MiniTrendLine: View {
     }
 }
 
-/// Placeholder breakdown view (MVP)
+/// Breakdown view showing component contributions
 struct ScoreBreakdownPlaceholder: View {
     let score: Int
     @Environment(\.dismiss) private var dismiss
 
+    // Mock component data based on wellness score formula
+    // Real implementation will fetch from calculate-wellness-score edge function
+    private var components: [(name: String, value: Int, weight: Double, icon: String)] {
+        let baseValues = [
+            ("Mood", Int(Double(score) * 1.0), 0.30, "face.smiling"),
+            ("Sleep", Int(Double(score) * 0.95), 0.25, "bed.double"),
+            ("Activity", Int(Double(score) * 0.9), 0.20, "figure.walk"),
+            ("Streaks", Int(Double(score) * 1.05), 0.15, "flame"),
+            ("Exercises", Int(Double(score) * 0.85), 0.10, "heart.circle")
+        ]
+        return baseValues.map { (name, value, weight, icon) in
+            (name, min(value, 100), weight, icon)
+        }
+    }
+
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
-                // Overall score display
-                VStack(spacing: 8) {
-                    WellnessScoreRing(score: score, colorZone: colorZoneForScore(score), size: 140)
+            ScrollView {
+                VStack(spacing: 24) {
+                    // Overall score display
+                    VStack(spacing: 8) {
+                        WellnessScoreRing(score: score, colorZone: colorZoneForScore(score), size: 140)
 
-                    Text(labelForScore(score))
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(colorForScore(score))
+                        Text(labelForScore(score))
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(colorForScore(score))
+                    }
+                    .padding(.top)
+
+                    // Component breakdown
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("What Contributed")
+                            .font(.headline)
+                            .padding(.horizontal)
+
+                        ForEach(components, id: \.name) { component in
+                            ComponentBreakdownRow(
+                                name: component.name,
+                                value: component.value,
+                                weight: component.weight,
+                                icon: component.icon,
+                                totalScore: score
+                            )
+                        }
+
+                        // Backend integration note
+                        Text("Using sample data. Backend integration in progress.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 8)
+                    }
+                    .padding(.vertical)
+                    .background(Color(.secondarySystemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                    Spacer()
                 }
-                .padding(.top)
-
-                // Component breakdown placeholder
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("What Contributed")
-                        .font(.headline)
-
-                    Text("Component breakdown will be available once backend integration is complete.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding()
-                }
-                .frame(maxWidth: .infinity)
                 .padding()
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-
-                Spacer()
             }
-            .padding()
             .navigationTitle("Wellness Breakdown")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -260,6 +289,81 @@ struct ScoreBreakdownPlaceholder: View {
 
     private func colorForScore(_ score: Int) -> Color {
         colorZoneForScore(score).color
+    }
+}
+
+/// Individual component row in breakdown
+struct ComponentBreakdownRow: View {
+    let name: String
+    let value: Int
+    let weight: Double
+    let icon: String
+    let totalScore: Int
+
+    private var contribution: Double {
+        Double(value) * weight
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: icon)
+                    .foregroundStyle(.blue)
+                    .frame(width: 24)
+
+                Text(name)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(value)")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+
+                    Text("\(Int(weight * 100))% weight")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            // Progress bar
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(height: 8)
+                        .cornerRadius(4)
+
+                    Rectangle()
+                        .fill(colorForValue(value))
+                        .frame(width: geometry.size.width * CGFloat(value) / 100.0, height: 8)
+                        .cornerRadius(4)
+                }
+            }
+            .frame(height: 8)
+
+            HStack {
+                Text("+\(String(format: "%.1f", contribution)) pts")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+            }
+        }
+        .padding(.horizontal)
+    }
+
+    private func colorForValue(_ value: Int) -> Color {
+        switch value {
+        case 0..<40:
+            return .red
+        case 40..<70:
+            return .yellow
+        default:
+            return .green
+        }
     }
 }
 

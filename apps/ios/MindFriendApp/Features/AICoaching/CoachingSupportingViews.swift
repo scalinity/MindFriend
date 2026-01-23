@@ -120,7 +120,8 @@ struct ThoughtRecordRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(record.activatingEvent.prefix(40) + (record.activatingEvent.count > 40 ? "..." : ""))
+                let event = record.activatingEvent ?? ""
+                Text(event.prefix(40) + (event.count > 40 ? "..." : ""))
                     .font(.subheadline)
                     .fontWeight(.medium)
 
@@ -136,8 +137,8 @@ struct ThoughtRecordRow: View {
             }
 
             HStack(spacing: 8) {
-                if !record.identifiedDistortions.isEmpty {
-                    ForEach(record.identifiedDistortions.prefix(2)) { distortion in
+                if !record.cognitiveDistortions.isEmpty {
+                    ForEach(record.cognitiveDistortions.prefix(2)) { distortion in
                         Text(distortion.displayName)
                             .font(.caption2)
                             .padding(.horizontal, 6)
@@ -192,8 +193,8 @@ struct CoachingPreferencesView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var viewModel: AICoachingViewModel
 
-    @State private var defaultMode: ConversationMode?
-    @State private var preferredTone: AITone?
+    @State private var defaultMode: ConversationMode = .supportive
+    @State private var preferredTone: AITone = .friendly
     @State private var reflectionPromptsEnabled = true
     @State private var reframeRemindersEnabled = true
 
@@ -203,13 +204,12 @@ struct CoachingPreferencesView: View {
                 // Default Mode
                 Section("Default Coaching Mode") {
                     Picker("Mode", selection: $defaultMode) {
-                        Text("None").tag(nil as ConversationMode?)
                         ForEach(ConversationMode.allCases) { mode in
                             HStack {
                                 Image(systemName: mode.icon)
                                 Text(mode.displayName)
                             }
-                            .tag(mode as ConversationMode?)
+                            .tag(mode)
                         }
                     }
                 }

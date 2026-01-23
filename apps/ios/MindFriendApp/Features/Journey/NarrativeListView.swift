@@ -1,4 +1,5 @@
 import SwiftUI
+import Supabase
 
 /// List view displaying all weekly stories with favorites filtering
 struct NarrativeListView: View {
@@ -175,6 +176,17 @@ private struct StoryRowView: View {
 
 #Preview {
     NavigationStack {
-        NarrativeListView(dataService: SupabaseDataService.shared)
+        NarrativeListViewPreview()
+    }
+}
+
+private struct NarrativeListViewPreview: View {
+    var body: some View {
+        NarrativeListView(dataService: createMockDataService())
+    }
+
+    private func createMockDataService() -> SupabaseDataService {
+        let authService = SupabaseAuthService()
+        return SupabaseDataService(authService: authService)
     }
 }
