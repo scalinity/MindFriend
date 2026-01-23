@@ -33,16 +33,19 @@ struct DistortionPromptOverlay: View {
                     Image(systemName: "brain.head.profile")
                         .font(.title2)
                         .foregroundColor(.purple)
+                        .accessibilityLabel("Thought pattern icon")
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Thought Pattern Noticed")
                             .font(.subheadline)
                             .fontWeight(.medium)
                             .foregroundColor(.secondary)
+                            .accessibilityLabel("Notification")
 
                         Text(prompt.displayTitle)
                             .font(.headline)
                             .foregroundColor(.primary)
+                            .accessibilityLabel("Pattern type: \(prompt.displayTitle)")
                     }
 
                     Spacer()
@@ -56,6 +59,8 @@ struct DistortionPromptOverlay: View {
                             .font(.title3)
                             .foregroundColor(.secondary)
                     }
+                    .accessibilityLabel("Close prompt")
+                    .accessibilityHint("Double tap to dismiss this thought pattern prompt")
                 }
 
                 // Trigger phrase
@@ -70,6 +75,7 @@ struct DistortionPromptOverlay: View {
                             RoundedRectangle(cornerRadius: 8)
                                 .fill(Color.purple.opacity(0.1))
                         )
+                        .accessibilityLabel("Trigger phrase: \(prompt.triggerPhrase)")
                 }
 
                 // Reframing prompt
@@ -77,6 +83,7 @@ struct DistortionPromptOverlay: View {
                     .font(.body)
                     .foregroundColor(.primary)
                     .lineLimit(showDetails ? nil : 2)
+                    .accessibilityLabel("Reframing question: \(prompt.displayMessage)")
 
                 // Action buttons
                 HStack(spacing: 12) {
@@ -98,6 +105,8 @@ struct DistortionPromptOverlay: View {
                                 .fill(Color.secondary.opacity(0.1))
                         )
                     }
+                    .accessibilityLabel("Skip this prompt")
+                    .accessibilityHint("Continue journaling without exploring this pattern")
 
                     Spacer()
 
@@ -125,6 +134,8 @@ struct DistortionPromptOverlay: View {
                                 )
                         )
                     }
+                    .accessibilityLabel("Explore this pattern")
+                    .accessibilityHint("Learn more about this thought pattern and reframing techniques")
                 }
 
                 // Show more details toggle
@@ -143,6 +154,8 @@ struct DistortionPromptOverlay: View {
                             .foregroundColor(.purple)
                     }
                 }
+                .accessibilityLabel(showDetails ? "Show less details" : "Learn more about this pattern")
+                .accessibilityHint("Double tap to \(showDetails ? "collapse" : "expand") explanation")
 
                 if showDetails {
                     VStack(alignment: .leading, spacing: 8) {
@@ -157,6 +170,8 @@ struct DistortionPromptOverlay: View {
                     }
                     .padding(.top, 4)
                     .transition(.opacity.combined(with: .move(edge: .top)))
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Explanation: \(prompt.distortionEvent.distortionType.explanation)")
                 }
             }
             .padding(20)
@@ -187,8 +202,12 @@ struct DistortionPromptOverlay: View {
                         }
                     }
             )
+            .accessibilityAction(named: "Dismiss") {
+                onDismiss()
+            }
         }
         .transition(.move(edge: .bottom).combined(with: .opacity))
+        .privacySensitive() // Prevent screenshots and screen recording of mental health data
     }
 }
 

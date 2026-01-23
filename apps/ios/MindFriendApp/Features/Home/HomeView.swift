@@ -37,6 +37,10 @@ struct HomeView: View {
     // Quest Arc state
     @State private var activeQuestArc: UserQuestArc?
     @State private var showQuestArcCatalog = false
+    // Mood prediction state
+    @State private var todayPrediction: MoodPrediction?
+    @State private var pendingMoodIntervention: PreemptiveIntervention?
+    @State private var showInterventionSheet = false
 
     /// Background color adapts to mood context
     private var adaptiveBackgroundColor: Color {
@@ -95,6 +99,21 @@ struct HomeView: View {
                     CapacityIndicator()
                         .environmentObject(container.difficultyService)
                         .padding(.horizontal)
+
+                    // Wellness Score Card (MVP - shows mock data)
+                    WellnessScoreCard()
+                        .padding(.horizontal)
+
+                    // Mood Prediction Card (shows today's AI prediction)
+                    if let prediction = todayPrediction {
+                        MoodPredictionCard(prediction: prediction) {
+                            // If there's a pending intervention, show it
+                            if pendingMoodIntervention != nil {
+                                showInterventionSheet = true
+                            }
+                        }
+                        .padding(.horizontal)
+                    }
 
                     // Supportive message (mood-adaptive)
                     if let message = homeContext?.supportiveMessage {
@@ -248,6 +267,34 @@ struct HomeView: View {
             .sheet(isPresented: $showQuestArcCatalog) {
                 QuestArcCatalogView()
                     .environmentObject(container)
+            }
+            .sheet(isPresented: $showInterventionSheet) {
+                if let intervention = pendingMoodIntervention {
+                    PreemptiveInterventionView(
+                        intervention: intervention,
+                        prediction: todayPrediction,
+                        onAccept: {
+                            Task {
+                                try? await container.predictiveService.respondToMoodIntervention(
+                                    intervention,
+                                    response: "accepted",
+                                    accepted: true
+                                )
+                                pendingMoodIntervention = nil
+                            }
+                        },
+                        onDismiss: { feedback in
+                            Task {
+                                try? await container.predictiveService.respondToMoodIntervention(
+                                    intervention,
+                                    response: feedback,
+                                    accepted: false
+                                )
+                                pendingMoodIntervention = nil
+                            }
+                        }
+                    )
+                }
             }
             } // End of else block for standard home
             } // End of Group
@@ -424,6 +471,9 @@ struct HomeView: View {
             async let celebrationsTask = try? await container.supabaseDataService.getPendingCelebrations()
             async let recoveryModeTask = try? await container.supabaseDataService.fetchRecoveryModeState()
             async let questArcTask = try? await container.questArcsService.getActiveArc()
+            // Mood prediction data (fail gracefully)
+            async let predictionTask: Void = try? await container.predictiveService.fetchTodayPrediction()
+            async let interventionTask: Void = try? await container.predictiveService.fetchPendingMoodIntervention()
 
             // Await all results concurrently
             let questResult = try await questTask
@@ -439,6 +489,9 @@ struct HomeView: View {
             let pendingCelebrations = await celebrationsTask ?? []
             let recoveryModeResult = await recoveryModeTask ?? .inactive
             let questArcResult = await questArcTask ?? nil
+            // Await prediction tasks (they update the service's published state)
+            _ = await predictionTask
+            _ = await interventionTask
 
             // Compute level info from profile
             let defaultStats = UserStats(
@@ -513,6 +566,10 @@ struct HomeView: View {
                 if !pendingCelebrations.isEmpty {
                     appState.addCelebrations(pendingCelebrations)
                 }
+
+                // Set mood prediction data from service's published state
+                todayPrediction = container.predictiveService.todayPrediction
+                pendingMoodIntervention = container.predictiveService.pendingMoodIntervention
 
                 // Shield status is set from protection check above
             }
