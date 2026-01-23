@@ -160,7 +160,7 @@ final class DependencyContainer: ObservableObject {
     }()
 
     lazy var questArcsService: QuestArcsService = {
-        QuestArcsService(supabase: supabaseClient)
+        QuestArcsService(supabase: supabaseClient, difficultyService: difficultyService)
     }()
 
     lazy var insightLabService: InsightLabService = {

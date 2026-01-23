@@ -7,10 +7,41 @@ struct ExerciseLibraryView: View {
     @State private var skillProgress: [SkillProgress] = []
     @State private var selectedType: ExerciseType?
     @State private var isLoading = true
+    @State private var showOnlyRecommended = false
 
     var filteredExercises: [Exercise] {
-        guard let type = selectedType else { return exercises }
-        return exercises.filter { $0.type == type }
+        var filtered = exercises
+
+        // Filter by type
+        if let type = selectedType {
+            filtered = filtered.filter { $0.type == type }
+        }
+
+        // Filter by recommended (capacity-based)
+        if showOnlyRecommended {
+            filtered = filtered.filter { isRecommended($0) }
+        }
+
+        // Sort: recommended first
+        return filtered.sorted { isRecommended($0) && !isRecommended($1) }
+    }
+
+    /// Check if exercise is recommended for current capacity level
+    private func isRecommended(_ exercise: Exercise) -> Bool {
+        let level = container.difficultyService.getEffectiveLevel()
+        let duration = exercise.durationSeconds / 60
+
+        switch level {
+        case .low:
+            // Recommend short, calming exercises
+            return duration <= 5 && (exercise.type == .breathing || exercise.type == .grounding)
+        case .moderate:
+            // Recommend moderate-length exercises
+            return duration <= 15
+        case .high:
+            // Recommend longer or advanced exercises
+            return duration >= 10 || exercise.difficultyLevel == "advanced"
+        }
     }
 
     /// Get skill progress for the selected type
@@ -42,6 +73,11 @@ struct ExerciseLibraryView: View {
                     }
                     .padding(.horizontal)
                 }
+
+                // Recommended filter
+                Toggle("Show only recommended for you", isOn: $showOnlyRecommended)
+                    .font(.subheadline)
+                    .padding(.horizontal)
 
                 // Skill progress indicator (shown when a type is selected)
                 if let skill = selectedSkillProgress {
@@ -82,7 +118,10 @@ struct ExerciseLibraryView: View {
                             NavigationLink {
                                 ExercisePlayerView(exercise: exercise)
                             } label: {
-                                ExerciseCard(exercise: exercise)
+                                ExerciseCard(
+                                    exercise: exercise,
+                                    isRecommended: isRecommended(exercise)
+                                )
                             }
                             .buttonStyle(.plain)
                         }
@@ -142,6 +181,7 @@ private struct ExerciseFilterChip: View {
 
 struct ExerciseCard: View {
     let exercise: Exercise
+    var isRecommended: Bool = false
 
     private var durationMinutes: Int {
         guard exercise.durationSeconds > 0 else { return 0 }
@@ -159,9 +199,17 @@ struct ExerciseCard: View {
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(exercise.title)
-                    .font(.headline)
-                    .foregroundStyle(.primary)
+                HStack(spacing: 8) {
+                    Text(exercise.title)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+
+                    if isRecommended {
+                        Image(systemName: "star.fill")
+                            .font(.caption2)
+                            .foregroundColor(.orange)
+                    }
+                }
 
                 Text(exercise.description)
                     .font(.caption)
@@ -178,6 +226,16 @@ struct ExerciseCard: View {
                             isReviewed: exercise.isTherapistReviewed,
                             showInfo: false
                         )
+                    }
+
+                    if isRecommended {
+                        Text("For you")
+                            .font(.caption2)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.orange.opacity(0.1))
+                            .foregroundColor(.orange)
+                            .cornerRadius(4)
                     }
                 }
                 .font(.caption)
