@@ -42,10 +42,6 @@ struct ChatListView: View {
                     }
                 } else if conversations.isEmpty {
                     EmptyConversationsView(showNewChat: $showNewChat)
-                        .onAppear {
-                            // Also refresh here in case a conversation was just created
-                            refreshTrigger = UUID()
-                        }
                 } else {
                     List {
                         ForEach(conversations) { conversation in
@@ -58,12 +54,6 @@ struct ChatListView: View {
                         .onDelete(perform: deleteConversations)
                     }
                     .listStyle(.plain)
-                    .onAppear {
-                        // Refresh when returning from viewing a conversation
-                        // This fires when the List becomes visible again after navigation
-                        Log.chat.debug("[ChatList] List appeared, refreshing for updated titles")
-                        refreshTrigger = UUID()
-                    }
                 }
             }
             .navigationTitle("Chat")

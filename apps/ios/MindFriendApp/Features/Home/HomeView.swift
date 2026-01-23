@@ -547,11 +547,9 @@ struct HomeView: View {
             // Await experience load (updates achievementService.userExperience)
             _ = await experienceTask
 
-            // Compute level info from user_experience (correct table)
-            // achievementService.userExperience was loaded in parallel above
+            // Compute level info from user_stats (via achievementService)
             let levelResult: UserLevel
             if let exp = await MainActor.run(body: { container.achievementService.userExperience }) {
-                print("🏠 [HomeView] Using achievementService data: Level \(exp.currentLevel), XP \(exp.totalXp)")
                 levelResult = UserLevel(
                     level: exp.currentLevel,
                     title: levelTitle(for: exp.currentLevel),
@@ -561,7 +559,6 @@ struct HomeView: View {
                 )
             } else {
                 // Fallback to default if experience not loaded
-                print("⚠️ [HomeView] achievementService.userExperience is nil, using defaults")
                 levelResult = UserLevel(
                     level: 1,
                     title: "Beginner",

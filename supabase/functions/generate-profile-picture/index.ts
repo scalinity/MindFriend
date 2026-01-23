@@ -149,14 +149,14 @@ serve(async (req) => {
         { status: 429, headers: responseHeaders },
       );
     }
-    
+
     // CRITICAL: Increment quota BEFORE generation to prevent race condition
     // If OpenAI call fails, quota will still be consumed (prevents abuse)
     const { error: incrementError } = await supabaseAdmin.rpc(
       "increment_ai_art_quota",
       { user_id: user.id },
     );
-    
+
     if (incrementError) {
       console.error("Failed to increment quota:", incrementError);
       return new Response(JSON.stringify({ error: "Failed to update quota" }), {
@@ -226,8 +226,7 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({
           error: "Moderation failed",
-          message:
-            "Unable to verify content safety. Please try again later.",
+          message: "Unable to verify content safety. Please try again later.",
         }),
         { status: 503, headers: responseHeaders },
       );
@@ -253,10 +252,8 @@ serve(async (req) => {
             model: "gpt-image-1-mini",
             prompt: enhancedPrompt,
             n: 1,
-            size: "512x512",
-            quality: "standard",
+            size: "1024x1024",
             response_format: "b64_json",
-            // Removed: stream and partial_images are not supported by Images API
           }),
           signal: controller.signal,
         },
