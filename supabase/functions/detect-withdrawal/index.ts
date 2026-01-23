@@ -103,11 +103,66 @@ serve(async (req) => {
           alert_sent: false,
         });
       }
+    }
 
-      // If severe withdrawal detected and should alert, send peer alerts
-      if (result.status?.shouldAlert && !result.error) {
-        const alertSent = await sendPeerAlert(supabase, user.user_id, result.status);
-        result.alertSent = alertSent;
+    // PERFORMANCE: Batch fetch all data for alert processing
+    const usersToAlert = results
+      .filter(r => r.status?.shouldAlert && !r.error)
+      .map(r => r.userId);
+
+    if (usersToAlert.length > 0) {
+      // Batch fetch preferences
+      const { data: allPreferences } = await supabase
+        .from("peer_alert_preferences")
+        .select("*")
+        .in("user_id", usersToAlert);
+
+      // Batch fetch recent alerts (rate limiting)
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      const { data: allRecentAlerts } = await supabase
+        .from("peer_alerts")
+        .select("user_id, created_at")
+        .in("user_id", usersToAlert)
+        .gte("created_at", sevenDaysAgo.toISOString());
+
+      // Batch fetch all consent records for supporters
+      const allSupporterIds = (allPreferences || [])
+        .flatMap(p => p.designated_supporters || []);
+      const { data: allConsents } = await supabase
+        .from("peer_support_consent")
+        .select("supporter_id, requesting_user_id, accepted")
+        .in("requesting_user_id", usersToAlert)
+        .in("supporter_id", allSupporterIds);
+
+      // Create lookup maps
+      const preferencesMap = new Map(
+        (allPreferences || []).map(p => [p.user_id, p])
+      );
+      const recentAlertsMap = new Map<string, any[]>();
+      for (const alert of allRecentAlerts || []) {
+        if (!recentAlertsMap.has(alert.user_id)) {
+          recentAlertsMap.set(alert.user_id, []);
+        }
+        recentAlertsMap.get(alert.user_id)!.push(alert);
+      }
+      const consentMap = new Map(
+        (allConsents || []).map(c => [`${c.supporter_id}:${c.requesting_user_id}`, c.accepted])
+      );
+
+      // Process alerts with pre-fetched data
+      for (const result of results) {
+        if (result.status?.shouldAlert && !result.error) {
+          const alertSent = await sendPeerAlert(
+            supabase,
+            result.userId,
+            result.status,
+            preferencesMap.get(result.userId),
+            recentAlertsMap.get(result.userId) || [],
+            consentMap
+          );
+          result.alertSent = alertSent;
+        }
       }
     }
 
@@ -224,16 +279,13 @@ async function sendPeerAlert(
   supabase: any,
   userId: string,
   status: WithdrawalStatus,
+  preferences?: any,
+  recentAlerts?: any[],
+  consentMap?: Map<string, boolean>,
 ): Promise<boolean> {
   try {
     // Check if user has opted in to peer alerts
-    const { data: preferences, error: prefError } = await supabase
-      .from("peer_alert_preferences")
-      .select("*")
-      .eq("user_id", userId)
-      .single();
-
-    if (prefError || !preferences || !preferences.enabled) {
+    if (!preferences || !preferences.enabled) {
       console.log(
         `[detect-withdrawal] User ${userId}: Peer alerts not enabled`,
       );
@@ -255,20 +307,11 @@ async function sendPeerAlert(
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    const { data: recentAlerts, error: alertsError } = await supabase
-      .from("peer_alerts")
-      .select("created_at")
-      .eq("user_id", userId)
-      .gte("created_at", sevenDaysAgo.toISOString())
-      .limit(1);
+    const userAlerts = recentAlerts || [];
+    const lastAlert = userAlerts.length > 0 ? userAlerts[userAlerts.length - 1] : null;
+    const lastAlertTime = lastAlert ? new Date(lastAlert.created_at) : null;
 
-    if (alertsError) {
-      throw new Error(
-        `Failed to check alert rate limit: ${alertsError.message}`,
-      );
-    }
-
-    if (recentAlerts && recentAlerts.length > 0) {
+    if (lastAlertTime && lastAlertTime >= sevenDaysAgo) {
       console.log(
         `[detect-withdrawal] User ${userId}: Rate limit exceeded (last alert within 7 days)`,
       );
@@ -284,14 +327,8 @@ async function sendPeerAlert(
 
     for (const supporterId of supporters) {
       // Check if supporter has consented
-      const { data: consent, error: consentError } = await supabase
-        .from("peer_support_consent")
-        .select("accepted")
-        .eq("supporter_id", supporterId)
-        .eq("requesting_user_id", userId)
-        .single();
-
-      if (consentError || !consent || !consent.accepted) {
+      const consent = consentMap?.get(`${supporterId}:${userId}`);
+      if (consent === false) {
         console.log(
           `[detect-withdrawal] Supporter ${supporterId}: Consent not granted`,
         );
