@@ -16,7 +16,7 @@ enum VoiceServiceEvent {
     case bargeInTriggered      // User interrupted AI with speech or tap
     case transcriptUpdated(String)
     case quotaUpdated(Double)
-    case emotionDetected(EmotionAnalyzer.EmotionResult)  // Emotion detected from voice
+    case emotionDetected(EmotionResult)  // Emotion detected from voice
     case error(VoiceError)
 }
 
@@ -78,7 +78,7 @@ protocol VoiceServiceProtocol: ObservableObject {
     // MARK: - Emotion State
 
     /// Current detected emotion (nil if no emotion detected or analysis disabled)
-    var currentEmotion: EmotionAnalyzer.EmotionResult? { get }
+    var currentEmotion: EmotionResult? { get }
 
     /// Emotion history for current session
     var emotionHistory: [EmotionSnapshot] { get }
@@ -138,7 +138,7 @@ final class MockVoiceService: VoiceServiceProtocol {
     @Published var isPremium = false
 
     // Emotion state
-    @Published private(set) var currentEmotion: EmotionAnalyzer.EmotionResult?
+    @Published private(set) var currentEmotion: EmotionResult?
     @Published private(set) var emotionHistory: [EmotionSnapshot] = []
 
     // Test hooks
@@ -204,7 +204,7 @@ final class MockVoiceService: VoiceServiceProtocol {
     }
 
     // Test helpers
-    func simulateEmotionDetected(_ result: EmotionAnalyzer.EmotionResult) {
+    func simulateEmotionDetected(_ result: EmotionResult) {
         currentEmotion = result
         let snapshot = EmotionSnapshot(
             emotion: result.emotion,

@@ -3,6 +3,19 @@ import Accelerate
 import CoreML
 import os.log
 
+/// Emotion classification result
+struct EmotionResult {
+    let emotion: String
+    let confidence: Double
+    let allProbabilities: [String: Double]
+}
+
+/// Protocol for dependency injection and testing
+protocol EmotionAnalyzerProtocol {
+    func analyzeAudio(at url: URL, userId: String?) async throws -> EmotionResult
+    func analyzeAudioBuffer(_ audioBuffer: [Float], userId: String?) async throws -> EmotionResult
+}
+
 /// Emotion analyzer using Core ML model trained on speech prosody features.
 /// Supports 8 emotion classes: angry, calm, disgust, fearful, happy, neutral, sad, surprised
 ///
@@ -18,23 +31,6 @@ import os.log
 /// - User consent required for emotion analysis
 @MainActor
 final class EmotionAnalyzer: ObservableObject {
-
-    // MARK: - Types
-
-    /// Emotion classification result
-    struct EmotionResult {
-        let emotion: String
-        let confidence: Double
-        let allProbabilities: [String: Double]
-    }
-
-    // MARK: - Configuration
-
-    /// Protocol for dependency injection and testing
-    protocol EmotionAnalyzerProtocol {
-        func analyzeAudio(at url: URL, userId: String?) async throws -> EmotionResult
-        func analyzeAudioBuffer(_ audioBuffer: [Float], userId: String?) async throws -> EmotionResult
-    }
 
     // MARK: - Error Types
 
@@ -87,6 +83,41 @@ final class EmotionAnalyzer: ObservableObject {
                 return "Emotion analysis timed out"
             case .unsupportedFormat(let ext):
                 return "Unsupported audio format: \(ext)"
+            }
+        }
+
+        var failureReason: String? {
+            switch self {
+            case .invalidURL:
+                return "The provided URL is not a valid file URL"
+            case .pathTraversalAttempt:
+                return "The file path attempts to access locations outside the allowed directories"
+            case .invalidFileFormat:
+                return "The file content does not match a supported audio format"
+            case .audioTooLong:
+                return "Audio duration exceeds the maximum allowed duration"
+            case .invalidAudioLength:
+                return "Audio frame count is zero or negative"
+            case .audioLoadError(let error):
+                return "Failed to read audio file: \(error.localizedDescription)"
+            case .bufferCreationFailed:
+                return "Could not allocate audio buffer with requested format"
+            case .noAudioData:
+                return "Audio buffer contains no sample data"
+            case .modelNotLoaded:
+                return "Core ML model could not be loaded from app bundle"
+            case .noPrediction:
+                return "Model inference did not produce a valid prediction"
+            case .featureExtractionFailed:
+                return "Feature extraction algorithms failed to process audio"
+            case .consentRequired:
+                return "User must grant consent before voice emotion analysis"
+            case .rateLimitExceeded:
+                return "Analysis rate limit exceeded"
+            case .inferenceTimeout:
+                return "Emotion analysis did not complete within timeout period"
+            case .unsupportedFormat(let ext):
+                return "File extension '.\(ext)' is not a supported audio format"
             }
         }
     }
@@ -159,6 +190,11 @@ final class EmotionAnalyzer: ObservableObject {
     /// Model resource name
     private let modelResourceName = "EmotionProsodyClassifier_20260122_124134"
 
+    // Named constants for magic numbers
+    private let rateLimitResetInterval: TimeInterval = 3600  // 1 hour in seconds
+    private let spectralRolloffThreshold: Double = 0.85      // 85% energy threshold
+    private let harmonicRatioEpsilon: Double = 1e-10         // Small value to prevent division by zero
+
     // MARK: - Initialization
 
     init() {
@@ -167,7 +203,8 @@ final class EmotionAnalyzer: ObservableObject {
     }
 
     deinit {
-        clearSensitiveData()
+        // Note: Cannot call @MainActor methods from deinit
+        // clearSensitiveData() must be called explicitly before deinit if cleanup needed
         if let compiledURL = compiledModelURL {
             try? FileManager.default.removeItem(at: compiledURL)
         }
@@ -217,7 +254,7 @@ final class EmotionAnalyzer: ObservableObject {
 
     // MARK: - Private Methods - Analysis
 
-    private func performAnalysis(featureExtractor: () async throws -> [Double]) async throws -> EmotionResult {
+    private func performAnalysis(featureExtractor: @escaping () async throws -> [Double]) async throws -> EmotionResult {
         isAnalyzing = true
         lastError = nil
 
@@ -229,7 +266,7 @@ final class EmotionAnalyzer: ObservableObject {
         do {
             // Extract features from audio (run on background)
             let features = try await Task.detached {
-                try featureExtractor()
+                try await featureExtractor()
             }.value
 
             // Normalize features
@@ -284,9 +321,9 @@ final class EmotionAnalyzer: ObservableObject {
 
         // Validate file extension
         let allowedExtensions = ["wav", "m4a", "mp3", "caf", "aac"]
-        guard let ext = url.pathExtension.lowercased(),
-              allowedExtensions.contains(ext) else {
-            throw EmotionAnalyzerError.unsupportedFormat(url.pathExtension)
+        let ext = url.pathExtension.lowercased()
+        guard allowedExtensions.contains(ext) else {
+            throw EmotionAnalyzerError.unsupportedFormat(ext)
         }
     }
 
@@ -305,7 +342,7 @@ final class EmotionAnalyzer: ObservableObject {
         let now = Date()
 
         // Reset hourly counter if needed
-        if let lastTime = lastAnalysisTime, now.timeIntervalSince(lastTime) > 3600 {
+        if let lastTime = lastAnalysisTime, now.timeIntervalSince(lastTime) > rateLimitResetInterval {
             analysisCount.removeAll()
         }
 
@@ -347,9 +384,9 @@ final class EmotionAnalyzer: ObservableObject {
 
             os_log("EmotionAnalyzer: Model loaded successfully", type: .info)
             os_log("Model input: %{public}@", type: .info,
-                   modelDescription?.inputDescriptionsByKey.values.first?.name ?? "unknown")
+                   modelDescription?.inputDescriptionsByName["features"]?.name ?? modelDescription?.inputDescriptionsByName.values.first?.name ?? "unknown")
             os_log("Model output: %{public}@", type: .info,
-                   modelDescription?.outputDescriptionsByKey.values.first?.name ?? "unknown")
+                   modelDescription?.outputDescriptionsByName["output"]?.name ?? modelDescription?.outputDescriptionsByName.values.first?.name ?? "unknown")
         } catch {
             os_log("Error loading model: %{public}@", type: .error, error.localizedDescription)
             lastError = error
@@ -364,7 +401,7 @@ final class EmotionAnalyzer: ObservableObject {
               let scale = json["scale"] as? [Double],
               mean.count == featureDimension,
               scale.count == featureDimension else {
-            os_log("Warning: Could not load scaler parameters, using defaults", type: .warning)
+            os_log("Warning: Could not load scaler parameters, using defaults", type: .default)
             // Initialize with defaults (zero mean, unit scale)
             scalerMean = Array(repeating: 0.0, count: featureDimension)
             scalerScale = Array(repeating: 1.0, count: featureDimension)
@@ -382,7 +419,7 @@ final class EmotionAnalyzer: ObservableObject {
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let labels = json["labels"] as? [String],
               !labels.isEmpty else {
-            os_log("Warning: Could not load emotion labels, using defaults", type: .warning)
+            os_log("Warning: Could not load emotion labels, using defaults", type: .default)
             emotionLabels = ["angry", "calm", "disgust", "fearful", "happy", "neutral", "sad", "surprised"]
             return
         }
@@ -778,7 +815,7 @@ final class EmotionAnalyzer: ObservableObject {
 
             // Spectral rolloff (85%)
             var rolloffSum: Double = 0
-            let rolloffThreshold = 0.85 * denom
+            let rolloffThreshold = spectralRolloffThreshold * denom
             var rolloffFound = false
             for k in 0..<magnitudes.count {
                 rolloffSum += magnitudes[k]
@@ -877,7 +914,7 @@ final class EmotionAnalyzer: ObservableObject {
 
             for k in 1..<(fftSize / 2) {
                 let freq = nyquist * Double(k) / Double(fftSize / 2)
-                let chromaBin = Int(freq / 110.0 * numChroma / 12) % numChroma
+                let chromaBin = Int(freq / 110.0 * Double(numChroma) / 12.0) % numChroma
                 var magnitude: Double = 0
                 for n in 0..<frameLength {
                     let angle = -2 * .pi * Double(k) * Double(n) / Double(fftSize)
@@ -980,26 +1017,28 @@ final class EmotionAnalyzer: ObservableObject {
 
         // Use bulk copy for better performance
         features.withUnsafeBufferPointer { featuresPtr in
-            multiArray.dataPointer.copyBytes(from: featuresPtr.baseAddress!, byteCount: featureDimension * MemoryLayout<Double>.size)
+            multiArray.dataPointer.copyMemory(from: featuresPtr.baseAddress!, byteCount: featureDimension * MemoryLayout<Double>.size)
         }
 
         // Create input feature provider
-        let inputName = modelDescription.inputDescriptionsByKey.values.first?.name ?? "features"
+        let inputName = modelDescription.inputDescriptionsByName["features"]?.name ?? modelDescription.inputDescriptionsByName.values.first?.name ?? "features"
         guard let inputProvider = try? MLDictionaryFeatureProvider(dictionary: [inputName: multiArray]) else {
             throw EmotionAnalyzerError.modelNotLoaded
         }
 
         // Run prediction
-        let output = try model.prediction(input: inputProvider)
+        let output = try await model.prediction(from: inputProvider)
 
         // Extract probabilities from output
-        let outputName = modelDescription.outputDescriptionsByKey.values.first?.name ?? "output"
+        let outputName = modelDescription.outputDescriptionsByName["output"]?.name ?? modelDescription.outputDescriptionsByName.values.first?.name ?? "output"
         guard let outputDict = output.featureValue(for: outputName) else {
             throw EmotionAnalyzerError.noPrediction
         }
 
         var probabilities: [String: Double] = [:]
-        let outputArray = outputDict.multiArrayValue
+        guard let outputArray = outputDict.multiArrayValue else {
+            throw EmotionAnalyzerError.noPrediction
+        }
 
         // Handle both 1D and 2D output arrays
         let shapeCount = outputArray.shape.count
@@ -1011,11 +1050,10 @@ final class EmotionAnalyzer: ObservableObject {
         }
 
         for i in 0..<count {
-            let index: [NSNumber] = shapeCount >= 2 ? [0, i] : [i]
+            let index: [NSNumber] = shapeCount >= 2 ? [0, NSNumber(value: i)] : [NSNumber(value: i)]
             let value = outputArray[index]
-            if let doubleValue = try? value.doubleValue() {
-                probabilities[emotionLabels[i]] = doubleValue
-            }
+            let doubleValue = value.doubleValue
+            probabilities[emotionLabels[i]] = doubleValue
         }
 
         // Find dominant emotion

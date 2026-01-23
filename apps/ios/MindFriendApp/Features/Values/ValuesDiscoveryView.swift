@@ -62,7 +62,7 @@ struct ValuesDiscoveryView: View {
 
     // MARK: - Phase 1: Select 8-12 Values
 
-    private var phase1View: View {
+    private var phase1View: some View {
         VStack(spacing: 20) {
             // Progress
             progressBar(phase: 1)
@@ -115,7 +115,7 @@ struct ValuesDiscoveryView: View {
 
     // MARK: - Phase 2: Rank Top 5
 
-    private var phase2View: View {
+    private var phase2View: some View {
         VStack(spacing: 20) {
             progressBar(phase: 2)
 
@@ -197,7 +197,7 @@ struct ValuesDiscoveryView: View {
 
     // MARK: - Phase 3: Confirm
 
-    private var phase3View: View {
+    private var phase3View: some View {
         VStack(spacing: 20) {
             progressBar(phase: 3)
 

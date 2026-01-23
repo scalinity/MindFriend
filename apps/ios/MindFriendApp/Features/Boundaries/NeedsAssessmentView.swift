@@ -117,7 +117,7 @@ struct Step1DrainTriggersView: View {
                 VStack(spacing: 12) {
                     ForEach(drainTriggers, id: \.0) { trigger in
                         DrainTriggerCard(
-                            title: trigger.0,
+                            title: LocalizedStringKey(trigger.0),
                             icon: trigger.1,
                             isSelected: viewModel.step1DrainTriggers.contains(trigger.0)
                         ) {
@@ -169,7 +169,7 @@ struct DrainTriggerCard: View {
 
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.accentColor)
+                        .foregroundStyle(Color.accentColor)
                 }
             }
             .padding()
@@ -212,7 +212,7 @@ struct Step2ImportanceRatingsView: View {
                 VStack(spacing: 20) {
                     ForEach(needs, id: \.self) { need in
                         NeedRatingCard(
-                            title: need,
+                            title: LocalizedStringKey(need),
                             rating: viewModel.step2ImportanceRatings[need] ?? .medium
                         ) { newRating in
                             viewModel.setImportanceRating(need, rating: newRating)
@@ -318,7 +318,7 @@ struct Step3CurrentlyMetView: View {
                 VStack(spacing: 20) {
                     ForEach(needs, id: \.self) { need in
                         CurrentlyMetCard(
-                            title: need,
+                            title: LocalizedStringKey(need),
                             status: viewModel.step3CurrentlyMet[need] ?? .sometimes
                         ) { newStatus in
                             viewModel.setCurrentlyMet(need, status: newStatus)
@@ -372,30 +372,38 @@ struct CurrentlyMetCard: View {
 
             HStack(spacing: 8) {
                 ForEach([MetLevel.no, .sometimes, .yes], id: \.self) { statusOption in
-                    Button {
-                        onStatusChange(statusOption)
-                    } label: {
-                        VStack(spacing: 4) {
-                            Image(systemName: statusOption.icon)
-                                .font(.title2)
-                                .foregroundStyle(status == statusOption ? .white : statusOption.color)
-                                .frame(width: 40, height: 40)
-                                .background(status == statusOption ? statusOption.color : Color.gray.opacity(0.2))
-                                .cornerRadius(8)
-
-                            Text(statusOption.displayName)
-                                .font(.caption)
-                                .foregroundStyle(status == statusOption ? .primary : .secondary)
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.plain)
+                    statusButton(for: statusOption)
                 }
             }
         }
         .padding()
         .background(Color.gray.opacity(0.1))
         .cornerRadius(12)
+    }
+    
+    private func statusButton(for statusOption: MetLevel) -> some View {
+        Button {
+            onStatusChange(statusOption)
+        } label: {
+            VStack(spacing: 4) {
+                let isSelected = status == statusOption
+                let iconForeground: Color = isSelected ? .white : statusOption.color
+                let iconBackground: Color = isSelected ? statusOption.color : Color.gray.opacity(0.2)
+                
+                Image(systemName: statusOption.icon)
+                    .font(.title2)
+                    .foregroundStyle(iconForeground)
+                    .frame(width: 40, height: 40)
+                    .background(iconBackground)
+                    .cornerRadius(8)
+
+                Text(statusOption.displayName)
+                    .font(.caption)
+                    .foregroundStyle(isSelected ? .primary : .secondary)
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -418,7 +426,7 @@ struct Step4PriorityNeedsView: View {
                 VStack(spacing: 12) {
                     ForEach(viewModel.suggestedPriorityNeeds, id: \.self) { need in
                         PriorityNeedCard(
-                            title: need,
+                            title: LocalizedStringKey(need),
                             isConfirmed: viewModel.step4PriorityNeeds.contains(need)
                         ) {
                             viewModel.togglePriorityNeed(need)
@@ -476,7 +484,7 @@ struct PriorityNeedCard: View {
 
                 if isConfirmed {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.accentColor)
+                        .foregroundStyle(Color.accentColor)
                 }
             }
             .padding()
@@ -577,12 +585,8 @@ final class NeedsAssessmentViewModel: ObservableObject {
         do {
             let responses = AssessmentResponses(
                 step1DrainTriggers: step1DrainTriggers,
-                step2ImportanceRatings: Dictionary(
-                    uniqueKeysWithValues: step2ImportanceRatings.map { ($0.key, $0.value.rawValue) }
-                ),
-                step3CurrentlyMet: Dictionary(
-                    uniqueKeysWithValues: step3CurrentlyMet.map { ($0.key, $0.value.rawValue) }
-                ),
+                step2ImportanceRatings: step2ImportanceRatings,
+                step3CurrentlyMet: step3CurrentlyMet,
                 step4PriorityNeeds: step4PriorityNeeds
             )
 
@@ -592,7 +596,7 @@ final class NeedsAssessmentViewModel: ObservableObject {
             )
 
             // Navigate to results (handled by parent view)
-            print("Assessment created: \(result.assessment.id)")
+            print("Assessment created: \(result.assessmentId)")
 
         } catch {
             self.error = error

@@ -151,7 +151,7 @@ struct ScriptGeneratorView: View {
                         ForEach(scripts.practicePrompts, id: \.self) { prompt in
                             HStack(alignment: .top, spacing: 12) {
                                 Image(systemName: "checkmark.circle")
-                                    .foregroundStyle(.accentColor)
+                                    .foregroundStyle(Color.accentColor)
                                     .font(.title3)
 
                                 Text(prompt)
@@ -173,17 +173,11 @@ struct ScriptGeneratorView: View {
 // MARK: - Script Card
 
 struct ScriptCard: View {
-    let script: BoundaryScript
+    let script: ScriptResponse
     @State var isCopied = false
     
     var variation: ScriptVariation {
-        switch script.variation.lowercased() {
-        case "direct": return .direct
-        case "gentle": return .gentle
-        case "assertive": return .assertive
-        case "collaborative": return .collaborative
-        default: return .direct
-        }
+        script.variation
     }
     
     var variationColor: Color {
@@ -215,16 +209,16 @@ struct ScriptCard: View {
                 }
             }
             
-            Text(script.text)
+            Text(script.script)
                 .font(.body)
                 .lineLimit(nil)
             
-            if let tips = script.tips {
+            if !script.tips.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Tips:")
                         .font(.caption)
                         .fontWeight(.semibold)
-                    ForEach(tips, id: \.self) { tip in
+                    ForEach(script.tips, id: \.self) { tip in
                         Label(tip, systemImage: "lightbulb.fill")
                             .font(.caption)
                     }
@@ -238,7 +232,7 @@ struct ScriptCard: View {
     }
     
     private func copyScript() {
-        UIPasteboard.general.string = script.text
+        UIPasteboard.general.string = script.script
         isCopied = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             isCopied = false
@@ -288,7 +282,8 @@ final class ScriptGeneratorViewModel: ObservableObject {
     }
 
     func navigateToPractice() {
-        showPracticeView = true
+        // TODO: Implement navigation to practice view
+        // showPracticeView = true
     }
 }
 

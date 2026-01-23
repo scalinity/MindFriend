@@ -178,7 +178,7 @@ struct RecommendationCard: View {
             // Type badge
             HStack {
                 Image(systemName: boundaryTypeIcon(recommendation.type))
-                    .foregroundStyle(.accentColor)
+                    .foregroundStyle(Color.accentColor)
 
                 Text(recommendation.type)
                     .font(.subheadline)
@@ -225,7 +225,7 @@ struct NextStepCard: View {
         HStack(alignment: .top, spacing: 16) {
             Image(systemName: icon)
                 .font(.title2)
-                .foregroundStyle(.accentColor)
+                .foregroundStyle(Color.accentColor)
                 .frame(width: 44, height: 44)
                 .background(Color.accentColor.opacity(0.1))
                 .cornerRadius(12)

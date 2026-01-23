@@ -82,7 +82,7 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
     // MARK: - Emotion State
 
     /// Current detected emotion (nil if no emotion detected or analysis disabled)
-    @Published private(set) var currentEmotion: EmotionAnalyzer.EmotionResult?
+    @Published private(set) var currentEmotion: EmotionResult?
 
     /// Emotion history for current session
     @Published private(set) var emotionHistory: [EmotionSnapshot] = []
@@ -1138,7 +1138,7 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
     }
 
     /// Handle successful emotion analysis result
-    private func handleEmotionResult(_ result: EmotionAnalyzer.EmotionResult) {
+    private func handleEmotionResult(_ result: EmotionResult) {
         currentEmotion = result
         emotionConfidence = result.confidence
 

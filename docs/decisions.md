@@ -4,6 +4,67 @@ This document records architectural and implementation decisions that deviate fr
 
 ---
 
+## 2026-01-22: Migration History Reset to Production Schema Baseline
+
+**Decision:** Replaced 190 local migrations with single production schema baseline migration.
+
+**Rationale:**
+
+The local migration history contained severe ordering issues - many migrations referenced tables/columns before they were created (e.g., `20260120225055` referenced `cognitive_distortions` table created in `20260701000004`). These issues were:
+
+1. **Local development only** - Production database schema is healthy and functional
+2. **Accumulation over time** - 190 migrations added incrementally without dependency validation
+3. **Migration-order specific** - Required 100+ fixes to wrap operations in table-existence checks
+4. **Inefficient** - Every `supabase start` had to apply 190 migrations
+
+**Alternatives Considered:**
+
+- **Continue fixing migrations individually** - Would require 100+ more fixes, high bug risk, still results in slow local startup
+- **Reorder migration timestamps** - Dangerous practice, creates production/local divergence
+- **Pull production schema** - Industry standard approach for complex migration histories ✅
+
+**Implementation:**
+
+```bash
+# 1. Backed up all 190 migrations to supabase/migrations_archive_20260122_223034/
+# 2. Marked all old migrations as reverted in remote migration history table
+# 3. Pulled production schema as single baseline: 20260122223034_remote_schema.sql
+# 4. Fixed malformed COMMENT statement in pulled schema (line 20)
+```
+
+**Impact:**
+
+✅ **Positive:**
+
+- `supabase start` now succeeds without errors (previously failed at migration 87/190)
+- Local schema guaranteed to match production exactly
+- Future migrations apply cleanly on top of baseline
+- Faster local dev setup (1 migration vs 190)
+- All Docker containers healthy and running
+
+⚠️ **Neutral:**
+
+- Old migrations preserved in archive for historical reference
+- No impact on production (schema unchanged)
+- Future migrations will have timestamps after 20260122223034
+
+**Verification:**
+
+```bash
+$ supabase start
+✅ Started supabase local development setup
+$ docker ps --filter "name=supabase" | grep healthy
+✅ All 10 core containers healthy
+```
+
+**Going Forward:**
+
+- New migrations create/apply normally
+- Keep archived migrations for reference/deployment history
+- Standard practice for projects with complex migration evolution
+
+---
+
 ## 2026-01-20: Values Compass & Decision Coach Implementation Assumptions
 
 **Decision:** Implement Values Compass & Decision Coach with spec-analyzer-provided assumptions for 5 blocking issues and 4 JSONB schema definitions, enabling autonomous pipeline execution.

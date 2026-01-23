@@ -382,6 +382,7 @@
 		BD2274F9BF67AD276FEB82A7 /* BiometricsDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74758D8702F7028E3775C783 /* BiometricsDashboardView.swift */; };
 		BD66C1353A371D6F27CCE18B /* ShareCardSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C45900E4356C7E0822E2621 /* ShareCardSheet.swift */; };
 		BDDA1C8498354F7E53DA905D /* SoundscapeSoundsLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D78294849845B324988D92A /* SoundscapeSoundsLibraryView.swift */; };
+		BFF2E6F60636A03F0738E0DD /* DifficultyModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6851D6CC3547D68A86C01F00 /* DifficultyModels.swift */; };
 		C0D64EF9DA3E058588DF9BCA /* CopingKitModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC8D37169CA4CB5173C00304 /* CopingKitModels.swift */; };
 		C0E0208F76475A337CF13841 /* TherapistModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D6E32C18ECB63B8696298B2 /* TherapistModels.swift */; };
 		C1092AD98B7E2CFBFEC1F323 /* CreatorMarketplaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BCF6653F952D018995C1085 /* CreatorMarketplaceView.swift */; };
@@ -424,6 +425,7 @@
 		CC6D9EA90CC39A0ADB153E28 /* SOSCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1523F40FAE3F8B96219AA88 /* SOSCoordinator.swift */; };
 		CCD2173273CDB3006FB809CD /* AchievementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D56DB8020978281C38A9EF2D /* AchievementModels.swift */; };
 		CEE6B31708E6B49C7185F35C /* LanguageSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 042AE6E96027B4F73D25470F /* LanguageSettingsView.swift */; };
+		CEED25EF345291464C4CF187 /* DifficultyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55866E837E5C2787D4918CC1 /* DifficultyService.swift */; };
 		D0899B2DFA636681F3B04381 /* RitualService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 264E5D60FFE68DBFB8DC769F /* RitualService.swift */; };
 		D090AF9150509752A81313B9 /* VoiceJournalRecorderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0E6C3D32796745F8C915C8 /* VoiceJournalRecorderView.swift */; };
 		D1F325EDEB5541EC8A50C890 /* DependencyContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1634ECD8030D56B2BDB8ED74 /* DependencyContainer.swift */; };
@@ -715,6 +717,7 @@
 		54D9308D61CBA8D9DDE47206 /* CompanionMemoryModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CompanionMemoryModels.swift; sourceTree = "<group>"; };
 		54EC8E75ED2A40E17F65FB13 /* ActionCardModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ActionCardModels.swift; sourceTree = "<group>"; };
 		54FB239809696F626303B6AA /* LocalizationService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LocalizationService.swift; sourceTree = "<group>"; };
+		55866E837E5C2787D4918CC1 /* DifficultyService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DifficultyService.swift; sourceTree = "<group>"; };
 		55A9CBFC6741A9B10FCA6F14 /* ChallengeModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ChallengeModels.swift; sourceTree = "<group>"; };
 		55BABC9A3120C689DE2F802A /* OutcomeHomeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OutcomeHomeView.swift; sourceTree = "<group>"; };
 		56417E06D522B4D73DEA20E7 /* QuestDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestDetailView.swift; sourceTree = "<group>"; };
@@ -763,6 +766,7 @@
 		6673DE4FD4D4050037475B28 /* FamilyService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FamilyService.swift; sourceTree = "<group>"; };
 		66A103F500EA7498EAE7F6D7 /* COPPAComplianceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = COPPAComplianceTests.swift; sourceTree = "<group>"; };
 		674F4D8CA706605464558DC4 /* EmotionAnalyzer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EmotionAnalyzer.swift; sourceTree = "<group>"; };
+		6851D6CC3547D68A86C01F00 /* DifficultyModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DifficultyModels.swift; sourceTree = "<group>"; };
 		6851D6F38425F9EFF497B341 /* ModeratorDashboardView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModeratorDashboardView.swift; sourceTree = "<group>"; };
 		68B57B69D0FFE36A8CA95C02 /* ValuesDiscoveryViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ValuesDiscoveryViewModel.swift; sourceTree = "<group>"; };
 		68C7B2199707C8853EB6952B /* LockScreenView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LockScreenView.swift; sourceTree = "<group>"; };
@@ -1886,6 +1890,7 @@
 				F388BA7ACC4523977CD7352B /* RewriteService.swift */,
 				DF66C40C36749137E04D776C /* ValuesService.swift */,
 				674F4D8CA706605464558DC4 /* EmotionAnalyzer.swift */,
+				55866E837E5C2787D4918CC1 /* DifficultyService.swift */,
 			);
 			name = Services;
 			path = Services;
@@ -2057,6 +2062,7 @@
 				8675BF108ADDCFB5A8CC690F /* EmailModels.swift */,
 				219EA5EB2D0D7008A8C52CB3 /* VaultModels.swift */,
 				140407069DFC525EA9856CB8 /* RitualModels.swift */,
+				6851D6CC3547D68A86C01F00 /* DifficultyModels.swift */,
 			);
 			name = Models;
 			path = Models;
@@ -3380,6 +3386,8 @@
 				A074ECF6D700CE0EB777B087 /* VoiceEmotionModels.swift in Sources */,
 				0F76C5AB74E6EB6FC6BC6F35 /* EmotionBadge.swift in Sources */,
 				2801817693EC1BC536FD3A2B /* EmotionDetailSheet.swift in Sources */,
+				BFF2E6F60636A03F0738E0DD /* DifficultyModels.swift in Sources */,
+				CEED25EF345291464C4CF187 /* DifficultyService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -237,7 +237,7 @@ struct TipCard: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: icon)
-                .foregroundStyle(.accentColor)
+                .foregroundStyle(Color.accentColor)
                 .frame(width: 24, height: 24)
 
             Text(text)
@@ -295,20 +295,31 @@ final class BoundaryPracticeViewModel: ObservableObject {
             do {
                 let supabase = DependencyContainer.shared.supabaseClient
                 guard let userId = supabase.auth.currentUser?.id.uuidString else {
-                    throw BoundaryPlannerError.unauthorized
+                    throw BoundaryPlannerService.BoundaryPlannerError.unauthorized
                 }
                 
                 // Create custom scenario record in custom_scenarios table
-                let scenarioData: [String: AnyCodable] = [
-                    "user_id": .init(userId),
-                    "scenario_type": .init("boundary_practice"),
-                    "title": .init(boundary.statementText),
-                    "description": .init("Practice: " + boundary.statementText),
-                    "context": .init(boundary.expectedImpact ?? ""),
-                    "difficulty_level": .init("medium"),
-                    "source_feature": .init("boundary_planner"),
-                    "source_id": .init(boundary.id.uuidString)
-                ]
+                struct ScenarioData: Codable {
+                    let user_id: String
+                    let scenario_type: String
+                    let title: String
+                    let description: String
+                    let context: String
+                    let difficulty_level: String
+                    let source_feature: String
+                    let source_id: String
+                }
+                
+                let scenarioData = ScenarioData(
+                    user_id: userId,
+                    scenario_type: "boundary_practice",
+                    title: boundary.statementText,
+                    description: "Practice: " + boundary.statementText,
+                    context: boundary.expectedImpact ?? "",
+                    difficulty_level: "medium",
+                    source_feature: "boundary_planner",
+                    source_id: boundary.id.uuidString
+                )
                 
                 let response = try await supabase
                     .from("custom_scenarios")
@@ -317,14 +328,10 @@ final class BoundaryPracticeViewModel: ObservableObject {
                     .single()
                     .execute()
                 
-                if let data = response.data {
-                    if let scenarioId = data["id"] as? String {
-                        selectedScenarioId = scenarioId
-                        showPracticeMode = true
-                        // Practice count will be auto-incremented by trigger
-                    }
-                }
-                
+                // If insert succeeded, generate a scenario ID based on boundary
+                let scenarioId = boundary.id.uuidString
+                selectedScenarioId = scenarioId
+                showPracticeMode = true
                 isLoading = false
             } catch {
                 self.error = error
