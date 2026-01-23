@@ -8,8 +8,8 @@ VALUES (
   'profile-pictures',
   'profile-pictures',
   TRUE,  -- Public bucket (avatars are publicly viewable)
-  10485760,  -- 10MB limit (pre-compression)
-  ARRAY['image/jpeg', 'image/png', 'image/heic']
+  524288,  -- 512KB limit (matches client 500KB with small buffer)
+  ARRAY['image/jpeg']  -- Only JPEG (client always produces JPEG)
 )
 ON CONFLICT (id) DO NOTHING;
 

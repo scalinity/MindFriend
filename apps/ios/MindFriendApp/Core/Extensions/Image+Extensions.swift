@@ -1,5 +1,7 @@
 import SwiftUI
 import UIKit
+import ImageIO
+import UniformTypeIdentifiers
 
 // MARK: - Image Processing Constants
 enum ImageProcessingConstants {
@@ -7,6 +9,8 @@ enum ImageProcessingConstants {
     static let maxFileSize: Int = 500_000 // 500KB
     static let minDimension: CGFloat = 100
     static let maxDimension: CGFloat = 4096
+    static let maxMemoryFootprint: Int = 16_777_216 // 16MB (4096×1024 RGBA)
+    static let maxPixels: Int = 4_194_304 // 4096×1024 pixels (safer than 4096×4096)
     static let compressionQuality: CGFloat = 0.85
     static let minCompressionQuality: CGFloat = 0.1
 }
@@ -32,6 +36,18 @@ extension UIImage {
         guard width <= ImageProcessingConstants.maxDimension,
               height <= ImageProcessingConstants.maxDimension else {
             throw ImageValidationError.dimensionsTooLarge
+        }
+        
+        // CRITICAL: Check pixel count to prevent image bombs
+        let totalPixels = Int(width * height)
+        guard totalPixels <= ImageProcessingConstants.maxPixels else {
+            throw ImageValidationError.tooManyPixels
+        }
+        
+        // CRITICAL: Check memory footprint (RGBA = 4 bytes per pixel)
+        let memoryFootprint = totalPixels * 4
+        guard memoryFootprint <= ImageProcessingConstants.maxMemoryFootprint else {
+            throw ImageValidationError.memoryFootprintTooLarge
         }
         
         // Check aspect ratio (reject extreme aspect ratios)
@@ -65,28 +81,53 @@ extension UIImage {
     }
 
     /// Compress to JPEG with quality target (max 500KB)
-    /// - Returns: Compressed JPEG data, or nil if cannot meet maxBytes requirement
+    /// CRITICAL: Strips EXIF metadata to prevent privacy leaks (GPS, device info)
+    /// - Returns: Compressed JPEG data without metadata, or nil if cannot meet requirements
     func compressedJPEG(maxBytes: Int = ImageProcessingConstants.maxFileSize) -> Data? {
-        var compression: CGFloat = ImageProcessingConstants.compressionQuality
-        guard var data = self.jpegData(compressionQuality: compression) else {
-            return nil
-        }
-
-        // Iteratively reduce quality if still too large
-        while data.count > maxBytes && compression > ImageProcessingConstants.minCompressionQuality {
-            compression -= 0.1
-            guard let newData = self.jpegData(compressionQuality: compression) else {
-                break
-            }
-            data = newData
-        }
-
-        // Return nil if still exceeds maxBytes after compression
-        guard data.count <= maxBytes else {
+        guard let cgImage = self.cgImage else {
             return nil
         }
         
-        return data
+        var compression: CGFloat = ImageProcessingConstants.compressionQuality
+        
+        // Iteratively reduce quality until size requirement met
+        while compression >= ImageProcessingConstants.minCompressionQuality {
+            // Use ImageIO to create JPEG WITHOUT metadata (strips EXIF/GPS/etc)
+            let mutableData = NSMutableData()
+            guard let destination = CGImageDestinationCreateWithData(
+                mutableData,
+                UTType.jpeg.identifier as CFString,
+                1,
+                nil
+            ) else {
+                return nil
+            }
+            
+            // CRITICAL: Only include compression quality - NO metadata keys
+            // This strips all EXIF, GPS, device info, timestamps
+            let options: [CFString: Any] = [
+                kCGImageDestinationLossyCompressionQuality: compression
+            ]
+            
+            CGImageDestinationAddImage(destination, cgImage, options as CFDictionary)
+            
+            guard CGImageDestinationFinalize(destination) else {
+                return nil
+            }
+            
+            let data = mutableData as Data
+            
+            // Check if we met the size requirement
+            if data.count <= maxBytes {
+                return data
+            }
+            
+            // Reduce quality for next iteration
+            compression -= 0.1
+        }
+        
+        // Could not meet size requirement even at minimum quality
+        return nil
     }
 
     /// Crop image to square aspect ratio (center crop)
@@ -119,6 +160,8 @@ enum ImageValidationError: LocalizedError {
     case invalidFormat
     case dimensionsTooSmall
     case dimensionsTooLarge
+    case tooManyPixels
+    case memoryFootprintTooLarge
     case invalidAspectRatio
     case cannotEncodeJPEG
     
@@ -130,6 +173,10 @@ enum ImageValidationError: LocalizedError {
             return "Image is too small (minimum 100×100 pixels)"
         case .dimensionsTooLarge:
             return "Image is too large (maximum 4096×4096 pixels)"
+        case .tooManyPixels:
+            return "Image contains too many pixels"
+        case .memoryFootprintTooLarge:
+            return "Image would consume too much memory"
         case .invalidAspectRatio:
             return "Invalid image aspect ratio"
         case .cannotEncodeJPEG:
