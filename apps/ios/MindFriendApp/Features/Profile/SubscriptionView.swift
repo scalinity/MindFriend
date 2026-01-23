@@ -24,6 +24,21 @@ struct SubscriptionView: View {
         billingService.product(for: selectedPlanType, billingPeriod: selectedBillingPeriod)
     }
 
+    /// Fallback plan when StoreKit products aren't available
+    private var selectedFallbackPlan: SubscriptionPlan? {
+        selectedBillingPeriod == .monthly
+            ? SubscriptionPlan.monthlyPlan(for: selectedPlanType)
+            : SubscriptionPlan.annualPlan(for: selectedPlanType)
+    }
+
+    /// Display price - from StoreKit or fallback
+    private var selectedDisplayPrice: String? {
+        if let product = selectedProduct {
+            return product.displayPrice
+        }
+        return selectedFallbackPlan?.displayPrice
+    }
+
     private var hasActiveSubscription: Bool {
         billingService.subscription?.status == .active
     }
@@ -267,16 +282,22 @@ struct SubscriptionView: View {
 
                     Spacer()
 
-                    if let product = selectedProduct {
+                    if let price = selectedDisplayPrice {
                         VStack(alignment: .trailing, spacing: 4) {
-                            Text(product.displayPrice)
+                            Text(price)
                                 .font(.title2)
                                 .fontWeight(.bold)
 
                             if selectedBillingPeriod == .yearly {
-                                Text(monthlyEquivalent(for: product))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                if let product = selectedProduct {
+                                    Text(monthlyEquivalent(for: product))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                } else if let plan = selectedFallbackPlan {
+                                    Text(plan.pricePerMonth ?? "")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                         }
                     }
@@ -311,6 +332,11 @@ struct SubscriptionView: View {
 
     // MARK: - Subscribe Button
 
+    /// Whether we can attempt a purchase (have StoreKit product or fallback)
+    private var canPurchase: Bool {
+        selectedProduct != nil || selectedFallbackPlan != nil
+    }
+
     private var subscribeButton: some View {
         Button {
             if selectedPlanType == .enterprise {
@@ -338,11 +364,11 @@ struct SubscriptionView: View {
             }
             .frame(maxWidth: .infinity)
             .padding()
-            .background(isSpecialPlanType ? Color.accentColor : (selectedProduct != nil ? Color.accentColor : Color.secondary))
+            .background(isSpecialPlanType || canPurchase ? Color.accentColor : Color.secondary)
             .foregroundStyle(.white)
             .cornerRadius(12)
         }
-        .disabled(!isSpecialPlanType && (selectedProduct == nil || isPurchasing))
+        .disabled(!isSpecialPlanType && (!canPurchase || isPurchasing))
     }
 
     private var isSpecialPlanType: Bool {
@@ -467,7 +493,12 @@ struct SubscriptionView: View {
     }
 
     private func purchase() {
-        guard let product = selectedProduct else { return }
+        guard let product = selectedProduct else {
+            // StoreKit products not available - show error
+            self.error = BillingError.productNotFound
+            showError = true
+            return
+        }
 
         isPurchasing = true
         Task {

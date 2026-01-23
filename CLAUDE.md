@@ -117,6 +117,24 @@ Any additional context, blockers, or follow-ups.
 - Follow the template format (see Section 13 or the template at the end of `decisions.md`).
 - **`decisions.md` vs `SCRATCHPAD.md`:** Decisions are permanent architectural records; scratchpad is for ideas and progress notes.
 
+### API integration and documentation
+
+- **ALWAYS use Context7 MCP** (`mcp__context7__query-docs`) when integrating third-party APIs or libraries.
+- Never rely on assumptions or outdated knowledge about API parameters, models, or supported values.
+- Workflow:
+  1. Use `mcp__context7__resolve-library-id` to find the correct library ID
+  2. Use `mcp__context7__query-docs` to get current API documentation
+  3. Verify parameter names, allowed values, and constraints from docs
+  4. Document any non-obvious API requirements in code comments
+
+**Example: OpenAI gpt-image-1-mini (2026-01-23)**
+
+- **Supported sizes:** `1024x1024`, `1024x1536`, `1536x1024` (NOT `512x512`)
+- **Quality parameter:** Not supported (standard quality only)
+- **Response format:** `b64_json` or `url`
+- **Note:** `512x512` only available for DALL-E 2, not GPT image models
+- **Lesson learned:** Always verify API parameters via Context7 before implementation
+
 ---
 
 ## 2) Architecture Overview

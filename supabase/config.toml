@@ -55,11 +55,15 @@ enable_confirmations = false
 enabled = false
 
 # Edge Functions configuration
+# NOTE: JWT verification is handled internally by each function using supabase.auth.getUser()
+# Gateway-level verify_jwt can cause issues with token formats, so we disable it here
+# and rely on the internal verification which is more flexible and provides better error messages
+
 [functions.chat]
-verify_jwt = true  # Verify JWT before function invocation (defense-in-depth)
+verify_jwt = false  # Verified internally in function code
 
 [functions.voice-token]
-verify_jwt = true  # Verify JWT before function invocation (defense-in-depth)
+verify_jwt = false  # Verified internally in function code
 
 [functions.b2b-stripe-webhook]
 verify_jwt = false

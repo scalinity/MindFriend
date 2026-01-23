@@ -3815,15 +3815,34 @@ final class SupabaseDataService: ObservableObject {
         return nil
     }
 
-    func getActiveEnrollment() async throws -> ProgramEnrollment? {
-        // TODO: Implement getActiveEnrollment
-        return nil
+    // MARK: - Programs
+
+    /// Fetch all available programs
+    func getPrograms() async throws -> [Program] {
+        let response: [DBProgram] = try await supabase
+            .from("programs")
+            .select()
+            .order("sort_order")
+            .execute()
+            .value
+
+        return response.map { $0.toProgram() }
     }
 
-    // MARK: - Programs (stub - not implemented yet)
-    
-    func getPrograms() async throws -> [Program] {
-        throw DataError.notImplemented("Programs feature not yet implemented")
+    /// Get active enrollment for current user
+    func getActiveEnrollment() async throws -> ProgramEnrollment? {
+        let currentUserId = try userId
+
+        let response: [DBProgramEnrollment] = try await supabase
+            .from("program_enrollments")
+            .select("*, programs(*)")
+            .eq("user_id", value: currentUserId.uuidString)
+            .eq("status", value: "active")
+            .execute()
+            .value
+
+        // Return first active enrollment if exists
+        return response.first?.toEnrollment()
     }
     
     // MARK: - Stress Signature

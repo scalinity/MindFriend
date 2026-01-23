@@ -114,11 +114,9 @@ final class AchievementService: ObservableObject {
                 )
             }
 
-            print("🎯 [AchievementService] SUCCESS: Loaded Level \(statsRow.level), XP \(statsRow.xpTotal)")
             Log.data.debug("Loaded user experience: Level \(statsRow.level), XP \(statsRow.xpTotal)")
         } catch {
             // If user_stats row doesn't exist, use default values
-            print("❌ [AchievementService] FAILED to load user stats: \(error)")
             Log.data.warning("Failed to load user stats, using defaults: \(error.localizedDescription)")
             
             await MainActor.run {
