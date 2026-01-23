@@ -2,7 +2,7 @@
 // Enables or disables vacation mode (streak freeze) for users
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 interface ToggleVacationRequest {
@@ -75,11 +75,22 @@ serve(async (req) => {
     }
 
     if (action === "activate") {
+      // Validate dates BEFORE passing them
+      if (!startDate || !endDate) {
+        return new Response(
+          JSON.stringify({ error: "startDate and endDate are required for activation" }),
+          {
+            status: 400,
+            headers: { ...headers, "Content-Type": "application/json" },
+          },
+        );
+      }
+      
       return await activateVacation(
         supabase,
         user.id,
-        startDate!,
-        endDate!,
+        startDate,
+        endDate,
         reason,
         headers,
       );
@@ -91,7 +102,6 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         error: "Internal server error",
-        message: error.message,
       }),
       {
         status: 500,
@@ -102,22 +112,63 @@ serve(async (req) => {
 });
 
 async function activateVacation(
-  supabase: any,
+  supabase: SupabaseClient,
   userId: string,
   startDate: string,
   endDate: string,
   reason: string | undefined,
   headers: Record<string, string>,
 ): Promise<Response> {
-  // Validate required fields
-  if (!startDate || !endDate) {
-    return new Response(
-      JSON.stringify({ error: "startDate and endDate are required" }),
-      {
-        status: 400,
-        headers: { ...headers, "Content-Type": "application/json" },
-      },
-    );
+  // Check user's subscription tier before enforcing quota
+  const { data: subscription, error: subError } = await supabase
+    .from("subscriptions")
+    .select("tier, is_active")
+    .eq("user_id", userId)
+    .eq("is_active", true)
+    .single();
+  
+  if (subError && subError.code !== "PGRST116") {  // PGRST116 = no rows returned
+    console.error("Subscription check error:", subError);
+    // Continue with free tier assumption on error
+  }
+  
+  const isPremium = subscription?.tier === "premium" && subscription?.is_active === true;
+  
+  // Rate limiting: Only enforce for free tier users
+  if (!isPremium) {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    const { data: recentVacations, error: countError } = await supabase
+      .from("vacation_mode")
+      .select("id", { count: "exact", head: false })
+      .eq("user_id", userId)
+      .gte("created_at", thirtyDaysAgo.toISOString());
+    
+    if (countError) {
+      console.error("Count error:", countError);
+      return new Response(
+        JSON.stringify({ error: "Failed to check vacation quota" }),
+        {
+          status: 500,
+          headers: { ...headers, "Content-Type": "application/json" },
+        },
+      );
+    }
+    
+    // Free tier limit: 1 vacation per month
+    if (recentVacations && recentVacations.length >= 1) {
+      return new Response(
+        JSON.stringify({
+          error: "quota_exceeded",
+          message: "Free tier allows 1 vacation per month. Upgrade to Premium for unlimited vacations.",
+        }),
+        {
+          status: 429,
+          headers: { ...headers, "Content-Type": "application/json" },
+        },
+      );
+    }
   }
 
   // Parse dates
@@ -127,7 +178,7 @@ async function activateVacation(
   // Validate date range
   if (isNaN(start.getTime()) || isNaN(end.getTime())) {
     return new Response(
-      JSON.stringify({ error: "Invalid date format. Use YYYY-MM-DD" }),
+      JSON.stringify({ error: "Invalid date format" }),
       {
         status: 400,
         headers: { ...headers, "Content-Type": "application/json" },
@@ -170,8 +221,7 @@ async function activateVacation(
   if (existing) {
     return new Response(
       JSON.stringify({
-        error: "overlapping_vacation",
-        message: "You already have an active vacation mode",
+        error: "You already have an active vacation",
       }),
       {
         status: 409,
@@ -187,6 +237,11 @@ async function activateVacation(
     .eq("user_id", userId)
     .single();
 
+  // Sanitize reason field to prevent XSS/injection
+  const sanitizedReason = reason 
+    ? reason.trim().substring(0, 200).replace(/[<>]/g, '') 
+    : null;
+
   // Create vacation mode entry
   const { data: vacation, error: insertError } = await supabase
     .from("vacation_mode")
@@ -194,7 +249,7 @@ async function activateVacation(
       user_id: userId,
       start_date: startDate,
       end_date: endDate,
-      reason: reason || null,
+      reason: sanitizedReason,
       streak_at_start: stats?.current_streak_days || 0,
       is_active: true,
     })
@@ -206,7 +261,6 @@ async function activateVacation(
     return new Response(
       JSON.stringify({
         error: "Failed to create vacation mode",
-        details: insertError.message,
       }),
       {
         status: 500,
@@ -231,7 +285,7 @@ async function activateVacation(
 }
 
 async function deactivateVacation(
-  supabase: any,
+  supabase: SupabaseClient,
   userId: string,
   headers: Record<string, string>,
 ): Promise<Response> {

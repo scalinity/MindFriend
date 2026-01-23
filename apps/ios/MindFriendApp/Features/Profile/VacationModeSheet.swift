@@ -59,8 +59,8 @@ struct VacationModeSheet: View {
         } header: {
             Text("Vacation Period")
         } footer: {
-            if dayCount > 14 {
-                Text("Maximum vacation duration is 14 days")
+            if let error = validationError {
+                Text(error)
                     .foregroundStyle(.red)
             } else {
                 Text("Your streak will be frozen during this period")
@@ -72,6 +72,18 @@ struct VacationModeSheet: View {
         Section("Reason (Optional)") {
             TextField("e.g., Family vacation, work trip", text: $reason, axis: .vertical)
                 .lineLimit(2...4)
+                .onChange(of: reason) { _, newValue in
+                    // Limit to 200 characters (server limit)
+                    if newValue.count > 200 {
+                        reason = String(newValue.prefix(200))
+                    }
+                }
+        } footer: {
+            HStack {
+                Text("\(reason.count)/200")
+                    .foregroundStyle(reason.count > 200 ? .red : .secondary)
+                Spacer()
+            }
         }
     }
 
@@ -114,26 +126,65 @@ struct VacationModeSheet: View {
     // MARK: - Computed Properties
 
     private var dayCount: Int {
-        Calendar.current.dateComponents([.day], from: startDate, to: endDate).day ?? 0
+        let days = Calendar.current.dateComponents([.day], from: startDate, to: endDate).day ?? 0
+        return days + 1  // +1 for inclusive counting (matching server logic)
+    }
+    
+    private var validationError: String? {
+        let today = Calendar.current.startOfDay(for: Date())
+        let start = Calendar.current.startOfDay(for: startDate)
+        
+        // Check if start date is in the past
+        if start < today {
+            return "Start date cannot be in the past"
+        }
+        
+        // Check day count range
+        if dayCount < 1 {
+            return "Vacation must be at least 1 day"
+        }
+        
+        if dayCount > 14 {
+            return "Maximum vacation duration is 14 days"
+        }
+        
+        // Check reason length
+        if reason.count > 200 {
+            return "Reason must be 200 characters or less"
+        }
+        
+        return nil
     }
 
     private var isValid: Bool {
-        dayCount >= 0 && dayCount <= 14
+        validationError == nil
     }
 
     // MARK: - Actions
 
     private func activateVacation() async {
+        // Final validation check
+        guard validationError == nil else {
+            errorMessage = validationError
+            return
+        }
+        
         isActivating = true
         defer { isActivating = false }
 
         do {
+            // Sanitize reason (remove HTML/script tags)
+            let sanitizedReason = reason
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .replacingOccurrences(of: "<", with: "")
+                .replacingOccurrences(of: ">", with: "")
+            
             let service = StreakShieldService(supabase: container.supabase)
             _ = try await service.toggleVacation(
                 action: .activate,
                 startDate: startDate,
                 endDate: endDate,
-                reason: reason.isEmpty ? nil : reason
+                reason: sanitizedReason.isEmpty ? nil : sanitizedReason
             )
             showSuccess = true
         } catch {

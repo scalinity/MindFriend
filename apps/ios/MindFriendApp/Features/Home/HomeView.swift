@@ -94,6 +94,12 @@ struct HomeView: View {
                         userName: appState.currentUser?.displayName ?? "Friend",
                         timeOfDay: homeContext?.timeOfDay ?? .current
                     )
+                    
+                    // XP Progress Widget (NEW)
+                    if let selectedTab = $appState.selectedTab {
+                        XPCompactWidget(selectedTab: selectedTab)
+                            .environmentObject(container.achievementService)
+                    }
 
                     // Capacity indicator (difficulty adjustment)
                     CapacityIndicator()
