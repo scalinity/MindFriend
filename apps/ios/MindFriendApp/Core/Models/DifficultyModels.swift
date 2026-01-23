@@ -1,6 +1,34 @@
 import Foundation
 import SwiftUI
 
+// MARK: - Configuration Constants
+
+/// Constants for capacity difficulty calculations
+/// SHARED WITH: supabase/functions/calculate-capacity/algorithms.ts
+/// These values MUST stay in sync between Swift and TypeScript implementations
+private enum CapacityConstants {
+    // Capacity level thresholds (aligned with spec)
+    static let thresholdLow: Int = 35      // 0-35 is "low"
+    static let thresholdModerate: Int = 70  // 35-70 is "moderate", 70-100 is "high"
+
+    // Difficulty multipliers for quest/exercise adjustment
+    static let multiplierLow: Double = 0.5      // Easier/shorter content
+    static let multiplierModerate: Double = 1.0  // Standard content
+    static let multiplierHigh: Double = 1.25    // Challenging/longer content
+
+    // Override target scores
+    static let overrideRestScore: Int = 25       // Rest mode target
+    static let overrideNormalScore: Int = 50     // Normal mode target
+    static let overrideChallengeScore: Int = 75  // Challenge mode target
+
+    // Staleness threshold
+    static let stalenessThresholdSeconds: TimeInterval = 12 * 3600  // 12 hours
+
+    // Score bounds
+    static let scoreMin: Int = 0
+    static let scoreMax: Int = 100
+}
+
 // MARK: - Capacity Level
 
 /// Capacity level based on capacity score
@@ -38,24 +66,24 @@ enum CapacityLevel: String, Codable, CaseIterable {
     }
     
     /// Difficulty multiplier for quest/exercise adjustment
-    /// Low: easier/shorter content (0.5x)
-    /// Moderate: standard content (1.0x)
-    /// High: challenging/longer content (1.25x)
+    /// Low: easier/shorter content
+    /// Moderate: standard content
+    /// High: challenging/longer content
     var difficultyMultiplier: Double {
         switch self {
-        case .low: return 0.5
-        case .moderate: return 1.0
-        case .high: return 1.25
+        case .low: return CapacityConstants.multiplierLow
+        case .moderate: return CapacityConstants.multiplierModerate
+        case .high: return CapacityConstants.multiplierHigh
         }
     }
-    
+
     /// Initialize from capacity score
-    /// UPDATED: Thresholds aligned with spec (0-35 low, 35-70 moderate, 70-100 high)
+    /// UPDATED: Thresholds aligned with spec
     init(score: Int) {
         switch score {
-        case 0..<35:
+        case CapacityConstants.scoreMin..<CapacityConstants.thresholdLow:
             self = .low
-        case 35..<70:
+        case CapacityConstants.thresholdLow..<CapacityConstants.thresholdModerate:
             self = .moderate
         default:
             self = .high
@@ -82,12 +110,14 @@ struct ComponentScore: Codable, Identifiable {
         case sleep
         case mood
         case streak
+        case completion
 
         var displayName: String {
             switch self {
             case .sleep: return NSLocalizedString("difficulty.component.sleep", value: "Recent Sleep", comment: "Sleep component")
             case .mood: return NSLocalizedString("difficulty.component.mood", value: "Current Mood", comment: "Mood component")
             case .streak: return NSLocalizedString("difficulty.component.streak", value: "Streak Momentum", comment: "Streak component")
+            case .completion: return NSLocalizedString("difficulty.component.completion", value: "Completion Rate", comment: "Completion component")
             }
         }
 
@@ -96,6 +126,7 @@ struct ComponentScore: Codable, Identifiable {
             case .sleep: return "moon.zzz.fill"
             case .mood: return "face.smiling.fill"
             case .streak: return "flame.fill"
+            case .completion: return "checkmark.circle.fill"
             }
         }
     }
@@ -114,16 +145,18 @@ struct CapacityComponents: Codable {
     let sleep: ComponentScore
     let mood: ComponentScore
     let streak: ComponentScore
+    let completion: ComponentScore
 
     /// All components as array for iteration
     var all: [ComponentScore] {
-        [sleep, mood, streak]
+        [sleep, mood, streak, completion]
     }
 
     enum CodingKeys: String, CodingKey {
         case sleep
         case mood
         case streak
+        case completion
     }
 }
 
@@ -147,9 +180,9 @@ struct CapacityScore: Codable, Identifiable {
         Date() < expiresAt
     }
 
-    /// Whether this score is stale (calculated >12h ago)
+    /// Whether this score is stale (calculated >threshold ago)
     var isStale: Bool {
-        Date().timeIntervalSince(calculatedAt) > 12 * 3600
+        Date().timeIntervalSince(calculatedAt) > CapacityConstants.stalenessThresholdSeconds
     }
 
     enum CodingKeys: String, CodingKey {
@@ -173,9 +206,23 @@ struct CapacityOverride: Codable, Identifiable {
     let id: UUID
     let userId: UUID
     let overrideLevel: OverrideLevel
-    let createdAt: Date
     let expiresAt: Date
     let isActive: Bool
+    let createdAt: Date
+
+    /// Target capacity level for this override
+    var capacityLevel: CapacityLevel {
+        CapacityLevel(score: targetScore)
+    }
+
+    /// Target capacity score based on override level
+    var targetScore: Int {
+        switch overrideLevel {
+        case .rest: return CapacityConstants.overrideRestScore
+        case .normal: return CapacityConstants.overrideNormalScore
+        case .challenge: return CapacityConstants.overrideChallengeScore
+        }
+    }
 
     enum OverrideLevel: String, Codable {
         case rest = "rest"          // Force capacity to low (score ~25)
@@ -196,18 +243,6 @@ struct CapacityOverride: Codable, Identifiable {
             case .normal: return "circle.grid.2x2.fill"
             case .challenge: return "flame.fill"
             }
-        }
-
-        var targetScore: Int {
-            switch self {
-            case .rest: return 25
-            case .normal: return 50
-            case .challenge: return 75
-            }
-        }
-
-        var capacityLevel: CapacityLevel {
-            CapacityLevel.from(score: targetScore)
         }
     }
 
@@ -260,6 +295,7 @@ struct CalculateCapacityResponse: Codable {
     let score: Int
     let level: String
     let components: ComponentsResponse
+    let localDate: String     // YYYY-MM-DD
     let calculatedAt: String  // ISO 8601
     let expiresAt: String     // ISO 8601
     let hasOverride: Bool
@@ -268,6 +304,7 @@ struct CalculateCapacityResponse: Codable {
         let sleep: ComponentResponse
         let mood: ComponentResponse
         let streak: ComponentResponse
+        let completion: ComponentResponse
     }
 
     struct ComponentResponse: Codable {
@@ -280,6 +317,7 @@ struct CalculateCapacityResponse: Codable {
         case score
         case level
         case components
+        case localDate = "local_date"
         case calculatedAt = "calculated_at"
         case expiresAt = "expires_at"
         case hasOverride = "has_override"
@@ -287,29 +325,36 @@ struct CalculateCapacityResponse: Codable {
 
     /// Convert to CapacityScore model
     func toCapacityScore(userId: UUID) -> CapacityScore? {
-        guard let level = CapacityLevel(rawValue: level),
-              let calculatedDate = ISO8601DateFormatter().date(from: calculatedAt),
-              let expiresDate = ISO8601DateFormatter().date(from: expiresAt) else {
+        // Validate that level string is valid
+        guard CapacityLevel(rawValue: level) != nil else {
             return nil
         }
 
-        // Get local date (YYYY-MM-DD)
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd"
-        dateFormatter.timeZone = TimeZone.current
-        let localDateString = dateFormatter.string(from: calculatedDate)
+        // Use level derived from score for consistency
+        let capacityLevel = CapacityLevel(score: score)
+
+        // SAFETY: Parse dates with validation
+        let formatter = ISO8601DateFormatter()
+        guard let calculatedDate = formatter.date(from: calculatedAt),
+              let expiresDate = formatter.date(from: expiresAt) else {
+            #if DEBUG
+            print("Failed to parse capacity dates: calculatedAt=\(calculatedAt), expiresAt=\(expiresAt)")
+            #endif
+            return nil // Reject invalid response instead of using fallback
+        }
 
         return CapacityScore(
             id: UUID(),
             userId: userId,
             score: score,
-            level: level,
+            level: capacityLevel,
             components: CapacityComponents(
                 sleep: ComponentScore(type: .sleep, score: components.sleep.score, weight: components.sleep.weight),
                 mood: ComponentScore(type: .mood, score: components.mood.score, weight: components.mood.weight),
-                streak: ComponentScore(type: .streak, score: components.streak.score, weight: components.streak.weight)
+                streak: ComponentScore(type: .streak, score: components.streak.score, weight: components.streak.weight),
+                completion: ComponentScore(type: .completion, score: components.completion.score, weight: components.completion.weight)
             ),
-            localDate: localDateString,
+            localDate: localDate,
             calculatedAt: calculatedDate,
             expiresAt: expiresDate,
             hasOverride: hasOverride,

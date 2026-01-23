@@ -1,5 +1,8 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
+import { corsHeaders } from "../_shared/cors.ts";
+import { zonedTimeToUtc, utcToZonedTime } from "https://esm.sh/date-fns-tz@2.0.0";
+import { addDays, startOfDay } from "https://esm.sh/date-fns@2.30.0";
 import type {
   CalculateCapacityRequest,
   CalculateCapacityResponse,
@@ -20,208 +23,423 @@ import {
   calculateCompositeScore,
   smoothCapacity,
   scoreToLevel,
+  WEIGHTS,
 } from "./algorithms.ts";
 
-// SECURITY FIX: Restrict CORS to specific origins in production
-const corsHeaders = {
-  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") || "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
+// =====================================================
+// QUERY TIMEOUT UTILITY
+// =====================================================
+
+/**
+ * Wraps a database query with a timeout to prevent hanging
+ * @param queryFn Async function that executes the query
+ * @param timeoutMs Timeout in milliseconds (default: 5000ms)
+ * @returns Query result
+ * @throws Error if timeout exceeded
+ */
+async function withQueryTimeout<T>(
+  queryFn: () => Promise<T>,
+  timeoutMs: number = 5000,
+): Promise<T> {
+  return Promise.race([
+    queryFn(),
+    new Promise<T>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`Database query timeout after ${timeoutMs}ms`)),
+        timeoutMs,
+      )
+    ),
+  ]);
+}
+
+// =====================================================
+// CONFIGURATION CONSTANTS
+// =====================================================
+
+// CONFIGURATION CONSTANTS
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+const RATE_LIMIT_MAX_REQUESTS = 10; // requests per window
+const MAX_TIMEZONE_LENGTH = 50; // Maximum timezone identifier length
+const MAX_REQUEST_BODY_SIZE = 1024 * 1024; // 1MB maximum request size
+const SLEEP_LOOKBACK_DAYS = 7; // Days to look back for sleep data
+const MOOD_LOOKBACK_DAYS = 3; // Days to look back for mood data
+const COMPLETION_LOOKBACK_DAYS = 7; // Days for completion rate calculation
+const COMPLETION_VOLUME_DIVISOR = 30; // Divisor for volume score calculation (total quests / 30)
+
+// SECURITY: Origin validation
+function validateOrigin(req: Request): boolean {
+  const allowedOrigin = Deno.env.get("ALLOWED_ORIGIN") || "";
+  const origin = req.headers.get("Origin");
+  
+  // Allow requests without Origin header (direct API calls)
+  if (!origin) return true;
+  
+  // In development (localhost), allow
+  if (!Deno.env.get("DENO_REGION") && origin.startsWith("http://localhost")) {
+    return true;
+  }
+  
+  // In production, require exact origin match
+  return origin === allowedOrigin;
+}
+
+// =====================================================
+// HELPER FUNCTIONS
+// =====================================================
+
+/**
+ * Validate request and authenticate user
+ * @returns User ID and validated request data
+ * @throws Error if validation fails
+ */
+async function validateAndAuthenticate(
+  req: Request,
+  supabaseAuth: SupabaseClient,
+  supabaseAdmin: SupabaseClient,
+): Promise<{ userId: string; localDate: string; timezone: string }> {
+  // Validate Content-Type
+  const contentType = req.headers.get("Content-Type");
+  if (!contentType?.includes("application/json")) {
+    throw new Error("Content-Type must be application/json");
+  }
+
+  // Validate request body size
+  const contentLength = req.headers.get("Content-Length");
+  if (contentLength && parseInt(contentLength, 10) > MAX_REQUEST_BODY_SIZE) {
+    throw new Error(
+      `Request body too large (max ${MAX_REQUEST_BODY_SIZE} bytes)`,
+    );
+  }
+
+  // Authenticate user
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) {
+    throw new Error("Missing Authorization header");
+  }
+
+  const token = authHeader.replace("Bearer ", "");
+  const {
+    data: { user },
+    error: authError,
+  } = await supabaseAuth.auth.getUser(token);
+
+  if (authError || !user) {
+    throw new Error("Authentication failed");
+  }
+
+  const userId = user.id;
+
+  // Rate limiting
+  await checkRateLimit(supabaseAdmin, userId);
+
+  // Parse and validate request
+  const requestData: CalculateCapacityRequest = await req.json();
+  const { localDate, timezone } = requestData;
+
+  // Validate localDate format (YYYY-MM-DD)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(localDate)) {
+    throw new Error("Invalid localDate format (expected YYYY-MM-DD)");
+  }
+
+  // Validate timezone
+  if (!timezone || timezone.length > MAX_TIMEZONE_LENGTH) {
+    throw new Error("Invalid timezone");
+  }
+
+  // SECURITY: Validate IANA timezone format
+  // Valid formats: Area/Location (e.g., America/New_York, Europe/London)
+  // or Area/Location/City (e.g., America/Argentina/Buenos_Aires)
+  // or special cases: UTC, GMT
+  const timezoneRegex = /^([A-Z][a-z]+\/[A-Z][a-z_]+(?:\/[A-Z][a-z_]+)?|UTC|GMT)$/;
+  if (!timezoneRegex.test(timezone)) {
+    throw new Error("Invalid timezone format (expected IANA identifier like America/New_York)");
+  }
+
+  return { userId, localDate, timezone };
+}
+
+/**
+ * Apply manual capacity override
+ * Overrides calculated capacity with user-specified level
+ */
+async function handleOverride(
+  supabaseAdmin: SupabaseClient,
+  userId: string,
+  localDate: string,
+  timezone: string,
+  override: CapacityOverride,
+  baseResponse: CalculateCapacityResponse,
+): Promise<CalculateCapacityResponse> {
+  // Calculate override score based on level
+  const overrideScore = getOverrideScore(override.override_level);
+  const level = scoreToLevel(overrideScore);
+
+  // Use neutral component scores for overrides
+  const components: CalculateCapacityResponse["components"] = {
+    sleep: {
+      score: 50,
+      weight: WEIGHTS.sleep,
+      contribution: 50 * WEIGHTS.sleep,
+    },
+    mood: {
+      score: 50,
+      weight: WEIGHTS.mood,
+      contribution: 50 * WEIGHTS.mood,
+    },
+    streak: {
+      score: 50,
+      weight: WEIGHTS.streak,
+      contribution: 50 * WEIGHTS.streak,
+    },
+    completion: {
+      score: 50,
+      weight: WEIGHTS.completion,
+      contribution: 50 * WEIGHTS.completion,
+    },
+  };
+
+  const response: CalculateCapacityResponse = {
+    score: overrideScore,
+    level,
+    components,
+    local_date: localDate,
+    calculated_at: new Date().toISOString(),
+    expires_at: getNextMidnight(timezone).toISOString(),
+    has_override: true,
+  };
+
+  // Persist override capacity
+  await persistCapacity(
+    supabaseAdmin,
+    userId,
+    overrideScore,
+    level,
+    components,
+    localDate,
+    timezone,
+    true,
+  );
+
+  return response;
+}
+
+/**
+ * Check for valid cached capacity
+ * @returns Cached response if valid, null if needs recalculation
+ */
+async function checkCachedCapacity(
+  supabaseAuth: SupabaseClient,
+  userId: string,
+  localDate: string,
+): Promise<CalculateCapacityResponse | null> {
+  const { data: cachedCapacity, error: cacheError } = await withQueryTimeout(
+    () =>
+      supabaseAuth
+        .from("user_capacity")
+        .select("score, level, components, local_date, calculated_at, expires_at, has_override")
+        .eq("user_id", userId)
+        .eq("local_date", localDate)
+        .maybeSingle(),
+  );
+
+  if (cacheError) {
+    console.error("Cache lookup failed", { code: cacheError.code });
+    return null;
+  }
+
+  // Return cached if valid and not stale
+  if (cachedCapacity && new Date(cachedCapacity.expires_at) > new Date()) {
+    return {
+      score: cachedCapacity.score,
+      level: cachedCapacity.level,
+      components: cachedCapacity.components,
+      local_date: cachedCapacity.local_date,
+      calculated_at: cachedCapacity.calculated_at,
+      expires_at: cachedCapacity.expires_at,
+      has_override: cachedCapacity.has_override,
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Transform CapacityResult to API response format
+ */
+function buildCapacityResponse(
+  result: CapacityResult,
+  localDate: string,
+  timezone: string,
+): CalculateCapacityResponse {
+  const components: CalculateCapacityResponse["components"] = {
+    sleep: {
+      score: result.components.sleep,
+      weight: WEIGHTS.sleep,
+      contribution: result.components.sleep * WEIGHTS.sleep,
+    },
+    mood: {
+      score: result.components.mood,
+      weight: WEIGHTS.mood,
+      contribution: result.components.mood * WEIGHTS.mood,
+    },
+    streak: {
+      score: result.components.streak,
+      weight: WEIGHTS.streak,
+      contribution: result.components.streak * WEIGHTS.streak,
+    },
+    completion: {
+      score: result.components.completion,
+      weight: WEIGHTS.completion,
+      contribution: result.components.completion * WEIGHTS.completion,
+    },
+  };
+
+  const calculatedAt = new Date().toISOString();
+  const expiresAt = getNextMidnight(timezone).toISOString();
+
+  return {
+    score: result.score,
+    level: result.level,
+    components,
+    local_date: localDate,
+    calculated_at: calculatedAt,
+    expires_at: expiresAt,
+    has_override: false,
+  };
+}
+
+/**
+ * Get or calculate capacity score
+ * Checks cache first, calculates if needed
+ */
+async function getOrCalculateCapacity(
+  supabaseAuth: SupabaseClient,
+  supabaseAdmin: SupabaseClient,
+  userId: string,
+  localDate: string,
+  timezone: string,
+): Promise<CalculateCapacityResponse> {
+  // Check cache first
+  const cached = await checkCachedCapacity(supabaseAuth, userId, localDate);
+  if (cached) {
+    return cached;
+  }
+
+  // Calculate new capacity
+  const { start: sleepStart, end: sleepEnd } = getDateRangeInUTC(
+    localDate,
+    timezone,
+    SLEEP_LOOKBACK_DAYS,
+  );
+  const { start: moodStart, end: moodEnd } = getDateRangeInUTC(
+    localDate,
+    timezone,
+    MOOD_LOOKBACK_DAYS,
+  );
+
+  // OPTIMIZATION: Fetch completion data first to get today's completion status
+  // This avoids duplicate quest query in fetchStreakData
+  const completionData = await fetchCompletionData(supabaseAdmin, userId, localDate, timezone);
+  
+  // Fetch remaining data in parallel
+  const [sleepData, moodData, streakData, previousCapacity] =
+    await Promise.all([
+      fetchSleepData(supabaseAdmin, userId, sleepStart, sleepEnd),
+      fetchMoodData(supabaseAdmin, userId, moodStart, moodEnd, timezone),
+      fetchStreakData(supabaseAdmin, userId, completionData.completedToday),
+      fetchPreviousCapacity(supabaseAdmin, userId, localDate),
+    ]);
+
+  // Calculate capacity
+  const result = calculateCapacity({
+    sleep: sleepData,
+    mood: moodData,
+    streak: streakData,
+    completion: completionData,
+    previous: previousCapacity,
+  });
+
+  // Transform to response format
+  const response = buildCapacityResponse(result, localDate, timezone);
+
+  // Persist to cache (non-blocking)
+  await persistCapacity(
+    supabaseAdmin,
+    userId,
+    result.score,
+    result.level,
+    response.components,
+    localDate,
+    timezone,
+    false,
+  );
+
+  return response;
+}
+
+// =====================================================
+// MAIN HANDLER
+// =====================================================
 
 serve(async (req) => {
-  // Handle CORS preflight
+  // CORS preflight
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  // SECURITY: Validate origin
+  if (!validateOrigin(req)) {
+    return new Response(JSON.stringify({ error: "Forbidden origin" }), {
+      status: 403,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   try {
-    // Initialize Supabase client with service role for DB writes
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-    // Authenticate user from JWT
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Missing authorization header" }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser(token);
-
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized", message: authError?.message }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    const userId = user.id;
-
-    // Parse and validate request
-    const requestData: CalculateCapacityRequest = await req.json();
-    const { localDate, timezone } = requestData;
-
-    // INPUT VALIDATION: Prevent injection and bad data
-    if (!localDate || !/^\d{4}-\d{2}-\d{2}$/.test(localDate)) {
-      return new Response(
-        JSON.stringify({ error: "Invalid localDate format. Expected YYYY-MM-DD" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    if (!timezone || typeof timezone !== "string" || timezone.length > 50) {
-      return new Response(
-        JSON.stringify({ error: "Invalid timezone parameter" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    // Check for cached capacity (valid for today)
-    const { data: existingCapacity } = await supabase
-      .from("user_capacity")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("local_date", localDate)
-      .single();
-
-    if (
-      existingCapacity &&
-      new Date(existingCapacity.expires_at) > new Date()
-    ) {
-      // Return cached result
-      const response: CalculateCapacityResponse = {
-        score: existingCapacity.score,
-        level: existingCapacity.level,
-        components: existingCapacity.components,
-        calculated_at: existingCapacity.calculated_at,
-        expires_at: existingCapacity.expires_at,
-        has_override: existingCapacity.has_override,
-      };
-      return new Response(JSON.stringify(response), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Check for active override
-    const { data: activeOverride } = await supabase
-      .from("capacity_overrides")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("is_active", true)
-      .gt("expires_at", new Date().toISOString())
-      .single();
-
-    if (activeOverride) {
-      // User has manual override active - use override score
-      const overrideScore = getOverrideScore(activeOverride.override_level);
-      const level = scoreToLevel(overrideScore);
-
-      const result = await persistCapacity(
-        supabase,
-        userId,
-        overrideScore,
-        level,
-        {
-          sleep: { score: 50, weight: 0.30, contribution: 15.0 },
-          mood: { score: 50, weight: 0.35, contribution: 17.5 },
-          streak: { score: 50, weight: 0.20, contribution: 10.0 },
-          completion: { score: 50, weight: 0.15, contribution: 7.5 },
-        },
-        localDate,
-        timezone,
-        true, // has_override
-      );
-
-      return new Response(JSON.stringify(result), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Fetch data in parallel for performance
-    const [sleepData, moodData, streakData, completionData, previousCapacity] =
-      await Promise.all([
-        fetchSleepData(supabase, userId),
-        fetchMoodData(supabase, userId),
-        fetchStreakData(supabase, userId),
-        fetchCompletionData(supabase, userId),
-        fetchPreviousCapacity(supabase, userId, localDate),
-      ]);
-
-    // Calculate component scores
-    const sleepScore = calculateSleepScore(sleepData ? [sleepData] : []);
-    const moodScore = calculateMoodScore(moodData ? [moodData] : []);
-    const streakScore = calculateStreakScore(streakData);
-    const completionScore = calculateCompletionScore(
-      completionData.recentCompletionRate,
-      completionData.questsCompleted,
+    // Initialize Supabase clients
+    const supabaseAuth = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { auth: { persistSession: false } },
     );
 
-    // Calculate composite score
-    const rawScore = calculateCompositeScore({
-      sleep: sleepScore,
-      mood: moodScore,
-      streak: streakScore,
-      completion: completionScore,
-    });
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      { auth: { persistSession: false } },
+    );
 
-    // Apply smoothing
-    const smoothedScore = smoothCapacity(rawScore, previousCapacity);
-    const level = scoreToLevel(smoothedScore);
+    // Validate and authenticate
+    const { userId, localDate, timezone } = await validateAndAuthenticate(
+      req,
+      supabaseAuth,
+      supabaseAdmin,
+    );
 
-    // Persist result
-    const response = await persistCapacity(
-      supabase,
+    // Get or calculate capacity
+    let response = await getOrCalculateCapacity(
+      supabaseAuth,
+      supabaseAdmin,
       userId,
-      smoothedScore,
-      level,
-      {
-        sleep: {
-          score: sleepScore,
-          weight: 0.30,
-          contribution: sleepScore * 0.30,
-        },
-        mood: {
-          score: moodScore,
-          weight: 0.35,
-          contribution: moodScore * 0.35,
-        },
-        streak: {
-          score: streakScore,
-          weight: 0.20,
-          contribution: streakScore * 0.20,
-        },
-        completion: {
-          score: completionScore,
-          weight: 0.15,
-          contribution: completionScore * 0.15,
-        },
-      },
       localDate,
       timezone,
-      false, // has_override
     );
 
+    // Check for manual override
+    const override = await fetchOverride(supabaseAdmin, userId);
+    if (override) {
+      response = await handleOverride(
+        supabaseAdmin,
+        userId,
+        localDate,
+        timezone,
+        override,
+        response,
+      );
+    }
+
     return new Response(JSON.stringify(response), {
+      status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
@@ -246,217 +464,438 @@ serve(async (req) => {
 
 // Helper functions
 
+/**
+ * Get date range boundaries in UTC for a given local date and timezone
+ * BUG FIX: Timezone-aware date queries
+ */
+function getDateRangeInUTC(
+  localDate: string,
+  timezone: string,
+  daysBack: number,
+): { start: string; end: string } {
+  try {
+    // Parse local date (YYYY-MM-DD)
+    const [year, month, day] = localDate.split("-").map(Number);
+    const localDateObj = new Date(year, month - 1, day, 0, 0, 0);
+
+    // Calculate start date using date-fns (safe arithmetic)
+    const startLocalDate = addDays(localDateObj, -daysBack);
+
+    // Convert to UTC using timezone
+    const startUtc = zonedTimeToUtc(startLocalDate, timezone);
+    const endUtc = zonedTimeToUtc(localDateObj, timezone);
+
+    // Add 1 day to end to include full day
+    const endUtcPlusOne = addDays(endUtc, 1);
+
+    return {
+      start: startUtc.toISOString(),
+      end: endUtcPlusOne.toISOString(),
+    };
+  } catch (error) {
+    console.error("Date range calculation failed, using UTC fallback", {
+      error: (error as any).message,
+    });
+
+    // Fallback: use UTC dates
+    const now = new Date();
+    const endUtc = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const startUtc = new Date(endUtc);
+    startUtc.setDate(startUtc.getDate() - daysBack);
+
+    return {
+      start: startUtc.toISOString(),
+      end: endUtc.toISOString(),
+    };
+  }
+}
+
+/**
+ * Convert local date string to UTC using proper timezone library
+ * FIXED: Replaced broken manual conversion with date-fns-tz
+ * @param localDateString Date string in format "YYYY-MM-DDTHH:mm:ss"
+ * @param timezone IANA timezone identifier (e.g., "America/New_York")
+ * @returns UTC Date object
+ */
+function localDateToUTC(localDateString: string, timezone: string): Date {
+  try {
+    // Use date-fns-tz for proper timezone conversion
+    return zonedTimeToUtc(localDateString, timezone);
+  } catch (error) {
+    // SECURITY: Don't log timezone (PII - reveals location)
+    console.warn("Timezone conversion failed, using UTC fallback");
+    return new Date(localDateString + "Z");
+  }
+}
+
 async function fetchSleepData(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   userId: string,
+  startDate: Date,
+  endDate: Date,
 ): Promise<SleepData | null> {
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  try {
+    const { data, error } = await withQueryTimeout(
+      () =>
+        supabase
+          .from("sleep_logs")
+          .select("logged_at, fell_asleep_at, woke_up_at, quality")
+          .eq("user_id", userId)
+          .gte("logged_at", startDate.toISOString())
+          .lte("logged_at", endDate.toISOString())
+          .order("logged_at", { ascending: false }),
+    );
 
-  const { data: sleepLogs, error } = await supabase
-    .from("sleep_logs")
-    .select("fell_asleep_at, woke_up_at, quality_score, logged_at")
-    .eq("user_id", userId)
-    .gte("logged_at", sevenDaysAgo.toISOString())
-    .order("logged_at", { ascending: false });
+    if (error) {
+      console.error("Error fetching sleep data", {
+        code: error.code,
+      });
+      return null;
+    }
 
-  if (error || !sleepLogs || sleepLogs.length === 0) {
+    // Calculate metrics
+    // BUG FIX: Handle midnight crossing and invalid data
+    const sleepHours = (data as any[]).map((log: any) => {
+      const asleep = new Date(log.fell_asleep_at);
+      const awake = new Date(log.woke_up_at);
+      let hours = (awake.getTime() - asleep.getTime()) / (1000 * 60 * 60);
+
+      // If negative (bad data or timezone issue), assume midnight crossing
+      if (hours < 0) {
+        hours += 24;
+      }
+
+      // Validate: sleep hours should be reasonable (0-24 hours)
+      // Re-validate after midnight correction to catch still-negative values
+      if (hours < 0 || hours > 24) {
+        console.warn("Invalid sleep hours detected, clamping", {
+          original: hours,
+        });
+        hours = Math.max(0, Math.min(hours, 24));
+      }
+
+      return hours;
+    });
+
+    // FIXED: Add division by zero protection
+    const averageHours =
+      sleepHours.length > 0
+        ? sleepHours.reduce((a, b) => a + b, 0) / sleepHours.length
+        : 0;
+    const lastNightHours = (data as any[])[0]?.hours ?? null;
+    const quality = (data as any[])[0]?.quality ?? null;
+
+    // Calculate sleep deficit (cumulative hours below 7)
+    const deficit7d = sleepHours.reduce((deficit, hours) => {
+      return deficit + Math.max(0, 7 - hours);
+    }, 0);
+
+    return {
+      averageHours,
+      lastNightHours,
+      quality,
+      deficit7d,
+    };
+  } catch (error) {
+    console.error("Sleep data query failed", {
+      error: (error as any).message,
+    });
     return null;
   }
-
-  // Calculate metrics
-  const sleepHours = sleepLogs.map((log: SleepLog) => {
-    const asleep = new Date(log.fell_asleep_at);
-    const awake = new Date(log.woke_up_at);
-    return (awake.getTime() - asleep.getTime()) / (1000 * 60 * 60);
-  });
-
-  const averageHours =
-    sleepHours.reduce((a, b) => a + b, 0) / sleepHours.length;
-  const lastNightHours = sleepLogs[0] ? sleepHours[0] : null;
-  const quality = sleepLogs[0]?.quality_score ?? null;
-
-  // Calculate sleep deficit (cumulative hours below 7)
-  const deficit7d = sleepHours.reduce((deficit, hours) => {
-    return deficit + Math.max(0, 7 - hours);
-  }, 0);
-
-  return {
-    averageHours,
-    lastNightHours,
-    quality,
-    deficit7d,
-  };
 }
 
 async function fetchMoodData(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   userId: string,
+  startDate: Date,
+  endDate: Date,
+  timezone: string,
 ): Promise<MoodData | null> {
-  const threeDaysAgo = new Date();
-  threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+  // BUG FIX: Use timezone-aware date range (last N days in user's timezone)
+  const { start, end } = getDateRangeInUTC(
+    startDate.toISOString().split("T")[0],
+    timezone,
+    MOOD_LOOKBACK_DAYS,
+  );
 
-  const { data: moods, error } = await supabase
-    .from("moods")
-    .select("mood_score, logged_at")
-    .eq("user_id", userId)
-    .gte("logged_at", threeDaysAgo.toISOString())
-    .order("logged_at", { ascending: false });
+  try {
+    const { data, error } = await withQueryTimeout(
+      () =>
+        supabase
+          .from("moods")
+          .select("logged_at, mood_score")
+          .eq("user_id", userId)
+          .gte("logged_at", start)
+          .lte("logged_at", end)
+          .order("logged_at", { ascending: false }),
+    );
 
-  if (error || !moods || moods.length === 0) {
+    if (error) {
+      console.error("Error fetching mood data", {
+        code: error.code,
+      });
+      return null;
+    }
+
+    if (!data || data.length === 0) {
+      return null;
+    }
+
+    const moodScores = (data as any[]).map((m: any) => m.mood_score);
+    
+    // FIX: Prevent division by zero
+    const averageMood3d = moodScores.length > 0
+      ? moodScores.reduce((a, b) => a + b, 0) / moodScores.length
+      : 0;
+    
+    const todayMood = (data as any[])[0]?.mood_score ?? null;
+
+    // Calculate trend (simple delta)
+    let trend3d = 0;
+    if (moodScores.length >= 3) {
+      const latest = moodScores[0];
+      const oldest = moodScores[moodScores.length - 1];
+      trend3d = (latest - oldest) / 2;
+    }
+
+    return {
+      todayMood,
+      averageMood3d,
+      trend3d,
+    };
+  } catch (error) {
+    console.error("Mood data query failed", {
+      error: (error as any).message,
+    });
     return null;
   }
-
-  const moodScores = moods.map((m: Mood) => m.mood_score);
-  const averageMood3d =
-    moodScores.reduce((a, b) => a + b, 0) / moodScores.length;
-  const todayMood = moods[0]?.mood_score ?? null;
-
-  // Calculate trend (simple delta)
-  let trend3d = 0;
-  if (moodScores.length >= 3) {
-    const latest = moodScores[0];
-    const oldest = moodScores[moodScores.length - 1];
-    trend3d = (latest - oldest) / 2;
-  }
-
-  return {
-    todayMood,
-    averageMood3d,
-    trend3d,
-  };
 }
 
 async function fetchStreakData(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   userId: string,
-): Promise<{ current_streak: number; longest_streak: number; streakDays: number; completedToday: boolean }> {
-  // CORRECTNESS FIX: Query profiles.current_streak_days instead of user_settings
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("current_streak_days, longest_streak")
-    .eq("id", userId)
-    .single();
+  completedToday: boolean,
+): Promise<StreakData> {
+  try {
+    // Query: Get current/longest streaks
+    const { data: streakData, error: streakError } = await withQueryTimeout(
+      () =>
+        supabase
+          .from("profiles")
+          .select("current_streak, longest_streak")
+          .eq("id", userId)
+          .single(),
+    );
 
-  if (!profile) {
-    return { current_streak: 0, longest_streak: 0, streakDays: 0, completedToday: false };
+    if (streakError) {
+      console.error("Error fetching streak data", {
+        code: streakError.code,
+      });
+    }
+
+    // Build and return streak data (no quest query needed - use passed value)
+    const currentStreak = streakData?.current_streak ?? 0;
+    const longestStreak = streakData?.longest_streak ?? 0;
+
+    return {
+      streakDays: currentStreak,
+      completedToday,
+      current_streak: currentStreak,
+      longest_streak: longestStreak,
+    };
+  } catch (error) {
+    console.error("Streak data query failed", {
+      error: (error as any).message,
+    });
+    return {
+      streakDays: 0,
+      completedToday: false,
+      current_streak: 0,
+      longest_streak: 0,
+    };
   }
-
-  // Check if quest completed today (query quests table)
-  const today = new Date().toISOString().split('T')[0];
-  const { data: todayQuest } = await supabase
-    .from("quests")
-    .select("completed")
-    .eq("user_id", userId)
-    .eq("assigned_date", today)
-    .single();
-
-  return {
-    current_streak: profile.current_streak_days ?? 0,
-    longest_streak: profile.longest_streak ?? 0,
-    streakDays: profile.current_streak_days ?? 0,
-    completedToday: todayQuest?.completed ?? false,
-  };
 }
 
 async function fetchCompletionData(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   userId: string,
-): Promise<CompletionData> {
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  localDate: string,
+  timezone: string,
+): Promise<{ recentCompletionRate: number; questsCompleted: number; completedToday: boolean }> {
+  try {
+    // Query 1: Get recent quest completion rate (last 7 days)
+    const recentDate = new Date();
+    recentDate.setDate(recentDate.getDate() - COMPLETION_LOOKBACK_DAYS);
 
-  // Get recent quests (last 7 days)
-  const { data: recentQuests } = await supabase
-    .from("quests")
-    .select("completed")
-    .eq("user_id", userId)
-    .gte("assigned_date", sevenDaysAgo.toISOString().split('T')[0])
-    .order("assigned_date", { ascending: false });
+    const { data: recentQuests, error: recentError } = await withQueryTimeout(
+      () =>
+        supabase
+          .from("quests")
+          .select("completed, assigned_date")
+          .eq("user_id", userId)
+          .gte("assigned_date", recentDate.toISOString().split("T")[0])
+          .order("assigned_date", { ascending: false }),
+    );
 
-  // Get total completed quests
-  const { count: totalCompleted } = await supabase
-    .from("quests")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .eq("completed", true);
+    if (recentError) {
+      console.error("Error fetching recent quests", {
+        code: recentError.code,
+      });
+    }
 
-  const completedCount = recentQuests?.filter(q => q.completed).length ?? 0;
-  const totalCount = recentQuests?.length ?? 1; // Avoid division by zero
+    // Query 2: Get total completed quests
+    const { count: totalCompleted, error: countError } = await withQueryTimeout(
+      () =>
+        supabase
+          .from("quests")
+          .select("*", { count: "exact", head: true })
+          .eq("user_id", userId)
+          .eq("completed", true),
+    );
 
-  return {
-    recentCompletionRate: totalCount > 0 ? completedCount / totalCount : 0,
-    questsCompleted: totalCompleted ?? 0,
-  };
+    if (countError) {
+      console.error("Error fetching total completed count", {
+        code: countError.code,
+      });
+    }
+
+    // Calculate completion metrics
+    const completedCount = recentQuests?.filter((q: any) => q.completed).length ?? 0;
+    const totalCount = recentQuests?.length ?? 1; // Avoid division by zero
+    const recentCompletionRate = totalCount > 0 ? completedCount / totalCount : 0;
+    const questsCompleted = totalCompleted ?? 0;
+    
+    // OPTIMIZATION: Extract today's completion from recentQuests (avoids duplicate query)
+    const todayQuest = recentQuests?.find((q: any) => q.assigned_date === localDate);
+    const completedToday = todayQuest?.completed ?? false;
+
+    return {
+      recentCompletionRate,
+      questsCompleted,
+      completedToday,
+    };
+  } catch (error) {
+    console.error("Completion data query failed", {
+      error: (error as any).message,
+    });
+    return {
+      recentCompletionRate: 0,
+      questsCompleted: 0,
+      completedToday: false,
+    };
+  }
 }
 
 async function fetchPreviousCapacity(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   userId: string,
-  currentDate: string,
+  localDate: string,
 ): Promise<number | null> {
-  const { data } = await supabase
-    .from("user_capacity")
-    .select("score")
-    .eq("user_id", userId)
-    .lt("local_date", currentDate)
-    .order("local_date", { ascending: false })
-    .limit(1)
-    .single();
+  try {
+    const yesterday = new Date(localDate);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayDate = yesterday.toISOString().split("T")[0];
 
-  return data?.score ?? null;
+    const { data, error } = await withQueryTimeout(
+      () =>
+        supabase
+          .from("user_capacity")
+          .select("score")
+          .eq("user_id", userId)
+          .eq("local_date", yesterdayDate)
+          .maybeSingle(),
+    );
+
+    if (error) {
+      console.error("Error fetching previous capacity", {
+        code: error.code,
+      });
+      return null;
+    }
+
+    return data?.score ?? null;
+  } catch (error) {
+    console.error("Previous capacity query failed", {
+      error: (error as any).message,
+    });
+    return null;
+  }
+}
+
+async function fetchOverride(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<CapacityOverride | null> {
+  try {
+    const now = new Date().toISOString();
+
+    const { data, error } = await withQueryTimeout(
+      () =>
+        supabase
+          .from("capacity_overrides")
+          .select("*")
+          .eq("user_id", userId)
+          .eq("is_active", true)
+          .gt("expires_at", now)
+          .maybeSingle(),
+    );
+
+    if (error) {
+      console.error("Error fetching override", {
+        code: error.code,
+      });
+      return null;
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Override query failed", {
+      error: (error as any).message,
+    });
+    return null;
+  }
 }
 
 async function persistCapacity(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   userId: string,
   score: number,
-  level: string,
-  components: CalculateCapacityResponse["components"],
+  level: CapacityLevel,
+  components: CapacityComponents,
   localDate: string,
   timezone: string,
   hasOverride: boolean,
-): Promise<CalculateCapacityResponse> {
-  const now = new Date();
+): Promise<void> {
+  try {
+    const calculatedAt = new Date().toISOString();
+    const expiresAt = getNextMidnight(timezone).toISOString();
 
-  // Calculate expiration (midnight in user's timezone)
-  const expiresAt = getNextMidnight(timezone);
+    const { error } = await withQueryTimeout(
+      () =>
+        supabase.from("user_capacity").upsert({
+          user_id: userId,
+          score,
+          level,
+          components,
+          local_date: localDate,
+          calculated_at: calculatedAt,
+          expires_at: expiresAt,
+          has_override: hasOverride,
+        }),
+    );
 
-  const capacityRow: Partial<UserCapacityRow> = {
-    user_id: userId,
-    score,
-    level,
-    components,
-    local_date: localDate,
-    calculated_at: now.toISOString(),
-    expires_at: expiresAt.toISOString(),
-    has_override: hasOverride,
-    previous_score: null,
-  };
-
-  // Upsert (insert or update)
-  const { error } = await supabase
-    .from("user_capacity")
-    .upsert(capacityRow, { onConflict: "user_id,local_date" });
-
-  if (error) {
-    // SECURITY FIX: Sanitized logging
-    console.error("Error persisting capacity:", {
-      message: (error as any).message,
-      code: (error as any).code,
-      // Omit details that might contain PII
+    if (error) {
+      console.error("Error persisting capacity", {
+        code: error.code,
+      });
+      // Continue without throwing - cache write failure is non-fatal
+    }
+  } catch (error) {
+    console.error("Persist capacity query failed", {
+      error: (error as any).message,
     });
-    throw error;
+    // Continue without throwing
   }
-
-  return {
-    score,
-    level: level as "low" | "moderate" | "high",
-    components,
-    calculated_at: now.toISOString(),
-    expires_at: expiresAt.toISOString(),
-    has_override: hasOverride,
-  };
 }
 
 function getOverrideScore(overrideLevel: string): number {
@@ -473,63 +912,59 @@ function getOverrideScore(overrideLevel: string): number {
 }
 
 function getNextMidnight(timezone: string): Date {
-  // BUG FIX: Properly calculate midnight in user's timezone using Temporal API polyfill
-  // For now, use a simple offset-based approach
-  
   try {
-    // Parse timezone offset (e.g., "America/New_York" or "UTC-5")
     const now = new Date();
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    });
-    
-    const parts = formatter.formatToParts(now);
-    const dateParts: Record<string, string> = {};
-    parts.forEach(part => {
-      dateParts[part.type] = part.value;
-    });
-    
-    // Create date for tomorrow at midnight in the target timezone
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    
-    const tomorrowFormatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    });
-    
-    const tomorrowParts = tomorrowFormatter.formatToParts(tomorrow);
-    const tomorrowDate: Record<string, string> = {};
-    tomorrowParts.forEach(part => {
-      tomorrowDate[part.type] = part.value;
-    });
-    
-    // Construct midnight timestamp in target timezone
-    const midnightString = `${tomorrowDate.year}-${tomorrowDate.month}-${tomorrowDate.day}T00:00:00`;
-    const midnightInTz = new Date(midnightString);
-    
-    // Calculate offset between UTC and target timezone
-    const utcDate = new Date(midnightString + 'Z');
-    const tzDate = new Date(formatter.format(new Date(midnightString)));
-    const offset = utcDate.getTime() - tzDate.getTime();
-    
-    // Return midnight in target timezone as UTC Date object
-    return new Date(midnightInTz.getTime() - offset);
+    const zonedNow = utcToZonedTime(now, timezone);
+    const zonedTomorrow = startOfDay(addDays(zonedNow, 1));
+    return zonedTimeToUtc(zonedTomorrow, timezone);
   } catch (error) {
-    // Fallback: Use UTC midnight if timezone parsing fails
-    console.error("Timezone calculation failed, using UTC:", { timezone, error: (error as any).message });
+    console.error("Timezone calculation failed, using UTC fallback", {
+      error: (error as any).message,
+    });
     const tomorrow = new Date();
     tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
     tomorrow.setUTCHours(0, 0, 0, 0);
     return tomorrow;
+  }
+}
+
+async function checkRateLimit(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<void> {
+  const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MS);
+
+  try {
+    // RACE CONDITION FIX: Use atomic RPC for rate limit check
+    const { data: result, error } = await withQueryTimeout(
+      () =>
+        supabase.rpc("check_capacity_rate_limit", {
+          p_user_id: userId,
+          p_window_ms: RATE_LIMIT_WINDOW_MS,
+          p_max_requests: RATE_LIMIT_MAX_REQUESTS,
+        }),
+    );
+
+    if (error) {
+      console.error("Rate limit check failed", {
+        code: error.code,
+      });
+      throw new Error("Rate limit check failed");
+    }
+
+    // RPC returns {allowed: boolean, resetAt: timestamp, remaining: int}
+    if (!result.allowed) {
+      throw new Error(
+        `Rate limit exceeded: ${RATE_LIMIT_MAX_REQUESTS} requests per hour`,
+      );
+    }
+  } catch (error) {
+    if ((error as any).message?.includes("Rate limit exceeded")) {
+      throw error;
+    }
+    console.error("Rate limit query failed", {
+      error: (error as any).message,
+    });
+    throw new Error("Rate limit check failed");
   }
 }

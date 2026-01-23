@@ -12,7 +12,9 @@ export interface CalculateCapacityResponse {
     sleep: ComponentScore;
     mood: ComponentScore;
     streak: ComponentScore;
+    completion: ComponentScore;
   };
+  local_date: string; // YYYY-MM-DD
   calculated_at: string; // ISO 8601
   expires_at: string; // ISO 8601
   has_override: boolean;
@@ -28,19 +30,18 @@ export interface CapacityInput {
   sleep: SleepData | null;
   mood: MoodData | null;
   streak: StreakData;
+  completion: CompletionData;
   previous: number | null; // Previous capacity score for smoothing
 }
 
 export interface SleepData {
-  quality_score: number | null;
   lastNightHours: number | null;
   averageHours: number;
-  quality: number | null;
-  deficit7d: number;
+  quality: number | null;  // 0-100 sleep quality score
+  deficit7d: number;        // Accumulated sleep deficit in hours
 }
 
 export interface MoodData {
-  valence: number | null;
   todayMood: number | null;
   averageMood3d: number;
   trend3d: number;
@@ -55,7 +56,8 @@ export interface StreakData {
 
 export interface CompletionData {
   recentCompletionRate: number; // 0-1
-  questsCompleted: number;
+  questsCompleted: number; // Total completed quests
+  completedToday: boolean; // Whether today's quest is completed
 }
 
 export interface CapacityComponents {
@@ -72,6 +74,7 @@ export interface CapacityResult {
     sleep: number;
     mood: number;
     streak: number;
+    completion: number;
   };
 }
 
@@ -97,6 +100,9 @@ export interface CapacityOverrideRow {
   expires_at: string;
   is_active: boolean;
 }
+
+// Type alias for convenience
+export type CapacityOverride = CapacityOverrideRow;
 
 export interface Mood {
   id: string;

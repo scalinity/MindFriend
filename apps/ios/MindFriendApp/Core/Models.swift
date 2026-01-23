@@ -3807,7 +3807,7 @@ enum ExerciseDifficulty: String, Codable, CaseIterable {
 }
 
 /// A creative exercise/prompt
-struct CreativeExercise: Identifiable, Codable, Equatable {
+struct CreativeExercise: Codable, Identifiable, Equatable {
     let id: String
     let title: String
     let description: String
@@ -3934,32 +3934,6 @@ struct GenerateArtResponse: Codable {
     let style: String?
     let error: String?
     let quotaExceeded: Bool?
-}
-
-/// Voice journal analysis request
-struct AnalyzeVoiceRequest: Codable {
-    let creativeWorkId: String
-    let audioUrl: String?
-    let durationSeconds: Int
-}
-
-/// Voice journal analysis response
-struct AnalyzeVoiceResponse: Codable {
-    let success: Bool
-    let creativeWorkId: String?
-    let analysis: VoiceAnalysisResult?
-    let error: String?
-    let quotaExceeded: Bool?
-}
-
-struct VoiceAnalysisResult: Codable {
-    let sentiment: Double
-    let emotions: EmotionScores
-    let toneAnalysis: ToneAnalysis
-    let keyThemes: [String]
-    let keyQuotes: [String]
-    let summary: String
-    let reflectionPrompts: [String]
 }
 
 // MARK: - Medications
@@ -4554,956 +4528,6 @@ extension Date {
     }
 }
 
-// MARK: - Quest Arc Models
-// (Moved to separate file: QuestArcModels.swift)
-
-// MARK: - Safety Plan Models
-
-/// Represents a user's personal safety plan
-struct SafetyPlan: Codable, Equatable {
-    let id: UUID
-    let userId: UUID
-    let version: Int
-    let payload: SafetyPlanPayload
-    let allowAiReference: Bool
-    let createdAt: Date
-    let updatedAt: Date
-
-    enum CodingKeys: String, CodingKey {
-        case id, version, payload
-        case userId = "user_id"
-        case allowAiReference = "allow_ai_reference"
-        case createdAt = "created_at"
-        case updatedAt = "updated_at"
-    }
-}
-
-/// The content of a safety plan (JSONB payload)
-struct SafetyPlanPayload: Codable, Equatable {
-    var warningSigns: [SafetyPlanItem]
-    var coping: [CopingStrategy]
-    var contacts: [TrustedContact]
-    var resources: [ProfessionalResource]
-    var environmentSteps: [SafetyPlanItem]
-    var anchors: [SafetyPlanItem]
-
-    init(
-        warningSigns: [SafetyPlanItem] = [],
-        coping: [CopingStrategy] = [],
-        contacts: [TrustedContact] = [],
-        resources: [ProfessionalResource] = [],
-        environmentSteps: [SafetyPlanItem] = [],
-        anchors: [SafetyPlanItem] = []
-    ) {
-        self.warningSigns = warningSigns
-        self.coping = coping
-        self.contacts = contacts
-        self.resources = resources
-        self.environmentSteps = environmentSteps
-        self.anchors = anchors
-    }
-
-    static var empty: SafetyPlanPayload {
-        SafetyPlanPayload()
-    }
-}
-
-/// Offline cache payload for safety plan access
-struct SafetyPlanCachePayload: Codable, Equatable {
-    let payload: SafetyPlanPayload
-    let settings: SafetyPlanSettings
-    let version: Int
-    let cachedAt: Date
-    let expiresAt: Date
-
-    var isExpired: Bool {
-        Date() > expiresAt
-    }
-}
-
-/// A single item in the safety plan
-struct SafetyPlanItem: Codable, Identifiable, Equatable {
-    var id: String
-    var text: String
-    var isCustom: Bool
-    var order: Int
-    var isFavorite: Bool
-
-    init(id: String = UUID().uuidString, text: String, isCustom: Bool = false, order: Int = 0, isFavorite: Bool = false) {
-        self.id = id
-        self.text = text
-        self.isCustom = isCustom
-        self.order = order
-        self.isFavorite = isFavorite
-    }
-}
-
-/// A coping strategy that can link to in-app exercises
-struct CopingStrategy: Codable, Identifiable, Equatable {
-    var id: String
-    var type: CopingStrategyType
-    var exerciseId: String?
-    var label: String
-    var duration: Int?
-    var category: CopingCategory
-    var isFavorite: Bool
-    var order: Int
-
-    enum CodingKeys: String, CodingKey {
-        case id, type, label, duration, category, order
-        case exerciseId = "exercise_id"
-        case isFavorite = "is_favorite"
-    }
-
-    init(
-        id: String = UUID().uuidString,
-        type: CopingStrategyType,
-        exerciseId: String? = nil,
-        label: String,
-        duration: Int? = nil,
-        category: CopingCategory,
-        isFavorite: Bool = false,
-        order: Int = 0
-    ) {
-        self.id = id
-        self.type = type
-        self.exerciseId = exerciseId
-        self.label = label
-        self.duration = duration
-        self.category = category
-        self.isFavorite = isFavorite
-        self.order = order
-    }
-
-    /// Creates a custom coping strategy
-    static func custom(label: String, category: CopingCategory, isFavorite: Bool = false) -> CopingStrategy {
-        CopingStrategy(type: .custom, label: label, category: category, isFavorite: isFavorite)
-    }
-}
-
-enum CopingStrategyType: String, Codable {
-    case exercise
-    case custom
-}
-
-enum CopingCategory: String, Codable, CaseIterable {
-    case breathing
-    case meditation
-    case grounding
-    case journaling
-    case movement
-    case custom
-
-    var displayName: String {
-        switch self {
-        case .breathing: return "Breathing"
-        case .meditation: return "Meditation"
-        case .grounding: return "Grounding"
-        case .journaling: return "Journaling"
-        case .movement: return "Movement"
-        case .custom: return "Custom"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .breathing: return "wind"
-        case .meditation: return "leaf"
-        case .grounding: return "hand.raised"
-        case .journaling: return "pencil"
-        case .movement: return "figure.walk"
-        case .custom: return "star"
-        }
-    }
-}
-
-/// A trusted contact for the safety plan
-struct TrustedContact: Codable, Identifiable, Equatable {
-    var id: String
-    var name: String
-    var phone: String
-    var relationship: TrustedContactRelationship
-    var preferredMethod: ContactMethod
-    var whatToSay: String?
-    var isPrimary: Bool
-    var order: Int
-
-    enum CodingKeys: String, CodingKey {
-        case id, name, phone, relationship, order
-        case preferredMethod = "preferred_method"
-        case whatToSay = "what_to_say"
-        case isPrimary = "is_primary"
-    }
-
-    init(
-        id: String = UUID().uuidString,
-        name: String,
-        phone: String,
-        relationship: TrustedContactRelationship,
-        preferredMethod: ContactMethod = .call,
-        whatToSay: String? = nil,
-        isPrimary: Bool = false,
-        order: Int = 0
-    ) {
-        self.id = id
-        self.name = name
-        self.phone = phone
-        self.relationship = relationship
-        self.preferredMethod = preferredMethod
-        self.whatToSay = whatToSay
-        self.isPrimary = isPrimary
-        self.order = order
-    }
-
-    /// Returns the phone number formatted for display
-    var formattedPhone: String {
-        phone
-    }
-
-    /// Checks if phone is valid E.164 format
-    var isValidPhone: Bool {
-        phone.hasPrefix("+") && phone.count >= 10
-    }
-}
-
-enum TrustedContactRelationship: String, Codable, CaseIterable {
-    case friend
-    case family
-    case partner
-    case therapist
-    case other
-
-    var displayName: String {
-        switch self {
-        case .friend: return "Friend"
-        case .family: return "Family"
-        case .partner: return "Partner"
-        case .therapist: return "Therapist"
-        case .other: return "Other"
-        }
-    }
-}
-
-enum ContactMethod: String, Codable {
-    case call
-    case text
-
-    var displayName: String {
-        switch self {
-        case .call: return "Call"
-        case .text: return "Text"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .call: return "phone.fill"
-        case .text: return "message.fill"
-        }
-    }
-}
-
-/// A professional resource (crisis hotline or therapist)
-struct ProfessionalResource: Codable, Identifiable, Equatable {
-    var id: String
-    var type: ProfessionalResourceType
-    var name: String
-    var phone: String?
-    var url: String?
-    var country: String?
-    var notes: String?
-
-    enum CodingKeys: String, CodingKey {
-        case id, type, name, phone, url, country, notes
-    }
-
-    init(
-        id: String = UUID().uuidString,
-        type: ProfessionalResourceType,
-        name: String,
-        phone: String? = nil,
-        url: String? = nil,
-        country: String? = nil,
-        notes: String? = nil
-    ) {
-        self.id = id
-        self.type = type
-        self.name = name
-        self.phone = phone
-        self.url = url
-        self.country = country
-        self.notes = notes
-    }
-}
-
-enum ProfessionalResourceType: String, Codable {
-    case hotline
-    case therapist
-    case crisisLine = "crisis_line"
-    case custom
-
-    var displayName: String {
-        switch self {
-        case .hotline: return "Crisis Hotline"
-        case .therapist: return "Therapist"
-        case .crisisLine: return "Crisis Line"
-        case .custom: return "Custom"
-        }
-    }
-}
-
-/// Safety plan settings
-struct SafetyPlanSettings: Codable, Equatable {
-    var allowAiReference: Bool
-    var pinnedToQuickActions: Bool
-
-    enum CodingKeys: String, CodingKey {
-        case allowAiReference = "allow_ai_reference"
-        case pinnedToQuickActions = "pinned_to_quick_actions"
-    }
-
-    init(allowAiReference: Bool = false, pinnedToQuickActions: Bool = false) {
-        self.allowAiReference = allowAiReference
-        self.pinnedToQuickActions = pinnedToQuickActions
-    }
-
-    static var `default`: SafetyPlanSettings {
-        SafetyPlanSettings()
-    }
-}
-
-/// Request body for manage-safety-plan Edge Function
-struct SafetyPlanRequest: Codable {
-    let operation: SafetyPlanOperation
-    let payload: SafetyPlanPayload?
-    let settings: SafetyPlanSettings?
-
-    enum CodingKeys: String, CodingKey {
-        case operation, payload, settings
-    }
-
-    init(operation: SafetyPlanOperation, payload: SafetyPlanPayload? = nil, settings: SafetyPlanSettings? = nil) {
-        self.operation = operation
-        self.payload = payload
-        self.settings = settings
-    }
-
-    static func get() -> SafetyPlanRequest {
-        SafetyPlanRequest(operation: .get)
-    }
-
-    static func create(payload: SafetyPlanPayload) -> SafetyPlanRequest {
-        SafetyPlanRequest(operation: .create, payload: payload)
-    }
-
-    static func update(payload: SafetyPlanPayload) -> SafetyPlanRequest {
-        SafetyPlanRequest(operation: .update, payload: payload)
-    }
-
-    static func delete() -> SafetyPlanRequest {
-        SafetyPlanRequest(operation: .delete)
-    }
-
-    static func updateSettings(_ settings: SafetyPlanSettings) -> SafetyPlanRequest {
-        SafetyPlanRequest(operation: .update, payload: nil, settings: settings)
-    }
-}
-
-enum SafetyPlanOperation: String, Codable {
-    case get
-    case create
-    case update
-    case delete
-}
-
-/// Response from manage-safety-plan Edge Function
-struct SafetyPlanResponse: Codable {
-    let success: Bool
-    let data: SafetyPlanData?
-    let error: SafetyPlanError?
-
-    struct SafetyPlanData: Codable {
-        let id: UUID
-        let version: Int
-        let payload: SafetyPlanPayload
-        let settings: SafetyPlanSettings
-        let createdAt: String
-        let updatedAt: String
-
-        enum CodingKeys: String, CodingKey {
-            case id, version, payload, settings
-            case createdAt = "created_at"
-            case updatedAt = "updated_at"
-        }
-    }
-
-    struct SafetyPlanError: Codable {
-        let code: String
-        let message: String
-    }
-}
-
-// MARK: - AI Coaching Modes
-
-/// Conversation mode for AI coaching
-enum ConversationMode: String, Codable, CaseIterable, Identifiable {
-    case reflect = "reflect"       // Guided journaling, emotional exploration
-    case plan = "plan"            // Action-oriented, goal-focused
-    case reframe = "reframe"      // Cognitive restructuring, perspective shift
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .reflect: return "Reflect"
-        case .plan: return "Plan"
-        case .reframe: return "Reframe"
-        }
-    }
-
-    var shortDescription: String {
-        switch self {
-        case .reflect:
-            return "Explore your thoughts and feelings"
-        case .plan:
-            return "Take action toward your goals"
-        case .reframe:
-            return "Shift your perspective"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .reflect: return "heart.text.square"
-        case .plan: return "checkmark.circle"
-        case .reframe: return "arrow.triangle.2.circlepath"
-        }
-    }
-
-    var color: String {
-        switch self {
-        case .reflect: return "purple"
-        case .plan: return "blue"
-        case .reframe: return "orange"
-        }
-    }
-
-    var defaultPrompt: String {
-        switch self {
-        case .reflect:
-            return "I'm here to listen without judgment. What's on your mind today?"
-        case .plan:
-            return "Let's work together on some actionable steps. What's one small step you could take toward a goal?"
-        case .reframe:
-            return "Let's explore different perspectives together. What's a situation you'd like to look at differently?"
-        }
-    }
-
-    var exampleTopic: String {
-        switch self {
-        case .reflect: return "How has your day been affecting you emotionally?"
-        case .plan: return "What's one small step you could take toward a goal?"
-        case .reframe: return "Let's reframe: What would you tell a friend in this situation?"
-        }
-    }
-}
-
-/// Type of cognitive distortion for thought records
-enum CognitiveDistortion: String, Codable, CaseIterable, Identifiable {
-    case allOrNothing = "all_or_nothing"           // Black or white thinking
-    case catastrophizing = "catastrophizing"          // Magnifying negatives, minimizing positives
-    case emotionalReasoning = "emotional_reasoning" // Assuming feelings reflect reality
-    case mindReading = "mind_reading"              // Assuming others' thoughts
-    case overgeneralization = "overgeneralization" // Single event = always happens
-    case personalization = "personalization"       // Taking undue responsibility
-    case shouldStatements = "should_statements"    // Rigid rules about how things "should" be
-    case fortuneTelling = "fortune_telling"        // Predicting negative outcomes
-    case labeling = "labeling"                     // Global labels instead of behavior
-    case discountingPositives = "discounting_positives" // Dismissing positive experiences
-    case jumpingToConclusions = "jumping_to_conclusions" // Drawing conclusions without evidence
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .allOrNothing: return "All-or-Nothing Thinking"
-        case .catastrophizing: return "Catastrophizing"
-        case .emotionalReasoning: return "Emotional Reasoning"
-        case .mindReading: return "Mind Reading"
-        case .overgeneralization: return "Overgeneralization"
-        case .personalization: return "Personalization"
-        case .shouldStatements: return "Should Statements"
-        case .fortuneTelling: return "Fortune Telling"
-        case .labeling: return "Labeling"
-        case .discountingPositives: return "Discounting Positives"
-        case .jumpingToConclusions: return "Jumping to Conclusions"
-        }
-    }
-
-    var description: String {
-        switch self {
-        case .allOrNothing:
-            return "Seeing things in black and white categories"
-        case .catastrophizing:
-            return "Expecting the worst possible outcome"
-        case .emotionalReasoning:
-            return "Believing something is true because it feels true"
-        case .mindReading:
-            return "Assuming you know what others are thinking"
-        case .overgeneralization:
-            return "Viewing negative events as never-ending patterns"
-        case .personalization:
-            return "Blaming yourself for things outside your control"
-        case .shouldStatements:
-            return "Rigid rules about how things 'should' be"
-        case .fortuneTelling:
-            return "Predicting negative outcomes before they happen"
-        case .labeling:
-            return "Assigning global labels to yourself and others"
-        case .discountingPositives:
-            return "Dismissing positive experiences"
-        case .jumpingToConclusions:
-            return "Making negative interpretations without evidence"
-        }
-    }
-
-    var questionToChallenge: String {
-        switch self {
-        case .allOrNothing:
-            return "Are there any shades of gray in this situation?"
-        case .catastrophizing:
-            return "What's the actual evidence for the worst-case scenario?"
-        case .emotionalReasoning:
-            return "How would you describe this situation to a neutral observer?"
-        case .mindReading:
-            return "What facts do you have about what others are thinking?"
-        case .overgeneralization:
-            return "Is this situation truly representative of all similar situations?"
-        case .personalization:
-            return "What factors outside your control contributed to this?"
-        case .shouldStatements:
-            return "Where did this 'should' come from? Is it truly a rule you must follow?"
-        case .fortuneTelling:
-            return "What's more likely to happen, and what evidence supports that?"
-        case .labeling:
-            return "Can you describe the behavior without attaching a global label?"
-        case .discountingPositives:
-            return "What would you tell a friend who achieved this?"
-        case .jumpingToConclusions:
-            return "What additional information would help you see this more clearly?"
-        }
-    }
-}
-
-/// Represents a thought record entry (ABC format for cognitive restructuring)
-struct ThoughtRecord: Codable, Identifiable, Equatable {
-    let id: UUID
-    let userId: UUID
-    let conversationId: UUID?
-    let createdAt: Date
-    let updatedAt: Date
-
-    // Activating event - What happened or what was the situation
-    let activatingEvent: String
-
-    // Beliefs - What thoughts automatically came up
-    let automaticThoughts: [String]
-
-    // Consequences - How you felt and behaved
-    let emotions: [EmotionIntensity]
-    let physicalSensations: String?
-    let behaviors: String?
-
-    // Analysis
-    let identifiedDistortions: [CognitiveDistortion]
-    let evidenceForThoughts: String?
-    let evidenceAgainstThoughts: String?
-
-    // Reframing
-    let balancedThought: String?
-    let alternativePerspective: String?
-
-    // Outcome
-    let emotionAfterReframing: [EmotionIntensity]?
-    let lessonLearned: String?
-    let isCompleted: Bool
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case userId = "user_id"
-        case conversationId = "conversation_id"
-        case createdAt = "created_at"
-        case updatedAt = "updated_at"
-        case activatingEvent = "activating_event"
-        case automaticThoughts = "automatic_thoughts"
-        case emotions
-        case physicalSensations = "physical_sensations"
-        case behaviors
-        case identifiedDistortions = "identified_distortions"
-        case evidenceForThoughts = "evidence_for_thoughts"
-        case evidenceAgainstThoughts = "evidence_against_thoughts"
-        case balancedThought = "balanced_thought"
-        case alternativePerspective = "alternative_perspective"
-        case emotionAfterReframing = "emotion_after_reframing"
-        case lessonLearned = "lesson_learned"
-        case isCompleted = "is_completed"
-    }
-}
-
-/// Intensity level for emotions in thought records
-enum EmotionIntensity: String, Codable, CaseIterable, Identifiable {
-    case low = "low"
-    case medium = "medium"
-    case high = "high"
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        rawValue.capitalized
-    }
-
-    var emoji: String {
-        switch self {
-        case .low: return "🟢"
-        case .medium: return "🟡"
-        case .high: return "🔴"
-        }
-    }
-}
-
-/// AI-suggested quest based on conversation context
-struct AISuggestedQuest: Codable, Identifiable, Equatable {
-    let id: UUID
-    let userId: UUID
-    let conversationId: UUID?
-    let suggestedQuestTemplateId: UUID?
-
-    let title: String
-    let description: String
-    let category: QuestType
-    let difficulty: Int // 1-5
-    let estimatedMinutes: Int
-
-    let rationale: String  // Why this quest is suggested based on conversation
-    let relatedThoughts: [UUID]?  // Thought record IDs this relates to
-
-    let expiresAt: Date?
-    let isAccepted: Bool?
-    let createdAt: Date
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case userId = "user_id"
-        case conversationId = "conversation_id"
-        case suggestedQuestTemplateId = "suggested_quest_template_id"
-        case title, description, category, difficulty
-        case estimatedMinutes = "estimated_minutes"
-        case rationale
-        case relatedThoughts = "related_thoughts"
-        case expiresAt = "expires_at"
-        case isAccepted = "is_accepted"
-        case createdAt = "created_at"
-    }
-}
-
-/// User's preferred default coaching mode
-struct CoachingModePreferences: Codable, Equatable {
-    let userId: UUID
-    var defaultMode: ConversationMode?
-    var preferredTone: AITone?
-    var reflectionPromptsEnabled: Bool
-    var reframeRemindersEnabled: Bool
-    var weeklyReflectionDay: Int?  // 1-7 (Monday = 1)
-    var weeklyReflectionTime: String?  // HH:MM format
-
-    enum CodingKeys: String, CodingKey {
-        case userId = "user_id"
-        case defaultMode = "default_mode"
-        case preferredTone = "preferred_tone"
-        case reflectionPromptsEnabled = "reflection_prompts_enabled"
-        case reframeRemindersEnabled = "reframe_reminders_enabled"
-        case weeklyReflectionDay = "weekly_reflection_day"
-        case weeklyReflectionTime = "weekly_reflection_time"
-    }
-
-    static var `default`: CoachingModePreferences {
-        CoachingModePreferences(
-            userId: UUID(),
-            defaultMode: nil,
-            preferredTone: nil,
-            reflectionPromptsEnabled: true,
-            reframeRemindersEnabled: true,
-            weeklyReflectionDay: nil,
-            weeklyReflectionTime: nil
-        )
-    }
-}
-
-/// Request body for AI coaching edge functions
-struct CoachingModeRequest: Codable {
-    let operation: CoachingModeOperation
-    let mode: ConversationMode?
-    let thoughtRecord: ThoughtRecord?
-    let preferences: CoachingModePreferences?
-
-    enum CodingKeys: String, CodingKey {
-        case operation, mode
-        case thoughtRecord = "thought_record"
-        case preferences
-    }
-
-    init(operation: CoachingModeOperation, mode: ConversationMode? = nil, thoughtRecord: ThoughtRecord? = nil, preferences: CoachingModePreferences? = nil) {
-        self.operation = operation
-        self.mode = mode
-        self.thoughtRecord = thoughtRecord
-        self.preferences = preferences
-    }
-}
-
-enum CoachingModeOperation: String, Codable {
-    case getState
-    case startSession
-    case endSession
-    case saveThoughtRecord
-    case getThoughtRecords
-    case getSuggestedQuests
-    case acceptQuest
-    case updatePreferences
-    case getPromptsForMode
-}
-
-/// Response from AI coaching edge functions
-struct CoachingModeResponse: Codable {
-    let success: Bool
-    let data: CoachingModeData?
-    let error: CoachingModeError?
-
-    struct CoachingModeData: Codable {
-        let currentMode: ConversationMode?
-        let thoughtRecords: [ThoughtRecord]?
-        let suggestedQuests: [AISuggestedQuest]?
-        let preferences: CoachingModePreferences?
-        let sessionActive: Bool?
-        let sessionStartedAt: Date?
-        let prompts: [String]?
-        let thoughtRecord: ThoughtRecord?
-
-        enum CodingKeys: String, CodingKey {
-            case currentMode = "current_mode"
-            case thoughtRecords = "thought_records"
-            case suggestedQuests = "suggested_quests"
-            case preferences
-            case sessionActive = "session_active"
-            case sessionStartedAt = "session_started_at"
-            case prompts
-            case thoughtRecord = "thought_record"
-        }
-    }
-
-    struct CoachingModeError: Codable {
-        let code: String
-        let message: String
-    }
-}
-
-// MARK: - Weekly Wellbeing Check
-
-/// Weekly wellbeing assessment metrics
-struct WeeklyWellbeingCheck: Codable, Identifiable, Equatable {
-    let id: UUID
-    let userId: UUID
-    let weekStartDate: Date
-    let createdAt: Date
-
-    // Core metrics (1-10 scale)
-    let overallMood: Int
-    let energyLevel: Int
-    let stressLevel: Int
-    let sleepQuality: Int
-    let socialConnection: Int
-    let senseOfPurpose: Int
-
-    // Optional context
-    let highlightOfWeek: String?
-    let challengeOfWeek: String?
-    let gratitudeNote: String?
-
-    // Derived
-    let totalScore: Int
-    let previousWeekScore: Int?
-    let trend: WellbeingTrend
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case userId = "user_id"
-        case weekStartDate = "week_start_date"
-        case createdAt = "created_at"
-        case overallMood = "overall_mood"
-        case energyLevel = "energy_level"
-        case stressLevel = "stress_level"
-        case sleepQuality = "sleep_quality"
-        case socialConnection = "social_connection"
-        case senseOfPurpose = "sense_of_purpose"
-        case highlightOfWeek = "highlight_of_week"
-        case challengeOfWeek = "challenge_of_week"
-        case gratitudeNote = "gratitude_note"
-        case totalScore = "total_score"
-        case previousWeekScore = "previous_week_score"
-        case trend
-    }
-
-    var averageScore: Double {
-        Double(totalScore) / 6.0
-    }
-}
-
-/// Trend direction for wellbeing metrics
-enum WellbeingTrend: String, Codable {
-    case improving = "improving"
-    case declining = "declining"
-    case stable = "stable"
-
-    var icon: String {
-        switch self {
-        case .improving: return "arrow.up.circle.fill"
-        case .declining: return "arrow.down.circle.fill"
-        case .stable: return "minus.circle.fill"
-        }
-    }
-
-    var color: String {
-        switch self {
-        case .improving: return "green"
-        case .declining: return "red"
-        case .stable: return "gray"
-        }
-    }
-}
-
-/// Individual wellbeing metric for display
-struct WellbeingMetric: Identifiable {
-    let id = UUID()
-    let category: WellbeingCategory
-    let score: Int
-    let previousScore: Int?
-    let trend: WellbeingTrend
-
-    var changeDescription: String {
-        guard let previous = previousScore else { return "" }
-        let diff = score - previous
-        if diff > 0 { return "+\(diff) from last week" }
-        if diff < 0 { return "\(diff) from last week" }
-        return "Same as last week"
-    }
-}
-
-/// Categories for weekly wellbeing assessment
-enum WellbeingCategory: String, Codable, CaseIterable, Identifiable {
-    case mood = "mood"
-    case energy = "energy"
-    case stress = "stress"
-    case sleep = "sleep"
-    case social = "social"
-    case purpose = "purpose"
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .mood: return "Mood"
-        case .energy: return "Energy"
-        case .stress: return "Stress"
-        case .sleep: return "Sleep"
-        case .social: return "Social"
-        case .purpose: return "Purpose"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .mood: return "face.smiling"
-        case .energy: return "bolt.fill"
-        case .stress: return "waveform.path"
-        case .sleep: return "moon.fill"
-        case .social: return "person.2.fill"
-        case .purpose: return "sparkles"
-        }
-    }
-
-    var color: String {
-        switch self {
-        case .mood: return "yellow"
-        case .energy: return "orange"
-        case .stress: return "red"
-        case .sleep: return "indigo"
-        case .social: return "blue"
-        case .purpose: return "purple"
-        }
-    }
-
-    var question: String {
-        switch self {
-        case .mood: return "How would you rate your overall mood this week?"
-        case .energy: return "How energetic have you felt this week?"
-        case .stress: return "How stressed have you felt this week?"
-        case .sleep: return "How well have you slept this week?"
-        case .social: return "How connected have you felt to others?"
-        case .purpose: return "How much sense of purpose have you had?"
-        }
-    }
-
-    var higherIsBetter: Bool {
-        switch self {
-        case .stress: return false
-        default: return true
-        }
-    }
-}
-
-/// Weekly wellbeing check-in request
-struct WeeklyWellbeingRequest: Codable {
-    let metrics: [WellbeingMetricInput]
-    let highlight: String?
-    let challenge: String?
-    let gratitude: String?
-
-    struct WellbeingMetricInput: Codable {
-        let category: WellbeingCategory
-        let score: Int
-    }
-}
-
-/// Response from weekly wellbeing check
-struct WeeklyWellbeingResponse: Codable {
-    let success: Bool
-    let data: WeeklyWellbeingData?
-    let error: WeeklyWellbeingError?
-
-    struct WeeklyWellbeingData: Codable {
-        let check: WeeklyWellbeingCheck
-        let previousTrend: [WellbeingTrendData]
-        let insights: [String]
-
-        enum CodingKeys: String, CodingKey {
-            case check
-            case previousTrend = "previous_trend"
-            case insights
-        }
-    }
-
-    struct WellbeingTrendData: Codable {
-        let category: String
-        let current: Int
-        let previous: Int?
-        let trend: String
-    }
-
-    struct WeeklyWellbeingError: Codable {
-        let code: String
-        let message: String
-    }
-}
-
 // MARK: - Circle Habits
 
 /// Circle template for consistent check-ins
@@ -5830,5 +4854,132 @@ struct CircleHabitsResponse: Codable {
     struct CircleHabitsError: Codable {
         let code: String
         let message: String
+    }
+}
+
+// MARK: - Wellness Score
+
+/// Daily wellness score (0-100) synthesizing mood, quest, social, activity, and sleep data
+public struct WellnessScore: Codable, Identifiable {
+    public let id: UUID
+    public let userId: UUID
+    public let date: Date
+    public let score: Int // 0-100
+    public let confidence: Int // 0-100
+    public let components: WellnessComponents
+    
+    public var interpretation: String {
+        switch score {
+        case 80...100: return "Excellent"
+        case 60..<80: return "Good"
+        case 40..<60: return "Fair"
+        case 20..<40: return "Needs attention"
+        default: return "Critical"
+        }
+    }
+    
+    public var confidenceLevel: String {
+        switch confidence {
+        case 80...100: return "High"
+        case 50..<80: return "Medium"
+        default: return "Low"
+        }
+    }
+    
+    public var colorZone: ColorZone {
+        switch score {
+        case 0..<40: return .low
+        case 40..<70: return .medium
+        default: return .high
+        }
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case date
+        case score
+        case confidence
+        case components
+    }
+}
+
+public enum ColorZone {
+    case low    // 0-39, red
+    case medium // 40-69, yellow
+    case high   // 70-100, green
+    
+    public var color: Color {
+        switch self {
+        case .low: return .red
+        case .medium: return .yellow
+        case .high: return .green
+        }
+    }
+    
+    public var label: String {
+        switch self {
+        case .low: return "Needs attention"
+        case .medium: return "Building momentum"
+        case .high: return "Great day!"
+        }
+    }
+}
+
+public struct WellnessComponents: Codable {
+    // Emotional Health (40% total)
+    public let mood: ComponentScore          // 15%
+    public let anxiety: ComponentScore       // 10%
+    public let energy: ComponentScore        // 10%
+    public let emotionalStability: ComponentScore  // 5%
+    
+    // Behavioral Engagement (30% total)
+    public let quest: ComponentScore         // 15%
+    public let social: ComponentScore        // 7.5%
+    public let exercises: ComponentScore     // 7.5%
+    
+    // Physical Health (30% total)
+    public let sleep: ComponentScore         // 12%
+    public let activity: ComponentScore      // 10%
+    public let stressResilience: ComponentScore  // 8%
+    
+    enum CodingKeys: String, CodingKey {
+        case mood
+        case anxiety
+        case energy
+        case emotionalStability = "emotional_stability"
+        case quest
+        case social
+        case exercises
+        case sleep
+        case activity
+        case stressResilience = "stress_resilience"
+    }
+    
+    public struct ComponentScore: Codable {
+        public let value: Int // 0-100
+        public let weight: Double // 0.0-1.0
+        public let confidence: Int // 0-100
+        public let reason: String
+    }
+}
+
+/// Trend data for 7-day wellness score history
+public struct WellnessScoreTrend: Codable {
+    public let scores: [DailyScore]
+    public let averageScore: Int
+    public let trendDirection: TrendDirection
+    
+    public struct DailyScore: Codable, Identifiable {
+        public var id: Date { date }
+        public let date: Date
+        public let score: Int
+        public let delta: Int? // Change from previous day
+    }
+    
+    public enum TrendDirection: String, Codable {
+        case improving
+        case stable
+        case declining
     }
 }

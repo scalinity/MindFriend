@@ -8,26 +8,66 @@
 
 import Foundation
 
-/// Client-side pattern matcher for cognitive distortions
-/// Uses keyword-based detection with confidence scoring
+/// Pattern matcher for detecting cognitive distortions using keyword matching
+/// Optimized with cached regex patterns and LRU cache for recent detections
 @MainActor
 final class DistortionPatternMatcher {
 
-    // MARK: - Pattern Definitions
+    // MARK: - Configuration
 
-    /// Keyword patterns for each distortion type
-    /// Confidence weights: 1.0 = strong indicator, 0.5 = weak indicator
-    private let patterns: [DistortionType: [String: Double]] = [
+    /// Minimum confidence threshold (0.0 - 1.0)
+    private let confidenceThreshold: Double = 0.50
+
+    // MARK: - Cached Regex Patterns
+    
+    /// Pre-compiled regex patterns for efficient matching (computed once at initialization)
+    private let regexPatterns: [DistortionType: [(regex: NSRegularExpression, weight: Double)]]
+    
+    // MARK: - LRU Cache
+    
+    /// Simple LRU cache for recent detections (max 50 entries)
+    private var detectionCache: [String: (type: DistortionType, confidence: Double)?] = [:]
+    private var cacheKeys: [String] = []
+    private let maxCacheSize = 50
+    
+    // MARK: - Initialization
+    
+    init() {
+        // Pre-compile all regex patterns at initialization for performance
+        var compiledPatterns: [DistortionType: [(regex: NSRegularExpression, weight: Double)]] = [:]
+        
+        for (distortionType, keywords) in Self.patterns {
+            var regexList: [(regex: NSRegularExpression, weight: Double)] = []
+            
+            for (keyword, weight) in keywords {
+                // Create word boundary regex for more accurate matching
+                let pattern = "\\b\(NSRegularExpression.escapedPattern(for: keyword))\\b"
+                if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
+                    regexList.append((regex: regex, weight: weight))
+                }
+            }
+            
+            compiledPatterns[distortionType] = regexList
+        }
+        
+        self.regexPatterns = compiledPatterns
+    }
+
+    // MARK: - Pattern Definitions (Static)
+
+    /// Keyword patterns for each distortion type with confidence weights
+    private static let patterns: [DistortionType: [String: Double]] = [
         .allOrNothing: [
             "always": 1.0,
             "never": 1.0,
             "every time": 0.9,
-            "completely": 0.7,
-            "totally": 0.7,
-            "perfect": 0.6,
-            "failure": 0.6,
-            "either": 0.5,
-            "all or nothing": 1.0
+            "completely": 0.8,
+            "totally": 0.8,
+            "absolutely": 0.7,
+            "perfect": 0.7,
+            "impossible": 0.9,
+            "everything": 0.8,
+            "nothing": 0.8
         ],
         .overgeneralization: [
             "always happens": 1.0,
@@ -103,56 +143,86 @@ final class DistortionPatternMatcher {
         ]
     ]
 
-    // MARK: - Detection
+    // MARK: - Public Interface
 
-    /// Detects cognitive distortions in transcript text
-    /// - Parameter text: Transcript text to analyze
-    /// - Returns: Detected distortion with confidence score, or nil if none found
+    /// Detects cognitive distortion in text using optimized regex matching
+    /// - Parameter text: Input text to analyze
+    /// - Returns: Tuple of distortion type and confidence, or nil if no distortion detected
     func detectDistortion(in text: String) -> (type: DistortionType, confidence: Double)? {
-        let lowerText = text.lowercased()
+        // Normalize text for cache key
+        let normalizedText = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // Check cache first (O(1) lookup)
+        if let cached = detectionCache[normalizedText] {
+            return cached
+        }
+        
+        // Perform detection
+        let result = detectDistortionUncached(in: text)
+        
+        // Update cache (LRU eviction)
+        updateCache(key: normalizedText, value: result)
+        
+        return result
+    }
+    
+    // MARK: - Private Helpers
+    
+    /// Performs uncached detection using pre-compiled regex patterns
+    private func detectDistortionUncached(in text: String) -> (type: DistortionType, confidence: Double)? {
+        let nsText = text as NSString
+        let range = NSRange(location: 0, length: nsText.length)
+        
         var matches: [(type: DistortionType, score: Double)] = []
-
-        // Check each distortion type
-        for (distortionType, keywords) in patterns {
+        
+        // Use pre-compiled regex patterns for O(n×m) instead of O(n×m×k) complexity
+        for (distortionType, regexList) in regexPatterns {
             var totalScore: Double = 0
             var matchCount = 0
-
-            for (keyword, weight) in keywords {
-                if lowerText.contains(keyword) {
-                    totalScore += weight
-                    matchCount += 1
+            
+            for (regex, weight) in regexList {
+                let matchCount = regex.numberOfMatches(in: text, range: range)
+                if matchCount > 0 {
+                    totalScore += weight * Double(matchCount)
+                    matchCount += matchCount
                 }
             }
-
+            
             if matchCount > 0 {
-                // Calculate confidence based on total score and match count
-                // More matches and higher weights = higher confidence
-                let confidence = min(0.95, (totalScore / Double(keywords.count)) + (Double(matchCount) * 0.1))
+                // Confidence formula: normalized score + bonus for multiple matches
+                let normalizedScore = totalScore / Double(regexList.count)
+                let matchBonus = min(0.3, Double(matchCount) * 0.1)
+                let confidence = min(0.95, normalizedScore + matchBonus)
+                
                 matches.append((type: distortionType, score: confidence))
             }
         }
-
-        // Return highest confidence match
-        guard let topMatch = matches.max(by: { $0.score < $1.score }) else {
+        
+        // Return highest confidence match above threshold
+        guard let bestMatch = matches.max(by: { $0.score < $1.score }),
+              bestMatch.score >= confidenceThreshold else {
             return nil
         }
-
-        return (type: topMatch.type, confidence: topMatch.score)
+        
+        return bestMatch
     }
-
-    /// Batch detection for multiple text segments
-    /// - Parameter segments: Array of text segments to analyze
-    /// - Returns: Array of detected distortions
-    func detectDistortions(in segments: [String]) -> [(type: DistortionType, confidence: Double)] {
-        return segments.compactMap { detectDistortion(in: $0) }
+    
+    /// Updates LRU cache with new detection result
+    private func updateCache(key: String, value: (type: DistortionType, confidence: Double)?) {
+        // Add to cache
+        detectionCache[key] = value
+        cacheKeys.append(key)
+        
+        // Evict oldest entry if cache is full
+        if cacheKeys.count > maxCacheSize {
+            let oldestKey = cacheKeys.removeFirst()
+            detectionCache.removeValue(forKey: oldestKey)
+        }
     }
-
-    /// Validates if a detected distortion meets the minimum confidence threshold
-    /// - Parameters:
-    ///   - confidence: Confidence score from detection
-    ///   - threshold: Minimum threshold (default: 0.70)
-    /// - Returns: True if confidence meets threshold
-    func meetsThreshold(_ confidence: Double, threshold: Double = 0.70) -> Bool {
-        return confidence >= threshold
+    
+    /// Clears the detection cache (useful for testing or memory pressure)
+    func clearCache() {
+        detectionCache.removeAll()
+        cacheKeys.removeAll()
     }
 }

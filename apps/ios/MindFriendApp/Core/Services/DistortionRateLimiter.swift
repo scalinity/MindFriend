@@ -90,6 +90,43 @@ final class DistortionRateLimiter: ObservableObject {
         }
     }
 
+    /// Atomically reserves a prompt slot (called before detection to prevent TOCTOU)
+    /// - Returns: True if slot was reserved, false if limits prevent showing
+    @discardableResult
+    func reservePromptSlot() -> Bool {
+        cleanupExpiredSession()
+        
+        guard canShowPrompt() else {
+            return false
+        }
+        
+        // Reserve slot immediately to prevent concurrent races
+        let record = PromptRecord(
+            distortionType: .allOrNothing, // Placeholder, will be updated when type is known
+            shownAt: Date(),
+            dismissedAt: nil
+        )
+        promptsShown.append(record)
+        return true
+    }
+    
+    /// Releases the last reservation if detection didn't result in a prompt
+    func releaseLastReservation() {
+        guard !promptsShown.isEmpty else { return }
+        promptsShown.removeLast()
+    }
+    
+    /// Updates the last reservation with the actual distortion type
+    /// - Parameter distortionType: The detected distortion type
+    func updateLastReservation(distortionType: DistortionType) {
+        guard !promptsShown.isEmpty else { return }
+        promptsShown[promptsShown.count - 1] = PromptRecord(
+            distortionType: distortionType,
+            shownAt: promptsShown.last!.shownAt,
+            dismissedAt: nil
+        )
+    }
+
     /// Gets remaining prompts for current session
     /// - Returns: Number of prompts remaining (0-3)
     func remainingPrompts() -> Int {
