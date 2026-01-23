@@ -191,6 +191,9 @@ function aggregateMetrics(
   for (const [circleId, circlePosts] of postsByCircle.entries()) {
     const members = circleMembers.get(circleId);
     if (!members) continue;
+    
+    // P2 FIX: Skip solo circles (need at least 2 members for interactions)
+    if (members.size < 2) continue;
 
     // For each member, calculate metrics with every other member
     for (const userId of members) {

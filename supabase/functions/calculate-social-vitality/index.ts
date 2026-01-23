@@ -343,10 +343,18 @@ function calculateReciprocityScore(metrics: InteractionMetric[]): number {
     0,
   );
 
-  if (totalSent + totalReceived === 0) return 0;
+  // P2 FIX: Handle edge cases for one-way communication
+  if (totalSent + totalReceived === 0) return 0; // No activity
+  
+  // If user only receives (never sends), score as imbalanced
+  if (totalSent === 0) return 5;
+  
+  // If user only sends (never receives), they're actively engaging but in inactive circle
+  // Don't penalize as harshly - could be the only active member
+  if (totalReceived === 0) return 12;
 
   // Calculate ratio (sent / received)
-  const ratio = totalSent / Math.max(totalReceived, 1);
+  const ratio = totalSent / totalReceived;
 
   // Deviation from perfect balance (1.0)
   const deviation = Math.abs(ratio - 1.0);
@@ -361,6 +369,25 @@ function calculateReciprocityScore(metrics: InteractionMetric[]): number {
 /**
  * Component 4: Diversity of Connections (0-25 points)
  * Based on unique people and circles
+ * 
+ * P3 DOCUMENTATION: Scoring Rationale
+ * 
+ * People Diversity (0-15 points):
+ * - 0 people: 0 points (no interactions)
+ * - 1 person: 5/15 (33%) - Consistent 1-on-1 relationship
+ * - 2 people: 10/15 (67%) - Small support network
+ * - 3+ people: 15/15 (100%) - Diverse social connections
+ * 
+ * Design: Step function reflects research showing benefits plateau after 3-5 close connections.
+ * We prioritize depth over breadth, so reaching 3 people earns full score.
+ * 
+ * Circle Diversity (0-10 points):
+ * - 0 circles: 0 points (not engaged)
+ * - 1 circle: 4/10 (40%) - Single community membership
+ * - 2+ circles: 10/10 (100%) - Multi-context social life
+ * 
+ * Design: Research shows people with diverse social contexts (work, hobbies, family) have
+ * better mental health outcomes. Engaging in 2+ circles indicates healthy social variety.
  */
 function calculateDiversityScore(metrics: InteractionMetric[]): number {
   const uniquePeople = new Set(metrics.map((m) => m.other_user_id)).size;
@@ -387,6 +414,7 @@ function calculateDiversityScore(metrics: InteractionMetric[]): number {
  * Returns: 'improving' | 'stable' | 'declining' | 'plummeting'
  */
 function calculateTrendFromScores(scores: any[]): string {
+  // P3 FIX: Add validation for insufficient or invalid data
   if (!scores || scores.length < 7) {
     return "stable"; // Default if insufficient data
   }
@@ -394,6 +422,14 @@ function calculateTrendFromScores(scores: any[]): string {
   // Split into recent (D-1 to D-3) and older (D-5 to D-7)
   const recentScores = scores.slice(-3).map((s: any) => s.overall_score);
   const olderScores = scores.slice(0, 3).map((s: any) => s.overall_score);
+
+  // P3 FIX: Validate that all scores are numbers (handle gaps/nulls)
+  const hasInvalidScores = [...recentScores, ...olderScores].some(
+    (score) => typeof score !== 'number' || isNaN(score)
+  );
+  if (hasInvalidScores) {
+    return "stable"; // Default if data quality issues
+  }
 
   const recentAvg =
     recentScores.reduce((sum: number, s: number) => sum + s, 0) /
