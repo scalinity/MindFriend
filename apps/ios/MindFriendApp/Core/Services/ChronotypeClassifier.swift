@@ -61,7 +61,7 @@ final class ChronotypeClassifier {
         let sleepDebt = max(0, freeDayDuration - weekdayDuration)
 
         // Correct for sleep debt → MSFsc
-        let msfCorrected = averageMSF - (sleepDebt / 2)
+        let msfCorrected = averageMSF + (sleepDebt / 2)
 
         // Map MSFsc to chronotype (based on Roenneberg 2003)
         let chronotype = mapToChronotype(msfCorrected: msfCorrected)

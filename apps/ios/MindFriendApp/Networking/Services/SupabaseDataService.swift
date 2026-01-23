@@ -3930,7 +3930,7 @@ final class SupabaseDataService: ObservableObject {
         )
     }
 
-    // MARK: - Progress Stories (Post-MVP)
+    // MARK: - Post-MVP Features
 
     /// Fetch weekly progress story for a given week
     func getWeeklyStory(weekStart: Date) async throws -> [String: Any]? {
@@ -4052,5 +4052,287 @@ final class SupabaseDataService: ObservableObject {
             periodStart: Date(),
             periodEnd: Date()
         )
+    }
+    
+    // MARK: - Circadian Vulnerability Shield Methods
+    
+    func getCurrentUserId() async throws -> UUID {
+        guard let userId = supabase.auth.currentUser?.id else {
+            throw NSError(domain: "SupabaseDataService", code: 401, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
+        }
+        return userId
+    }
+    
+    func saveCircadianProfile(_ profile: CircadianProfile) async throws {
+        struct ProfileDTO: Encodable {
+            let id: UUID
+            let user_id: UUID
+            let chronotype: String
+            let chronotype_confidence: Double
+            let natural_wake_time: Int
+            let natural_sleep_time: Int
+            let social_jet_lag_minutes: Int
+            let vulnerable_windows: String
+            let peak_performance_window: String?
+            let created_at: Date
+            let updated_at: Date
+        }
+        
+        let vulnerableWindowsJSON = try JSONEncoder().encode(profile.vulnerableWindows)
+        let vulnerableWindowsString = String(data: vulnerableWindowsJSON, encoding: .utf8) ?? "[]"
+        
+        var peakJSON: String? = nil
+        if let peak = profile.peakPerformanceWindow {
+            let peakData = try JSONEncoder().encode(peak)
+            peakJSON = String(data: peakData, encoding: .utf8)
+        }
+        
+        let dto = ProfileDTO(
+            id: profile.id,
+            user_id: profile.userId,
+            chronotype: profile.chronotype.rawValue,
+            chronotype_confidence: profile.chronotypeConfidence,
+            natural_wake_time: profile.naturalWakeTime,
+            natural_sleep_time: profile.naturalSleepTime,
+            social_jet_lag_minutes: profile.socialJetLagMinutes,
+            vulnerable_windows: vulnerableWindowsString,
+            peak_performance_window: peakJSON,
+            created_at: profile.createdAt,
+            updated_at: profile.updatedAt
+        )
+        
+        try await supabase.from("circadian_profiles")
+            .upsert(dto)
+            .execute()
+    }
+    
+    func fetchCircadianProfile() async throws -> CircadianProfile? {
+        let userId = try await getCurrentUserId()
+        
+        struct ProfileDTO: Decodable {
+            let id: UUID
+            let user_id: UUID
+            let chronotype: String
+            let chronotype_confidence: Double
+            let natural_wake_time: Int
+            let natural_sleep_time: Int
+            let social_jet_lag_minutes: Int
+            let vulnerable_windows: String
+            let peak_performance_window: String?
+            let created_at: Date
+            let updated_at: Date
+        }
+        
+        let response: [ProfileDTO] = try await supabase.from("circadian_profiles")
+            .select()
+            .eq("user_id", value: userId.uuidString)
+            .execute()
+            .value
+        
+        guard let dto = response.first else { return nil }
+        
+        let windowsData = dto.vulnerable_windows.data(using: .utf8) ?? Data()
+        let windows = (try? JSONDecoder().decode([VulnerableWindow].self, from: windowsData)) ?? []
+        
+        var peak: PeakPerformanceWindow? = nil
+        if let peakJSON = dto.peak_performance_window,
+           let peakData = peakJSON.data(using: .utf8) {
+            peak = try? JSONDecoder().decode(PeakPerformanceWindow.self, from: peakData)
+        }
+        
+        guard let chronotype = Chronotype(rawValue: dto.chronotype) else { return nil }
+        
+        return CircadianProfile(
+            id: dto.id,
+            userId: dto.user_id,
+            chronotype: chronotype,
+            chronotypeConfidence: dto.chronotype_confidence,
+            naturalWakeTime: dto.natural_wake_time,
+            naturalSleepTime: dto.natural_sleep_time,
+            socialJetLagMinutes: dto.social_jet_lag_minutes,
+            vulnerableWindows: windows,
+            peakPerformanceWindow: peak,
+            createdAt: dto.created_at,
+            updatedAt: dto.updated_at
+        )
+    }
+    
+    func saveVulnerableWindow(_ window: VulnerableWindow) async throws {
+        struct WindowDTO: Encodable {
+            let id: UUID
+            let user_id: UUID
+            let date: Date
+            let start_time: Date
+            let end_time: Date
+            let severity: String
+            let confidence: Double
+            let predicted_triggers: [String]
+            let armor_delivered: Bool
+            let armor_completed: Bool
+            let armor_exercise_id: String?
+            let mood_during_window: Double?
+            let crash_occurred: Bool?
+            let created_at: Date
+        }
+        
+        let dto = WindowDTO(
+            id: window.id,
+            user_id: window.userId,
+            date: window.date,
+            start_time: window.startTime,
+            end_time: window.endTime,
+            severity: window.severity.rawValue,
+            confidence: window.confidence,
+            predicted_triggers: window.predictedTriggers,
+            armor_delivered: window.armorDelivered,
+            armor_completed: window.armorCompleted,
+            armor_exercise_id: window.armorExerciseId,
+            mood_during_window: window.moodDuringWindow,
+            crash_occurred: window.crashOccurred,
+            created_at: window.createdAt
+        )
+        
+        try await supabase.from("vulnerable_windows")
+            .upsert(dto)
+            .execute()
+    }
+    
+    func fetchVulnerableWindows(for date: Date) async throws -> [VulnerableWindow] {
+        let userId = try await getCurrentUserId()
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else {
+            return []
+        }
+        
+        struct WindowDTO: Decodable {
+            let id: UUID
+            let user_id: UUID
+            let date: Date
+            let start_time: Date
+            let end_time: Date
+            let severity: String
+            let confidence: Double
+            let predicted_triggers: [String]
+            let armor_delivered: Bool
+            let armor_completed: Bool
+            let armor_exercise_id: String?
+            let mood_during_window: Double?
+            let crash_occurred: Bool?
+            let created_at: Date
+        }
+        
+        let response: [WindowDTO] = try await supabase.from("vulnerable_windows")
+            .select()
+            .eq("user_id", value: userId.uuidString)
+            .gte("date", value: startOfDay.ISO8601Format())
+            .lt("date", value: endOfDay.ISO8601Format())
+            .execute()
+            .value
+        
+        return response.compactMap { dto in
+            guard let severity = VulnerableWindow.VulnerabilitySeverity(rawValue: dto.severity) else {
+                return nil
+            }
+            
+            return VulnerableWindow(
+                id: dto.id,
+                userId: dto.user_id,
+                date: dto.date,
+                startTime: dto.start_time,
+                endTime: dto.end_time,
+                severity: severity,
+                confidence: dto.confidence,
+                predictedTriggers: dto.predicted_triggers,
+                armorDelivered: dto.armor_delivered,
+                armorCompleted: dto.armor_completed,
+                armorExerciseId: dto.armor_exercise_id,
+                moodDuringWindow: dto.mood_during_window,
+                crashOccurred: dto.crash_occurred,
+                createdAt: dto.created_at
+            )
+        }
+    }
+    
+    func fetchVulnerableWindows(lastDays: Int) async throws -> [VulnerableWindow] {
+        let userId = try await getCurrentUserId()
+        let calendar = Calendar.current
+        guard let startDate = calendar.date(byAdding: .day, value: -lastDays, to: Date()) else {
+            return []
+        }
+        
+        struct WindowDTO: Decodable {
+            let id: UUID
+            let user_id: UUID
+            let date: Date
+            let start_time: Date
+            let end_time: Date
+            let severity: String
+            let confidence: Double
+            let predicted_triggers: [String]
+            let armor_delivered: Bool
+            let armor_completed: Bool
+            let armor_exercise_id: String?
+            let mood_during_window: Double?
+            let crash_occurred: Bool?
+            let created_at: Date
+        }
+        
+        let response: [WindowDTO] = try await supabase.from("vulnerable_windows")
+            .select()
+            .eq("user_id", value: userId.uuidString)
+            .gte("date", value: startDate.ISO8601Format())
+            .execute()
+            .value
+        
+        return response.compactMap { dto in
+            guard let severity = VulnerableWindow.VulnerabilitySeverity(rawValue: dto.severity) else {
+                return nil
+            }
+            
+            return VulnerableWindow(
+                id: dto.id,
+                userId: dto.user_id,
+                date: dto.date,
+                startTime: dto.start_time,
+                endTime: dto.end_time,
+                severity: severity,
+                confidence: dto.confidence,
+                predictedTriggers: dto.predicted_triggers,
+                armorDelivered: dto.armor_delivered,
+                armorCompleted: dto.armor_completed,
+                armorExerciseId: dto.armor_exercise_id,
+                moodDuringWindow: dto.mood_during_window,
+                crashOccurred: dto.crash_occurred,
+                createdAt: dto.created_at
+            )
+        }
+    }
+    
+    func deleteVulnerableWindows(after date: Date) async throws {
+        let userId = try await getCurrentUserId()
+        
+        try await supabase.from("vulnerable_windows")
+            .delete()
+            .eq("user_id", value: userId.uuidString)
+            .gte("date", value: date.ISO8601Format())
+            .execute()
+    }
+    
+    func updateVulnerableWindowOutcome(windowId: UUID, moodDuring: Double?, crashOccurred: Bool) async throws {
+        struct UpdateDTO: Encodable {
+            let mood_during_window: Double?
+            let crash_occurred: Bool
+        }
+        
+        let dto = UpdateDTO(
+            mood_during_window: moodDuring,
+            crash_occurred: crashOccurred
+        )
+        
+        try await supabase.from("vulnerable_windows")
+            .update(dto)
+            .eq("id", value: windowId.uuidString)
+            .execute()
     }
 }

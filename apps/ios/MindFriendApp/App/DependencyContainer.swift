@@ -254,6 +254,61 @@ final class DependencyContainer: ObservableObject {
         BoundaryPlannerService(supabase: supabaseClient)
     }()
 
+    // MARK: - Nervous System State Engine Services
+    
+    lazy var healthKitService: HealthKitService = {
+        HealthKitService.shared
+    }()
+    
+    lazy var voicePolyvagalExtractor: VoicePolyvagalExtractor = {
+        VoicePolyvagalExtractor()
+    }()
+    
+    lazy var hrvPolyvagalExtractor: HRVPolyvagalExtractor = {
+        HRVPolyvagalExtractor(healthKitService: healthKitService)
+    }()
+    
+    lazy var behavioralPolyvagalTracker: BehavioralPolyvagalTracker = {
+        BehavioralPolyvagalTracker()
+    }()
+    
+    lazy var polyvagalClassifier: PolyvagalClassifier = {
+        PolyvagalClassifier()
+    }()
+    
+    lazy var cascadeDetector: CascadeDetector = {
+        CascadeDetector()
+    }()
+    
+    lazy var interventionRecommender: InterventionRecommender = {
+        InterventionRecommender(supabase: supabaseClient)
+    }()
+    
+    lazy var nervousSystemStateEngine: NervousSystemStateEngine = {
+        NervousSystemStateEngine(
+            voiceExtractor: voicePolyvagalExtractor,
+            hrvExtractor: hrvPolyvagalExtractor,
+            behavioralTracker: behavioralPolyvagalTracker,
+            classifier: polyvagalClassifier,
+            cascadeDetector: cascadeDetector,
+            interventionRecommender: interventionRecommender,
+            supabase: supabaseClient
+        )
+    }()
+
+    // MARK: - Circadian Vulnerability Shield Services
+    
+    lazy var armorScheduler: ArmorScheduler = {
+        ArmorScheduler()
+    }()
+    
+    lazy var circadianEngine: CircadianVulnerabilityEngine = {
+        CircadianVulnerabilityEngine(
+            healthKitService: healthKitService,
+            dataService: supabaseDataService
+        )
+    }()
+
     // MARK: - Incomplete Feature Services (TODO: Add when features are ready)
     // lazy var microMomentsService: MicroMomentsService
     // lazy var peerSupportService: PeerSupportService

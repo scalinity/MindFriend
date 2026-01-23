@@ -32,20 +32,22 @@ final class CascadeDetector {
 
         // Cascade = consistent movement toward lower polyvagal values (toward dorsal)
         var transitionCount = 0
-        var isDeterioration = true
+        var previousValue: Int?
 
-        for i in 0..<(stateValues.count - 1) {
-            if stateValues[i] > stateValues[i + 1] {
-                // State deteriorated (moved toward dorsal)
-                transitionCount += 1
-            } else if stateValues[i] < stateValues[i + 1] {
-                // State improved - breaks cascade pattern
-                isDeterioration = false
-                break
+        for state in windowStates {
+            let currentValue = state.state.polyvagalValue
+
+            if let prev = previousValue {
+                // Only count transitions that move toward dorsal (decreasing polyvagal value)
+                if currentValue < prev {
+                    transitionCount += 1
+                }
             }
+
+            previousValue = currentValue
         }
 
-        guard isDeterioration && transitionCount >= minTransitionsForCascade - 1 else {
+        guard transitionCount >= minTransitionsForCascade - 1 else {
             return nil
         }
 

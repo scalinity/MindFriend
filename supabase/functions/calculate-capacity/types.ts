@@ -32,21 +32,37 @@ export interface CapacityInput {
 }
 
 export interface SleepData {
-  averageHours: number; // Last 7 days average
+  quality_score: number | null;
   lastNightHours: number | null;
-  quality: number | null; // 0-100 if available
-  deficit7d: number; // Cumulative hours below 7 over 7 days
+  averageHours: number;
+  quality: number | null;
+  deficit7d: number;
 }
 
 export interface MoodData {
-  todayMood: number | null; // 1-10
-  averageMood3d: number; // Last 3 days average
-  trend3d: number; // (day3 - day1) / 2
+  valence: number | null;
+  todayMood: number | null;
+  averageMood3d: number;
+  trend3d: number;
 }
 
 export interface StreakData {
+  current_streak: number;
+  longest_streak: number;
   streakDays: number;
   completedToday: boolean;
+}
+
+export interface CompletionData {
+  recentCompletionRate: number; // 0-1
+  questsCompleted: number;
+}
+
+export interface CapacityComponents {
+  sleep: number;
+  mood: number;
+  streak: number;
+  completion: number;
 }
 
 export interface CapacityResult {

@@ -3,31 +3,23 @@ import SwiftUI
 
 // MARK: - Capacity Level
 
-/// Represents the user's current capacity level based on their capacity score
+/// Capacity level based on capacity score
+/// Aligned with spec thresholds: low 0-35, moderate 35-70, high 70-100
 enum CapacityLevel: String, Codable, CaseIterable {
-    case low = "low"           // Score 0-40: Rest mode, easier activities
-    case moderate = "moderate" // Score 41-70: Balanced, standard activities
-    case high = "high"         // Score 71-100: Challenge mode, harder activities
-
-    /// User-facing display name
+    case low = "low"
+    case moderate = "moderate"
+    case high = "high"
+    
+    /// Display name for UI
     var displayName: String {
         switch self {
-        case .low: return NSLocalizedString("difficulty.level.low", value: "Taking it easy", comment: "Low capacity level")
-        case .moderate: return NSLocalizedString("difficulty.level.moderate", value: "Balanced", comment: "Moderate capacity level")
-        case .high: return NSLocalizedString("difficulty.level.high", value: "Ready for a challenge", comment: "High capacity level")
+        case .low: return "Low Energy"
+        case .moderate: return "Moderate Energy"
+        case .high: return "High Energy"
         }
     }
-
-    /// SF Symbol icon name
-    var icon: String {
-        switch self {
-        case .low: return "leaf.fill"
-        case .moderate: return "circle.grid.2x2.fill"
-        case .high: return "flame.fill"
-        }
-    }
-
-    /// Color for UI display
+    
+    /// Color for UI indicators
     var color: Color {
         switch self {
         case .low: return .blue
@@ -35,22 +27,38 @@ enum CapacityLevel: String, Codable, CaseIterable {
         case .high: return .orange
         }
     }
-
-    /// Difficulty multiplier for quest duration/intensity
-    var difficultyMultiplier: Double {
+    
+    /// Icon for UI indicators
+    var icon: String {
         switch self {
-        case .low: return 0.5   // Halve duration
-        case .moderate: return 1.0 // Standard duration
-        case .high: return 1.25    // Extend duration by 25%
+        case .low: return "leaf.fill"
+        case .moderate: return "circle.grid.2x2.fill"
+        case .high: return "flame.fill"
         }
     }
-
-    /// Convert numeric score to capacity level
-    static func from(score: Int) -> CapacityLevel {
+    
+    /// Difficulty multiplier for quest/exercise adjustment
+    /// Low: easier/shorter content (0.5x)
+    /// Moderate: standard content (1.0x)
+    /// High: challenging/longer content (1.25x)
+    var difficultyMultiplier: Double {
+        switch self {
+        case .low: return 0.5
+        case .moderate: return 1.0
+        case .high: return 1.25
+        }
+    }
+    
+    /// Initialize from capacity score
+    /// UPDATED: Thresholds aligned with spec (0-35 low, 35-70 moderate, 70-100 high)
+    init(score: Int) {
         switch score {
-        case 0...40: return .low
-        case 41...70: return .moderate
-        default: return .high
+        case 0..<35:
+            self = .low
+        case 35..<70:
+            self = .moderate
+        default:
+            self = .high
         }
     }
 }
