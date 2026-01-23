@@ -367,7 +367,6 @@ struct ShieldEvent: Codable, Identifiable {
     let eventType: ShieldEventType
     let streakProtected: Int?
     let shieldsRemaining: Int?
-    let metadata: [String: AnyCodable]?
     let createdAt: Date
 
     /// Human-readable event title
@@ -398,7 +397,6 @@ struct ShieldEvent: Codable, Identifiable {
         case eventType = "event_type"
         case streakProtected = "streak_protected"
         case shieldsRemaining = "shields_remaining"
-        case metadata
         case createdAt = "created_at"
     }
 }
