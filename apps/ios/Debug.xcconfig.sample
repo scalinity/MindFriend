@@ -3,9 +3,11 @@
 // DO NOT commit Debug.xcconfig to version control!
 
 // Supabase Configuration
-SUPABASE_URL = https://your-project.supabase.co
+// IMPORTANT: Use $()/ to escape // in URLs - xcconfig treats // as comment delimiter!
+// Example: https:/$()/your-project.supabase.co (NOT https://your-project.supabase.co)
+SUPABASE_URL = https:/$()/your-project.supabase.co
 SUPABASE_ANON_KEY = your-anon-key-here
 
 // For local development with supabase local, use:
-// SUPABASE_URL = http://localhost:54321
+// SUPABASE_URL = http:/$()/localhost:54321
 // SUPABASE_ANON_KEY = ***REMOVED***
