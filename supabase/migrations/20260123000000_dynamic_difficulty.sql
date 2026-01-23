@@ -1,42 +1,41 @@
 -- =====================================================
--- Dynamic Difficulty Adjustment (F005) - MVP Schema
--- Created: 2026-01-23
--- Purpose: User capacity scoring, manual overrides, quest difficulty mapping
+-- Migration: Dynamic Difficulty Adjustment (F005)
+-- Description: Capacity calculation, manual overrides, difficulty mapping
+-- Author: MindFriend Dev Team
+-- Date: 2026-01-23
 -- =====================================================
 
--- 1. User capacity scores (calculation results)
+-- Table: user_capacity
+-- Stores calculated capacity scores with expiration
 CREATE TABLE IF NOT EXISTS user_capacity (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-
-    -- Capacity metrics
     score INT NOT NULL CHECK (score BETWEEN 0 AND 100),
     level TEXT NOT NULL CHECK (level IN ('low', 'moderate', 'high')),
-
-    -- Component breakdown (JSONB for flexibility)
     components JSONB NOT NULL,
-    -- Structure: {
-    --   "sleep": {"score": 75, "weight": 0.35, "contribution": 26.25},
-    --   "mood": {"score": 60, "weight": 0.40, "contribution": 24.00},
-    --   "streak": {"score": 80, "weight": 0.25, "contribution": 20.00}
-    -- }
-
-    -- Metadata
-    local_date DATE NOT NULL, -- User's local date when calculated
+    local_date DATE NOT NULL,
     calculated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    expires_at TIMESTAMPTZ NOT NULL, -- Midnight in user's timezone
+    expires_at TIMESTAMPTZ NOT NULL,
     has_override BOOLEAN NOT NULL DEFAULT false,
-
-    -- Smoothing state (for next calculation)
     previous_score INT CHECK (previous_score BETWEEN 0 AND 100),
-
     UNIQUE(user_id, local_date)
 );
 
-CREATE INDEX IF NOT EXISTS idx_user_capacity_user_date ON user_capacity(user_id, local_date DESC);
 CREATE INDEX IF NOT EXISTS idx_user_capacity_expires ON user_capacity(expires_at);
+CREATE INDEX IF NOT EXISTS idx_user_capacity_user_date ON user_capacity(user_id, local_date);
+CREATE INDEX IF NOT EXISTS idx_capacity_overrides_user_active ON capacity_overrides(user_id, is_active) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_capacity_rate_limits_user ON capacity_rate_limits(user_id);
 
-COMMENT ON TABLE user_capacity IS 'Daily capacity scores for dynamic difficulty adjustment (F005)';
+-- SECURITY: Add rate limiting table for capacity calculation endpoint
+CREATE TABLE IF NOT EXISTS capacity_rate_limits (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    request_count INT NOT NULL DEFAULT 0,
+    window_start TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(user_id)
+);
+
+COMMENT ON TABLE user_capacity IS 'Stores user capacity scores with midnight expiration';
 COMMENT ON COLUMN user_capacity.components IS 'JSON breakdown of sleep/mood/streak component scores';
 COMMENT ON COLUMN user_capacity.expires_at IS 'Cache expiration timestamp (midnight in user timezone)';
 
@@ -120,65 +119,61 @@ CREATE INDEX IF NOT EXISTS idx_exercises_difficulty ON exercises(difficulty_leve
 ALTER TABLE user_capacity ENABLE ROW LEVEL SECURITY;
 ALTER TABLE capacity_overrides ENABLE ROW LEVEL SECURITY;
 ALTER TABLE quest_difficulty_mapping ENABLE ROW LEVEL SECURITY;
+ALTER TABLE capacity_rate_limits ENABLE ROW LEVEL SECURITY;
 
--- user_capacity: Users read own, service role writes
+-- Conditional policy creation (idempotent)
 DO $$
 BEGIN
+    -- user_capacity policies
     IF NOT EXISTS (
-        SELECT 1 FROM pg_policies
-        WHERE schemaname = 'public'
-          AND tablename = 'user_capacity'
-          AND policyname = 'Users read own capacity'
+        SELECT 1 FROM pg_policies WHERE tablename = 'user_capacity' AND policyname = 'Users can read own capacity'
     ) THEN
-        CREATE POLICY "Users read own capacity" ON user_capacity
-            FOR SELECT
-            TO authenticated
+        CREATE POLICY "Users can read own capacity"
+            ON user_capacity FOR SELECT
             USING (auth.uid() = user_id);
-        RAISE NOTICE 'Created RLS policy: Users read own capacity';
-    ELSE
-        RAISE NOTICE 'RLS policy already exists: Users read own capacity';
     END IF;
-END $$;
 
--- Service role writes via Edge Function (no INSERT/UPDATE policy for users)
--- Edge Function uses service_role key to bypass RLS for writes
-
--- capacity_overrides: Users manage own
-DO $$
-BEGIN
     IF NOT EXISTS (
-        SELECT 1 FROM pg_policies
-        WHERE schemaname = 'public'
-          AND tablename = 'capacity_overrides'
-          AND policyname = 'Users manage own overrides'
+        SELECT 1 FROM pg_policies WHERE tablename = 'user_capacity' AND policyname = 'Service role can write capacity'
     ) THEN
-        CREATE POLICY "Users manage own overrides" ON capacity_overrides
-            FOR ALL
-            TO authenticated
-            USING (auth.uid() = user_id)
-            WITH CHECK (auth.uid() = user_id);
-        RAISE NOTICE 'Created RLS policy: Users manage own overrides';
-    ELSE
-        RAISE NOTICE 'RLS policy already exists: Users manage own overrides';
+        CREATE POLICY "Service role can write capacity"
+            ON user_capacity FOR ALL
+            USING (auth.jwt()->>'role' = 'service_role');
     END IF;
-END $$;
 
--- quest_difficulty_mapping: Public read, admin write
-DO $$
-BEGIN
+    -- capacity_overrides policies
     IF NOT EXISTS (
-        SELECT 1 FROM pg_policies
-        WHERE schemaname = 'public'
-          AND tablename = 'quest_difficulty_mapping'
-          AND policyname = 'Public read difficulty mapping'
+        SELECT 1 FROM pg_policies WHERE tablename = 'capacity_overrides' AND policyname = 'Users can manage own overrides'
     ) THEN
-        CREATE POLICY "Public read difficulty mapping" ON quest_difficulty_mapping
-            FOR SELECT
-            TO authenticated
+        CREATE POLICY "Users can manage own overrides"
+            ON capacity_overrides FOR ALL
+            USING (auth.uid() = user_id);
+    END IF;
+
+    -- quest_difficulty_mapping policies (read-only for users)
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies WHERE tablename = 'quest_difficulty_mapping' AND policyname = 'Anyone can read difficulty mappings'
+    ) THEN
+        CREATE POLICY "Anyone can read difficulty mappings"
+            ON quest_difficulty_mapping FOR SELECT
             USING (true);
-        RAISE NOTICE 'Created RLS policy: Public read difficulty mapping';
-    ELSE
-        RAISE NOTICE 'RLS policy already exists: Public read difficulty mapping';
+    END IF;
+
+    -- capacity_rate_limits policies
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies WHERE tablename = 'capacity_rate_limits' AND policyname = 'Users can read own rate limits'
+    ) THEN
+        CREATE POLICY "Users can read own rate limits"
+            ON capacity_rate_limits FOR SELECT
+            USING (auth.uid() = user_id);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies WHERE tablename = 'capacity_rate_limits' AND policyname = 'Service role can manage rate limits'
+    ) THEN
+        CREATE POLICY "Service role can manage rate limits"
+            ON capacity_rate_limits FOR ALL
+            USING (auth.jwt()->>'role' = 'service_role');
     END IF;
 END $$;
 
@@ -186,29 +181,45 @@ END $$;
 -- Maintenance Functions
 -- =====================================================
 
-CREATE OR REPLACE FUNCTION cleanup_expired_capacity()
+-- Cleanup Function: Delete capacity records older than 30 days
+-- SECURITY FIX: Added search_path protection to prevent SQL injection
+CREATE OR REPLACE FUNCTION cleanup_old_capacity()
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public, pg_temp
 AS $$
 BEGIN
-    -- Delete capacity records older than 30 days (archival)
     DELETE FROM user_capacity
     WHERE calculated_at < now() - INTERVAL '30 days';
-
-    -- Deactivate expired overrides
-    UPDATE capacity_overrides
-    SET is_active = false
-    WHERE is_active = true AND expires_at < now();
-
-    RAISE NOTICE 'Cleaned up expired capacity data';
 END;
 $$;
 
-COMMENT ON FUNCTION cleanup_expired_capacity() IS 'Cleanup old capacity data and expire overrides (run daily via cron)';
+COMMENT ON FUNCTION cleanup_old_capacity() IS 'Deletes capacity records older than 30 days (runs daily at 3 AM UTC)';
 
--- Schedule cleanup (if pg_cron extension is enabled)
--- Example: SELECT cron.schedule('cleanup-capacity', '0 2 * * *', 'SELECT cleanup_expired_capacity()');
+-- Schedule cleanup via pg_cron (requires pg_cron extension)
+-- Run daily at 3 AM UTC
+-- Note: Ensure pg_cron is enabled in your Supabase project
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+        PERFORM cron.schedule(
+            'cleanup-old-capacity',
+            '0 3 * * *',
+            'SELECT cleanup_old_capacity()'
+        );
+    END IF;
+EXCEPTION
+    WHEN OTHERS THEN
+        -- Ignore if pg_cron not available
+        NULL;
+END $$;
+
+-- Grant necessary permissions
+GRANT SELECT ON user_capacity TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON capacity_overrides TO authenticated;
+GRANT SELECT ON quest_difficulty_mapping TO authenticated;
+GRANT SELECT ON capacity_rate_limits TO authenticated;
 
 -- =====================================================
 -- Grants (ensure service role can write)
@@ -218,3 +229,4 @@ GRANT USAGE ON SCHEMA public TO service_role;
 GRANT ALL ON user_capacity TO service_role;
 GRANT ALL ON capacity_overrides TO service_role;
 GRANT SELECT ON quest_difficulty_mapping TO service_role;
+GRANT SELECT ON capacity_rate_limits TO service_role;

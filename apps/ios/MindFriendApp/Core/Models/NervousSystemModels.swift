@@ -226,12 +226,12 @@ enum CascadeSeverity: String, Codable {
 /// Intervention recommendation
 struct InterventionRecommendation: Identifiable, Codable {
     let id: UUID
-    let type: InterventionType
+    let type: NervousSystemInterventionType
     let title: String
     let description: String
-    let estimatedDuration: TimeInterval
-    let urgency: InterventionUrgency
-    let efficacyScore: Double?
+    let estimatedDuration: Int  // seconds
+    var urgency: InterventionUrgency
+    var efficacyScore: Double?  // 0-1, based on user history
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -245,7 +245,7 @@ struct InterventionRecommendation: Identifiable, Codable {
 }
 
 /// Types of interventions
-enum InterventionType: String, Codable, CaseIterable {
+enum NervousSystemInterventionType: String, Codable, CaseIterable {
     case breathing = "breathing"
     case grounding = "grounding"
     case movement = "movement"

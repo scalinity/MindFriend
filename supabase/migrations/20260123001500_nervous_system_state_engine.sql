@@ -174,6 +174,7 @@ CREATE OR REPLACE FUNCTION delete_old_nervous_system_data()
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public, pg_temp
 AS $$
 BEGIN
     -- Delete states older than 90 days
@@ -195,6 +196,7 @@ CREATE OR REPLACE FUNCTION update_intervention_efficacy()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public, pg_temp
 AS $$
 DECLARE
     target_state_value TEXT;
