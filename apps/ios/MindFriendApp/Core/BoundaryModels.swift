@@ -22,12 +22,52 @@ enum ImportanceLevel: String, Codable {
     case high
     case medium
     case low
+    
+    var color: Color {
+        switch self {
+        case .high: return Color.red
+        case .medium: return Color.orange
+        case .low: return Color.green
+        }
+    }
+    
+    var displayName: String {
+        switch self {
+        case .high: return "High"
+        case .medium: return "Medium"
+        case .low: return "Low"
+        }
+    }
 }
 
 enum MetLevel: String, Codable {
     case yes
     case sometimes
     case no
+    
+    var icon: String {
+        switch self {
+        case .yes: return "checkmark.circle.fill"
+        case .sometimes: return "minus.circle.fill"
+        case .no: return "xmark.circle.fill"
+        }
+    }
+    
+    var displayName: String {
+        switch self {
+        case .yes: return "Yes"
+        case .sometimes: return "Sometimes"
+        case .no: return "No"
+        }
+    }
+    
+    var color: Color {
+        switch self {
+        case .yes: return .green
+        case .sometimes: return .orange
+        case .no: return .red
+        }
+    }
 }
 
 /// A need identified from the assessment with gap analysis
@@ -454,11 +494,12 @@ struct GenerateScriptsResponse: Codable {
     let practicePrompts: [String]
 }
 
-struct ScriptResponse: Codable {
+struct ScriptResponse: Codable, Identifiable {
     let variation: ScriptVariation
     let script: String
     let toneDescription: String
     let tips: [String]
+    var id: UUID { UUID() }
     
     enum CodingKeys: String, CodingKey {
         case variation

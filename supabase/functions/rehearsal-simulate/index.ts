@@ -77,6 +77,41 @@ interface EndSessionParams {
   notes?: string;
 }
 
+type SituationType = "conflict" | "feedback" | "boundary" | "request" | "other";
+
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+interface TranscriptEntry {
+  role: "user" | "assistant";
+  content: string;
+  timestamp?: string;
+}
+
+interface GetScenariosParams {
+  type?: "prebuilt" | "custom";
+}
+
+interface GetSessionHistoryParams {
+  limit?: number;
+  offset?: number;
+  status?: "active" | "completed" | "abandoned" | "crisis_ended";
+}
+
+interface FeedbackResult {
+  feedback: string;
+  suggestions: string[];
+  confidenceRating: number;
+}
+
+interface UpdateLayoutPreferencesRequest {
+  layoutType?: string;
+  hideCompletedSessions?: boolean;
+  groupBySituation?: boolean;
+}
+
 // Constants
 const MAX_MESSAGE_LENGTH = 1000; // Rehearsal messages are shorter
 const FREE_TIER_WEEKLY_QUOTA = 2;
@@ -86,16 +121,16 @@ const XAI_API_URL = "https://api.x.ai/v1/chat/completions";
 // AI Prompts for role simulation
 const ROLE_SIMULATION_PROMPT = (
   scenario: ScenarioUnion,
-) => `You are role-playing as ${scenario.other_party_role} in a ${
-  "situation_type" in scenario ? scenario.situation_type : "conversation"
+) => `You are role-playing as ${sanitizeForPrompt(scenario.other_party_role)} in a ${
+  "situation_type" in scenario ? sanitizeForPrompt(scenario.situation_type) : "conversation"
 }.
 
 Scenario context: ${
-  "situation_context" in scenario ? scenario.situation_context : scenario.situation_summary
+  "situation_context" in scenario ? sanitizeForPrompt(scenario.situation_context) : sanitizeForPrompt(scenario.situation_summary)
 }
 Your personality: ${
   "other_party_personality" in scenario && scenario.other_party_personality
-    ? scenario.other_party_personality
+    ? sanitizeForPrompt(scenario.other_party_personality)
     : "neutral and realistic"
 }
 
@@ -147,7 +182,9 @@ function normalizeScenario(scenario: ScenarioUnion): {
     title: scenario.title,
     role: scenario.other_party_role,
     personality:
-      scenario.other_party_personality || "neutral and realistic",
+      ("other_party_personality" in scenario && scenario.other_party_personality)
+        ? scenario.other_party_personality
+        : "neutral and realistic",
     context:
       "situation_context" in scenario
         ? scenario.situation_context
@@ -181,9 +218,39 @@ function sanitizeAIResponse(content: string): string {
   return sanitized.slice(0, MAX_RESPONSE_LENGTH).trim();
 }
 
+// Helper: Parse transcript JSON with error recovery
+function parseTranscript(transcriptRaw: string | null | undefined): any[] {
+  if (!transcriptRaw) return [];
+  try {
+    const parsed = JSON.parse(transcriptRaw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (parseError) {
+    console.error("Transcript parse error, resetting:", parseError);
+    return [];
+  }
+}
+
 interface ActionRequest {
   action: string;
   [key: string]: any;
+}
+
+// Helper: Build HTTP response with proper headers
+function buildResponseHeaders(
+  body: any,
+  status: number,
+  baseCorsHeaders: Record<string, string>,
+): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      ...baseCorsHeaders,
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store, no-cache, must-revalidate, private",
+      "Pragma": "no-cache",
+      "Expires": "0",
+    },
+  });
 }
 
 serve(async (req) => {
@@ -191,7 +258,11 @@ serve(async (req) => {
   const baseCorsHeaders = getCorsHeaders(origin);
 
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: baseCorsHeaders });
+    return buildResponseHeaders(
+      { status: "ok" },
+      200,
+      baseCorsHeaders,
+    );
   }
 
   try {
@@ -277,15 +348,14 @@ serve(async (req) => {
     switch (action) {
       case "create-scenario":
         response = await handleCreateScenario(
-          params,
+          params as CreateScenarioParams,
           user.id,
           supabaseUser,
-          supabaseAdmin,
         );
         break;
       case "start-session":
         response = await handleStartSession(
-          params,
+          params as StartSessionParams,
           user.id,
           supabaseUser,
           supabaseAdmin,
@@ -293,7 +363,8 @@ serve(async (req) => {
         break;
       case "send-message":
         response = await handleSendMessage(
-          params,
+          req,
+          params as SendMessageParams,
           user.id,
           supabaseUser,
           supabaseAdmin,
@@ -301,7 +372,7 @@ serve(async (req) => {
         break;
       case "end-session":
         response = await handleEndSession(
-          params,
+          params as EndSessionParams,
           user.id,
           supabaseUser,
           supabaseAdmin,
@@ -314,10 +385,14 @@ serve(async (req) => {
         response = await handleGetSessionHistory(params, user.id, supabaseUser);
         break;
       default:
-        return new Response(JSON.stringify({ error: "Invalid action" }), {
-          status: 400,
-          headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
-        });
+        return buildResponseHeaders(
+          {
+            error: "Invalid action",
+            message: "Invalid action provided",
+          },
+          400,
+          baseCorsHeaders,
+        );
     }
 
     return new Response(JSON.stringify(response), {
@@ -330,12 +405,13 @@ serve(async (req) => {
     });
   } catch (error: any) {
     console.error("Rehearsal function error:", error);
-    return new Response(
-      JSON.stringify({ error: error?.message || "Internal server error" }),
+    return buildResponseHeaders(
       {
-        status: 500,
-        headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
+        error: "unexpected_error",
+        message: sanitizeError(error?.message || "Internal server error"),
       },
+      500,
+      baseCorsHeaders,
     );
   }
 });
@@ -345,87 +421,54 @@ async function handleCreateScenario(
   params: CreateScenarioParams,
   userId: string,
   supabaseUser: UntypedSupabaseClient,
-  supabaseAdmin: UntypedSupabaseClient,
-) {
-  const {
-    title,
-    description,
-    personRole,
-    situationType,
-    keyPoints,
-    desiredOutcome,
-  } = params;
+): Promise<SuccessResponse | ErrorResponse> {
+  const { title, description, personRole, situationType, keyPoints, desiredOutcome } = params;
 
   // Validation
-  if (!title || !description || !personRole || !keyPoints || !desiredOutcome) {
-    throw new Error("Missing required fields");
-  }
-
-  if (title.trim().length < 3 || title.trim().length > 100) {
-    throw new Error("Title must be 3-100 characters");
-  }
-
-  if (description.trim().length < 10 || description.trim().length > 500) {
-    throw new Error("Description must be 10-500 characters");
-  }
-
-  if (
-    !Array.isArray(keyPoints) ||
-    keyPoints.length < 1 ||
-    keyPoints.length > 5
-  ) {
-    throw new Error("Must have 1-5 key points");
-  }
-
-  // Bug fix #9: Removed quota check from scenario creation
-  // Creating scenarios is FREE (just planning). Quota only consumed when starting session (actual AI usage).
-  // This fixes double-charging bug: was 1 quota for create + 1 for start = 2 total
-  // Now: 0 for create + 1 for start = 1 total (correct)
-
-  // Crisis detection
-  const fullText = `${title} ${description} ${keyPoints.join(" ")} ${desiredOutcome}`;
-  const crisisDetected = await detectCrisis(fullText);
-
-  if (crisisDetected) {
-    // FIX P0: Store only matched keyword, not full scenario text (PII protection)
-    // FIX P1: Use extracted helper function to reduce duplication
-    await logCrisisEvent(supabaseAdmin, userId, fullText);
-
+  if (!title || !personRole || !situationType || !desiredOutcome) {
     return {
-      crisis: true,
-      message: CRISIS_RESPONSE,
-      resources: getCrisisResources(),
+      error: "Missing required fields",
+      message: "title, personRole, situationType, and desiredOutcome are required",
+      sessionEnded: false,
     };
   }
 
-  // SECURITY: Sanitize all scenario fields to prevent prompt injection
-  // These fields are later injected into AI system prompts, so must be sanitized
-  const sanitizedTitle = sanitizeForPrompt(title.trim());
-  const sanitizedPersonRole = sanitizeForPrompt(personRole.trim());
-  const sanitizedDescription = sanitizeForPrompt(description.trim());
-  const sanitizedKeyPoints = keyPoints.map((kp: string) =>
-    sanitizeForPrompt(kp),
-  );
-  const sanitizedDesiredOutcome = sanitizeForPrompt(desiredOutcome.trim());
+  try {
+    const { data: scenario, error: scenarioError } = await supabaseUser
+      .from("custom_scenarios")
+      .insert({
+        user_id: userId,
+        title,
+        other_party_role: personRole,
+        situation_summary: description,
+        key_points: keyPoints || [],
+        desired_outcome: desiredOutcome,
+        situation_type: situationType as SituationType,
+        is_public: false,
+      })
+      .select()
+      .single();
 
-  // Create scenario with sanitized data
-  const { data: scenario, error } = await supabaseUser
-    .from("custom_scenarios")
-    .insert({
-      user_id: userId,
-      title: sanitizedTitle,
-      other_party_role: sanitizedPersonRole,
-      situation_summary: sanitizedDescription,
-      key_points: sanitizedKeyPoints,
-      desired_outcome: sanitizedDesiredOutcome,
-      situation_type: situationType || "other",
-    })
-    .select("id, title, other_party_role, other_party_personality, situation_type, situation_summary, key_points, desired_outcome")
-    .single();
+    if (scenarioError) {
+      return {
+        error: "create_failed",
+        message: sanitizeError(scenarioError),
+        sessionEnded: false,
+      };
+    }
 
-  if (error) throw error;
-
-  return { scenario, success: true };
+    return {
+      success: true,
+      data: { scenario },
+      sessionEnded: false,
+    };
+  } catch (error) {
+    return {
+      error: "unexpected_error",
+      message: sanitizeError(error),
+      sessionEnded: false,
+    };
+  }
 }
 
 // Handler: Start rehearsal session
@@ -434,11 +477,15 @@ async function handleStartSession(
   userId: string,
   supabaseUser: UntypedSupabaseClient,
   supabaseAdmin: UntypedSupabaseClient,
-) {
+): Promise<SuccessResponse | ErrorResponse | CrisisResponse> {
   const { scenarioId, customScenarioId } = params;
 
   if (!scenarioId && !customScenarioId) {
-    throw new Error("Must provide scenarioId or customScenarioId");
+    return {
+      error: "invalid_input",
+      message: "Must provide either scenarioId or customScenarioId",
+      sessionEnded: false,
+    } as ErrorResponse;
   }
 
   // FIX High: Use atomic RPC call for session limit check (prevents TOCTOU race)
@@ -486,7 +533,11 @@ async function handleStartSession(
   }
 
   if (!scenario) {
-    throw new Error("Scenario not found");
+    return {
+      error: "scenario_not_found",
+      message: "The specified scenario does not exist or has been deleted",
+      sessionEnded: false,
+    } as ErrorResponse;
   }
 
   // Check if premium scenario and user has entitlement
@@ -545,154 +596,219 @@ async function handleStartSession(
   if (sessionError) {
     // Rollback quota on session creation failure
     try {
-      await supabaseAdmin.rpc("rollback_rehearsal_quota", {
+      const { error: rollbackError } = await supabaseAdmin.rpc("rollback_rehearsal_quota", {
         p_user_id: userId,
       });
-    } catch (e) {
+      if (rollbackError) {
+        console.error(
+          "CRITICAL: Quota rollback failed after session creation failure. User may be overcharged.",
+          { userId, rollbackError, originalError: sessionError }
+        );
+      }
+    } catch (rollbackException) {
       console.error(
-        "Failed to rollback quota after session creation failure:",
-        e,
+        "CRITICAL: Quota rollback exception after session creation failure. User may be overcharged.",
+        { userId, rollbackException, originalError: sessionError }
       );
     }
     throw sessionError;
   }
 
-  // Generate AI opening message
+  // Generate AI opening message with error handling and quota rollback
   const systemPrompt = ROLE_SIMULATION_PROMPT(scenario);
-  const openingMessage = await callXAIWithRetry(
-    [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: "Start the conversation naturally." },
-    ],
-    3,
-  );
+  let openingMessage: string;
+  try {
+    openingMessage = await callXAIWithRetry(
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: "Start the conversation naturally." },
+      ],
+      3,
+    );
+  } catch (messageError) {
+    // Rollback quota on opening message generation failure
+    try {
+      const { error: rollbackError } = await supabaseAdmin.rpc("rollback_rehearsal_quota", { p_user_id: userId });
+      if (rollbackError) {
+        console.error(
+          "CRITICAL: Quota rollback failed after opening message failure. User may be overcharged.",
+          { userId, rollbackError, originalError: messageError }
+        );
+      }
+    } catch (rollbackException) {
+      console.error(
+        "CRITICAL: Quota rollback exception after opening message failure. User may be overcharged.",
+        { userId, rollbackException, originalError: messageError }
+      );
+    }
+    return {
+      error: "ai_api_error",
+      message: `Failed to generate opening message: ${sanitizeError(messageError)}`,
+      sessionEnded: false,
+    } as ErrorResponse;
+  }
 
   return {
-    session: {
-      id: session.id,
-      scenarioTitle: scenario.title,
-      keyPoints: scenario.key_points_to_convey || scenario.key_points || [],
-      goal: scenario.desired_outcome,
+    success: true,
+    data: {
+      session: {
+        id: session.id,
+        scenarioTitle: scenario.title,
+        keyPoints: scenario.key_points_to_convey || scenario.key_points || [],
+        goal: scenario.desired_outcome,
+      },
+      openingMessage,
+      systemContext: systemPrompt,
     },
-    openingMessage,
-    systemContext: systemPrompt,
-  };
+    sessionEnded: false,
+  } as SuccessResponse;
 }
 
 // Handler: Send message in rehearsal
 async function handleSendMessage(
+  req: Request,
   params: SendMessageParams,
   userId: string,
   supabaseUser: UntypedSupabaseClient,
   supabaseAdmin: UntypedSupabaseClient,
-) {
+): Promise<ErrorResponse | SuccessResponse<SendMessageData> | CrisisResponse> {
   const { sessionId, message } = params;
 
   if (!sessionId || !message) {
-    throw new Error("Missing sessionId or message");
+    return {
+      error: "invalid_input",
+      message: "sessionId and message are required",
+      sessionEnded: false,
+    } as ErrorResponse;
   }
 
   if (message.length > MAX_MESSAGE_LENGTH) {
-    throw new Error(`Message too long (max ${MAX_MESSAGE_LENGTH} characters)`);
+    return {
+      error: "message_too_long",
+      message: `Message must be ${MAX_MESSAGE_LENGTH} characters or less`,
+      sessionEnded: false,
+    } as ErrorResponse;
   }
 
   // Get session and scenario with selective columns (no SELECT *)
-  const { data: session, error: sessionError } = await supabaseUser
+  const { data: sessionBase, error: sessionError } = await supabaseUser
     .from("rehearsal_sessions")
-    .select(`
-      id, user_id, status, transcript, total_exchanges, started_at, completed_at, crisis_detected,
-      conversation_scenarios(id, title, other_party_role, other_party_personality, situation_type, situation_context, key_points_to_convey, desired_outcome, is_premium),
-      custom_scenarios(id, title, other_party_role, other_party_personality, situation_type, situation_summary, key_points, desired_outcome)
-    `)
+    .select("id, user_id, status, transcript, total_exchanges, started_at, completed_at, crisis_detected, scenario_id, custom_scenario_id")
     .eq("id", sessionId)
     .eq("user_id", userId)
     .single();
 
-  if (sessionError || !session) {
-    throw new Error(`Session query failed: ${sessionError?.message || "Session not found"}`);
-  }
-
-  if (session.status !== "active") {
-    throw new Error("Session is not active");
-  }
-
-  // Check exchange limit for free tier
-  // FIX P1: Use extracted helper function to reduce duplication
-  const subscriptionTier = await getProfileSubscriptionTier(supabaseUser, userId);
-
-  if (
-    subscriptionTier !== "premium" &&
-    session.total_exchanges >= FREE_TIER_EXCHANGES_LIMIT
-  ) {
+  if (sessionError || !sessionBase) {
     return {
-      error: "exchange_limit",
-      message: `Free tier limit of ${FREE_TIER_EXCHANGES_LIMIT} exchanges reached`,
-      upgradePrompt: true,
-    };
+      error: "session_error",
+      message: "Unable to retrieve session. Please try again.",
+      sessionEnded: false,
+    } as ErrorResponse;
   }
 
-  // Crisis detection (using KEYWORD only, not full message)
-  const crisisDetected = await detectCrisis(message);
-  if (crisisDetected) {
-    // FIX P0: Store only matched keyword, not full user message (PII protection)
-    // FIX P1: Use extracted helper function to reduce duplication
-    await logCrisisEvent(supabaseAdmin, userId, message);
+  if (sessionBase.status !== "active") {
+    return {
+      error: "session_inactive",
+      message: "This session is no longer active",
+      sessionEnded: true,
+    } as ErrorResponse;
+  }
 
-    // FIX P0: Atomically update session to crisis_ended with row-level lock
-    const { data: crisisUpdateResult, error: crisisUpdateError } = await supabaseUser
-      .rpc("update_session_crisis_status_atomic", {
-        p_session_id: sessionId,
-        p_user_id: userId,
-      })
+  // FIX CA1: Optimize query to fetch only needed scenario table (not both)
+  // Check which scenario type is used, fetch only that table
+  let scenario: ScenarioUnion | null = null;
+  
+  if (sessionBase.scenario_id) {
+    // Fetch prebuilt scenario
+    const { data: scenarios } = await supabaseUser
+      .from("conversation_scenarios")
+      .select("id, title, other_party_role, other_party_personality, situation_type, situation_context, key_points_to_convey, desired_outcome, is_premium")
+      .eq("id", sessionBase.scenario_id)
       .single();
+    scenario = scenarios as unknown as ScenarioUnion;
+  } else if (sessionBase.custom_scenario_id) {
+    // Fetch custom scenario
+    const { data: scenarios } = await supabaseUser
+      .from("custom_scenarios")
+      .select("id, title, other_party_role, other_party_personality, situation_type, situation_summary, key_points, desired_outcome")
+      .eq("id", sessionBase.custom_scenario_id)
+      .eq("user_id", userId)
+      .single();
+    scenario = scenarios as unknown as ScenarioUnion;
+  }
 
-    if (crisisUpdateError || !crisisUpdateResult?.success) {
-      console.error(
-        "Crisis session status update failed:",
-        crisisUpdateError || crisisUpdateResult?.error_message,
-      );
-      // Continue with crisis response regardless of status update failure
-    }
+  if (!scenario) {
+    return {
+      error: "scenario_deleted",
+      message: "The scenario for this session has been deleted",
+      sessionEnded: true,
+    } as ErrorResponse;
+  }
 
+  // Rebuild session object with fetched scenario
+  const session = {
+    ...sessionBase,
+    scenario,
+  };
+
+  // MOVE CRISIS DETECTION HERE - BEFORE ALL OTHER CHECKS (line 577)
+  // Crisis is safety-critical and must be detected on ANY message, regardless of quota
+  const crisisDetected = await detectCrisis(message);
+  
+  if (crisisDetected) {
+    // Log crisis event (fire-and-forget) - pass all required parameters
+    const crisisResult = await logCrisisEvent(
+      supabaseAdmin,
+      userId,
+      message,
+      sessionId,
+      "other" as SituationType,
+    );
+    
+    // Return crisis response immediately - this overrides all other logic
     return {
       crisis: true,
       message: CRISIS_RESPONSE,
       resources: getCrisisResources(),
       sessionEnded: true,
-    };
+    } as CrisisResponse;
+  }
+
+  // NOW check exchange limit (after crisis safety check)
+  const transcript = session.transcript || [];
+  const subscriptionTier = await getProfileSubscriptionTier(supabaseUser, userId);
+  
+  // Parse transcript to check actual exchange count (not string length)
+  const transcriptArray = parseTranscript(session.transcript);
+  
+  // Free tier allows exactly 10 exchanges (20 entries: user + AI response each)
+  // Block when trying to exceed limit: transcriptArray.length >= 21
+  if (subscriptionTier !== "premium" && transcriptArray.length >= FREE_TIER_EXCHANGES_LIMIT * 2) {
+    return {
+      error: "exchange_limit",
+      message: `Free tier limit of ${FREE_TIER_EXCHANGES_LIMIT} exchanges reached`,
+      upgradePrompt: true,
+    } as ErrorResponse;
   }
 
   // FIX P0: Sanitize user message to prevent prompt injection
   const sanitizedMessage = sanitizeForPrompt(message);
-
-  // FIX P0: Extract first element from nested query arrays (Supabase returns arrays)
-  const scenarioArray = session.conversation_scenarios || session.custom_scenarios;
-  const scenario = Array.isArray(scenarioArray) ? scenarioArray[0] : scenarioArray;
-  if (!scenario) {
-    throw new Error("Scenario not found or was deleted");
-  }
-  const systemPrompt = ROLE_SIMULATION_PROMPT(scenario);
-
-  // FIX P0: Parse existing transcript with proper error handling (prevents crash)
-  let transcript: any[] = [];
-  try {
-    const parsed = session.transcript ? JSON.parse(session.transcript) : [];
-    transcript = Array.isArray(parsed) ? parsed : [];
-  } catch (parseError) {
-    console.error("Transcript parse error, resetting:", parseError);
-    transcript = [];
-  }
+  
+  // Generate system prompt from scenario
+  const systemPrompt = ROLE_SIMULATION_PROMPT(session.scenario);
 
   // Enforce max exchanges to prevent DoS via transcript bloat
-  const MAX_EXCHANGES = 100;
-  if (transcript.length >= MAX_EXCHANGES * 2) {
+  // Use >= to block when at or exceeding limit (for free tier only, checked above)
+  // Allows exactly 10 exchanges (20 entries), blocks on 11th exchange
+  if (transcriptArray.length >= FREE_TIER_EXCHANGES_LIMIT * 2) {
     return {
-      error: "exchange_limit",
-      message: `Session exchange limit reached (${MAX_EXCHANGES} exchanges max)`,
-    };
+      error: sanitizeError("Session exchange limit reached"),
+      message: "This rehearsal session has reached its maximum exchanges",
+      sessionEnded: true,
+    } as ErrorResponse;
   }
 
-  transcript.push({
+  transcriptArray.push({
     role: "user",
     content: sanitizedMessage,
     timestamp: new Date().toISOString(),
@@ -701,13 +817,20 @@ async function handleSendMessage(
   // Get AI response with retry logic
   const conversationHistory = [
     { role: "system", content: systemPrompt },
-    ...transcript
+    ...transcriptArray
       .slice(-10)
       .map((t: any) => ({ role: t.role, content: t.content })),
   ];
 
   const aiResponse = await callXAIWithRetry(conversationHistory, 3);
-  transcript.push({
+
+  // Validate subscription status mid-session before generating AI response
+  const isPremium = "is_premium" in scenario && scenario.is_premium;
+  if (isPremium && subscriptionTier !== "premium") {
+    throw new Error("Subscription expired during session. Please renew.");
+  }
+
+  transcriptArray.push({
     role: "assistant",
     content: aiResponse,
     timestamp: new Date().toISOString(),
@@ -732,37 +855,48 @@ async function handleSendMessage(
       // Continue - don't block user response
     });
 
-  // Don't await feedback - return to user immediately
-  feedbackPromise; // Fire and forget (no duplicate generation)
+  // Don't await feedback - return to user immediately (void marks intentional fire-and-forget)
+  void feedbackPromise;
 
   // Use pattern-based fallback for immediate response (no AI cost)
   const patternFeedback = analyzeWithPatterns(message);
 
   // FIX P0: Add error handling for session update (prevent data inconsistency)
   // FIX P0: Use atomic RPC call for session update (prevents race condition from concurrent messages)
+  // FIX P1: Calculate total exchanges correctly: each exchange = 2 entries (user + AI response)
+  const totalExchanges = Math.floor(transcriptArray.length / 2);
   const { data: updateResult, error: updateError } = await supabaseUser
     .rpc("update_session_transcript_atomic", {
       p_session_id: sessionId,
       p_user_id: userId,
-      p_transcript_json: JSON.stringify(transcript),
-      p_total_exchanges: session.total_exchanges + 1,
+      p_transcript_json: JSON.stringify(transcriptArray),
+      p_total_exchanges: totalExchanges,
     })
     .single();
 
-  if (updateError || !updateResult?.success) {
-    console.error("Session transcript update failed:", updateError || updateResult?.error_message);
-    throw new Error(updateResult?.error_message || "Failed to update session transcript");
+  const result = updateResult as RPCSuccessResult;
+  if (updateError || !result?.success) {
+    console.error("Session transcript update failed:", updateError || result?.error_message);
+    return {
+      error: "transcript_update_failed",
+      message: "Failed to save conversation. Please try again.",
+      sessionEnded: false,
+    } as ErrorResponse;
   }
 
   return {
-    aiResponse,
-    feedback: {
-      style: patternFeedback.tone,
-      suggestions: patternFeedback.improvement ? [patternFeedback.improvement] : [],
-      encouragement: patternFeedback.strength || "Good effort!",
+    success: true,
+    data: {
+      aiResponse,
+      feedback: {
+        style: patternFeedback.tone,
+        suggestions: patternFeedback.improvement ? [patternFeedback.improvement] : [],
+        encouragement: patternFeedback.strength || "Good effort!",
+      },
+      exchangeCount: totalExchanges,
     },
-    exchangeCount: transcript.length / 2,
-  };
+    sessionEnded: false,
+  } as SuccessResponse<SendMessageData>;
 }
 
 // Handler: End session with summary
@@ -771,12 +905,21 @@ async function handleEndSession(
   userId: string,
   supabaseUser: UntypedSupabaseClient,
   supabaseAdmin: UntypedSupabaseClient,
-) {
+): Promise<SuccessResponse | ErrorResponse> {
   const { sessionId, confidenceRating, notes } = params;
 
   if (!sessionId) {
-    throw new Error("Missing sessionId");
+    return {
+      error: "invalid_input",
+      message: "sessionId is required",
+      sessionEnded: false,
+    } as ErrorResponse;
   }
+
+  // FIX P0: Add bounds validation on confidenceRating (1-10 scale)
+  const validatedConfidenceRating = confidenceRating
+    ? Math.min(Math.max(confidenceRating, 1), 10)
+    : undefined;
 
   // FIX P1: Specify columns instead of SELECT * (performance optimization)
   const { data: session } = await supabaseUser
@@ -787,7 +930,11 @@ async function handleEndSession(
     .single();
 
   if (!session) {
-    throw new Error("Session not found");
+    return {
+      error: "session_not_found",
+      message: "Session does not exist or has already ended",
+      sessionEnded: true,
+    } as ErrorResponse;
   }
 
   // Calculate duration
@@ -834,31 +981,43 @@ async function handleEndSession(
       p_session_id: sessionId,
       p_user_id: userId,
       p_status: "completed",
-      p_confidence_rating: confidenceRating,
+      p_confidence_rating: validatedConfidenceRating,
       p_notes: notes || null,
       p_feedback_summary: feedbackSummary,
       p_communication_style: null,
     })
     .single();
 
-  if (endSessionError || !endSessionResult?.success) {
-    throw new Error(endSessionResult?.error_message || endSessionError?.message || "Failed to complete session");
+  const result = endSessionResult as RPCSuccessResult;
+  if (endSessionError || !result?.success) {
+    throw new Error(result?.error_message || endSessionError?.message || "Failed to complete session");
+  }
+
+  if (result?.error_message) {
+    return {
+      error: "session_end_failed",
+      message: "Failed to end session. Please try again.",
+      sessionEnded: false,
+    } as ErrorResponse;
   }
 
   return {
-    summary: {
-      duration: durationSeconds,
-      exchangesCount: session.total_exchanges,
-      avgScores: {
-        clarity: Number(avgClarity.toFixed(1)),
-        empathy: Number(avgEmpathy.toFixed(1)),
-        assertiveness: Number(avgAssertiveness.toFixed(1)),
-      },
-      strengths: allStrengths.slice(0, 3),
-      growthAreas: allImprovements.slice(0, 2),
-    },
     success: true,
-  };
+    data: {
+      summary: {
+        duration: durationSeconds,
+        exchangesCount: session.total_exchanges,
+        avgScores: {
+          clarity: Number(avgClarity.toFixed(1)),
+          empathy: Number(avgEmpathy.toFixed(1)),
+          assertiveness: Number(avgAssertiveness.toFixed(1)),
+        },
+        strengths: allStrengths.slice(0, 3),
+        growthAreas: allImprovements.slice(0, 2),
+      },
+    },
+    sessionEnded: true,
+  } as SuccessResponse;
 }
 
 // Handler: Get scenarios
@@ -866,7 +1025,7 @@ async function handleGetScenarios(
   params: any,
   userId: string,
   supabaseUser: UntypedSupabaseClient,
-) {
+): Promise<SuccessResponse<{ prebuilt: any[]; custom: any[] }>> {
   const { category, includeCustom } = params;
 
   // FIX P2: Use selective columns instead of SELECT * for performance
@@ -896,7 +1055,10 @@ async function handleGetScenarios(
     custom = data || [];
   }
 
-  return { prebuilt: prebuilt || [], custom };
+  return {
+    success: true,
+    data: { prebuilt: prebuilt || [], custom },
+  } as SuccessResponse<{ prebuilt: any[]; custom: any[] }>;
 }
 
 // Handler: Get session history
@@ -904,11 +1066,13 @@ async function handleGetSessionHistory(
   params: any,
   userId: string,
   supabaseUser: UntypedSupabaseClient,
-) {
-  const { limit = 20 } = params;
+): Promise<SuccessResponse<{ sessions: any[] }> | ErrorResponse> {
+  // FIX P0: Add bounds validation to prevent DoS via unbounded queries
+  const rawLimit = params.limit || 20;
+  const limit = Math.min(Math.max(rawLimit, 1), 100); // Clamp between 1 and 100
 
   // FIX P2: Use selective columns instead of SELECT * for performance
-  const { data: sessions } = await supabaseUser
+  const { data: sessions, error } = await supabaseUser
     .from("rehearsal_sessions")
     .select(
       "id, status, started_at, completed_at, total_exchanges, confidence_rating, conversation_scenarios(title), custom_scenarios(title)",
@@ -917,7 +1081,20 @@ async function handleGetSessionHistory(
     .order("started_at", { ascending: false })
     .limit(limit);
 
-  return { sessions: sessions || [] };
+  if (error) {
+    console.error("Session history query failed:", error);
+    return {
+      error: "session_history_failed",
+      message: "Failed to load session history. Please try again.",
+      sessionEnded: false,
+    } as ErrorResponse;
+  }
+
+  return {
+    success: true,
+    data: { sessions: sessions || [] },
+    sessionEnded: false,
+  } as SuccessResponse<{ sessions: any[] }>;
 }
 
 // Utility: Call xAI API with timeout
@@ -972,25 +1149,28 @@ async function callXAIWithRetry(
 ): Promise<string> {
   let retries = 0;
 
-  while (true) {
+  while (retries < maxRetries) {
     try {
       return await callXAI(messages, timeoutMs);
     } catch (error: any) {
-      if (retries < maxRetries && !error.message.includes("timed out")) {
-        const delay = Math.min(baseDelayMs * 2 ** retries, 60000);
-        await new Promise((resolve) => setTimeout(resolve, delay));
-        retries++;
-        continue;
+      retries++;
+      if (retries >= maxRetries) {
+        throw error;
       }
-      throw error;
+      console.warn(`xAI API retry ${retries}/${maxRetries}:`, error);
+      await new Promise((resolve) => setTimeout(resolve, baseDelayMs * Math.pow(2, retries - 1)));
     }
   }
+
+  // This should not be reached due to throw above
+  throw new Error("xAI API request failed");
 }
 
 // Utility: Generate feedback using AI
 async function generateFeedback(message: string, scenario: any) {
   const contextDesc = `${scenario.title}: ${scenario.situation_context || scenario.situation_summary}`;
-  const prompt = FEEDBACK_PROMPT(message, contextDesc);
+  const sanitizedMessage = sanitizeForPrompt(message);
+  const prompt = FEEDBACK_PROMPT(sanitizedMessage, contextDesc);
 
   const response = await callXAIWithRetry([
     {
@@ -1052,6 +1232,9 @@ interface ErrorResponse {
   error: string;
   message: string;
   sessionEnded?: boolean;
+  upgradePrompt?: boolean;
+  quotaUsed?: number;
+  quotaLimit?: number;
 }
 
 interface SuccessResponse<T = Record<string, unknown>> {
@@ -1065,6 +1248,12 @@ interface CrisisResponse {
   message: string;
   resources: CrisisResource[];
   sessionEnded?: boolean;
+}
+
+// RPC Return Types
+interface RPCSuccessResult {
+  success: boolean;
+  error_message?: string;
 }
 
 // Utility: Get crisis resources
@@ -1098,24 +1287,52 @@ function sanitizeForPrompt(input: string): string {
     .slice(0, MAX_LENGTH); // Enforce length limit
 }
 
+// SANITIZATION UTILITIES (prevent error leakage)
+function sanitizeError(error: unknown): string {
+  const errorMsg = String(error || 'Unknown error');
+  
+  // Never leak database details, SQL, or internal paths to client
+  if (errorMsg.includes('UNIQUE') || errorMsg.includes('duplicate')) {
+    return 'This resource already exists';
+  }
+  if (errorMsg.includes('foreign key') || errorMsg.includes('constraint')) {
+    return 'Invalid reference to required data';
+  }
+  if (errorMsg.includes('column') || errorMsg.includes('table') || errorMsg.includes('schema')) {
+    return 'Internal validation failed';
+  }
+  if (errorMsg.includes('timeout') || errorMsg.includes('connection')) {
+    return 'Service temporarily unavailable';
+  }
+  // Default safe message
+  return 'Operation failed';
+}
+
 // FIX P1: Extract duplicated crisis logging into helper function (DRY principle)
 // Used in both createScenario and handleSendMessage to avoid duplication
+// CRITICAL: Only logs matched keyword, NOT raw user content (GDPR Art. 32 - data minimization)
 async function logCrisisEvent(
   supabaseAdmin: UntypedSupabaseClient,
   userId: string,
   content: string,
+  sessionId: string,
+  situationType: SituationType,
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const matchedKeyword = getMatchedCrisisKeyword(content);
-    const { error: crisisError } = await supabaseAdmin.from("crisis_events").insert({
-      user_id: userId,
-      matched_keyword: matchedKeyword || "detected",
-      detected_at: new Date().toISOString(),
-    });
+    // Only store matched keyword + metadata, NOT raw user content (prevents unencrypted PII exposure)
+    const { error: crisisError } = await supabaseAdmin
+      .from("crisis_events")
+      .insert({
+        user_id: userId,
+        session_id: sessionId,
+        detected_at: new Date().toISOString(),
+        matched_keyword: matchedKeyword || "unknown", // Store only the matched keyword, not full content
+      });
 
     if (crisisError) {
+      // Don't let crisis logging failure block the response - log and continue
       console.error("Crisis event logging failed:", crisisError);
-      return { success: false, error: crisisError.message };
     }
 
     return { success: true };
@@ -1139,3 +1356,29 @@ async function getProfileSubscriptionTier(
 
   return profile?.subscription_tier;
 }
+
+// Add response data types for handlers
+interface SendMessageData {
+  aiResponse: string;
+  feedback: any;
+  exchangeCount: number;
+}
+
+interface StartSessionData {
+  session: any;
+  openingMessage: string;
+  systemContext: string;
+}
+
+interface CreateScenarioData {
+  scenario: any;
+  scenarioId: string;
+}
+
+interface EndSessionData {
+  summary: string;
+  totalExchanges: number;
+  completedAt: string;
+}
+
+// Top-level error handler - sanitize all errors before sending to client

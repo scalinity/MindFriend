@@ -1,3 +1,37 @@
+## [2026-01-22] Local Database Initialization with Production Schema Baseline
+
+**Type:** Infrastructure
+**Status:** Complete
+
+### Summary
+
+Successfully initialized local Supabase database with production schema baseline, replacing 190+ migrations with a single baseline migration pulled from production.
+
+### Changes
+
+| Component                                                          | Change                                                               |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| `supabase/migrations/20260123001427_remote_schema.sql`             | Production schema baseline (316 tables, 675 policies, 253 functions) |
+| `supabase/migrations/20260122180000_fix_couples_exercises_rls.sql` | Moved to archive (already included in baseline)                      |
+| Remote migration history                                           | Marked 20260122180000 as reverted                                    |
+
+### Testing
+
+- [x] Database reset completed successfully
+- [x] All Supabase containers healthy (10/10 services)
+- [x] Baseline migration applied (version 20260123001427)
+- [x] Schema verified: 316 tables, 675 RLS policies, 253 functions
+- [x] Key tables confirmed present (couples_exercises, profiles, etc.)
+
+### Notes
+
+- Fixed malformed COMMENT fragment in pulled schema (line 20)
+- Production schema is now the single source of truth for local dev
+- New migrations will be created incrementally from this baseline
+- Use `supabase db push` to apply new migrations going forward
+
+---
+
 ## [2026-01-20] Boundary Planner P0 Blockers - Phase 3 Verify Complete
 
 **Type:** Bugfix

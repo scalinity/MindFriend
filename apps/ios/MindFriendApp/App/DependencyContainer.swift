@@ -93,6 +93,10 @@ final class DependencyContainer: ObservableObject {
         SleepService(supabase: self.supabaseClient)
     }()
 
+    lazy var difficultyService: DifficultyService = {
+        DifficultyService(supabase: self.supabaseClient)
+    }()
+
     lazy var audioPlayerService: AudioPlayerService = {
         AudioPlayerService(supabase: self.supabaseClient)
     }()
@@ -242,6 +246,12 @@ final class DependencyContainer: ObservableObject {
     /// Service for content creator platform (profiles, content, earnings, marketplace)
     lazy var creatorService: CreatorService = {
         CreatorService(supabase: supabaseClient)
+    }()
+
+    // MARK: - Boundary Planner Service
+    
+    lazy var boundaryPlannerService: BoundaryPlannerService = {
+        BoundaryPlannerService(supabase: supabaseClient)
     }()
 
     // MARK: - Incomplete Feature Services (TODO: Add when features are ready)
