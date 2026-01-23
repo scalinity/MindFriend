@@ -70,7 +70,7 @@ serve(async (req) => {
       .from("circle_posts")
       .select("id, circle_id, user_id, body_text, created_at")
       .gte("created_at", `${yesterdayStr}T00:00:00Z`)
-      .lt("created_at", `${todayStr}T00:00:00Z`)  // Exclusive upper bound
+      .lt("created_at", `${todayStr}T00:00:00Z`) // Exclusive upper bound
       .order("created_at", { ascending: true });
 
     if (postsError) {
@@ -191,7 +191,7 @@ function aggregateMetrics(
   for (const [circleId, circlePosts] of postsByCircle.entries()) {
     const members = circleMembers.get(circleId);
     if (!members) continue;
-    
+
     // P2 FIX: Skip solo circles (need at least 2 members for interactions)
     if (members.size < 2) continue;
 
@@ -234,23 +234,26 @@ function aggregateMetrics(
         );
 
         // For each post by userId, find the most recent post from otherUserId before it
-        for (const userPost of allPosts.filter(p => p.user_id === userId)) {
+        for (const userPost of allPosts.filter((p) => p.user_id === userId)) {
           const userPostTime = new Date(userPost.created_at).getTime();
-          
+
           // Find the most recent post from otherUserId before this userPost
-          let mostRecentOtherPost = null;
+          let mostRecentOtherPost: CirclePost | null = null;
           let mostRecentOtherTime = 0;
-          
+
           for (const otherPost of allPosts) {
             if (otherPost.user_id !== otherUserId) continue;
-            
+
             const otherPostTime = new Date(otherPost.created_at).getTime();
-            if (otherPostTime < userPostTime && otherPostTime > mostRecentOtherTime) {
+            if (
+              otherPostTime < userPostTime &&
+              otherPostTime > mostRecentOtherTime
+            ) {
               mostRecentOtherPost = otherPost;
               mostRecentOtherTime = otherPostTime;
             }
           }
-          
+
           // If found, calculate response time
           if (mostRecentOtherPost) {
             const responseTimeMs = userPostTime - mostRecentOtherTime;
