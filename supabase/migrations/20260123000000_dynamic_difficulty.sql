@@ -23,8 +23,6 @@ CREATE TABLE IF NOT EXISTS user_capacity (
 
 CREATE INDEX IF NOT EXISTS idx_user_capacity_expires ON user_capacity(expires_at);
 CREATE INDEX IF NOT EXISTS idx_user_capacity_user_date ON user_capacity(user_id, local_date);
-CREATE INDEX IF NOT EXISTS idx_capacity_overrides_user_active ON capacity_overrides(user_id, is_active) WHERE is_active = true;
-CREATE INDEX IF NOT EXISTS idx_capacity_rate_limits_user ON capacity_rate_limits(user_id);
 
 -- SECURITY: Add rate limiting table for capacity calculation endpoint
 CREATE TABLE IF NOT EXISTS capacity_rate_limits (
@@ -34,6 +32,8 @@ CREATE TABLE IF NOT EXISTS capacity_rate_limits (
     window_start TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE(user_id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_capacity_rate_limits_user ON capacity_rate_limits(user_id);
 
 COMMENT ON TABLE user_capacity IS 'Stores user capacity scores with midnight expiration';
 COMMENT ON COLUMN user_capacity.components IS 'JSON breakdown of sleep/mood/streak component scores';
@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS capacity_overrides (
     CONSTRAINT chk_expires_future CHECK (expires_at > created_at)
 );
 
+CREATE INDEX IF NOT EXISTS idx_capacity_overrides_user_active ON capacity_overrides(user_id, is_active) WHERE is_active = true;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_capacity_overrides_active_user
     ON capacity_overrides(user_id) WHERE is_active = true;
 CREATE INDEX IF NOT EXISTS idx_capacity_overrides_expires
@@ -183,6 +184,7 @@ END $$;
 
 -- Cleanup Function: Delete capacity records older than 30 days
 -- SECURITY FIX: Added search_path protection to prevent SQL injection
+-- SECURITY FIX: Added authorization check to prevent unauthorized access
 CREATE OR REPLACE FUNCTION cleanup_old_capacity()
 RETURNS void
 LANGUAGE plpgsql
@@ -190,12 +192,111 @@ SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
 BEGIN
+    -- SECURITY: Only allow service_role to execute (for pg_cron)
+    IF NOT (auth.jwt()->>'role' = 'service_role') THEN
+        RAISE EXCEPTION 'Unauthorized: This function is for automated maintenance only';
+    END IF;
+
     DELETE FROM user_capacity
     WHERE calculated_at < now() - INTERVAL '30 days';
 END;
 $$;
 
 COMMENT ON FUNCTION cleanup_old_capacity() IS 'Deletes capacity records older than 30 days (runs daily at 3 AM UTC)';
+
+-- Atomic Rate Limit Check Function
+-- RACE CONDITION FIX: Atomic check-and-increment for rate limiting
+-- Returns: JSON with {allowed: boolean, resetAt: timestamptz, remaining: int}
+CREATE OR REPLACE FUNCTION check_capacity_rate_limit(
+    p_user_id UUID,
+    p_window_ms BIGINT,
+    p_max_requests INT
+)
+RETURNS JSON
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+    v_rate_limit RECORD;
+    v_now TIMESTAMPTZ := now();
+    v_window_age_ms BIGINT;
+    v_reset_at TIMESTAMPTZ;
+    v_remaining INT;
+BEGIN
+    -- SECURITY: Verify caller is checking their own rate limit
+    IF auth.uid() IS NULL OR auth.uid() != p_user_id THEN
+        RAISE EXCEPTION 'Unauthorized: Can only check own rate limit';
+    END IF;
+
+    -- Atomic SELECT FOR UPDATE to prevent race conditions
+    SELECT * INTO v_rate_limit
+    FROM capacity_rate_limits
+    WHERE user_id = p_user_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+        -- First request: create record
+        INSERT INTO capacity_rate_limits (user_id, request_count, window_start)
+        VALUES (p_user_id, 1, v_now);
+
+        v_reset_at := v_now + (p_window_ms || ' milliseconds')::INTERVAL;
+        v_remaining := p_max_requests - 1;
+
+        RETURN json_build_object(
+            'allowed', true,
+            'resetAt', v_reset_at,
+            'remaining', v_remaining
+        );
+    END IF;
+
+    -- Calculate window age
+    v_window_age_ms := EXTRACT(EPOCH FROM (v_now - v_rate_limit.window_start)) * 1000;
+
+    IF v_window_age_ms < p_window_ms THEN
+        -- Within current window
+        IF v_rate_limit.request_count >= p_max_requests THEN
+            -- Rate limit exceeded
+            v_reset_at := v_rate_limit.window_start + (p_window_ms || ' milliseconds')::INTERVAL;
+            RETURN json_build_object(
+                'allowed', false,
+                'resetAt', v_reset_at,
+                'remaining', 0
+            );
+        ELSE
+            -- Increment count
+            UPDATE capacity_rate_limits
+            SET request_count = request_count + 1
+            WHERE user_id = p_user_id;
+
+            v_reset_at := v_rate_limit.window_start + (p_window_ms || ' milliseconds')::INTERVAL;
+            v_remaining := p_max_requests - v_rate_limit.request_count - 1;
+
+            RETURN json_build_object(
+                'allowed', true,
+                'resetAt', v_reset_at,
+                'remaining', v_remaining
+            );
+        END IF;
+    ELSE
+        -- Window expired: reset
+        UPDATE capacity_rate_limits
+        SET request_count = 1, window_start = v_now
+        WHERE user_id = p_user_id;
+
+        v_reset_at := v_now + (p_window_ms || ' milliseconds')::INTERVAL;
+        v_remaining := p_max_requests - 1;
+
+        RETURN json_build_object(
+            'allowed', true,
+            'resetAt', v_reset_at,
+            'remaining', v_remaining
+        );
+    END IF;
+END;
+$$;
+
+COMMENT ON FUNCTION check_capacity_rate_limit IS 'Atomically check and increment rate limit counter (prevents race conditions)';
 
 -- Schedule cleanup via pg_cron (requires pg_cron extension)
 -- Run daily at 3 AM UTC
@@ -230,3 +331,61 @@ GRANT ALL ON user_capacity TO service_role;
 GRANT ALL ON capacity_overrides TO service_role;
 GRANT SELECT ON quest_difficulty_mapping TO service_role;
 GRANT SELECT ON capacity_rate_limits TO service_role;
+
+-- =====================================================
+-- Performance Indexes for Capacity Calculation Queries
+-- =====================================================
+
+-- Conditional index creation for tables that may not exist yet
+DO $$
+BEGIN
+    -- Index for fetchSleepData: Query sleep_logs by user_id + logged_at range
+    -- Check both table and column existence
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'sleep_logs'
+          AND column_name = 'logged_at'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS idx_sleep_logs_user_logged
+            ON sleep_logs(user_id, logged_at DESC);
+        EXECUTE 'COMMENT ON INDEX idx_sleep_logs_user_logged IS ''Optimizes capacity calculation sleep data queries (7-day range)''';
+    END IF;
+
+    -- Index for fetchMoodData: Query moods by user_id + logged_at range
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'moods'
+          AND column_name = 'logged_at'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS idx_moods_user_logged
+            ON moods(user_id, logged_at DESC);
+        EXECUTE 'COMMENT ON INDEX idx_moods_user_logged IS ''Optimizes capacity calculation mood data queries (3-day range)''';
+    END IF;
+
+    -- Index for fetchStreakData: Query today's quest by user_id + assigned_date
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'quests'
+          AND column_name = 'assigned_date'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS idx_quests_user_assigned
+            ON quests(user_id, assigned_date DESC);
+        EXECUTE 'COMMENT ON INDEX idx_quests_user_assigned IS ''Optimizes capacity calculation streak/completion queries''';
+
+        -- Index for fetchCompletionData: Query completed quests by user_id + completion status
+        IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'quests'
+              AND column_name = 'completed'
+        ) THEN
+            CREATE INDEX IF NOT EXISTS idx_quests_user_completed
+                ON quests(user_id, completed)
+                WHERE completed = true;
+            EXECUTE 'COMMENT ON INDEX idx_quests_user_completed IS ''Optimizes capacity calculation completion rate counting''';
+        END IF;
+    END IF;
+END $$;

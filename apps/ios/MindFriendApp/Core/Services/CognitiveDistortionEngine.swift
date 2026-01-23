@@ -79,16 +79,26 @@ final class CognitiveDistortionEngine: ObservableObject {
             return false
         }
 
-        // Check rate limits
+        // Check rate limits atomically - reserve a slot before processing
         guard rateLimiter.canShowPrompt() else {
             print("DistortionEngine: Rate limit exceeded")
             return false
         }
 
+        // Validate input size (max 5000 characters)
+        guard text.count <= 5000 else {
+            print("DistortionEngine: Input text too long (\(text.count) chars, max 5000)")
+            return false
+        }
+
         isDetecting = true
+        defer { isDetecting = false } // Ensures cleanup on all exit paths
         lastError = nil
 
         do {
+            // Reserve rate limit slot atomically to prevent TOCTOU race condition
+            rateLimiter.reservePromptSlot()
+            
             // Call Edge Function for detection
             let result = try await detectViaEdgeFunction(text: text, sessionId: sessionId)
 
@@ -96,16 +106,19 @@ final class CognitiveDistortionEngine: ObservableObject {
                 // Create and show prompt
                 await showPrompt(for: distortion, sessionId: sessionId, transcriptText: text)
                 return true
+            } else {
+                // No distortion detected, release the reserved slot
+                rateLimiter.releaseLastReservation()
             }
 
             return false
         } catch {
+            // On error, release the reserved slot
+            rateLimiter.releaseLastReservation()
             lastError = error
             print("DistortionEngine: Detection failed - \(error.localizedDescription)")
             return false
         }
-
-        isDetecting = false
     }
 
     /// Dismisses the current prompt
@@ -143,7 +156,7 @@ final class CognitiveDistortionEngine: ObservableObject {
 
     // MARK: - Private Helpers
 
-    /// Detects distortion via Edge Function
+    /// Detects distortion via Edge Function with timeout
     private func detectViaEdgeFunction(text: String, sessionId: String) async throws -> DetectDistortionResponse {
         struct DetectRequest: Encodable {
             let text: String
@@ -152,10 +165,27 @@ final class CognitiveDistortionEngine: ObservableObject {
 
         let request = DetectRequest(text: text, sessionId: sessionId)
 
-        let response: DetectDistortionResponse = try await supabase.functions
-            .invoke("detect-distortion", options: FunctionInvokeOptions(body: request))
-
-        return response
+        // Implement timeout (15 seconds) to prevent indefinite blocking
+        return try await withThrowingTaskGroup(of: DetectDistortionResponse.self) { group in
+            group.addTask {
+                let response: DetectDistortionResponse = try await self.supabase.functions
+                    .invoke("detect-distortion", options: FunctionInvokeOptions(body: request))
+                
+                return response
+            }
+            
+            group.addTask {
+                try await Task.sleep(nanoseconds: 15_000_000_000) // 15 seconds
+                throw DistortionError.timeout
+            }
+            
+            guard let result = try await group.next() else {
+                throw DistortionError.unknown
+            }
+            
+            group.cancelAll()
+            return result
+        }
     }
 
     /// Shows a prompt for detected distortion
@@ -168,6 +198,9 @@ final class CognitiveDistortionEngine: ObservableObject {
             print("DistortionEngine: No authenticated user")
             return
         }
+
+        // Update the reserved slot with the actual distortion type
+        rateLimiter.updateLastReservation(distortionType: distortion.type)
 
         // Create distortion event (already stored by Edge Function)
         let event = DistortionEvent(
@@ -189,9 +222,6 @@ final class CognitiveDistortionEngine: ObservableObject {
             acknowledged: false
         )
 
-        // Record in rate limiter
-        rateLimiter.recordPromptShown(for: distortion.type)
-
         // Store prompt in database
         do {
             let promptRecord = DistortionPromptRecord(
@@ -210,6 +240,7 @@ final class CognitiveDistortionEngine: ObservableObject {
 
             // Show prompt to user
             pendingPrompt = prompt
+            print("DistortionEngine: Prompt shown for distortion type: \(distortion.type)")
         } catch {
             lastError = error
             print("DistortionEngine: Failed to store prompt - \(error.localizedDescription)")
@@ -229,4 +260,23 @@ private struct DetectedDistortion: Decodable {
     let type: DistortionType
     let confidence: Double
     let reasoning: String?
+}
+
+// MARK: - Error Types
+
+enum DistortionError: Error, LocalizedError {
+    case timeout
+    case unknown
+    case invalidInput
+    
+    var errorDescription: String? {
+        switch self {
+        case .timeout:
+            return "Detection timed out after 15 seconds"
+        case .unknown:
+            return "An unknown error occurred during detection"
+        case .invalidInput:
+            return "Invalid input provided for detection"
+        }
+    }
 }

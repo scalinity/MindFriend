@@ -36,31 +36,36 @@ struct CapacityIndicator: View {
                     }
                 }
 
-                // Label
+                // Label (with Dynamic Type support)
                 VStack(alignment: .leading, spacing: 2) {
                     if let capacity = difficultyService.currentCapacity {
                         Text(capacity.level.displayName)
                             .font(.subheadline)
                             .fontWeight(.medium)
                             .foregroundColor(.primary)
+                            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
 
                         if capacity.hasOverride {
                             Text("Manual override")
                                 .font(.caption2)
                                 .foregroundColor(.secondary)
+                                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                         } else if capacity.isStale {
                             Text("Updated \(timeAgo(capacity.calculatedAt))")
                                 .font(.caption2)
                                 .foregroundColor(.secondary)
+                                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                         }
                     } else if difficultyService.isCalculating {
                         Text("Calculating...")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
+                            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                     } else {
                         Text("Tap to calculate")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
+                            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                     }
                 }
 
@@ -77,6 +82,10 @@ struct CapacityIndicator: View {
             .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityHint("Double tap to view detailed capacity breakdown")
+        .accessibilityAddTraits(.isButton)
         .sheet(isPresented: $showDetailSheet) {
             CapacityDetailSheet()
                 .environmentObject(difficultyService)
@@ -86,6 +95,22 @@ struct CapacityIndicator: View {
             if difficultyService.getCachedCapacity() == nil {
                 try? await difficultyService.refreshCapacity()
             }
+        }
+    }
+
+    private var accessibilityLabel: String {
+        if let capacity = difficultyService.currentCapacity {
+            var label = "Capacity: \(capacity.level.displayName), score \(capacity.score) out of 100"
+            if capacity.hasOverride {
+                label += ", manual override active"
+            } else if capacity.isStale {
+                label += ", last updated \(timeAgo(capacity.calculatedAt))"
+            }
+            return label
+        } else if difficultyService.isCalculating {
+            return "Calculating capacity"
+        } else {
+            return "Capacity not calculated, tap to calculate"
         }
     }
 
