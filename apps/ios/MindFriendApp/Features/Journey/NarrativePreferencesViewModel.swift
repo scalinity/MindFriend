@@ -16,6 +16,8 @@ class NarrativePreferencesViewModel: ObservableObject {
     // MARK: - Private Properties
 
     private let dataService: SupabaseDataService
+    private let maxRetries = 3
+    private let baseRetryDelay: TimeInterval = 1.0
 
     // MARK: - Computed Properties
 
@@ -55,11 +57,17 @@ class NarrativePreferencesViewModel: ObservableObject {
         error = nil
 
         do {
-            if let fetchedPreferences = try await dataService.fetchNarrativePreferences() {
+            let fetchedPreferences = try await retryWithBackoff {
+                try await self.dataService.fetchNarrativePreferences()
+            }
+            
+            if let fetchedPreferences = fetchedPreferences {
                 preferences = fetchedPreferences
             } else {
                 // No preferences exist yet - create default
-                let userId = try await dataService.getCurrentUserId()
+                let userId = try await retryWithBackoff {
+                    try await self.dataService.getCurrentUserId()
+                }
                 preferences = NarrativePreferences(
                     userId: userId,
                     preferredTone: .warm,
@@ -117,7 +125,9 @@ class NarrativePreferencesViewModel: ObservableObject {
         showSuccessToast = false
 
         do {
-            try await dataService.updateNarrativePreferences(currentPreferences)
+            try await retryWithBackoff {
+                try await self.dataService.updateNarrativePreferences(currentPreferences)
+            }
 
             // Show success feedback
             showSuccessToast = true
@@ -147,5 +157,48 @@ class NarrativePreferencesViewModel: ObservableObject {
             includeMetrics: true,
             frequency: .weekly
         )
+    }
+
+    // MARK: - Private Helpers
+
+    /// Retries an async operation with exponential backoff
+    /// - Parameter operation: The async throwing operation to retry
+    /// - Throws: The last error if all retries fail
+    private func retryWithBackoff<T>(_ operation: @escaping () async throws -> T) async throws -> T {
+        var lastError: Error?
+        
+        for attempt in 0..<maxRetries {
+            do {
+                return try await operation()
+            } catch {
+                lastError = error
+                
+                // Don't retry on client errors (4xx) or auth errors
+                if let urlError = error as? URLError {
+                    // Only retry on network/timeout errors
+                    let retryableErrors: Set<URLError.Code> = [
+                        .timedOut, .cannotFindHost, .cannotConnectToHost,
+                        .networkConnectionLost, .dnsLookupFailed, .notConnectedToInternet
+                    ]
+                    if !retryableErrors.contains(urlError.code) {
+                        throw error
+                    }
+                } else if error.localizedDescription.contains("401") || 
+                          error.localizedDescription.contains("403") ||
+                          error.localizedDescription.contains("404") {
+                    // Don't retry auth or not found errors
+                    throw error
+                }
+                
+                // If this wasn't the last attempt, wait before retrying
+                if attempt < maxRetries - 1 {
+                    let delay = baseRetryDelay * pow(2.0, Double(attempt))
+                    try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                }
+            }
+        }
+        
+        // All retries failed, throw the last error
+        throw lastError ?? NSError(domain: "RetryError", code: -1)
     }
 }
