@@ -74,6 +74,12 @@ struct ProfileView: View {
                     } label: {
                         Label("Certificates", systemImage: "checkmark.seal.fill")
                     }
+
+                    NavigationLink {
+                        NarrativeListView(dataService: container.supabaseDataService)
+                    } label: {
+                        Label("My Stories", systemImage: "book.closed")
+                    }
                 }
 
                 // Features

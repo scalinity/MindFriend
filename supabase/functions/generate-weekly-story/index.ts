@@ -202,11 +202,25 @@ serve(async (req) => {
       );
     }
 
+    // Read user preferences
+    const { data: preferencesData } = await supabaseAuth
+      .from("narrative_preferences")
+      .select("preferred_tone, preferred_length, include_metrics")
+      .eq("user_id", user.id)
+      .single();
+
+    const preferences = {
+      tone: preferencesData?.preferred_tone || "warm",
+      length: preferencesData?.preferred_length || "standard",
+      includeMetrics: preferencesData?.include_metrics ?? true,
+    };
+
     // Generate story cards
     const cards = await generateStoryCards(
       supabaseAuth,
       user.id,
       body.weekStart,
+      preferences,
     );
 
     // Upsert to weekly_stories table
@@ -287,10 +301,17 @@ function generateUUID(): string {
 /**
  * Generate 3-5 story cards based on user's weekly data
  */
+interface NarrativePreferences {
+  tone: "warm" | "professional" | "playful";
+  length: "brief" | "standard" | "detailed";
+  includeMetrics: boolean;
+}
+
 async function generateStoryCards(
   supabase: SupabaseClient,
   userId: string,
   weekStart: string,
+  preferences: NarrativePreferences,
 ): Promise<StoryCard[]> {
   const cards: StoryCard[] = [];
   const now = new Date().toISOString();
@@ -377,13 +398,32 @@ async function generateStoryCards(
     cards.push(generateInsightCard(summaryData.ai_insight, now));
   }
 
-  // Ensure we have at least 3 cards
-  while (cards.length < 3) {
+  // Apply length preference
+  const cardLimits = {
+    brief: { min: 2, max: 3 },
+    standard: { min: 3, max: 5 },
+    detailed: { min: 5, max: 7 },
+  };
+
+  const { min, max } = cardLimits[preferences.length];
+
+  // Ensure we have at least min cards
+  while (cards.length < min) {
     cards.push(generateEncouragementCard(cards.length, now));
   }
 
-  // Limit to 5 cards max
-  return cards.slice(0, 5);
+  // Apply tone preference to card messages (update messages based on tone)
+  const updatedCards = cards.map((card) =>
+    applyToneToCard(card, preferences.tone),
+  );
+
+  // Apply metrics preference (conditionally include/exclude numeric data)
+  const finalCards = preferences.includeMetrics
+    ? updatedCards
+    : updatedCards.map((card) => removeMetricsFromCard(card));
+
+  // Limit to max cards based on length preference
+  return finalCards.slice(0, max);
 }
 
 /**
@@ -860,4 +900,66 @@ function detectMilestone(
   }
 
   return null;
+}
+
+/**
+ * Apply tone preference to a card's message
+ */
+function applyToneToCard(
+  card: StoryCard,
+  tone: "warm" | "professional" | "playful",
+): StoryCard {
+  // Define tone-specific message variations
+  const toneMessages: Record<string, Record<string, string>> = {
+    warm: {
+      "You're blooming beautifully": "You're blooming beautifully! 🌸",
+      "Strong progress this week": "You're making wonderful progress this week",
+      "You crushed it this week": "You're doing amazing this week!",
+    },
+    professional: {
+      "You're blooming beautifully": "Significant progress observed this week",
+      "Strong progress this week": "Strong progress this week",
+      "You crushed it this week": "Excellent performance this week",
+    },
+    playful: {
+      "You're blooming beautifully": "Look at you go! 🎉",
+      "Strong progress this week": "You're on fire this week! 🔥",
+      "You crushed it this week": "You absolutely crushed it this week! 💪",
+    },
+  };
+
+  // Apply tone to message if it exists in the mapping
+  const message = card.data.message || "";
+  const toneMap = toneMessages[tone] || {};
+
+  // Check if we have a tone variation for this message
+  for (const [original, replacement] of Object.entries(toneMap)) {
+    if (message.includes(original)) {
+      return {
+        ...card,
+        data: {
+          ...card.data,
+          message: message.replace(original, replacement),
+        },
+      };
+    }
+  }
+
+  // Return card unchanged if no tone mapping found
+  return card;
+}
+
+/**
+ * Remove metrics from card data (for users who prefer qualitative insights only)
+ */
+function removeMetricsFromCard(card: StoryCard): StoryCard {
+  return {
+    ...card,
+    data: {
+      ...card.data,
+      stat: undefined,
+      statLabel: undefined,
+      // Keep other fields like headline and message
+    },
+  };
 }
