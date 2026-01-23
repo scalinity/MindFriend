@@ -15,6 +15,8 @@ struct ProfilePictureEditorView: View {
     @State private var isUploading = false
     @State private var errorMessage: String?
     @State private var loadPhotoTask: Task<Void, Never>?
+    @State private var uploadTask: Task<Void, Never>?
+    @State private var removeTask: Task<Void, Never>?
 
     var body: some View {
         NavigationStack {
@@ -116,6 +118,10 @@ struct ProfilePictureEditorView: View {
             .onDisappear {
                 loadPhotoTask?.cancel()
                 loadPhotoTask = nil
+                uploadTask?.cancel()
+                uploadTask = nil
+                removeTask?.cancel()
+                removeTask = nil
             }
             .sheet(isPresented: $showCropView) {
                 if let image = selectedUIImage {
@@ -188,17 +194,27 @@ struct ProfilePictureEditorView: View {
             return
         }
 
+        // Cancel any existing upload
+        uploadTask?.cancel()
+        
         isUploading = true
         errorMessage = nil
 
-        Task {
+        uploadTask = Task {
             do {
+                // Check for cancellation
+                guard !Task.isCancelled else { return }
+                
                 // Validate image before upload
                 try croppedImage.validateForAvatar()
+                
+                guard !Task.isCancelled else { return }
                 
                 // Use shared upload pipeline
                 let publicUrl = try await container.supabaseDataService.uploadAndSetAvatar(croppedImage, userId: userId)
 
+                guard !Task.isCancelled else { return }
+                
                 // Update AppState with new UserProfile instance
                 await MainActor.run {
                     if let user = appState.currentUser {
@@ -220,6 +236,7 @@ struct ProfilePictureEditorView: View {
                     dismiss()
                 }
             } catch {
+                guard !Task.isCancelled else { return }
                 await MainActor.run {
                     errorMessage = error.localizedDescription
                     isUploading = false
@@ -234,11 +251,16 @@ struct ProfilePictureEditorView: View {
             return
         }
 
+        // Cancel any existing remove operation
+        removeTask?.cancel()
+        
         isUploading = true
         errorMessage = nil
 
-        Task {
+        removeTask = Task {
             do {
+                guard !Task.isCancelled else { return }
+                
                 // Delete from Storage (if path exists)
                 if let avatarUrl = appState.currentUser?.avatarUrl,
                    let url = URL(string: avatarUrl),
@@ -246,9 +268,13 @@ struct ProfilePictureEditorView: View {
                     try? await container.supabaseDataService.deleteProfilePicture(path: path)
                 }
 
+                guard !Task.isCancelled else { return }
+                
                 // Update avatar_url to NULL in database
                 try await container.supabaseDataService.updateAvatarUrl("", userId: userId)
 
+                guard !Task.isCancelled else { return }
+                
                 // Update AppState with new UserProfile instance
                 await MainActor.run {
                     if let user = appState.currentUser {
@@ -270,6 +296,7 @@ struct ProfilePictureEditorView: View {
                     isUploading = false
                 }
             } catch {
+                guard !Task.isCancelled else { return }
                 await MainActor.run {
                     errorMessage = error.localizedDescription
                     isUploading = false
