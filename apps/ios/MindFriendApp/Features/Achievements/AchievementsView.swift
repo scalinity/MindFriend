@@ -65,6 +65,27 @@ struct AchievementsView: View {
                 ProgressView("Loading achievements...")
             }
         }
+        // Level-Up Celebration (NEW)
+        .fullScreenCover(item: $achievementService.pendingCelebration) { event in
+            LevelUpCelebrationView(
+                oldLevel: event.oldLevel,
+                newLevel: event.newLevel,
+                xpEarned: event.xpEarned,
+                onDismiss: {
+                    achievementService.pendingCelebration = nil
+                }
+            )
+        }
+        // Milestone Narrative (NEW)
+        .sheet(item: $achievementService.pendingMilestone) { celebration in
+            MilestoneNarrativeView(celebration: celebration)
+                .onDisappear {
+                    Task {
+                        try? await achievementService.markMilestoneViewed(celebrationId: celebration.id)
+                        achievementService.pendingMilestone = nil
+                    }
+                }
+        }
     }
 }
 
@@ -404,6 +425,30 @@ struct BadgeDetailView: View {
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
                 }
+                
+                // Tier Progression (NEW - for tiered badges)
+                if badge.tier != nil {
+                    TierProgressView(badge: badge, progress: progress)
+                        .padding(.horizontal)
+                }
+                
+                // How to Progress (NEW - for non-earned badges)
+                if progress?.isEarned == false, let target = progress?.progressTarget {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("How to Progress")
+                            .font(.headline)
+                        
+                        let remaining = target - (progress?.progressCurrent ?? 0)
+                        Text(getProgressTip(badge: badge, remaining: remaining))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+                    .background(Color(.tertiarySystemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(.horizontal)
+                }
 
                 // Progress Section
                 if let progress = progress {
@@ -432,6 +477,7 @@ struct BadgeDetailView: View {
                     .padding()
                     .background(Color(.secondarySystemBackground))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(.horizontal)
                 }
 
                 // Stats
@@ -467,6 +513,7 @@ struct BadgeDetailView: View {
                 .padding()
                 .background(Color(.secondarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal)
 
                 // Favorite Button
                 if progress?.isEarned == true {
@@ -486,6 +533,7 @@ struct BadgeDetailView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(progress?.isFavorite == true ? .red : .accentColor)
+                    .padding(.horizontal)
                 }
             }
             .padding()
@@ -496,6 +544,23 @@ struct BadgeDetailView: View {
             if progress?.isNew == true {
                 try? await achievementService.markBadgeAsSeen(badgeId: badge.id)
             }
+        }
+    }
+    
+    private func getProgressTip(badge: AchievementBadge, remaining: Int) -> String {
+        switch badge.requirementType {
+        case "quest_count":
+            return "Complete \(remaining) more daily quests to unlock this badge."
+        case "streak_days":
+            return "Keep your streak going! \(remaining) more days to go."
+        case "exercise_count":
+            return "Practice \(remaining) more exercises to earn this badge."
+        case "meditation_minutes":
+            return "Meditate for \(remaining) more minutes to unlock."
+        case "mood_entries":
+            return "Log \(remaining) more mood entries to progress."
+        default:
+            return "Keep completing activities to unlock this badge!"
         }
     }
 }

@@ -199,32 +199,20 @@ async function checkShieldEarning(
     return;
   }
 
-  // Get current shield status
-  const { data: stats } = await supabase
-    .from("user_stats")
-    .select("streak_shields_remaining, streak_shields_max")
-    .eq("user_id", userId)
-    .single();
+  // Atomic update: Use RPC to increment shields atomically
+  // This prevents race conditions where concurrent operations could exceed max
+  const { data: result, error } = await supabase.rpc("increment_shield_count", {
+    p_user_id: userId,
+  });
 
-  if (!stats) return;
-
-  // Award shield if not at max (premium users have max=999)
-  if (stats.streak_shields_remaining < stats.streak_shields_max) {
-    // Update shield count
-    await supabase
-      .from("user_stats")
-      .update({
-        streak_shields_remaining: stats.streak_shields_remaining + 1,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("user_id", userId);
-
+  // If shield was awarded successfully
+  if (!error && result && result.shields_awarded) {
     // Log shield event
     await supabase.from("streak_shield_events").insert({
       user_id: userId,
       event_type: "earned",
       streak_protected: currentStreak,
-      shields_remaining: stats.streak_shields_remaining + 1,
+      shields_remaining: result.new_shields_count,
       metadata: { earned_at_streak: currentStreak },
     });
 

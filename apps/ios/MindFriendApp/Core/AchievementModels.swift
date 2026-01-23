@@ -780,17 +780,42 @@ struct UserChallengeProgress: Identifiable {
 
 struct AwardXPResponse: Codable {
     let success: Bool
-    let totalXp: Int
-    let newLevel: Int
-    let leveledUp: Bool
     let xpAwarded: Int
+    let multiplierApplied: Double
+    let experience: ExperienceData
+    let levelUp: LevelUpData?
+    
+    struct ExperienceData: Codable {
+        let totalXp: Int
+        let currentLevel: Int
+        let xpToNextLevel: Int
+        let dailyXp: Int
+        let weeklyXp: Int
+        
+        enum CodingKeys: String, CodingKey {
+            case totalXp = "totalXp"
+            case currentLevel = "currentLevel"
+            case xpToNextLevel = "xpToNextLevel"
+            case dailyXp = "dailyXp"
+            case weeklyXp = "weeklyXp"
+        }
+    }
+    
+    struct LevelUpData: Codable {
+        let oldLevel: Int
+        let newLevel: Int
+        let unlockedContent: [String]
+    }
+    
+    var leveledUp: Bool { levelUp != nil }
+    var newLevel: Int { experience.currentLevel }
 
     enum CodingKeys: String, CodingKey {
         case success
-        case totalXp = "total_xp"
-        case newLevel = "new_level"
-        case leveledUp = "leveled_up"
-        case xpAwarded = "xp_awarded"
+        case xpAwarded
+        case multiplierApplied
+        case experience
+        case levelUp
     }
 }
 

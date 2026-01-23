@@ -329,7 +329,9 @@ struct VacationMode: Codable, Identifiable {
 
     /// Number of days remaining in vacation
     var daysRemaining: Int {
-        Calendar.current.dateComponents([.day], from: Date(), to: endDate).day ?? 0
+        let today = Calendar.current.startOfDay(for: Date())
+        let end = Calendar.current.startOfDay(for: endDate)
+        return Calendar.current.dateComponents([.day], from: today, to: end).day ?? 0
     }
 
     /// Whether this vacation is currently protecting the streak
@@ -340,9 +342,10 @@ struct VacationMode: Codable, Identifiable {
         return isActive && today >= start && today <= end
     }
 
-    /// Total duration of the vacation in days
+    /// Total duration of the vacation in days (inclusive)
     var totalDays: Int {
-        Calendar.current.dateComponents([.day], from: startDate, to: endDate).day ?? 0
+        let days = Calendar.current.dateComponents([.day], from: startDate, to: endDate).day ?? 0
+        return days + 1  // +1 for inclusive counting (Jan 1 to Jan 7 = 7 days, not 6)
     }
 
     enum CodingKeys: String, CodingKey {
@@ -1619,11 +1622,13 @@ struct CircleChallenge: Codable, Identifiable, Equatable {
     var completions: [ChallengeCompletion]?
     var creatorName: String?
 
+    /// Whether the challenge is currently active
     var isActive: Bool {
         let now = Date()
         return now >= startsAt && now <= endsAt
     }
 
+    /// Time remaining formatted as "Xh Ym"
     var timeRemaining: String {
         let remaining = endsAt.timeIntervalSince(Date())
         let hours = Int(remaining / 3600)

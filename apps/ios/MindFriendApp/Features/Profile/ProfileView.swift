@@ -8,6 +8,8 @@ struct ProfileView: View {
     @State private var showDeleteConfirm = false
     @State private var showEditProfile = false
     @State private var showSubscription = false
+    @State private var showVacationMode = false
+    @State private var showShieldHistory = false
 
     var body: some View {
         NavigationStack {
@@ -157,6 +159,19 @@ struct ProfileView: View {
                         AIPreferencesView()
                     } label: {
                         Label("AI Preferences", systemImage: "brain")
+                    }
+                    
+                    // Vacation Mode & Shield History
+                    Button {
+                        showVacationMode = true
+                    } label: {
+                        Label("Vacation Mode", systemImage: "airplane")
+                    }
+                    
+                    Button {
+                        showShieldHistory = true
+                    } label: {
+                        Label("Shield History", systemImage: "shield.lefthalf.filled")
                     }
 
                     NavigationLink {
@@ -356,6 +371,16 @@ struct ProfileView: View {
             }
             .sheet(isPresented: $showSubscription) {
                 SubscriptionView()
+            }
+            .sheet(isPresented: $showVacationMode) {
+                VacationModeSheet()
+                    .environmentObject(container)
+            }
+            .sheet(isPresented: $showShieldHistory) {
+                NavigationStack {
+                    ShieldHistoryView()
+                        .environmentObject(container)
+                }
             }
         }
     }

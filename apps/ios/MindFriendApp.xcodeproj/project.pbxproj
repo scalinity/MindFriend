@@ -562,6 +562,7 @@
 		F68B86CB032BDDD92CACB77E /* SleepTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8A4DD6B1097F96BF4A4DCCA /* SleepTabView.swift */; };
 		F70417071B08CC6FB5BDABE4 /* CreateFamilySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FDEDE8B67E2F79A6B56B550 /* CreateFamilySheet.swift */; };
 		F854AA2DCDD2999F99EA4C13 /* DrawingCanvasView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0ADC47E2F50EA1857B71304E /* DrawingCanvasView.swift */; };
+		F87F31C6DC7CB1656C46EFD3 /* MilestoneNarrativeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E269FB50894ABD4CFF9167D4 /* MilestoneNarrativeView.swift */; };
 		F8B7FFF4A38804105D8BFF9D /* GiftPurchaseSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A9276476E87EDF136AE3FF7 /* GiftPurchaseSheet.swift */; };
 		F8D2CB42D43E9B9DAE7E0948 /* ExperimentCatalogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1030B88B81B484465DF6AFD4 /* ExperimentCatalogView.swift */; };
 		F9CB3B64ADDB0703AD2B74D5 /* VoiceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7AD65176299932BB1BB0BDB /* VoiceSettingsView.swift */; };
@@ -1108,6 +1109,7 @@
 		E135DCDA9C4F13B9C6CD0E8A /* LockScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LockScreenView.swift; sourceTree = "<group>"; };
 		E1563ABDC874039C48EF3EF2 /* EmotionProsodyClassifier_20260122_124134.mlpackage */ = {isa = PBXFileReference; path = EmotionProsodyClassifier_20260122_124134.mlpackage; sourceTree = "<group>"; };
 		E1CA472EDC79CE2F1DD3C6EA /* CrashReporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrashReporterTests.swift; sourceTree = "<group>"; };
+		E269FB50894ABD4CFF9167D4 /* MilestoneNarrativeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MilestoneNarrativeView.swift; sourceTree = "<group>"; };
 		E2B5ECCDAEE3C6AC57CC7009 /* DifficultySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DifficultySettingsView.swift; sourceTree = "<group>"; };
 		E2C15C6E72FF7EC59EBD0E8D /* InsightsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightsListView.swift; sourceTree = "<group>"; };
 		E36CC8B23144262BD5C29210 /* RitualService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RitualService.swift; sourceTree = "<group>"; };
@@ -1437,6 +1439,7 @@
 			children = (
 				5EF48EB690020D514075654D /* Components */,
 				24E2A0EC9053DCC2DA71FA23 /* LevelUpCelebrationView.swift */,
+				E269FB50894ABD4CFF9167D4 /* MilestoneNarrativeView.swift */,
 			);
 			name = Achievements;
 			path = Achievements;
@@ -3401,6 +3404,7 @@
 				4D77E4E4C5E5E0B13ED02D15 /* NarrativeDetailViewModel.swift in Sources */,
 				44790C8B3C40BE6995FE6F12 /* NarrativePreferencesView.swift in Sources */,
 				030378CAB3E59FFADBCC7215 /* NarrativePreferencesViewModel.swift in Sources */,
+				F87F31C6DC7CB1656C46EFD3 /* MilestoneNarrativeView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

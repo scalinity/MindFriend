@@ -279,6 +279,25 @@ serve(async (req) => {
             unlockedContent: [], // Could populate with unlocked items
           }
         : null;
+    
+    // Trigger milestone narrative generation for milestone levels (NEW)
+    if (levelUp) {
+      const milestones = [5, 10, 25, 50, 100];
+      if (milestones.includes(newLevel)) {
+        // Call in background (don't await - non-blocking)
+        fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/generate-milestone-narrative`, {
+          method: "POST",
+          headers: {
+            "Authorization": req.headers.get("Authorization")!,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ level: newLevel }),
+        }).catch((error) => {
+          console.error("Failed to trigger milestone narrative:", error);
+          // Don't fail the XP award if narrative generation fails
+        });
+      }
+    }
 
     return new Response(
       JSON.stringify({
