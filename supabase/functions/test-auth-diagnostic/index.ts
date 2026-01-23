@@ -23,6 +23,9 @@ serve(async (req) => {
       SUPABASE_ANON_KEY: !!Deno.env.get("SUPABASE_ANON_KEY"),
       SUPABASE_SERVICE_ROLE_KEY: !!Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
     },
+    expectedValues: {
+      supabaseUrl: Deno.env.get("SUPABASE_URL"),
+    },
   };
 
   try {
@@ -43,6 +46,27 @@ serve(async (req) => {
     const token = authHeader.replace("Bearer ", "");
     diagnostics.tokenLength = token.length;
     diagnostics.tokenPrefix = token.substring(0, 30);
+
+    // Decode JWT (without verification) to inspect claims
+    try {
+      const parts = token.split(".");
+      if (parts.length === 3) {
+        const payload = JSON.parse(
+          atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")),
+        );
+        diagnostics.tokenClaims = {
+          aud: payload.aud,
+          iss: payload.iss,
+          sub: payload.sub,
+          exp: payload.exp,
+          expDate: new Date(payload.exp * 1000).toISOString(),
+          isExpired: payload.exp * 1000 < Date.now(),
+          role: payload.role,
+        };
+      }
+    } catch (e) {
+      diagnostics.tokenDecodeError = (e as Error).message;
+    }
 
     // Try with service role key
     const supabaseAdmin = createClient(

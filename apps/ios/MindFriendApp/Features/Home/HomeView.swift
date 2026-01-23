@@ -524,6 +524,8 @@ struct HomeView: View {
             // Mood prediction data (fail gracefully)
             async let predictionTask: Void? = try? await container.predictiveService.fetchTodayPrediction()
             async let interventionTask: Void? = try? await container.predictiveService.fetchPendingMoodIntervention()
+            // Load user experience (XP/level from user_experience table)
+            async let experienceTask: Void? = try? await container.achievementService.loadUserExperience()
 
             // Await all results concurrently
             let questResult = try await questTask
@@ -542,19 +544,32 @@ struct HomeView: View {
             // Await prediction tasks (they update the service's published state)
             _ = await predictionTask
             _ = await interventionTask
+            // Await experience load (updates achievementService.userExperience)
+            _ = await experienceTask
 
-            // Compute level info from profile
-            let defaultStats = UserStats(
-                currentStreakDays: 0,
-                longestStreakDays: 0,
-                totalQuestsCompleted: 0,
-                totalExercisesCompleted: 0,
-                xpTotal: 0,
-                xpThisWeek: 0,
-                level: 1,
-                levelTitle: "Beginner"
-            )
-            let levelResult = UserLevel.from(stats: profileResult.stats ?? defaultStats)
+            // Compute level info from user_experience (correct table)
+            // achievementService.userExperience was loaded in parallel above
+            let levelResult: UserLevel
+            if let exp = await MainActor.run(body: { container.achievementService.userExperience }) {
+                print("🏠 [HomeView] Using achievementService data: Level \(exp.currentLevel), XP \(exp.totalXp)")
+                levelResult = UserLevel(
+                    level: exp.currentLevel,
+                    title: levelTitle(for: exp.currentLevel),
+                    currentXP: exp.totalXp,
+                    nextLevelXP: exp.xpToNextLevel,
+                    xpThisWeek: exp.weeklyXp
+                )
+            } else {
+                // Fallback to default if experience not loaded
+                print("⚠️ [HomeView] achievementService.userExperience is nil, using defaults")
+                levelResult = UserLevel(
+                    level: 1,
+                    title: "Beginner",
+                    currentXP: 0,
+                    nextLevelXP: 100,
+                    xpThisWeek: 0
+                )
+            }
 
             await MainActor.run {
                 // Track load time for stale state prevention
