@@ -212,11 +212,11 @@ serve(async (req) => {
     // Validate and sanitize preferences
     const validTones = ["warm", "professional", "playful"];
     const validLengths = ["brief", "standard", "detailed"];
-    const tone = validTones.includes(preferencesData?.preferred_tone)
-      ? preferencesData.preferred_tone
+    const tone = validTones.includes(preferencesData?.preferred_tone ?? "")
+      ? preferencesData!.preferred_tone
       : "warm";
-    const length = validLengths.includes(preferencesData?.preferred_length)
-      ? preferencesData.preferred_length
+    const length = validLengths.includes(preferencesData?.preferred_length ?? "")
+      ? preferencesData!.preferred_length
       : "standard";
 
     const preferences = {
