@@ -174,9 +174,10 @@ async function detectWithdrawalForUser(
       olderScores.length;
     const decline = olderAvg - recentAvg;
 
-    // Check if consistently declining (each day <= previous day)
+    // P2 FIX: Check if consistently declining (strict: each day < previous day, not <=)
+    // This prevents flat scores from being flagged as "declining"
     const isConsistentlyDeclining = recentScores.every(
-      (score: number, i: number) => i === 0 || score <= recentScores[i - 1],
+      (score: number, i: number) => i === 0 || score < recentScores[i - 1],
     );
 
     if (!isConsistentlyDeclining) {
@@ -300,7 +301,7 @@ async function sendPeerAlert(
       // Call send-notification function with retry logic
       try {
         const notificationSent = await retryWithBackoff(async () => {
-          const { error: notificationError } = await supabase.functions.invoke(
+          const { data, error: notificationError } = await supabase.functions.invoke(
             "send-notification",
             {
               body: {
@@ -313,9 +314,16 @@ async function sendPeerAlert(
             },
           );
 
+          // P1 FIX: Check both error field AND HTTP response status
           if (notificationError) {
             throw new Error(`Notification failed: ${notificationError.message}`);
           }
+          
+          // Check if response indicates success (data should be truthy for successful notification)
+          if (!data || (data as any).success === false) {
+            throw new Error(`Notification delivery failed: ${JSON.stringify(data)}`);
+          }
+          
           return true;
         }, 3);
 

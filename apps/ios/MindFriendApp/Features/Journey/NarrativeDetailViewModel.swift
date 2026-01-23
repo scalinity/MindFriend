@@ -163,13 +163,40 @@ class NarrativeDetailViewModel: ObservableObject {
         return sanitized
     }
 
+    /// Extracts HTTP status code from various error types
+    /// - Parameter error: The error to extract status code from
+    /// - Returns: HTTP status code if found, nil otherwise
+    private func extractHTTPStatusCode(from error: Error) -> Int? {
+        let nsError = error as NSError
+        
+        // Check for Supabase error with status code
+        if let statusCode = nsError.userInfo["statusCode"] as? Int {
+            return statusCode
+        }
+        
+        // Check for HTTP response in userInfo
+        if let response = nsError.userInfo[NSURLErrorFailingURLStringErrorKey] as? HTTPURLResponse {
+            return response.statusCode
+        }
+        
+        // Check alternate keys
+        if let response = nsError.userInfo["response"] as? HTTPURLResponse {
+            return response.statusCode
+        }
+        
+        return nil
+    }
+
     /// Retries an async operation with exponential backoff
     /// - Parameter operation: The async throwing operation to retry
-    /// - Throws: The last error if all retries fail
+    /// - Throws: The last error if all retries fail, or CancellationError if cancelled
     private func retryWithBackoff<T>(_ operation: @escaping () async throws -> T) async throws -> T {
         var lastError: Error?
         
         for attempt in 0..<maxRetries {
+            // Check for cancellation before each attempt
+            try Task.checkCancellation()
+            
             do {
                 return try await operation()
             } catch {
@@ -185,17 +212,23 @@ class NarrativeDetailViewModel: ObservableObject {
                     if !retryableErrors.contains(urlError.code) {
                         throw error
                     }
-                } else if error.localizedDescription.contains("401") || 
-                          error.localizedDescription.contains("403") ||
-                          error.localizedDescription.contains("404") {
-                    // Don't retry auth or not found errors
+                } else if let statusCode = extractHTTPStatusCode(from: error),
+                          (400..<500).contains(statusCode) {
+                    // Don't retry 4xx client errors
                     throw error
                 }
                 
                 // If this wasn't the last attempt, wait before retrying
                 if attempt < maxRetries - 1 {
                     let delay = baseRetryDelay * pow(2.0, Double(attempt))
-                    try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                    
+                    // Use cancellation-aware sleep
+                    do {
+                        try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                    } catch is CancellationError {
+                        // Task was cancelled during sleep - exit immediately
+                        throw CancellationError()
+                    }
                 }
             }
         }
