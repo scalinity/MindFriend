@@ -158,7 +158,6 @@ final class SupabaseDataService: ObservableObject {
             .gte("local_date", value: startDate)
             .lte("local_date", value: endDate)
             .order("local_date", ascending: false)
-            .limit(limit)
             .range(from: offset, to: offset + limit - 1)
             .execute()
             .value

@@ -5,6 +5,38 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
+const OPERATION_TIMEOUT_MS = 15000; // 15s timeout for database operations
+
+/**
+ * Creates a promise that rejects after the specified timeout
+ * Properly handles Supabase PostgrestBuilder which implements PromiseLike
+ */
+function withTimeout<T>(
+  promiseOrBuilder: Promise<T> | PromiseLike<T>,
+  timeoutMs: number,
+  operation: string,
+): Promise<T> {
+  const promise = Promise.resolve(promiseOrBuilder);
+  
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(
+        new Error(`Operation '${operation}' timed out after ${timeoutMs}ms`),
+      );
+    }, timeoutMs);
+
+    promise
+      .then((result) => {
+        clearTimeout(timeoutId);
+        resolve(result);
+      })
+      .catch((error) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      });
+  });
+}
+
 interface ToggleVacationRequest {
   action: "activate" | "deactivate";
   startDate?: string; // ISO date string (YYYY-MM-DD), required for activate
@@ -57,8 +89,20 @@ serve(async (req) => {
       });
     }
 
-    // Parse request body
-    const body: ToggleVacationRequest = await req.json();
+    // Parse request body with error handling (P1 fix: prevent crash on malformed JSON)
+    let body: ToggleVacationRequest;
+    try {
+      body = await req.json();
+    } catch (error) {
+      return new Response(
+        JSON.stringify({ error: "Invalid JSON in request body" }),
+        {
+          status: 400,
+          headers: { ...headers, "Content-Type": "application/json" },
+        },
+      );
+    }
+    
     const { action, startDate, endDate, reason } = body;
 
     // Validate action
@@ -119,16 +163,20 @@ async function activateVacation(
   reason: string | undefined,
   headers: Record<string, string>,
 ): Promise<Response> {
-  // Check user's subscription tier before enforcing quota
-  const { data: subscription, error: subError } = await supabase
-    .from("subscriptions")
-    .select("tier, is_active")
-    .eq("user_id", userId)
-    .eq("is_active", true)
-    .single();
+  // Check user's subscription tier before enforcing quota (with timeout)
+  const { data: subscription, error: subError } = await withTimeout(
+    supabase
+      .from("subscriptions")
+      .select("tier, is_active")
+      .eq("user_id", userId)
+      .eq("is_active", true)
+      .single(),
+    OPERATION_TIMEOUT_MS,
+    "subscription check",
+  );
   
-  if (subError && subError.code !== "PGRST116") {  // PGRST116 = no rows returned
-    console.error("Subscription check error:", subError);
+  if (subError && subError.code !== "PGRST116") {
+    console.error("Subscription check error:", subError.code);
     // Continue with free tier assumption on error
   }
   
@@ -139,11 +187,15 @@ async function activateVacation(
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     
-    const { data: recentVacations, error: countError } = await supabase
-      .from("vacation_mode")
-      .select("id", { count: "exact", head: false })
-      .eq("user_id", userId)
-      .gte("created_at", thirtyDaysAgo.toISOString());
+    const { data: recentVacations, error: countError } = await withTimeout(
+      supabase
+        .from("vacation_mode")
+        .select("id", { count: "exact", head: false })
+        .eq("user_id", userId)
+        .gte("created_at", thirtyDaysAgo.toISOString()),
+    OPERATION_TIMEOUT_MS,
+      "rate limit check",
+    );
     
     if (countError) {
       console.error("Count error:", countError);
@@ -186,7 +238,10 @@ async function activateVacation(
     );
   }
 
-  const daysDiff = Math.ceil(
+  // Calculate days difference using Math.floor to match iOS dateComponents logic
+  // iOS uses: dateComponents([.day], from: start, to: end).day + 1
+  // This ensures Jan 1 to Jan 7 = 6 days diff, then +1 = 7 days total (inclusive)
+  const daysDiff = Math.floor(
     (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24),
   );
 
@@ -200,7 +255,9 @@ async function activateVacation(
     );
   }
 
-  if (daysDiff > 14) {
+  // Check >= 14 instead of > 14 because we return daysDiff + 1
+  // This prevents 15-day vacations (daysDiff=14, returned daysCount=15)
+  if (daysDiff >= 14) {
     return new Response(
       JSON.stringify({ error: "Maximum vacation duration is 14 days" }),
       {
@@ -210,13 +267,17 @@ async function activateVacation(
     );
   }
 
-  // Check for overlapping active vacations
-  const { data: existing } = await supabase
-    .from("vacation_mode")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("is_active", true)
-    .single();
+  // Check for overlapping active vacations (with timeout)
+  const { data: existing } = await withTimeout(
+    supabase
+      .from("vacation_mode")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("is_active", true)
+      .single(),
+    OPERATION_TIMEOUT_MS,
+    "overlap check",
+  );
 
   if (existing) {
     return new Response(
@@ -230,31 +291,39 @@ async function activateVacation(
     );
   }
 
-  // Get current streak value
-  const { data: stats } = await supabase
-    .from("user_stats")
-    .select("current_streak_days")
-    .eq("user_id", userId)
-    .single();
+  // Get current streak value (with timeout)
+  const { data: stats } = await withTimeout(
+    supabase
+      .from("user_stats")
+      .select("current_streak_days")
+      .eq("user_id", userId)
+      .single(),
+    OPERATION_TIMEOUT_MS,
+    "streak fetch",
+  );
 
   // Sanitize reason field to prevent XSS/injection
   const sanitizedReason = reason 
     ? reason.trim().substring(0, 200).replace(/[<>]/g, '') 
     : null;
 
-  // Create vacation mode entry
-  const { data: vacation, error: insertError } = await supabase
-    .from("vacation_mode")
-    .insert({
-      user_id: userId,
-      start_date: startDate,
-      end_date: endDate,
-      reason: sanitizedReason,
-      streak_at_start: stats?.current_streak_days || 0,
-      is_active: true,
-    })
-    .select()
-    .single();
+  // Create vacation mode entry (with timeout)
+  const { data: vacation, error: insertError } = await withTimeout(
+    supabase
+      .from("vacation_mode")
+      .insert({
+        user_id: userId,
+        start_date: startDate,
+        end_date: endDate,
+        is_active: true,
+        reason: sanitizedReason,
+        streak_on_activation: stats?.current_streak_days || 0,
+      })
+      .select()
+      .single(),
+    OPERATION_TIMEOUT_MS,
+    "vacation insert",
+  );
 
   if (insertError) {
     console.error("Insert error:", insertError);
@@ -289,22 +358,25 @@ async function deactivateVacation(
   userId: string,
   headers: Record<string, string>,
 ): Promise<Response> {
-  // Deactivate all active vacations for user
-  const { error: updateError } = await supabase
-    .from("vacation_mode")
-    .update({
-      is_active: false,
-      deactivated_at: new Date().toISOString(),
-    })
-    .eq("user_id", userId)
-    .eq("is_active", true);
+  // Deactivate all active vacations for user (with timeout)
+  const { error: updateError } = await withTimeout(
+    supabase
+      .from("vacation_mode")
+      .update({
+        is_active: false,
+        deactivated_at: new Date().toISOString(),
+      })
+      .eq("user_id", userId)
+      .eq("is_active", true),
+    OPERATION_TIMEOUT_MS,
+    "vacation deactivate",
+  );
 
   if (updateError) {
-    console.error("Update error:", updateError);
+    console.error("Update error:", updateError.code);
     return new Response(
       JSON.stringify({
         error: "Failed to deactivate vacation mode",
-        details: updateError.message,
       }),
       {
         status: 500,
