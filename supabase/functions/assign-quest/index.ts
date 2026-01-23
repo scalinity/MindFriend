@@ -170,6 +170,80 @@ async function postStreakMilestone(
   );
 }
 
+// Check if user is in vacation mode for given date
+async function checkVacationMode(
+  supabase: SupabaseClient,
+  userId: string,
+  date: string,
+): Promise<boolean> {
+  const { data: vacation } = await supabase
+    .from("vacation_mode")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("is_active", true)
+    .lte("start_date", date)
+    .gte("end_date", date)
+    .single();
+
+  return !!vacation;
+}
+
+// Check and award shield at 7-day milestones
+async function checkShieldEarning(
+  supabase: SupabaseClient,
+  userId: string,
+  currentStreak: number,
+): Promise<void> {
+  // Only award at 7-day milestones (7, 14, 21, 28, etc.)
+  if (currentStreak <= 0 || currentStreak % 7 !== 0) {
+    return;
+  }
+
+  // Get current shield status
+  const { data: stats } = await supabase
+    .from("user_stats")
+    .select("streak_shields_remaining, streak_shields_max")
+    .eq("user_id", userId)
+    .single();
+
+  if (!stats) return;
+
+  // Award shield if not at max (premium users have max=999)
+  if (stats.streak_shields_remaining < stats.streak_shields_max) {
+    // Update shield count
+    await supabase
+      .from("user_stats")
+      .update({
+        streak_shields_remaining: stats.streak_shields_remaining + 1,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("user_id", userId);
+
+    // Log shield event
+    await supabase.from("streak_shield_events").insert({
+      user_id: userId,
+      event_type: "earned",
+      streak_protected: currentStreak,
+      shields_remaining: stats.streak_shields_remaining + 1,
+      metadata: { earned_at_streak: currentStreak },
+    });
+
+    // Send notification
+    try {
+      await supabase.functions.invoke("send-notification", {
+        body: {
+          type: "shield_earned",
+          recipientId: userId,
+          data: { streakDay: currentStreak },
+        },
+      });
+    } catch (error) {
+      console.error("Failed to send shield earned notification:", error);
+      // Non-critical, continue
+    }
+  }
+}
+
 // Assign quest to a single user
 // Uses preference-weighted selection if user has quest preferences data
 async function assignQuestToUser(
@@ -177,6 +251,15 @@ async function assignQuestToUser(
   userId: string,
   localDate: string,
 ): Promise<{ assigned: boolean; reason?: string }> {
+  // Check if user is in vacation mode
+  const isOnVacation = await checkVacationMode(supabase, userId, localDate);
+  if (isOnVacation) {
+    console.log(
+      `User ${userId} is in vacation mode - skipping quest assignment`,
+    );
+    return { assigned: false, reason: "vacation_mode" };
+  }
+
   // Check if user already has a quest for today
   const { data: existingQuest } = await supabase
     .from("quests")
@@ -465,6 +548,9 @@ async function updateStreakAndCheckMilestone(
     const displayName = profile?.display_name || "Someone";
     await postStreakMilestone(supabase, userId, newStreak, displayName);
   }
+
+  // Check and award shield at 7-day milestones
+  await checkShieldEarning(supabase, userId, newStreak);
 }
 
 serve(async (req) => {

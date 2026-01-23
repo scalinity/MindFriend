@@ -7,11 +7,13 @@ struct ProgressStoryPreviewCard: View {
 
     @State private var story: WeeklyStory?
     @State private var isLoading = false
-    @State private var showViewer = false
+    @State private var showDetailView = false
 
     var body: some View {
         Button {
-            showViewer = true
+            if story != nil {
+                showDetailView = true
+            }
         } label: {
             VStack(alignment: .leading, spacing: 12) {
                 // Header
@@ -53,11 +55,22 @@ struct ProgressStoryPreviewCard: View {
             .cornerRadius(16)
         }
         .buttonStyle(.plain)
+        .disabled(story == nil)
         .task {
             await loadStory()
         }
-        .fullScreenCover(isPresented: $showViewer) {
-            ProgressStoryViewer(weekStart: nil)
+        .sheet(isPresented: $showDetailView) {
+            if let story = story {
+                NavigationStack {
+                    NarrativeDetailView(
+                        story: story,
+                        dataService: container.supabaseDataService,
+                        onUpdate: { updatedStory in
+                            self.story = updatedStory
+                        }
+                    )
+                }
+            }
         }
     }
 
@@ -137,13 +150,18 @@ struct ProgressStoryPreviewCard: View {
         defer { isLoading = false }
 
         do {
-            let weekStart = Date()
-            // Note: getWeeklyStory is a stub returning [String: Any]? 
-            // When implemented, this will need proper type decoding
-            _ = try await container.supabaseDataService.getWeeklyStory(weekStart: weekStart)
-            // For now, story remains nil since the stub returns nil
+            // Fetch the most recent story (limit 1)
+            let stories = try await container.supabaseDataService.fetchWeeklyStories(
+                limit: 1,
+                offset: 0,
+                favoritesOnly: false
+            )
+
+            // Get the first story if available
+            story = stories.first
         } catch {
             // Silently fail - card will show "no story" state
+            print("Failed to load weekly story: \(error.localizedDescription)")
         }
     }
 }

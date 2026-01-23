@@ -183,6 +183,15 @@ struct HomeView: View {
                         onStartRecovery: startRecoveryQuest
                     )
 
+                    // Grace period banner (48-hour window to complete missed quest)
+                    if let shieldStatus = shieldStatus,
+                       shieldStatus.recoveryQuestAvailable,
+                       let expiresAt = shieldStatus.recoveryQuestExpiresAt {
+                        GracePeriodBanner(expiresAt: expiresAt) {
+                            startRecoveryQuest()
+                        }
+                    }
+
                     // Buddy widget or invite prompt
                     if let buddyData = buddyWidgetData {
                         BuddyWidget(
