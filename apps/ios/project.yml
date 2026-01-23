@@ -89,6 +89,7 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         CFBundleURLTypes:
           - CFBundleURLSchemes:
+              - com.googleusercontent.apps.937820575713-afr6c9u3mtle5emk9aefa1fiosojfmbg
               - com.googleusercontent.apps.937820575713-3n91aim648r7vhjr9iojm08opbp84c1n
               - mindfriend
         # Push Notifications
