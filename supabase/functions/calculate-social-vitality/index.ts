@@ -38,7 +38,11 @@ interface ScoreComponents {
 interface CalculationResult {
   success: boolean;
   userId: string;
-  score?: number;
+  score?: {
+    overallScore: number;
+    trend: string;
+    components: ScoreComponents;
+  };
   error?: string;
 }
 
@@ -85,7 +89,10 @@ serve(async (req) => {
       .eq("date", yesterdayStr);
 
     if (metricsError) {
-      console.error("[calculate-social-vitality] Error fetching metrics:", metricsError);
+      console.error(
+        "[calculate-social-vitality] Error fetching metrics:",
+        metricsError,
+      );
       return new Response(
         JSON.stringify({ success: false, error: metricsError.message }),
         { status: 500, headers: { "Content-Type": "application/json" } },
@@ -102,7 +109,10 @@ serve(async (req) => {
       .order("date", { ascending: true });
 
     if (scoresError) {
-      console.error("[calculate-social-vitality] Error fetching scores:", scoresError);
+      console.error(
+        "[calculate-social-vitality] Error fetching scores:",
+        scoresError,
+      );
       return new Response(
         JSON.stringify({ success: false, error: scoresError.message }),
         { status: 500, headers: { "Content-Type": "application/json" } },
@@ -173,7 +183,10 @@ serve(async (req) => {
           });
 
         if (upsertError) {
-          console.error("[calculate-social-vitality] Batch upsert error:", upsertError);
+          console.error(
+            "[calculate-social-vitality] Batch upsert error:",
+            upsertError,
+          );
         }
       }
     }
@@ -345,10 +358,10 @@ function calculateReciprocityScore(metrics: InteractionMetric[]): number {
 
   // P2 FIX: Handle edge cases for one-way communication
   if (totalSent + totalReceived === 0) return 0; // No activity
-  
+
   // If user only receives (never sends), score as imbalanced
   if (totalSent === 0) return 5;
-  
+
   // If user only sends (never receives), they're actively engaging but in inactive circle
   // Don't penalize as harshly - could be the only active member
   if (totalReceived === 0) return 12;
@@ -369,23 +382,23 @@ function calculateReciprocityScore(metrics: InteractionMetric[]): number {
 /**
  * Component 4: Diversity of Connections (0-25 points)
  * Based on unique people and circles
- * 
+ *
  * P3 DOCUMENTATION: Scoring Rationale
- * 
+ *
  * People Diversity (0-15 points):
  * - 0 people: 0 points (no interactions)
  * - 1 person: 5/15 (33%) - Consistent 1-on-1 relationship
  * - 2 people: 10/15 (67%) - Small support network
  * - 3+ people: 15/15 (100%) - Diverse social connections
- * 
+ *
  * Design: Step function reflects research showing benefits plateau after 3-5 close connections.
  * We prioritize depth over breadth, so reaching 3 people earns full score.
- * 
+ *
  * Circle Diversity (0-10 points):
  * - 0 circles: 0 points (not engaged)
  * - 1 circle: 4/10 (40%) - Single community membership
  * - 2+ circles: 10/10 (100%) - Multi-context social life
- * 
+ *
  * Design: Research shows people with diverse social contexts (work, hobbies, family) have
  * better mental health outcomes. Engaging in 2+ circles indicates healthy social variety.
  */
@@ -425,7 +438,7 @@ function calculateTrendFromScores(scores: any[]): string {
 
   // P3 FIX: Validate that all scores are numbers (handle gaps/nulls)
   const hasInvalidScores = [...recentScores, ...olderScores].some(
-    (score) => typeof score !== 'number' || isNaN(score)
+    (score) => typeof score !== "number" || isNaN(score),
   );
   if (hasInvalidScores) {
     return "stable"; // Default if data quality issues

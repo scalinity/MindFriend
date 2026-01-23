@@ -30,6 +30,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added missing `scenario` parameter to feedback generation calls
   - Removed manual quota increment (now handled by atomic RPC)
 
+- **Social Vitality Index**: Resolved TypeScript compilation errors in Edge Functions
+  - Fixed type inference error in `aggregate-interaction-metrics` (explicit CirclePost | null annotation)
+  - Fixed CalculationResult.score type in `calculate-social-vitality` (was number, now proper object structure)
+  - Applied linter formatting for consistency
+
 ### Security
 
 - **Rehearsal Prompt Injection Prevention**: Added sanitization for all user-submitted scenario fields
