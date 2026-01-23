@@ -48,7 +48,8 @@ final class SocialVitalityEngine: ObservableObject {
                 .rpc("get_social_vitality_dashboard", params: ["p_user_id": userId])
                 .execute()
 
-            guard let data = response.data else {
+            let data = response.data
+            guard !data.isEmpty else {
                 throw EngineError.noData
             }
 
@@ -171,16 +172,9 @@ final class SocialVitalityEngine: ObservableObject {
             throw EngineError.unauthorized
         }
 
-        let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
-        encoder.dateEncodingStrategy = .iso8601
-
-        let data = try encoder.encode(preferences)
-        let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
-
         try await supabase
             .from("peer_alert_preferences")
-            .upsert(dict)
+            .upsert(preferences)
             .execute()
 
         self.alertPreferences = preferences
@@ -213,13 +207,13 @@ final class SocialVitalityEngine: ObservableObject {
             throw EngineError.unauthorized
         }
 
-        let consent: [String: Any] = [
-            "supporter_id": supporterId,
-            "requesting_user_id": userId.uuidString,
-            "accepted": false,
-            "created_at": ISO8601DateFormatter().string(from: Date()),
-            "updated_at": ISO8601DateFormatter().string(from: Date())
-        ]
+        let consent = SupportConsentInsert(
+            supporterId: supporterId,
+            requestingUserId: userId.uuidString,
+            accepted: false,
+            createdAt: Date(),
+            updatedAt: Date()
+        )
 
         try await supabase
             .from("peer_support_consent")
@@ -227,6 +221,23 @@ final class SocialVitalityEngine: ObservableObject {
             .execute()
 
         // TODO: Send push notification to supporter asking for consent
+    }
+
+    /// Helper struct for consent insert
+    private struct SupportConsentInsert: Codable {
+        let supporterId: String
+        let requestingUserId: String
+        let accepted: Bool
+        let createdAt: Date
+        let updatedAt: Date
+
+        enum CodingKeys: String, CodingKey {
+            case supporterId = "supporter_id"
+            case requestingUserId = "requesting_user_id"
+            case accepted
+            case createdAt = "created_at"
+            case updatedAt = "updated_at"
+        }
     }
 
     /// Remove supporter from designated list

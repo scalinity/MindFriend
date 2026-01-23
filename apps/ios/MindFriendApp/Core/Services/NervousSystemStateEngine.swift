@@ -240,8 +240,8 @@ final class NervousSystemStateEngine: ObservableObject {
         }
 
         // Only store if confidence meets threshold
-        guard result.confidence >= minConfidenceThreshold else {
-            logger.info("Skipping storage: confidence \(result.confidence) below threshold \(minConfidenceThreshold)")
+        guard result.confidence >= self.minConfidenceThreshold else {
+            logger.info("Skipping storage: confidence \(result.confidence) below threshold \(self.minConfidenceThreshold)")
             return
         }
 

@@ -771,7 +771,23 @@ final class EmotionAnalyzer: ObservableObject {
     }
 
     private func extractSpectralFeatures(from samples: [Double], sampleRate: Double) -> [Double] {
-        // ... existing code ...
+        // Initialize feature collection arrays
+        var features: [Double] = []
+        var spectralCentroids: [Double] = []
+        var spectralBandwidths: [Double] = []
+        var spectralRolloffs: [Double] = []
+        var spectralFlatness: [Double] = []
+        var spectralContrast: [[Double]] = []
+        
+        // Frame processing parameters
+        let fftSize = frameLength
+        var frameStart = 0
+        
+        // Guard against empty or too short samples
+        guard samples.count >= frameLength else {
+            // Return zero-padded features if audio is too short
+            return Array(repeating: 0.0, count: 17) // 2*4 + 7 + 2 = 17 spectral features
+        }
         
         while frameStart + frameLength <= samples.count {
             let frame = Array(samples[frameStart..<frameStart + frameLength])
@@ -920,7 +936,19 @@ final class EmotionAnalyzer: ObservableObject {
     }
 
     private func extractChromaFeatures(from samples: [Double], sampleRate: Double) -> [Double] {
-        // ... existing code ...
+        // Initialize chroma feature arrays
+        var chromaMeans: [[Double]] = []
+        var chromaStds: [[Double]] = []
+
+        // Frame processing parameters
+        let fftSize = frameLength
+        let numChroma = 12
+        var frameStart = 0
+
+        // Guard against empty or too short samples
+        guard samples.count >= frameLength else {
+            return Array(repeating: 0.0, count: numChroma * 2) // Mean + std for each chroma bin
+        }
 
         while frameStart + frameLength <= samples.count {
             let frame = Array(samples[frameStart..<frameStart + frameLength])

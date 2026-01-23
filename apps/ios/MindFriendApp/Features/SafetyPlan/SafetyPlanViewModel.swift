@@ -93,7 +93,7 @@ final class SafetyPlanViewModel: ObservableObject {
                 isSaving = false
                 return true
             } else if let error = response.error {
-                errorMessage = error.message
+                errorMessage = error
                 showError = true
             }
         } catch {
@@ -138,7 +138,7 @@ final class SafetyPlanViewModel: ObservableObject {
                 await cachePlan(payload: payload, settings: settings, version: data.version)
             } else if let error = response.error {
                 // Revert to previous settings on failure
-                errorMessage = error.message
+                errorMessage = error
                 showError = true
                 settings.allowAiReference = previousSettings.allowAiReference
             }
@@ -165,7 +165,7 @@ final class SafetyPlanViewModel: ObservableObject {
                 planVersion = 0
                 await clearCachedPlan()
             } else if let error = response.error {
-                errorMessage = error.message
+                errorMessage = error
                 showError = true
             }
         } catch {

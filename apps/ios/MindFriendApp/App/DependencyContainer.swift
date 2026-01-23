@@ -70,7 +70,10 @@ final class DependencyContainer: ObservableObject {
     }()
 
     lazy var achievementService: AchievementService = {
-        AchievementService(supabase: self.supabaseClient)
+        AchievementService(
+            supabase: self.supabaseClient,
+            authService: self.supabaseAuthService
+        )
     }()
 
     lazy var photoMoodService: PhotoMoodService = {

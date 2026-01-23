@@ -8,7 +8,19 @@ struct MilestoneNarrativeView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showShareSheet = false
     @State private var shareImage: UIImage?
-    
+
+    // Grid layout
+    private let columns = [
+        GridItem(.flexible()),
+        GridItem(.flexible())
+    ]
+
+    // Computed properties from journey stats
+    private var streakDays: Int { celebration.journeyStats.currentStreak }
+    private var questsCompleted: Int { celebration.journeyStats.totalQuests }
+    private var badgesEarned: Int { celebration.journeyStats.badgesEarned }
+    private var tierLevel: Int { celebration.levelReached }
+
     var body: some View {
         NavigationView {
             ScrollView {
@@ -50,30 +62,30 @@ struct MilestoneNarrativeView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 16))
                     
                     // Journey stats highlights
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                        StatCard(
-                            icon: "checkmark.circle.fill",
-                            value: "\(celebration.journeyStats.totalQuests)",
-                            label: "Quests",
-                            color: .green
+                    LazyVGrid(columns: columns, spacing: 12) {
+                        MilestoneStatCard(
+                            icon: "calendar",
+                            value: "\(streakDays)",
+                            label: "Day Streak",
+                            color: .orange
                         )
-                        StatCard(
-                            icon: "figure.mind.and.body",
-                            value: "\(celebration.journeyStats.totalExercises)",
-                            label: "Exercises",
+                        MilestoneStatCard(
+                            icon: "target",
+                            value: "\(questsCompleted)",
+                            label: "Quests Done",
                             color: .blue
                         )
-                        StatCard(
-                            icon: "heart.fill",
-                            value: "\(celebration.journeyStats.totalMoodLogs)",
-                            label: "Mood Logs",
-                            color: .pink
+                        MilestoneStatCard(
+                            icon: "trophy",
+                            value: "\(badgesEarned)",
+                            label: "Badges Earned",
+                            color: .yellow
                         )
-                        StatCard(
-                            icon: "flame.fill",
-                            value: "\(celebration.journeyStats.longestStreak)",
-                            label: "Best Streak",
-                            color: .orange
+                        MilestoneStatCard(
+                            icon: "checkmark.circle",
+                            value: "\(tierLevel)",
+                            label: "Current Tier",
+                            color: .green
                         )
                     }
                     
@@ -118,7 +130,7 @@ struct MilestoneNarrativeView: View {
     }
 }
 
-struct StatCard: View {
+struct MilestoneStatCard: View {
     let icon: String
     let value: String
     let label: String
@@ -207,15 +219,4 @@ struct ShareStatBadge: View {
         .background(.white.opacity(0.2))
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
-}
-
-struct ShareSheet: UIViewControllerRepresentable {
-    let items: [Any]
-    
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        let controller = UIActivityViewController(activityItems: items, applicationActivities: nil)
-        return controller
-    }
-    
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

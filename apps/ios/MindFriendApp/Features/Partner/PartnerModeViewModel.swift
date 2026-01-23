@@ -53,7 +53,7 @@ final class PartnerModeViewModel: ObservableObject {
 
         do {
             // Add timeout protection (15 seconds)
-            try await withTimeout(seconds: 15) {
+            try await partnerWithTimeout(seconds: 15) {
                 try await self._loadPartnerDataInternal()
             }
         } catch is TimeoutError {
@@ -351,20 +351,20 @@ extension PartnerModeViewModel {
 /// Custom error for timeout
 struct TimeoutError: Error {}
 
-/// Execute an async operation with a timeout
-func withTimeout<T>(seconds: TimeInterval, operation: @escaping () async throws -> T) async throws -> T {
+/// Execute an async operation with a timeout (partner-specific version)
+fileprivate func partnerWithTimeout<T>(seconds: TimeInterval, operation: @escaping () async throws -> T) async throws -> T {
     try await withThrowingTaskGroup(of: T.self) { group in
         // Start the actual operation
         group.addTask {
             try await operation()
         }
-        
+
         // Start the timeout task
         group.addTask {
             try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
             throw TimeoutError()
         }
-        
+
         // Return the first result (either success or timeout)
         let result = try await group.next()!
         group.cancelAll()

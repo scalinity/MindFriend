@@ -65,7 +65,7 @@ final class WeeklyWellbeingViewModel: ObservableObject {
                 history.insert(data.check, at: 0)
                 resetScores()
             } else if let error = response.error {
-                errorMessage = error.message
+                errorMessage = error
                 showError = true
             }
         } catch {

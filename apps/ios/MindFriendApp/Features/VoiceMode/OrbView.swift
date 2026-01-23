@@ -317,6 +317,8 @@ struct OrbView: View {
             return Color(UIColor.systemGray4)
         case .reconnecting:
             return Color.orange
+        case .paused:
+            return Color.blue.opacity(0.5)  // Dim blue for idle disconnected
         case .error:
             return Color.red
         }

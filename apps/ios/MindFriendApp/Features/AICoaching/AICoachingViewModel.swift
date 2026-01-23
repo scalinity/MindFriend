@@ -178,28 +178,29 @@ final class AICoachingThoughtRecordViewModel: ObservableObject {
     func createThoughtRecord() async -> ThoughtRecord? {
         isSaving = true
 
-        // Extract emotion intensities from dictionary values
-        let emotions = Array(emotionIntensities.values)
+        // Convert emotion intensities to EmotionEntry array
+        let emotionEntries = emotionIntensities.map { name, intensity in
+            EmotionEntry(emotion: name, intensity: intensity.value)
+        }
 
         let record = ThoughtRecord(
-            id: UUID(),
-            userId: UUID(), // Will be replaced by backend
-            conversationId: nil,
-            createdAt: Date(),
-            updatedAt: Date(),
+            id: UUID().uuidString,
+            userId: "", // Will be replaced by backend
+            enrollmentId: nil,
+            programDayNumber: nil,
+            situation: activatingEvent,
             activatingEvent: activatingEvent,
-            automaticThoughts: automaticThoughts.filter { !$0.isEmpty },
-            emotions: emotions,
-            physicalSensations: nil,
-            behaviors: nil,
-            identifiedDistortions: identifiedDistortions,
-            evidenceForThoughts: evidenceForThoughts.isEmpty ? nil : evidenceForThoughts,
-            evidenceAgainstThoughts: evidenceAgainstThoughts.isEmpty ? nil : evidenceAgainstThoughts,
+            automaticThought: automaticThoughts.filter { !$0.isEmpty }.joined(separator: "; "),
+            emotions: emotionEntries,
+            evidenceFor: evidenceForThoughts.isEmpty ? nil : evidenceForThoughts,
+            evidenceAgainst: evidenceAgainstThoughts.isEmpty ? nil : evidenceAgainstThoughts,
             balancedThought: balancedThought.isEmpty ? nil : balancedThought,
-            alternativePerspective: alternativePerspective.isEmpty ? nil : alternativePerspective,
-            emotionAfterReframing: outcomeEmotions.isEmpty ? nil : outcomeEmotions.map { _ in EmotionIntensity.low },
-            lessonLearned: lessonLearned.isEmpty ? nil : lessonLearned,
-            isCompleted: !balancedThought.isEmpty
+            newEmotionIntensity: nil,
+            cognitiveDistortions: identifiedDistortions,
+            aiAnalysis: nil,
+            aiAnalysisRequestedAt: nil,
+            createdAt: Date(),
+            updatedAt: Date()
         )
 
         isSaving = false
@@ -207,16 +208,20 @@ final class AICoachingThoughtRecordViewModel: ObservableObject {
     }
 
     func loadExistingRecord(_ record: ThoughtRecord) {
-        activatingEvent = record.activatingEvent
-        automaticThoughts = record.automaticThoughts.isEmpty ? [""] : record.automaticThoughts
+        activatingEvent = record.activatingEvent ?? record.situation
+        automaticThoughts = [record.automaticThought]
 
-        // This would need mapping from the record's emotions
-        identifiedDistortions = record.identifiedDistortions
-        evidenceForThoughts = record.evidenceForThoughts ?? ""
-        evidenceAgainstThoughts = record.evidenceAgainstThoughts ?? ""
+        // Map emotions to intensity dictionary
+        for entry in record.emotions {
+            if let intensity = EmotionIntensity(value: entry.intensity) {
+                emotionIntensities[entry.emotion] = intensity
+            }
+        }
+
+        identifiedDistortions = record.cognitiveDistortions
+        evidenceForThoughts = record.evidenceFor ?? ""
+        evidenceAgainstThoughts = record.evidenceAgainst ?? ""
         balancedThought = record.balancedThought ?? ""
-        alternativePerspective = record.alternativePerspective ?? ""
-        lessonLearned = record.lessonLearned ?? ""
     }
 }
 
@@ -230,24 +235,23 @@ extension AICoachingViewModel {
         vm.isSessionActive = true
         vm.recentThoughtRecords = [
             ThoughtRecord(
-                id: UUID(),
-                userId: UUID(),
-                conversationId: nil,
-                createdAt: Date().addingTimeInterval(-86400),
-                updatedAt: Date(),
+                id: UUID().uuidString,
+                userId: UUID().uuidString,
+                enrollmentId: nil,
+                programDayNumber: nil,
+                situation: "Received critical feedback on my project at work",
                 activatingEvent: "Received critical feedback on my project at work",
-                automaticThoughts: ["I'm not good enough", "Everyone thinks I'm incompetent"],
-                emotions: [.medium],
-                physicalSensations: nil,
-                behaviors: nil,
-                identifiedDistortions: [.allOrNothing, .mindReading],
-                evidenceForThoughts: nil,
-                evidenceAgainstThoughts: nil,
+                automaticThought: "I'm not good enough; Everyone thinks I'm incompetent",
+                emotions: [EmotionEntry(emotion: "Anxious", intensity: 70)],
+                evidenceFor: nil,
+                evidenceAgainst: nil,
                 balancedThought: "One piece of feedback doesn't define my overall competence",
-                alternativePerspective: nil,
-                emotionAfterReframing: nil,
-                lessonLearned: nil,
-                isCompleted: true
+                newEmotionIntensity: nil,
+                cognitiveDistortions: [.allOrNothing, .mindReading],
+                aiAnalysis: nil,
+                aiAnalysisRequestedAt: nil,
+                createdAt: Date().addingTimeInterval(-86400),
+                updatedAt: Date()
             )
         ]
         return vm

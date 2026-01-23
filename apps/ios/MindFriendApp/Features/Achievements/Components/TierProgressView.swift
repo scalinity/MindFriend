@@ -119,10 +119,3 @@ struct TierBadgeView: View {
         }
     }
 }
-
-// Collection extension for safe subscripting
-extension Collection {
-    subscript(safe index: Index) -> Element? {
-        return indices.contains(index) ? self[index] : nil
-    }
-}

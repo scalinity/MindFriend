@@ -1,6 +1,57 @@
 import Foundation
 import SwiftUI
 
+// MARK: - Type Aliases
+
+/// Convenience type alias for TherapeuticThoughtRecord
+typealias ThoughtRecord = TherapeuticThoughtRecord
+
+/// Type alias for cognitive distortion types used in AI coaching
+typealias CognitiveDistortion = CognitiveDistortionType
+
+// MARK: - Emotion Intensity
+
+/// Intensity levels for emotions in thought records
+enum EmotionIntensity: String, Codable, CaseIterable, Hashable {
+    case low
+    case medium
+    case high
+    
+    var displayName: String {
+        switch self {
+        case .low: return "Low"
+        case .medium: return "Medium"
+        case .high: return "High"
+        }
+    }
+    
+    var value: Int {
+        switch self {
+        case .low: return 1
+        case .medium: return 2
+        case .high: return 3
+        }
+    }
+
+    var emoji: String {
+        switch self {
+        case .low: return "😐"
+        case .medium: return "😟"
+        case .high: return "😰"
+        }
+    }
+
+    /// Initialize from numeric value
+    init?(value: Int) {
+        switch value {
+        case 1: self = .low
+        case 2: self = .medium
+        case 3: self = .high
+        default: return nil
+        }
+    }
+}
+
 // MARK: - Clinical Assessment Types
 
 /// Assessment point in a program
@@ -254,7 +305,7 @@ struct AssessmentSubmissionResult: Codable {
 // MARK: - Cognitive Distortion Types
 
 /// Common cognitive distortions identified in CBT
-enum CognitiveDistortionType: String, Codable, CaseIterable {
+enum CognitiveDistortionType: String, Codable, CaseIterable, Identifiable {
     case allOrNothing = "all_or_nothing"
     case overgeneralization = "overgeneralization"
     case mentalFilter = "mental_filter"
@@ -265,6 +316,8 @@ enum CognitiveDistortionType: String, Codable, CaseIterable {
     case emotionalReasoning = "emotional_reasoning"
     case shouldStatements = "should_statements"
     case labeling = "labeling"
+    
+    var id: String { rawValue }
 
     var displayName: String {
         switch self {
@@ -392,6 +445,57 @@ struct EmotionEntry: Codable, Equatable, Hashable {
     }
 }
 
+/// Emotion prediction from voice analysis
+struct EmotionPrediction: Codable, Identifiable, Equatable {
+    let id: String
+    let emotion: String
+    let confidence: Double
+    let timestamp: Date
+    let voiceFeatures: VoiceAudioFeatures?
+
+    var isHighConfidence: Bool {
+        confidence >= 0.7
+    }
+}
+
+/// Voice audio features extracted for emotion analysis
+struct VoiceAudioFeatures: Codable, Equatable {
+    let pitch: Double?
+    let pace: Double?
+    let volume: Double?
+    let jitter: Double?
+    let shimmer: Double?
+    let hrv: Double?
+}
+
+// MARK: - Voice Analysis
+
+/// Request type for voice analysis
+struct AnalyzeVoiceRequest: Codable {
+    let creativeWorkId: String
+    let audioUrl: String?
+    let durationSeconds: Int
+}
+
+/// Response type for voice analysis
+struct AnalyzeVoiceResponse: Codable {
+    let success: Bool
+    let analysis: VoiceAnalysisResult?
+    let error: String?
+    let quotaExceeded: Bool?
+}
+
+/// Result of voice analysis
+struct VoiceAnalysisResult: Codable {
+    let primaryEmotion: String
+    let emotions: [EmotionPrediction]
+    let speakingPace: Double?
+    let volumeLevel: String?
+    let fillerWords: [String]
+    let sentiment: String
+    let insights: [String]
+}
+
 // MARK: - Therapeutic Thought Record
 
 /// A CBT thought record entry for therapeutic programs
@@ -403,6 +507,7 @@ struct TherapeuticThoughtRecord: Codable, Identifiable, Equatable {
 
     // ABC Model fields
     let situation: String
+    let activatingEvent: String?  // Alias for situation
     let automaticThought: String
     let emotions: [EmotionEntry]
 
@@ -425,6 +530,11 @@ struct TherapeuticThoughtRecord: Codable, Identifiable, Equatable {
         evidenceFor != nil && evidenceAgainst != nil && balancedThought != nil
     }
 
+    /// Alias for isComplete for compatibility
+    var isCompleted: Bool {
+        isComplete
+    }
+
     /// Whether AI analysis has been requested but not received
     var isAwaitingAnalysis: Bool {
         aiAnalysisRequestedAt != nil && aiAnalysis == nil
@@ -442,7 +552,7 @@ struct TherapeuticThoughtRecord: Codable, Identifiable, Equatable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, situation, emotions
+        case id, situation, activatingEvent, emotions
         case userId = "user_id"
         case enrollmentId = "enrollment_id"
         case programDayNumber = "program_day_number"
@@ -519,6 +629,7 @@ struct DBThoughtRecord: Codable {
             enrollmentId: enrollmentId?.uuidString,
             programDayNumber: programDayNumber,
             situation: situation,
+            activatingEvent: situation, // Alias for situation
             automaticThought: automaticThought,
             emotions: emotions,
             evidenceFor: evidenceFor,

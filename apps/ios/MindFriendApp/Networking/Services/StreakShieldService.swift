@@ -38,7 +38,7 @@ final class StreakShieldService: ObservableObject {
         let events: [ShieldEvent] = try await supabase
             .from("streak_shield_events")
             .select()
-            .eq("user_id", userId.uuidString)
+            .eq("user_id", value: userId.uuidString)
             .order("created_at", ascending: false)
             .limit(limit)
             .execute()
@@ -59,26 +59,18 @@ final class StreakShieldService: ObservableObject {
         let dateFormatter = ISO8601DateFormatter()
         dateFormatter.formatOptions = [.withFullDate]
 
-        var requestBody: [String: Any] = ["action": action.rawValue]
-
-        if let startDate = startDate {
-            requestBody["startDate"] = dateFormatter.string(from: startDate)
-        }
-
-        if let endDate = endDate {
-            requestBody["endDate"] = dateFormatter.string(from: endDate)
-        }
-
-        if let reason = reason {
-            requestBody["reason"] = reason
-        }
-
-        let response = try await supabase.functions.invoke(
-            "toggle-vacation",
-            options: .init(body: requestBody)
+        let requestBody = VacationToggleRequest(
+            action: action.rawValue,
+            startDate: startDate.map { dateFormatter.string(from: $0) },
+            endDate: endDate.map { dateFormatter.string(from: $0) },
+            reason: reason
         )
 
-        let result = try JSONDecoder().decode(VacationModeResponse.self, from: response.data)
+        let result: VacationModeResponse = try await supabase.functions.invoke(
+            "toggle-vacation",
+            options: FunctionInvokeOptions(body: requestBody)
+        )
+
         return result
     }
 
@@ -87,8 +79,8 @@ final class StreakShieldService: ObservableObject {
         let result: [VacationMode] = try await supabase
             .from("vacation_mode")
             .select()
-            .eq("user_id", userId.uuidString)
-            .eq("is_active", true)
+            .eq("user_id", value: userId.uuidString)
+            .eq("is_active", value: true)
             .order("created_at", ascending: false)
             .limit(1)
             .execute()
@@ -97,6 +89,23 @@ final class StreakShieldService: ObservableObject {
         let vacation = result.first
         self.activeVacation = vacation
         return vacation
+    }
+}
+
+// MARK: - Internal Types
+
+/// Request for vacation toggle Edge Function
+private struct VacationToggleRequest: Codable {
+    let action: String
+    let startDate: String?
+    let endDate: String?
+    let reason: String?
+
+    enum CodingKeys: String, CodingKey {
+        case action
+        case startDate
+        case endDate
+        case reason
     }
 }
 
