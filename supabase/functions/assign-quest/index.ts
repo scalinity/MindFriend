@@ -19,12 +19,15 @@ const OPERATION_TIMEOUT_MS = 25000; // 25s timeout per operation
 
 /**
  * Creates a promise that rejects after the specified timeout
+ * Properly handles Supabase PostgrestBuilder which implements PromiseLike
  */
 function withTimeout<T>(
-  promise: Promise<T>,
+  promiseOrBuilder: Promise<T> | PromiseLike<T>,
   timeoutMs: number,
   operation: string,
 ): Promise<T> {
+  const promise = Promise.resolve(promiseOrBuilder);
+
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => {
       reject(
@@ -153,17 +156,17 @@ async function postStreakMilestone(
 
   const localDate = getLocalDate();
 
-  // Post milestone to each circle
-  for (const membership of memberships) {
-    await supabase.from("circle_posts").insert({
-      circle_id: membership.circle_id,
-      user_id: userId,
-      post_type: "milestone",
-      mood_emoji: "🔥",
-      body_text: `${displayName} just hit ${streakDays} days! Keep it up!`,
-      local_date: localDate,
-    });
-  }
+  // Batch insert milestone posts to all circles (P2 fix: eliminate N+1 query)
+  const posts = memberships.map((membership) => ({
+    circle_id: membership.circle_id,
+    user_id: userId,
+    post_type: "milestone",
+    mood_emoji: "🔥",
+    body_text: `${displayName} just hit ${streakDays} days! Keep it up!`,
+    local_date: localDate,
+  }));
+
+  await supabase.from("circle_posts").insert(posts);
 
   console.log(
     `Posted ${streakDays}-day milestone to ${memberships.length} circles for user ${userId}`,
@@ -908,16 +911,17 @@ serve(async (req) => {
                 const arcTitle =
                   (arcProgress.arc as { title?: string })?.title || "their arc";
 
-                for (const membership of memberships) {
-                  await supabaseAdmin.from("circle_posts").insert({
-                    circle_id: membership.circle_id,
-                    user_id: user.id,
-                    kind: "checkin",
-                    mood_emoji: "🎯",
-                    body_text: `${displayName} reached day ${arcProgress.current_day} of ${arcTitle}!`,
-                    local_date: quest.local_date,
-                  });
-                }
+                // Batch insert arc milestone posts to all circles (P2 fix: eliminate N+1 query)
+                const posts = memberships.map((membership) => ({
+                  circle_id: membership.circle_id,
+                  user_id: user.id,
+                  kind: "checkin",
+                  mood_emoji: "🎯",
+                  body_text: `${displayName} reached day ${arcProgress.current_day} of ${arcTitle}!`,
+                  local_date: quest.local_date,
+                }));
+
+                await supabaseAdmin.from("circle_posts").insert(posts);
               }
             }
 
