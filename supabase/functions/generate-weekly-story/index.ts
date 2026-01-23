@@ -209,9 +209,19 @@ serve(async (req) => {
       .eq("user_id", user.id)
       .single();
 
+    // Validate and sanitize preferences
+    const validTones = ["warm", "professional", "playful"];
+    const validLengths = ["brief", "standard", "detailed"];
+    const tone = validTones.includes(preferencesData?.preferred_tone)
+      ? preferencesData.preferred_tone
+      : "warm";
+    const length = validLengths.includes(preferencesData?.preferred_length)
+      ? preferencesData.preferred_length
+      : "standard";
+
     const preferences = {
-      tone: preferencesData?.preferred_tone || "warm",
-      length: preferencesData?.preferred_length || "standard",
+      tone,
+      length,
       includeMetrics: preferencesData?.include_metrics ?? true,
     };
 
@@ -706,7 +716,7 @@ function generateStreakCard(
     data: {
       headline,
       stat: String(streakDays),
-      statLabel: streakDays === 1 ? "Day Streak" : "Day Streak",
+      statLabel: streakDays === 1 ? "Day Streak" : "Days Streak",
       message,
       streakDays,
     },
@@ -840,12 +850,23 @@ function generateQuestCard(stats: WeeklyStats, generatedAt: string): StoryCard {
  * Generate insight card from AI insight
  */
 function generateInsightCard(insight: string, generatedAt: string): StoryCard {
-  // Truncate insight if too long
+  // Truncate insight at last complete sentence or word boundary
   const maxLength = 200;
-  const truncatedInsight =
-    insight.length > maxLength
-      ? insight.substring(0, maxLength - 3) + "..."
-      : insight;
+  let truncatedInsight = insight;
+  
+  if (insight.length > maxLength) {
+    // Try to truncate at last sentence
+    const sentences = insight.substring(0, maxLength).match(/[^.!?]+[.!?]+/g);
+    if (sentences && sentences.length > 0) {
+      truncatedInsight = sentences.join(" ");
+    } else {
+      // Fall back to last word boundary
+      const lastSpace = insight.substring(0, maxLength).lastIndexOf(" ");
+      truncatedInsight = lastSpace > 0
+        ? insight.substring(0, lastSpace) + "..."
+        : insight.substring(0, maxLength - 3) + "...";
+    }
+  }
 
   return {
     id: generateUUID(),
@@ -970,7 +991,21 @@ function detectMilestone(
 }
 
 /**
- * Apply tone preference to a card's message
+ * Applies tone preference to a story card's message text.
+ * 
+ * This function maps the default "warm" tone messages (from the MESSAGES constant)
+ * to their professional or playful equivalents based on user preference.
+ * 
+ * @param card - The story card to apply tone to
+ * @param tone - User's preferred tone: "warm" (default), "professional", or "playful"
+ * @returns A new card with the message updated to match the tone, or the original
+ *          card if tone is "warm" or no mapping exists for the message
+ * 
+ * @example
+ * // Convert warm message to professional
+ * const card = { data: { message: "You're building momentum!" }, ... };
+ * const professional = applyToneToCard(card, "professional");
+ * // professional.data.message === "Consistent daily engagement observed."
  */
 function applyToneToCard(
   card: StoryCard,
