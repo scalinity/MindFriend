@@ -39,6 +39,7 @@
 		0E31DD26EACE2E9D5BFE524B /* PriorityMatrixView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27184043225D8C02734E5982 /* PriorityMatrixView.swift */; };
 		0EBCF2C1F48A53948F676508 /* SendHugButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = B15870A8B2BEAE2A4AB84C6D /* SendHugButton.swift */; };
 		0F0E7F8D97331A1E0200ACD2 /* PersonalizedInsightsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0296D85C697AEF24089092 /* PersonalizedInsightsView.swift */; };
+		0F1065ACD82A380E40F0363E /* LevelUpCelebrationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24E2A0EC9053DCC2DA71FA23 /* LevelUpCelebrationView.swift */; };
 		0F7D3BAEF8C1B53A8C83CD87 /* ProgressChartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE73B63ADD40681DE940C8DF /* ProgressChartView.swift */; };
 		0FBFD3383EC6421D3D634FA8 /* AICoachingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7E577527EA8C8338DCE1994 /* AICoachingView.swift */; };
 		0FFF7C4037B0E40DCDA0E732 /* SOSGroundingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CFEDA009FD33C03F4205106 /* SOSGroundingView.swift */; };
@@ -663,6 +664,7 @@
 		23D490333DC8BA4297BD45DC /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		23DE3C97DDF9E4A0EFA80BA4 /* SupabaseDataService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseDataService.swift; sourceTree = "<group>"; };
 		242AB502C8F421DA22905BFD /* MoodPredictionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoodPredictionCard.swift; sourceTree = "<group>"; };
+		24E2A0EC9053DCC2DA71FA23 /* LevelUpCelebrationView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LevelUpCelebrationView.swift; sourceTree = "<group>"; };
 		25C32C3BFE3FBAA31EF3B20F /* AccessibilitySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilitySettingsView.swift; sourceTree = "<group>"; };
 		25DE2160C4A9656F6E0DFE0C /* OAuthHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuthHandler.swift; sourceTree = "<group>"; };
 		26B74F28CA40E7340DD926DE /* FamilyWellnessModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FamilyWellnessModelsTests.swift; sourceTree = "<group>"; };
@@ -1390,6 +1392,7 @@
 			isa = PBXGroup;
 			children = (
 				5EF48EB690020D514075654D /* Components */,
+				24E2A0EC9053DCC2DA71FA23 /* LevelUpCelebrationView.swift */,
 			);
 			name = Achievements;
 			path = Achievements;
@@ -3264,6 +3267,7 @@
 				4A4F77A4B2EAB51F52D6471C /* ParticleEmitter.swift in Sources */,
 				D081DB4993B8C7668B259169 /* TierProgressView.swift in Sources */,
 				A739AC2775E0FE2EAE990A69 /* XPCompactWidget.swift in Sources */,
+				0F1065ACD82A380E40F0363E /* LevelUpCelebrationView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
