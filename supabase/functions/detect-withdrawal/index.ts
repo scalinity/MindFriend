@@ -56,15 +56,71 @@ serve(async (req) => {
 
     console.log(`[detect-withdrawal] Analyzing ${users?.length || 0} users...`);
 
-    // Process each user
+    // OPTIMIZATION: Batch fetch all scores from past 14 days
+    const fourteenDaysAgo = new Date();
+    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+    
+    const { data: allScores, error: scoresError } = await supabase
+      .from("social_vitality_scores")
+      .select("user_id, overall_score, date")
+      .gte("date", fourteenDaysAgo.toISOString().split("T")[0])
+      .order("user_id, date", { ascending: true });
+
+    if (scoresError) {
+      console.error("[detect-withdrawal] Error fetching scores:", scoresError);
+      return new Response(
+        JSON.stringify({ success: false, error: scoresError.message }),
+        { status: 500, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    // Group scores by user_id
+    const scoresByUser = new Map<string, any[]>();
+    for (const score of allScores || []) {
+      if (!scoresByUser.has(score.user_id)) {
+        scoresByUser.set(score.user_id, []);
+      }
+      scoresByUser.get(score.user_id)!.push(score);
+    }
+
+    // Process each user with pre-fetched data
     const results: DetectionResult[] = [];
+    const detectionsToUpsert: any[] = [];
+
     for (const user of users || []) {
-      const result = await detectWithdrawalForUser(supabase, user.user_id);
+      const userScores = scoresByUser.get(user.user_id) || [];
+      const result = await detectWithdrawalForUser(user.user_id, userScores);
       results.push(result);
+
+      if (result.status) {
+        detectionsToUpsert.push({
+          user_id: user.user_id,
+          date: new Date().toISOString().split("T")[0],
+          severity: result.status.severity,
+          decline_percent: result.status.declinePercent,
+          days_since_peak: result.status.daysSincePeak,
+          should_alert: result.status.shouldAlert,
+          alert_sent: false,
+        });
+      }
 
       // If severe withdrawal detected and should alert, send peer alerts
       if (result.status?.shouldAlert && !result.error) {
-        await sendPeerAlert(supabase, user.user_id, result.status);
+        const alertSent = await sendPeerAlert(supabase, user.user_id, result.status);
+        result.alertSent = alertSent;
+      }
+    }
+
+    // OPTIMIZATION: Batch upsert all detections
+    if (detectionsToUpsert.length > 0) {
+      const { error: upsertError } = await supabase
+        .from("withdrawal_detections")
+        .upsert(detectionsToUpsert, {
+          onConflict: "user_id,date",
+        });
+
+      if (upsertError) {
+        console.error("[detect-withdrawal] Batch upsert error:", upsertError);
       }
     }
 
@@ -94,28 +150,13 @@ serve(async (req) => {
 });
 
 /**
- * Detect withdrawal pattern for a single user
+ * Detect withdrawal pattern for a single user (optimized with pre-fetched scores)
  */
 async function detectWithdrawalForUser(
-  supabase: any,
   userId: string,
+  scores: any[],
 ): Promise<DetectionResult> {
   try {
-    // Fetch past 14 days of scores
-    const fourteenDaysAgo = new Date();
-    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
-
-    const { data: scores, error: scoresError } = await supabase
-      .from("social_vitality_scores")
-      .select("overall_score, date")
-      .eq("user_id", userId)
-      .gte("date", fourteenDaysAgo.toISOString().split("T")[0])
-      .order("date", { ascending: true });
-
-    if (scoresError) {
-      throw new Error(`Failed to fetch scores: ${scoresError.message}`);
-    }
-
     if (!scores || scores.length < 7) {
       return { userId, status: null, alertSent: false }; // Insufficient data
     }
@@ -168,34 +209,6 @@ async function detectWithdrawalForUser(
       daysSincePeak,
       shouldAlert,
     };
-
-    // Store withdrawal detection in database
-    const { error: upsertError } = await supabase
-      .from("withdrawal_detections")
-      .upsert(
-        {
-          user_id: userId,
-          date: new Date().toISOString().split("T")[0],
-          severity,
-          decline_percent: status.declinePercent,
-          days_since_peak: daysSincePeak,
-          should_alert: shouldAlert,
-          alert_sent: false,
-        },
-        {
-          onConflict: "user_id,date",
-        },
-      );
-
-    if (upsertError) {
-      throw new Error(
-        `Failed to store withdrawal detection: ${upsertError.message}`,
-      );
-    }
-
-    console.log(
-      `[detect-withdrawal] User ${userId}: ${severity} withdrawal (decline: ${decline.toFixed(1)} points)`,
-    );
 
     return { userId, status, alertSent: false };
   } catch (error) {
@@ -261,18 +274,8 @@ async function sendPeerAlert(
       return false;
     }
 
-    // Get user's display name
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("full_name, email")
-      .eq("id", userId)
-      .single();
-
-    if (profileError) {
-      throw new Error(`Failed to fetch user profile: ${profileError.message}`);
-    }
-
-    const userName = profile.full_name || profile.email.split("@")[0];
+    // SECURITY FIX: Generic message without PII
+    const message = "A friend in your support circle might appreciate hearing from you today. A quick message could brighten their day. 💙";
 
     // Send alerts to each designated supporter (max 3)
     const supporters = preferences.designated_supporters || [];
@@ -294,42 +297,44 @@ async function sendPeerAlert(
         continue;
       }
 
-      // Generate alert message
-      const message = `${userName} might appreciate hearing from you today. A quick message could brighten their day. 💙`;
-
-      // Call send-notification function
+      // Call send-notification function with retry logic
       try {
-        const { error: notificationError } = await supabase.functions.invoke(
-          "send-notification",
-          {
-            body: {
-              user_id: supporterId,
-              title: "A Friend Could Use Support",
-              body: message,
-              category: "peer_support",
-              payload: { user_id: userId, alert_type: "withdrawal_detected" },
+        const notificationSent = await retryWithBackoff(async () => {
+          const { error: notificationError } = await supabase.functions.invoke(
+            "send-notification",
+            {
+              body: {
+                user_id: supporterId,
+                title: "A Friend Could Use Support",
+                body: message,
+                category: "peer_support",
+                payload: { alert_type: "withdrawal_detected" }, // SECURITY: No user_id in payload
+              },
             },
-          },
-        );
+          );
 
-        if (notificationError) {
-          throw new Error(`Notification failed: ${notificationError.message}`);
+          if (notificationError) {
+            throw new Error(`Notification failed: ${notificationError.message}`);
+          }
+          return true;
+        }, 3);
+
+        if (notificationSent) {
+          // Log alert in database
+          await supabase.from("peer_alerts").insert({
+            user_id: userId,
+            supporter_id: supporterId,
+            alert_type: "withdrawal_detected",
+            message,
+            acknowledged: false,
+            delivery_failed: false,
+          });
+
+          alertsSent++;
+          console.log(
+            `[detect-withdrawal] Alert sent to supporter ${supporterId}`,
+          );
         }
-
-        // Log alert in database
-        await supabase.from("peer_alerts").insert({
-          user_id: userId,
-          supporter_id: supporterId,
-          alert_type: "withdrawal_detected",
-          message,
-          acknowledged: false,
-          delivery_failed: false,
-        });
-
-        alertsSent++;
-        console.log(
-          `[detect-withdrawal] Alert sent to supporter ${supporterId}`,
-        );
       } catch (error) {
         // Log delivery failure but continue to next supporter
         console.error(
@@ -369,4 +374,31 @@ async function sendPeerAlert(
     );
     return false;
   }
+}
+
+/**
+ * Retry function with exponential backoff
+ */
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries: number,
+  baseDelayMs: number = 1000,
+): Promise<T> {
+  let lastError: Error;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error as Error;
+      
+      if (attempt < maxRetries - 1) {
+        const delay = baseDelayMs * Math.pow(2, attempt);
+        console.log(`Retry attempt ${attempt + 1}/${maxRetries} after ${delay}ms`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  }
+  
+  throw lastError!;
 }
