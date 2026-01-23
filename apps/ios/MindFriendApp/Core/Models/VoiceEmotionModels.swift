@@ -104,7 +104,7 @@ struct EmotionSnapshot: Codable, Identifiable, Equatable, Hashable {
     ///   - sessionStartTime: When the voice session started
     ///   - transcript: Optional associated transcript text
     init(
-        from result: EmotionAnalyzer.EmotionResult,
+        from result: EmotionResult,
         sessionStartTime: Date,
         transcript: String? = nil
     ) {

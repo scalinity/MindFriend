@@ -11,7 +11,7 @@ final class CoachSettingsViewModel: ObservableObject {
 
     init(coachService: CoachServiceProtocol) {
         self.coachService = coachService
-        self.settings = CoachSettings()
+        self.settings = CoachSettings.defaultSettings
     }
 
     func loadSettings() async {
@@ -99,14 +99,20 @@ struct CoachSettingsView: View {
                         HStack {
                             Text("From:")
                             Spacer()
-                            DatePicker("Start time", selection: $viewModel.settings.silentHoursStart, displayedComponents: .hourAndMinute)
+                            DatePicker("Start time", selection: Binding(
+                                get: { viewModel.settings.silentHoursStart ?? Date() },
+                                set: { viewModel.settings.silentHoursStart = $0 }
+                            ), displayedComponents: .hourAndMinute)
                                 .labelsHidden()
                         }
 
                         HStack {
                             Text("To:")
                             Spacer()
-                            DatePicker("End time", selection: $viewModel.settings.silentHoursEnd, displayedComponents: .hourAndMinute)
+                            DatePicker("End time", selection: Binding(
+                                get: { viewModel.settings.silentHoursEnd ?? Date() },
+                                set: { viewModel.settings.silentHoursEnd = $0 }
+                            ), displayedComponents: .hourAndMinute)
                                 .labelsHidden()
                         }
 
@@ -121,8 +127,8 @@ struct CoachSettingsView: View {
                             HStack {
                                 Text("Manage excluded patterns")
                                 Spacer()
-                                if let count = viewModel.settings.disabledDistortions?.count, count > 0 {
-                                    Text("\(count) excluded")
+                                if viewModel.settings.disabledDistortions.count > 0 {
+                                    Text("\(viewModel.settings.disabledDistortions.count) excluded")
                                         .foregroundColor(.secondary)
                                         .font(.caption)
                                 }
@@ -182,7 +188,7 @@ struct CoachSettingsView: View {
 
 struct DisabledDistortionsView: View {
     @Binding var settings: CoachSettings
-    @State private var allDistortions: [CognitiveDistortion] = []
+    @State private var allDistortions: [CognitiveDistortionData] = []
     @State private var isLoading = false
     @Environment(\.dismiss) var dismiss
 
@@ -200,7 +206,7 @@ struct DisabledDistortionsView: View {
 
                     Spacer()
 
-                    if settings.disabledDistortions?.contains(distortion.code) ?? false {
+                    if settings.disabledDistortions.contains(distortion.code) {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundColor(.accentColor)
                     } else {
@@ -228,7 +234,8 @@ struct DisabledDistortionsView: View {
         defer { isLoading = false }
 
         allDistortions = [
-            CognitiveDistortion(
+            CognitiveDistortionData(
+                id: UUID(),
                 code: "AON",
                 name: "All-or-Nothing Thinking",
                 shortDescription: "Seeing things in black and white",
@@ -236,10 +243,10 @@ struct DisabledDistortionsView: View {
                 examples: ["If I'm not perfect, I'm a failure"],
                 questionsToChallenge: ["What evidence contradicts this?"],
                 reframeTemplates: ["Perfection isn't possible. What went well?"],
-                severityWeight: 1,
                 displayOrder: 1
             ),
-            CognitiveDistortion(
+            CognitiveDistortionData(
+                id: UUID(),
                 code: "CAT",
                 name: "Catastrophizing",
                 shortDescription: "Expecting the worst outcome",
@@ -247,10 +254,10 @@ struct DisabledDistortionsView: View {
                 examples: ["One mistake means everything will fall apart"],
                 questionsToChallenge: ["How likely is this really?"],
                 reframeTemplates: ["One mistake doesn't determine the outcome"],
-                severityWeight: 1,
                 displayOrder: 2
             ),
-            CognitiveDistortion(
+            CognitiveDistortionData(
+                id: UUID(),
                 code: "MIND",
                 name: "Mind Reading",
                 shortDescription: "Assuming you know what others think",
@@ -258,21 +265,16 @@ struct DisabledDistortionsView: View {
                 examples: ["They must think I'm stupid"],
                 questionsToChallenge: ["Have they actually said this?"],
                 reframeTemplates: ["I don't actually know what they're thinking"],
-                severityWeight: 1,
                 displayOrder: 3
             ),
         ]
     }
 
     private func toggleDistortion(_ code: String) {
-        if settings.disabledDistortions == nil {
-            settings.disabledDistortions = []
-        }
-
-        if settings.disabledDistortions!.contains(code) {
-            settings.disabledDistortions!.removeAll { $0 == code }
+        if settings.disabledDistortions.contains(code) {
+            settings.disabledDistortions.removeAll { $0 == code }
         } else {
-            settings.disabledDistortions!.append(code)
+            settings.disabledDistortions.append(code)
         }
     }
 }
@@ -290,8 +292,9 @@ class MockCoachService: CoachServiceProtocol {
             sensitivityLevel: .balanced,
             silentHoursStart: Date(timeIntervalSince1970: 82800), // 11 PM
             silentHoursEnd: Date(timeIntervalSince1970: 21600),   // 6 AM
-            disabledDistortions: nil,
-            showPatterns: true
+            disabledDistortions: [],
+            showPatterns: true,
+            timezone: TimeZone.current.identifier
         )
     }
 

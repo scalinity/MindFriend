@@ -150,11 +150,11 @@ struct BoundaryFollowUpView: View {
                             Text(encouragement)
                         }
                         
-                        if !outcome.suggestions.isEmpty {
+                        if !(outcome.suggestions ?? []).isEmpty {
                             Text("followup.suggestions_header")
                                 .fontWeight(.semibold)
                             
-                            ForEach(outcome.suggestions, id: \.self) { suggestion in
+                            ForEach(outcome.suggestions ?? [], id: \.self) { suggestion in
                                 Text("• \(suggestion)")
                             }
                         }

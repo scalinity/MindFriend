@@ -9,7 +9,7 @@ struct EmotionDetailSheet: View {
     // MARK: - Properties
 
     /// Current emotion result (optional, nil if no current emotion)
-    let currentEmotion: EmotionAnalyzer.EmotionResult?
+    let currentEmotion: EmotionResult?
 
     /// History of emotions detected during this session
     let emotionHistory: [EmotionSnapshot]
@@ -82,7 +82,7 @@ struct EmotionDetailSheet: View {
     // MARK: - Current Emotion Card
 
     @ViewBuilder
-    private func currentEmotionCard(_ emotion: EmotionAnalyzer.EmotionResult) -> some View {
+    private func currentEmotionCard(_ emotion: EmotionResult) -> some View {
         VStack(spacing: 16) {
             // Emoji - use shared helper
             Text(EmotionSnapshot.emoji(for: emotion.emotion))
@@ -235,7 +235,7 @@ struct EmotionDetailSheet: View {
 
 #Preview("With Emotion") {
     EmotionDetailSheet(
-        currentEmotion: EmotionAnalyzer.EmotionResult(
+        currentEmotion: EmotionResult(
             emotion: "happy",
             confidence: 0.82,
             allProbabilities: [

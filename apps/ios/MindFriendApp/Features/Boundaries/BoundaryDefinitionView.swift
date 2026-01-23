@@ -103,12 +103,12 @@ struct BoundaryDefinitionView: View {
                 // Templates Section
                 if !viewModel.templates.isEmpty {
                     Section {
-                        ForEach(viewModel.templates) { template in
+                        ForEach(viewModel.templates, id: \.id) { template in
                             Button {
                                 viewModel.applyTemplate(template)
                             } label: {
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text(template.toneGuidance)
+                                    Text(template.toneDescription ?? "")
                                         .font(.subheadline)
                                         .fontWeight(.medium)
 
@@ -206,12 +206,12 @@ final class BoundaryDefinitionViewModel: ObservableObject {
             do {
                 let service = DependencyContainer.shared.boundaryPlannerService
                 templates = try await service.getTemplates(
-                    boundaryType: selectedType.rawValue,
+                    boundaryType: selectedType,
                     relationshipType: stakeholder
                 )
                 isLoadingTemplates = false
             } catch {
-                self.error = error as? BoundaryPlannerError ?? .unknown
+                self.error = error
                 isLoadingTemplates = false
             }
         }
