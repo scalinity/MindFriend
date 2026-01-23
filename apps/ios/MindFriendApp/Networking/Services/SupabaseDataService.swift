@@ -4433,4 +4433,95 @@ final class SupabaseDataService: ObservableObject {
 
         try await query.execute()
     }
+
+    // MARK: - Weekly Stories & Narrative Preferences
+
+    /// Fetches weekly stories for the current user with pagination and filtering
+    /// - Parameters:
+    ///   - limit: Number of stories to fetch (default: 20)
+    ///   - offset: Pagination offset (default: 0)
+    ///   - favoritesOnly: If true, only return favorited stories (default: false)
+    /// - Returns: Array of WeeklyStory objects sorted by week_start descending
+    func fetchWeeklyStories(
+        limit: Int = 20,
+        offset: Int = 0,
+        favoritesOnly: Bool = false
+    ) async throws -> [WeeklyStory] {
+        let userId = try await getCurrentUserId()
+
+        var query = supabase
+            .from("weekly_stories")
+            .select()
+            .eq("user_id", value: userId.uuidString)
+            .order("week_start", ascending: false)
+            .range(from: offset, to: offset + limit - 1)
+
+        if favoritesOnly {
+            query = query.eq("is_favorite", value: true)
+        }
+
+        let response: [WeeklyStory] = try await query.execute().value
+        return response
+    }
+
+    /// Updates the user rating for a specific story
+    /// - Parameters:
+    ///   - id: Story UUID
+    ///   - rating: -1 (thumbs down), 1 (thumbs up), or nil (remove rating)
+    func updateStoryRating(id: UUID, rating: Int?) async throws {
+        try await supabase
+            .from("weekly_stories")
+            .update(["user_rating": rating as Any])
+            .eq("id", value: id.uuidString)
+            .execute()
+    }
+
+    /// Toggles the favorite status of a story
+    /// - Parameters:
+    ///   - id: Story UUID
+    ///   - isFavorite: New favorite status
+    func toggleStoryFavorite(id: UUID, isFavorite: Bool) async throws {
+        try await supabase
+            .from("weekly_stories")
+            .update(["is_favorite": isFavorite])
+            .eq("id", value: id.uuidString)
+            .execute()
+    }
+
+    /// Fetches narrative preferences for the current user
+    /// - Returns: NarrativePreferences if they exist, nil otherwise
+    func fetchNarrativePreferences() async throws -> NarrativePreferences? {
+        let userId = try await getCurrentUserId()
+
+        let response: [NarrativePreferences] = try await supabase
+            .from("narrative_preferences")
+            .select()
+            .eq("user_id", value: userId.uuidString)
+            .execute()
+            .value
+
+        return response.first
+    }
+
+    /// Updates (upserts) narrative preferences for the current user
+    /// - Parameter preferences: NarrativePreferences to save
+    func updateNarrativePreferences(_ preferences: NarrativePreferences) async throws {
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        encoder.dateEncodingStrategy = .iso8601
+
+        let data = try encoder.encode(preferences)
+        guard let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw NSError(
+                domain: "SupabaseDataService",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Failed to serialize preferences"]
+            )
+        }
+
+        try await supabase
+            .from("narrative_preferences")
+            .upsert(dict)
+            .execute()
+    }
 }
