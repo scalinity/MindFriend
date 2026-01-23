@@ -19,6 +19,8 @@ class NarrativeListViewModel: ObservableObject {
     private var currentOffset = 0
     private let pageSize = 20
     private var hasMorePages = true
+    private let maxRetries = 3
+    private let baseRetryDelay: TimeInterval = 1.0
 
     // MARK: - Initialization
 
@@ -38,11 +40,13 @@ class NarrativeListViewModel: ObservableObject {
         hasMorePages = true
 
         do {
-            let fetchedStories = try await dataService.fetchWeeklyStories(
-                limit: pageSize,
-                offset: 0,
-                favoritesOnly: showFavoritesOnly
-            )
+            let fetchedStories = try await retryWithBackoff {
+                try await self.dataService.fetchWeeklyStories(
+                    limit: self.pageSize,
+                    offset: 0,
+                    favoritesOnly: self.showFavoritesOnly
+                )
+            }
 
             stories = fetchedStories
             hasMorePages = fetchedStories.count == pageSize
@@ -71,11 +75,13 @@ class NarrativeListViewModel: ObservableObject {
         do {
             currentOffset += pageSize
 
-            let fetchedStories = try await dataService.fetchWeeklyStories(
-                limit: pageSize,
-                offset: currentOffset,
-                favoritesOnly: showFavoritesOnly
-            )
+            let fetchedStories = try await retryWithBackoff {
+                try await self.dataService.fetchWeeklyStories(
+                    limit: self.pageSize,
+                    offset: self.currentOffset,
+                    favoritesOnly: self.showFavoritesOnly
+                )
+            }
 
             stories.append(contentsOf: fetchedStories)
             hasMorePages = fetchedStories.count == pageSize
@@ -104,12 +110,56 @@ class NarrativeListViewModel: ObservableObject {
     /// Updates a story in the local list after rating/favorite changes
     func updateStory(_ updatedStory: WeeklyStory) {
         if let index = stories.firstIndex(where: { $0.id == updatedStory.id }) {
-            stories[index] = updatedStory
-
             // If favorites filter is on and story is no longer favorited, remove it
             if showFavoritesOnly && !updatedStory.isFavorite {
                 stories.remove(at: index)
+            } else {
+                // Otherwise, update the story in place
+                stories[index] = updatedStory
             }
         }
+    }
+
+    // MARK: - Private Helpers
+
+    /// Retries an async operation with exponential backoff
+    /// - Parameter operation: The async throwing operation to retry
+    /// - Throws: The last error if all retries fail
+    private func retryWithBackoff<T>(_ operation: @escaping () async throws -> T) async throws -> T {
+        var lastError: Error?
+        
+        for attempt in 0..<maxRetries {
+            do {
+                return try await operation()
+            } catch {
+                lastError = error
+                
+                // Don't retry on client errors (4xx) or auth errors
+                if let urlError = error as? URLError {
+                    // Only retry on network/timeout errors
+                    let retryableErrors: Set<URLError.Code> = [
+                        .timedOut, .cannotFindHost, .cannotConnectToHost,
+                        .networkConnectionLost, .dnsLookupFailed, .notConnectedToInternet
+                    ]
+                    if !retryableErrors.contains(urlError.code) {
+                        throw error
+                    }
+                } else if error.localizedDescription.contains("401") || 
+                          error.localizedDescription.contains("403") ||
+                          error.localizedDescription.contains("404") {
+                    // Don't retry auth or not found errors
+                    throw error
+                }
+                
+                // If this wasn't the last attempt, wait before retrying
+                if attempt < maxRetries - 1 {
+                    let delay = baseRetryDelay * pow(2.0, Double(attempt))
+                    try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                }
+            }
+        }
+        
+        // All retries failed, throw the last error
+        throw lastError ?? NSError(domain: "RetryError", code: -1)
     }
 }

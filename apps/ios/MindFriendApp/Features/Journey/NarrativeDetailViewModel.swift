@@ -14,6 +14,8 @@ class NarrativeDetailViewModel: ObservableObject {
     // MARK: - Private Properties
 
     private let dataService: SupabaseDataService
+    private let maxRetries = 3
+    private let baseRetryDelay: TimeInterval = 1.0
 
     // MARK: - Callback
 
@@ -42,7 +44,9 @@ class NarrativeDetailViewModel: ObservableObject {
         error = nil
 
         do {
-            try await dataService.updateStoryRating(id: story.id, rating: rating)
+            try await retryWithBackoff {
+                try await self.dataService.updateStoryRating(id: self.story.id, rating: rating)
+            }
 
             // Notify parent of update
             onStoryUpdated?(story)
@@ -69,7 +73,9 @@ class NarrativeDetailViewModel: ObservableObject {
         error = nil
 
         do {
-            try await dataService.toggleStoryFavorite(id: story.id, isFavorite: story.isFavorite)
+            try await retryWithBackoff {
+                try await self.dataService.toggleStoryFavorite(id: self.story.id, isFavorite: self.story.isFavorite)
+            }
 
             // Haptic feedback for favorite action
             let generator = UIImpactFeedbackGenerator(style: .medium)
@@ -96,14 +102,21 @@ class NarrativeDetailViewModel: ObservableObject {
 
         for card in story.cards {
             if let headline = card.data.headline {
-                text += "\(headline)\n"
+                text += "\(sanitizeText(headline))\n"
             }
             if let message = card.data.message {
-                text += "\(message)\n\n"
+                text += "\(sanitizeText(message))\n\n"
             }
         }
 
         text += "\nTracked with MindFriend"
+        
+        // Limit total length to prevent excessive sharing
+        let maxLength = 1000
+        if text.count > maxLength {
+            let truncated = String(text.prefix(maxLength - 3))
+            text = truncated + "..."
+        }
 
         return text
     }
@@ -116,5 +129,78 @@ class NarrativeDetailViewModel: ObservableObject {
     /// Determines if the thumbs down button should be highlighted
     var isThumbsDownActive: Bool {
         story.userRating == -1
+    }
+
+    // MARK: - Private Helpers
+
+    /// Sanitizes text for safe sharing
+    /// - Parameter text: Raw text from AI-generated content
+    /// - Returns: Sanitized text with harmful characters removed
+    private func sanitizeText(_ text: String) -> String {
+        var sanitized = text
+        
+        // Remove HTML tags and entities
+        sanitized = sanitized.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+        sanitized = sanitized.replacingOccurrences(of: "&[a-z]+;", with: "", options: .regularExpression)
+        
+        // Remove script injection attempts
+        sanitized = sanitized.replacingOccurrences(of: "javascript:", with: "", options: .caseInsensitive)
+        sanitized = sanitized.replacingOccurrences(of: "data:", with: "", options: .caseInsensitive)
+        
+        // Remove potentially harmful control characters (keep newlines and tabs)
+        let allowedControlChars = CharacterSet.newlines.union(.whitespaces)
+        sanitized = sanitized.components(separatedBy: CharacterSet.controlCharacters.subtracting(allowedControlChars)).joined()
+        
+        // Limit individual field length
+        let maxFieldLength = 300
+        if sanitized.count > maxFieldLength {
+            sanitized = String(sanitized.prefix(maxFieldLength - 3)) + "..."
+        }
+        
+        // Trim whitespace
+        sanitized = sanitized.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        return sanitized
+    }
+
+    /// Retries an async operation with exponential backoff
+    /// - Parameter operation: The async throwing operation to retry
+    /// - Throws: The last error if all retries fail
+    private func retryWithBackoff<T>(_ operation: @escaping () async throws -> T) async throws -> T {
+        var lastError: Error?
+        
+        for attempt in 0..<maxRetries {
+            do {
+                return try await operation()
+            } catch {
+                lastError = error
+                
+                // Don't retry on client errors (4xx) or auth errors
+                if let urlError = error as? URLError {
+                    // Only retry on network/timeout errors
+                    let retryableErrors: Set<URLError.Code> = [
+                        .timedOut, .cannotFindHost, .cannotConnectToHost,
+                        .networkConnectionLost, .dnsLookupFailed, .notConnectedToInternet
+                    ]
+                    if !retryableErrors.contains(urlError.code) {
+                        throw error
+                    }
+                } else if error.localizedDescription.contains("401") || 
+                          error.localizedDescription.contains("403") ||
+                          error.localizedDescription.contains("404") {
+                    // Don't retry auth or not found errors
+                    throw error
+                }
+                
+                // If this wasn't the last attempt, wait before retrying
+                if attempt < maxRetries - 1 {
+                    let delay = baseRetryDelay * pow(2.0, Double(attempt))
+                    try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                }
+            }
+        }
+        
+        // All retries failed, throw the last error
+        throw lastError ?? NSError(domain: "RetryError", code: -1)
     }
 }

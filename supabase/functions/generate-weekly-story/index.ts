@@ -215,6 +215,73 @@ serve(async (req) => {
       includeMetrics: preferencesData?.include_metrics ?? true,
     };
 
+    // Global rate limiting: 10 requests per hour per user (across all weeks)
+    const { data: rateLimitData, error: rateLimitError } = await supabaseAuth
+      .rpc("check_rate_limit", {
+        p_user_id: user.id,
+        p_endpoint: "generate-weekly-story",
+        p_max_requests: 10,
+        p_window_seconds: 3600, // 1 hour
+      });
+
+    if (rateLimitError) {
+      console.error("Rate limit check error:", rateLimitError);
+      // Continue despite rate limit check failure (fail open)
+    } else if (rateLimitData && !rateLimitData.allowed) {
+      return new Response(
+        JSON.stringify({
+          error: "Rate limit exceeded",
+          code: "RATE_LIMIT_EXCEEDED",
+          retryAfter: rateLimitData.reset_at,
+          remaining: 0,
+        }),
+        {
+          status: 429,
+          headers: {
+            ...headers,
+            "Retry-After": String(
+              Math.ceil(
+                (new Date(rateLimitData.reset_at).getTime() - Date.now()) / 1000,
+              ),
+            ),
+            "X-RateLimit-Limit": "10",
+            "X-RateLimit-Remaining": "0",
+            "X-RateLimit-Reset": rateLimitData.reset_at,
+          },
+        },
+      );
+    }
+
+    // Per-week cache check: Return cached story if generated < 1 hour ago
+    const { data: existingStory } = await supabaseAuth
+      .from("weekly_stories")
+      .select("cards, updated_at")
+      .eq("user_id", user.id)
+      .eq("week_start", body.weekStart)
+      .single();
+
+    if (existingStory?.cards && existingStory?.updated_at) {
+      const updatedAt = new Date(existingStory.updated_at);
+      const now = new Date();
+      const hoursSinceUpdate =
+        (now.getTime() - updatedAt.getTime()) / (1000 * 60 * 60);
+
+      // If story was generated less than 1 hour ago, return cached version
+      if (hoursSinceUpdate < 1) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            userId: user.id,
+            weekStart: body.weekStart,
+            cards: existingStory.cards,
+            generatedAt: existingStory.updated_at,
+            cached: true,
+          }),
+          { status: 200, headers },
+        );
+      }
+    }
+
     // Generate story cards
     const cards = await generateStoryCards(
       supabaseAuth,
@@ -909,43 +976,79 @@ function applyToneToCard(
   card: StoryCard,
   tone: "warm" | "professional" | "playful",
 ): StoryCard {
-  // Define tone-specific message variations
-  const toneMessages: Record<string, Record<string, string>> = {
-    warm: {
-      "You're blooming beautifully": "You're blooming beautifully! 🌸",
-      "Strong progress this week": "You're making wonderful progress this week",
-      "You crushed it this week": "You're doing amazing this week!",
-    },
+  // If tone is warm (default), no changes needed
+  if (tone === "warm") {
+    return card;
+  }
+
+  // Define tone-specific message variations mapping actual MESSAGES constant values
+  const message = (card.data.message as string) || "";
+  
+  // Map warm messages to professional/playful alternatives
+  const toneMappings: Record<"professional" | "playful", Record<string, string>> = {
     professional: {
-      "You're blooming beautifully": "Significant progress observed this week",
-      "Strong progress this week": "Strong progress this week",
-      "You crushed it this week": "Excellent performance this week",
+      // Streak messages
+      "You're building momentum! Keep the streak alive.": "Consistent daily engagement observed. Continue current trajectory.",
+      "Consistency is key, and you've got it! Keep going.": "Strong adherence to daily routine. Maintain current performance.",
+      "You're unstoppable! This dedication is paying off.": "Exceptional consistency demonstrated. Long-term benefits evident.",
+      "Incredible milestone! Your commitment is truly inspiring.": "Significant milestone achieved. Commitment level exemplary.",
+      
+      // Mood messages
+      "Your mood is trending up! Small steps lead to big changes.": "Positive mood trajectory observed. Incremental improvements noted.",
+      "Steady and grounded. Consistency is a strength.": "Mood stability maintained. Consistent baseline achieved.",
+      "It's been a challenging week. Remember: every day is a fresh start.": "Challenging period noted. Recovery opportunities available daily.",
+      
+      // Exercise messages
+      "You've been moving your body! Exercise is self-care.": "Physical activity levels strong. Wellness benefits accumulating.",
+      "Every minute counts. Keep incorporating movement.": "All activity contributes to goals. Continue integration efforts.",
+      
+      // Quest messages
+      "You crushed your quests! Each one builds your wellness foundation.": "Quest completion rate excellent. Foundation strengthening confirmed.",
+      "Progress over perfection. You're doing great!": "Satisfactory progress achieved. Performance acceptable.",
+      
+      // Minimal messages
+      "This week is a fresh canvas. What will you create?": "New week presents opportunities for goal achievement.",
+      "Welcome to your weekly story! Log activities to see your progress.": "Weekly summary initialized. Activity logging enables progress tracking.",
     },
     playful: {
-      "You're blooming beautifully": "Look at you go! 🎉",
-      "Strong progress this week": "You're on fire this week! 🔥",
-      "You crushed it this week": "You absolutely crushed it this week! 💪",
+      // Streak messages
+      "You're building momentum! Keep the streak alive.": "You're on a roll! Don't break the chain! 🔥",
+      "Consistency is key, and you've got it! Keep going.": "Look at you being all consistent! You're crushing it! 💪",
+      "You're unstoppable! This dedication is paying off.": "Nothing can stop you now! You're a wellness wizard! ✨",
+      "Incredible milestone! Your commitment is truly inspiring.": "BOOM! 💥 Milestone unlocked! You're a legend!",
+      
+      // Mood messages
+      "Your mood is trending up! Small steps lead to big changes.": "Your vibe is rising! ⬆️ Keep that good energy flowing!",
+      "Steady and grounded. Consistency is a strength.": "Balanced like a pro! Your steady vibe is chef's kiss 🤌",
+      "It's been a challenging week. Remember: every day is a fresh start.": "Tough week, but you're tougher! Tomorrow's a new adventure! 🌅",
+      
+      // Exercise messages
+      "You've been moving your body! Exercise is self-care.": "Look at you go! Your body is loving all this movement! 🏃‍♀️",
+      "Every minute counts. Keep incorporating movement.": "Every wiggle, every jiggle counts! Keep moving and grooving! 🕺",
+      
+      // Quest messages
+      "You crushed your quests! Each one builds your wellness foundation.": "Quest domination mode: ACTIVATED! You're unstoppable! 🎯",
+      "Progress over perfection. You're doing great!": "Hey, you're doing awesome! Progress is progress! 🎉",
+      
+      // Minimal messages
+      "This week is a fresh canvas. What will you create?": "New week, new you! Let's paint this canvas together! 🎨",
+      "Welcome to your weekly story! Log activities to see your progress.": "Hey there! Let's fill this week with awesome moments! ⭐",
     },
   };
 
-  // Apply tone to message if it exists in the mapping
-  const message = card.data.message || "";
-  const toneMap = toneMessages[tone] || {};
-
-  // Check if we have a tone variation for this message
-  for (const [original, replacement] of Object.entries(toneMap)) {
-    if (message.includes(original)) {
-      return {
-        ...card,
-        data: {
-          ...card.data,
-          message: message.replace(original, replacement),
-        },
-      };
-    }
+  // Apply tone mapping
+  const toneMap = toneMappings[tone];
+  if (toneMap && toneMap[message]) {
+    return {
+      ...card,
+      data: {
+        ...card.data,
+        message: toneMap[message],
+      },
+    };
   }
 
-  // Return card unchanged if no tone mapping found
+  // Return card unchanged if no mapping found
   return card;
 }
 
