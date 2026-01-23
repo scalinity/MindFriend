@@ -218,10 +218,17 @@ struct SubscriptionView: View {
             return nil
         }
 
+        // Try StoreKit product first
         if let product = billingService.product(for: planType, billingPeriod: selectedBillingPeriod) {
             return product.displayPrice
         }
-        return nil
+
+        // Fall back to static plan prices (for simulator/development)
+        let plan: SubscriptionPlan? = selectedBillingPeriod == .monthly
+            ? SubscriptionPlan.monthlyPlan(for: planType)
+            : SubscriptionPlan.annualPlan(for: planType)
+
+        return plan?.displayPrice
     }
 
     // MARK: - Billing Period

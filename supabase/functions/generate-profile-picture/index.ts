@@ -190,26 +190,47 @@ serve(async (req) => {
         },
       );
 
-      if (moderationResponse.ok) {
-        const moderationData = await moderationResponse.json();
-        const flagged = moderationData.results?.[0]?.flagged;
+      if (!moderationResponse.ok) {
+        // CRITICAL: Fail-closed - don't proceed if moderation unavailable
+        console.error(
+          "Moderation API failed:",
+          moderationResponse.status,
+          await moderationResponse.text(),
+        );
+        return new Response(
+          JSON.stringify({
+            error: "Moderation unavailable",
+            message:
+              "Content moderation is temporarily unavailable. Please try again later.",
+          }),
+          { status: 503, headers: responseHeaders },
+        );
+      }
 
-        if (flagged) {
-          return new Response(
-            JSON.stringify({
-              error: "Inappropriate content",
-              message:
-                "This prompt contains inappropriate content. Please try a different description.",
-            }),
-            { status: 400, headers: responseHeaders },
-          );
-        }
-      } else {
-        console.warn("Moderation API failed, proceeding with generation");
+      const moderationData = await moderationResponse.json();
+      const flagged = moderationData.results?.[0]?.flagged;
+
+      if (flagged) {
+        return new Response(
+          JSON.stringify({
+            error: "Inappropriate content",
+            message:
+              "This prompt contains inappropriate content. Please try a different description.",
+          }),
+          { status: 400, headers: responseHeaders },
+        );
       }
     } catch (moderationError) {
+      // CRITICAL: Fail-closed - don't proceed if moderation fails
       console.error("Moderation API error:", moderationError);
-      // Continue with generation if moderation fails (graceful degradation)
+      return new Response(
+        JSON.stringify({
+          error: "Moderation failed",
+          message:
+            "Unable to verify content safety. Please try again later.",
+        }),
+        { status: 503, headers: responseHeaders },
+      );
     }
 
     // Build enhanced prompt for therapeutic/appropriate content
