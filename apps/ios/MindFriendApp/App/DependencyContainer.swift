@@ -297,15 +297,33 @@ final class DependencyContainer: ObservableObject {
     }()
 
     // MARK: - Circadian Vulnerability Shield Services
-    
+
     lazy var armorScheduler: ArmorScheduler = {
         ArmorScheduler()
     }()
-    
+
     lazy var circadianEngine: CircadianVulnerabilityEngine = {
         CircadianVulnerabilityEngine(
             healthKitService: healthKitService,
             dataService: supabaseDataService
+        )
+    }()
+
+    // MARK: - Cognitive Distortion Detection Services (F006)
+
+    lazy var distortionPatternMatcher: DistortionPatternMatcher = {
+        DistortionPatternMatcher()
+    }()
+
+    lazy var distortionRateLimiter: DistortionRateLimiter = {
+        DistortionRateLimiter()
+    }()
+
+    lazy var cognitiveDistortionEngine: CognitiveDistortionEngine = {
+        CognitiveDistortionEngine(
+            supabase: supabaseClient,
+            patternMatcher: distortionPatternMatcher,
+            rateLimiter: distortionRateLimiter
         )
     }()
 
