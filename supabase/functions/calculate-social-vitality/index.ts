@@ -52,6 +52,11 @@ serve(async (req) => {
 
     console.log("[calculate-social-vitality] Starting daily calculation...");
 
+    // Calculate yesterday's date
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split("T")[0];
+
     // Fetch all active users
     const { data: users, error: usersError } = await supabase
       .from("profiles")
@@ -73,21 +78,103 @@ serve(async (req) => {
       `[calculate-social-vitality] Processing ${users?.length || 0} users...`,
     );
 
-    // Process each user
+    // OPTIMIZATION: Batch fetch all metrics for yesterday
+    const { data: allMetrics, error: metricsError } = await supabase
+      .from("interaction_metrics")
+      .select("*")
+      .eq("date", yesterdayStr);
+
+    if (metricsError) {
+      console.error("[calculate-social-vitality] Error fetching metrics:", metricsError);
+      return new Response(
+        JSON.stringify({ success: false, error: metricsError.message }),
+        { status: 500, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    // OPTIMIZATION: Batch fetch all scores from past 7 days for trend calculation
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const { data: allScores, error: scoresError } = await supabase
+      .from("social_vitality_scores")
+      .select("user_id, overall_score, date")
+      .gte("date", sevenDaysAgo.toISOString().split("T")[0])
+      .order("date", { ascending: true });
+
+    if (scoresError) {
+      console.error("[calculate-social-vitality] Error fetching scores:", scoresError);
+      return new Response(
+        JSON.stringify({ success: false, error: scoresError.message }),
+        { status: 500, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    // Group metrics and scores by user_id
+    const metricsByUser = new Map<string, InteractionMetric[]>();
+    for (const metric of allMetrics || []) {
+      if (!metricsByUser.has(metric.user_id)) {
+        metricsByUser.set(metric.user_id, []);
+      }
+      metricsByUser.get(metric.user_id)!.push(metric);
+    }
+
+    const scoresByUser = new Map<string, any[]>();
+    for (const score of allScores || []) {
+      if (!scoresByUser.has(score.user_id)) {
+        scoresByUser.set(score.user_id, []);
+      }
+      scoresByUser.get(score.user_id)!.push(score);
+    }
+
+    // Process each user with pre-fetched data
     const results: CalculationResult[] = [];
+    const scoresToUpsert: any[] = [];
+
     for (const user of users || []) {
       const result = await calculateScoreForUser(
-        supabase,
         user.id,
         user.created_at,
+        yesterdayStr,
+        metricsByUser.get(user.id) || [],
+        scoresByUser.get(user.id) || [],
       );
       results.push(result);
+
+      if (result.success && result.score !== undefined) {
+        scoresToUpsert.push({
+          user_id: user.id,
+          date: yesterdayStr,
+          overall_score: result.score.overallScore,
+          trend: result.score.trend,
+          interaction_frequency: result.score.components.frequency,
+          interaction_depth: result.score.components.depth,
+          reciprocity: result.score.components.reciprocity,
+          diversity: result.score.components.diversity,
+        });
+      }
 
       if (!result.success) {
         console.error(
           `[calculate-social-vitality] Failed for user ${user.id}:`,
           result.error,
         );
+      }
+    }
+
+    // OPTIMIZATION: Batch upsert all scores at once
+    if (scoresToUpsert.length > 0) {
+      const batchSize = 100;
+      for (let i = 0; i < scoresToUpsert.length; i += batchSize) {
+        const batch = scoresToUpsert.slice(i, i + batchSize);
+        const { error: upsertError } = await supabase
+          .from("social_vitality_scores")
+          .upsert(batch, {
+            onConflict: "user_id,date",
+          });
+
+        if (upsertError) {
+          console.error("[calculate-social-vitality] Batch upsert error:", upsertError);
+        }
       }
     }
 
@@ -117,12 +204,14 @@ serve(async (req) => {
 });
 
 /**
- * Calculate social vitality score for a single user
+ * Calculate social vitality score for a single user (optimized with pre-fetched data)
  */
 async function calculateScoreForUser(
-  supabase: any,
   userId: string,
   userCreatedAt: string,
+  date: string,
+  metrics: InteractionMetric[],
+  scores: any[],
 ): Promise<CalculationResult> {
   try {
     // Check if user has been active for 7+ days (minimum for scoring)
@@ -134,63 +223,33 @@ async function calculateScoreForUser(
       console.log(
         `[calculate-social-vitality] User ${userId}: Collecting baseline (day ${daysSinceSignup}/7)`,
       );
-      return { success: true, userId, score: undefined }; // Skip, still in baseline period
-    }
-
-    // Fetch interaction metrics from past 24 hours (yesterday)
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().split("T")[0];
-
-    const { data: metrics, error: metricsError } = await supabase
-      .from("interaction_metrics")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("date", yesterdayStr);
-
-    if (metricsError) {
-      throw new Error(`Failed to fetch metrics: ${metricsError.message}`);
+      return { success: true, userId, score: undefined };
     }
 
     // Calculate 4 components
-    const components = calculateComponents(metrics || []);
+    const components = calculateComponents(metrics);
     const overallScore =
       components.frequency +
       components.depth +
       components.reciprocity +
       components.diversity;
 
-    // Calculate trend from past 7 days
-    const trend = await calculateTrend(supabase, userId);
-
-    // Upsert score to database
-    const { error: upsertError } = await supabase
-      .from("social_vitality_scores")
-      .upsert(
-        {
-          user_id: userId,
-          date: yesterdayStr,
-          overall_score: overallScore,
-          trend,
-          interaction_frequency: components.frequency,
-          interaction_depth: components.depth,
-          reciprocity: components.reciprocity,
-          diversity: components.diversity,
-        },
-        {
-          onConflict: "user_id,date",
-        },
-      );
-
-    if (upsertError) {
-      throw new Error(`Failed to upsert score: ${upsertError.message}`);
-    }
+    // Calculate trend from pre-fetched scores
+    const trend = calculateTrendFromScores(scores);
 
     console.log(
       `[calculate-social-vitality] User ${userId}: Score ${overallScore}, Trend ${trend}`,
     );
 
-    return { success: true, userId, score: overallScore };
+    return {
+      success: true,
+      userId,
+      score: {
+        overallScore,
+        trend,
+        components,
+      },
+    };
   } catch (error) {
     return { success: false, userId, error: String(error) };
   }
@@ -324,22 +383,11 @@ function calculateDiversityScore(metrics: InteractionMetric[]): number {
 }
 
 /**
- * Calculate trend from past 7 days
+ * Calculate trend from pre-fetched scores
  * Returns: 'improving' | 'stable' | 'declining' | 'plummeting'
  */
-async function calculateTrend(supabase: any, userId: string): Promise<string> {
-  // Fetch past 7 days of scores
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-  const { data: scores, error } = await supabase
-    .from("social_vitality_scores")
-    .select("overall_score, date")
-    .eq("user_id", userId)
-    .gte("date", sevenDaysAgo.toISOString().split("T")[0])
-    .order("date", { ascending: true });
-
-  if (error || !scores || scores.length < 7) {
+function calculateTrendFromScores(scores: any[]): string {
+  if (!scores || scores.length < 7) {
     return "stable"; // Default if insufficient data
   }
 

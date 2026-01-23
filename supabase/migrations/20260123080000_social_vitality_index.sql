@@ -335,6 +335,12 @@ RETURNS JSON AS $$
 DECLARE
     v_result JSON;
 BEGIN
+    -- SECURITY: Validate that the requesting user can only access their own dashboard
+    IF p_user_id != auth.uid() THEN
+        RAISE EXCEPTION 'Unauthorized: Cannot access another user''s dashboard'
+            USING ERRCODE = 'PAUTH';
+    END IF;
+
     WITH current_score AS (
         SELECT
             overall_score,
@@ -414,6 +420,12 @@ RETURNS TABLE (
     days_of_data BIGINT
 ) AS $$
 BEGIN
+    -- SECURITY: This function should only be called by Edge Functions (service role)
+    IF current_setting('request.jwt.claim.role', true) != 'service_role' THEN
+        RAISE EXCEPTION 'Unauthorized: This function can only be called by Edge Functions'
+            USING ERRCODE = 'PAUTH';
+    END IF;
+
     RETURN QUERY
     SELECT
         svs.user_id,
