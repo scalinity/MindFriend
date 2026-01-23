@@ -328,6 +328,90 @@ final class HealthKitService: ObservableObject {
         return (durationMinutes, qualityScore, startTime, endTime, timeInBed)
     }
 
+    /// Fetch structured sleep records for chronotype analysis
+    /// - Parameter days: Number of days to fetch (default: 30)
+    /// - Returns: Array of SleepRecord with weekend detection and midpoint calculation
+    func fetchSleepRecords(days: Int = 30) async throws -> [SleepRecord] {
+        let calendar = Calendar.current
+        let endDate = Date()
+        guard let startDate = calendar.date(byAdding: .day, value: -days, to: endDate) else {
+            return []
+        }
+
+        var records: [SleepRecord] = []
+
+        // Fetch sleep data day-by-day
+        for dayOffset in 0..<days {
+            guard let dayStart = calendar.date(byAdding: .day, value: -dayOffset, to: endDate) else {
+                continue
+            }
+            let dayStartOfDay = calendar.startOfDay(for: dayStart)
+            guard let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStartOfDay) else {
+                continue
+            }
+
+            let sleepData = try await fetchSleepData(from: dayStartOfDay, to: dayEnd)
+
+            // Only include days with valid sleep data
+            guard let durationMin = sleepData.durationMinutes,
+                  let startTimeStr = sleepData.startTime,
+                  let endTimeStr = sleepData.endTime,
+                  durationMin > 0 else {
+                continue
+            }
+
+            // Parse time strings to Date objects
+            let formatter = DateFormatter()
+            formatter.dateFormat = "HH:mm"
+
+            // Handle sleep that crosses midnight (start time is previous day)
+            let sleepStartDate: Date
+            if let startTime = formatter.date(from: startTimeStr) {
+                let startComponents = calendar.dateComponents([.hour, .minute], from: startTime)
+                if let hour = startComponents.hour, hour > 12 {
+                    // Evening start - use previous day
+                    guard let previousDay = calendar.date(byAdding: .day, value: -1, to: dayStartOfDay),
+                          let start = calendar.date(bySettingHour: hour, minute: startComponents.minute ?? 0, second: 0, of: previousDay) else {
+                        continue
+                    }
+                    sleepStartDate = start
+                } else {
+                    // Morning start (rare) - use same day
+                    guard let start = calendar.date(bySettingHour: startComponents.hour ?? 0, minute: startComponents.minute ?? 0, second: 0, of: dayStartOfDay) else {
+                        continue
+                    }
+                    sleepStartDate = start
+                }
+            } else {
+                continue
+            }
+
+            let sleepEndDate: Date
+            if let endTime = formatter.date(from: endTimeStr) {
+                let endComponents = calendar.dateComponents([.hour, .minute], from: endTime)
+                guard let end = calendar.date(bySettingHour: endComponents.hour ?? 0, minute: endComponents.minute ?? 0, second: 0, of: dayStartOfDay) else {
+                    continue
+                }
+                sleepEndDate = end
+            } else {
+                continue
+            }
+
+            // Create SleepRecord
+            let record = SleepRecord(
+                date: dayStartOfDay,
+                startTime: sleepStartDate,
+                endTime: sleepEndDate,
+                duration: TimeInterval(durationMin * 60),
+                isWeekend: calendar.isDateInWeekend(dayStartOfDay)
+            )
+
+            records.append(record)
+        }
+
+        return records.sorted(by: { $0.date < $1.date })
+    }
+
     // MARK: - HRV Data
 
     private func fetchHRVData(from start: Date, to end: Date) async throws -> (average: Double?, min: Double?, max: Double?) {

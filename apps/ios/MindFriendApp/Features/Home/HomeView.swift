@@ -91,6 +91,11 @@ struct HomeView: View {
                         timeOfDay: homeContext?.timeOfDay ?? .current
                     )
 
+                    // Capacity indicator (difficulty adjustment)
+                    CapacityIndicator()
+                        .environmentObject(container.difficultyService)
+                        .padding(.horizontal)
+
                     // Supportive message (mood-adaptive)
                     if let message = homeContext?.supportiveMessage {
                         SupportiveMessageCard(

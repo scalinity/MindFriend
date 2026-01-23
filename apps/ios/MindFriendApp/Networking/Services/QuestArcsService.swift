@@ -13,9 +13,19 @@ import Supabase
 @MainActor
 final class QuestArcsService {
     private let supabase: SupabaseClient
+    private weak var difficultyService: DifficultyService?
 
-    init(supabase: SupabaseClient) {
+    init(supabase: SupabaseClient, difficultyService: DifficultyService? = nil) {
         self.supabase = supabase
+        self.difficultyService = difficultyService
+    }
+
+    // MARK: - Difficulty Adjustment
+
+    /// Get current difficulty multiplier for quest adjustments
+    /// - Returns: Multiplier (0.5 for easy, 1.0 for normal, 1.25 for hard)
+    func getDifficultyMultiplier() -> Double {
+        return difficultyService?.getDifficultyMultiplier() ?? 1.0
     }
 
     // MARK: - Fetch Arcs
