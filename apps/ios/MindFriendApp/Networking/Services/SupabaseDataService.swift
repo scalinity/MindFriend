@@ -4546,10 +4546,18 @@ final class SupabaseDataService: ObservableObject {
     }
     
     /// Shared pipeline for uploading and setting avatar (used by both upload and AI generation)
-    /// Automatically cleans up old avatar before uploading new one
+    /// Automatically cleans up old avatars when uploading new one
     func uploadAndSetAvatar(_ image: UIImage, userId: UUID) async throws -> String {
+        Log.data.debug("[Data] uploadAndSetAvatar: Starting for user \(userId)")
+        
         // Validate image before processing
-        try image.validateForAvatar()
+        do {
+            try image.validateForAvatar()
+            Log.data.debug("[Data] uploadAndSetAvatar: Image validation passed")
+        } catch {
+            Log.data.error("[Data] uploadAndSetAvatar: Validation failed - \(error.localizedDescription)")
+            throw error
+        }
         
         // Get current avatar URL to clean up old file
         var oldAvatarUrl: String?
@@ -4562,8 +4570,11 @@ final class SupabaseDataService: ObservableObject {
                 .execute()
                 .value
             oldAvatarUrl = profileData["avatar_url"] ?? nil
+            if let url = oldAvatarUrl {
+                Log.data.debug("[Data] uploadAndSetAvatar: Found existing avatar to clean up")
+            }
         } catch {
-            // Ignore fetch errors - cleanup is best effort
+            Log.data.warning("[Data] uploadAndSetAvatar: Could not fetch old avatar URL (non-fatal)")
         }
         
         // Resize to 512×512
@@ -4571,30 +4582,45 @@ final class SupabaseDataService: ObservableObject {
             width: ImageProcessingConstants.avatarSize,
             height: ImageProcessingConstants.avatarSize
         )) else {
+            Log.data.error("[Data] uploadAndSetAvatar: Resize failed")
             throw NSError(domain: "ImageError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to resize image"])
         }
+        Log.data.debug("[Data] uploadAndSetAvatar: Image resized to \(ImageProcessingConstants.avatarSize)x\(ImageProcessingConstants.avatarSize)")
         
         // Compress to JPEG <500KB
         guard let jpegData = resized.compressedJPEG(maxBytes: ImageProcessingConstants.maxFileSize) else {
+            Log.data.error("[Data] uploadAndSetAvatar: Compression failed")
             throw NSError(domain: "ImageError", code: -2, userInfo: [NSLocalizedDescriptionKey: "Failed to compress image"])
         }
+        Log.data.debug("[Data] uploadAndSetAvatar: Image compressed to \(jpegData.count) bytes")
         
         // Upload to Storage
         let path = "\(userId)/avatar_\(Int(Date().timeIntervalSince1970)).jpg"
+        Log.data.debug("[Data] uploadAndSetAvatar: Uploading to path \(path)")
         try await uploadProfilePicture(data: jpegData, path: path, userId: userId)
+        Log.data.debug("[Data] uploadAndSetAvatar: Upload successful")
         
         // Get public URL and update profile
         let publicUrl = try getPublicUrl(bucket: "profile-pictures", path: path)
+        Log.data.debug("[Data] uploadAndSetAvatar: Got public URL")
+        
         try await updateAvatarUrl(publicUrl, userId: userId)
+        Log.data.debug("[Data] uploadAndSetAvatar: Database updated with new avatar URL")
         
         // Clean up old avatar file (best effort, don't fail if cleanup fails)
         if let oldUrl = oldAvatarUrl,
            !oldUrl.isEmpty,
            let url = URL(string: oldUrl),
            let oldPath = extractStoragePath(from: url, bucket: "profile-pictures") {
-            try? await deleteProfilePicture(path: oldPath)
+            do {
+                try await deleteProfilePicture(path: oldPath)
+                Log.data.debug("[Data] uploadAndSetAvatar: Old avatar cleaned up successfully")
+            } catch {
+                Log.data.warning("[Data] uploadAndSetAvatar: Failed to clean up old avatar (non-fatal): \(error.localizedDescription)")
+            }
         }
         
+        Log.data.debug("[Data] uploadAndSetAvatar: Complete")
         return publicUrl
     }
     
@@ -4646,6 +4672,8 @@ final class SupabaseDataService: ObservableObject {
     /// - Returns: Response containing base64 image and quota info
     /// - Throws: GenerateProfilePictureError for various failure modes
     func generateProfilePicture(prompt: String) async throws -> GenerateProfilePictureResponse {
+        Log.data.debug("[Data] generateProfilePicture: Starting with prompt length \(prompt.count)")
+        
         do {
             // Fixed: functions.invoke returns typed response, not tuple
             let response: GenerateProfilePictureResponse = try await supabase.functions.invoke(
@@ -4655,15 +4683,20 @@ final class SupabaseDataService: ObservableObject {
                 )
             )
             
+            Log.data.debug("[Data] generateProfilePicture: Success, quota remaining: \(response.quotaRemaining ?? -1)")
             return response
         } catch {
+            Log.data.error("[Data] generateProfilePicture: Failed - \(error.localizedDescription)")
+            
             // If the error can be converted to data, try parsing the error response
             let errorString = String(describing: error)
             
             if errorString.contains("quota") || errorString.contains("limit") {
+                Log.data.warning("[Data] generateProfilePicture: Quota exceeded")
                 throw GenerateProfilePictureError.quotaExceeded
             }
             if errorString.contains("Inappropriate") || errorString.contains("inappropriate") {
+                Log.data.warning("[Data] generateProfilePicture: Inappropriate content detected")
                 throw GenerateProfilePictureError.inappropriateContent
             }
             

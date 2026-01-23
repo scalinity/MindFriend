@@ -54,17 +54,23 @@ struct AIProfileGeneratorView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Describe your ideal profile picture")
                                 .font(.headline)
+                                .accessibilityAddTraits(.isHeader)
 
                             TextField("e.g., A calm ocean sunset with palm trees", text: $prompt, axis: .vertical)
                                 .textFieldStyle(.roundedBorder)
                                 .lineLimit(3...5)
                                 .disabled(isGenerating)
+                                .accessibilityLabel("Profile picture description")
+                                .accessibilityHint("Enter a description of the profile picture you want to generate, between 3 and 200 characters")
+                                .accessibilityValue(prompt.isEmpty ? "Empty" : "\(prompt.count) characters entered")
 
                             HStack {
                                 Spacer()
                                 Text("\(prompt.count)/200")
                                     .font(.caption)
                                     .foregroundStyle(prompt.count > 200 ? .red : .secondary)
+                                    .accessibilityLabel("Character count")
+                                    .accessibilityValue("\(prompt.count) of 200 characters")
                             }
 
                             if let quotaRemaining {
@@ -75,6 +81,9 @@ struct AIProfileGeneratorView: View {
                                         .font(.caption)
                                 }
                                 .foregroundStyle(.secondary)
+                                .accessibilityElement(children: .combine)
+                                .accessibilityLabel("Quota status")
+                                .accessibilityValue("\(quotaRemaining) AI profile picture generations remaining today")
                             }
                         }
                         .padding(.horizontal)
@@ -88,6 +97,9 @@ struct AIProfileGeneratorView: View {
                                     .foregroundStyle(.secondary)
                             }
                             .padding()
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel("Generating")
+                            .accessibilityValue("Please wait while your profile picture is being generated")
                         } else {
                             Button {
                                 generateImage()
@@ -98,6 +110,10 @@ struct AIProfileGeneratorView: View {
                             .buttonStyle(.borderedProminent)
                             .disabled(prompt.count < 3 || prompt.count > 200)
                             .padding(.horizontal)
+                            .accessibilityLabel("Generate profile picture")
+                            .accessibilityHint(prompt.count < 3 ? "Enter at least 3 characters first" : 
+                                             prompt.count > 200 ? "Reduce description to 200 characters or less" :
+                                             "Double tap to generate a profile picture using AI")
                         }
                     }
 
