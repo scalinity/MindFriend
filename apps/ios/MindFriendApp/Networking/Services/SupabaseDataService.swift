@@ -4324,15 +4324,113 @@ final class SupabaseDataService: ObservableObject {
             let mood_during_window: Double?
             let crash_occurred: Bool
         }
-        
+
         let dto = UpdateDTO(
             mood_during_window: moodDuring,
             crash_occurred: crashOccurred
         )
-        
+
         try await supabase.from("vulnerable_windows")
             .update(dto)
             .eq("id", value: windowId.uuidString)
             .execute()
+    }
+
+    // MARK: - Cognitive Distortion Detection (F006)
+
+    /// Fetches distortion events for the current user
+    /// - Parameter limit: Maximum number of events to fetch (default: 50)
+    /// - Returns: Array of distortion events
+    func fetchDistortionEvents(limit: Int = 50) async throws -> [DistortionEvent] {
+        let userId = try await getCurrentUserId()
+
+        let events: [DistortionEvent] = try await supabase
+            .from("distortion_events")
+            .select()
+            .eq("user_id", value: userId.uuidString)
+            .order("created_at", ascending: false)
+            .limit(limit)
+            .execute()
+            .value
+
+        return events
+    }
+
+    /// Fetches distortion events for a specific session
+    /// - Parameter sessionId: Voice journal session ID
+    /// - Returns: Array of distortion events for the session
+    func fetchDistortionEvents(forSession sessionId: String) async throws -> [DistortionEvent] {
+        let userId = try await getCurrentUserId()
+
+        let events: [DistortionEvent] = try await supabase
+            .from("distortion_events")
+            .select()
+            .eq("user_id", value: userId.uuidString)
+            .eq("session_id", value: sessionId)
+            .order("created_at", ascending: false)
+            .execute()
+            .value
+
+        return events
+    }
+
+    /// Updates distortion event acknowledgment status
+    /// - Parameter eventId: Distortion event ID
+    func acknowledgeDistortionEvent(_ eventId: UUID) async throws {
+        struct UpdateDTO: Encodable {
+            let user_acknowledged: Bool
+        }
+
+        let dto = UpdateDTO(user_acknowledged: true)
+
+        try await supabase
+            .from("distortion_events")
+            .update(dto)
+            .eq("id", value: eventId.uuidString)
+            .execute()
+    }
+
+    /// Fetches distortion statistics for the current user
+    /// - Parameter days: Number of days to look back (default: 30)
+    /// - Returns: Dictionary mapping distortion type to count
+    func fetchDistortionStats(lastDays days: Int = 30) async throws -> [DistortionType: Int] {
+        let userId = try await getCurrentUserId()
+        let calendar = Calendar.current
+        guard let startDate = calendar.date(byAdding: .day, value: -days, to: Date()) else {
+            return [:]
+        }
+
+        let events: [DistortionEvent] = try await supabase
+            .from("distortion_events")
+            .select()
+            .eq("user_id", value: userId.uuidString)
+            .gte("created_at", value: startDate.ISO8601Format())
+            .execute()
+            .value
+
+        // Count occurrences by type
+        var stats: [DistortionType: Int] = [:]
+        for event in events {
+            stats[event.distortionType, default: 0] += 1
+        }
+
+        return stats
+    }
+
+    /// Deletes distortion events for the current user (GDPR Right to Erasure)
+    /// - Parameter eventIds: Optional array of specific event IDs to delete (nil deletes all)
+    func deleteDistortionEvents(eventIds: [UUID]? = nil) async throws {
+        let userId = try await getCurrentUserId()
+
+        var query = supabase
+            .from("distortion_events")
+            .delete()
+            .eq("user_id", value: userId.uuidString)
+
+        if let ids = eventIds {
+            query = query.in("id", values: ids.map { $0.uuidString })
+        }
+
+        try await query.execute()
     }
 }
