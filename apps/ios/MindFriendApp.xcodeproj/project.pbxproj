@@ -60,6 +60,7 @@
 		16390E56BF40047B288B77E1 /* CascadeDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = B55E7BB1C450FC7630C33C72 /* CascadeDetector.swift */; };
 		165B1837D5B442FBC57753D4 /* BoundaryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F6417DB87EE35A7DABD819D /* BoundaryModels.swift */; };
 		16F17E9DA68101170AEDF12B /* EngagementTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E5AA2F7E6CEABDF3237D256 /* EngagementTracker.swift */; };
+		181A2ECD724C5089C84D09A9 /* CognitiveDistortionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C358E8187C07FBBB8487F05 /* CognitiveDistortionModels.swift */; };
 		1845DA2A1446D853201D0088 /* FamilyHubViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 810CB05C44D15BF64A7254BB /* FamilyHubViewModel.swift */; };
 		185EF929129BEAF13C1E6EE0 /* SOSResourcesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B09D9487A95102875F4BBD5 /* SOSResourcesView.swift */; };
 		18E468D0875D8E314BFB2BEB /* StreakCardWithShields.swift in Sources */ = {isa = PBXBuildFile; fileRef = B89AD7E6DA319614C0AC4803 /* StreakCardWithShields.swift */; };
@@ -692,6 +693,7 @@
 		3AD50D3FAA5620D48D91B02A /* VoiceStateMachine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceStateMachine.swift; sourceTree = "<group>"; };
 		3AE853934DDBEC51946F7042 /* SyncQueueManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SyncQueueManager.swift; sourceTree = "<group>"; };
 		3B1D0D64A2BC281EC4DED95F /* SharedDataStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedDataStore.swift; sourceTree = "<group>"; };
+		3C358E8187C07FBBB8487F05 /* CognitiveDistortionModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CognitiveDistortionModels.swift; sourceTree = "<group>"; };
 		3C45900E4356C7E0822E2621 /* ShareCardSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareCardSheet.swift; sourceTree = "<group>"; };
 		3C80BF27DC055159E653E7BF /* ActionPlanFeedbackSheet.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ActionPlanFeedbackSheet.swift; sourceTree = "<group>"; };
 		3CA142FF7FAD5CEEF249E374 /* counting.ahap */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.json; path = counting.ahap; sourceTree = "<group>"; };
@@ -2131,6 +2133,7 @@
 				9BD35AED41F23F35170BA8F0 /* NervousSystemModels.swift */,
 				C254EA81E0F8395BC8512541 /* NervousSystemModels.swift */,
 				20C31116268E077C9A270473 /* CircadianModels.swift */,
+				3C358E8187C07FBBB8487F05 /* CognitiveDistortionModels.swift */,
 			);
 			name = Models;
 			path = Models;
@@ -3477,6 +3480,7 @@
 				E759F435168D69AABEABE6EB /* VulnerabilityRefiner.swift in Sources */,
 				0D6F19595983071DE0ADACFC /* CircadianVulnerabilityEngine.swift in Sources */,
 				8F30DC99F38E0F7D2D7555A5 /* ArmorScheduler.swift in Sources */,
+				181A2ECD724C5089C84D09A9 /* CognitiveDistortionModels.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
