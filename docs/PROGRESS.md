@@ -1,3 +1,92 @@
+## [2026-01-23] Dynamic Difficulty Adjustment (F005) - Phase 1 Foundation
+
+**Type:** Feature
+**Status:** In Progress (Phase 1 Complete, Phases 2-5 Pending)
+
+### Summary
+
+Implemented the foundational infrastructure for Dynamic Difficulty Adjustment, including database schema, Edge Function capacity calculation, and iOS service layer. System automatically adjusts quest difficulty based on user's sleep quality, mood state, and streak momentum to prevent burnout on low-energy days while maintaining engagement on high-capacity periods.
+
+### Changes
+
+| Component                                                      | Change                                                                                        |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `supabase/migrations/20260123000000_dynamic_difficulty.sql`    | Created tables: user_capacity, capacity_overrides, quest_difficulty_mapping with RLS policies |
+| `supabase/functions/calculate-capacity/index.ts`               | Edge Function handler with JWT auth, caching, override handling                               |
+| `supabase/functions/calculate-capacity/algorithms.ts`          | Capacity calculation: weighted average (sleep 35%, mood 40%, streak 25%) with smoothing       |
+| `supabase/functions/calculate-capacity/types.ts`               | TypeScript interfaces for request/response/database types                                     |
+| `apps/ios/MindFriendApp/Core/Models/DifficultyModels.swift`    | Swift models: CapacityScore, CapacityLevel, CapacityOverride                                  |
+| `apps/ios/MindFriendApp/Core/Services/DifficultyService.swift` | iOS orchestrator: refresh capacity, manage overrides, provide difficulty multipliers          |
+| `apps/ios/MindFriendApp/App/DependencyContainer.swift:96-98`   | Added DifficultyService lazy initialization                                                   |
+| `exercises` table                                              | Added difficulty_level column (beginner/intermediate/advanced)                                |
+
+### Testing
+
+- [x] Database migration applied successfully (all tables created)
+- [x] RLS policies validated (users read own capacity, manage own overrides)
+- [ ] Edge Function deployment pending
+- [ ] iOS unit tests pending
+- [ ] Integration tests pending
+- [ ] Manual verification pending
+
+### Algorithm Details
+
+**Capacity Calculation:**
+
+- Sleep score: Based on last night + 7-day average, penalizes deficit
+- Mood score: Today's mood + 3-day trend adjustment
+- Streak score: Logarithmic growth (20 + log2(days) \* 15)
+- Smoothing: Exponential moving average (α=0.3) prevents oscillation
+- Levels: Low (0-40), Moderate (41-70), High (71-100)
+
+**Difficulty Adjustment:**
+
+- Low capacity: 0.5x multiplier (halve quest duration)
+- Moderate capacity: 1.0x multiplier (standard)
+- High capacity: 1.25x multiplier (extend by 25%)
+
+### Notes
+
+- Budget gate triggered at 109K/200K tokens (54% used, insufficient for all remaining phases)
+- Phase 1 BUILD complete with core infrastructure
+- Remaining work: UI components, quest/exercise integration, testing, review
+- To continue: Run fresh session with existing state or manual Phase 2+ implementation
+
+### Performance Targets
+
+- Capacity calculation: <100ms p95 latency (parallel DB queries)
+- Cache-first strategy with midnight expiration
+- Override check short-circuits calculation
+- Debounced refresh (60s cooldown) prevents API spam
+
+### Next Steps (Phases 2-5)
+
+**Phase 2 - UI Components:**
+
+- CapacityIndicator (circular progress ring)
+- DifficultySettingsView (manual override controls)
+- Integration into HomeView
+
+**Phase 3 - Service Integration:**
+
+- QuestArcsService difficulty multiplier application
+- ExerciseListView filtering by capacity level
+
+**Phase 4 - Testing:**
+
+- Unit tests for algorithms (edge cases, smoothing, levels)
+- Integration tests (E2E capacity calculation)
+- Performance tests (load testing Edge Function)
+
+**Phase 5 - Review & Deployment:**
+
+- Code review
+- Security audit
+- Edge Function deployment
+- Production monitoring setup
+
+---
+
 ## [2026-01-22] Local Database Initialization with Production Schema Baseline
 
 **Type:** Infrastructure
