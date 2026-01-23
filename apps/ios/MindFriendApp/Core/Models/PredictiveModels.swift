@@ -470,3 +470,225 @@ struct DailySignals: Codable, Identifiable, Equatable {
 }
 
 // Note: AnyCodableValue is defined in PersonalizationModels.swift
+
+// MARK: - Mood Prediction Models
+
+/// A mood prediction for a specific day
+struct MoodPrediction: Identifiable, Codable, Equatable {
+    let id: UUID
+    let userId: UUID
+    let predictedFor: Date
+    let predictedMood: Decimal
+    let confidence: Decimal
+    let factors: [MoodPredictionFactor]
+    let modelVersion: String
+    let featuresUsed: [String: AnyCodableValue]?
+    var actualMood: Decimal?
+    var predictionAccuracy: Decimal?
+    let notificationSent: Bool
+    let notificationSentAt: Date?
+    let createdAt: Date
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case predictedFor = "predicted_for"
+        case predictedMood = "predicted_mood"
+        case confidence
+        case factors
+        case modelVersion = "model_version"
+        case featuresUsed = "features_used"
+        case actualMood = "actual_mood"
+        case predictionAccuracy = "prediction_accuracy"
+        case notificationSent = "notification_sent"
+        case notificationSentAt = "notification_sent_at"
+        case createdAt = "created_at"
+    }
+    
+    /// Convert predicted mood (1-10) to display-friendly value
+    var predictedMoodValue: Double {
+        Double(truncating: predictedMood as NSNumber)
+    }
+    
+    /// Whether this is a low mood prediction
+    var isLowMoodPredicted: Bool {
+        predictedMoodValue < 4.0
+    }
+    
+    /// Outlook label based on predicted mood
+    var outlookLabel: String {
+        switch predictedMoodValue {
+        case 0..<4: return "Challenging"
+        case 4..<6: return "Moderate"
+        case 6..<8: return "Good"
+        default: return "Great"
+        }
+    }
+    
+    /// Confidence level label
+    var confidenceLabel: String {
+        let conf = Double(truncating: confidence as NSNumber)
+        switch conf {
+        case 0..<0.5: return "Low"
+        case 0.5..<0.75: return "Medium"
+        default: return "High"
+        }
+    }
+    
+    /// Confidence as percentage
+    var confidencePercent: Int {
+        Int(Double(truncating: confidence as NSNumber) * 100)
+    }
+    
+    /// Color for the mood prediction indicator
+    var moodColor: Color {
+        switch predictedMoodValue {
+        case 0..<4: return .orange
+        case 4..<6: return .yellow
+        case 6..<8: return .green
+        default: return .mint
+        }
+    }
+    
+    /// SF Symbol for the mood
+    var moodIcon: String {
+        switch predictedMoodValue {
+        case 0..<3: return "cloud.rain.fill"
+        case 3..<5: return "cloud.fill"
+        case 5..<7: return "cloud.sun.fill"
+        case 7..<9: return "sun.max.fill"
+        default: return "sparkles"
+        }
+    }
+}
+
+/// A factor contributing to the mood prediction
+struct MoodPredictionFactor: Codable, Equatable, Identifiable {
+    var id: String { factor }
+    
+    let factor: String
+    let impact: Double
+    let description: String
+    
+    /// Display-friendly impact label
+    var impactLabel: String {
+        if impact > 0 {
+            return "+\(String(format: "%.1f", impact))"
+        } else {
+            return String(format: "%.1f", impact)
+        }
+    }
+    
+    /// Whether this factor has positive impact
+    var isPositive: Bool {
+        impact > 0
+    }
+    
+    /// Color for the impact indicator
+    var impactColor: Color {
+        isPositive ? .green : .orange
+    }
+    
+    /// SF Symbol for the factor type
+    var icon: String {
+        switch factor {
+        case let f where f.contains("sleep"):
+            return "moon.zzz.fill"
+        case let f where f.contains("steps"):
+            return "figure.walk"
+        case let f where f.contains("exercise"):
+            return "figure.run"
+        case let f where f.contains("streak"):
+            return "flame.fill"
+        case let f where f.contains("trend"):
+            return "chart.line.uptrend.xyaxis"
+        case let f where f.contains("day_of_week"):
+            return "calendar"
+        default:
+            return "chart.bar.fill"
+        }
+    }
+}
+
+/// Type of preemptive intervention
+enum PreemptiveInterventionType: String, Codable {
+    case restSuggestion = "rest_suggestion"
+    case movementSuggestion = "movement_suggestion"
+    case patternBreak = "pattern_break"
+    case generalSupport = "general_support"
+    
+    var title: String {
+        switch self {
+        case .restSuggestion: return "Rest & Recharge"
+        case .movementSuggestion: return "Get Moving"
+        case .patternBreak: return "Try Something New"
+        case .generalSupport: return "We're Here for You"
+        }
+    }
+    
+    var icon: String {
+        switch self {
+        case .restSuggestion: return "moon.stars.fill"
+        case .movementSuggestion: return "figure.walk"
+        case .patternBreak: return "sparkles"
+        case .generalSupport: return "heart.fill"
+        }
+    }
+    
+    var color: Color {
+        switch self {
+        case .restSuggestion: return .purple
+        case .movementSuggestion: return .green
+        case .patternBreak: return .orange
+        case .generalSupport: return .blue
+        }
+    }
+}
+
+/// Status of a preemptive intervention
+enum PreemptiveInterventionStatus: String, Codable {
+    case pending
+    case delivered
+    case accepted
+    case dismissed
+    case expired
+}
+
+/// A preemptive intervention offered before a predicted low mood day
+struct PreemptiveIntervention: Identifiable, Codable, Equatable {
+    let id: UUID
+    let userId: UUID
+    let predictionId: UUID
+    let interventionType: PreemptiveInterventionType
+    let content: String
+    let suggestedExerciseId: UUID?
+    var status: PreemptiveInterventionStatus
+    var deliveredAt: Date?
+    var userResponse: String?
+    var responseRecordedAt: Date?
+    let createdAt: Date
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case predictionId = "prediction_id"
+        case interventionType = "intervention_type"
+        case content
+        case suggestedExerciseId = "suggested_exercise_id"
+        case status
+        case deliveredAt = "delivered_at"
+        case userResponse = "user_response"
+        case responseRecordedAt = "response_recorded_at"
+        case createdAt = "created_at"
+    }
+    
+    /// Whether this intervention is still pending
+    var isPending: Bool {
+        status == .pending || status == .delivered
+    }
+    
+    /// Whether this intervention has been acted upon
+    var isActedUpon: Bool {
+        status == .accepted || status == .dismissed
+    }
+}
