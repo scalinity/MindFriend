@@ -836,3 +836,52 @@ private func parseDate(_ string: String) -> Date? {
     dateFormatter.timeZone = TimeZone(identifier: "UTC")
     return dateFormatter.date(from: string)
 }
+
+// MARK: - Milestone Celebrations
+
+struct MilestoneCelebration: Codable, Identifiable {
+    let id: UUID
+    let userId: UUID
+    let levelReached: Int
+    let narrative: String
+    let journeyStats: JourneyStats
+    let generatedAt: Date
+    var viewed: Bool
+    var shared: Bool
+    
+    var narrativeExcerpt: String {
+        String(narrative.prefix(100)) + "..."
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case levelReached = "level_reached"
+        case narrative
+        case journeyStats = "journey_stats"
+        case generatedAt = "generated_at"
+        case viewed, shared
+    }
+}
+
+struct JourneyStats: Codable {
+    let totalQuests: Int
+    let totalExercises: Int
+    let totalMoodLogs: Int
+    let currentStreak: Int
+    let longestStreak: Int
+    let totalCirclePosts: Int
+    let badgesEarned: Int
+    let daysActive: Int
+    
+    enum CodingKeys: String, CodingKey {
+        case totalQuests = "total_quests"
+        case totalExercises = "total_exercises"
+        case totalMoodLogs = "total_mood_logs"
+        case currentStreak = "current_streak"
+        case longestStreak = "longest_streak"
+        case totalCirclePosts = "total_circle_posts"
+        case badgesEarned = "badges_earned"
+        case daysActive = "days_active"
+    }
+}
