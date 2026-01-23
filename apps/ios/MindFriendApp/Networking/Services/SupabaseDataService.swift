@@ -970,26 +970,6 @@ final class SupabaseDataService: ObservableObject {
             )
             Log.data.debug("[Data] Chat function returned successfully")
             Log.data.debug("[Data] Response: quotaUsed=\(chatResponse.quotaUsed ?? -1), quotaLimit=\(chatResponse.quotaLimit ?? -1)")
-        } catch let error as FunctionsError {
-            // Extract detailed error info from FunctionsError
-            switch error {
-            case .httpError(let code, let data):
-                let responseBody = String(data: data, encoding: .utf8) ?? "unknown"
-                Log.data.error("[Data] Chat function HTTP error \(code): \(responseBody)")
-
-                if code == 429 || responseBody.lowercased().contains("quota") {
-                    throw APIError.quotaExceeded
-                } else if code == 401 {
-                    throw APIError.badRequest("Authentication failed: \(responseBody)")
-                } else if code == 404 {
-                    throw APIError.badRequest("User profile not found. Please try signing out and back in.")
-                } else {
-                    throw APIError.serverError("Server error (\(code)): \(responseBody)")
-                }
-            case .relayError:
-                Log.data.error("[Data] Chat function relay error")
-                throw APIError.networkError("Unable to reach server")
-            }
         } catch {
             Log.data.error("[Data] Chat function error: \(error)")
             throw error
@@ -3558,22 +3538,10 @@ final class SupabaseDataService: ObservableObject {
 
     /// Update the user's proactive settings
     func updateProactiveSettings(_ settings: ProactiveSettings) async throws {
-        let currentUserId = try userId
-
-        let typesEnabled = settings.proactiveTypesEnabled.map { $0.rawValue }
-
-        let updates: [String: AnyEncodable] = [
-            "proactive_enabled": AnyEncodable(settings.proactiveEnabled),
-            "proactive_max_daily": AnyEncodable(settings.proactiveMaxDaily),
-            "proactive_types_enabled": AnyEncodable(typesEnabled),
-            "calendar_integration_enabled": AnyEncodable(settings.calendarIntegrationEnabled),
-            "weather_insights_enabled": AnyEncodable(settings.weatherInsightsEnabled)
-        ]
-
         try await supabase
             .from(Tables.userSettings)
-            .update(updates)
-            .eq("user_id", value: currentUserId)
+            .update(settings)
+            .eq("user_id", value: try userId)
             .execute()
     }
 
@@ -4093,8 +4061,8 @@ final class SupabaseDataService: ObservableObject {
             user_id: profile.userId,
             chronotype: profile.chronotype.rawValue,
             chronotype_confidence: profile.chronotypeConfidence,
-            natural_wake_time: profile.naturalWakeTime,
-            natural_sleep_time: profile.naturalSleepTime,
+            natural_wake_time: Int(profile.naturalWakeTime),
+            natural_sleep_time: Int(profile.naturalSleepTime),
             social_jet_lag_minutes: profile.socialJetLagMinutes,
             vulnerable_windows: vulnerableWindowsString,
             peak_performance_window: peakJSON,
@@ -4133,12 +4101,12 @@ final class SupabaseDataService: ObservableObject {
         guard let dto = response.first else { return nil }
         
         let windowsData = dto.vulnerable_windows.data(using: .utf8) ?? Data()
-        let windows = (try? JSONDecoder().decode([VulnerableWindow].self, from: windowsData)) ?? []
+        let windows = (try? JSONDecoder().decode([TimeWindow].self, from: windowsData)) ?? []
         
-        var peak: PeakPerformanceWindow? = nil
+        var peak: TimeWindow? = nil
         if let peakJSON = dto.peak_performance_window,
            let peakData = peakJSON.data(using: .utf8) {
-            peak = try? JSONDecoder().decode(PeakPerformanceWindow.self, from: peakData)
+            peak = try? JSONDecoder().decode(TimeWindow.self, from: peakData)
         }
         
         guard let chronotype = Chronotype(rawValue: dto.chronotype) else { return nil }
@@ -4148,8 +4116,8 @@ final class SupabaseDataService: ObservableObject {
             userId: dto.user_id,
             chronotype: chronotype,
             chronotypeConfidence: dto.chronotype_confidence,
-            naturalWakeTime: dto.natural_wake_time,
-            naturalSleepTime: dto.natural_sleep_time,
+            naturalWakeTime: TimeInterval(dto.natural_wake_time),
+            naturalSleepTime: TimeInterval(dto.natural_sleep_time),
             socialJetLagMinutes: dto.social_jet_lag_minutes,
             vulnerableWindows: windows,
             peakPerformanceWindow: peak,
@@ -4450,18 +4418,28 @@ final class SupabaseDataService: ObservableObject {
     ) async throws -> [WeeklyStory] {
         let userId = try await getCurrentUserId()
 
-        var query = supabase
-            .from("weekly_stories")
-            .select()
-            .eq("user_id", value: userId.uuidString)
-            .order("week_start", ascending: false)
-            .range(from: offset, to: offset + limit - 1)
-
+        let response: [WeeklyStory]
         if favoritesOnly {
-            query = query.eq("is_favorite", value: true)
+            response = try await supabase
+                .from("weekly_stories")
+                .select()
+                .eq("user_id", value: userId.uuidString)
+                .eq("is_favorite", value: true)
+                .order("week_start", ascending: false)
+                .range(from: offset, to: offset + limit - 1)
+                .execute()
+                .value
+        } else {
+            response = try await supabase
+                .from("weekly_stories")
+                .select()
+                .eq("user_id", value: userId.uuidString)
+                .order("week_start", ascending: false)
+                .range(from: offset, to: offset + limit - 1)
+                .execute()
+                .value
         }
 
-        let response: [WeeklyStory] = try await query.execute().value
         return response
     }
 
@@ -4470,9 +4448,17 @@ final class SupabaseDataService: ObservableObject {
     ///   - id: Story UUID
     ///   - rating: -1 (thumbs down), 1 (thumbs up), or nil (remove rating)
     func updateStoryRating(id: UUID, rating: Int?) async throws {
+        struct StoryRatingUpdate: Codable {
+            let userRating: Int?
+
+            enum CodingKeys: String, CodingKey {
+                case userRating = "user_rating"
+            }
+        }
+
         try await supabase
             .from("weekly_stories")
-            .update(["user_rating": rating as Any])
+            .update(StoryRatingUpdate(userRating: rating))
             .eq("id", value: id.uuidString)
             .execute()
     }
@@ -4507,22 +4493,181 @@ final class SupabaseDataService: ObservableObject {
     /// Updates (upserts) narrative preferences for the current user
     /// - Parameter preferences: NarrativePreferences to save
     func updateNarrativePreferences(_ preferences: NarrativePreferences) async throws {
-        let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
-        encoder.dateEncodingStrategy = .iso8601
-
-        let data = try encoder.encode(preferences)
-        guard let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw NSError(
-                domain: "SupabaseDataService",
-                code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "Failed to serialize preferences"]
-            )
-        }
-
         try await supabase
             .from("narrative_preferences")
-            .upsert(dict)
+            .upsert(preferences)
             .execute()
+    }
+
+    // MARK: - Profile Picture Management
+
+    /// Upload profile picture to Storage
+    /// - Parameters:
+    ///   - data: Image data (JPEG format)
+    ///   - path: Storage path (format: {user_id}/avatar_{timestamp}.jpg)
+    ///   - userId: User ID for validation
+    func uploadProfilePicture(data: Data, path: String, userId: UUID) async throws {
+        try await supabase.storage
+            .from("profile-pictures")
+            .upload(path: path, file: data, options: FileOptions(contentType: "image/jpeg", upsert: true))
+    }
+
+    /// Get public URL for uploaded file
+    func getPublicUrl(bucket: String, path: String) throws -> String {
+        let response = try supabase.storage
+            .from(bucket)
+            .getPublicURL(path: path)  // Fixed: getPublicUrl -> getPublicURL
+        return response.absoluteString
+    }
+
+    /// Update user's avatar_url in profiles table
+    /// - Parameters:
+    ///   - url: New avatar URL (empty string to remove)
+    ///   - userId: User ID
+    func updateAvatarUrl(_ url: String, userId: UUID) async throws {
+        // Fixed: Use Encodable struct instead of [String: Any]
+        struct AvatarUpdate: Encodable {
+            let avatar_url: String?
+        }
+        
+        let updates = AvatarUpdate(avatar_url: url.isEmpty ? nil : url)
+        try await supabase
+            .from("profiles")
+            .update(updates)
+            .eq("id", value: userId.uuidString)
+            .execute()
+    }
+
+    /// Delete profile picture from Storage
+    func deleteProfilePicture(path: String) async throws {
+        try await supabase.storage
+            .from("profile-pictures")
+            .remove(paths: [path])
+    }
+    
+    /// Shared pipeline for uploading and setting avatar (used by both upload and AI generation)
+    /// Automatically cleans up old avatar before uploading new one
+    func uploadAndSetAvatar(_ image: UIImage, userId: UUID) async throws -> String {
+        // Validate image before processing
+        try image.validateForAvatar()
+        
+        // Get current avatar URL to clean up old file
+        var oldAvatarUrl: String?
+        do {
+            let profileData: [String: String?] = try await supabase
+                .from("profiles")
+                .select("avatar_url")
+                .eq("id", value: userId.uuidString)
+                .single()
+                .execute()
+                .value
+            oldAvatarUrl = profileData["avatar_url"] ?? nil
+        } catch {
+            // Ignore fetch errors - cleanup is best effort
+        }
+        
+        // Resize to 512×512
+        guard let resized = image.resized(to: CGSize(
+            width: ImageProcessingConstants.avatarSize,
+            height: ImageProcessingConstants.avatarSize
+        )) else {
+            throw NSError(domain: "ImageError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to resize image"])
+        }
+        
+        // Compress to JPEG <500KB
+        guard let jpegData = resized.compressedJPEG(maxBytes: ImageProcessingConstants.maxFileSize) else {
+            throw NSError(domain: "ImageError", code: -2, userInfo: [NSLocalizedDescriptionKey: "Failed to compress image"])
+        }
+        
+        // Upload to Storage
+        let path = "\(userId)/avatar_\(Int(Date().timeIntervalSince1970)).jpg"
+        try await uploadProfilePicture(data: jpegData, path: path, userId: userId)
+        
+        // Get public URL and update profile
+        let publicUrl = try getPublicUrl(bucket: "profile-pictures", path: path)
+        try await updateAvatarUrl(publicUrl, userId: userId)
+        
+        // Clean up old avatar file (best effort, don't fail if cleanup fails)
+        if let oldUrl = oldAvatarUrl,
+           !oldUrl.isEmpty,
+           let url = URL(string: oldUrl),
+           let oldPath = extractStoragePath(from: url, bucket: "profile-pictures") {
+            try? await deleteProfilePicture(path: oldPath)
+        }
+        
+        return publicUrl
+    }
+    
+    /// Extract storage path from public URL
+    /// - Parameters:
+    ///   - url: Public Storage URL
+    ///   - bucket: Bucket name to extract path from
+    /// - Returns: Path within bucket, or nil if cannot extract
+    private func extractStoragePath(from url: URL, bucket: String) -> String? {
+        let components = url.pathComponents
+        if let index = components.firstIndex(of: bucket), index + 1 < components.count {
+            return components[(index + 1)...].joined(separator: "/")
+        }
+        return nil
+    }
+
+    // MARK: - AI Profile Picture Generation
+
+    /// Generate profile picture response structure
+    struct GenerateProfilePictureResponse: Codable {
+        let success: Bool
+        let imageBase64: String
+        let quotaRemaining: Int?
+    }
+
+    /// Generate profile picture error types
+    enum GenerateProfilePictureError: LocalizedError {
+        case quotaExceeded
+        case inappropriateContent
+        case networkError
+        case apiError(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .quotaExceeded:
+                return "Daily limit reached. Upgrade to Premium for unlimited generations!"
+            case .inappropriateContent:
+                return "This prompt contains inappropriate content. Please try a different description."
+            case .networkError:
+                return "Network error. Please check your connection and try again."
+            case .apiError(let message):
+                return message
+            }
+        }
+    }
+
+    /// Generate AI profile picture using OpenAI gpt-image-1-mini
+    /// - Parameter prompt: User's prompt for image generation (3-200 chars)
+    /// - Returns: Response containing base64 image and quota info
+    /// - Throws: GenerateProfilePictureError for various failure modes
+    func generateProfilePicture(prompt: String) async throws -> GenerateProfilePictureResponse {
+        do {
+            // Fixed: functions.invoke returns typed response, not tuple
+            let response: GenerateProfilePictureResponse = try await supabase.functions.invoke(
+                "generate-profile-picture",
+                options: .init(
+                    body: ["prompt": prompt]
+                )
+            )
+            
+            return response
+        } catch {
+            // If the error can be converted to data, try parsing the error response
+            let errorString = String(describing: error)
+            
+            if errorString.contains("quota") || errorString.contains("limit") {
+                throw GenerateProfilePictureError.quotaExceeded
+            }
+            if errorString.contains("Inappropriate") || errorString.contains("inappropriate") {
+                throw GenerateProfilePictureError.inappropriateContent
+            }
+            
+            throw GenerateProfilePictureError.apiError(error.localizedDescription)
+        }
     }
 }

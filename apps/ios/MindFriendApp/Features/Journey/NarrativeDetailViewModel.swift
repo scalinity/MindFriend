@@ -101,12 +101,8 @@ class NarrativeDetailViewModel: ObservableObject {
         text += "\(story.weekRangeFormatted)\n\n"
 
         for card in story.cards {
-            if let headline = card.data.headline {
-                text += "\(sanitizeText(headline))\n"
-            }
-            if let message = card.data.message {
-                text += "\(sanitizeText(message))\n\n"
-            }
+            text += "\(sanitizeText(card.data.headline))\n"
+            text += "\(sanitizeText(card.data.message))\n\n"
         }
 
         text += "\nTracked with MindFriend"

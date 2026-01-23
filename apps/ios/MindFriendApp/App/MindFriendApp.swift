@@ -71,6 +71,11 @@ struct MindFriendApp: App {
                                 // Update with verified network data
                                 appState.setAuthenticated(user: profile)
 
+                                // Request notification permission after authentication
+                                if !notificationManager.isAuthorized {
+                                    _ = await notificationManager.requestAuthorization()
+                                }
+
                                 // Sync any widget actions made while app was inactive
                                 await appState.processPendingWidgetSyncs(container: container)
                             }

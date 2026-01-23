@@ -324,6 +324,20 @@ final class VoiceAudioCapture {
         return outputBuffer
     }
 
+    /// Convert Float samples (normalized -1 to 1) to PCM16 Data for WebSocket transmission
+    /// Used when flushing buffered audio after idle reconnection
+    /// - Parameter samples: Float samples normalized to [-1, 1]
+    /// - Returns: Data containing little-endian Int16 samples
+    func convertToData(_ samples: [Float]) -> Data {
+        var data = Data(capacity: samples.count * 2)
+        for sample in samples {
+            // Scale and clamp to Int16 range
+            let scaled = Int16(clamping: Int32(sample * 32767))
+            withUnsafeBytes(of: scaled.littleEndian) { data.append(contentsOf: $0) }
+        }
+        return data
+    }
+
     // MARK: - Level Processing
 
     private func normalizeAudioLevel(_ db: Float) -> Float {

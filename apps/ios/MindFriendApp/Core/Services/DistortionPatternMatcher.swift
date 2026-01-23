@@ -10,7 +10,6 @@ import Foundation
 
 /// Pattern matcher for detecting cognitive distortions using keyword matching
 /// Optimized with cached regex patterns and LRU cache for recent detections
-@MainActor
 final class DistortionPatternMatcher {
 
     // MARK: - Configuration
@@ -173,37 +172,37 @@ final class DistortionPatternMatcher {
         let nsText = text as NSString
         let range = NSRange(location: 0, length: nsText.length)
         
-        var matches: [(type: DistortionType, score: Double)] = []
-        
+        var matches: [(type: DistortionType, confidence: Double)] = []
+
         // Use pre-compiled regex patterns for O(n×m) instead of O(n×m×k) complexity
         for (distortionType, regexList) in regexPatterns {
             var totalScore: Double = 0
-            var matchCount = 0
-            
+            var totalMatches = 0
+
             for (regex, weight) in regexList {
-                let matchCount = regex.numberOfMatches(in: text, range: range)
-                if matchCount > 0 {
-                    totalScore += weight * Double(matchCount)
-                    matchCount += matchCount
+                let count = regex.numberOfMatches(in: text, range: range)
+                if count > 0 {
+                    totalScore += weight * Double(count)
+                    totalMatches += count
                 }
             }
-            
-            if matchCount > 0 {
+
+            if totalMatches > 0 {
                 // Confidence formula: normalized score + bonus for multiple matches
                 let normalizedScore = totalScore / Double(regexList.count)
-                let matchBonus = min(0.3, Double(matchCount) * 0.1)
+                let matchBonus = min(0.3, Double(totalMatches) * 0.1)
                 let confidence = min(0.95, normalizedScore + matchBonus)
-                
-                matches.append((type: distortionType, score: confidence))
+
+                matches.append((type: distortionType, confidence: confidence))
             }
         }
-        
+
         // Return highest confidence match above threshold
-        guard let bestMatch = matches.max(by: { $0.score < $1.score }),
-              bestMatch.score >= confidenceThreshold else {
+        guard let bestMatch = matches.max(by: { $0.confidence < $1.confidence }),
+              bestMatch.confidence >= confidenceThreshold else {
             return nil
         }
-        
+
         return bestMatch
     }
     

@@ -5,15 +5,32 @@ import SwiftUI
 
 struct XPCompactWidget: View {
     @EnvironmentObject private var achievementService: AchievementService
-    @Binding var selectedTab: Int // To navigate to achievements
+    @Binding var selectedTab: MainTab // To navigate to achievements
     
+    // Optional external level data (e.g., from HomeView's loaded state)
+    var userLevel: UserLevel?
+
     private var experience: UserExperience? {
-        achievementService.userExperience
+        // Prefer external userLevel if provided (already loaded from profile)
+        if let level = userLevel {
+            return UserExperience(
+                totalXp: level.currentXP,
+                currentLevel: level.level,
+                xpToNextLevel: level.nextLevelXP,
+                dailyXp: 0,
+                weeklyXp: level.xpThisWeek,
+                prestigeLevel: 0,
+                xpMultiplier: 1.0,
+                multiplierExpiresAt: nil
+            )
+        }
+        // Fallback to achievementService
+        return achievementService.userExperience
     }
-    
+
     var body: some View {
         Button {
-            selectedTab = 3 // Navigate to Achievements tab (index 3)
+            selectedTab = .outcomes // Navigate to Progress/Outcomes tab
         } label: {
             HStack(spacing: 12) {
                 // Level badge

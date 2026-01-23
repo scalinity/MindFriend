@@ -6,11 +6,11 @@ struct AICoachingThoughtRecordView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel = AICoachingThoughtRecordViewModel()
 
-    let onSave: ((ThoughtRecord) -> Void)?
+    let onSave: ((TherapeuticThoughtRecord) -> Void)?
 
     @State private var currentStep: ThoughtRecordStep = .activatingEvent
 
-    init(onSave: ((ThoughtRecord) -> Void)? = nil) {
+    init(onSave: ((TherapeuticThoughtRecord) -> Void)? = nil) {
         self.onSave = onSave
     }
 

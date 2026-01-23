@@ -3,6 +3,7 @@ import SwiftUI
 /// Displays transaction log of shields earned, used, expired, and reset
 struct ShieldHistoryView: View {
     @EnvironmentObject var container: DependencyContainer
+    @EnvironmentObject var appState: AppState
 
     @State private var events: [ShieldEvent] = []
     @State private var isLoading = true
@@ -66,12 +67,12 @@ struct ShieldHistoryView: View {
         defer { isLoading = false }
 
         do {
-            guard let userId = container.appState.currentUser?.id else {
+            guard let userId = appState.currentUser?.id else {
                 errorMessage = "User not authenticated"
                 return
             }
 
-            let service = StreakShieldService(supabase: container.supabase)
+            let service = StreakShieldService(supabase: container.supabaseClient)
             events = try await service.getShieldHistory(userId: userId)
         } catch {
             errorMessage = "Failed to load shield history: \(error.localizedDescription)"

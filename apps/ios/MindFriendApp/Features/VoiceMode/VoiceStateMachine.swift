@@ -23,6 +23,7 @@ struct VoiceStateMachine {
         case bargeIn
         case muted
         case reconnecting
+        case idleDisconnected  // WebSocket closed due to inactivity, mic still listening for VAD
         case error(String)
         case ended
 
@@ -47,6 +48,8 @@ struct VoiceStateMachine {
                 return .muted
             case .reconnecting:
                 return .reconnecting
+            case .idleDisconnected:
+                return .paused
             case .error:
                 return .error
             }
@@ -77,6 +80,8 @@ struct VoiceStateMachine {
                 return "speaker.wave.2.fill"
             case .muted:
                 return "mic.slash.fill"
+            case .idleDisconnected:
+                return "pause.circle"
             case .error:
                 return "exclamationmark.triangle.fill"
             case .ended:
@@ -99,7 +104,7 @@ struct VoiceStateMachine {
         /// Whether audio capture should be running
         var shouldCaptureAudio: Bool {
             switch self {
-            case .ready, .listening, .userSpeaking, .bargeIn, .speaking:
+            case .ready, .listening, .userSpeaking, .bargeIn, .speaking, .idleDisconnected:
                 return true
             default:
                 return false
@@ -149,6 +154,8 @@ struct VoiceStateMachine {
                 return "Muted"
             case .reconnecting:
                 return "Reconnecting..."
+            case .idleDisconnected:
+                return "Paused - Speak to resume"
             case .error(let message):
                 return "Error: \(message)"
             case .ended:
@@ -180,6 +187,7 @@ struct VoiceStateMachine {
         case interrupted
         case muted
         case reconnecting
+        case paused  // Dim blue for idleDisconnected
         case error
     }
 
@@ -204,6 +212,10 @@ struct VoiceStateMachine {
         case speechStart
         case speechEnd
         case endOfUtteranceDetected
+
+        // Idle Management Events
+        case idleTimeoutReached        // 90s silence elapsed
+        case clientVadSpeechDetected   // Client VAD detected speech while disconnected
 
         // Transport Events
         case connected
@@ -301,6 +313,9 @@ struct VoiceStateMachine {
         case (.ready, .disconnected):
             state = .reconnecting
 
+        case (.ready, .idleTimeoutReached):
+            state = .idleDisconnected
+
         // MARK: - Listening State Transitions
 
         case (.listening, .speechStart):
@@ -317,6 +332,9 @@ struct VoiceStateMachine {
 
         case (.listening, .disconnected):
             state = .reconnecting
+
+        case (.listening, .idleTimeoutReached):
+            state = .idleDisconnected
 
         // MARK: - User Speaking State Transitions
 
@@ -423,6 +441,9 @@ struct VoiceStateMachine {
                 state = .muted
             }
 
+        case (.speaking, .idleTimeoutReached):
+            state = .idleDisconnected
+
         // MARK: - Barge-In State Transitions
 
         case (.bargeIn, .audioPlaybackFinished):
@@ -463,6 +484,18 @@ struct VoiceStateMachine {
             state = .ended
 
         case (.muted, .disconnected):
+            state = .reconnecting
+
+        // MARK: - Idle Disconnected State Transitions
+
+        case (.idleDisconnected, .clientVadSpeechDetected):
+            state = .reconnecting
+
+        case (.idleDisconnected, .tapEnd):
+            state = .ended
+
+        case (.idleDisconnected, .tapStart):
+            // User explicitly tapped to reconnect
             state = .reconnecting
 
         // MARK: - Reconnecting State Transitions
@@ -582,6 +615,12 @@ extension VoiceStateMachine.State {
         if case .ended = self { return true }
         return false
     }
+
+    /// Convenience for checking idle disconnected state
+    var isIdleDisconnected: Bool {
+        if case .idleDisconnected = self { return true }
+        return false
+    }
 }
 
 // MARK: - Logging descriptions
@@ -603,6 +642,7 @@ extension VoiceStateMachine.State: CustomStringConvertible {
         case .bargeIn: return "bargeIn"
         case .muted: return "muted"
         case .reconnecting: return "reconnecting"
+        case .idleDisconnected: return "idleDisconnected"
         case .error(let message): return "error(\(message))"
         case .ended: return "ended"
         }
@@ -630,6 +670,10 @@ extension VoiceStateMachine.Event: CustomStringConvertible {
         case .speechStart: return "speechStart"
         case .speechEnd: return "speechEnd"
         case .endOfUtteranceDetected: return "endOfUtteranceDetected"
+
+        // Idle Management Events
+        case .idleTimeoutReached: return "idleTimeoutReached"
+        case .clientVadSpeechDetected: return "clientVadSpeechDetected"
 
         // Transport Events
         case .connected: return "connected"

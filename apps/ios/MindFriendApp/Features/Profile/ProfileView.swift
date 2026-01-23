@@ -20,9 +20,36 @@ struct ProfileView: View {
                         showEditProfile = true
                     } label: {
                         HStack(spacing: 16) {
-                            Image(systemName: "person.circle.fill")
-                                .font(.system(size: 60))
-                                .foregroundStyle(Color.accentColor)
+                            // Display avatar or placeholder
+                            if let avatarUrl = appState.currentUser?.avatarUrl, !avatarUrl.isEmpty {
+                                AsyncImage(url: URL(string: avatarUrl)) { phase in
+                                    switch phase {
+                                    case .success(let image):
+                                        image
+                                            .resizable()
+                                            .aspectRatio(contentMode: .fill)
+                                            .frame(width: 60, height: 60)
+                                            .clipShape(Circle())
+                                    case .failure:
+                                        Image(systemName: "person.circle.fill")
+                                            .font(.system(size: 60))
+                                            .foregroundStyle(Color.accentColor)
+                                    case .empty:
+                                        ProgressView()
+                                            .frame(width: 60, height: 60)
+                                    @unknown default:
+                                        Image(systemName: "person.circle.fill")
+                                            .font(.system(size: 60))
+                                            .foregroundStyle(Color.accentColor)
+                                    }
+                                }
+                                .accessibilityLabel("Profile picture")
+                            } else {
+                                Image(systemName: "person.circle.fill")
+                                    .font(.system(size: 60))
+                                    .foregroundStyle(Color.accentColor)
+                                    .accessibilityLabel("Profile picture placeholder")
+                            }
 
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(appState.currentUser?.displayName ?? "User")
@@ -60,6 +87,25 @@ struct ProfileView: View {
                         ProfileStatItem(value: "\(appState.currentUser?.badges?.count ?? 0)", label: "Badges")
                     }
                     .padding(.vertical, 8)
+                }
+
+                // Premium / Subscription (placed between Stats and Progress)
+                if appState.entitlements.tier == .free {
+                    Section {
+                        Button {
+                            showSubscription = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "star.fill")
+                                    .foregroundStyle(.yellow)
+                                Text("Upgrade to Premium")
+                                    .fontWeight(.semibold)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
                 }
 
                 // Progress
@@ -210,6 +256,7 @@ struct ProfileView: View {
 
                     NavigationLink {
                         CompanionMemoryView()
+                            .environmentObject(container.companionMemoryService)
                     } label: {
                         Label("Memory Vault", systemImage: "archivebox.fill")
                     }
@@ -251,44 +298,6 @@ struct ProfileView: View {
                         OurApproachView()
                     } label: {
                         Label("Our Approach", systemImage: "checkmark.seal.fill")
-                    }
-                }
-
-                // Premium / Subscription
-                Section {
-                    if appState.entitlements.tier == .free {
-                        Button {
-                            showSubscription = true
-                        } label: {
-                            HStack {
-                                Image(systemName: "star.fill")
-                                    .foregroundStyle(.yellow)
-                                Text("Upgrade to Premium")
-                                    .fontWeight(.semibold)
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    } else {
-                        Button {
-                            showSubscription = true
-                        } label: {
-                            HStack {
-                                Image(systemName: "star.fill")
-                                    .foregroundStyle(.yellow)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Premium")
-                                        .fontWeight(.semibold)
-                                    Text("Manage subscription")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
                     }
                 }
 
@@ -759,7 +768,6 @@ struct AIPreferencesView: View {
 
             do {
                 try await container.supabaseDataService.updateUserSettings(aiTone: tone)
-
                 // Settings updated in database - will be refreshed on next profile fetch
             } catch {
                 await MainActor.run {
@@ -945,6 +953,7 @@ struct EditProfileView: View {
     @State private var isSaving = false
     @State private var errorMessage: String?
     @State private var handleValidation: HandleValidation = .empty
+    @State private var showProfilePictureEditor = false
 
     enum HandleValidation {
         case empty
@@ -977,6 +986,55 @@ struct EditProfileView: View {
     var body: some View {
         NavigationStack {
             Form {
+                // Profile picture section
+                Section {
+                    Button {
+                        showProfilePictureEditor = true
+                    } label: {
+                        HStack(spacing: 16) {
+                            if let avatarUrl = appState.currentUser?.avatarUrl, !avatarUrl.isEmpty {
+                                AsyncImage(url: URL(string: avatarUrl)) { phase in
+                                    switch phase {
+                                    case .success(let image):
+                                        image
+                                            .resizable()
+                                            .aspectRatio(contentMode: .fill)
+                                            .frame(width: 80, height: 80)
+                                            .clipShape(Circle())
+                                    case .failure, .empty:
+                                        Image(systemName: "person.circle.fill")
+                                            .font(.system(size: 80))
+                                            .foregroundStyle(.gray)
+                                    @unknown default:
+                                        Image(systemName: "person.circle.fill")
+                                            .font(.system(size: 80))
+                                            .foregroundStyle(.gray)
+                                    }
+                                }
+                            } else {
+                                Image(systemName: "person.circle.fill")
+                                    .font(.system(size: 80))
+                                    .foregroundStyle(.gray)
+                            }
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Profile Picture")
+                                    .font(.headline)
+                                    .foregroundStyle(.primary)
+                                Text("Tap to edit")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Spacer()
+
+                            Image(systemName: "chevron.right")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 8)
+                }
+
                 Section {
                     TextField("Display Name", text: $displayName)
                         .textContentType(.name)
@@ -1047,6 +1105,11 @@ struct EditProfileView: View {
                 }
             }
             .interactiveDismissDisabled(isSaving)
+            .sheet(isPresented: $showProfilePictureEditor) {
+                ProfilePictureEditorView()
+                    .environmentObject(appState)
+                    .environmentObject(container)
+            }
         }
     }
 

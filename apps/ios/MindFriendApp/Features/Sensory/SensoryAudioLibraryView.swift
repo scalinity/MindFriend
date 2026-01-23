@@ -8,7 +8,7 @@
 
 import SwiftUI
 
-struct AudioLibraryView: View {
+struct SensoryAudioLibraryView: View {
     @EnvironmentObject private var dependencies: DependencyContainer
     @State private var selectedSoundscape: AudioSoundscape?
     @State private var showSession: Bool = false

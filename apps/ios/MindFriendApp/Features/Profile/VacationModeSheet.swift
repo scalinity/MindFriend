@@ -69,7 +69,7 @@ struct VacationModeSheet: View {
     }
 
     private var reasonSection: some View {
-        Section("Reason (Optional)") {
+        Section {
             TextField("e.g., Family vacation, work trip", text: $reason, axis: .vertical)
                 .lineLimit(2...4)
                 .onChange(of: reason) { _, newValue in
@@ -78,6 +78,8 @@ struct VacationModeSheet: View {
                         reason = String(newValue.prefix(200))
                     }
                 }
+        } header: {
+            Text("Reason (Optional)")
         } footer: {
             HStack {
                 Text("\(reason.count)/200")

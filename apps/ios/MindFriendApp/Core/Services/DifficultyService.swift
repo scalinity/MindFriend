@@ -9,9 +9,9 @@ final class DifficultyService: ObservableObject {
     private static let refreshCooldownSeconds: TimeInterval = 60 // 1 minute debounce
     private static let requestTimeoutSeconds: TimeInterval = 10 // API timeout
     private static let maxRetryAttempts: Int = 3 // Max retry attempts
-    private static let initialRetryDelay: TimeInterval = 0.5 // Initial retry delay in seconds
-    private static let retryExponentialBase: Double = 2.0 // Exponential backoff multiplier
-    private static let nanosecondsPerSecond: UInt64 = 1_000_000_000 // ns/s conversion
+    static let initialRetryDelay: TimeInterval = 0.5 // Initial retry delay in seconds
+    static let retryExponentialBase: Double = 2.0 // Exponential backoff multiplier
+    static let nanosecondsPerSecond: UInt64 = 1_000_000_000 // ns/s conversion
 
     // MARK: - Published Properties
 
@@ -54,22 +54,27 @@ final class DifficultyService: ObservableObject {
     /// - Returns: Updated capacity score
     /// - Throws: DifficultyError if calculation fails
     func refreshCapacity() async throws -> CapacityScore {
+        print("[DifficultyService] refreshCapacity called")
+
         // RACE CONDITION FIX: Atomically check and create task
         // If refresh already in progress, await that task
         if let existingTask = refreshTask {
+            print("[DifficultyService] Refresh already in progress, awaiting existing task")
             return try await existingTask.value
         }
 
         // Create new refresh task immediately to claim the slot
         let task = Task<CapacityScore, Error> { @MainActor in
             // Debounce: prevent rapid successive calls (checked inside task)
-            if let last = self.lastRefreshDate, 
+            if let last = self.lastRefreshDate,
                Date().timeIntervalSince(last) < Self.refreshCooldownSeconds {
+                print("[DifficultyService] Debouncing refresh (last refresh: \(Date().timeIntervalSince(last))s ago)")
                 if let cached = self.getCachedCapacity() {
                     return cached
                 }
             }
-            
+
+            print("[DifficultyService] Performing new capacity calculation")
             return try await self.performRefresh()
         }
 
@@ -81,14 +86,18 @@ final class DifficultyService: ObservableObject {
 
     /// Internal refresh implementation
     private func performRefresh() async throws -> CapacityScore {
+        print("[DifficultyService] performRefresh started")
         isCalculating = true
         defer { isCalculating = false }
 
         do {
-            // Get current user (SAFETY: use optional chaining to prevent crash if session nil)
-            guard let userId = try await supabase.auth.session?.user.id else {
+            // Get current user
+            guard let userId = supabase.auth.currentUser?.id else {
+                print("[DifficultyService] ERROR: No authenticated user")
                 throw DifficultyError.calculationFailed("No authenticated user")
             }
+
+            print("[DifficultyService] User authenticated: \(userId)")
 
             // Prepare request
             let dateFormatter = DateFormatter()
@@ -103,14 +112,88 @@ final class DifficultyService: ObservableObject {
                 timezone: timezone
             )
 
+            print("[DifficultyService] Calling calculate-capacity edge function with localDate=\(localDate), timezone=\(timezone)")
+            print("[DifficultyService] Current user session exists: \(supabase.auth.currentSession != nil)")
+            if let session = supabase.auth.currentSession {
+                print("[DifficultyService] Session token (first 20 chars): \(String(session.accessToken.prefix(20)))...")
+            }
+
             // Call Edge Function with timeout and retry
-            let response: CalculateCapacityResponse = try await withRetry(maxAttempts: Self.maxRetryAttempts) {
-                try await withTimeout(seconds: Self.requestTimeoutSeconds) {
-                    try await supabase.functions
-                        .invoke("calculate-capacity", options: FunctionInvokeOptions(body: request))
-                        .value
+            // SECURITY FIX: Retry with session refresh on 401
+            // TEMPORARY: Use diagnostic function to debug auth issues
+            let response: CalculateCapacityResponse = try await withRetry(maxAttempts: Self.maxRetryAttempts) { [self] in
+                do {
+                    // DIAGNOSTIC: Call test-auth-diagnostic to see actual auth error
+                    do {
+                        let diagnosticResponse: Data = try await withTimeout(seconds: Self.requestTimeoutSeconds) {
+                            try await self.supabase.functions
+                                .invoke("test-auth-diagnostic", options: FunctionInvokeOptions(body: request))
+                        }
+                        // Success case - should not happen if auth is broken
+                        if let jsonString = String(data: diagnosticResponse, encoding: .utf8) {
+                            print("[DifficultyService] DIAGNOSTIC SUCCESS: \(jsonString)")
+                        }
+                    } catch {
+                        // Extract error data from FunctionsError
+                        print("[DifficultyService] DIAGNOSTIC ERROR: \(error)")
+                        if case let FunctionsError.httpError(code, data) = error {
+                            if let jsonString = String(data: data, encoding: .utf8) {
+                                print("[DifficultyService] DIAGNOSTIC RESPONSE (HTTP \(code)): \(jsonString)")
+                            }
+                        }
+                    }
+
+                    // Now try the actual call
+                    return try await withTimeout(seconds: Self.requestTimeoutSeconds) {
+                        try await self.supabase.functions
+                            .invoke("calculate-capacity", options: FunctionInvokeOptions(body: request))
+                    }
+                } catch {
+                    // Log full error details
+                    print("[DifficultyService] ERROR DETAILS: \(error)")
+                    print("[DifficultyService] ERROR TYPE: \(type(of: error))")
+
+                    // If we get a 401, try refreshing the session and retrying once
+                    let errorMessage = error.localizedDescription.lowercased()
+                    if errorMessage.contains("401") || errorMessage.contains("unauthorized") {
+                        print("[DifficultyService] Got 401, attempting session refresh...")
+                        do {
+                            _ = try await self.supabase.auth.refreshSession()
+                            print("[DifficultyService] Session refreshed, retrying request...")
+
+                            // Try diagnostic again after refresh
+                            do {
+                                let diagnosticResponse2: Data = try await withTimeout(seconds: Self.requestTimeoutSeconds) {
+                                    try await self.supabase.functions
+                                        .invoke("test-auth-diagnostic", options: FunctionInvokeOptions(body: request))
+                                }
+                                if let jsonString = String(data: diagnosticResponse2, encoding: .utf8) {
+                                    print("[DifficultyService] DIAGNOSTIC AFTER REFRESH SUCCESS: \(jsonString)")
+                                }
+                            } catch {
+                                print("[DifficultyService] DIAGNOSTIC AFTER REFRESH ERROR: \(error)")
+                                if case let FunctionsError.httpError(code, data) = error {
+                                    if let jsonString = String(data: data, encoding: .utf8) {
+                                        print("[DifficultyService] DIAGNOSTIC AFTER REFRESH (HTTP \(code)): \(jsonString)")
+                                    }
+                                }
+                            }
+
+                            // Retry once after refresh
+                            return try await withTimeout(seconds: Self.requestTimeoutSeconds) {
+                                try await self.supabase.functions
+                                    .invoke("calculate-capacity", options: FunctionInvokeOptions(body: request))
+                            }
+                        } catch {
+                            print("[DifficultyService] Session refresh failed: \(error.localizedDescription)")
+                            throw error // Throw original 401 error
+                        }
+                    }
+                    throw error
                 }
             }
+
+            print("[DifficultyService] Edge function returned: score=\(response.score), level=\(response.level)")
 
             // Convert to CapacityScore
             guard let capacity = response.toCapacityScore(userId: userId) else {
@@ -129,13 +212,15 @@ final class DifficultyService: ObservableObject {
 
             return capacity
         } catch let error as DifficultyError {
+            print("[DifficultyService] ERROR: DifficultyError - \(error.localizedDescription)")
             // GRACEFUL DEGRADATION: Fall back to cached data if available
             if let cached = getCachedCapacity(), cached.isValid {
-                print("⚠️ Using cached capacity due to error: \(error.localizedDescription ?? "Unknown error")")
+                print("⚠️ Using cached capacity due to error: \(error.localizedDescription)")
                 return cached
             }
             throw error
         } catch {
+            print("[DifficultyService] ERROR: Unexpected error - \(error.localizedDescription)")
             // GRACEFUL DEGRADATION: Fall back to cached data for network errors
             if let cached = getCachedCapacity(), cached.isValid {
                 print("⚠️ Using cached capacity due to network error: \(error.localizedDescription)")
@@ -166,21 +251,34 @@ final class DifficultyService: ObservableObject {
     /// - Parameter level: Override level (rest, normal, challenge)
     /// - Throws: DifficultyError if override fails
     func setManualOverride(_ level: CapacityOverride.OverrideLevel) async throws {
-        // SAFETY: use optional chaining to prevent crash if session nil
-        guard let userId = try await supabase.auth.session?.user.id else {
+        guard let userId = supabase.auth.currentUser?.id else {
             throw DifficultyError.overrideFailed("No authenticated user")
         }
 
         // Calculate expiration (next midnight)
         let expiresAt = getNextMidnight()
 
-        // Create override record
-        let override = [
-            "user_id": userId.uuidString,
-            "override_level": level.rawValue,
-            "expires_at": ISO8601DateFormatter().string(from: expiresAt),
-            "is_active": true,
-        ] as [String: Any]
+        // Create override record using Codable struct
+        struct OverrideInsert: Codable {
+            let userId: String
+            let overrideLevel: String
+            let expiresAt: String
+            let isActive: Bool
+
+            enum CodingKeys: String, CodingKey {
+                case userId = "user_id"
+                case overrideLevel = "override_level"
+                case expiresAt = "expires_at"
+                case isActive = "is_active"
+            }
+        }
+
+        let override = OverrideInsert(
+            userId: userId.uuidString,
+            overrideLevel: level.rawValue,
+            expiresAt: ISO8601DateFormatter().string(from: expiresAt),
+            isActive: true
+        )
 
         do {
             // Upsert override (will replace existing active override due to unique constraint)
@@ -245,8 +343,7 @@ final class DifficultyService: ObservableObject {
     // MARK: - Private Methods
 
     private func fetchActiveOverride() async throws {
-        // SAFETY: use optional chaining to prevent crash if session nil
-        guard let userId = try await supabase.auth.session?.user.id else {
+        guard let userId = supabase.auth.currentUser?.id else {
             return
         }
 

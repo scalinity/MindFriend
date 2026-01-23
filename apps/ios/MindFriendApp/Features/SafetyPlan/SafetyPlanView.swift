@@ -628,10 +628,10 @@ struct CopingStepView: View {
             ExercisePickerView { exercise in
                 payload.coping.append(CopingStrategy(
                     type: .exercise,
-                    exerciseId: exercise.id,
                     label: exercise.title,
                     duration: exercise.durationSeconds / 60,
-                    category: categoryFromExerciseType(exercise.type)
+                    category: categoryFromExerciseType(exercise.type),
+                    exerciseId: exercise.id
                 ))
             }
         }
@@ -1032,8 +1032,8 @@ struct ResourceRowView: View {
                     .font(.subheadline)
                     .fontWeight(.medium)
 
-                if let phone = resource.phone {
-                    Text(phone)
+                if !resource.phone.isEmpty {
+                    Text(resource.phone)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -1041,8 +1041,8 @@ struct ResourceRowView: View {
 
             Spacer()
 
-            if let phone = resource.phone {
-                Link(destination: URL(string: "tel://\(phone.replacingOccurrences(of: "+", with: ""))")!) {
+            if !resource.phone.isEmpty {
+                Link(destination: URL(string: "tel://\(resource.phone.replacingOccurrences(of: "+", with: ""))")!) {
                     Image(systemName: "phone.fill")
                         .foregroundStyle(.blue)
                 }
@@ -1102,7 +1102,7 @@ struct AddTherapistView: View {
                             type: .therapist,
                             name: name,
                             phone: phone.hasPrefix("+") ? phone : "+\(phone)",
-                            notes: notes.isEmpty ? nil : notes
+                            description: notes.isEmpty ? nil : notes
                         )
                         onAdd(resource)
                         dismiss()

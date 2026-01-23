@@ -79,6 +79,15 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
         }
     }
 
+    /// Whether WebSocket is disconnected due to idle timeout (mic still listening for VAD)
+    @Published private(set) var isIdleDisconnected = false {
+        didSet {
+            if isIdleDisconnected && !oldValue {
+                delegate?.voiceService(self, didEmit: .idleDisconnected)
+            }
+        }
+    }
+
     // MARK: - Emotion State
 
     /// Current detected emotion (nil if no emotion detected or analysis disabled)
@@ -123,6 +132,35 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
     private var sessionUpdatedTimeoutTask: Task<Void, Never>?
     private var isWaitingForResponse = false
     private var usageTimer: Timer?
+
+    // MARK: - Idle Management
+
+    /// Timer that checks for idle state and disconnects WebSocket
+    private var idleDisconnectTimer: Timer?
+
+    /// Last time speech activity was detected
+    private var lastSpeechActivityTime: Date?
+
+    /// Threshold in seconds before idle disconnect (90 seconds)
+    private let idleDisconnectThreshold: TimeInterval = 90
+
+    /// Cached token for fast reconnection
+    private var cachedToken: String?
+
+    /// Expiry time of cached token
+    private var cachedTokenExpiry: Date?
+
+    /// Counter for client-side VAD while idle
+    private var vadFramesAboveThreshold = 0
+
+    /// Threshold for client VAD detection (mic level 0.0-1.0)
+    private let vadDetectionThreshold: Float = 0.15
+
+    /// Number of consecutive frames above threshold required to trigger reconnection
+    private let vadRequiredFrames = 3  // ~125ms at typical buffer rate
+
+    /// Flag to prevent multiple simultaneous reconnection attempts
+    private var isReconnecting = false
 
     // Voice instructions for MindFriend personality
     private let voiceInstructions = """
@@ -169,13 +207,15 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
                 self?.sendAudioData(audioData)
             }
         }
-        
+
         audioCapture.onMicLevelUpdate = { [weak self] level in
             Task { @MainActor in
                 self?.micLevel = level
+                // Check for client-side VAD while in idle disconnected state
+                self?.checkClientVadWhileIdle(level: level)
             }
         }
-        
+
         // Audio playback callbacks
         audioPlayback.onPlaybackStart = { [weak self] in
             Task { @MainActor in
@@ -206,6 +246,10 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
 
         connectionState = .connecting
 
+        // Reset idle state in case we're reconnecting
+        isIdleDisconnected = false
+        isReconnecting = false
+
         do {
             try await requestMicrophonePermission()
 
@@ -217,6 +261,12 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
             availableVoices = tokenResponse.grokAvailableVoices
             currentVoice = tokenResponse.grokVoice
             sessionId = tokenResponse.sessionId
+
+            // Cache the token for potential reconnection
+            cachedToken = tokenResponse.token
+            if let expiryDate = ISO8601DateFormatter().date(from: tokenResponse.expiresAt) {
+                cachedTokenExpiry = expiryDate
+            }
 
             try await webSocketManager.connect(token: tokenResponse.token)
 
@@ -271,6 +321,9 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
                 startUsageTimer()
             }
 
+            // Start idle disconnect timer
+            startIdleTimer()
+
             // Auto-start listening for continuous conversation mode
             try startListening()
         } catch {
@@ -284,6 +337,7 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
         stopListening()
         audioPlayback.stop()
         stopUsageTimer()
+        stopIdleTimer()
 
         // Cancel emotion analysis task
         emotionAnalysisTask?.cancel()
@@ -314,6 +368,14 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
         sessionId = nil
         sessionStartTime = nil
         isWaitingForResponse = false
+
+        // Clear idle state
+        isIdleDisconnected = false
+        isReconnecting = false
+        cachedToken = nil
+        cachedTokenExpiry = nil
+        lastSpeechActivityTime = nil
+        vadFramesAboveThreshold = 0
 
         // Clear emotion state
         currentEmotion = nil
@@ -794,6 +856,9 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
             Log.voice.debug("[Voice] VAD detected speech start")
             #endif
 
+            // Reset idle timer on speech activity
+            resetIdleTimer()
+
             // Check if this is a barge-in situation (user speaking while AI is responding)
             let isBargeIn = isSpeaking || isWaitingForResponse
 
@@ -828,6 +893,10 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
             #if DEBUG
             Log.voice.debug("[Voice] VAD detected speech stop - server will auto-commit and respond")
             #endif
+
+            // Reset idle timer on speech activity
+            resetIdleTimer()
+
             isUserSpeaking = false
             // With server_vad + create_response: true, the server will:
             // 1. Automatically commit the audio buffer
@@ -905,6 +974,9 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
             // only when playback actually completes in audioPlayback.onPlaybackEnd callback
             isWaitingForResponse = false
 
+            // Reset idle timer after response completes
+            resetIdleTimer()
+
             // Clear transcript after a delay
             Task {
                 try? await Task.sleep(nanoseconds: 3_000_000_000) // 3 seconds
@@ -975,6 +1047,196 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
     private func stopUsageTimer() {
         usageTimer?.invalidate()
         usageTimer = nil
+    }
+
+    // MARK: - Idle Timer Management
+
+    /// Start the idle disconnect timer (called after connection established)
+    private func startIdleTimer() {
+        stopIdleTimer()
+        lastSpeechActivityTime = Date()
+
+        // Check every 5 seconds if we've exceeded idle threshold
+        idleDisconnectTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.checkIdleTimeout()
+            }
+        }
+
+        #if DEBUG
+        Log.voice.debug("[Voice] Idle timer started (threshold: \(self.idleDisconnectThreshold)s)")
+        #endif
+    }
+
+    /// Stop the idle disconnect timer
+    private func stopIdleTimer() {
+        idleDisconnectTimer?.invalidate()
+        idleDisconnectTimer = nil
+    }
+
+    /// Reset the idle timer when speech activity is detected
+    private func resetIdleTimer() {
+        lastSpeechActivityTime = Date()
+        vadFramesAboveThreshold = 0
+
+        #if DEBUG
+        Log.voice.debug("[Voice] Idle timer reset")
+        #endif
+    }
+
+    /// Check if idle threshold has been exceeded
+    private func checkIdleTimeout() {
+        guard let lastActivity = lastSpeechActivityTime,
+              !isIdleDisconnected,
+              connectionState.isConnected else { return }
+
+        let elapsed = Date().timeIntervalSince(lastActivity)
+        if elapsed >= idleDisconnectThreshold {
+            performIdleDisconnect()
+        }
+    }
+
+    /// Disconnect WebSocket due to idle timeout but keep audio capture running for VAD
+    private func performIdleDisconnect() {
+        #if DEBUG
+        Log.voice.debug("[Voice] Performing idle disconnect (threshold exceeded)")
+        #endif
+
+        isIdleDisconnected = true
+        stopIdleTimer()
+
+        // Stop audio playback
+        audioPlayback.stop()
+
+        // Disconnect WebSocket but DON'T stop audio capture - we need it for client VAD
+        webSocketManager.disconnect()
+        connectionState = .disconnected
+
+        // Keep audioCapture running so we can detect speech and reconnect
+        // The mic level updates will trigger checkClientVadWhileIdle()
+    }
+
+    /// Check for client-side VAD while in idle disconnected state
+    private func checkClientVadWhileIdle(level: Float) {
+        guard isIdleDisconnected, !isReconnecting else { return }
+
+        if level >= vadDetectionThreshold {
+            vadFramesAboveThreshold += 1
+
+            if vadFramesAboveThreshold >= vadRequiredFrames {
+                #if DEBUG
+                Log.voice.debug("[Voice] Client VAD detected speech while idle - triggering reconnection")
+                #endif
+                triggerReconnection()
+            }
+        } else {
+            vadFramesAboveThreshold = 0
+        }
+    }
+
+    /// Reconnect after idle disconnect when speech is detected
+    private func triggerReconnection() {
+        guard isIdleDisconnected, !isReconnecting else { return }
+
+        isReconnecting = true
+        connectionState = .reconnecting
+
+        Task {
+            do {
+                // Get cached or fresh token
+                let token = try await getCachedOrFreshToken()
+
+                // Reconnect WebSocket
+                try await webSocketManager.connect(token: token)
+
+                // Wait for session.created
+                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                    sessionCreatedContinuation = continuation
+
+                    sessionCreatedTimeoutTask = Task { @MainActor [weak self] in
+                        try? await Task.sleep(nanoseconds: 10_000_000_000)
+                        guard let self, !Task.isCancelled else { return }
+                        if let cont = self.sessionCreatedContinuation {
+                            self.sessionCreatedContinuation = nil
+                            cont.resume(throwing: VoiceError.connectionTimeout)
+                        }
+                    }
+                }
+
+                // Configure session
+                try await configureSession()
+
+                // Wait for session.updated
+                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                    sessionUpdatedContinuation = continuation
+
+                    sessionUpdatedTimeoutTask = Task { @MainActor [weak self] in
+                        try? await Task.sleep(nanoseconds: 10_000_000_000)
+                        guard let self, !Task.isCancelled else { return }
+                        if let cont = self.sessionUpdatedContinuation {
+                            self.sessionUpdatedContinuation = nil
+                            cont.resume(throwing: VoiceError.connectionTimeout)
+                        }
+                    }
+                }
+
+                // Flush buffered audio that triggered reconnection
+                if let recentAudio = audioCapture.getRecentAudioBuffer(duration: 3.0) {
+                    let data = audioCapture.convertToData(recentAudio)
+                    sendAudioData(data)
+                    #if DEBUG
+                    Log.voice.debug("[Voice] Flushed \(data.count) bytes of buffered audio after reconnection")
+                    #endif
+                }
+
+                // Commit to trigger server VAD processing
+                webSocketManager.send(["type": "input_audio_buffer.commit"])
+
+                // Success - reset state
+                isIdleDisconnected = false
+                isReconnecting = false
+                connectionState = .connected
+                startIdleTimer()
+
+                #if DEBUG
+                Log.voice.debug("[Voice] Reconnection after idle disconnect successful")
+                #endif
+
+            } catch {
+                #if DEBUG
+                Log.voice.error("[Voice] Reconnection failed: \(error)")
+                #endif
+                isReconnecting = false
+                connectionState = .error(error.localizedDescription)
+            }
+        }
+    }
+
+    /// Get cached token if still valid, otherwise fetch fresh token
+    private func getCachedOrFreshToken() async throws -> String {
+        // Check if cached token is still valid (with 30s buffer)
+        if let token = cachedToken,
+           let expiry = cachedTokenExpiry,
+           expiry > Date().addingTimeInterval(30) {
+            #if DEBUG
+            Log.voice.debug("[Voice] Using cached token for reconnection")
+            #endif
+            return token
+        }
+
+        // Fetch fresh token
+        #if DEBUG
+        Log.voice.debug("[Voice] Fetching fresh token for reconnection")
+        #endif
+        let response = try await fetchVoiceToken()
+
+        // Cache the new token
+        cachedToken = response.token
+        if let expiryDate = ISO8601DateFormatter().date(from: response.expiresAt) {
+            cachedTokenExpiry = expiryDate
+        }
+
+        return response.token
     }
 
     private func updateMinutesRemaining() {

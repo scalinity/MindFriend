@@ -196,6 +196,10 @@ struct ModeCard: View {
 
     private func colorForMode(_ mode: ConversationMode) -> Color {
         switch mode {
+        case .supportive: return .green
+        case .challenging: return .red
+        case .socratic: return .indigo
+        case .empathetic: return .pink
         case .reflect: return .purple
         case .plan: return .blue
         case .reframe: return .orange
@@ -240,7 +244,8 @@ struct ThoughtRecordCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(record.activatingEvent.prefix(50) + (record.activatingEvent.count > 50 ? "..." : ""))
+                let event = record.activatingEvent ?? ""
+                Text(event.prefix(50) + (event.count > 50 ? "..." : ""))
                     .font(.subheadline)
                     .fontWeight(.medium)
 
@@ -253,7 +258,7 @@ struct ThoughtRecordCard: View {
             }
 
             HStack {
-                ForEach(record.identifiedDistortions.prefix(2)) { distortion in
+                ForEach(record.cognitiveDistortions.prefix(2)) { distortion in
                     Text(distortion.displayName)
                         .font(.caption)
                         .padding(.horizontal, 8)

@@ -47,6 +47,48 @@ struct HomeView: View {
         homeContext?.moodContext.backgroundColor ?? Color(uiColor: .systemBackground)
     }
 
+    /// Level to display - uses loaded userLevel, falls back to AchievementService, then default
+    private var displayLevel: UserLevel {
+        if let level = userLevel {
+            return level
+        }
+        // Fallback to AchievementService data if available
+        if let exp = container.achievementService.userExperience {
+            return UserLevel(
+                level: exp.currentLevel,
+                title: levelTitle(for: exp.currentLevel),
+                currentXP: exp.totalXp,
+                nextLevelXP: exp.xpToNextLevel,
+                xpThisWeek: exp.weeklyXp
+            )
+        }
+        // Default level while loading
+        return UserLevel(
+            level: 1,
+            title: "Beginner",
+            currentXP: 0,
+            nextLevelXP: 100,
+            xpThisWeek: 0
+        )
+    }
+
+    /// Get level title for a given level number
+    private func levelTitle(for level: Int) -> String {
+        switch level {
+        case 1...5: return "Beginner"
+        case 6...10: return "Learner"
+        case 11...15: return "Explorer"
+        case 16...20: return "Practitioner"
+        case 21...25: return "Achiever"
+        case 26...30: return "Expert"
+        case 31...35: return "Master"
+        case 36...40: return "Champion"
+        case 41...45: return "Legend"
+        case 46...50: return "Transcendent"
+        default: return "Beginner"
+        }
+    }
+
     var body: some View {
         NavigationStack {
             Group {
@@ -94,12 +136,10 @@ struct HomeView: View {
                         userName: appState.currentUser?.displayName ?? "Friend",
                         timeOfDay: homeContext?.timeOfDay ?? .current
                     )
-                    
-                    // XP Progress Widget (NEW)
-                    if let selectedTab = $appState.selectedTab {
-                        XPCompactWidget(selectedTab: selectedTab)
-                            .environmentObject(container.achievementService)
-                    }
+
+                    // Level progress (moved to top for visibility)
+                    LevelProgressView(userLevel: displayLevel)
+                        .padding(.horizontal)
 
                     // Capacity indicator (difficulty adjustment)
                     CapacityIndicator()
@@ -129,11 +169,6 @@ struct HomeView: View {
                             showCrisisSupport: homeContext?.shouldShowCrisisSupport ?? false,
                             onCrisisTap: { appState.showCrisisResources = true }
                         )
-                    }
-
-                    // Level progress
-                    if let level = userLevel {
-                        LevelProgressView(userLevel: level)
                     }
 
                     // Active event (if participating)
@@ -487,8 +522,8 @@ struct HomeView: View {
             async let recoveryModeTask = try? await container.supabaseDataService.fetchRecoveryModeState()
             async let questArcTask = try? await container.questArcsService.getActiveArc()
             // Mood prediction data (fail gracefully)
-            async let predictionTask: Void = try? await container.predictiveService.fetchTodayPrediction()
-            async let interventionTask: Void = try? await container.predictiveService.fetchPendingMoodIntervention()
+            async let predictionTask: Void? = try? await container.predictiveService.fetchTodayPrediction()
+            async let interventionTask: Void? = try? await container.predictiveService.fetchPendingMoodIntervention()
 
             // Await all results concurrently
             let questResult = try await questTask
@@ -1517,6 +1552,40 @@ struct InviteBuddyPrompt: View {
             .cornerRadius(16)
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Level Progress Loading View
+
+struct LevelProgressLoadingView: View {
+    var body: some View {
+        HStack(spacing: 12) {
+            // Level badge placeholder
+            Circle()
+                .fill(Color(uiColor: .tertiarySystemFill))
+                .frame(width: 44, height: 44)
+
+            VStack(alignment: .leading, spacing: 6) {
+                // Level text placeholder
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color(uiColor: .tertiarySystemFill))
+                    .frame(width: 80, height: 14)
+
+                // Progress bar placeholder
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color(uiColor: .tertiarySystemFill))
+                    .frame(height: 8)
+
+                // XP text placeholder
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color(uiColor: .tertiarySystemFill))
+                    .frame(width: 100, height: 12)
+            }
+        }
+        .padding()
+        .background(Color(uiColor: .secondarySystemBackground))
+        .cornerRadius(16)
+        .redacted(reason: .placeholder)
     }
 }
 

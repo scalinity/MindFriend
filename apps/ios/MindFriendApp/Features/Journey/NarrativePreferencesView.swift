@@ -1,4 +1,5 @@
 import SwiftUI
+import Supabase
 
 /// Preferences view for customizing narrative generation
 struct NarrativePreferencesView: View {
@@ -161,6 +162,17 @@ struct NarrativePreferencesView: View {
 
 #Preview {
     NavigationStack {
-        NarrativePreferencesView(dataService: SupabaseDataService.shared)
+        NarrativePreferencesViewPreview()
+    }
+}
+
+private struct NarrativePreferencesViewPreview: View {
+    var body: some View {
+        NarrativePreferencesView(dataService: createMockDataService())
+    }
+
+    private func createMockDataService() -> SupabaseDataService {
+        let authService = SupabaseAuthService()
+        return SupabaseDataService(authService: authService)
     }
 }

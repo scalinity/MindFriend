@@ -5,35 +5,51 @@ struct PaywallView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
     @Environment(\.dismiss) var dismiss
-
-    @State private var selectedProduct: Product?
+    
+    @State private var selectedPlanType: PlanType = .individual
+    @State private var selectedBillingPeriod: BillingPeriod = .monthly
     @State private var isPurchasing = false
     @State private var error: Error?
     @State private var showError = false
-
-    // Spec 15: Business Model features
-    @State private var promoCode = ""
-    @State private var validatedPromo: PromoCode?
-    @State private var isValidatingPromo = false
     @State private var showGiftSheet = false
-    @State private var showHSAInfo = false
-
+    @State private var showEnterpriseInquiry = false
+    
+    var selectedPlan: SubscriptionPlan {
+        switch selectedBillingPeriod {
+        case .monthly:
+            return SubscriptionPlan.monthlyPlan(for: selectedPlanType) ?? .premiumMonthly
+        case .yearly:
+            return SubscriptionPlan.annualPlan(for: selectedPlanType) ?? .premiumAnnual
+        }
+    }
+    
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 32) {
                     headerSection
+                    planTypeSection
+
+                    if selectedPlanType != .enterprise && selectedPlanType != .gift {
+                        billingPeriodSection
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+
                     benefitsSection
-                    productsSection
-                    hsaFSASection
-                    promoCodeSection
                     subscribeButton
-                    giftButton
-                    restoreButton
+
+                    if selectedPlanType != .enterprise && selectedPlanType != .gift {
+                        restoreButton
+                            .transition(.opacity)
+                    }
+
                     termsSection
                     Spacer(minLength: 32)
                 }
+                .padding()
+                .animation(.easeInOut(duration: 0.25), value: selectedPlanType)
             }
+            .navigationTitle("Premium")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -45,10 +61,6 @@ struct PaywallView: View {
                     }
                 }
             }
-            .task {
-                await container.billingService.loadProducts()
-                selectedProduct = container.billingService.products.first
-            }
             .alert("Purchase Error", isPresented: $showError, presenting: error) { _ in
                 Button("OK", role: .cancel) {}
             } message: { error in
@@ -57,32 +69,131 @@ struct PaywallView: View {
             .sheet(isPresented: $showGiftSheet) {
                 GiftPurchaseSheet()
             }
-            .sheet(isPresented: $showHSAInfo) {
-                HSAFSAInfoView()
+            .sheet(isPresented: $showEnterpriseInquiry) {
+                EnterpriseInquirySheet()
             }
         }
     }
-
+    
     // MARK: - View Components
-
+    
     private var headerSection: some View {
         VStack(spacing: 16) {
             Image(systemName: "star.circle.fill")
                 .font(.system(size: 80))
                 .foregroundStyle(.yellow)
-
+            
             Text("MindFriend Premium")
                 .font(.largeTitle)
                 .fontWeight(.bold)
-
-            Text("Unlock unlimited conversations and premium features")
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
         }
-        .padding(.top)
     }
-
+    
+    private var planTypeSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Choose Your Plan")
+                .font(.title3)
+                .fontWeight(.semibold)
+            
+            // Individual
+            PaywallPlanCard(
+                planType: .individual,
+                isSelected: selectedPlanType == .individual,
+                price: priceForPlanType(.individual),
+                billingPeriod: selectedBillingPeriod
+            ) {
+                selectedPlanType = .individual
+            }
+            
+            // Couples
+            PaywallPlanCard(
+                planType: .couples,
+                isSelected: selectedPlanType == .couples,
+                price: priceForPlanType(.couples),
+                billingPeriod: selectedBillingPeriod
+            ) {
+                selectedPlanType = .couples
+            }
+            
+            // Family (Best Value)
+            PaywallPlanCard(
+                planType: .family,
+                isSelected: selectedPlanType == .family,
+                price: priceForPlanType(.family),
+                billingPeriod: selectedBillingPeriod,
+                showBestValue: true
+            ) {
+                selectedPlanType = .family
+            }
+            
+            // Enterprise
+            PaywallPlanCard(
+                planType: .enterprise,
+                isSelected: selectedPlanType == .enterprise,
+                price: priceForPlanType(.enterprise),
+                billingPeriod: selectedBillingPeriod
+            ) {
+                selectedPlanType = .enterprise
+            }
+            
+            // Gift
+            Button {
+                showGiftSheet = true
+            } label: {
+                HStack(spacing: 16) {
+                    Image(systemName: "gift.fill")
+                        .font(.title2)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 40)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Gift")
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                        Text("Gift a subscription")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .foregroundStyle(.secondary)
+                }
+                .padding()
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(12)
+            }
+        }
+    }
+    
+    private var billingPeriodSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Billing Period")
+                .font(.title3)
+                .fontWeight(.semibold)
+            
+            HStack(spacing: 12) {
+                // Monthly
+                BillingPeriodButton(
+                    period: .monthly,
+                    isSelected: selectedBillingPeriod == .monthly
+                ) {
+                    selectedBillingPeriod = .monthly
+                }
+                
+                // Annual
+                BillingPeriodButton(
+                    period: .yearly,
+                    isSelected: selectedBillingPeriod == .yearly,
+                    savings: "Save 50%"
+                ) {
+                    selectedBillingPeriod = .yearly
+                }
+            }
+        }
+    }
+    
     private var benefitsSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             BenefitRow(icon: "infinity", title: "Unlimited AI Chat", description: "No daily message limits")
@@ -90,128 +201,92 @@ struct PaywallView: View {
             BenefitRow(icon: "chart.line.uptrend.xyaxis", title: "Advanced Analytics", description: "Detailed mood insights")
             BenefitRow(icon: "bell.badge.fill", title: "Smart Reminders", description: "Personalized nudges")
         }
-        .padding(.horizontal)
     }
-
-    private var productsSection: some View {
-        VStack(spacing: 12) {
-            ForEach(container.billingService.products, id: \.id) { product in
-                ProductCard(
-                    product: product,
-                    isSelected: selectedProduct?.id == product.id,
-                    onSelect: { selectedProduct = product }
-                )
-            }
-        }
-        .padding(.horizontal)
-    }
-
-    private var hsaFSASection: some View {
-        Button {
-            showHSAInfo = true
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "heart.text.square.fill")
-                    .foregroundStyle(.blue)
-
-                Text("HSA/FSA Eligible")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .padding()
-            .background(Color.blue.opacity(0.05))
-            .cornerRadius(8)
-            .foregroundStyle(.primary)
-        }
-        .padding(.horizontal)
-        .accessibilityLabel("HSA/FSA eligibility information button")
-    }
-
-    private var promoCodeSection: some View {
-        PromoCodeField(
-            billingService: container.billingService,
-            code: $promoCode,
-            validatedPromo: $validatedPromo,
-            isValidating: $isValidatingPromo
-        )
-        .padding(.horizontal)
-    }
-
+    
     private var subscribeButton: some View {
         Button {
-            purchase()
+            if selectedPlanType == .enterprise {
+                showEnterpriseInquiry = true
+            } else {
+                purchase()
+            }
         } label: {
             if isPurchasing {
                 ProgressView()
                     .tint(.white)
+            } else if selectedPlanType == .enterprise {
+                Text("Contact Sales")
+                    .fontWeight(.semibold)
             } else {
-                Text("Subscribe Now")
+                Text("Subscribe to \(selectedPlan.displayPrice)/\(selectedBillingPeriod == .monthly ? "month" : "year")")
+                    .fontWeight(.semibold)
             }
         }
         .font(.headline)
         .frame(maxWidth: .infinity)
         .padding()
-        .background(selectedProduct != nil ? Color.accentColor : Color.secondary)
+        .background(Color.accentColor)
         .foregroundStyle(.white)
         .cornerRadius(12)
-        .disabled(selectedProduct == nil || isPurchasing)
-        .padding(.horizontal)
-        .accessibilityLabel("Subscribe now button")
+        .disabled(isPurchasing && selectedPlanType != .enterprise)
     }
-
-    private var giftButton: some View {
-        Button {
-            showGiftSheet = true
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "gift.fill")
-                Text("Give as Gift")
-                    .fontWeight(.semibold)
-            }
-            .frame(maxWidth: .infinity)
-            .padding()
-            .background(Color.pink.opacity(0.1))
-            .foregroundStyle(Color.pink)
-            .cornerRadius(12)
-        }
-        .padding(.horizontal)
-        .accessibilityLabel("Give subscription as gift button")
-    }
-
+    
     private var restoreButton: some View {
         Button("Restore Purchases") {
             restorePurchases()
         }
         .font(.subheadline)
         .foregroundStyle(.secondary)
-        .accessibilityLabel("Restore purchases button")
     }
-
+    
     private var termsSection: some View {
         Text("Subscription automatically renews unless cancelled at least 24 hours before the end of the current period. Manage subscriptions in Settings.")
             .font(.caption)
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
-            .padding(.horizontal)
     }
+    
+    // MARK: - Helpers
+    
+    private func priceForPlanType(_ planType: PlanType) -> String {
+        // Enterprise shows "Custom" instead of a price
+        if planType == .enterprise {
+            return "Custom"
+        }
 
+        let plan: SubscriptionPlan
+
+        switch (planType, selectedBillingPeriod) {
+        case (.individual, .monthly):
+            plan = SubscriptionPlan.premiumMonthly
+        case (.individual, .yearly):
+            plan = SubscriptionPlan.premiumAnnual
+        case (.couples, .monthly):
+            plan = SubscriptionPlan.couplesMonthly
+        case (.couples, .yearly):
+            plan = SubscriptionPlan.couplesAnnual
+        case (.family, .monthly):
+            plan = SubscriptionPlan.familyMonthly
+        case (.family, .yearly):
+            plan = SubscriptionPlan.familyAnnual
+        default:
+            return "$0.00"
+        }
+
+        return plan.displayPrice
+    }
+    
     private func purchase() {
-        guard let product = selectedProduct else { return }
-
         isPurchasing = true
         Task {
             do {
-                // Spec 15: Pass validated promo code if available
-                try await container.billingService.purchase(
-                    product,
-                    promoCode: validatedPromo?.code
-                )
+                // In real implementation, load actual StoreKit product
+                // For now, using mock plan
+                guard let storeProduct = await loadStoreKitProduct(for: selectedPlan) else {
+                    throw BillingError.productNotFound
+                }
+                
+                try await container.billingService.purchase(storeProduct, promoCode: nil)
                 await MainActor.run {
                     appState.updateEntitlements(.premium)
                     dismiss()
@@ -228,7 +303,14 @@ struct PaywallView: View {
             isPurchasing = false
         }
     }
-
+    
+    private func loadStoreKitProduct(for plan: SubscriptionPlan) async -> Product? {
+        guard let productId = plan.appStoreProductId else { return nil }
+        // Load actual StoreKit product
+        // This is a placeholder - in real implementation, use StoreKit 2
+        return container.billingService.products.first { $0.id == productId }
+    }
+    
     private func restorePurchases() {
         isPurchasing = true
         Task {
@@ -246,6 +328,133 @@ struct PaywallView: View {
             }
             isPurchasing = false
         }
+    }
+}
+
+// MARK: - Supporting Views
+
+struct PaywallPlanCard: View {
+    let planType: PlanType
+    let isSelected: Bool
+    let price: String
+    let billingPeriod: BillingPeriod
+    var showBestValue: Bool = false
+    let onSelect: () -> Void
+    
+    var body: some View {
+        Button(action: onSelect) {
+            HStack(spacing: 12) {
+                // Icon
+                Image(systemName: iconForPlanType(planType))
+                    .font(.title2)
+                    .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+                    .frame(width: 36)
+
+                // Plan info
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 8) {
+                        Text(planType.displayName)
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+
+                        if showBestValue {
+                            Text("Best Value")
+                                .font(.caption2)
+                                .fontWeight(.semibold)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 2)
+                                .background(Color.green)
+                                .foregroundStyle(.white)
+                                .cornerRadius(4)
+                        }
+                    }
+
+                    Text(planType.description)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                // Price - only show for non-enterprise plans
+                if planType != .enterprise {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(price)
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(.primary)
+
+                        Text(billingPeriod == .monthly ? "/month" : "/year")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                // Selection indicator
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+                    .font(.title3)
+            }
+            .padding()
+            .background(
+                isSelected
+                    ? Color.accentColor.opacity(0.1)
+                    : Color(.secondarySystemBackground)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+            )
+            .cornerRadius(12)
+        }
+        .buttonStyle(.plain)
+    }
+    
+    private func iconForPlanType(_ type: PlanType) -> String {
+        switch type {
+        case .individual: return "person.fill"
+        case .couples: return "heart.fill"
+        case .family: return "figure.2.and.child.holdinghands"
+        case .enterprise: return "building.2.fill"
+        case .gift: return "gift.fill"
+        }
+    }
+}
+
+struct BillingPeriodButton: View {
+    let period: BillingPeriod
+    let isSelected: Bool
+    var savings: String?
+    let onSelect: () -> Void
+    
+    var body: some View {
+        Button(action: onSelect) {
+            VStack(spacing: 4) {
+                Text(period.displayName)
+                    .font(.headline)
+                    .foregroundStyle(isSelected ? .primary : .secondary)
+
+                if let savings = savings {
+                    Text(savings)
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.green)
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .padding(.vertical, 16)
+            .padding(.horizontal)
+            .background(
+                isSelected
+                    ? Color.accentColor.opacity(0.1)
+                    : Color(.secondarySystemBackground)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+            )
+            .cornerRadius(12)
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -269,70 +478,6 @@ struct BenefitRow: View {
                     .foregroundStyle(.secondary)
             }
         }
-    }
-}
-
-struct ProductCard: View {
-    let product: Product
-    let isSelected: Bool
-    let onSelect: () -> Void
-
-    var isBestValue: Bool {
-        product.id.contains("yearly")
-    }
-
-    var body: some View {
-        Button(action: onSelect) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(product.displayName)
-                            .font(.headline)
-
-                        if isBestValue {
-                            Text("Best Value")
-                                .font(.caption)
-                                .fontWeight(.semibold)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 2)
-                                .background(Color.green)
-                                .foregroundStyle(.white)
-                                .cornerRadius(4)
-                        }
-                    }
-
-                    Text(product.description)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                VStack(alignment: .trailing) {
-                    Text(product.displayPrice)
-                        .font(.title3)
-                        .fontWeight(.bold)
-
-                    if isBestValue {
-                        Text("per year")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text("per month")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .padding()
-            .background(isSelected ? Color.accentColor.opacity(0.1) : Color(.secondarySystemBackground))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
-            )
-            .cornerRadius(12)
-        }
-        .buttonStyle(.plain)
     }
 }
 

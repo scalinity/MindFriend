@@ -125,21 +125,21 @@ struct DifficultySettingsView: View {
 
                 Section {
                     VStack(alignment: .leading, spacing: 12) {
-                        InfoRow(
+                        DifficultyInfoRow(
                             icon: "leaf.fill",
                             title: "Rest Mode",
                             description: "Shorter, gentler activities",
                             color: .blue
                         )
 
-                        InfoRow(
+                        DifficultyInfoRow(
                             icon: "circle.grid.2x2.fill",
                             title: "Normal Mode",
                             description: "Standard difficulty and duration",
                             color: .green
                         )
 
-                        InfoRow(
+                        DifficultyInfoRow(
                             icon: "flame.fill",
                             title: "Challenge Mode",
                             description: "Longer, more intensive activities",
@@ -222,7 +222,7 @@ struct DifficultySettingsView: View {
     }
 }
 
-struct InfoRow: View {
+struct DifficultyInfoRow: View {
     let icon: String
     let title: String
     let description: String

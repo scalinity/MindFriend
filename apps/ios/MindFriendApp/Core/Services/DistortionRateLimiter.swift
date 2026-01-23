@@ -10,7 +10,6 @@ import Foundation
 
 /// Rate limiter for distortion prompts
 /// Enforces: < 3 prompts per 5-minute session, 60s cooldown after dismiss
-@MainActor
 final class DistortionRateLimiter: ObservableObject {
 
     // MARK: - Configuration

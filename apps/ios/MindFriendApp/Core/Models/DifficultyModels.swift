@@ -244,6 +244,15 @@ struct CapacityOverride: Codable, Identifiable {
             case .challenge: return "flame.fill"
             }
         }
+
+        /// Maps override level to capacity level
+        var capacityLevel: CapacityLevel {
+            switch self {
+            case .rest: return .low
+            case .normal: return .moderate
+            case .challenge: return .high
+            }
+        }
     }
 
     /// Whether this override is still active

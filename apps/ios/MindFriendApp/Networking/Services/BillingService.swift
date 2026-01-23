@@ -374,6 +374,7 @@ final class BillingService: ObservableObject {
                 let familyId: String
                 let userId: String
                 let invitedEmail: String?
+                let invitedPhone: String?
                 let status: FamilyMember.MemberStatus
                 let invitedAt: Date
                 let joinedAt: Date?
@@ -394,6 +395,7 @@ final class BillingService: ObservableObject {
                     case id
                     case familyId = "family_id"
                     case userId = "user_id"
+                    case invitedPhone = "invited_phone"
                     case invitedEmail = "invited_email"
                     case status
                     case invitedAt = "invited_at"
@@ -417,6 +419,7 @@ final class BillingService: ObservableObject {
                     familyId: member.familyId,
                     userId: member.userId,
                     invitedEmail: member.invitedEmail,
+                    invitedPhone: member.invitedPhone,
                     status: member.status,
                     invitedAt: member.invitedAt,
                     joinedAt: member.joinedAt,
@@ -823,6 +826,7 @@ enum BillingError: Error, LocalizedError, Equatable {
     case noActiveSubscription
     case hsaReceiptGenerationFailed
     case lomnGenerationFailed
+    case productNotFound
 
     var errorDescription: String? {
         switch self {
@@ -856,6 +860,8 @@ enum BillingError: Error, LocalizedError, Equatable {
             return "Failed to generate HSA/FSA receipt"
         case .lomnGenerationFailed:
             return "Failed to generate Letter of Medical Necessity"
+        case .productNotFound:
+            return "Product not found in the App Store"
         }
     }
 }

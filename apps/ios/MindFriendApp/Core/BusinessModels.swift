@@ -73,7 +73,7 @@ struct SubscriptionPlan: Codable, Identifiable, Equatable, Hashable {
         id: UUID(uuidString: "00000000-0000-0000-0000-000000000001") ?? UUID(),
         name: "Premium Monthly",
         description: "Unlimited access",
-        priceCents: 999,
+        priceCents: 1299,
         currency: "USD",
         billingPeriod: .monthly,
         billingPeriodMonths: 1,
@@ -91,7 +91,7 @@ struct SubscriptionPlan: Codable, Identifiable, Equatable, Hashable {
         id: UUID(uuidString: "00000000-0000-0000-0000-000000000002") ?? UUID(),
         name: "Premium Annual",
         description: "Save 2 months with annual billing",
-        priceCents: 7999,
+        priceCents: 7799,
         currency: "USD",
         billingPeriod: .yearly,
         billingPeriodMonths: 12,
@@ -109,7 +109,7 @@ struct SubscriptionPlan: Codable, Identifiable, Equatable, Hashable {
         id: UUID(uuidString: "00000000-0000-0000-0000-000000000003") ?? UUID(),
         name: "Family Annual",
         description: "Up to 6 family members",
-        priceCents: 11999,
+        priceCents: 14999,
         currency: "USD",
         billingPeriod: .yearly,
         billingPeriodMonths: 12,
@@ -122,6 +122,116 @@ struct SubscriptionPlan: Codable, Identifiable, Equatable, Hashable {
         isActive: true,
         isVisible: true
     )
+    
+    static let couplesMonthly = SubscriptionPlan(
+        id: UUID(uuidString: "00000000-0000-0000-0000-000000000004") ?? UUID(),
+        name: "Couples Monthly",
+        description: "For 2 people",
+        priceCents: 1999,
+        currency: "USD",
+        billingPeriod: .monthly,
+        billingPeriodMonths: 1,
+        planType: .couples,
+        maxSeats: 2,
+        features: .premium,
+        aiChatLimit: nil,
+        exerciseLimit: nil,
+        appStoreProductId: "com.mindfriend.couples.monthly",
+        isActive: true,
+        isVisible: true
+    )
+    
+    static let couplesAnnual = SubscriptionPlan(
+        id: UUID(uuidString: "00000000-0000-0000-0000-000000000005") ?? UUID(),
+        name: "Couples Annual",
+        description: "For 2 people - Save 50%",
+        priceCents: 11999,
+        currency: "USD",
+        billingPeriod: .yearly,
+        billingPeriodMonths: 12,
+        planType: .couples,
+        maxSeats: 2,
+        features: .premium,
+        aiChatLimit: nil,
+        exerciseLimit: nil,
+        appStoreProductId: "com.mindfriend.couples.annual",
+        isActive: true,
+        isVisible: true
+    )
+    
+    static let familyMonthly = SubscriptionPlan(
+        id: UUID(uuidString: "00000000-0000-0000-0000-000000000006") ?? UUID(),
+        name: "Family Monthly",
+        description: "Up to 6 people",
+        priceCents: 2499,
+        currency: "USD",
+        billingPeriod: .monthly,
+        billingPeriodMonths: 1,
+        planType: .family,
+        maxSeats: 6,
+        features: .premium,
+        aiChatLimit: nil,
+        exerciseLimit: nil,
+        appStoreProductId: "com.mindfriend.family.monthly",
+        isActive: true,
+        isVisible: true
+    )
+    
+    static let enterpriseMonthly = SubscriptionPlan(
+        id: UUID(uuidString: "00000000-0000-0000-0000-000000000007") ?? UUID(),
+        name: "Enterprise Monthly",
+        description: "For organizations",
+        priceCents: 9999,
+        currency: "USD",
+        billingPeriod: .monthly,
+        billingPeriodMonths: 1,
+        planType: .enterprise,
+        maxSeats: nil,
+        features: .premium,
+        aiChatLimit: nil,
+        exerciseLimit: nil,
+        appStoreProductId: "com.mindfriend.enterprise.monthly",
+        isActive: true,
+        isVisible: true
+    )
+    
+    static let enterpriseAnnual = SubscriptionPlan(
+        id: UUID(uuidString: "00000000-0000-0000-0000-000000000008") ?? UUID(),
+        name: "Enterprise Annual",
+        description: "For organizations - Save 50%",
+        priceCents: 79999,
+        currency: "USD",
+        billingPeriod: .yearly,
+        billingPeriodMonths: 12,
+        planType: .enterprise,
+        maxSeats: nil,
+        features: .premium,
+        aiChatLimit: nil,
+        exerciseLimit: nil,
+        appStoreProductId: "com.mindfriend.enterprise.annual",
+        isActive: true,
+        isVisible: true
+    )
+    
+    /// All available plans grouped by plan type
+    static var allPlans: [PlanType: [SubscriptionPlan]] {
+        [
+            .individual: [premiumMonthly, premiumAnnual],
+            .couples: [couplesMonthly, couplesAnnual],
+            .family: [familyMonthly, familyAnnual],
+            .enterprise: [enterpriseMonthly, enterpriseAnnual]
+        ]
+    }
+    
+    /// Get monthly plan for a plan type
+    static func monthlyPlan(for planType: PlanType) -> SubscriptionPlan? {
+        allPlans[planType]?.first { $0.billingPeriod == .monthly }
+    }
+    
+    /// Get annual plan for a plan type
+    static func annualPlan(for planType: PlanType) -> SubscriptionPlan? {
+        allPlans[planType]?.first { $0.billingPeriod == .yearly }
+    }
 }
 
 // MARK: - Plan Features

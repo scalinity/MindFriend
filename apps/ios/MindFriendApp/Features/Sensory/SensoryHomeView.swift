@@ -51,7 +51,7 @@ struct SensoryHomeView: View {
                             )
                         }
 
-                        NavigationLink(destination: AudioLibraryView()) {
+                        NavigationLink(destination: SensoryAudioLibraryView()) {
                             ModalityCard(
                                 title: "Audio",
                                 subtitle: "Listen to nature sounds",

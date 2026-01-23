@@ -132,6 +132,8 @@ struct CapacityDetailSheet: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var difficultyService: DifficultyService
     @State private var showSettings = false
+    @State private var errorMessage: String?
+    @State private var showError = false
 
     var body: some View {
         NavigationView {
@@ -230,7 +232,12 @@ struct CapacityDetailSheet: View {
 
                             Button {
                                 Task {
-                                    try? await difficultyService.refreshCapacity()
+                                    do {
+                                        _ = try await difficultyService.refreshCapacity()
+                                    } catch {
+                                        errorMessage = error.localizedDescription
+                                        showError = true
+                                    }
                                 }
                             } label: {
                                 if difficultyService.isCalculating {
@@ -249,6 +256,14 @@ struct CapacityDetailSheet: View {
                             }
                             .disabled(difficultyService.isCalculating)
                             .padding(.horizontal, 32)
+
+                            if let errorMessage = errorMessage {
+                                Text(errorMessage)
+                                    .font(.caption)
+                                    .foregroundColor(.red)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal, 32)
+                            }
                         }
                         .padding(.top, 48)
                     }
@@ -267,6 +282,13 @@ struct CapacityDetailSheet: View {
             .sheet(isPresented: $showSettings) {
                 DifficultySettingsView()
                     .environmentObject(difficultyService)
+            }
+            .alert("Calculation Error", isPresented: $showError) {
+                Button("OK") {
+                    showError = false
+                }
+            } message: {
+                Text(errorMessage ?? "Failed to calculate capacity")
             }
         }
     }

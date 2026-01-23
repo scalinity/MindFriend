@@ -37,8 +37,8 @@ export interface CapacityInput {
 export interface SleepData {
   lastNightHours: number | null;
   averageHours: number;
-  quality: number | null;  // 0-100 sleep quality score
-  deficit7d: number;        // Accumulated sleep deficit in hours
+  quality: number | null; // 0-100 sleep quality score
+  deficit7d: number; // Accumulated sleep deficit in hours
 }
 
 export interface MoodData {
@@ -103,6 +103,7 @@ export interface CapacityOverrideRow {
 
 // Type alias for convenience
 export type CapacityOverride = CapacityOverrideRow;
+export type CapacityLevel = "low" | "moderate" | "high";
 
 export interface Mood {
   id: string;

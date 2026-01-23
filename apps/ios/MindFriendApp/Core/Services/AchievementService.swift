@@ -46,6 +46,7 @@ final class AchievementService: ObservableObject {
     @Published private(set) var weeklyChallenges: [WeeklyChallenge] = []
     @Published private(set) var userChallengeProgress: [UserChallengeProgress] = []
     @Published private(set) var newlyEarnedBadges: [AchievementBadge] = []
+    @Published private(set) var lastLoadTime: Date?
     
     // Celebration state (NEW)
     @Published var pendingCelebration: LevelUpEvent?
@@ -57,11 +58,13 @@ final class AchievementService: ObservableObject {
     // MARK: - Private
 
     private let supabase: SupabaseClient
+    private let authService: SupabaseAuthService
 
     // MARK: - Init
 
-    init(supabase: SupabaseClient) {
+    init(supabase: SupabaseClient, authService: SupabaseAuthService) {
         self.supabase = supabase
+        self.authService = authService
     }
 
     // MARK: - Experience & Level
@@ -71,47 +74,65 @@ final class AchievementService: ObservableObject {
             throw AchievementError.notAuthenticated
         }
 
-        // Fetch from profiles table (same source as Home screen) for consistency
-        struct ProfileStats: Decodable {
-            let stats: UserStats?
-            
-            enum CodingKeys: String, CodingKey {
-                case stats
+        do {
+            // Query user_stats table directly for better error handling
+            struct UserStatsRow: Decodable {
+                let xpTotal: Int
+                let level: Int
+                let xpThisWeek: Int
+                
+                enum CodingKeys: String, CodingKey {
+                    case xpTotal = "xp_total"
+                    case level
+                    case xpThisWeek = "xp_this_week"
+                }
             }
-        }
-        
-        let profile: ProfileStats = try await supabase
-            .from("profiles")
-            .select("stats")
-            .eq("id", value: userId)
-            .single()
-            .execute()
-            .value
-        
-        // Build UserExperience from profile stats
-        if let stats = profile.stats {
-            self.userExperience = UserExperience(
-                totalXp: stats.xpTotal,
-                currentLevel: stats.level,
-                xpToNextLevel: UserLevel.xpThresholds[min(stats.level, 49)] - stats.xpTotal,
-                dailyXp: 0,  // Not tracked in profile stats
-                weeklyXp: stats.xpThisWeek,
-                prestigeLevel: 0,
-                xpMultiplier: 1.0,
-                multiplierExpiresAt: nil
-            )
-        } else {
-            // Default for new users
-            self.userExperience = UserExperience(
-                totalXp: 0,
-                currentLevel: 1,
-                xpToNextLevel: 100,
-                dailyXp: 0,
-                weeklyXp: 0,
-                prestigeLevel: 0,
-                xpMultiplier: 1.0,
-                multiplierExpiresAt: nil
-            )
+            
+            let statsRow: UserStatsRow = try await supabase
+                .from("user_stats")
+                .select("xp_total, level, xp_this_week")
+                .eq("user_id", value: userId)
+                .single()
+                .execute()
+                .value
+
+            // FIX: Use next level's threshold (level + 1)
+            let nextLevelIndex = min(statsRow.level + 1, 50)
+            let xpToNext = UserLevel.xpThresholds[nextLevelIndex] - statsRow.xpTotal
+
+            // FIX: Explicit MainActor wrapping
+            await MainActor.run {
+                self.userExperience = UserExperience(
+                    totalXp: statsRow.xpTotal,
+                    currentLevel: statsRow.level,
+                    xpToNextLevel: xpToNext,
+                    dailyXp: 0,
+                    weeklyXp: statsRow.xpThisWeek,
+                    prestigeLevel: 0,
+                    xpMultiplier: 1.0,
+                    multiplierExpiresAt: nil
+                )
+            }
+
+            Log.data.debug("Loaded user experience: Level \(statsRow.level), XP \(statsRow.xpTotal)")
+        } catch {
+            // If user_stats row doesn't exist, use default values
+            Log.data.warning("Failed to load user stats, using defaults: \(error.localizedDescription)")
+            
+            await MainActor.run {
+                self.userExperience = UserExperience(
+                    totalXp: 0,
+                    currentLevel: 1,
+                    xpToNextLevel: 100,
+                    dailyXp: 0,
+                    weeklyXp: 0,
+                    prestigeLevel: 0,
+                    xpMultiplier: 1.0,
+                    multiplierExpiresAt: nil
+                )
+            }
+            
+            // Don't throw - we have fallback data
         }
     }
 
@@ -456,10 +477,16 @@ final class AchievementService: ObservableObject {
 
             _ = try await (badgeProgressTask, skillProgressTask, challengeProgressTask)
 
-            isLoading = false
+            await MainActor.run {
+                self.lastLoadTime = Date()
+                self.isLoading = false
+            }
         } catch {
-            self.error = error
-            isLoading = false
+            Log.data.error("Failed to load achievement data", error: error)
+            await MainActor.run {
+                self.error = error
+                self.isLoading = false
+            }
         }
     }
 
@@ -567,6 +594,7 @@ struct LevelUpEvent: Identifiable {
 
 enum AchievementError: LocalizedError {
     case notAuthenticated
+    case statsNotFound
     case noShieldsAvailable
     case badgeNotFound
     case operationFailed(String)
@@ -575,6 +603,8 @@ enum AchievementError: LocalizedError {
         switch self {
         case .notAuthenticated:
             return "You must be signed in to access achievements"
+        case .statsNotFound:
+            return "Stats not found"
         case .noShieldsAvailable:
             return "No streak shields available"
         case .badgeNotFound:

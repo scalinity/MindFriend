@@ -149,6 +149,11 @@ struct VoiceModeView: View {
         .onChange(of: voiceService.transcribedText) { _, newText in
             assistantTranscript = newText
         }
+        .onChange(of: voiceService.isIdleDisconnected) { _, isIdleDisconnected in
+            if isIdleDisconnected {
+                _ = stateMachine.send(.idleTimeoutReached)
+            }
+        }
     }
 
     // MARK: - Background
@@ -404,10 +409,18 @@ struct VoiceModeView: View {
     private var connectionStatusColor: Color {
         switch voiceService.connectionState {
         case .connected:
+            // Check if we're idle disconnected (paused state)
+            if voiceService.isIdleDisconnected {
+                return .blue.opacity(0.5)
+            }
             return .green
         case .connecting, .reconnecting:
             return .orange
         case .disconnected:
+            // Check if we're in paused state (idle disconnect with mic still listening)
+            if voiceService.isIdleDisconnected {
+                return .blue.opacity(0.5)
+            }
             return .gray
         case .error:
             return .red
@@ -423,6 +436,10 @@ struct VoiceModeView: View {
         case .reconnecting:
             return "Reconnecting..."
         case .disconnected:
+            // Check if we're in paused state
+            if voiceService.isIdleDisconnected {
+                return "Paused"
+            }
             return "Disconnected"
         case .error(let message):
             return "Error: \(message)"
@@ -529,6 +546,10 @@ struct VoiceModeView: View {
             Task {
                 await startVoiceSession()
             }
+
+        case .idleDisconnected:
+            // Tapping while paused triggers reconnection (same as speaking)
+            _ = stateMachine.send(.tapStart)
 
         case .error:
             // Retry connection

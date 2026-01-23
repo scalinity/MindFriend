@@ -42,7 +42,10 @@ private struct ConnectionStatusPayload: Encodable {
 /// Handles authorization, data fetching, and syncing biometrics to the backend
 @MainActor
 final class HealthKitService: ObservableObject {
-    private let healthStore = HKHealthStore()
+    static let shared = HealthKitService()
+
+    /// Exposed for HRV queries - use via helper methods when possible
+    let healthStore = HKHealthStore()
     private let logger = Logger(subsystem: "com.mindfriend", category: "HealthKit")
 
     @Published var isAuthorized = false
@@ -81,7 +84,7 @@ final class HealthKitService: ObservableObject {
 
     // MARK: - Authorization
 
-    var isHealthKitAvailable: Bool {
+    nonisolated var isHealthKitAvailable: Bool {
         HKHealthStore.isHealthDataAvailable()
     }
 
