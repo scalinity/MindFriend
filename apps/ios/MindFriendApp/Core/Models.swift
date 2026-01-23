@@ -4339,7 +4339,11 @@ struct WeeklyStory: Codable, Identifiable, Equatable {
     let cards: [StoryCard]
     let createdAt: Date
     let updatedAt: Date
-    
+
+    // Personalization fields (added in migration 20260123070000)
+    var userRating: Int?        // -1 (thumbs down), 1 (thumbs up), nil (no rating)
+    var isFavorite: Bool = false
+
     enum CodingKeys: String, CodingKey {
         case id
         case userId = "user_id"
@@ -4347,6 +4351,58 @@ struct WeeklyStory: Codable, Identifiable, Equatable {
         case cards
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case userRating = "user_rating"
+        case isFavorite = "is_favorite"
+    }
+
+    /// Formatted week range for display (e.g., "Jan 1 - Jan 7" or "Dec 28, 2025 - Jan 3, 2026")
+    var weekRangeFormatted: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+
+        guard let startDate = formatter.date(from: weekStart) else {
+            return weekStart
+        }
+
+        // Calculate end date (6 days after start)
+        let endDate = Calendar.current.date(byAdding: .day, value: 6, to: startDate) ?? startDate
+
+        let displayFormatter = DateFormatter()
+
+        // Check if year boundary is crossed
+        let startYear = Calendar.current.component(.year, from: startDate)
+        let endYear = Calendar.current.component(.year, from: endDate)
+
+        if startYear != endYear {
+            displayFormatter.dateFormat = "MMM d, yyyy"
+            let startStr = displayFormatter.string(from: startDate)
+            let endStr = displayFormatter.string(from: endDate)
+            return "\(startStr) - \(endStr)"
+        } else {
+            displayFormatter.dateFormat = "MMM d"
+            let startStr = displayFormatter.string(from: startDate)
+            let endStr = displayFormatter.string(from: endDate)
+            return "\(startStr) - \(endStr)"
+        }
+    }
+
+    /// Preview text from first card (truncated to 100 chars)
+    var previewText: String {
+        guard let firstCard = cards.first else {
+            return "Your weekly wellness story"
+        }
+
+        // Extract text from card data
+        let text: String
+        if let headline = firstCard.data.headline {
+            text = headline
+        } else if let message = firstCard.data.message {
+            text = message
+        } else {
+            text = "Your weekly wellness story"
+        }
+
+        return text.count > 100 ? String(text.prefix(100)) + "..." : text
     }
 }
 
@@ -4526,6 +4582,97 @@ extension Date {
         formatter.timeZone = TimeZone(identifier: "UTC")
         return formatter.string(from: weekStartMonday)
     }
+}
+
+/// User preferences for narrative generation (tone, length, metrics inclusion)
+struct NarrativePreferences: Codable, Identifiable, Equatable {
+    let userId: UUID
+    var preferredTone: ToneOption
+    var preferredLength: LengthOption
+    var includeMetrics: Bool
+    var generationFrequency: FrequencyOption
+    let createdAt: Date
+    var updatedAt: Date
+
+    var id: UUID { userId }
+
+    enum ToneOption: String, Codable, CaseIterable, Equatable {
+        case warm
+        case professional
+        case playful
+
+        var displayName: String {
+            switch self {
+            case .warm: return "Warm & Encouraging"
+            case .professional: return "Professional & Clear"
+            case .playful: return "Playful & Lighthearted"
+            }
+        }
+
+        var description: String {
+            switch self {
+            case .warm: return "Supportive and compassionate language"
+            case .professional: return "Direct and objective insights"
+            case .playful: return "Fun and conversational style"
+            }
+        }
+    }
+
+    enum LengthOption: String, Codable, CaseIterable, Equatable {
+        case brief
+        case standard
+        case detailed
+
+        var displayName: String {
+            switch self {
+            case .brief: return "Brief"
+            case .standard: return "Standard"
+            case .detailed: return "Detailed"
+            }
+        }
+
+        var cardCountRange: String {
+            switch self {
+            case .brief: return "2-3 cards"
+            case .standard: return "3-5 cards"
+            case .detailed: return "5-7 cards"
+            }
+        }
+    }
+
+    enum FrequencyOption: String, Codable, CaseIterable, Equatable {
+        case weekly
+        case biweekly
+        case monthly
+
+        var displayName: String {
+            switch self {
+            case .weekly: return "Weekly"
+            case .biweekly: return "Every 2 Weeks"
+            case .monthly: return "Monthly"
+            }
+        }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case preferredTone = "preferred_tone"
+        case preferredLength = "preferred_length"
+        case includeMetrics = "include_metrics"
+        case generationFrequency = "generation_frequency"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+
+    static let `default` = NarrativePreferences(
+        userId: UUID(),
+        preferredTone: .warm,
+        preferredLength: .standard,
+        includeMetrics: true,
+        generationFrequency: .weekly,
+        createdAt: Date(),
+        updatedAt: Date()
+    )
 }
 
 // MARK: - Circle Habits
