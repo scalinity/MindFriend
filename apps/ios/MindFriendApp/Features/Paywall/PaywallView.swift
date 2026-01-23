@@ -14,6 +14,10 @@ struct PaywallView: View {
     @State private var showGiftSheet = false
     @State private var showEnterpriseInquiry = false
     
+    private var billingService: BillingService {
+        container.billingService
+    }
+
     var selectedPlan: SubscriptionPlan {
         switch selectedBillingPeriod {
         case .monthly:
@@ -22,7 +26,7 @@ struct PaywallView: View {
             return SubscriptionPlan.annualPlan(for: selectedPlanType) ?? .premiumAnnual
         }
     }
-    
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -71,6 +75,9 @@ struct PaywallView: View {
             }
             .sheet(isPresented: $showEnterpriseInquiry) {
                 EnterpriseInquirySheet()
+            }
+            .task {
+                await billingService.loadProducts()
             }
         }
     }
@@ -247,33 +254,24 @@ struct PaywallView: View {
     }
     
     // MARK: - Helpers
-    
-    private func priceForPlanType(_ planType: PlanType) -> String {
-        // Enterprise shows "Custom" instead of a price
-        if planType == .enterprise {
-            return "Custom"
+
+    private func priceForPlanType(_ planType: PlanType) -> String? {
+        // Enterprise and Gift don't show prices
+        if planType == .enterprise || planType == .gift {
+            return nil
         }
 
-        let plan: SubscriptionPlan
-
-        switch (planType, selectedBillingPeriod) {
-        case (.individual, .monthly):
-            plan = SubscriptionPlan.premiumMonthly
-        case (.individual, .yearly):
-            plan = SubscriptionPlan.premiumAnnual
-        case (.couples, .monthly):
-            plan = SubscriptionPlan.couplesMonthly
-        case (.couples, .yearly):
-            plan = SubscriptionPlan.couplesAnnual
-        case (.family, .monthly):
-            plan = SubscriptionPlan.familyMonthly
-        case (.family, .yearly):
-            plan = SubscriptionPlan.familyAnnual
-        default:
-            return "$0.00"
+        // Try StoreKit product first
+        if let product = billingService.product(for: planType, billingPeriod: selectedBillingPeriod) {
+            return product.displayPrice
         }
 
-        return plan.displayPrice
+        // Fall back to static plan prices (for simulator/development)
+        let plan: SubscriptionPlan? = selectedBillingPeriod == .monthly
+            ? SubscriptionPlan.monthlyPlan(for: planType)
+            : SubscriptionPlan.annualPlan(for: planType)
+
+        return plan?.displayPrice
     }
     
     private func purchase() {
@@ -336,11 +334,11 @@ struct PaywallView: View {
 struct PaywallPlanCard: View {
     let planType: PlanType
     let isSelected: Bool
-    let price: String
-    let billingPeriod: BillingPeriod
+    var price: String?
+    var billingPeriod: BillingPeriod = .monthly
     var showBestValue: Bool = false
     let onSelect: () -> Void
-    
+
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: 12) {
@@ -376,13 +374,12 @@ struct PaywallPlanCard: View {
 
                 Spacer()
 
-                // Price - only show for non-enterprise plans
-                if planType != .enterprise {
+                // Price display (not for enterprise/gift)
+                if let price = price {
                     VStack(alignment: .trailing, spacing: 2) {
                         Text(price)
-                            .font(.system(size: 18, weight: .bold))
+                            .font(.system(size: 17, weight: .bold))
                             .foregroundStyle(.primary)
-
                         Text(billingPeriod == .monthly ? "/month" : "/year")
                             .font(.caption)
                             .foregroundStyle(.secondary)

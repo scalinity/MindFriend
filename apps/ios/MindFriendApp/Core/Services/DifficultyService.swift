@@ -120,39 +120,13 @@ final class DifficultyService: ObservableObject {
 
             // Call Edge Function with timeout and retry
             // SECURITY FIX: Retry with session refresh on 401
-            // TEMPORARY: Use diagnostic function to debug auth issues
             let response: CalculateCapacityResponse = try await withRetry(maxAttempts: Self.maxRetryAttempts) { [self] in
                 do {
-                    // DIAGNOSTIC: Call test-auth-diagnostic to see actual auth error
-                    do {
-                        let diagnosticResponse: Data = try await withTimeout(seconds: Self.requestTimeoutSeconds) {
-                            try await self.supabase.functions
-                                .invoke("test-auth-diagnostic", options: FunctionInvokeOptions(body: request))
-                        }
-                        // Success case - should not happen if auth is broken
-                        if let jsonString = String(data: diagnosticResponse, encoding: .utf8) {
-                            print("[DifficultyService] DIAGNOSTIC SUCCESS: \(jsonString)")
-                        }
-                    } catch {
-                        // Extract error data from FunctionsError
-                        print("[DifficultyService] DIAGNOSTIC ERROR: \(error)")
-                        if case let FunctionsError.httpError(code, data) = error {
-                            if let jsonString = String(data: data, encoding: .utf8) {
-                                print("[DifficultyService] DIAGNOSTIC RESPONSE (HTTP \(code)): \(jsonString)")
-                            }
-                        }
-                    }
-
-                    // Now try the actual call
                     return try await withTimeout(seconds: Self.requestTimeoutSeconds) {
                         try await self.supabase.functions
                             .invoke("calculate-capacity", options: FunctionInvokeOptions(body: request))
                     }
                 } catch {
-                    // Log full error details
-                    print("[DifficultyService] ERROR DETAILS: \(error)")
-                    print("[DifficultyService] ERROR TYPE: \(type(of: error))")
-
                     // If we get a 401, try refreshing the session and retrying once
                     let errorMessage = error.localizedDescription.lowercased()
                     if errorMessage.contains("401") || errorMessage.contains("unauthorized") {
@@ -160,25 +134,6 @@ final class DifficultyService: ObservableObject {
                         do {
                             _ = try await self.supabase.auth.refreshSession()
                             print("[DifficultyService] Session refreshed, retrying request...")
-
-                            // Try diagnostic again after refresh
-                            do {
-                                let diagnosticResponse2: Data = try await withTimeout(seconds: Self.requestTimeoutSeconds) {
-                                    try await self.supabase.functions
-                                        .invoke("test-auth-diagnostic", options: FunctionInvokeOptions(body: request))
-                                }
-                                if let jsonString = String(data: diagnosticResponse2, encoding: .utf8) {
-                                    print("[DifficultyService] DIAGNOSTIC AFTER REFRESH SUCCESS: \(jsonString)")
-                                }
-                            } catch {
-                                print("[DifficultyService] DIAGNOSTIC AFTER REFRESH ERROR: \(error)")
-                                if case let FunctionsError.httpError(code, data) = error {
-                                    if let jsonString = String(data: data, encoding: .utf8) {
-                                        print("[DifficultyService] DIAGNOSTIC AFTER REFRESH (HTTP \(code)): \(jsonString)")
-                                    }
-                                }
-                            }
-
                             // Retry once after refresh
                             return try await withTimeout(seconds: Self.requestTimeoutSeconds) {
                                 try await self.supabase.functions

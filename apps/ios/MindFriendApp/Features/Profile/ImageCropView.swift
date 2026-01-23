@@ -26,17 +26,10 @@ struct ImageCropView: View {
                         .frame(width: imageSize.width * scale, height: imageSize.height * scale)
                         .offset(offset)
                         .gesture(
-                            MagnificationGesture()
+                            // Use simultaneous gestures for smooth interaction
+                            DragGesture(minimumDistance: 0)
                                 .onChanged { value in
-                                    scale = lastScale * value
-                                }
-                                .onEnded { _ in
-                                    lastScale = scale
-                                }
-                        )
-                        .gesture(
-                            DragGesture()
-                                .onChanged { value in
+                                    // Update immediately without animation for real-time feedback
                                     offset = CGSize(
                                         width: lastOffset.width + value.translation.width,
                                         height: lastOffset.height + value.translation.height
@@ -45,7 +38,19 @@ struct ImageCropView: View {
                                 .onEnded { _ in
                                     lastOffset = offset
                                 }
+                                .simultaneously(with:
+                                    MagnificationGesture(minimumScaleDelta: 0)
+                                        .onChanged { value in
+                                            // value is CGFloat, not a struct with .magnification
+                                            scale = lastScale * value
+                                        }
+                                        .onEnded { _ in
+                                            lastScale = scale
+                                        }
+                                )
                         )
+                        .animation(nil, value: offset) // Disable animation for immediate response
+                        .animation(nil, value: scale)
 
                     // Crop overlay (circular)
                     Circle()

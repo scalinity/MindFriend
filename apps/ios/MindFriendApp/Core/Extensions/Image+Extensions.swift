@@ -9,8 +9,8 @@ enum ImageProcessingConstants {
     static let maxFileSize: Int = 500_000 // 500KB
     static let minDimension: CGFloat = 100
     static let maxDimension: CGFloat = 4096
-    static let maxMemoryFootprint: Int = 16_777_216 // 16MB (4096×1024 RGBA)
-    static let maxPixels: Int = 4_194_304 // 4096×1024 pixels (safer than 4096×4096)
+    static let maxMemoryFootprint: Int = 50_331_648 // 48MB (allows 4032×3024 iPhone photos)
+    static let maxPixels: Int = 12_582_912 // 12.6M pixels (4096×3072 or 3546×3546)
     static let compressionQuality: CGFloat = 0.85
     static let minCompressionQuality: CGFloat = 0.1
 }

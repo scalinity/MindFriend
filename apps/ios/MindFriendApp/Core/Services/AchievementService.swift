@@ -75,19 +75,19 @@ final class AchievementService: ObservableObject {
         }
 
         do {
-            // Query user_stats table directly for better error handling
+            // Query user_stats table (where actual XP data is stored)
             struct UserStatsRow: Decodable {
                 let xpTotal: Int
                 let level: Int
                 let xpThisWeek: Int
-                
+
                 enum CodingKeys: String, CodingKey {
                     case xpTotal = "xp_total"
                     case level
                     case xpThisWeek = "xp_this_week"
                 }
             }
-            
+
             let statsRow: UserStatsRow = try await supabase
                 .from("user_stats")
                 .select("xp_total, level, xp_this_week")
@@ -96,9 +96,9 @@ final class AchievementService: ObservableObject {
                 .execute()
                 .value
 
-            // FIX: Use next level's threshold (level + 1)
+            // Calculate XP to next level using thresholds
             let nextLevelIndex = min(statsRow.level + 1, 50)
-            let xpToNext = UserLevel.xpThresholds[nextLevelIndex] - statsRow.xpTotal
+            let xpToNext = max(0, UserLevel.xpThresholds[nextLevelIndex] - statsRow.xpTotal)
 
             // FIX: Explicit MainActor wrapping
             await MainActor.run {
@@ -114,9 +114,11 @@ final class AchievementService: ObservableObject {
                 )
             }
 
+            print("🎯 [AchievementService] SUCCESS: Loaded Level \(statsRow.level), XP \(statsRow.xpTotal)")
             Log.data.debug("Loaded user experience: Level \(statsRow.level), XP \(statsRow.xpTotal)")
         } catch {
             // If user_stats row doesn't exist, use default values
+            print("❌ [AchievementService] FAILED to load user stats: \(error)")
             Log.data.warning("Failed to load user stats, using defaults: \(error.localizedDescription)")
             
             await MainActor.run {
