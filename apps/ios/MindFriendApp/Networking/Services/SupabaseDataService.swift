@@ -150,7 +150,7 @@ final class SupabaseDataService: ObservableObject {
         ])
     }
 
-    func getMoods(from startDate: String, to endDate: String) async throws -> [MoodEntry] {
+    func getMoods(from startDate: String, to endDate: String, limit: Int = 100, offset: Int = 0) async throws -> [MoodEntry] {
         let moods: [DBMood] = try await supabase
             .from(Tables.moods)
             .select()
@@ -158,13 +158,15 @@ final class SupabaseDataService: ObservableObject {
             .gte("local_date", value: startDate)
             .lte("local_date", value: endDate)
             .order("local_date", ascending: false)
+            .limit(limit)
+            .range(from: offset, to: offset + limit - 1)
             .execute()
             .value
 
         return moods.map { $0.toMoodEntry() }
     }
 
-    func getMoodsForPast(days: Int) async throws -> [MoodEntry] {
+    func getMoodsForPast(days: Int, limit: Int = 100, offset: Int = 0) async throws -> [MoodEntry] {
         // Use local date formatter to match MoodCheckInView's date format
         // This ensures consistency when comparing saved moods with query dates
         let formatter = DateFormatter()
@@ -175,7 +177,7 @@ final class SupabaseDataService: ObservableObject {
             return []
         }
         let from = formatter.string(from: pastDate)
-        return try await getMoods(from: from, to: to)
+        return try await getMoods(from: from, to: to, limit: limit, offset: offset)
     }
 
     // MARK: - Home Context (Mood-Adaptive Home)

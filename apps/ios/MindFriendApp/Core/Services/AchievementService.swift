@@ -46,6 +46,10 @@ final class AchievementService: ObservableObject {
     @Published private(set) var weeklyChallenges: [WeeklyChallenge] = []
     @Published private(set) var userChallengeProgress: [UserChallengeProgress] = []
     @Published private(set) var newlyEarnedBadges: [AchievementBadge] = []
+    
+    // Celebration state (NEW)
+    @Published var pendingCelebration: LevelUpEvent?
+    @Published var pendingMilestone: MilestoneCelebration?
 
     @Published private(set) var isLoading = false
     @Published private(set) var error: Error?
@@ -141,6 +145,15 @@ final class AchievementService: ObservableObject {
 
         // Reload user experience after awarding XP
         try await loadUserExperience()
+        
+        // Trigger level-up celebration if level increased (NEW)
+        if response.leveledUp, let levelUp = response.levelUp {
+            triggerLevelUpCelebration(
+                oldLevel: levelUp.oldLevel,
+                newLevel: levelUp.newLevel,
+                xpEarned: response.xpAwarded
+            )
+        }
 
         return response
     }
@@ -475,6 +488,79 @@ final class AchievementService: ObservableObject {
     func progressForBadge(_ badgeId: UUID) -> UserBadgeProgress? {
         userBadgeProgress.first { $0.badge.id == badgeId }
     }
+    
+    // MARK: - Celebration Management (NEW)
+    
+    func triggerLevelUpCelebration(oldLevel: Int, newLevel: Int, xpEarned: Int) {
+        pendingCelebration = LevelUpEvent(
+            oldLevel: oldLevel,
+            newLevel: newLevel,
+            xpEarned: xpEarned
+        )
+        
+        // Check if this is a milestone level
+        let milestones = [5, 10, 25, 50, 100]
+        if milestones.contains(newLevel) {
+            Task {
+                do {
+                    let celebration = try await fetchMilestoneNarrative(level: newLevel)
+                    pendingMilestone = celebration
+                } catch {
+                    print("Failed to fetch milestone narrative: \(error)")
+                }
+            }
+        }
+    }
+    
+    func fetchMilestoneNarrative(level: Int) async throws -> MilestoneCelebration {
+        struct MilestoneRequest: Encodable {
+            let level: Int
+        }
+        
+        struct MilestoneResponse: Decodable {
+            let narrative: String
+            let celebrationId: String
+            let stats: JourneyStats
+            
+            enum CodingKeys: String, CodingKey {
+                case narrative
+                case celebrationId = "celebrationId"
+                case stats
+            }
+        }
+        
+        let request = MilestoneRequest(level: level)
+        let response: MilestoneResponse = try await supabase.functions
+            .invoke("generate-milestone-narrative", options: .init(body: request))
+        
+        // Fetch the full celebration record
+        let celebration: MilestoneCelebration = try await supabase
+            .from("milestone_celebrations")
+            .select()
+            .eq("id", value: response.celebrationId)
+            .single()
+            .execute()
+            .value
+        
+        return celebration
+    }
+    
+    func markMilestoneViewed(celebrationId: UUID) async throws {
+        try await supabase
+            .from("milestone_celebrations")
+            .update(["viewed": true])
+            .eq("id", value: celebrationId)
+            .execute()
+    }
+}
+
+// MARK: - Level Up Event (NEW)
+
+struct LevelUpEvent: Identifiable {
+    let id = UUID()
+    let oldLevel: Int
+    let newLevel: Int
+    let xpEarned: Int
 }
 
 // MARK: - Errors
