@@ -1,5 +1,73 @@
 # MindFriend Development Progress Log
 
+## [2026-01-24] F017: PHI Security Hardening - Client-Side Sanitization, Logging Policy, Audit Trail
+
+**Type:** Security/Compliance
+**Status:** Complete
+
+### Summary
+
+Completed the remaining security improvements for PHI protection in Contextual Micro-Interventions: client-side sanitization before network transmission, comprehensive logging sanitization policy, and database audit trail for compliance monitoring.
+
+### Changes
+
+| File                                                                  | Description                                                                                                                                                                                                                                                                                                                                              |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **iOS**                                                               |                                                                                                                                                                                                                                                                                                                                                          |
+| `apps/ios/MindFriendApp/Core/Models/InterventionTimingModels.swift`   | Added `sanitized()` method to `TriggerContext` that converts raw biometric PHI (heart rate, HRV) to boolean flags and categories before network transmission. Created `SanitizedTriggerContext` and `SanitizedBiometrics` types.                                                                                                                         |
+| `apps/ios/MindFriendApp/Core/Services/InterventionService.swift`      | Updated `checkTriggers()` to call `sanitized()` before sending context to Edge Function. Ensures no raw PHI crosses network boundary.                                                                                                                                                                                                                    |
+| `apps/ios/MindFriendAppTests/InterventionServiceTests.swift`          | **NEW** - 334 lines of comprehensive tests for PHI sanitization: biometric categorization (HR/HRV thresholds), calendar title removal, integration tests. 11 test methods covering all sanitization edge cases.                                                                                                                                          |
+| **Edge Functions**                                                    |                                                                                                                                                                                                                                                                                                                                                          |
+| `supabase/functions/_shared/logging-sanitization.ts`                  | **NEW** - 203 lines of logging sanitization utilities. Exports `sanitizeForLogging()`, `sanitizeError()`, `sanitizeUser()`, and `logSanitized()` functions. Detects raw vs sanitized biometric data, removes calendar titles from logs. Comprehensive policy documentation in comments.                                                                  |
+| `supabase/functions/check-intervention-triggers/index.ts`             | Imported and applied logging sanitization policy. Replaced direct `console.error()` calls with `logSanitized()`. Added logging policy documentation.                                                                                                                                                                                                     |
+| `supabase/functions/analyze-intervention-patterns/index.ts`           | Added import and logging policy documentation comment block.                                                                                                                                                                                                                                                                                             |
+| **Database**                                                          |                                                                                                                                                                                                                                                                                                                                                          |
+| `supabase/migrations/20260124193854_add_sanitization_audit_trail.sql` | **NEW** - 172 lines. Created `intervention_delivery_audit` table to track PHI sanitization events (fields detected, method used, timestamp). Updated `sanitize_delivery_context()` trigger to log all sanitization events. Created `sanitization_summary` view for compliance monitoring dashboard. Includes RLS policies for user access to audit logs. |
+
+### Testing
+
+- [x] Unit tests added - `InterventionServiceTests.swift` (11 test methods)
+- [x] Integration tests added - Full context sanitization end-to-end test
+- [x] Migration applied successfully - `supabase db push` completed
+- [ ] Manual verification - Tests verified syntactically correct, ready for runtime verification
+
+### Compliance
+
+- **HIPAA §164.312(e)(1)** - Transmission security: Client-side sanitization ensures no raw PHI transmitted over network
+- **HIPAA §164.308(a)(1)(ii)(D)** - Audit controls: Database audit trail tracks all sanitization events
+- **GDPR Article 32(2)** - Pseudonymization: Biometric values converted to categories, calendar titles removed
+
+### Technical Details
+
+**Client-Side Sanitization:**
+
+- Heart Rate: `< 60` → "low", `60-100` → "normal", `101-120` → "elevated", `> 120` → "very_high"
+- HRV: `< 20` → "very_low", `20-50` → "low", `51-100` → "normal", `> 100` → "high"
+- Events: Titles removed, metadata preserved (classification, stress score, timing)
+
+**Logging Policy:**
+
+- NEVER log raw biometric values (HR, HRV)
+- NEVER log calendar event titles
+- NEVER log full error stacks with PHI
+- Use `sanitizeForLogging()` for all TriggerContext logging
+- Detects raw vs sanitized data and handles appropriately
+
+**Audit Trail:**
+
+- Tracks: delivery_id, sanitization_applied (boolean), raw_fields_detected (array), method (trigger/manual/none), timestamp
+- View: `sanitization_summary` aggregates by day and method for compliance dashboard
+- RLS: Users can read their own audit logs only
+
+### Notes
+
+- All sanitization is defensive: client-side (before transmission), server-side (database trigger), and logging
+- Tests cover boundary conditions (thresholds like 60, 100, 120 for HR; 20, 30, 50, 100 for HRV)
+- Audit trail enables compliance reporting and verification that sanitization occurred
+- Next: Runtime test verification as part of CI/CD pipeline
+
+---
+
 ## [2026-01-24] F017: Contextual Micro-Interventions - Phase 1 Complete + Critical Security Fixes
 
 **Type:** Feature + Security/Quality Fixes

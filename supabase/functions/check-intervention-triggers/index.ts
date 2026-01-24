@@ -3,6 +3,8 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { logSanitized, sanitizeForLogging } from "../_shared/logging-sanitization.ts";
 
 // Configuration Constants
 const RETRY_MAX_ATTEMPTS = 3;
@@ -25,6 +27,15 @@ const MOOD_CONFIDENCE_MULTIPLIER = 0.3;
 const CIRCUIT_BREAKER_FAILURE_THRESHOLD = 5;
 const CIRCUIT_BREAKER_TIMEOUT_MS = 60000; // 1 minute
 const CIRCUIT_BREAKER_RESET_TIMEOUT_MS = 30000; // 30 seconds
+
+/**
+ * LOGGING POLICY:
+ * - NEVER log raw biometric values (HR, HRV)
+ * - NEVER log calendar event titles
+ * - Use logSanitized() for all context logging
+ * - Use sanitizeForLogging() when logging context separately
+ * - Only log error.message, never full error objects
+ */
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -353,9 +364,11 @@ serve(async (req) => {
     }
 
     // Sanitize error logs - don't log request body (may contain PHI)
-    console.error("Error in check-intervention-triggers:", {
-      error: (error as Error).message,
-      circuitState: circuitBreaker.getState(),
+    logSanitized("error", "Error in check-intervention-triggers", {
+      error,
+      metadata: {
+        circuitState: circuitBreaker.getState(),
+      },
     });
 
     return new Response(
