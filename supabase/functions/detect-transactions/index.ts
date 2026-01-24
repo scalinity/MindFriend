@@ -27,32 +27,71 @@ serve(async (req) => {
   try {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Manual trigger: detect for specific user and date
-    if (req.method === "POST") {
-      const { user_id, date } = await req.json();
-      const transactions = await detectUserTransactions(
-        supabase,
-        user_id,
-        date || getYesterdayISO(),
-      );
-      await upsertTransactions(supabase, transactions);
-
+    // CRON requests: verify secret token
+    if (req.method === "GET" || !req.headers.get("Authorization")) {
+      const cronSecret = req.headers.get("X-Cron-Secret");
+      const expectedSecret = Deno.env.get("CRON_SECRET");
+      
+      if (!expectedSecret || cronSecret !== expectedSecret) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      
+      await detectTransactionsForAllUsers(supabase);
       return new Response(
         JSON.stringify({
           success: true,
-          transactions_count: transactions.length,
+          message: "Transaction detection completed",
         }),
         { headers: { "Content-Type": "application/json" } },
       );
     }
 
-    // Cron trigger: detect for all active users
-    await detectTransactionsForAllUsers(supabase);
+    // MANUAL requests: verify JWT
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Missing authorization" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
+
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // Manual trigger: detect for specific user and date
+    const { user_id, date } = await req.json();
+    
+    // Authorization check: user can only trigger for themselves
+    if (user_id && user_id !== user.id) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const transactions = await detectUserTransactions(
+      supabase,
+      user_id || user.id,
+      date || getYesterdayISO(),
+    );
+    await upsertTransactions(supabase, transactions);
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: "Transaction detection completed",
+        transactions_count: transactions.length,
       }),
       { headers: { "Content-Type": "application/json" } },
     );
