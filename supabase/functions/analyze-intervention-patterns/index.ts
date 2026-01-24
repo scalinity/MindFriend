@@ -4,6 +4,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { logSanitized } from "../_shared/logging-sanitization.ts";
+
+/**
+ * LOGGING POLICY:
+ * - NEVER log raw biometric values from intervention_deliveries.context_snapshot
+ * - Use logSanitized() for all error logging
+ * - Only log error.message, never full error objects
+ */
 
 // Configuration Constants
 const MIN_DAYS_FOR_ANALYSIS = 14; // 2 weeks minimum

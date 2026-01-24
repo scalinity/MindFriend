@@ -169,7 +169,10 @@ final class InterventionService: ObservableObject {
             contextToSend = await gatherCurrentContext()
         }
 
-        let request = CheckTriggersRequest(context: contextToSend)
+        // CRITICAL: Sanitize context before network transmission
+        // Removes PHI: biometric values → categories, calendar titles removed
+        let sanitizedContext = contextToSend.sanitized()
+        let request = CheckTriggersRequest(context: sanitizedContext)
 
         let response: CheckTriggersResponse = try await supabase.functions.invoke(
             "check-intervention-triggers",
@@ -565,6 +568,71 @@ final class InterventionService: ObservableObject {
             }
 
             healthStore.execute(query)
+        }
+    }
+
+    // MARK: - Private Helpers
+    
+    /// Sanitize biometric PHI before network transmission
+    /// Converts raw numeric values (heart rate, HRV) to boolean flags and categories
+    /// Compliance: HIPAA §164.312(e)(1) - Encryption in transit
+    private func sanitizeBiometrics(_ biometrics: TriggerContext.Biometrics?) -> [String: Any]? {
+        guard let biometrics = biometrics else { return nil }
+        
+        var sanitized: [String: Any] = [:]
+        
+        // Heart rate sanitization
+        if let hr = biometrics.heartRate {
+            sanitized["hasElevatedHR"] = hr > InterventionConstants.heartRateElevatedThreshold
+            
+            // Categorize instead of raw value
+            let hrCategory: String
+            if hr < 60 {
+                hrCategory = "low"
+            } else if hr <= 100 {
+                hrCategory = "normal"
+            } else if hr <= 120 {
+                hrCategory = "elevated"
+            } else {
+                hrCategory = "very_high"
+            }
+            sanitized["hrCategory"] = hrCategory
+        }
+        
+        // HRV sanitization
+        if let hrv = biometrics.hrv {
+            sanitized["hasLowHRV"] = hrv < InterventionConstants.hrvLowThreshold
+            
+            // Categorize instead of raw value
+            let hrvCategory: String
+            if hrv < 20 {
+                hrvCategory = "very_low"
+            } else if hrv <= 50 {
+                hrvCategory = "low"
+            } else if hrv <= 100 {
+                hrvCategory = "normal"
+            } else {
+                hrvCategory = "high"
+            }
+            sanitized["hrvCategory"] = hrvCategory
+        }
+        
+        return sanitized
+    }
+    
+    /// Sanitize calendar events to remove PII (event titles)
+    private func sanitizeCalendarEvents(_ events: [ClassifiedEvent]?) -> [[String: Any]]? {
+        guard let events = events else { return nil }
+        
+        return events.map { event in
+            [
+                "id": event.id,
+                "classification": event.classification.rawValue,
+                "stressScore": event.stressScore,
+                "needsArmor": event.needsArmor,
+                "startDate": event.startDate.ISO8601Format(),
+                "hasTitle": true  // Indicate title exists but don't transmit it
+            ]
         }
     }
 }
