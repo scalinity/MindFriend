@@ -80,3 +80,9 @@ verify_jwt = false
 [functions.create-organization]
 verify_jwt = false
 
+[functions.generate-profile-picture]
+verify_jwt = false  # Verified internally in function code
+
+[functions.calculate-capacity]
+verify_jwt = false  # Verified internally in function code
+

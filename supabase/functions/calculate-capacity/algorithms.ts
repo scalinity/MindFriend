@@ -1,6 +1,7 @@
 import type {
   CapacityInput,
   CapacityResult,
+  CapacityLevel,
   MoodData,
   SleepData,
   StreakData,
@@ -98,7 +99,10 @@ export function calculateSleepScore(sleepData: SleepData[]): number {
   let score = SLEEP_BASELINE_SCORE;
 
   // Primary factor: last night's sleep
-  if (isValidNumber(data.lastNightHours) && isValidSleepHours(data.lastNightHours)) {
+  if (
+    isValidNumber(data.lastNightHours) &&
+    isValidSleepHours(data.lastNightHours)
+  ) {
     if (
       data.lastNightHours >= SLEEP_OPTIMAL_MIN_HOURS &&
       data.lastNightHours <= SLEEP_OPTIMAL_MAX_HOURS
@@ -111,7 +115,10 @@ export function calculateSleepScore(sleepData: SleepData[]): number {
     } else {
       score = SLEEP_SCORE_VERY_POOR;
     }
-  } else if (isValidNumber(data.averageHours) && isValidSleepHours(data.averageHours)) {
+  } else if (
+    isValidNumber(data.averageHours) &&
+    isValidSleepHours(data.averageHours)
+  ) {
     // Fall back to average if last night unavailable or invalid
     if (
       data.averageHours >= SLEEP_OPTIMAL_MIN_HOURS &&
@@ -156,9 +163,17 @@ export function calculateMoodScore(moodData: MoodData[]): number {
   let score = MOOD_BASELINE_SCORE;
 
   // Convert mood (1-10) to score (0-100)
-  if (isValidNumber(data.todayMood) && data.todayMood >= 1 && data.todayMood <= MOOD_SCALE_MAX) {
+  if (
+    isValidNumber(data.todayMood) &&
+    data.todayMood >= 1 &&
+    data.todayMood <= MOOD_SCALE_MAX
+  ) {
     score = (data.todayMood / MOOD_SCALE_MAX) * SCORE_MAX;
-  } else if (isValidNumber(data.averageMood3d) && data.averageMood3d >= 1 && data.averageMood3d <= MOOD_SCALE_MAX) {
+  } else if (
+    isValidNumber(data.averageMood3d) &&
+    data.averageMood3d >= 1 &&
+    data.averageMood3d <= MOOD_SCALE_MAX
+  ) {
     // Fall back to 3-day average if today's mood is invalid
     score = (data.averageMood3d / MOOD_SCALE_MAX) * SCORE_MAX;
   }
@@ -240,7 +255,9 @@ export function calculateCompositeScore(components: {
     sleep: isValidNumber(components.sleep) ? components.sleep : 50,
     mood: isValidNumber(components.mood) ? components.mood : 50,
     streak: isValidNumber(components.streak) ? components.streak : 50,
-    completion: isValidNumber(components.completion) ? components.completion : 50,
+    completion: isValidNumber(components.completion)
+      ? components.completion
+      : 50,
   };
 
   const rawScore =
@@ -289,7 +306,10 @@ export function smoothCapacity(
 
   // SAFETY: Validate previousScore if provided
   if (previousScore !== null && !isValidNumber(previousScore)) {
-    console.warn("Invalid previousScore, treating as first calculation:", previousScore);
+    console.warn(
+      "Invalid previousScore, treating as first calculation:",
+      previousScore,
+    );
     previousScore = null;
   }
 
