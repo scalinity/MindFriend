@@ -6,30 +6,35 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 serve(async (req) => {
   try {
-    // Get user from JWT
-    const authHeader = req.headers.get("Authorization")!;
-    const supabaseClient = createClient(
+    // Validate authentication
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "Missing authorization header" }),
+        { status: 401, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+    const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-      {
-        global: { headers: { Authorization: authHeader } },
-      }
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
 
     const {
       data: { user },
-      error: userError,
-    } = await supabaseClient.auth.getUser();
+      error: authError,
+    } = await supabaseAdmin.auth.getUser(token);
 
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { "Content-Type": "application/json" } }
+      );
     }
 
     // Fetch top exercises
-    const { data: topExercises, error: topError } = await supabaseClient
+    const { data: topExercises, error: topError } = await supabaseAdmin
       .from("user_efficacy_profiles")
       .select(\`
         *,
@@ -48,7 +53,7 @@ serve(async (req) => {
     }
 
     // Fetch recent sessions
-    const { data: recentSessions, error: sessionsError } = await supabaseClient
+    const { data: recentSessions, error: sessionsError } = await supabaseAdmin
       .from("intervention_efficacy")
       .select(\`
         *,

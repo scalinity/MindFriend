@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS intervention_efficacy (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     exercise_id UUID NOT NULL REFERENCES exercises(id),
-    session_id UUID NOT NULL,
+    session_id UUID NOT NULL REFERENCES exercise_sessions(id) ON DELETE CASCADE,
     completed_at TIMESTAMPTZ NOT NULL,
 
     -- Core metrics
