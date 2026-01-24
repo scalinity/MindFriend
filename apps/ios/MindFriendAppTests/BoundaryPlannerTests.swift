@@ -7,17 +7,17 @@ final class BoundaryPlannerTests: XCTestCase {
     
     func testAssessmentResponsesEncoding() {
         let responses = AssessmentResponses(
-            drainingTriggers: ["work stress"],
-            importanceRatings: ["work-life balance": .high],
-            currentlyMetNeeds: ["work-life balance": .sometimes],
-            priorityNeeds: ["work-life balance"]
+            step1DrainTriggers: ["work stress"],
+            step2ImportanceRatings: ["work-life balance": .high],
+            step3CurrentlyMet: ["work-life balance": .sometimes],
+            step4PriorityNeeds: ["work-life balance"]
         )
         
         let encoded = try! JSONEncoder().encode(responses)
         let decoded = try! JSONDecoder().decode(AssessmentResponses.self, from: encoded)
         
-        XCTAssertEqual(decoded.drainingTriggers, responses.drainingTriggers)
-        XCTAssertEqual(decoded.importanceRatings, responses.importanceRatings)
+        XCTAssertEqual(decoded.step1DrainTriggers, responses.step1DrainTriggers)
+        XCTAssertEqual(decoded.step2ImportanceRatings, responses.step2ImportanceRatings)
     }
     
     // MARK: - Boundary Type Tests
@@ -36,13 +36,14 @@ final class BoundaryPlannerTests: XCTestCase {
         var boundary = DefinedBoundary(
             id: UUID(),
             userId: UUID(),
+            needsAssessmentId: nil,
             boundaryType: .time,
             statementText: "I need work-life balance",
             whyMatters: "Mental health",
             stakeholder: "Manager",
             expectedImpact: "More energy",
             status: .draft,
-            scripts: [:],
+            scripts: [],
             practiceCount: 0,
             createdAt: Date(),
             updatedAt: Date()
@@ -107,31 +108,34 @@ final class BoundaryPlannerTests: XCTestCase {
     func testScriptTemplateStructure() {
         let template = BoundaryScriptTemplate(
             id: UUID(),
-            boundaryType: "time",
+            boundaryType: .time,
             relationshipType: "manager",
-            templateVariation: "direct",
+            templateVariation: .direct,
             templateText: "I need...",
             toneDescription: "Clear and firm",
-            exampleContext: "Work hours"
+            exampleContext: "Work hours",
+            locale: "en",
+            isPremium: false,
+            createdAt: Date()
         )
-        
-        XCTAssertEqual(template.boundaryType, "time")
+
+        XCTAssertEqual(template.boundaryType, .time)
         XCTAssertEqual(template.relationshipType, "manager")
-        XCTAssertEqual(template.templateVariation, "direct")
+        XCTAssertEqual(template.templateVariation, .direct)
     }
     
     // MARK: - Error Handling Tests
     
     func testBoundaryPlannerErrorCases() {
-        let errors: [BoundaryPlannerError] = [
+        let errors: [BoundaryPlannerService.BoundaryPlannerError] = [
             .unauthorized,
-            .tierLimitExceeded,
-            .invalidBoundaryType,
-            .invalidInput("test"),
-            .networkError,
-            .unknown
+            .tierLimitReached(currentCount: 3),
+            .boundaryNotFound,
+            .invalidTransition(current: "draft", requested: "set", allowed: ["ready"]),
+            .networkError(NSError(domain: "test", code: -1)),
+            .unknown("test error")
         ]
-        
+
         XCTAssertEqual(errors.count, 6)
     }
     
@@ -155,16 +159,23 @@ final class BoundaryPlannerTests: XCTestCase {
     // MARK: - Needs Assessment Tests
     
     func testNeedsAssessmentInitialization() {
+        let responses = AssessmentResponses(
+            step1DrainTriggers: ["work stress"],
+            step2ImportanceRatings: ["work-life balance": .high],
+            step3CurrentlyMet: ["work-life balance": .sometimes],
+            step4PriorityNeeds: ["work-life balance"]
+        )
+
         let assessment = NeedsAssessment(
             id: UUID(),
             userId: UUID(),
             assessmentType: .work,
-            responses: [:],
+            responses: responses,
             topNeeds: ["work-life balance"],
             createdAt: Date(),
             updatedAt: Date()
         )
-        
+
         XCTAssertEqual(assessment.assessmentType, .work)
         XCTAssertEqual(assessment.topNeeds.count, 1)
     }
