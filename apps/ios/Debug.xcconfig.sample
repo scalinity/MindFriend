@@ -1,17 +1,14 @@
 // Debug.xcconfig.sample
-// Copy this file to Debug.xcconfig and fill in your credentials
+// Copy this file to Debug.xcconfig and fill in your development credentials
 // DO NOT commit Debug.xcconfig to version control!
 
 // Supabase Configuration
-// IMPORTANT: xcconfig treats // as comment delimiter, so we must escape URLs
-// Solution: Use SLASH variable to construct :// without literal //
 SLASH = /
 SUPABASE_PROTOCOL = https
-SUPABASE_HOST = your-project.supabase.co
+SUPABASE_HOST = YOUR_SUPABASE_PROJECT.supabase.co
 SUPABASE_URL = $(SUPABASE_PROTOCOL):$(SLASH)$(SLASH)$(SUPABASE_HOST)
-SUPABASE_ANON_KEY = your-anon-key-here
+SUPABASE_ANON_KEY = YOUR_SUPABASE_ANON_KEY_HERE
 
-// For local development with supabase local, use:
-// SUPABASE_PROTOCOL = http
-// SUPABASE_HOST = localhost:54321
-// SUPABASE_ANON_KEY = ***REMOVED***
+// Sentry Crash Reporting (optional for development)
+// Leave empty to disable, or set to your Sentry DSN
+SENTRY_DSN =

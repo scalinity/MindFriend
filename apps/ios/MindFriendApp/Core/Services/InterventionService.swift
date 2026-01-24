@@ -8,6 +8,23 @@ import Foundation
 import Supabase
 import HealthKit
 
+// MARK: - Configuration Constants
+
+private enum InterventionConstants {
+    static let monitoringIntervalSeconds: TimeInterval = 5 * 60 // 5 minutes
+    static let preferencesSaveDebounceNanoseconds: UInt64 = 500_000_000 // 500ms
+    static let healthKitQueryTimeoutSeconds: UInt64 = 10 // 10 seconds
+    static let recentHeartRateWindowMinutes: TimeInterval = 15 // Last 15 minutes
+    static let recentHRVWindowMinutes: TimeInterval = 60 // Last 1 hour
+    static let heartRateSampleLimit = 10
+    static let hrvSampleLimit = 10
+    static let heartRateMin = 40.0 // BPM
+    static let heartRateMax = 220.0 // BPM
+    static let hrvMin = 10.0 // Milliseconds
+    static let hrvMax = 200.0 // Milliseconds
+    static let preferencesCacheExpirationSeconds: TimeInterval = 5 * 60 // 5 minutes
+}
+
 // MARK: - AnyCodableValue Extension
 
 extension AnyCodableValue {
@@ -45,10 +62,14 @@ final class InterventionService: ObservableObject {
     private let supabase: SupabaseClient
     private let healthStore: HKHealthStore?
     private var monitoringTimer: Timer?
-    private let monitoringInterval: TimeInterval = 5 * 60 // 5 minutes
+    private let monitoringInterval: TimeInterval = InterventionConstants.monitoringIntervalSeconds
     
     // Debouncing for preference updates
     private var preferencesSaveTask: Task<Void, Error>?
+    
+    // Preferences caching
+    private var cachedPreferences: InterventionPreferences?
+    private var preferencesCacheTimestamp: Date?
 
     // MARK: - Initialization
 
@@ -225,7 +246,7 @@ final class InterventionService: ObservableObject {
         
         // Debounce: wait 500ms before saving
         let saveTask = Task { @MainActor in
-            try await Task.sleep(nanoseconds: 500_000_000) // 500ms
+            try await Task.sleep(nanoseconds: InterventionConstants.preferencesSaveDebounceNanoseconds)
             
             guard !Task.isCancelled else { return }
             
@@ -235,6 +256,10 @@ final class InterventionService: ObservableObject {
                 .execute()
 
             self.preferences = preferences
+            
+            // Invalidate cache on update
+            self.cachedPreferences = preferences
+            self.preferencesCacheTimestamp = Date()
 
             // Restart monitoring if enabled changed
             if preferences.enabled && !isMonitoring {
@@ -258,8 +283,16 @@ final class InterventionService: ObservableObject {
         }
     }
 
-    /// Load user preferences from database
+    /// Load user preferences from database (with caching)
     func loadPreferences() async throws {
+        // Check cache first
+        if let cached = cachedPreferences,
+           let timestamp = preferencesCacheTimestamp,
+           Date().timeIntervalSince(timestamp) < InterventionConstants.preferencesCacheExpirationSeconds {
+            self.preferences = cached
+            return
+        }
+        
         let session = try await supabase.auth.session
         let userId = session.user.id
 
@@ -273,9 +306,14 @@ final class InterventionService: ObservableObject {
                 .value
 
             self.preferences = response
+            self.cachedPreferences = response
+            self.preferencesCacheTimestamp = Date()
         } catch {
             // No preferences exist - use defaults
-            self.preferences = InterventionPreferences.default
+            let defaults = InterventionPreferences.default
+            self.preferences = defaults
+            self.cachedPreferences = defaults
+            self.preferencesCacheTimestamp = Date()
         }
     }
 
@@ -366,30 +404,51 @@ final class InterventionService: ObservableObject {
             return nil
         }
 
-        // Query biometrics on background thread
+        // Query biometrics on background thread with timeout
         return await Task.detached {
-            async let heartRate = self.queryRecentHeartRate(from: healthStore)
-            async let hrv = self.queryRecentHRV(from: healthStore)
-            
-            let (hr, hrvValue) = await (heartRate, hrv)
-            
-            if hr == nil && hrvValue == nil {
-                return nil
-            }
-            
-            // Validate biometric values
-            let validatedHR = hr.flatMap { value in
-                (40...220).contains(value) ? value : nil
-            }
-            let validatedHRV = hrvValue.flatMap { value in
-                (10...200).contains(value) ? value : nil
-            }
-            
-            guard validatedHR != nil || validatedHRV != nil else {
-                return nil
-            }
+            do {
+                return try await withThrowingTaskGroup(of: TriggerContext.Biometrics?.self) { group in
+                    // Add query task
+                    group.addTask {
+                        async let heartRate = self.queryRecentHeartRate(from: healthStore)
+                        async let hrv = self.queryRecentHRV(from: healthStore)
+                        
+                        let (hr, hrvValue) = await (heartRate, hrv)
+                        
+                        if hr == nil && hrvValue == nil {
+                            return nil
+                        }
+                        
+                        // Validate biometric values
+                        let validatedHR = hr.flatMap { value in
+                            (InterventionConstants.heartRateMin...InterventionConstants.heartRateMax).contains(value) ? value : nil
+                        }
+                        let validatedHRV = hrvValue.flatMap { value in
+                            (InterventionConstants.hrvMin...InterventionConstants.hrvMax).contains(value) ? value : nil
+                        }
+                        
+                        guard validatedHR != nil || validatedHRV != nil else {
+                            return nil
+                        }
 
-            return TriggerContext.Biometrics(heartRate: validatedHR, hrv: validatedHRV)
+                        return TriggerContext.Biometrics(heartRate: validatedHR, hrv: validatedHRV)
+                    }
+                    
+                    // Add timeout task
+                    group.addTask {
+                        try await Task.sleep(nanoseconds: InterventionConstants.healthKitQueryTimeoutSeconds * 1_000_000_000)
+                        return nil // Timeout returns nil
+                    }
+                    
+                    // Return first result (query or timeout)
+                    let result = try await group.next()
+                    group.cancelAll()
+                    return result ?? nil
+                }
+            } catch {
+                print("HealthKit query error: \(error.localizedDescription)")
+                return nil
+            }
         }.value
     }
 
@@ -399,7 +458,7 @@ final class InterventionService: ObservableObject {
         }
 
         let predicate = HKQuery.predicateForSamples(
-            withStart: Date().addingTimeInterval(-15 * 60), // Last 15 minutes
+            withStart: Date().addingTimeInterval(-InterventionConstants.recentHeartRateWindowMinutes * 60),
             end: Date(),
             options: .strictEndDate
         )
@@ -410,7 +469,7 @@ final class InterventionService: ObservableObject {
             let query = HKSampleQuery(
                 sampleType: heartRateType,
                 predicate: predicate,
-                limit: 10,
+                limit: InterventionConstants.heartRateSampleLimit,
                 sortDescriptors: [sortDescriptor]
             ) { _, samples, error in
                 // Handle on background thread
@@ -436,7 +495,7 @@ final class InterventionService: ObservableObject {
         }
 
         let predicate = HKQuery.predicateForSamples(
-            withStart: Date().addingTimeInterval(-60 * 60), // Last 1 hour
+            withStart: Date().addingTimeInterval(-InterventionConstants.recentHRVWindowMinutes * 60),
             end: Date(),
             options: .strictEndDate
         )
@@ -447,7 +506,7 @@ final class InterventionService: ObservableObject {
             let query = HKSampleQuery(
                 sampleType: hrvType,
                 predicate: predicate,
-                limit: 10,
+                limit: InterventionConstants.hrvSampleLimit,
                 sortDescriptors: [sortDescriptor]
             ) { _, samples, error in
                 // Handle on background thread

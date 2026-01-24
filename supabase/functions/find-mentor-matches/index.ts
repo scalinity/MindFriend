@@ -145,15 +145,23 @@ serve(async (req) => {
   const limit = Math.min(body.limit || 5, 10); // Max 10 results
 
   try {
-    // Call the database function to find matches
-    const { data: matches, error: matchError } = await supabase.rpc(
-      "find_mentor_matches",
-      {
-        p_user_id: user.id,
-        p_seeking_areas: body.seekingAreas,
-        p_limit: limit,
-      },
+    // Call the matching function with timeout
+    const timeoutPromise = new Promise((_resolve, reject) =>
+      setTimeout(
+        () => reject(new Error("Mentor matching timeout")),
+        5000, // 5 second timeout
+      ),
     );
+
+    const matchPromise = supabase.rpc("find_mentor_matches", {
+      p_user_id: user.id,
+      p_seeking_areas: body.seekingAreas,
+      p_limit: Math.min(body.limit || 5, 10),
+    }).execute();
+
+    const response = await Promise.race([matchPromise, timeoutPromise]);
+
+    const { data: matches, error: matchError } = response;
 
     if (matchError) {
       console.error("Error finding matches:", matchError);

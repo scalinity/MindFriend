@@ -4696,13 +4696,17 @@ final class SupabaseDataService: ObservableObject {
 
         // Get current session token
         guard let session = try? await supabase.auth.session else {
+            #if DEBUG
             print("[Debug] generateProfilePicture: No active session")
+            #endif
             throw GenerateProfilePictureError.networkError
         }
 
+        #if DEBUG
         print("[Debug] generateProfilePicture: Session found")
         print("[Debug] generateProfilePicture: Access token prefix = \(session.accessToken.prefix(20))...")
         print("[Debug] generateProfilePicture: Token expires at = \(session.expiresAt)")
+        #endif
 
         do {
             let requestBody = ["prompt": prompt]

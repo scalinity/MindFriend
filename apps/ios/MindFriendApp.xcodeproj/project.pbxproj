@@ -714,7 +714,7 @@
 		12EE60DC6B6713CC2C65F2B7 /* FlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowLayout.swift; sourceTree = "<group>"; };
 		14C5E2C378ED432C53CD0B16 /* RecoveryQuestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryQuestView.swift; sourceTree = "<group>"; };
 		1539B8C89FEC4B5D46A4FDF0 /* WeeklyInsightsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeeklyInsightsView.swift; sourceTree = "<group>"; };
-		15C14F02E711A3B56AE98F9A /* Release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
+		15C14F02E711A3B56AE98F9A /* Release.xcconfig.sample */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = Release.xcconfig.sample; sourceTree = "<group>"; };
 		1634ECD8030D56B2BDB8ED74 /* DependencyContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DependencyContainer.swift; sourceTree = "<group>"; };
 		166BAE423CC309F8B45D655D /* NarrativeDetailView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NarrativeDetailView.swift; sourceTree = "<group>"; };
 		174C0CB0A38CCB31167850D1 /* SmartNotificationSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartNotificationSettingsView.swift; sourceTree = "<group>"; };
@@ -862,7 +862,7 @@
 		508331DCDCB7FDC7A1F75C0F /* SleepService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepService.swift; sourceTree = "<group>"; };
 		50A6FCE3B96F27F466E24740 /* AudioPlayerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerService.swift; sourceTree = "<group>"; };
 		50EF094FD2B809A789EA1A8A /* AudioPlayerServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerServiceTests.swift; sourceTree = "<group>"; };
-		51328707460D54FC9AD5E98C /* Debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
+		51328707460D54FC9AD5E98C /* Debug.xcconfig.sample */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = Debug.xcconfig.sample; sourceTree = "<group>"; };
 		530545891D98EA794FCEC74E /* ActionPlanSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionPlanSheet.swift; sourceTree = "<group>"; };
 		533A6F509C12DB0FAF4B092A /* ForumModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForumModels.swift; sourceTree = "<group>"; };
 		53E67C6D3786B341AAC11C96 /* RecoveryProgramView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecoveryProgramView.swift; sourceTree = "<group>"; };
@@ -2816,8 +2816,8 @@
 				FA3350F86FBD1253570FEE3B /* MindFriendAppUITests */,
 				5212FF8E863708234BCC496F /* Products */,
 				871A25C1265B30F2037B1E62 /* MindFriendApp */,
-				51328707460D54FC9AD5E98C /* Debug.xcconfig */,
-				15C14F02E711A3B56AE98F9A /* Release.xcconfig */,
+				51328707460D54FC9AD5E98C /* Debug.xcconfig.sample */,
+				15C14F02E711A3B56AE98F9A /* Release.xcconfig.sample */,
 				E5FBE9EC31493AF8635CD705 /* MindFriendAppTests */,
 			);
 			sourceTree = "<group>";
@@ -3872,7 +3872,7 @@
 /* Begin XCBuildConfiguration section */
 		080611F49D2DEE9AEF266477 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 51328707460D54FC9AD5E98C /* Debug.xcconfig */;
+			baseConfigurationReference = 51328707460D54FC9AD5E98C /* Debug.xcconfig.sample */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -3911,7 +3911,7 @@
 		};
 		2BA9011410D3B44F81D6F2EE /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 51328707460D54FC9AD5E98C /* Debug.xcconfig */;
+			baseConfigurationReference = 51328707460D54FC9AD5E98C /* Debug.xcconfig.sample */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -3979,7 +3979,7 @@
 		};
 		51E864D37A43A7F7463CFE1D /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 15C14F02E711A3B56AE98F9A /* Release.xcconfig */;
+			baseConfigurationReference = 15C14F02E711A3B56AE98F9A /* Release.xcconfig.sample */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -4018,7 +4018,7 @@
 		};
 		92DAFC661725209A615D129B /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 15C14F02E711A3B56AE98F9A /* Release.xcconfig */;
+			baseConfigurationReference = 15C14F02E711A3B56AE98F9A /* Release.xcconfig.sample */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;

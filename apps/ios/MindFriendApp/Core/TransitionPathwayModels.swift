@@ -311,3 +311,17 @@ struct Celebration: Codable {
     let message: String
     let milestones: [String]
 }
+
+struct CheckInResponse: Codable {
+    let success: Bool
+    let newDay: Int
+    let newPhase: Int
+    let phaseAdvanced: Bool
+    
+    enum CodingKeys: String, CodingKey {
+        case success
+        case newDay = "newDay"
+        case newPhase = "newPhase"
+        case phaseAdvanced = "phaseAdvanced"
+    }
+}

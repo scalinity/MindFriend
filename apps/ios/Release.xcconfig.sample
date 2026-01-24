@@ -3,13 +3,11 @@
 // DO NOT commit Release.xcconfig to version control!
 
 // Supabase Production Configuration
-// IMPORTANT: xcconfig treats // as comment delimiter, so we must escape URLs
-// Solution: Use SLASH variable to construct :// without literal //
 SLASH = /
 SUPABASE_PROTOCOL = https
-SUPABASE_HOST = your-project.supabase.co
+SUPABASE_HOST = YOUR_SUPABASE_PROJECT.supabase.co
 SUPABASE_URL = $(SUPABASE_PROTOCOL):$(SLASH)$(SLASH)$(SUPABASE_HOST)
-SUPABASE_ANON_KEY = your-production-anon-key-here
+SUPABASE_ANON_KEY = YOUR_SUPABASE_ANON_KEY_HERE
 
-// Note: For CI/CD, set these as environment variables in your build system
-// The build script should generate Release.xcconfig from environment variables
+// Sentry Crash Reporting (required for production)
+SENTRY_DSN = https://YOUR_PUBLIC_KEY@YOUR_ORG.ingest.sentry.io/YOUR_PROJECT_ID
