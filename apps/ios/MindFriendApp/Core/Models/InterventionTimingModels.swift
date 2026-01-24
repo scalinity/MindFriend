@@ -167,7 +167,116 @@ struct TriggerContext: Codable {
         let heartRate: Double?
         let hrv: Double?
     }
+    
+    struct SanitizedBiometrics: Codable {
+        let hasElevatedHR: Bool?
+        let hrCategory: String?
+        let hasLowHRV: Bool?
+        let hrvCategory: String?
+    }
+    
+    struct SanitizedEvent: Codable {
+        let id: String
+        let classification: String
+        let stressScore: Double
+        let needsArmor: Bool
+        let startDate: String
+        let hasTitle: Bool
+        
+        enum CodingKeys: String, CodingKey {
+            case id, classification
+            case stressScore = "stress_score"
+            case needsArmor = "needs_armor"
+            case startDate = "start_date"
+            case hasTitle = "has_title"
+        }
+    }
 
+    enum CodingKeys: String, CodingKey {
+        case biometrics
+        case timeOfDay = "time_of_day"
+        case recentMood = "recent_mood"
+        case upcomingEvents = "upcoming_events"
+        case timingConfidence = "timing_confidence"
+    }
+    
+    /// Return sanitized version of context for network transmission
+    /// Removes PHI: converts biometric values to categories, strips calendar event titles
+    /// Compliance: HIPAA §164.312(e)(1) - Transmission security
+    func sanitized() -> SanitizedTriggerContext {
+        let sanitizedBiometrics: SanitizedBiometrics?
+        if let bio = biometrics {
+            var hasElevatedHR: Bool?
+            var hrCategory: String?
+            var hasLowHRV: Bool?
+            var hrvCategory: String?
+            
+            if let hr = bio.heartRate {
+                hasElevatedHR = hr > 100
+                if hr < 60 {
+                    hrCategory = "low"
+                } else if hr <= 100 {
+                    hrCategory = "normal"
+                } else if hr <= 120 {
+                    hrCategory = "elevated"
+                } else {
+                    hrCategory = "very_high"
+                }
+            }
+            
+            if let hrv = bio.hrv {
+                hasLowHRV = hrv < 30
+                if hrv < 20 {
+                    hrvCategory = "very_low"
+                } else if hrv <= 50 {
+                    hrvCategory = "low"
+                } else if hrv <= 100 {
+                    hrvCategory = "normal"
+                } else {
+                    hrvCategory = "high"
+                }
+            }
+            
+            sanitizedBiometrics = SanitizedBiometrics(
+                hasElevatedHR: hasElevatedHR,
+                hrCategory: hrCategory,
+                hasLowHRV: hasLowHRV,
+                hrvCategory: hrvCategory
+            )
+        } else {
+            sanitizedBiometrics = nil
+        }
+        
+        let sanitizedEvents = upcomingEvents?.map { event in
+            SanitizedEvent(
+                id: event.id,
+                classification: event.classification.rawValue,
+                stressScore: event.stressScore,
+                needsArmor: event.needsArmor,
+                startDate: event.startDate.ISO8601Format(),
+                hasTitle: true
+            )
+        }
+        
+        return SanitizedTriggerContext(
+            biometrics: sanitizedBiometrics,
+            timeOfDay: timeOfDay,
+            recentMood: recentMood,
+            upcomingEvents: sanitizedEvents,
+            timingConfidence: timingConfidence
+        )
+    }
+}
+
+/// Sanitized version of TriggerContext for network transmission
+/// Contains no PHI - biometric categories instead of raw values, no calendar titles
+struct SanitizedTriggerContext: Codable {
+    let biometrics: TriggerContext.SanitizedBiometrics?
+    let timeOfDay: String?
+    let recentMood: Int?
+    let upcomingEvents: [TriggerContext.SanitizedEvent]?
+    let timingConfidence: Double?
+    
     enum CodingKeys: String, CodingKey {
         case biometrics
         case timeOfDay = "time_of_day"
@@ -178,7 +287,7 @@ struct TriggerContext: Codable {
 }
 
 struct CheckTriggersRequest: Codable {
-    let context: TriggerContext?
+    let context: SanitizedTriggerContext?
 }
 
 struct CheckTriggersResponse: Codable {
