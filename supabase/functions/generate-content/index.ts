@@ -22,6 +22,9 @@ import {
   ElevenLabsError,
 } from "../_shared/elevenlabs.ts";
 import { checkRateLimit } from "../_shared/ratelimit.ts";
+// NEW: Import context-aware generation modules
+import { gatherGenerationContext, GenerationContext } from "./context-gatherer.ts";
+import { buildContextualPrompt } from "./prompt-builder.ts";
 
 // Type alias for untyped Supabase client
 type UntypedSupabaseClient = SupabaseClient<unknown, "public", unknown>;
@@ -393,8 +396,25 @@ serve(async (req) => {
     const contentId = contentRecord.id;
 
     try {
-      // Generate text content with xAI
-      const textContent = await generateTextContent(request);
+      // NEW: Gather user context for personalized generation (for exercise types)
+      let generationContext: GenerationContext | null = null;
+      const exerciseTypes = ["breathing", "meditation", "grounding", "journaling", "mindfulness"];
+      
+      if (exerciseTypes.includes(request.contentType)) {
+        try {
+          generationContext = await gatherGenerationContext(
+            supabaseAdmin,
+            user.id,
+            request.contentType
+          );
+        } catch (contextError) {
+          console.warn("Context gathering failed, proceeding with minimal context:", contextError);
+          // Continue with null context - generateTextContent will handle this
+        }
+      }
+
+      // Generate text content with xAI (now context-aware for exercises)
+      const textContent = await generateTextContent(request, user.id, generationContext);
 
       // Validate generated content
       const contentValidation = validateGeneratedContent(textContent);
@@ -423,13 +443,21 @@ serve(async (req) => {
         );
       }
 
-      // Update record with text content
-      await supabaseAdmin
+      // Update record with generated content and context
+      const updateData: any = {
+        text_content: textContent,
+        safety_flags: contentValidation.flags,
+        status: "completed",
+      };
+      
+      // NEW: Store generation context if available
+      if (generationContext) {
+        updateData.generation_context = generationContext;
+      }
+
+      const { error: updateError } = await supabaseAdmin
         .from("generated_content")
-        .update({
-          text_content: textContent,
-          safety_flags: contentValidation.flags,
-        })
+        .update(updateData)
         .eq("id", contentId);
 
       // Attempt TTS synthesis (non-blocking - can fail gracefully)
@@ -566,36 +594,60 @@ serve(async (req) => {
 
 /**
  * Generate text content using xAI Grok
+ * Now context-aware for exercise types
  */
 async function generateTextContent(
   request: GenerateContentRequest,
+  userId: string,
+  context: GenerationContext | null,
 ): Promise<string> {
   const xaiApiKey = Deno.env.get("XAI_API_KEY");
   if (!xaiApiKey) {
     throw new Error("XAI_API_KEY not configured");
   }
 
-  // Build the prompt
-  const basePrompt = CONTENT_PROMPTS[request.contentType];
-  const durationMinutes = Math.round((request.params.duration || 300) / 60);
+  // Check if this is an exercise type that should use contextual prompts
+  const exerciseTypes = ["breathing", "meditation", "grounding", "journaling", "mindfulness"];
+  const useContextualPrompt = exerciseTypes.includes(request.contentType) && context !== null;
 
-  let prompt = basePrompt
-    .replace("{duration}", String(durationMinutes))
-    .replace(
-      "{theme}",
-      request.params.theme || request.params.focus || "general wellness",
-    )
-    .replace("{focus}", request.params.focus || "mindfulness")
-    .replace("{approach}", request.params.approach || "mindfulness")
-    .replace("{pattern}", request.params.pattern || "4-4-4")
-    .replace("{location}", request.params.location || "indoor")
-    .replace("{scenario}", request.params.groundingScenario || "general")
-    .replace("{timeOfDay}", "anytime")
-    .replace("{thought}", request.params.customPrompt || "anxious thoughts");
+  let systemPrompt: string;
+  let userPrompt: string;
 
-  // Add custom prompt if provided
-  if (request.params.customPrompt) {
-    prompt += `\n\nAdditional user request: ${request.params.customPrompt}`;
+  if (useContextualPrompt) {
+    // NEW: Use context-aware prompt building for exercises
+    const prompts = buildContextualPrompt(
+      request.contentType,
+      context!,
+      request.params.duration,
+      request.params.theme || request.params.customPrompt
+    );
+    systemPrompt = prompts.systemPrompt;
+    userPrompt = prompts.userPrompt;
+  } else {
+    // Legacy: Use template-based prompts for non-exercise types (sleep stories, affirmations, etc.)
+    const basePrompt = CONTENT_PROMPTS[request.contentType];
+    const durationMinutes = Math.round((request.params.duration || 300) / 60);
+
+    userPrompt = basePrompt
+      .replace("{duration}", String(durationMinutes))
+      .replace(
+        "{theme}",
+        request.params.theme || request.params.focus || "general wellness",
+      )
+      .replace("{focus}", request.params.focus || "mindfulness")
+      .replace("{approach}", request.params.approach || "mindfulness")
+      .replace("{pattern}", request.params.pattern || "4-4-4")
+      .replace("{location}", request.params.location || "indoor")
+      .replace("{scenario}", request.params.groundingScenario || "general")
+      .replace("{timeOfDay}", "anytime")
+      .replace("{thought}", request.params.customPrompt || "anxious thoughts");
+
+    // Add custom prompt if provided
+    if (request.params.customPrompt) {
+      userPrompt += `\n\nAdditional user request: ${request.params.customPrompt}`;
+    }
+
+    systemPrompt = "You are a professional wellness content creator specializing in mental health and relaxation content. Create calming, therapeutic content that promotes wellbeing.";
   }
 
   const response = await fetch(XAI_API_URL, {
@@ -609,12 +661,11 @@ async function generateTextContent(
       messages: [
         {
           role: "system",
-          content:
-            "You are a professional wellness content creator specializing in mental health and relaxation content. Create calming, therapeutic content that promotes wellbeing.",
+          content: systemPrompt,
         },
         {
           role: "user",
-          content: prompt,
+          content: userPrompt,
         },
       ],
       max_tokens: 4000,
