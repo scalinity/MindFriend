@@ -159,6 +159,12 @@ struct ProfileView: View {
                 // Social
                 Section("Social") {
                     NavigationLink {
+                        PeerSupportHubView(supabase: container.supabase)
+                    } label: {
+                        Label("Peer Support & Mentorship", systemImage: "person.3.fill")
+                    }
+
+                    NavigationLink {
                         PartnerModeView()
                     } label: {
                         Label("Partner Mode", systemImage: "person.2.fill")
