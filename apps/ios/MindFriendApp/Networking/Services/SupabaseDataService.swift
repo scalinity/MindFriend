@@ -4750,4 +4750,127 @@ final class SupabaseDataService: ObservableObject {
             throw GenerateProfilePictureError.apiError(error.localizedDescription)
         }
     }
+    
+    // MARK: - Generated Content (Exercise Management)
+    
+    /// Rate a generated exercise
+    func rateContent(contentId: String, rating: Int, feedback: String? = nil) async throws {
+        guard let contentUUID = UUID(uuidString: contentId) else {
+            throw NSError(domain: "SupabaseDataService", code: 400, userInfo: [
+                NSLocalizedDescriptionKey: "Invalid content ID"
+            ])
+        }
+        
+        struct RateExerciseRequest: Encodable {
+            let contentId: String
+            let rating: Int
+            let feedback: String?
+        }
+        
+        struct RateExerciseResponse: Decodable {
+            let success: Bool
+            let updatedRating: Int
+        }
+        
+        let requestBody = RateExerciseRequest(
+            contentId: contentId,
+            rating: rating,
+            feedback: feedback
+        )
+        
+        let _: RateExerciseResponse = try await supabase.functions.invoke(
+            "rate-exercise",
+            options: FunctionInvokeOptions(body: requestBody)
+        )
+        
+        Log.data.info("[Data] Rated content \(contentId) with \(rating) stars")
+    }
+    
+    /// Toggle favorite status for a generated exercise
+    func toggleFavorite(contentId: String) async throws {
+        guard let contentUUID = UUID(uuidString: contentId) else {
+            throw NSError(domain: "SupabaseDataService", code: 400, userInfo: [
+                NSLocalizedDescriptionKey: "Invalid content ID"
+            ])
+        }
+        
+        // Get current favorite status
+        struct FavoriteResult: Decodable {
+            let isFavorite: Bool
+            
+            enum CodingKeys: String, CodingKey {
+                case isFavorite = "is_favorite"
+            }
+        }
+        
+        let results: [FavoriteResult] = try await supabase
+            .from("generated_content")
+            .select("is_favorite")
+            .eq("id", value: contentUUID)
+            .eq("user_id", value: try userId)
+            .execute()
+            .value
+        
+        guard let current = results.first else {
+            throw NSError(domain: "SupabaseDataService", code: 404, userInfo: [
+                NSLocalizedDescriptionKey: "Content not found"
+            ])
+        }
+        
+        // Toggle the favorite status
+        let newStatus = !current.isFavorite
+        
+        try await supabase
+            .from("generated_content")
+            .update(["is_favorite": AnyEncodable(newStatus)])
+            .eq("id", value: contentUUID)
+            .eq("user_id", value: try userId)
+            .execute()
+        
+        Log.data.info("[Data] Toggled favorite for content \(contentId): \(newStatus)")
+    }
+    
+    /// Get user's generated content with optional filters
+    func getUserGeneratedContent(
+        type: GeneratedContentType? = nil,
+        favoritesOnly: Bool = false,
+        limit: Int = 50
+    ) async throws -> [GeneratedContent] {
+        var query = supabase
+            .from("generated_content")
+            .select()
+            .eq("user_id", value: try userId)
+            .order("created_at", ascending: false)
+            .limit(limit)
+        
+        // Apply type filter if specified
+        if let type = type {
+            query = query.eq("content_type", value: type.rawValue)
+        }
+        
+        // Apply favorites filter if requested
+        if favoritesOnly {
+            query = query.eq("is_favorite", value: true)
+        }
+        
+        let results: [GeneratedContent] = try await query.execute().value
+        
+        Log.data.info("[Data] Fetched \(results.count) generated content items")
+        return results
+    }
+    
+    /// Get a specific generated content item by ID
+    func getGeneratedContent(id: String) async throws -> GeneratedContent? {
+        guard let contentUUID = UUID(uuidString: id) else { return nil }
+        
+        let results: [GeneratedContent] = try await supabase
+            .from("generated_content")
+            .select()
+            .eq("id", value: contentUUID)
+            .eq("user_id", value: try userId)
+            .execute()
+            .value
+        
+        return results.first
+    }
 }

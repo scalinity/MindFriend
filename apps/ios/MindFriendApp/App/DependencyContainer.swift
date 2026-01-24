@@ -96,6 +96,15 @@ final class DependencyContainer: ObservableObject {
         SleepService(supabase: self.supabaseClient)
     }()
 
+    // Sleep Tracking Services
+    lazy var sleepTrackingService: SleepTrackingService = {
+        SleepTrackingService(supabase: self.supabaseClient)
+    }()
+
+    lazy var sleepHealthKitManager: SleepHealthKitManager = {
+        SleepHealthKitManager(sleepTrackingService: self.sleepTrackingService)
+    }()
+
     lazy var difficultyService: DifficultyService = {
         DifficultyService(supabase: self.supabaseClient)
     }()
