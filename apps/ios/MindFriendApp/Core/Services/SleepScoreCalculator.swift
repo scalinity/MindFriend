@@ -75,9 +75,10 @@ struct SleepScoreCalculator {
         let efficiency: Double
 
         if let providedEfficiency = entry.sleepEfficiency {
-            efficiency = providedEfficiency
+            // Normalize: if value is <= 1.0, treat as decimal (0-1); otherwise treat as percentage (0-100)
+            efficiency = providedEfficiency <= 1.0 ? providedEfficiency * 100 : providedEfficiency
         } else if let asleep = entry.timeAsleepMinutes {
-            // Estimate: (time asleep / time in bed) * 100
+            // Calculate: (time asleep / time in bed) * 100
             efficiency = (Double(asleep) / Double(entry.timeInBedMinutes)) * 100
         } else {
             // No data available, return default
@@ -147,7 +148,7 @@ struct SleepScoreCalculator {
               let rem = entry.remSleepMinutes,
               let totalAsleep = entry.timeAsleepMinutes else {
             // No stage data available (manual entry or older device)
-            return 10 // Default middle score
+            return 0 // Return 0 when data is missing
         }
 
         var score = 0

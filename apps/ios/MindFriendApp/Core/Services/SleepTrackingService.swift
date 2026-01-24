@@ -9,11 +9,13 @@ final class SleepTrackingService: ObservableObject {
 
     private let supabase: SupabaseClient
     private let calculator = SleepScoreCalculator()
+    private let notificationService: BedtimeNotificationServicing?
 
     // MARK: - Initialization
 
-    init(supabase: SupabaseClient) {
+    init(supabase: SupabaseClient, notificationService: BedtimeNotificationServicing? = nil) {
         self.supabase = supabase
+        self.notificationService = notificationService
     }
 
     // MARK: - Sleep Entries
@@ -140,6 +142,28 @@ final class SleepTrackingService: ObservableObject {
             .single()
             .execute()
             .value
+
+        // Update bedtime reminder notifications
+        if response.bedtimeReminderEnabled, let targetBedtime = response.targetBedtime {
+            // Schedule/update bedtime reminder
+            let routineSuggestion = response.preferredWindDownTypes.isEmpty
+                ? "Start your wind-down routine"
+                : "Tonight's routine: \(response.preferredWindDownTypes.prefix(2).joined(separator: ", "))"
+
+            do {
+                try await notificationService?.updateReminderSchedule(
+                    newBedtime: targetBedtime,
+                    windDownMinutes: response.windDownDurationMinutes,
+                    routineSuggestion: routineSuggestion
+                )
+            } catch {
+                // Log error but don't fail the goals update
+                print("⚠️ Failed to update bedtime reminder notification: \(error.localizedDescription)")
+            }
+        } else {
+            // Cancel reminders if disabled
+            await notificationService?.cancelBedtimeReminder()
+        }
 
         return response
     }
