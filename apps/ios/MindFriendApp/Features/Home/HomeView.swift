@@ -910,7 +910,7 @@ struct QuestCard: View {
         }
         .buttonStyle(.plain)
         .sheet(isPresented: $showQuestChoice) {
-            QuestChoiceView()
+            QuestChoiceView(assignedQuest: quest)
         }
     }
 }
