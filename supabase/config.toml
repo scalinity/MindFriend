@@ -86,3 +86,13 @@ verify_jwt = false  # Verified internally in function code
 [functions.calculate-capacity]
 verify_jwt = false  # Verified internally in function code
 
+# N006: Wellbeing Debt Calculator Edge Functions
+[functions.detect-transactions]
+verify_jwt = false  # Cron job, uses service role key internally
+
+[functions.calculate-debt-score]
+verify_jwt = false  # Cron job, uses service role key internally
+
+[functions.generate-recovery-program]
+verify_jwt = false  # Verified internally in function code
+

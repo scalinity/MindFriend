@@ -244,6 +244,148 @@ enum BackgroundSoundType: String, Codable, CaseIterable {
 
 // MARK: - Generated Content
 
+// NEW: Generation Context for personalized exercises
+struct GenerationContext: Codable {
+    struct Mood: Codable {
+        let level: Int // 1-10
+        let label: String // "anxious", "calm", etc.
+        let timestamp: Date
+    }
+    
+    struct RecentExercise: Codable {
+        let title: String
+        let type: String
+        let completedAt: Date
+        let rating: Int?
+        
+        enum CodingKeys: String, CodingKey {
+            case title
+            case type
+            case completedAt = "completedAt"
+            case rating
+        }
+    }
+    
+    struct Preferences: Codable {
+        let imagery: [String]
+        let guidanceLevel: String // "minimal", "moderate", "detailed"
+        let avoidThemes: [String]
+        let voicePreference: String
+        
+        enum CodingKeys: String, CodingKey {
+            case imagery
+            case guidanceLevel
+            case avoidThemes
+            case voicePreference
+        }
+    }
+    
+    let mood: Mood?
+    let recentExercises: [RecentExercise]
+    let timeOfDay: String // "morning", "afternoon", "evening", "night"
+    let preferences: Preferences
+}
+
+// NEW: Exercise-specific content structures
+enum ExerciseContent {
+    case breathing(BreathingExercise)
+    case meditation(MeditationExercise)
+    case grounding(GroundingExercise)
+    case journaling(JournalingExercise)
+    
+    struct BreathingExercise: Codable {
+        struct Pattern: Codable {
+            let inhaleSeconds: Double
+            let holdInSeconds: Double
+            let exhaleSeconds: Double
+            let holdOutSeconds: Double
+            let patternName: String
+        }
+        
+        let pattern: Pattern
+        let cycles: Int
+        let introText: String
+        let outroText: String
+    }
+    
+    struct MeditationExercise: Codable {
+        struct Segment: Codable, Identifiable {
+            let id = UUID()
+            let timestamp: Int // seconds from start
+            let text: String
+            let type: String // "intro", "breathingGuide", "bodyAwareness", etc.
+            
+            enum CodingKeys: String, CodingKey {
+                case timestamp, text, type
+            }
+        }
+        
+        let script: [Segment]
+    }
+    
+    struct GroundingExercise: Codable {
+        struct Prompt: Codable, Identifiable {
+            let id = UUID()
+            let timestamp: Int
+            let text: String
+            let sense: String? // "sight", "touch", "hearing", etc.
+            
+            enum CodingKeys: String, CodingKey {
+                case timestamp, text, sense
+            }
+        }
+        
+        let technique: String // "5-4-3-2-1", "body scan", etc.
+        let prompts: [Prompt]
+    }
+    
+    struct JournalingExercise: Codable {
+        struct Prompt: Codable, Identifiable {
+            let id = UUID()
+            let text: String
+            let category: String
+            
+            enum CodingKeys: String, CodingKey {
+                case text, category
+            }
+        }
+        
+        let prompts: [Prompt]
+        let reflectionQuestions: [String]
+    }
+    
+    // Parse exercise content from JSON text
+    static func parse(from jsonString: String, type: GeneratedContentType) -> ExerciseContent? {
+        guard let data = jsonString.data(using: .utf8) else { return nil }
+        
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        decoder.dateDecodingStrategy = .iso8601
+        
+        do {
+            switch type {
+            case .breathing:
+                let exercise = try decoder.decode(BreathingExercise.self, from: data)
+                return .breathing(exercise)
+            case .meditation, .mindfulness:
+                let exercise = try decoder.decode(MeditationExercise.self, from: data)
+                return .meditation(exercise)
+            case .grounding:
+                let exercise = try decoder.decode(GroundingExercise.self, from: data)
+                return .grounding(exercise)
+            case .journaling:
+                let exercise = try decoder.decode(JournalingExercise.self, from: data)
+                return .journaling(exercise)
+            default:
+                return nil
+            }
+        } catch {
+            print("Failed to parse exercise content: \(error)")
+            return nil
+        }
+    }
+}
+
 struct GeneratedContent: Codable, Identifiable {
     let id: UUID
     let userId: UUID
@@ -266,6 +408,9 @@ struct GeneratedContent: Codable, Identifiable {
     let isFavorite: Bool
     let playCount: Int
     let lastPlayedAt: Date?
+    // NEW: Context-aware generation fields
+    let generationContext: GenerationContext?
+    let userRating: Int? // User's own rating (1-5)
     let createdAt: Date
     let updatedAt: Date
 
@@ -291,6 +436,9 @@ struct GeneratedContent: Codable, Identifiable {
         case isFavorite = "is_favorite"
         case playCount = "play_count"
         case lastPlayedAt = "last_played_at"
+        // NEW
+        case generationContext = "generation_context"
+        case userRating = "user_rating"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
@@ -307,6 +455,14 @@ struct GeneratedContent: Codable, Identifiable {
 
     var hasAudio: Bool {
         audioUrl != nil && !audioUrl!.isEmpty
+    }
+    
+    // NEW: Parse exercise-specific content
+    var exerciseContent: ExerciseContent? {
+        guard [.breathing, .meditation, .grounding, .journaling, .mindfulness].contains(contentType) else {
+            return nil
+        }
+        return ExerciseContent.parse(from: textContent, type: contentType)
     }
 }
 
