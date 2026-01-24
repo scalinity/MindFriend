@@ -36,14 +36,14 @@ serve(async (req) => {
     // Fetch top exercises
     const { data: topExercises, error: topError } = await supabaseAdmin
       .from("user_efficacy_profiles")
-      .select(\`
+      .select(`
         *,
         exercises:exercise_id (
           id,
           name,
           type
         )
-      \`)
+      `)
       .eq("user_id", user.id)
       .order("overall_efficacy_score", { ascending: false })
       .limit(5);
@@ -55,12 +55,14 @@ serve(async (req) => {
     // Fetch recent sessions
     const { data: recentSessions, error: sessionsError } = await supabaseAdmin
       .from("intervention_efficacy")
-      .select(\`
+      .select(`
         *,
         exercises:exercise_id (
-          name
+          id,
+          name,
+          type
         )
-      \`)
+      `)
       .eq("user_id", user.id)
       .order("completed_at", { ascending: false })
       .limit(10);
@@ -99,15 +101,15 @@ serve(async (req) => {
 
       // Generate insight messages
       if (totalBreakthroughs > 0) {
-        insights.push(\`You've had \${totalBreakthroughs} breakthrough moment\${totalBreakthroughs > 1 ? 's' : ''} recently\`);
+        insights.push(`You've had ${totalBreakthroughs} breakthrough moment${totalBreakthroughs > 1 ? 's' : ''} recently`);
       }
 
       if (mostEffectiveContext && efficacyByTime[mostEffectiveContext].length >= 3) {
-        insights.push(\`Exercises work better for you in the \${mostEffectiveContext}\`);
+        insights.push(`Exercises work better for you in the ${mostEffectiveContext}`);
       }
 
       if (topExercises && topExercises.length > 0 && topExercises[0].trend === 'improving') {
-        insights.push(\`Your efficacy with \${(topExercises[0].exercises as any).name} is improving over time\`);
+        insights.push(`Your efficacy with ${(topExercises[0].exercises as any).name} is improving over time`);
       }
     }
 
