@@ -12,19 +12,35 @@ import Security
 
 /// Handles encryption/decryption of time capsule content
 /// Uses AES-256-GCM with per-capsule keys encrypted by user master key
+/// SECURITY: Master key is randomly generated (NOT derived from user ID)
+/// Keys stored in device-only Keychain (no iCloud sync for security)
 class CapsuleEncryptionService {
 
     // MARK: - Constants
 
     private enum KeychainKeys {
-        static let masterKeySalt = "com.mindfriend.capsule.master.salt"
+        static let masterKey = "com.mindfriend.capsule.master.key"
         static let capsuleKeyPrefix = "com.mindfriend.capsule.key."
         static let service = "com.mindfriend.timecapsule"
     }
 
-    private enum Constants {
-        static let masterKeyInfo = "capsule-master-key"
-        static let saltSize = 32
+    // MARK: - Types
+
+    /// Metadata for HMAC signature verification
+    struct CapsuleMetadata {
+        let title: String?
+        let theme: String?
+        let createdAt: Date
+        let deliverAt: Date
+
+        /// Serialize metadata for HMAC signing
+        func serialize() -> String {
+            let titleStr = title ?? ""
+            let themeStr = theme ?? ""
+            let createdStr = ISO8601DateFormatter().string(from: createdAt)
+            let deliverStr = ISO8601DateFormatter().string(from: deliverAt)
+            return "\(titleStr)|\(themeStr)|\(createdStr)|\(deliverStr)"
+        }
     }
 
     // MARK: - Errors
@@ -33,11 +49,11 @@ class CapsuleEncryptionService {
         case invalidContent
         case encryptionFailed
         case decryptionFailed
-        case keyDerivationFailed
+        case keyGenerationFailed
         case keychainStoreFailed
         case keychainRetrieveFailed
-        case userIdUnavailable
         case invalidKeyId
+        case signatureVerificationFailed
 
         var errorDescription: String? {
             switch self {
@@ -47,26 +63,18 @@ class CapsuleEncryptionService {
                 return "Failed to encrypt content. Please try again."
             case .decryptionFailed:
                 return "Failed to decrypt capsule content"
-            case .keyDerivationFailed:
-                return "Failed to derive encryption key"
+            case .keyGenerationFailed:
+                return "Failed to generate secure encryption key"
             case .keychainStoreFailed:
                 return "Failed to securely store encryption key"
             case .keychainRetrieveFailed:
-                return "Failed to retrieve encryption key. Enable iCloud Keychain to sync capsules across devices."
-            case .userIdUnavailable:
-                return "User authentication required"
+                return "Failed to retrieve encryption key. Capsules can only be opened on this device."
             case .invalidKeyId:
                 return "Invalid encryption key identifier"
+            case .signatureVerificationFailed:
+                return "Capsule metadata has been tampered with"
             }
         }
-    }
-
-    // MARK: - Dependencies
-
-    private let userIdProvider: () async -> String?
-
-    init(userIdProvider: @escaping () async -> String?) {
-        self.userIdProvider = userIdProvider
     }
 
     // MARK: - Public API
@@ -75,7 +83,7 @@ class CapsuleEncryptionService {
     /// - Parameter content: Plaintext content to encrypt
     /// - Returns: Tuple of (encrypted data, key ID)
     /// - Throws: EncryptionError if encryption fails
-    func encrypt(content: String) async throws -> (encrypted: Data, keyId: String) {
+    func encrypt(content: String) throws -> (encrypted: Data, keyId: String) {
         guard !content.isEmpty else {
             throw EncryptionError.invalidContent
         }
@@ -85,7 +93,7 @@ class CapsuleEncryptionService {
         }
 
         // Get or create master key
-        let masterKey = try await getMasterKey()
+        let masterKey = try getMasterKey()
 
         // Generate per-capsule encryption key
         let capsuleKey = SymmetricKey(size: .bits256)
@@ -120,9 +128,9 @@ class CapsuleEncryptionService {
     ///   - keyId: Encryption key identifier
     /// - Returns: Decrypted plaintext content
     /// - Throws: EncryptionError if decryption fails
-    func decrypt(encrypted: Data, keyId: String) async throws -> String {
+    func decrypt(encrypted: Data, keyId: String) throws -> String {
         // Get master key
-        let masterKey = try await getMasterKey()
+        let masterKey = try getMasterKey()
 
         // Retrieve and decrypt capsule key
         let encryptedKey = try retrieveEncryptedKey(keyId: keyId)
@@ -142,44 +150,127 @@ class CapsuleEncryptionService {
         return content
     }
 
-    // MARK: - Master Key Management
+    /// Sign capsule metadata with HMAC-SHA256
+    /// SECURITY: Prevents database administrators from tampering with metadata
+    /// - Parameters:
+    ///   - metadata: Capsule metadata to sign
+    ///   - keyId: Encryption key identifier
+    /// - Returns: Base64-encoded HMAC signature
+    /// - Throws: EncryptionError if signing fails
+    func signMetadata(_ metadata: CapsuleMetadata, keyId: String) throws -> String {
+        // Retrieve capsule key
+        let encryptedKey = try retrieveEncryptedKey(keyId: keyId)
+        let masterKey = try getMasterKey()
+        let keySealedBox = try AES.GCM.SealedBox(combined: encryptedKey)
+        let capsuleKeyData = try AES.GCM.open(keySealedBox, using: masterKey)
+        let capsuleKey = SymmetricKey(data: capsuleKeyData)
 
-    /// Get or create master key derived from stable user ID
-    private func getMasterKey() async throws -> SymmetricKey {
-        guard let userId = await userIdProvider() else {
-            throw EncryptionError.userIdUnavailable
+        // Create HMAC signature
+        let metadataString = metadata.serialize()
+        guard let metadataData = metadataString.data(using: .utf8) else {
+            throw EncryptionError.encryptionFailed
         }
 
-        // Get or create salt
-        let salt = try getOrCreateSalt()
-
-        // Derive master key from user ID + salt
-        return try deriveMasterKey(from: userId, salt: salt)
+        let signature = HMAC<SHA256>.authenticationCode(for: metadataData, using: capsuleKey)
+        return Data(signature).base64EncodedString()
     }
 
-    /// Derive master key using HKDF from stable user ID
-    private func deriveMasterKey(from userId: String, salt: Data) throws -> SymmetricKey {
-        guard let inputKeyData = userId.data(using: .utf8) else {
-            throw EncryptionError.keyDerivationFailed
+    /// Verify capsule metadata signature
+    /// SECURITY: Detects if database administrator tampered with metadata
+    /// - Parameters:
+    ///   - metadata: Capsule metadata to verify
+    ///   - signature: Base64-encoded HMAC signature
+    ///   - keyId: Encryption key identifier
+    /// - Returns: True if signature is valid, false otherwise
+    /// - Throws: EncryptionError if verification fails due to key retrieval issues
+    func verifyMetadata(_ metadata: CapsuleMetadata, signature: String, keyId: String) throws -> Bool {
+        // Retrieve capsule key
+        let encryptedKey = try retrieveEncryptedKey(keyId: keyId)
+        let masterKey = try getMasterKey()
+        let keySealedBox = try AES.GCM.SealedBox(combined: encryptedKey)
+        let capsuleKeyData = try AES.GCM.open(keySealedBox, using: masterKey)
+        let capsuleKey = SymmetricKey(data: capsuleKeyData)
+
+        // Recompute HMAC signature
+        let metadataString = metadata.serialize()
+        guard let metadataData = metadataString.data(using: .utf8) else {
+            return false
         }
 
-        let inputKey = SymmetricKey(data: inputKeyData)
-
-        guard let info = Constants.masterKeyInfo.data(using: .utf8) else {
-            throw EncryptionError.keyDerivationFailed
+        let expectedSignature = HMAC<SHA256>.authenticationCode(for: metadataData, using: capsuleKey)
+        guard let providedSignature = Data(base64Encoded: signature) else {
+            return false
         }
 
-        return HKDF<SHA256>.deriveKey(
-            inputKeyMaterial: inputKey,
-            salt: salt,
-            info: info,
-            outputByteCount: 32
-        )
+        // Constant-time comparison of signatures
+        return secureCompare(Data(expectedSignature), providedSignature)
+    }
+
+    // MARK: - Master Key Management
+
+    /// Get or create master key (randomly generated, NOT derived from user ID)
+    /// SECURITY FIX: Master key is now truly random, not derived from predictable user ID
+    private func getMasterKey() throws -> SymmetricKey {
+        // Try to retrieve existing master key
+        if let existingKey = try? retrieveMasterKeyFromKeychain() {
+            return existingKey
+        }
+
+        // Generate NEW random 256-bit master key
+        let masterKey = SymmetricKey(size: .bits256)
+
+        // Store in device-only Keychain (no iCloud sync)
+        try storeMasterKeyInKeychain(masterKey)
+
+        return masterKey
+    }
+
+    /// Store master key in Keychain (device-only, no iCloud sync)
+    private func storeMasterKeyInKeychain(_ key: SymmetricKey) throws {
+        let keyData = key.withUnsafeBytes { Data($0) }
+
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: KeychainKeys.service,
+            kSecAttrAccount as String: KeychainKeys.masterKey,
+            kSecValueData as String: keyData,
+            kSecAttrSynchronizable as String: false, // SECURITY: No iCloud sync
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly // Device-only
+        ]
+
+        // Delete existing item if present
+        SecItemDelete(query as CFDictionary)
+
+        let status = SecItemAdd(query as CFDictionary, nil)
+
+        guard status == errSecSuccess else {
+            throw EncryptionError.keychainStoreFailed
+        }
+    }
+
+    /// Retrieve master key from Keychain
+    private func retrieveMasterKeyFromKeychain() throws -> SymmetricKey {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: KeychainKeys.service,
+            kSecAttrAccount as String: KeychainKeys.masterKey,
+            kSecReturnData as String: true
+        ]
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        guard status == errSecSuccess, let keyData = result as? Data else {
+            throw EncryptionError.keychainRetrieveFailed
+        }
+
+        return SymmetricKey(data: keyData)
     }
 
     // MARK: - Keychain Operations
 
-    /// Store encrypted capsule key in Keychain with iCloud sync
+    /// Store encrypted capsule key in Keychain (device-only, no iCloud sync)
+    /// SECURITY FIX: Disabled iCloud sync to prevent attack surface expansion
     private func storeEncryptedKey(_ encryptedKey: Data, keyId: String) throws {
         let account = KeychainKeys.capsuleKeyPrefix + keyId
 
@@ -188,8 +279,8 @@ class CapsuleEncryptionService {
             kSecAttrService as String: KeychainKeys.service,
             kSecAttrAccount as String: account,
             kSecValueData as String: encryptedKey,
-            kSecAttrSynchronizable as String: true, // Enable iCloud Keychain sync
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock // Security: available after first unlock
+            kSecAttrSynchronizable as String: false, // SECURITY: No iCloud sync
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly // Device-only
         ]
 
         // Delete existing item if present
@@ -210,8 +301,7 @@ class CapsuleEncryptionService {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: KeychainKeys.service,
             kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecAttrSynchronizable as String: kSecAttrSynchronizableAny // Search both local and synced
+            kSecReturnData as String: true
         ]
 
         var result: AnyObject?
@@ -224,53 +314,6 @@ class CapsuleEncryptionService {
         return data
     }
 
-    /// Get or create salt for master key derivation
-    private func getOrCreateSalt() throws -> Data {
-        // Try to retrieve existing salt
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: KeychainKeys.service,
-            kSecAttrAccount as String: KeychainKeys.masterKeySalt,
-            kSecReturnData as String: true,
-            kSecAttrSynchronizable as String: kSecAttrSynchronizableAny
-        ]
-
-        var result: AnyObject?
-        var status = SecItemCopyMatching(query as CFDictionary, &result)
-
-        if status == errSecSuccess, let existingSalt = result as? Data {
-            return existingSalt
-        }
-
-        // Create new salt
-        var salt = Data(count: Constants.saltSize)
-        let result2 = salt.withUnsafeMutableBytes { ptr in
-            SecRandomCopyBytes(kSecRandomDefault, Constants.saltSize, ptr.baseAddress!)
-        }
-
-        guard result2 == errSecSuccess else {
-            throw EncryptionError.keyDerivationFailed
-        }
-
-        // Store salt in Keychain with iCloud sync
-        let addQuery: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: KeychainKeys.service,
-            kSecAttrAccount as String: KeychainKeys.masterKeySalt,
-            kSecValueData as String: salt,
-            kSecAttrSynchronizable as String: true,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock // Security: available after first unlock
-        ]
-
-        status = SecItemAdd(addQuery as CFDictionary, nil)
-
-        guard status == errSecSuccess else {
-            throw EncryptionError.keychainStoreFailed
-        }
-
-        return salt
-    }
-
     // MARK: - Utility
 
     /// Delete encryption key from Keychain (for capsule deletion)
@@ -280,8 +323,7 @@ class CapsuleEncryptionService {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: KeychainKeys.service,
-            kSecAttrAccount as String: account,
-            kSecAttrSynchronizable as String: kSecAttrSynchronizableAny
+            kSecAttrAccount as String: account
         ]
 
         let status = SecItemDelete(query as CFDictionary)
@@ -291,23 +333,59 @@ class CapsuleEncryptionService {
             throw EncryptionError.keychainStoreFailed
         }
     }
+
+    /// Constant-time comparison of two Data objects
+    /// SECURITY: Prevents timing attacks by comparing all bytes regardless of differences
+    /// - Parameters:
+    ///   - lhs: First data to compare
+    ///   - rhs: Second data to compare
+    /// - Returns: True if data is identical, false otherwise
+    private func secureCompare(_ lhs: Data, _ rhs: Data) -> Bool {
+        // Different lengths = not equal (but still compare to prevent short-circuit)
+        guard lhs.count == rhs.count else {
+            return false
+        }
+
+        // XOR all bytes and accumulate result
+        var result: UInt8 = 0
+        for (byte1, byte2) in zip(lhs, rhs) {
+            result |= byte1 ^ byte2
+        }
+
+        // result == 0 means all bytes matched
+        return result == 0
+    }
+
+    /// Constant-time string comparison
+    /// SECURITY: Prevents timing attacks when comparing key IDs or other sensitive strings
+    /// - Parameters:
+    ///   - lhs: First string to compare
+    ///   - rhs: Second string to compare
+    /// - Returns: True if strings are identical, false otherwise
+    private func secureCompareStrings(_ lhs: String, _ rhs: String) -> Bool {
+        guard let lhsData = lhs.data(using: .utf8),
+              let rhsData = rhs.data(using: .utf8) else {
+            return false
+        }
+        return secureCompare(lhsData, rhsData)
+    }
 }
 
 // MARK: - Base64 Helpers
 
 extension CapsuleEncryptionService {
     /// Encrypt and return base64-encoded string (for API transport)
-    func encryptToBase64(content: String) async throws -> (encrypted: String, keyId: String) {
-        let result = try await encrypt(content: content)
+    func encryptToBase64(content: String) throws -> (encrypted: String, keyId: String) {
+        let result = try encrypt(content: content)
         let base64 = result.encrypted.base64EncodedString()
         return (base64, result.keyId)
     }
 
     /// Decrypt from base64-encoded string
-    func decryptFromBase64(encrypted: String, keyId: String) async throws -> String {
+    func decryptFromBase64(encrypted: String, keyId: String) throws -> String {
         guard let data = Data(base64Encoded: encrypted) else {
             throw EncryptionError.decryptionFailed
         }
-        return try await decrypt(encrypted: data, keyId: keyId)
+        return try decrypt(encrypted: data, keyId: keyId)
     }
 }

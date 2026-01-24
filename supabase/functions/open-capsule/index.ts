@@ -6,8 +6,18 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   captureUserSnapshot,
   calculateHighlights,
+  UserSnapshot,
   DEFAULT_SNAPSHOT,
 } from "../_shared/capsule-utils.ts";
+import {
+  logError,
+  createErrorResponse,
+  createCustomErrorResponse,
+} from "../_shared/error-logger.ts";
+import {
+  checkRateLimit,
+  createRateLimitResponse,
+} from "../_shared/rate-limiter.ts";
 
 interface OpenCapsuleRequest {
   capsuleId: string;
@@ -41,6 +51,11 @@ serve(async (req) => {
       });
     }
 
+    // SECURITY: Rate limiting (10 requests per minute)
+    if (!checkRateLimit(user.id, 10, 60000)) {
+      return createRateLimitResponse(60);
+    }
+
     // Parse request
     const body: OpenCapsuleRequest = await req.json();
 
@@ -55,17 +70,22 @@ serve(async (req) => {
       `,
       )
       .eq("id", body.capsuleId)
-      .eq("user_id", user.id)
-      .is("deleted_at", null)
       .single();
 
     if (fetchError || !capsule) {
-      return new Response(
-        JSON.stringify({ error: "Capsule not found or access denied" }),
+      logError(
         {
-          status: 404,
-          headers: { "Content-Type": "application/json" },
+          function: "open-capsule",
+          operation: "fetch_capsule",
+          userId: user.id,
+          metadata: { capsuleId: body.capsuleId },
         },
+        fetchError || new Error("Capsule not found"),
+      );
+      return createCustomErrorResponse(
+        "capsule_not_found",
+        "Capsule not found",
+        404,
       );
     }
 
@@ -126,7 +146,15 @@ serve(async (req) => {
       .in("status", ["delivered", "sealed"]); // FIX: Atomic check in WHERE clause
 
     if (updateError) {
-      console.error("Failed to mark capsule as opened:", updateError);
+      logError(
+        {
+          function: "open-capsule",
+          operation: "update_capsule_status",
+          userId: user.id,
+          metadata: { capsuleId: capsule.id },
+        },
+        updateError,
+      );
       // Don't fail the request, just log the error
     }
 
@@ -167,16 +195,13 @@ serve(async (req) => {
       },
     );
   } catch (error) {
-    console.error("Error in open-capsule:", error);
-    return new Response(
-      JSON.stringify({
-        error: "Internal server error",
-        message: error instanceof Error ? error.message : "Unknown error",
-      }),
+    logError(
       {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
+        function: "open-capsule",
+        operation: "request_execution",
       },
+      error,
     );
+    return createErrorResponse(error);
   }
 });
