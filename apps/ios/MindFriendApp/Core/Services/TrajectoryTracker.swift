@@ -64,29 +64,53 @@ final class TrajectoryTracker: ObservableObject {
            let startTime = startTime,
            !currentTrajectory.isEmpty {
 
-            let trajectoryData: [String: Any] = [
-                "session_id": sessionId.uuidString,
-                "user_id": userId.uuidString,
-                "exercise_id": exerciseId.uuidString,
-                "start_time": ISO8601DateFormatter().string(from: startTime),
-                "end_time": ISO8601DateFormatter().string(from: Date()),
-                "samples": currentTrajectory.map { point in
-                    [
-                        "timestamp": ISO8601DateFormatter().string(from: point.timestamp),
-                        "seconds_from_start": point.secondsFromStart,
-                        "nervous_system_state": point.nervousSystemState ?? "unknown",
-                        "emotion_classification": point.emotionClassification.map { emotion in
-                            [
-                                "primary": emotion.primary,
-                                "valence": emotion.valence,
-                                "arousal": emotion.arousal ?? 0
-                            ]
-                        } ?? [:],
-                        "hrv_reading": point.hrvReading ?? 0,
-                        "composite_score": point.compositeScore
-                    ]
+            struct EmotionData: Encodable {
+                let primary: String
+                let valence: Double
+                let arousal: Double
+            }
+            
+            struct SampleData: Encodable {
+                let timestamp: String
+                let seconds_from_start: Int
+                let nervous_system_state: String
+                let emotion_classification: EmotionData?
+                let hrv_reading: Double
+                let composite_score: Double
+            }
+            
+            struct TrajectoryRecord: Encodable {
+                let session_id: String
+                let user_id: String
+                let exercise_id: String
+                let start_time: String
+                let end_time: String
+                let samples: [SampleData]
+            }
+
+            let trajectoryData = TrajectoryRecord(
+                session_id: sessionId.uuidString,
+                user_id: userId.uuidString,
+                exercise_id: exerciseId.uuidString,
+                start_time: ISO8601DateFormatter().string(from: startTime),
+                end_time: ISO8601DateFormatter().string(from: Date()),
+                samples: currentTrajectory.map { point in
+                    SampleData(
+                        timestamp: ISO8601DateFormatter().string(from: point.timestamp),
+                        seconds_from_start: point.secondsFromStart,
+                        nervous_system_state: point.nervousSystemState ?? "unknown",
+                        emotion_classification: point.emotionClassification.map { emotion in
+                            EmotionData(
+                                primary: emotion.primary,
+                                valence: emotion.valence,
+                                arousal: emotion.arousal ?? 0
+                            )
+                        },
+                        hrv_reading: point.hrvReading ?? 0,
+                        composite_score: point.compositeScore
+                    )
                 }
-            ]
+            )
 
             try await supabase
                 .from("emotional_trajectories")

@@ -13,7 +13,8 @@ import Supabase
 final class InterventionEfficacyEngine: ObservableObject {
     @Published private(set) var isTrackingSession = false
     
-    private let tracker: TrajectoryTracker
+    // Make tracker internal so views can observe trajectory
+    let tracker: TrajectoryTracker
     private let calculator: EfficacyCalculator
     private let recommender: EfficacyBasedRecommender
     private let supabase: SupabaseClient
@@ -107,31 +108,33 @@ final class InterventionEfficacyEngine: ObservableObject {
         
         // Send to Edge Function for server-side validation and storage
         do {
-            let requestBody: [String: Any] = [
-                "sessionId": sessionId.uuidString,
-                "exerciseId": exerciseId.uuidString,
-                "trajectoryPoints": trajectory.map { point in
-                    [
-                        "timestamp": ISO8601DateFormatter().string(from: point.timestamp),
-                        "secondsFromStart": point.secondsFromStart,
-                        "nervousSystemState": point.nervousSystemState ?? "",
-                        "emotionClassification": point.emotionClassification.map { emotion in
-                            [
-                                "primary": emotion.primary,
-                                "valence": emotion.valence,
-                                "arousal": emotion.arousal ?? 0
-                            ]
-                        } ?? [:],
-                        "hrvReading": point.hrvReading ?? 0,
-                        "compositeScore": point.compositeScore
-                    ]
+            let request = CalculateEfficacyRequest(
+                sessionId: sessionId.uuidString,
+                exerciseId: exerciseId.uuidString,
+                trajectoryPoints: trajectory.map { point in
+                    CalculateEfficacyRequest.TrajectoryPoint(
+                        timestamp: ISO8601DateFormatter().string(from: point.timestamp),
+                        secondsFromStart: point.secondsFromStart,
+                        nervousSystemState: point.nervousSystemState ?? "",
+                        emotionClassification: point.emotionClassification.map { emotion in
+                            CalculateEfficacyRequest.TrajectoryPoint.EmotionClassification(
+                                primary: emotion.primary,
+                                valence: emotion.valence,
+                                arousal: emotion.arousal ?? 0
+                            )
+                        },
+                        hrvReading: point.hrvReading ?? 0,
+                        compositeScore: point.compositeScore
+                    )
                 },
-                "sessionDuration": sessionDuration
-            ]
+                sessionDuration: Int(sessionDuration)
+            )
             
-            let _ = try await supabase.functions.invoke(
+            struct EmptyResponseLocal: Decodable {}
+            
+            let _: EmptyResponseLocal = try await supabase.functions.invoke(
                 "calculate-efficacy",
-                options: FunctionInvokeOptions(body: requestBody)
+                options: FunctionInvokeOptions(body: request)
             )
         } catch {
             print("Failed to sync efficacy to server: \(error)")
@@ -151,71 +154,52 @@ final class InterventionEfficacyEngine: ObservableObject {
     
     /// Fetch dashboard data (top exercises, recent sessions, insights)
     func getDashboardData() async throws -> EfficacyDashboardData {
-        let response = try await supabase.functions.invoke(
+        let response: DashboardResponse = try await supabase.functions.invoke(
             "get-efficacy-dashboard",
             options: FunctionInvokeOptions()
         )
         
-        guard let data = response.data,
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw EfficacyError.invalidResponse
-        }
-        
         // Parse top exercises
-        let topExercises = (json["topExercises"] as? [[String: Any]])?.compactMap { dict -> EfficacyDashboardData.TopExercise? in
-            guard let exerciseId = dict["exerciseId"] as? String,
-                  let exerciseName = dict["exerciseName"] as? String,
-                  let efficacyScore = dict["efficacyScore"] as? Double,
-                  let completionCount = dict["completionCount"] as? Int,
-                  let trendString = dict["trend"] as? String,
-                  let trend = UserEfficacyProfile.EfficacyTrend(rawValue: trendString) else {
+        let topExercises = response.topExercises.compactMap { dict -> EfficacyDashboardData.TopExercise? in
+            guard let trend = UserEfficacyProfile.EfficacyTrend(rawValue: dict.trend) else {
                 return nil
             }
             
             return EfficacyDashboardData.TopExercise(
-                exerciseId: UUID(uuidString: exerciseId) ?? UUID(),
-                exerciseName: exerciseName,
-                efficacyScore: efficacyScore,
-                completionCount: completionCount,
-                bestContext: dict["bestContext"] as? String,
+                exerciseId: UUID(uuidString: dict.exerciseId) ?? UUID(),
+                exerciseName: dict.exerciseName,
+                efficacyScore: dict.efficacyScore,
+                completionCount: dict.completionCount,
+                bestContext: dict.bestContext,
                 trend: trend
             )
-        } ?? []
+        }
         
         // Parse recent sessions
-        let recentSessions = (json["recentSessions"] as? [[String: Any]])?.compactMap { dict -> EfficacyDashboardData.RecentSession? in
-            guard let sessionId = dict["sessionId"] as? String,
-                  let exerciseId = dict["exerciseId"] as? String,
-                  let exerciseName = dict["exerciseName"] as? String,
-                  let completedAtString = dict["completedAt"] as? String,
-                  let efficacyScore = dict["efficacyScore"] as? Double,
-                  let netChange = dict["netChange"] as? Double,
-                  let breakthroughDetected = dict["breakthroughDetected"] as? Bool else {
+        let recentSessions = response.recentSessions.compactMap { dict -> EfficacyDashboardData.RecentSession? in
+            guard let completedAt = ISO8601DateFormatter().date(from: dict.completedAt) else {
                 return nil
             }
-            
-            let completedAt = ISO8601DateFormatter().date(from: completedAtString) ?? Date()
-            
+
             return EfficacyDashboardData.RecentSession(
-                sessionId: UUID(uuidString: sessionId) ?? UUID(),
-                exerciseId: UUID(uuidString: exerciseId) ?? UUID(),
-                exerciseName: exerciseName,
+                sessionId: UUID(uuidString: dict.sessionId) ?? UUID(),
+                exerciseId: UUID(uuidString: dict.exerciseId) ?? UUID(),
+                exerciseName: dict.exerciseName,
                 completedAt: completedAt,
-                efficacyScore: efficacyScore,
-                netChange: netChange,
-                breakthroughDetected: breakthroughDetected
+                efficacyScore: dict.efficacyScore,
+                netChange: dict.netChange,
+                breakthroughDetected: dict.breakthroughDetected
             )
-        } ?? []
+        }
         
         // Parse insights
-        let insightsDict = json["insights"] as? [String: Any]
         let insights = DashboardInsights(
-            totalBreakthroughs: insightsDict?["totalBreakthroughs"] as? Int ?? 0,
-            averageEfficacy: insightsDict?["averageEfficacy"] as? Double ?? 0,
-            mostEffectiveContext: insightsDict?["mostEffectiveContext"] as? String ?? "",
-            messages: insightsDict?["messages"] as? [String] ?? []
+            totalBreakthroughs: response.insights.totalBreakthroughs,
+            averageEfficacy: response.insights.averageEfficacy,
+            mostEffectiveContext: response.insights.mostEffectiveContext,
+            messages: response.insights.messages
         )
-        
+
         return EfficacyDashboardData(
             topExercises: topExercises,
             recentSessions: recentSessions,
@@ -248,12 +232,64 @@ final class InterventionEfficacyEngine: ObservableObject {
     
     private func getCurrentUserId() async throws -> UUID {
         let session = try await supabase.auth.session
-        guard let userIdString = session.user.id.uuidString,
-              let userId = UUID(uuidString: userIdString) else {
-            throw EfficacyError.invalidUserId
-        }
-        return userId
+        return session.user.id
     }
+}
+
+// MARK: - Edge Function Request/Response Types
+
+private struct CalculateEfficacyRequest: Encodable {
+    struct TrajectoryPoint: Encodable {
+        struct EmotionClassification: Encodable {
+            let primary: String
+            let valence: Double
+            let arousal: Double
+        }
+        
+        let timestamp: String
+        let secondsFromStart: Int
+        let nervousSystemState: String
+        let emotionClassification: EmotionClassification?
+        let hrvReading: Double
+        let compositeScore: Double
+    }
+    
+    let sessionId: String
+    let exerciseId: String
+    let trajectoryPoints: [TrajectoryPoint]
+    let sessionDuration: Int
+}
+
+private struct DashboardResponse: Decodable {
+    struct TopExercise: Decodable {
+        let exerciseId: String
+        let exerciseName: String
+        let efficacyScore: Double
+        let completionCount: Int
+        let bestContext: String?
+        let trend: String
+    }
+    
+    struct RecentSession: Decodable {
+        let sessionId: String
+        let exerciseId: String
+        let exerciseName: String
+        let completedAt: String
+        let efficacyScore: Double
+        let netChange: Double
+        let breakthroughDetected: Bool
+    }
+    
+    struct Insights: Decodable {
+        let totalBreakthroughs: Int
+        let averageEfficacy: Double
+        let mostEffectiveContext: String
+        let messages: [String]
+    }
+    
+    let topExercises: [TopExercise]
+    let recentSessions: [RecentSession]
+    let insights: Insights
 }
 
 // MARK: - Errors

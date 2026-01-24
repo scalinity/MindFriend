@@ -280,6 +280,13 @@ struct ExercisePlayerView: View {
     @State private var timer: Timer?
     @State private var showCompletion = false
     @State private var rating: Int = 0
+    
+    // Efficacy tracking
+    @State private var isTrackingEfficacy = false
+    @State private var currentTrajectory: [TrajectoryPoint] = []
+    @State private var showBreakthroughCelebration = false
+    @State private var breakthroughSecond: Int?
+    @State private var efficacyResult: InterventionEfficacy?
 
     init(exercise: Exercise) {
         self.exercise = exercise
@@ -316,6 +323,15 @@ struct ExercisePlayerView: View {
                 }
             }
             .frame(width: 250, height: 250)
+
+            // Trajectory visualization (shown during exercise)
+            if isTrackingEfficacy && !currentTrajectory.isEmpty {
+                TrajectoryVisualizationView(
+                    trajectory: currentTrajectory,
+                    isLive: isPlaying
+                )
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
 
             // Exercise content
             if let text = exercise.contentText {
@@ -366,11 +382,26 @@ struct ExercisePlayerView: View {
                 submitCompletion()
             }
         }
+        .fullScreenCover(isPresented: $showBreakthroughCelebration) {
+            BreakthroughCelebrationView(breakthroughSecond: breakthroughSecond) {
+                showBreakthroughCelebration = false
+            }
+        }
         .task {
             await startSession()
         }
+        .onReceive(container.interventionEfficacyEngine.tracker.$currentTrajectory) { trajectory in
+            currentTrajectory = trajectory
+            checkForBreakthrough()
+        }
         .onDisappear {
             timer?.invalidate()
+            // Stop tracking if still active
+            if isTrackingEfficacy {
+                Task {
+                    try? await stopEfficacyTracking()
+                }
+            }
         }
     }
 
@@ -394,6 +425,12 @@ struct ExercisePlayerView: View {
 
     private func startTimer() {
         isPlaying = true
+        
+        // Start efficacy tracking
+        Task {
+            await startEfficacyTracking()
+        }
+        
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
             if timeRemaining > 0 {
                 timeRemaining -= 1
@@ -411,11 +448,84 @@ struct ExercisePlayerView: View {
     private func resetTimer() {
         pauseTimer()
         timeRemaining = exercise.durationSeconds
+        
+        // Reset efficacy tracking
+        Task {
+            if isTrackingEfficacy {
+                try? await stopEfficacyTracking()
+            }
+            isTrackingEfficacy = false
+            currentTrajectory = []
+            efficacyResult = nil
+        }
     }
 
     private func completeExercise() {
         pauseTimer()
-        showCompletion = true
+        
+        // Stop efficacy tracking
+        Task {
+            await stopEfficacyTracking()
+            showCompletion = true
+        }
+    }
+    
+    // MARK: - Efficacy Tracking
+    
+    private func startEfficacyTracking() async {
+        guard let session = session,
+              let sessionIdUUID = UUID(uuidString: session.id),
+              let exerciseIdUUID = UUID(uuidString: exercise.id) else { return }
+        
+        do {
+            // Get user ID from Supabase session
+            let supabaseSession = try await container.supabase.auth.session
+            let userId = supabaseSession.user.id
+            
+            try await container.interventionEfficacyEngine.startSession(
+                sessionId: sessionIdUUID,
+                exerciseId: exerciseIdUUID,
+                userId: userId
+            )
+            await MainActor.run {
+                isTrackingEfficacy = true
+            }
+        } catch {
+            #if DEBUG
+            Log.quests.error("Failed to start efficacy tracking", error: error)
+            #endif
+        }
+    }
+    
+    private func stopEfficacyTracking() async {
+        guard isTrackingEfficacy else { return }
+        
+        do {
+            efficacyResult = try await container.interventionEfficacyEngine.endSession()
+            await MainActor.run {
+                isTrackingEfficacy = false
+            }
+        } catch {
+            #if DEBUG
+            Log.quests.error("Failed to stop efficacy tracking", error: error)
+            #endif
+        }
+    }
+    
+    private func checkForBreakthrough() {
+        guard currentTrajectory.count >= 2 else { return }
+        
+        let lastIndex = currentTrajectory.count - 1
+        let current = currentTrajectory[lastIndex]
+        let previous = currentTrajectory[lastIndex - 1]
+        
+        let change = current.compositeScore - previous.compositeScore
+        let duration = current.secondsFromStart - previous.secondsFromStart
+        
+        if change > 0.4 && duration <= 60 {
+            breakthroughSecond = current.secondsFromStart
+            showBreakthroughCelebration = true
+        }
     }
 
     private func submitCompletion() {
