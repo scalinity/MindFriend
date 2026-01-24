@@ -38,6 +38,68 @@ interface CheckTriggersResponse {
     | "disabled";
 }
 
+// Singleton Supabase client to prevent connection pool exhaustion
+let supabaseClient: ReturnType<typeof createClient> | null = null;
+
+function getSupabaseClient() {
+  if (!supabaseClient) {
+    supabaseClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+  }
+  return supabaseClient;
+}
+
+// Retry helper with exponential backoff
+async function withRetry<T>(
+  operation: () => Promise<T>,
+  maxRetries = 3,
+  baseDelay = 1000
+): Promise<T> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error as Error;
+      if (attempt < maxRetries - 1) {
+        const delay = baseDelay * Math.pow(2, attempt);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  }
+  throw lastError;
+}
+
+// Input validation
+function validateBiometrics(biometrics?: {
+  heartRate?: number;
+  hrv?: number;
+}): void {
+  if (!biometrics) return;
+  
+  if (biometrics.heartRate !== undefined) {
+    if (
+      typeof biometrics.heartRate !== "number" ||
+      biometrics.heartRate < 40 ||
+      biometrics.heartRate > 220
+    ) {
+      throw new Error("Invalid heart rate: must be between 40-220 BPM");
+    }
+  }
+  
+  if (biometrics.hrv !== undefined) {
+    if (
+      typeof biometrics.hrv !== "number" ||
+      biometrics.hrv < 10 ||
+      biometrics.hrv > 200
+    ) {
+      throw new Error("Invalid HRV: must be between 10-200ms");
+    }
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
@@ -57,9 +119,7 @@ serve(async (req) => {
       );
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase = getSupabaseClient();
 
     const {
       data: { user },
@@ -76,14 +136,41 @@ serve(async (req) => {
     const userId = user.id;
 
     // Parse request body
-    const { context }: CheckTriggersRequest = await req.json();
+    const { context } = (await req.json()) as {
+      context?: TriggerContext;
+    };
+
+    // Validate biometric inputs
+    if (context?.biometrics) {
+      validateBiometrics(context.biometrics);
+    }
+
+    // Get user timezone (default to UTC if not set)
+    const { data: settings } = await withRetry(() =>
+      supabase
+        .from("user_settings")
+        .select("timezone")
+        .eq("user_id", userId)
+        .maybeSingle()
+    );
+    
+    const userTimezone = settings?.timezone || "UTC";
+
+    // Get current time in user's timezone
+    const userLocalTime = new Date().toLocaleString("en-US", {
+      timeZone: userTimezone,
+      hour12: false,
+    });
+    const currentTime = new Date(userLocalTime).toTimeString().split(" ")[0];
 
     // 1. Load user preferences
-    const { data: prefs, error: prefsError } = await supabase
-      .from("intervention_preferences")
-      .select("*")
-      .eq("user_id", userId)
-      .single();
+    const { data: prefs, error: prefsError } = await withRetry(() =>
+      supabase
+        .from("intervention_preferences")
+        .select("*")
+        .eq("user_id", userId)
+        .maybeSingle()
+    );
 
     if (prefsError && prefsError.code !== "PGRST116") {
       // Error other than "no rows"
@@ -92,22 +179,31 @@ serve(async (req) => {
 
     // If no preferences exist, create defaults
     if (!prefs) {
-      const { data: newPrefs, error: insertError } = await supabase
-        .from("intervention_preferences")
-        .insert({
-          user_id: userId,
-          enabled: true,
-          max_daily: 5,
-          quiet_hours_start: null,
-          quiet_hours_end: null,
-        })
-        .select()
-        .single();
+      const { data: newPrefs, error: insertError } = await withRetry(() =>
+        supabase
+          .from("intervention_preferences")
+          .insert({
+            user_id: userId,
+            enabled: true,
+            max_daily: 5,
+            quiet_hours_start: null,
+            quiet_hours_end: null,
+          })
+          .select()
+          .single()
+      );
 
       if (insertError) throw insertError;
 
       // Use new default preferences
-      return evaluateTriggers(supabase, userId, newPrefs, context);
+      return evaluateTriggers(
+        supabase,
+        userId,
+        newPrefs,
+        userTimezone,
+        req.headers.get("Authorization") || "",
+        context
+      );
     }
 
     // Check if interventions are enabled
@@ -122,22 +218,28 @@ serve(async (req) => {
     }
 
     // Evaluate triggers with user preferences
-    const response = await evaluateTriggers(supabase, userId, prefs, context);
+    const response = await evaluateTriggers(
+      supabase,
+      userId,
+      prefs,
+      userTimezone,
+      req.headers.get("Authorization") || "",
+      context
+    );
 
     return new Response(JSON.stringify(response), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
-    console.error("Error in check-intervention-triggers:", error);
+    // Sanitize error logs - don't log request body (may contain PHI)
+    console.error("Error in check-intervention-triggers:", {
+      error: (error as Error).message,
+      // DO NOT log context or biometrics
+    });
+
     return new Response(
-      JSON.stringify({
-        error: "Internal server error",
-        message: error.message,
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
+      JSON.stringify({ error: "Internal server error" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
@@ -146,24 +248,29 @@ async function evaluateTriggers(
   supabase: any,
   userId: string,
   prefs: any,
+  userTimezone: string,
+  authHeader: string,
   context?: TriggerContext,
 ): Promise<CheckTriggersResponse> {
-  // 2. Check quiet hours
-  const now = new Date();
-  const currentTime = now.toTimeString().slice(0, 8); // "HH:MM:SS"
+  // Get current time in user's timezone for quiet hours check
+  const userLocalTime = new Date().toLocaleString("en-US", {
+    timeZone: userTimezone,
+    hour12: false,
+  });
+  const currentTime = new Date(userLocalTime).toTimeString().split(" ")[0];
 
+  // 2. Check quiet hours
   if (prefs.quiet_hours_start && prefs.quiet_hours_end) {
-    const { data: isQuiet, error: quietError } = await supabase.rpc(
-      "is_in_quiet_hours",
-      {
+    const { data: isQuiet, error: quietError } = await withRetry(() =>
+      supabase.rpc("is_in_quiet_hours", {
         check_time: currentTime,
         quiet_start: prefs.quiet_hours_start,
         quiet_end: prefs.quiet_hours_end,
-      },
+      })
     );
 
     if (quietError) {
-      console.error("Error checking quiet hours:", quietError);
+      console.error("Error checking quiet hours:", quietError.message);
     } else if (isQuiet) {
       return {
         shouldTrigger: false,
@@ -172,18 +279,24 @@ async function evaluateTriggers(
     }
   }
 
-  // 3. Check daily limit
-  const todayStart = new Date();
+  // 3. Check daily limit using user's local date
+  const userLocalDate = new Date(userLocalTime);
+  const todayStart = new Date(userLocalDate);
   todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date(userLocalDate);
+  todayEnd.setHours(23, 59, 59, 999);
 
-  const { count: todayCount, error: countError } = await supabase
-    .from("intervention_deliveries")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .gte("delivered_at", todayStart.toISOString());
+  const { count: todayCount, error: countError } = await withRetry(() =>
+    supabase
+      .from("intervention_deliveries")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .gte("delivered_at", todayStart.toISOString())
+      .lte("delivered_at", todayEnd.toISOString())
+  );
 
   if (countError) {
-    console.error("Error checking daily limit:", countError);
+    console.error("Error checking daily limit:", countError.message);
   } else if ((todayCount || 0) >= prefs.max_daily) {
     return {
       shouldTrigger: false,
@@ -193,22 +306,25 @@ async function evaluateTriggers(
 
   // 4. Check cooldown (4 hours after last dismissal)
   const cooldownHours = 4;
+  const now = new Date();
   const cooldownCutoff = new Date(
     now.getTime() - cooldownHours * 60 * 60 * 1000,
   );
 
-  const { data: recentDismissal, error: dismissError } = await supabase
-    .from("intervention_deliveries")
-    .select("dismissed_at")
-    .eq("user_id", userId)
-    .not("dismissed_at", "is", null)
-    .gte("dismissed_at", cooldownCutoff.toISOString())
-    .order("dismissed_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const { data: recentDismissal, error: dismissError } = await withRetry(() =>
+    supabase
+      .from("intervention_deliveries")
+      .select("dismissed_at")
+      .eq("user_id", userId)
+      .not("dismissed_at", "is", null)
+      .gte("dismissed_at", cooldownCutoff.toISOString())
+      .order("dismissed_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+  );
 
   if (dismissError) {
-    console.error("Error checking cooldown:", dismissError);
+    console.error("Error checking cooldown:", dismissError.message);
   } else if (recentDismissal) {
     return {
       shouldTrigger: false,
@@ -226,23 +342,36 @@ async function evaluateTriggers(
     };
   }
 
-  // 6. Select best intervention for trigger type
-  const { data: suggestions, error: suggestionError } =
-    await supabase.functions.invoke("get-micro-suggestions", {
-      body: {
-        triggerType,
-        triggerConfidence: calculateConfidence(context, triggerType),
-        limit: 1,
-      },
-    });
+  // 6. Select best intervention (use function-to-function auth)
+  const confidence = calculateConfidence(context, triggerType);
+  
+  const suggestionResponse = await withRetry(() =>
+    fetch(
+      `${Deno.env.get("SUPABASE_URL")}/functions/v1/get-micro-suggestions`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": authHeader,
+        },
+        body: JSON.stringify({
+          triggerType,
+          triggerConfidence: confidence,
+          limit: 1,
+        }),
+      }
+    )
+  );
 
-  if (suggestionError) {
-    console.error("Error getting suggestions:", suggestionError);
+  if (!suggestionResponse.ok) {
+    console.error("Error getting suggestions:", suggestionResponse.statusText);
     return {
       shouldTrigger: false,
       suppressionReason: "no_matching_templates",
     };
   }
+
+  const suggestions = await suggestionResponse.json();
 
   if (!suggestions?.suggestions || suggestions.suggestions.length === 0) {
     return {
@@ -255,6 +384,14 @@ async function evaluateTriggers(
 
   // Generate context message
   const contextMessage = generateContextMessage(triggerType, context);
+
+  // Create sanitized context snapshot (NO PHI)
+  const sanitizedContext = {
+    timeOfDay: context?.timeOfDay,
+    triggerType,
+    confidence,
+    // DO NOT store biometric data
+  };
 
   return {
     shouldTrigger: true,

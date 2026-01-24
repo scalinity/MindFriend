@@ -46,6 +46,9 @@ final class InterventionService: ObservableObject {
     private let healthStore: HKHealthStore?
     private var monitoringTimer: Timer?
     private let monitoringInterval: TimeInterval = 5 * 60 // 5 minutes
+    
+    // Debouncing for preference updates
+    private var preferencesSaveTask: Task<Void, Error>?
 
     // MARK: - Initialization
 
@@ -58,6 +61,15 @@ final class InterventionService: ObservableObject {
         } else {
             self.healthStore = nil
         }
+    }
+    
+    // MARK: - Deinitialization
+    
+    deinit {
+        // Clean up timer to prevent memory leak
+        monitoringTimer?.invalidate()
+        monitoringTimer = nil
+        preferencesSaveTask?.cancel()
     }
 
     // MARK: - Public Methods
@@ -206,20 +218,43 @@ final class InterventionService: ObservableObject {
         try await loadRecentDeliveries()
     }
 
-    /// Update user preferences
+    /// Update user preferences with debouncing
     func updatePreferences(_ preferences: InterventionPreferences) async throws {
-        try await supabase
-            .from("intervention_preferences")
-            .upsert(preferences)
-            .execute()
+        // Cancel any pending save
+        preferencesSaveTask?.cancel()
+        
+        // Debounce: wait 500ms before saving
+        let saveTask = Task { @MainActor in
+            try await Task.sleep(nanoseconds: 500_000_000) // 500ms
+            
+            guard !Task.isCancelled else { return }
+            
+            try await supabase
+                .from("intervention_preferences")
+                .upsert(preferences)
+                .execute()
 
-        self.preferences = preferences
+            self.preferences = preferences
 
-        // Restart monitoring if enabled changed
-        if preferences.enabled && !isMonitoring {
-            try await startMonitoring()
-        } else if !preferences.enabled && isMonitoring {
-            stopMonitoring()
+            // Restart monitoring if enabled changed
+            if preferences.enabled && !isMonitoring {
+                try await startMonitoring()
+            } else if !preferences.enabled && isMonitoring {
+                stopMonitoring()
+            }
+        }
+        
+        preferencesSaveTask = saveTask
+        
+        do {
+            try await saveTask.value
+        } catch is CancellationError {
+            // Ignore cancellation
+            return
+        } catch {
+            // Log sanitized error (no PHI)
+            print("Failed to update intervention preferences: \(error.localizedDescription)")
+            throw error
         }
     }
 
@@ -270,7 +305,8 @@ final class InterventionService: ObservableObject {
                 print("Trigger check: suppressed (\(response.suppressionReason ?? "unknown"))")
             }
         } catch {
-            print("Error checking triggers: \(error)")
+            // Sanitized error logging (no PHI)
+            print("Error checking triggers: \(error.localizedDescription)")
         }
     }
 
@@ -323,22 +359,38 @@ final class InterventionService: ObservableObject {
             do {
                 try await healthStore.requestAuthorization(toShare: [], read: typesToRead)
             } catch {
-                print("HealthKit authorization denied: \(error)")
+                print("HealthKit authorization denied")
                 return nil
             }
         } else if heartRateStatus == .sharingDenied {
             return nil
         }
 
-        // Query recent heart rate
-        let heartRate = await queryRecentHeartRate(from: healthStore)
-        let hrv = await queryRecentHRV(from: healthStore)
+        // Query biometrics on background thread
+        return await Task.detached {
+            async let heartRate = self.queryRecentHeartRate(from: healthStore)
+            async let hrv = self.queryRecentHRV(from: healthStore)
+            
+            let (hr, hrvValue) = await (heartRate, hrv)
+            
+            if hr == nil && hrvValue == nil {
+                return nil
+            }
+            
+            // Validate biometric values
+            let validatedHR = hr.flatMap { value in
+                (40...220).contains(value) ? value : nil
+            }
+            let validatedHRV = hrvValue.flatMap { value in
+                (10...200).contains(value) ? value : nil
+            }
+            
+            guard validatedHR != nil || validatedHRV != nil else {
+                return nil
+            }
 
-        if heartRate == nil && hrv == nil {
-            return nil
-        }
-
-        return TriggerContext.Biometrics(heartRate: heartRate, hrv: hrv)
+            return TriggerContext.Biometrics(heartRate: validatedHR, hrv: validatedHRV)
+        }.value
     }
 
     private func queryRecentHeartRate(from healthStore: HKHealthStore) async -> Double? {
@@ -361,6 +413,7 @@ final class InterventionService: ObservableObject {
                 limit: 10,
                 sortDescriptors: [sortDescriptor]
             ) { _, samples, error in
+                // Handle on background thread
                 guard let samples = samples as? [HKQuantitySample], !samples.isEmpty else {
                     continuation.resume(returning: nil)
                     return
@@ -397,6 +450,7 @@ final class InterventionService: ObservableObject {
                 limit: 10,
                 sortDescriptors: [sortDescriptor]
             ) { _, samples, error in
+                // Handle on background thread
                 guard let samples = samples as? [HKQuantitySample], !samples.isEmpty else {
                     continuation.resume(returning: nil)
                     return
