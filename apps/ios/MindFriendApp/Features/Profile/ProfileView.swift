@@ -212,7 +212,13 @@ struct ProfileView: View {
                     } label: {
                         Label("AI Preferences", systemImage: "brain")
                     }
-                    
+
+                    NavigationLink {
+                        InterventionSettingsView()
+                    } label: {
+                        Label("Smart Interventions", systemImage: "waveform.path.ecg")
+                    }
+
                     // Vacation Mode & Shield History
                     Button {
                         showVacationMode = true
