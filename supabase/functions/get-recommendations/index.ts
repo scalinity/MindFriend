@@ -12,52 +12,68 @@ interface GetRecommendationsRequest {
 }
 
 interface ExerciseRecommendation {
-  exerciseId: string;
-  exerciseName: string;
-  exerciseType: string;
+  exercise_id: string;
+  exercise_name: string;
+  exercise_type: string;
   duration: number;
-  predictedEfficacy: number;
+  predicted_efficacy: number;
   confidence: number;
-  completionCount: number;
+  completion_count: number;
   reason: string;
   trend: string | null;
 }
 
 serve(async (req) => {
   try {
-    // Get user from JWT
-    const authHeader = req.headers.get("Authorization")!;
-    const supabaseClient = createClient(
+    // Validate authentication
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({
+          error: "UNAUTHORIZED",
+          message: "Missing authorization header",
+        }),
+        { status: 401, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+    const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-      {
-        global: { headers: { Authorization: authHeader } },
-      }
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
 
     const {
       data: { user },
-      error: userError,
-    } = await supabaseClient.auth.getUser();
+      error: authError,
+    } = await supabaseAdmin.auth.getUser(token);
 
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({
+          error: "UNAUTHORIZED",
+          message: "Invalid or expired authentication token",
+        }),
+        { status: 401, headers: { "Content-Type": "application/json" } },
+      );
     }
 
-    // Parse query parameters
+    // Parse parameters from POST body or query params (supports both)
     const url = new URL(req.url);
-    const currentState = url.searchParams.get("state") || "rest";
-    const currentEmotion = url.searchParams.get("emotion") || "neutral";
-    const timeOfDay = url.searchParams.get("timeOfDay") || "morning";
-    const limit = parseInt(url.searchParams.get("limit") || "5");
+    const body = req.method === "POST" ? await req.json() : {};
+
+    const currentState = body.state || url.searchParams.get("state") || "rest";
+    const currentEmotion =
+      body.emotion || url.searchParams.get("emotion") || "neutral";
+    const timeOfDay =
+      body.timeOfDay || url.searchParams.get("timeOfDay") || "morning";
+    const limit = parseInt(body.limit || url.searchParams.get("limit") || "5");
 
     // Fetch user efficacy profiles
-    const { data: profiles, error: profilesError } = await supabaseClient
+    const { data: profiles, error: profilesError } = await supabaseAdmin
       .from("user_efficacy_profiles")
-      .select(`
+      .select(
+        `
         *,
         exercises:exercise_id (
           id,
@@ -65,7 +81,8 @@ serve(async (req) => {
           type,
           duration
         )
-      `)
+      `,
+      )
       .eq("user_id", user.id)
       .gte("completion_count", 5); // Minimum 5 sessions for reliable data
 
@@ -79,7 +96,7 @@ serve(async (req) => {
         {
           status: 500,
           headers: { "Content-Type": "application/json" },
-        }
+        },
       );
     }
 
@@ -87,30 +104,39 @@ serve(async (req) => {
 
     if (profiles && profiles.length > 0) {
       // Calculate contextual scores for each profile
-      recommendations = profiles.map((profile) => {
-        const exercise = profile.exercises as any;
-        const contextualScore = calculateContextualScore(
-          profile,
-          currentState,
-          currentEmotion,
-          timeOfDay
-        );
+      recommendations = profiles
+        .filter((profile) => profile.exercises) // Filter out profiles with deleted exercises
+        .map((profile) => {
+          const exercise = profile.exercises as any;
+          const contextualScore = calculateContextualScore(
+            profile,
+            currentState,
+            currentEmotion,
+            timeOfDay,
+          );
 
-        return {
-          exerciseId: profile.exercise_id,
-          exerciseName: exercise.name,
-          exerciseType: exercise.type,
-          duration: exercise.duration,
-          predictedEfficacy: contextualScore,
-          confidence: profile.confidence,
-          completionCount: profile.completion_count,
-          reason: generateReason(profile, contextualScore, currentState, timeOfDay),
-          trend: profile.trend,
-        };
-      });
+          return {
+            exercise_id: profile.exercise_id,
+            exercise_name: exercise.name,
+            exercise_type: exercise.type,
+            duration: exercise.duration,
+            predicted_efficacy: contextualScore,
+            confidence: profile.confidence,
+            completion_count: profile.completion_count,
+            reason: generateReason(
+              profile,
+              contextualScore,
+              currentState,
+              timeOfDay,
+            ),
+            trend: profile.trend,
+          };
+        });
 
       // Sort by predicted efficacy
-      recommendations.sort((a, b) => b.predictedEfficacy - a.predictedEfficacy);
+      recommendations.sort(
+        (a, b) => b.predicted_efficacy - a.predicted_efficacy,
+      );
 
       // Return top N
       recommendations = recommendations.slice(0, limit);
@@ -119,10 +145,10 @@ serve(async (req) => {
     // If no proven exercises (< 3 recommendations), blend with generic recommendations
     if (recommendations.length < 3) {
       const genericRecs = await getGenericRecommendations(
-        supabaseClient,
+        supabaseAdmin,
         currentState,
         currentEmotion,
-        limit - recommendations.length
+        limit - recommendations.length,
       );
 
       recommendations = [...recommendations, ...genericRecs];
@@ -131,25 +157,26 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         recommendations,
-        fallbackReason: profiles && profiles.length >= 3
-          ? null
-          : "Showing popular exercises (complete 5 sessions per exercise for personalized recommendations)",
+        fallbackReason:
+          profiles && profiles.length >= 3
+            ? null
+            : "Showing popular exercises (complete 5 sessions per exercise for personalized recommendations)",
       }),
       {
         headers: { "Content-Type": "application/json" },
-      }
+      },
     );
   } catch (error) {
     console.error("Error in get-recommendations:", error);
     return new Response(
       JSON.stringify({
         error: "RECOMMENDATION_FAILED",
-        message: error.message,
+        message: (error as Error).message,
       }),
       {
         status: 500,
         headers: { "Content-Type": "application/json" },
-      }
+      },
     );
   }
 });
@@ -158,7 +185,7 @@ function calculateContextualScore(
   profile: any,
   state: string,
   emotion: string,
-  timeOfDay: string
+  timeOfDay: string,
 ): number {
   let score = profile.overall_efficacy_score;
   let count = 1;
@@ -191,7 +218,7 @@ function generateReason(
   profile: any,
   score: number,
   state: string,
-  timeOfDay: string
+  timeOfDay: string,
 ): string {
   const percentage = Math.round(score);
   const contextParts: string[] = [];
@@ -200,23 +227,23 @@ function generateReason(
   const efficacyByTime = profile.efficacy_by_time_of_day || {};
 
   if (efficacyByState[state] && efficacyByState[state] > score * 0.9) {
-    contextParts.push(\`when you're in \${state} state\`);
+    contextParts.push(`when you're in ${state} state`);
   }
 
   if (efficacyByTime[timeOfDay] && efficacyByTime[timeOfDay] > score * 0.9) {
-    contextParts.push(\`in the \${timeOfDay}\`);
+    contextParts.push(`in the ${timeOfDay}`);
   }
 
-  const context = contextParts.length > 0 ? \` \${contextParts.join(", ")}\` : "";
+  const context = contextParts.length > 0 ? ` ${contextParts.join(", ")}` : "";
 
-  return \`Works \${percentage}% of the time\${context}\`;
+  return `Works ${percentage}% of the time${context}`;
 }
 
 async function getGenericRecommendations(
   supabaseClient: any,
   currentState: string,
   currentEmotion: string,
-  limit: number
+  limit: number,
 ): Promise<ExerciseRecommendation[]> {
   // Fetch popular exercises (by overall completion count across all users)
   // For MVP, use simple heuristic: breathing for anxiety, meditation for stress, etc.
@@ -230,14 +257,14 @@ async function getGenericRecommendations(
   }
 
   return exercises.map((exercise: any) => ({
-    exerciseId: exercise.id,
-    exerciseName: exercise.name,
-    exerciseType: exercise.type,
+    exercise_id: exercise.id,
+    exercise_name: exercise.name,
+    exercise_type: exercise.type,
     duration: exercise.duration,
-    predictedEfficacy: 60, // Generic baseline
+    predicted_efficacy: 60, // Generic baseline
     confidence: 0,
-    completionCount: 0,
-    reason: \`Popular exercise for \${currentEmotion} (you haven't tried this yet)\`,
+    completion_count: 0,
+    reason: `Popular exercise for ${currentEmotion} (you haven't tried this yet)`,
     trend: null,
   }));
 }

@@ -18,42 +18,80 @@ interface TrajectoryPoint {
 
 interface CalculateEfficacyRequest {
   sessionId: string;
-  userId: string;
   exerciseId: string;
   trajectoryPoints: TrajectoryPoint[];
   sessionDuration: number;
+  // Note: userId is derived from JWT auth token, not request body
 }
+
+type TrajectoryShape =
+  | "steadyImprovement"
+  | "lateBreakthrough"
+  | "earlyPeak"
+  | "deterioration"
+  | "flat";
 
 interface EfficacyResult {
   efficacyScore: number;
   netEmotionalChange: number;
-  trajectoryShape: string;
+  trajectoryShape: TrajectoryShape;
   breakthroughDetected: boolean;
   breakthroughSecond?: number;
 }
 
 serve(async (req) => {
   try {
-    // Get user from JWT
-    const authHeader = req.headers.get("Authorization")!;
-    const supabaseClient = createClient(
+    // Validate HTTP method
+    if (req.method !== "POST") {
+      return new Response(
+        JSON.stringify({
+          error: "METHOD_NOT_ALLOWED",
+          message: "Only POST requests are accepted",
+        }),
+        {
+          status: 405,
+          headers: {
+            "Content-Type": "application/json",
+            Allow: "POST",
+          },
+        },
+      );
+    }
+
+    // Validate authentication
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({
+          error: "UNAUTHORIZED",
+          message: "Missing authorization header",
+        }),
+        { status: 401, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+    const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-      {
-        global: { headers: { Authorization: authHeader } },
-      },
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
 
     const {
       data: { user },
-      error: userError,
-    } = await supabaseClient.auth.getUser();
+      error: authError,
+    } = await supabaseAdmin.auth.getUser(token);
 
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({
+          error: "UNAUTHORIZED",
+          message: "Invalid or expired authentication token",
+        }),
+        {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
     }
 
     // Parse request
@@ -68,6 +106,40 @@ serve(async (req) => {
         }),
         {
           status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    // Verify session ownership (prevent unauthorized efficacy submission)
+    const { data: session, error: sessionError } = await supabaseAdmin
+      .from("exercise_sessions")
+      .select("user_id")
+      .eq("id", body.sessionId)
+      .single();
+
+    if (sessionError || !session) {
+      return new Response(
+        JSON.stringify({
+          error: "SESSION_NOT_FOUND",
+          message: "The specified session does not exist",
+        }),
+        {
+          status: 404,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    if (session.user_id !== user.id) {
+      return new Response(
+        JSON.stringify({
+          error: "FORBIDDEN",
+          message:
+            "You do not have permission to submit efficacy data for this session",
+        }),
+        {
+          status: 403,
           headers: { "Content-Type": "application/json" },
         },
       );
@@ -102,11 +174,6 @@ serve(async (req) => {
     };
 
     // Insert efficacy record using service role client
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-    );
-
     const { data: efficacyRecord, error: insertError } = await supabaseAdmin
       .from("intervention_efficacy")
       .insert({
@@ -142,15 +209,15 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({
-        efficacyId: efficacyRecord.id,
-        efficacyScore: efficacy.efficacyScore,
-        netChange: efficacy.netEmotionalChange,
-        trajectoryShape: efficacy.trajectoryShape,
-        breakthroughDetected: efficacy.breakthroughDetected,
-        breakthroughSecond: efficacy.breakthroughSecond,
+        efficacy_id: efficacyRecord.id,
+        efficacy_score: efficacy.efficacyScore,
+        net_emotional_change: efficacy.netEmotionalChange,
+        trajectory_shape: efficacy.trajectoryShape,
+        breakthrough_detected: efficacy.breakthroughDetected,
+        breakthrough_second: efficacy.breakthroughSecond,
         insights: {
           message: generateInsightMessage(efficacy),
-          shouldCelebrate: efficacy.breakthroughDetected,
+          should_celebrate: efficacy.breakthroughDetected,
         },
       }),
       {
@@ -162,7 +229,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         error: "CALCULATION_FAILED",
-        message: error.message,
+        message: (error as Error).message,
       }),
       {
         status: 500,
@@ -194,6 +261,18 @@ function calculateEfficacy(trajectory: TrajectoryPoint[]): EfficacyResult {
 
   // Regulation quality: 1 - std_dev of middle 60%
   const midScores = midPhase.map((p) => p.compositeScore);
+
+  // Guard against empty midPhase (shouldn't happen with >= 3 points, but defensive)
+  if (midScores.length === 0) {
+    return {
+      efficacyScore: 50, // Neutral baseline
+      netEmotionalChange: endingScore - startingScore,
+      trajectoryShape: "flat",
+      breakthroughDetected: false,
+      breakthroughSecond: undefined,
+    };
+  }
+
   const midMean = midScores.reduce((a, b) => a + b, 0) / midScores.length;
   const midVariance =
     midScores.reduce((sum, score) => sum + Math.pow(score - midMean, 2), 0) /
@@ -239,18 +318,21 @@ function calculateEfficacy(trajectory: TrajectoryPoint[]): EfficacyResult {
 
   // Determine trajectory shape
   const midpoint = trajectory[Math.floor(totalPoints / 2)].compositeScore;
-  let trajectoryShape = "flat";
+  let trajectoryShape: TrajectoryShape;
 
   if (netEmotionalChange > 0.3) {
-    if (midpoint > startingScore) {
+    // Check earlyPeak first (peak in middle but decline at end)
+    if (midpoint > endingScore && midpoint > startingScore) {
+      trajectoryShape = "earlyPeak";
+    } else if (midpoint > startingScore) {
       trajectoryShape = "steadyImprovement";
     } else {
       trajectoryShape = "lateBreakthrough";
     }
-  } else if (netEmotionalChange > 0.3 && midpoint > endingScore) {
-    trajectoryShape = "earlyPeak";
-  } else if (netEmotionalChange < -0.1) {
+  } else if (netEmotionalChange < -0.2) {
     trajectoryShape = "deterioration";
+  } else {
+    trajectoryShape = "flat";
   }
 
   return {
