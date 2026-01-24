@@ -29,7 +29,7 @@ struct BriefingSettingsView: View {
             // Calendar Integration
             Section {
                 Toggle("Include Calendar Events", isOn: binding(\.includeCalendar))
-                    .disabled(!viewModel.preferences?.enabled ?? true)
+                    .disabled(!(viewModel.preferences?.enabled ?? true))
 
                 calendarPermissionRow
 
@@ -37,7 +37,7 @@ struct BriefingSettingsView: View {
                     Text("24 hours").tag(24)
                     Text("48 hours").tag(48)
                 }
-                .disabled(!viewModel.preferences?.includeCalendar ?? true)
+                .disabled(!(viewModel.preferences?.includeCalendar ?? true))
             } header: {
                 Text("Calendar")
             } footer: {

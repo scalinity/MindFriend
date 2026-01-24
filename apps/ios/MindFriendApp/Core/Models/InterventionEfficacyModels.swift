@@ -306,6 +306,6 @@ struct EfficacyDashboardData {
 struct DashboardInsights {
     let totalBreakthroughs: Int
     let averageEfficacy: Double
-    let mostEffectiveContext: String
+    let mostEffectiveContext: String?
     let messages: [String]
 }
