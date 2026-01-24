@@ -1,3 +1,79 @@
+## [2026-01-24] Fix Capacity Calculation End-to-End
+
+**Type:** Bugfix (P0 - Critical)
+**Status:** Complete
+
+### Summary
+
+Fixed multiple issues preventing the capacity calculation feature from working, including malformed Supabase URLs, TypeScript compilation errors, date-fns-tz compatibility issues, RPC permissions, timezone validation, and date parsing.
+
+### Issues Fixed
+
+1. **Malformed Supabase URL in xcconfig files** - URL had `https:/$()/` instead of `https://`
+2. **TypeScript compilation errors** - Missing type imports (`CapacityLevel`, `CapacityResult`)
+3. **date-fns-tz API compatibility** - Updated from v2 to v3 API (`fromZonedTime`, `toZonedTime`)
+4. **RPC permission errors** - Missing GRANT EXECUTE permissions for service_role
+5. **Timezone validation regex** - Too strict, rejected `America/New_York`
+6. **iOS date parsing** - Missing `.withFractionalSeconds` format option
+7. **Rate limit table missing** - Table didn't exist in remote database despite migration
+8. **RLS interference** - RLS on `capacity_rate_limits` table interfering with SECURITY DEFINER RPC
+
+### Root Causes
+
+**Supabase URL Issue:**
+
+- xcconfig files used `$(SUPABASE_PROTOCOL):/$()/$(SUPABASE_HOST)` which created malformed URLs
+- Xcode xcconfig format treats `//` as a comment delimiter
+- Solution: Use SLASH variable workaround: `$(SUPABASE_PROTOCOL):$(SLASH)$(SLASH)$(SUPABASE_HOST)`
+
+**TypeScript & date-fns-tz:**
+
+- Edge function used esm.sh imports incompatible with Deno 2.6.4
+- date-fns-tz v3 changed API: `zonedTimeToUtc` → `fromZonedTime`, `utcToZonedTime` → `toZonedTime`
+- Date object creation caused timezone misinterpretation
+
+**Database & Permissions:**
+
+- `check_capacity_rate_limit` RPC lacked GRANT EXECUTE permissions
+- `capacity_rate_limits` table had RLS enabled, blocking SECURITY DEFINER function
+- Table creation migration hadn't been applied to remote database
+
+### Changes
+
+| File                                                                   | Change                                                                            |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `apps/ios/Debug.xcconfig:10`                                           | Fixed URL: `SUPABASE_URL = $(SUPABASE_PROTOCOL):$(SLASH)$(SLASH)$(SUPABASE_HOST)` |
+| `apps/ios/Release.xcconfig:10`                                         | Fixed URL: `SUPABASE_URL = $(SUPABASE_PROTOCOL):$(SLASH)$(SLASH)$(SUPABASE_HOST)` |
+| `supabase/functions/calculate-capacity/index.ts:4`                     | Updated imports: `npm:date-fns-tz@3.2.0`, `npm:date-fns@4.1.0`                    |
+| `supabase/functions/calculate-capacity/index.ts:177`                   | Fixed timezone regex: `/^([A-Z][a-zA-Z_]+\/[A-Z][a-zA-Z_]+...`                    |
+| `supabase/functions/calculate-capacity/index.ts:529-550`               | Fixed `getDateRangeInUTC` to use ISO string format                                |
+| `supabase/functions/calculate-capacity/algorithms.ts:7`                | Added missing `CapacityLevel` import                                              |
+| `apps/ios/MindFriendApp/Core/Models/DifficultyModels.swift:347`        | Added `.withFractionalSeconds` to date formatter                                  |
+| `apps/ios/MindFriendApp/Core/Services/DifficultyService.swift:132-141` | Added detailed error logging for debugging                                        |
+
+**New Migrations:**
+
+- `20260123231947_grant_rate_limit_permissions.sql` - Added GRANT EXECUTE for RPC function
+- `20260123234826_fix_capacity_rate_limits_rls.sql` - Created table and disabled RLS
+
+### Testing
+
+- [x] Edge function deploys successfully
+- [x] TypeScript compilation passes
+- [x] iOS app calculates capacity score (37, moderate) with mock data
+- [x] Rate limiting works (60 requests/hour)
+- [x] Date parsing handles fractional seconds
+- [x] Timezone validation accepts IANA identifiers
+
+### Notes
+
+- Rate limit set to 60 requests/hour (once per minute average) for development
+- Edge function logs detailed errors for debugging
+- iOS app has graceful degradation (falls back to cached capacity on errors)
+- All date-fns operations now use timezone-aware functions
+
+---
+
 ## [2026-01-24] Fix Edge Function 401 Auth Errors
 
 **Type:** Bugfix (P0 - Critical)

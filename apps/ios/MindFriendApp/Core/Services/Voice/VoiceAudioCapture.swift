@@ -191,6 +191,9 @@ final class VoiceAudioCapture {
     }
 
     private func processAudioBuffer(_ buffer: AVAudioPCMBuffer) {
+        // Early exit if capture was stopped (Tasks in flight may still call this)
+        guard isCapturing else { return }
+
         guard let channelData = buffer.int16ChannelData else {
             #if DEBUG
             Log.voice.debug("[AudioCapture] No int16 channel data")

@@ -143,8 +143,6 @@ final class EmotionAnalyzer: ObservableObject {
     private var lastAnalysisTime: Date?
     private let analysisTimeout: TimeInterval = 30.0
 
-    // Compiled model cleanup
-    private var compiledModelURL: URL?
 
     // MARK: - Constants
 
@@ -195,6 +193,19 @@ final class EmotionAnalyzer: ObservableObject {
     private let spectralRolloffThreshold: Double = 0.85      // 85% energy threshold
     private let harmonicRatioEpsilon: Double = 1e-10         // Small value to prevent division by zero
 
+    // MARK: - Accelerate FFT Setup (cached for performance)
+
+    /// FFT setup for spectral analysis - log2(2048) = 11
+    private let fftLog2n: vDSP_Length = 11
+    private lazy var fftSetup: FFTSetupD? = vDSP_create_fftsetupD(fftLog2n, FFTRadix(kFFTRadix2))
+
+    /// Hann window for frame windowing (precomputed)
+    private lazy var hannWindow: [Double] = {
+        var window = [Double](repeating: 0, count: frameLength)
+        vDSP_hann_windowD(&window, vDSP_Length(frameLength), Int32(vDSP_HANN_NORM))
+        return window
+    }()
+
     // MARK: - Initialization
 
     init() {
@@ -203,11 +214,12 @@ final class EmotionAnalyzer: ObservableObject {
     }
 
     deinit {
+        // Clean up FFT setup
+        if let setup = fftSetup {
+            vDSP_destroy_fftsetupD(setup)
+        }
         // Note: Cannot call @MainActor methods from deinit
         // clearSensitiveData() must be called explicitly before deinit if cleanup needed
-        if let compiledURL = compiledModelURL {
-            try? FileManager.default.removeItem(at: compiledURL)
-        }
     }
 
     // MARK: - Consent Management
@@ -263,30 +275,24 @@ final class EmotionAnalyzer: ObservableObject {
             updateRateLimit()
         }
 
+        // Capture scaler values before detached task (main actor isolated)
+        let capturedMean = scalerMean
+        let capturedScale = scalerScale
+
         do {
-            // Extract features from audio (run on background)
-            let features = try await Task.detached {
+            // Extract features on a background thread to avoid blocking main thread
+            // Feature extraction is CPU-intensive (DSP algorithms on 48k samples)
+            let features = try await Task.detached(priority: .userInitiated) {
                 try await featureExtractor()
             }.value
 
-            // Normalize features
-            let normalizedFeatures = normalizeFeatures(features)
+            // Normalize features (can also run on background since we captured scaler values)
+            let normalizedFeatures = normalizeFeatures(features, mean: capturedMean, scale: capturedScale)
 
-            // Run ML inference with timeout
-            let prediction = try await withThrowingTaskGroup(of: EmotionResult.self) { group in
-                group.addTask {
-                    try await self.runInference(features: normalizedFeatures)
-                }
-                group.addTask {
-                    try await Task.sleep(nanoseconds: UInt64(self.analysisTimeout * 1_000_000_000))
-                    throw EmotionAnalyzerError.inferenceTimeout
-                }
-                return try await group.next() ?? {
-                    throw EmotionAnalyzerError.noPrediction
-                }()
-            }
+            // Run ML inference (CoreML handles threading internally)
+            let result = try await runInference(features: normalizedFeatures)
 
-            return prediction
+            return result
         } catch {
             lastError = error
             throw error
@@ -327,13 +333,15 @@ final class EmotionAnalyzer: ObservableObject {
         }
     }
 
-    private func validateAudioLength(_ frameCount: AVAudioFrameCount) throws {
+    nonisolated private func validateAudioLength(_ frameCount: AVAudioFrameCount) throws {
         guard frameCount > 0 else {
             throw EmotionAnalyzerError.invalidAudioLength
         }
 
         let sampleCount = Int(frameCount)
-        guard sampleCount <= maxSampleCount else {
+        // maxSampleCount = sampleRate * maxAudioDuration = 16000 * 300 = 4,800,000
+        let maxAllowedSamples = 4_800_000
+        guard sampleCount <= maxAllowedSamples else {
             throw EmotionAnalyzerError.audioTooLong
         }
     }
@@ -361,19 +369,21 @@ final class EmotionAnalyzer: ObservableObject {
 
     private func loadModel() {
         do {
-            // Load Core ML model
-            guard let modelURL = Bundle.main.url(forResource: modelResourceName, withExtension: "mlpackage") else {
-                os_log("Error: Core ML model not found in bundle", type: .error)
+            // Load Core ML model - Xcode compiles .mlpackage to .mlmodelc
+            print("[EmotionAnalyzer] Loading model: \(modelResourceName).mlmodelc")
+            guard let modelURL = Bundle.main.url(forResource: modelResourceName, withExtension: "mlmodelc") else {
+                print("[EmotionAnalyzer] ERROR: Model not found in bundle")
+                os_log("Error: Core ML model not found in bundle (looking for %{public}@.mlmodelc)", type: .error, modelResourceName)
                 return
             }
 
-            let compiledURL = try MLModel.compileModel(at: modelURL)
-            self.compiledModelURL = compiledURL
-
+            print("[EmotionAnalyzer] Model URL: \(modelURL)")
             let modelConfig = MLModelConfiguration()
-            modelConfig.computeUnits = .all // Use all available cores for faster inference
+            // Use CPU and GPU only - avoid ANE to prevent XPC connection crashes
+            // ANE uses XPC for communication which can be unstable with some models
+            modelConfig.computeUnits = .cpuAndGPU
 
-            model = try MLModel(contentsOf: compiledURL, configuration: modelConfig)
+            model = try MLModel(contentsOf: modelURL, configuration: modelConfig)
             modelDescription = model?.modelDescription
 
             // Load scaler parameters
@@ -382,12 +392,14 @@ final class EmotionAnalyzer: ObservableObject {
             // Load emotion labels
             loadEmotionLabels()
 
+            print("[EmotionAnalyzer] Model loaded successfully!")
             os_log("EmotionAnalyzer: Model loaded successfully", type: .info)
             os_log("Model input: %{public}@", type: .info,
                    modelDescription?.inputDescriptionsByName["features"]?.name ?? modelDescription?.inputDescriptionsByName.values.first?.name ?? "unknown")
             os_log("Model output: %{public}@", type: .info,
-                   modelDescription?.outputDescriptionsByName["output"]?.name ?? modelDescription?.outputDescriptionsByName.values.first?.name ?? "unknown")
+                   modelDescription?.outputDescriptionsByName["emotion_logits"]?.name ?? modelDescription?.outputDescriptionsByName.values.first?.name ?? "unknown")
         } catch {
+            print("[EmotionAnalyzer] ERROR loading model: \(error.localizedDescription)")
             os_log("Error loading model: %{public}@", type: .error, error.localizedDescription)
             lastError = error
         }
@@ -430,7 +442,7 @@ final class EmotionAnalyzer: ObservableObject {
 
     // MARK: - Private Methods - Feature Extraction
 
-    private func extractFeatures(from url: URL) throws -> [Double] {
+    nonisolated private func extractFeatures(from url: URL) throws -> [Double] {
         let audioFile: AVAudioFile
         do {
             audioFile = try AVAudioFile(forReading: url)
@@ -469,7 +481,7 @@ final class EmotionAnalyzer: ObservableObject {
         return try extractFeatures(from: samples)
     }
 
-    private func extractFeatures(from samples: [Float]) throws -> [Double] {
+    nonisolated private func extractFeatures(from samples: [Float], window: [Double], fftSetup: FFTSetupD?) throws -> [Double] {
         var features: [Double] = []
         features.reserveCapacity(featureDimension)
 
@@ -480,8 +492,8 @@ final class EmotionAnalyzer: ObservableObject {
         // Convert to Double for processing
         let doubleSamples = processedSamples.map { Double($0) }
 
-        // Extract MFCC features (40 coefficients)
-        let mfccs = extractMFCCs(from: doubleSamples, sampleRate: sampleRate)
+        // Extract MFCC features using vDSP FFT (40 coefficients)
+        let mfccs = extractMFCCs(from: doubleSamples, sampleRate: sampleRate, window: window, fftSetup: fftSetup)
 
         // MFCC mean, std, max, min (40 x 4 = 160 features)
         for i in 0..<numMFCC {
@@ -515,12 +527,12 @@ final class EmotionAnalyzer: ObservableObject {
         let zcr = computeZCR(doubleSamples)
         features.append(contentsOf: [zcr.mean, zcr.std])
 
-        // Spectral features
-        let spectralFeatures = extractSpectralFeatures(from: doubleSamples, sampleRate: sampleRate)
+        // Spectral features using vDSP FFT
+        let spectralFeatures = extractSpectralFeatures(from: doubleSamples, sampleRate: sampleRate, window: window, fftSetup: fftSetup)
         features.append(contentsOf: spectralFeatures)
 
-        // Chroma features (12 x 2 = 24 features)
-        let chromaFeatures = extractChromaFeatures(from: doubleSamples, sampleRate: sampleRate)
+        // Chroma features using vDSP FFT (12 x 2 = 24 features)
+        let chromaFeatures = extractChromaFeatures(from: doubleSamples, sampleRate: sampleRate, window: window, fftSetup: fftSetup)
         features.append(contentsOf: chromaFeatures)
 
         // Harmonic ratio (1 feature)
@@ -540,7 +552,7 @@ final class EmotionAnalyzer: ObservableObject {
         return features
     }
 
-    private func processAudioSamples(_ samples: [Float], targetLength: Int) -> [Float] {
+    nonisolated private func processAudioSamples(_ samples: [Float], targetLength: Int) -> [Float] {
         guard targetLength > 0 else { return samples }
 
         if samples.count >= targetLength {
@@ -550,10 +562,10 @@ final class EmotionAnalyzer: ObservableObject {
         }
     }
 
-    // MARK: - Private Methods - Audio Feature Algorithms
+    // MARK: - Private Methods - Audio Feature Algorithms (nonisolated for background execution)
+    // These use Accelerate framework for O(n log n) FFT instead of O(n²) naive DFT
 
-    private func extractMFCCs(from samples: [Double], sampleRate: Double) -> (values: [[Double]], mean: [Double], std: [Double], max: [Double], min: [Double]) {
-        // Estimate number of frames for pre-allocation
+    nonisolated private func extractMFCCs(from samples: [Double], sampleRate: Double, window: [Double], fftSetup: FFTSetupD?) -> (values: [[Double]], mean: [Double], std: [Double], max: [Double], min: [Double]) {
         let estimatedFrames = max(1, (samples.count - frameLength) / hopLength + 1)
         var mfccValues: [[Double]] = []
         mfccValues.reserveCapacity(estimatedFrames)
@@ -561,23 +573,16 @@ final class EmotionAnalyzer: ObservableObject {
         var frameStart = 0
 
         while frameStart + frameLength <= samples.count {
-            // Use UnsafeBufferPointer for zero-copy access
-            var frame = [Double](repeating: 0, count: frameLength)
-            samples.withUnsafeBufferPointer { samplesPtr in
-                memcpy(&frame, samplesPtr.baseAddress!.advanced(by: frameStart), frameLength * MemoryLayout<Double>.size)
-            }
+            // Extract and window the frame using vDSP
+            var frame = Array(samples[frameStart..<(frameStart + frameLength)])
+            var windowedFrame = [Double](repeating: 0, count: frameLength)
+            vDSP_vmulD(frame, 1, window, 1, &windowedFrame, 1, vDSP_Length(frameLength))
 
-            // Compute MFCC for frame using DCT approximation
-            var mfcc = [Double](repeating: 0, count: numMFCC)
-            for coef in 0..<numMFCC {
-                var sum: Double = 0
-                for n in 0..<frameLength {
-                    let window = 0.5 * (1 - cos(2 * .pi * Double(n) / Double(frameLength - 1)))
-                    sum += window * frame[n] * cos(.pi * Double(coef) * (2.0 * Double(n) + 1) / (2.0 * Double(frameLength)))
-                }
-                mfcc[coef] = sum
-            }
+            // Compute power spectrum using vDSP FFT
+            let magnitudes = computeFFTMagnitudes(windowedFrame, fftSetup: fftSetup)
 
+            // Compute MFCCs from power spectrum using mel filterbank approximation
+            let mfcc = computeMFCCFromSpectrum(magnitudes, sampleRate: sampleRate)
             mfccValues.append(mfcc)
             frameStart += hopLength
         }
@@ -590,37 +595,125 @@ final class EmotionAnalyzer: ObservableObject {
             return (mfccValues, defaults, defaults, negInf, posInf)
         }
 
-        // Single-pass statistics computation
+        // Compute statistics using vDSP
+        let (means, stds, maxes, mins) = computeMFCCStatistics(mfccValues)
+        return (mfccValues, means, stds, maxes, mins)
+    }
+
+    /// Compute FFT magnitudes using Accelerate vDSP - O(n log n)
+    nonisolated private func computeFFTMagnitudes(_ frame: [Double], fftSetup: FFTSetupD?) -> [Double] {
+        let n = frame.count
+        let halfN = n / 2
+
+        // Prepare split complex arrays for FFT
+        var real = [Double](repeating: 0, count: halfN)
+        var imag = [Double](repeating: 0, count: halfN)
+
+        // Convert to split complex format (interleaved -> split)
+        frame.withUnsafeBufferPointer { framePtr in
+            real.withUnsafeMutableBufferPointer { realPtr in
+                imag.withUnsafeMutableBufferPointer { imagPtr in
+                    var splitComplex = DSPDoubleSplitComplex(realp: realPtr.baseAddress!, imagp: imagPtr.baseAddress!)
+                    vDSP_ctozD(UnsafePointer<DSPDoubleComplex>(OpaquePointer(framePtr.baseAddress!)), 2, &splitComplex, 1, vDSP_Length(halfN))
+                }
+            }
+        }
+
+        // Perform FFT
+        if let setup = fftSetup {
+            real.withUnsafeMutableBufferPointer { realPtr in
+                imag.withUnsafeMutableBufferPointer { imagPtr in
+                    var splitComplex = DSPDoubleSplitComplex(realp: realPtr.baseAddress!, imagp: imagPtr.baseAddress!)
+                    vDSP_fft_zripD(setup, &splitComplex, 1, vDSP_Length(fftLog2n), FFTDirection(FFT_FORWARD))
+                }
+            }
+        }
+
+        // Compute magnitudes: sqrt(real² + imag²)
+        var magnitudes = [Double](repeating: 0, count: halfN + 1)
+        for i in 0..<halfN {
+            magnitudes[i] = sqrt(real[i] * real[i] + imag[i] * imag[i])
+        }
+        // DC component
+        magnitudes[halfN] = abs(real[0])
+
+        return magnitudes
+    }
+
+    /// Compute MFCCs from power spectrum using mel filterbank
+    nonisolated private func computeMFCCFromSpectrum(_ magnitudes: [Double], sampleRate: Double) -> [Double] {
+        let numFilters = numMFCC + 6  // Use more mel filters than coefficients
+        let halfN = magnitudes.count
+
+        // Compute mel filterbank energies (simplified triangular filters)
+        var melEnergies = [Double](repeating: 0, count: numFilters)
+        let maxMel = 2595.0 * log10(1 + sampleRate / 2 / 700.0)
+
+        for i in 0..<numFilters {
+            let melCenter = maxMel * Double(i + 1) / Double(numFilters + 1)
+            let freqCenter = 700.0 * (pow(10.0, melCenter / 2595.0) - 1)
+            let binCenter = Int(freqCenter * Double(halfN) / (sampleRate / 2))
+
+            let melWidth = maxMel / Double(numFilters + 1)
+            let freqWidth = 700.0 * (pow(10.0, melWidth / 2595.0) - 1)
+            let binWidth = max(1, Int(freqWidth * Double(halfN) / (sampleRate / 2)))
+
+            var energy: Double = 0
+            let startBin = max(0, binCenter - binWidth)
+            let endBin = min(halfN - 1, binCenter + binWidth)
+
+            for k in startBin...endBin {
+                let weight = 1.0 - abs(Double(k - binCenter)) / Double(binWidth + 1)
+                energy += magnitudes[k] * magnitudes[k] * weight
+            }
+            melEnergies[i] = log(max(energy, 1e-10))
+        }
+
+        // Apply DCT to get MFCCs (Type-II DCT approximation)
+        var mfcc = [Double](repeating: 0, count: numMFCC)
+        for i in 0..<numMFCC {
+            var sum: Double = 0
+            for j in 0..<numFilters {
+                sum += melEnergies[j] * cos(.pi * Double(i) * (Double(j) + 0.5) / Double(numFilters))
+            }
+            mfcc[i] = sum
+        }
+
+        return mfcc
+    }
+
+    /// Compute MFCC statistics using vectorized operations
+    nonisolated private func computeMFCCStatistics(_ mfccValues: [[Double]]) -> (mean: [Double], std: [Double], max: [Double], min: [Double]) {
         var means = [Double](repeating: 0, count: numMFCC)
         var stds = [Double](repeating: 0, count: numMFCC)
         var maxes = [Double](repeating: -Double.infinity, count: numMFCC)
         var mins = [Double](repeating: Double.infinity, count: numMFCC)
+        let count = Double(mfccValues.count)
 
         for i in 0..<numMFCC {
             var sum: Double = 0
-            var sumSquares: Double = 0
+            var sumSq: Double = 0
             var maxVal = -Double.infinity
             var minVal = Double.infinity
 
             for frame in mfccValues {
                 let val = frame[i]
                 sum += val
-                sumSquares += val * val
-                maxVal = max(maxVal, val)
-                minVal = min(minVal, val)
+                sumSq += val * val
+                maxVal = Swift.max(maxVal, val)
+                minVal = Swift.min(minVal, val)
             }
 
-            let count = Double(mfccValues.count)
             means[i] = sum / count
-            stds[i] = sqrt(max(0, sumSquares / count - means[i] * means[i]))
+            stds[i] = sqrt(Swift.max(0, sumSq / count - means[i] * means[i]))
             maxes[i] = maxVal
             mins[i] = minVal
         }
 
-        return (mfccValues, means, stds, maxes, mins)
+        return (means, stds, maxes, mins)
     }
 
-    private func computeDelta(_ values: [[Double]]) -> (values: [[Double]], mean: [Double]) {
+    nonisolated private func computeDelta(_ values: [[Double]]) -> (values: [[Double]], mean: [Double]) {
         var deltas: [[Double]] = []
 
         for i in 0..<values.count {
@@ -658,7 +751,7 @@ final class EmotionAnalyzer: ObservableObject {
         return (deltas, means)
     }
 
-    private func extractPitchFeatures(from samples: [Double], sampleRate: Double) -> [Double] {
+    nonisolated private func extractPitchFeatures(from samples: [Double], sampleRate: Double) -> [Double] {
         var f0Values: [Double] = []
         var frameStart = 0
 
@@ -689,7 +782,7 @@ final class EmotionAnalyzer: ObservableObject {
         ]
     }
 
-    private func estimateF0(_ frame: [Double], sampleRate: Double) -> Double {
+    nonisolated private func estimateF0(_ frame: [Double], sampleRate: Double) -> Double {
         let minLag = Int(sampleRate / 500)
         let maxLag = Int(sampleRate / 50)
 
@@ -714,7 +807,7 @@ final class EmotionAnalyzer: ObservableObject {
         return (f0 >= 50 && f0 <= 500) ? f0 : 0
     }
 
-    private func computeRMS(_ samples: [Double]) -> (mean: Double, std: Double, max: Double, min: Double) {
+    nonisolated private func computeRMS(_ samples: [Double]) -> (mean: Double, std: Double, max: Double, min: Double) {
         var rmsValues: [Double] = []
         var frameStart = 0
 
@@ -738,7 +831,7 @@ final class EmotionAnalyzer: ObservableObject {
         return (mean, sqrt(variance), rmsValues.max() ?? 0, rmsValues.min() ?? 0)
     }
 
-    private func computeZCR(_ samples: [Double]) -> (mean: Double, std: Double) {
+    nonisolated private func computeZCR(_ samples: [Double]) -> (mean: Double, std: Double) {
         var zcrValues: [Double] = []
         var frameStart = 0
 
@@ -770,51 +863,30 @@ final class EmotionAnalyzer: ObservableObject {
         return (mean, sqrt(variance))
     }
 
-    private func extractSpectralFeatures(from samples: [Double], sampleRate: Double) -> [Double] {
-        // Initialize feature collection arrays
+    nonisolated private func extractSpectralFeatures(from samples: [Double], sampleRate: Double, window: [Double], fftSetup: FFTSetupD?) -> [Double] {
         var features: [Double] = []
         var spectralCentroids: [Double] = []
         var spectralBandwidths: [Double] = []
         var spectralRolloffs: [Double] = []
         var spectralFlatness: [Double] = []
         var spectralContrast: [[Double]] = []
-        
-        // Frame processing parameters
-        let fftSize = frameLength
-        var frameStart = 0
-        
-        // Guard against empty or too short samples
+
         guard samples.count >= frameLength else {
-            // Return zero-padded features if audio is too short
-            return Array(repeating: 0.0, count: 17) // 2*4 + 7 + 2 = 17 spectral features
+            return Array(repeating: 0.0, count: 17)
         }
-        
+
+        var frameStart = 0
+        let nyquist = sampleRate / 2
+
         while frameStart + frameLength <= samples.count {
-            let frame = Array(samples[frameStart..<frameStart + frameLength])
+            // Extract and window the frame
+            var frame = Array(samples[frameStart..<frameStart + frameLength])
+            var windowedFrame = [Double](repeating: 0, count: frameLength)
+            vDSP_vmulD(frame, 1, window, 1, &windowedFrame, 1, vDSP_Length(frameLength))
 
-            // Compute magnitudes using optimized approach
-            var magnitudes: [Double] = Array(repeating: 0, count: fftSize / 2 + 1)
+            // Compute magnitudes using FFT (O(n log n) instead of O(n²))
+            let magnitudes = computeFFTMagnitudes(windowedFrame, fftSetup: fftSetup)
 
-            // BUG FIX: Ensure fftSize matches frame length to prevent array bounds violation
-            let safeFFTSize = min(fftSize, frame.count)
-            
-            for k in 0..<(safeFFTSize / 2 + 1) {
-                var realSum: Double = 0
-                var imagSum: Double = 0
-                for n in 0..<safeFFTSize {
-                    let angle = -2 * .pi * Double(k) * Double(n) / Double(safeFFTSize)
-                    realSum += frame[n] * cos(angle)
-                    imagSum += frame[n] * sin(angle)
-                }
-                magnitudes[k] = sqrt(realSum * realSum + imagSum * imagSum)
-            }
-
-            // Spectral centroid
-            var num: Double = 0
-            var denom: Double = 0
-            let nyquist = sampleRate / 2
-            
-            // BUG FIX: Guard against division by zero when magnitudes.count <= 1
             guard magnitudes.count > 1 else {
                 spectralCentroids.append(0)
                 spectralBandwidths.append(0)
@@ -824,16 +896,19 @@ final class EmotionAnalyzer: ObservableObject {
                 frameStart += hopLength
                 continue
             }
-            
+
+            // Spectral centroid
+            var num: Double = 0
+            var denom: Double = 0
             for k in 0..<magnitudes.count {
                 let freq = nyquist * Double(k) / Double(magnitudes.count - 1)
                 num += freq * magnitudes[k]
                 denom += magnitudes[k]
             }
-            spectralCentroids.append(denom > 0 ? num / denom : 0)
+            let centroid = denom > 0 ? num / denom : 0
+            spectralCentroids.append(centroid)
 
             // Spectral bandwidth
-            let centroid = spectralCentroids.last ?? 0
             var bandwidthSum: Double = 0
             for k in 0..<magnitudes.count {
                 let freq = nyquist * Double(k) / Double(magnitudes.count - 1)
@@ -844,30 +919,26 @@ final class EmotionAnalyzer: ObservableObject {
             // Spectral rolloff (85%)
             var rolloffSum: Double = 0
             let rolloffThreshold = spectralRolloffThreshold * denom
-            var rolloffFound = false
+            var rolloffFreq = nyquist
             for k in 0..<magnitudes.count {
                 rolloffSum += magnitudes[k]
                 if rolloffSum >= rolloffThreshold {
-                    spectralRolloffs.append(nyquist * Double(k) / Double(magnitudes.count - 1))
-                    rolloffFound = true
+                    rolloffFreq = nyquist * Double(k) / Double(magnitudes.count - 1)
                     break
                 }
             }
-            if !rolloffFound {
-                spectralRolloffs.append(nyquist)
-            }
+            spectralRolloffs.append(rolloffFreq)
 
             // Spectral flatness
             var logSum: Double = 0
             var linearSum: Double = 0
+            var numNonZero = 0
             for m in magnitudes where m > 0 {
                 logSum += log(m)
                 linearSum += m
+                numNonZero += 1
             }
-            let numNonZero = magnitudes.filter { $0 > 0 }.count
-            
-            // BUG FIX: Guard against division by zero in spectral flatness
-            if numNonZero > 0 && linearSum > 0 && magnitudes.count > 0 {
+            if numNonZero > 0 && linearSum > 0 {
                 let geometricMean = exp(logSum / Double(numNonZero))
                 spectralFlatness.append(geometricMean / (linearSum / Double(magnitudes.count)))
             } else {
@@ -875,7 +946,6 @@ final class EmotionAnalyzer: ObservableObject {
             }
 
             // Spectral contrast
-            // BUG FIX: Ensure bandSize is not zero
             let bandSize = max(1, magnitudes.count / (numSpectralContrast + 1))
             var bandValues: [Double] = []
             for band in 0..<numSpectralContrast {
@@ -885,18 +955,16 @@ final class EmotionAnalyzer: ObservableObject {
                 var peakSum: Double = 0
                 var valleyCount = 0
                 var peakCount = 0
-                
+
                 for k in start..<end {
                     valleySum += magnitudes[k]
                     valleyCount += 1
-                    
-                    // BUG FIX: Bounds check for peak calculation
                     if k + bandSize < magnitudes.count {
                         peakSum += magnitudes[k + bandSize]
                         peakCount += 1
                     }
                 }
-                
+
                 let valleyAvg = valleyCount > 0 ? valleySum / Double(valleyCount) : 0
                 let peakAvg = peakCount > 0 ? peakSum / Double(peakCount) : 0
                 bandValues.append(peakAvg - valleyAvg)
@@ -906,12 +974,20 @@ final class EmotionAnalyzer: ObservableObject {
             frameStart += hopLength
         }
 
-        // Aggregate features
+        // Aggregate features using helper
         func aggregate(_ values: [Double]) -> [Double] {
             guard !values.isEmpty else { return [0, 0] }
-            let mean = values.reduce(0, +) / Double(values.count)
-            let variance = values.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Double(values.count)
-            return [mean, sqrt(variance)]
+            var mean: Double = 0
+            var stdDev: Double = 0
+            vDSP_meanvD(values, 1, &mean, vDSP_Length(values.count))
+            var variance: Double = 0
+            var temp = [Double](repeating: 0, count: values.count)
+            var negMean = -mean
+            vDSP_vsaddD(values, 1, &negMean, &temp, 1, vDSP_Length(values.count))
+            vDSP_dotprD(temp, 1, temp, 1, &variance, vDSP_Length(values.count))
+            variance /= Double(values.count)
+            stdDev = sqrt(variance)
+            return [mean, stdDev]
         }
 
         features.append(contentsOf: aggregate(spectralCentroids))
@@ -935,82 +1011,75 @@ final class EmotionAnalyzer: ObservableObject {
         return features
     }
 
-    private func extractChromaFeatures(from samples: [Double], sampleRate: Double) -> [Double] {
-        // Initialize chroma feature arrays
-        var chromaMeans: [[Double]] = []
-        var chromaStds: [[Double]] = []
+    nonisolated private func extractChromaFeatures(from samples: [Double], sampleRate: Double, window: [Double], fftSetup: FFTSetupD?) -> [Double] {
+        var chromaFrames: [[Double]] = []
+        let numChromaBins = 12
 
-        // Frame processing parameters
-        let fftSize = frameLength
-        let numChroma = 12
-        var frameStart = 0
-
-        // Guard against empty or too short samples
         guard samples.count >= frameLength else {
-            return Array(repeating: 0.0, count: numChroma * 2) // Mean + std for each chroma bin
+            return Array(repeating: 0.0, count: numChromaBins * 2)
         }
 
+        var frameStart = 0
+        let nyquist = sampleRate / 2
+
         while frameStart + frameLength <= samples.count {
-            let frame = Array(samples[frameStart..<frameStart + frameLength])
+            // Extract and window the frame
+            var frame = Array(samples[frameStart..<frameStart + frameLength])
+            var windowedFrame = [Double](repeating: 0, count: frameLength)
+            vDSP_vmulD(frame, 1, window, 1, &windowedFrame, 1, vDSP_Length(frameLength))
 
-            // Compute chroma
-            var chroma = [Double](repeating: 0, count: numChroma)
+            // Compute magnitudes using FFT
+            let magnitudes = computeFFTMagnitudes(windowedFrame, fftSetup: fftSetup)
 
-            let nyquist = sampleRate / 2
+            // Map FFT bins to chroma
+            var chroma = [Double](repeating: 0, count: numChromaBins)
+            for k in 1..<magnitudes.count {
+                let freq = nyquist * Double(k) / Double(magnitudes.count - 1)
+                guard freq > 0 else { continue }
 
-            for k in 1..<(fftSize / 2) {
-                let freq = nyquist * Double(k) / Double(fftSize / 2)
-                
-                // BUG FIX: Prevent negative or out-of-bounds chroma bin index
-                let chromaBinRaw = Int(freq / 110.0 * Double(numChroma) / 12.0)
-                let chromaBin = max(0, chromaBinRaw) % numChroma
-                
-                var magnitude: Double = 0
-                for n in 0..<frameLength {
-                    let angle = -2 * .pi * Double(k) * Double(n) / Double(fftSize)
-                    magnitude += frame[n] * cos(angle)
-                }
-                magnitude = abs(magnitude)
-                chroma[chromaBin] += magnitude * magnitude
+                // Map frequency to chroma bin (A4 = 440Hz as reference)
+                let semitone = 12.0 * log2(freq / 440.0)
+                let chromaBin = Int((semitone.truncatingRemainder(dividingBy: 12) + 12).truncatingRemainder(dividingBy: 12))
+                chroma[chromaBin] += magnitudes[k] * magnitudes[k]
             }
 
             // Normalize
-            let totalEnergy = chroma.reduce(0, +)
+            var totalEnergy: Double = 0
+            vDSP_sveD(chroma, 1, &totalEnergy, vDSP_Length(numChromaBins))
             if totalEnergy > 0 {
-                for i in 0..<numChroma {
-                    chroma[i] /= totalEnergy
-                }
+                var scale = 1.0 / totalEnergy
+                vDSP_vsmulD(chroma, 1, &scale, &chroma, 1, vDSP_Length(numChromaBins))
             }
 
-            chromaMeans.append(chroma)
-            chromaStds.append(Array(repeating: 0, count: numChroma)) // Placeholder
-
+            chromaFrames.append(chroma)
             frameStart += hopLength
         }
 
-        // Aggregate across all frames
-        var finalMeans: [Double] = []
-        var finalStds: [Double] = []
+        // Aggregate across frames
+        var finalMeans = [Double](repeating: 0, count: numChromaBins)
+        var finalStds = [Double](repeating: 0, count: numChromaBins)
 
-        for i in 0..<numChroma {
-            var meanSum: Double = 0
-            for j in 0..<chromaMeans.count {
-                if i < chromaMeans[j].count {
-                    meanSum += chromaMeans[j][i]
+        if !chromaFrames.isEmpty {
+            let count = Double(chromaFrames.count)
+            for i in 0..<numChromaBins {
+                var sum: Double = 0
+                var sumSq: Double = 0
+                for frame in chromaFrames {
+                    sum += frame[i]
+                    sumSq += frame[i] * frame[i]
                 }
+                finalMeans[i] = sum / count
+                finalStds[i] = sqrt(Swift.max(0, sumSq / count - finalMeans[i] * finalMeans[i]))
             }
-            finalMeans.append(chromaMeans.isEmpty ? 0 : meanSum / Double(chromaMeans.count))
-            finalStds.append(0) // Placeholder
         }
 
         var features: [Double] = []
         features.append(contentsOf: finalMeans)
         features.append(contentsOf: finalStds)
-
         return features
     }
 
-    private func computeHarmonicRatio(from samples: [Double]) -> Double {
+    nonisolated private func computeHarmonicRatio(from samples: [Double]) -> Double {
         var harmonicSum: Double = 0
         var frameCount = 0
 
@@ -1042,14 +1111,14 @@ final class EmotionAnalyzer: ObservableObject {
 
     // MARK: - Private Methods - Normalization & Inference
 
-    private func normalizeFeatures(_ features: [Double]) -> [Double] {
-        guard scalerMean.count == featureDimension && scalerScale.count == featureDimension else {
+    nonisolated private func normalizeFeatures(_ features: [Double], mean: [Double], scale: [Double]) -> [Double] {
+        guard mean.count == featureDimension && scale.count == featureDimension else {
             return features
         }
 
-        return zip(features, zip(scalerMean, scalerScale)).map { feature, meanScale in
-            let (mean, scale) = meanScale
-            return scale > 0 ? (feature - mean) / scale : feature
+        return zip(features, zip(mean, scale)).map { feature, meanScale in
+            let (m, s) = meanScale
+            return s > 0 ? (feature - m) / s : feature
         }
     }
 
@@ -1060,14 +1129,20 @@ final class EmotionAnalyzer: ObservableObject {
         }
 
         // Convert features to MLMultiArray with proper 2D indexing
-        let multiArray = try MLMultiArray(
-            shape: [1, NSNumber(value: featureDimension)],
-            dataType: .double
-        )
+        let multiArray: MLMultiArray
+        do {
+            multiArray = try MLMultiArray(
+                shape: [1, NSNumber(value: featureDimension)],
+                dataType: .double
+            )
+        } catch {
+            print("[EmotionAnalyzer] Failed to create MLMultiArray: \(error)")
+            throw EmotionAnalyzerError.featureExtractionFailed
+        }
 
-        // Use bulk copy for better performance
-        features.withUnsafeBufferPointer { featuresPtr in
-            multiArray.dataPointer.copyMemory(from: featuresPtr.baseAddress!, byteCount: featureDimension * MemoryLayout<Double>.size)
+        // Copy features to MLMultiArray
+        for (index, value) in features.enumerated() {
+            multiArray[[0, NSNumber(value: index)]] = NSNumber(value: value)
         }
 
         // Create input feature provider
@@ -1076,11 +1151,17 @@ final class EmotionAnalyzer: ObservableObject {
             throw EmotionAnalyzerError.modelNotLoaded
         }
 
-        // Run prediction
-        let output = try await model.prediction(from: inputProvider)
+        // Run prediction with error handling
+        let output: MLFeatureProvider
+        do {
+            output = try await model.prediction(from: inputProvider)
+        } catch {
+            print("[EmotionAnalyzer] ML prediction failed: \(error)")
+            throw EmotionAnalyzerError.noPrediction
+        }
 
-        // Extract probabilities from output
-        let outputName = modelDescription.outputDescriptionsByName["output"]?.name ?? modelDescription.outputDescriptionsByName.values.first?.name ?? "output"
+        // Extract probabilities from output (model outputs "emotion_logits")
+        let outputName = modelDescription.outputDescriptionsByName["emotion_logits"]?.name ?? modelDescription.outputDescriptionsByName.values.first?.name ?? "emotion_logits"
         guard let outputDict = output.featureValue(for: outputName) else {
             throw EmotionAnalyzerError.noPrediction
         }

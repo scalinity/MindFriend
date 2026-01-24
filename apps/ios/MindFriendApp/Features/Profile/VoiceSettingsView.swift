@@ -5,6 +5,7 @@ struct VoiceSettingsView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var showUpgradeSheet = false
+    @AppStorage("voiceEmotionAnalysisEnabled") private var emotionAnalysisEnabled = false
 
     var body: some View {
         NavigationStack {
@@ -20,6 +21,29 @@ struct VoiceSettingsView: View {
                         Text("Upgrade to Premium to unlock all 5 voices.")
                             .foregroundStyle(.secondary)
                     }
+                }
+
+                Section {
+                    Toggle(isOn: $emotionAnalysisEnabled) {
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Emotion Analysis")
+                                Text("Detect emotions from your voice using on-device AI")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: "waveform.badge.mic")
+                                .foregroundStyle(.purple)
+                        }
+                    }
+                    .onChange(of: emotionAnalysisEnabled) { _, newValue in
+                        voiceService.setEmotionAnalysisEnabled(newValue)
+                    }
+                } header: {
+                    Text("Emotion Detection")
+                } footer: {
+                    Text("Emotion analysis runs entirely on your device using CoreML. No voice data is sent to any server for emotion detection.")
                 }
 
                 Section("Usage This Month") {
@@ -83,6 +107,10 @@ struct VoiceSettingsView: View {
             }
             .sheet(isPresented: $showUpgradeSheet) {
                 SubscriptionView()
+            }
+            .onAppear {
+                // Sync voiceService with persisted setting on appear
+                voiceService.setEmotionAnalysisEnabled(emotionAnalysisEnabled)
             }
         }
     }

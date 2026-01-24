@@ -1,14 +1,8 @@
-import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
-import {
-  createClient,
-  SupabaseClient,
-} from "https://esm.sh/@supabase/supabase-js@2";
+import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
-import {
-  zonedTimeToUtc,
-  utcToZonedTime,
-} from "https://esm.sh/date-fns-tz@3.0.0";
-import { addDays, startOfDay } from "https://esm.sh/date-fns@3.6.0";
+import { toZonedTime, fromZonedTime } from "npm:date-fns-tz@3.2.0";
+import { addDays, startOfDay } from "npm:date-fns@4.1.0";
 import type {
   CalculateCapacityRequest,
   CalculateCapacityResponse,
@@ -44,17 +38,17 @@ import {
 
 /**
  * Wraps a database query with a timeout to prevent hanging
- * @param queryFn Async function that executes the query
+ * @param queryFn Async function that executes the query (can be Promise or PromiseLike)
  * @param timeoutMs Timeout in milliseconds (default: 5000ms)
  * @returns Query result
  * @throws Error if timeout exceeded
  */
 async function withQueryTimeout<T>(
-  queryFn: () => Promise<T>,
+  queryFn: () => PromiseLike<T>,
   timeoutMs: number = 5000,
 ): Promise<T> {
   return Promise.race([
-    queryFn(),
+    Promise.resolve(queryFn()),
     new Promise<T>((_, reject) =>
       setTimeout(
         () => reject(new Error(`Database query timeout after ${timeoutMs}ms`)),
@@ -70,7 +64,7 @@ async function withQueryTimeout<T>(
 
 // CONFIGURATION CONSTANTS
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
-const RATE_LIMIT_MAX_REQUESTS = 10; // requests per window
+const RATE_LIMIT_MAX_REQUESTS = 60; // requests per window (once per minute average)
 const MAX_TIMEZONE_LENGTH = 50; // Maximum timezone identifier length
 const MAX_REQUEST_BODY_SIZE = 1024 * 1024; // 1MB maximum request size
 const SLEEP_LOOKBACK_DAYS = 7; // Days to look back for sleep data
@@ -178,8 +172,9 @@ async function validateAndAuthenticate(
   // Valid formats: Area/Location (e.g., America/New_York, Europe/London)
   // or Area/Location/City (e.g., America/Argentina/Buenos_Aires)
   // or special cases: UTC, GMT
+  // Pattern allows: Capital letter followed by alphanumeric and underscores
   const timezoneRegex =
-    /^([A-Z][a-z]+\/[A-Z][a-z_]+(?:\/[A-Z][a-z_]+)?|UTC|GMT)$/;
+    /^([A-Z][a-zA-Z_]+\/[A-Z][a-zA-Z_]+(?:\/[A-Z][a-zA-Z_]+)?|UTC|GMT)$/;
   if (!timezoneRegex.test(timezone)) {
     throw new Error(
       "Invalid timezone format (expected IANA identifier like America/New_York)",
@@ -264,8 +259,8 @@ async function checkCachedCapacity(
   localDate: string,
 ): Promise<CalculateCapacityResponse | null> {
   const { data: cachedCapacity, error: cacheError } = await withQueryTimeout(
-    () =>
-      supabaseAuth
+    async () =>
+      await supabaseAuth
         .from("user_capacity")
         .select(
           "score, level, components, local_date, calculated_at, expires_at, has_override",
@@ -402,12 +397,13 @@ async function getOrCalculateCapacity(
   const response = buildCapacityResponse(result, localDate, timezone);
 
   // Persist to cache (non-blocking)
+  // Store the full ComponentScore objects (with score, weight, contribution)
   await persistCapacity(
     supabaseAdmin,
     userId,
     result.score,
     result.level,
-    response.components,
+    response.components, // This is the correct format for the database JSONB
     localDate,
     timezone,
     false,
@@ -421,6 +417,8 @@ async function getOrCalculateCapacity(
 // =====================================================
 
 serve(async (req) => {
+  console.log("[calculate-capacity] Request received");
+
   // CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -434,21 +432,36 @@ serve(async (req) => {
     });
   }
 
+  console.log("[calculate-capacity] Origin validated, starting main flow");
+
   try {
     // Initialize Supabase clients
-    const supabaseAuth = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { auth: { persistSession: false } },
-    );
+    console.log("[calculate-capacity] Creating Supabase clients");
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
+    const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-      { auth: { persistSession: false } },
-    );
+    if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey) {
+      console.error("[calculate-capacity] Missing env vars:", {
+        hasUrl: !!supabaseUrl,
+        hasAnonKey: !!supabaseAnonKey,
+        hasServiceKey: !!supabaseServiceRoleKey,
+      });
+      throw new Error("Server configuration error");
+    }
+
+    const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: { persistSession: false },
+    });
+
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey, {
+      auth: { persistSession: false },
+    });
+
+    console.log("[calculate-capacity] Supabase clients created");
 
     // Validate and authenticate
+    console.log("[calculate-capacity] Starting authentication");
     const { userId, localDate, timezone } = await validateAndAuthenticate(
       req,
       supabaseAuth,
@@ -520,16 +533,14 @@ function getDateRangeInUTC(
   daysBack: number,
 ): { start: string; end: string } {
   try {
-    // Parse local date (YYYY-MM-DD)
-    const [year, month, day] = localDate.split("-").map(Number);
-    const localDateObj = new Date(year, month - 1, day, 0, 0, 0);
+    // Create date string with time at start of day in the target timezone
+    const localDateAtMidnight = `${localDate}T00:00:00`;
 
-    // Calculate start date using date-fns (safe arithmetic)
-    const startLocalDate = addDays(localDateObj, -daysBack);
+    // Parse the date as if it's in the target timezone, then convert to UTC
+    const endUtc = fromZonedTime(localDateAtMidnight, timezone);
 
-    // Convert to UTC using timezone
-    const startUtc = zonedTimeToUtc(startLocalDate, timezone);
-    const endUtc = zonedTimeToUtc(localDateObj, timezone);
+    // Calculate start date (go back N days)
+    const startUtc = addDays(endUtc, -daysBack);
 
     // Add 1 day to end to include full day
     const endUtcPlusOne = addDays(endUtc, 1);
@@ -570,7 +581,7 @@ function getDateRangeInUTC(
 function localDateToUTC(localDateString: string, timezone: string): Date {
   try {
     // Use date-fns-tz for proper timezone conversion
-    return zonedTimeToUtc(localDateString, timezone);
+    return fromZonedTime(localDateString, timezone);
   } catch (error) {
     // SECURITY: Don't log timezone (PII - reveals location)
     console.warn("Timezone conversion failed, using UTC fallback");
@@ -581,8 +592,8 @@ function localDateToUTC(localDateString: string, timezone: string): Date {
 async function fetchSleepData(
   supabase: SupabaseClient,
   userId: string,
-  startDate: Date,
-  endDate: Date,
+  startDate: string,
+  endDate: string,
 ): Promise<SleepData | null> {
   try {
     const { data, error } = await withQueryTimeout(() =>
@@ -590,8 +601,8 @@ async function fetchSleepData(
         .from("sleep_logs")
         .select("logged_at, fell_asleep_at, woke_up_at, quality")
         .eq("user_id", userId)
-        .gte("logged_at", startDate.toISOString())
-        .lte("logged_at", endDate.toISOString())
+        .gte("logged_at", startDate)
+        .lte("logged_at", endDate)
         .order("logged_at", { ascending: false }),
     );
 
@@ -656,16 +667,13 @@ async function fetchSleepData(
 async function fetchMoodData(
   supabase: SupabaseClient,
   userId: string,
-  startDate: Date,
-  endDate: Date,
+  startDate: string,
+  endDate: string,
   timezone: string,
 ): Promise<MoodData | null> {
-  // BUG FIX: Use timezone-aware date range (last N days in user's timezone)
-  const { start, end } = getDateRangeInUTC(
-    startDate.toISOString().split("T")[0],
-    timezone,
-    MOOD_LOOKBACK_DAYS,
-  );
+  // Use the passed date range directly (already calculated with proper timezone handling)
+  const start = startDate;
+  const end = endDate;
 
   try {
     const { data, error } = await withQueryTimeout(() =>
@@ -968,9 +976,9 @@ function getOverrideScore(overrideLevel: string): number {
 function getNextMidnight(timezone: string): Date {
   try {
     const now = new Date();
-    const zonedNow = utcToZonedTime(now, timezone);
+    const zonedNow = toZonedTime(now, timezone);
     const zonedTomorrow = startOfDay(addDays(zonedNow, 1));
-    return zonedTimeToUtc(zonedTomorrow, timezone);
+    return fromZonedTime(zonedTomorrow, timezone);
   } catch (error) {
     console.error("Timezone calculation failed, using UTC fallback", {
       error: (error as any).message,
@@ -999,13 +1007,26 @@ async function checkRateLimit(
     );
 
     if (error) {
-      console.error("Rate limit check failed", {
+      console.error("RPC error in rate limit check", {
         code: error.code,
+        message: error.message,
       });
-      throw new Error("Rate limit check failed");
+      throw new Error("Database error during rate limit check");
     }
 
     // RPC returns {allowed: boolean, resetAt: timestamp, remaining: int}
+    // Add defensive null check
+    if (!result) {
+      console.error("Rate limit RPC returned null result");
+      // Fail open - allow request if rate limit check fails
+      return;
+    }
+
+    console.log("Rate limit check result:", {
+      allowed: result.allowed,
+      remaining: result.remaining,
+    });
+
     if (!result.allowed) {
       throw new Error(
         `Rate limit exceeded: ${RATE_LIMIT_MAX_REQUESTS} requests per hour`,
@@ -1018,6 +1039,6 @@ async function checkRateLimit(
     console.error("Rate limit query failed", {
       error: (error as any).message,
     });
-    throw new Error("Rate limit check failed");
+    throw new Error("Database error during rate limit check");
   }
 }

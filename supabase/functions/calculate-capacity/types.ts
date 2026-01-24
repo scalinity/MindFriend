@@ -61,10 +61,10 @@ export interface CompletionData {
 }
 
 export interface CapacityComponents {
-  sleep: number;
-  mood: number;
-  streak: number;
-  completion: number;
+  sleep: ComponentScore;
+  mood: ComponentScore;
+  streak: ComponentScore;
+  completion: ComponentScore;
 }
 
 export interface CapacityResult {

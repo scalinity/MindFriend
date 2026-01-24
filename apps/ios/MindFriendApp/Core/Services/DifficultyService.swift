@@ -127,6 +127,19 @@ final class DifficultyService: ObservableObject {
                             .invoke("calculate-capacity", options: FunctionInvokeOptions(body: request))
                     }
                 } catch {
+                    // Log detailed error information
+                    print("[DifficultyService] Edge function error: \(error)")
+                    if let functionsError = error as? FunctionsError {
+                        switch functionsError {
+                        case .httpError(let code, let data):
+                            print("[DifficultyService] HTTP \(code) error, response data: \(String(data: data, encoding: .utf8) ?? "unable to decode")")
+                        case .relayError:
+                            print("[DifficultyService] Relay error")
+                        @unknown default:
+                            print("[DifficultyService] Unknown FunctionsError type")
+                        }
+                    }
+
                     // If we get a 401, try refreshing the session and retrying once
                     let errorMessage = error.localizedDescription.lowercased()
                     if errorMessage.contains("401") || errorMessage.contains("unauthorized") {

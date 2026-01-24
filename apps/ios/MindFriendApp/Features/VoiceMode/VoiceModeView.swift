@@ -22,6 +22,9 @@ struct VoiceModeView: View {
     @State private var errorMessage: String?
     @State private var showError = false
 
+    // Emotion analysis setting (persisted) - disabled by default until FFT optimization
+    @AppStorage("voiceEmotionAnalysisEnabled") private var emotionAnalysisEnabled = false
+
     // Transcript state
     @State private var userTranscript = ""
     @State private var assistantTranscript = ""
@@ -107,6 +110,7 @@ struct VoiceModeView: View {
                 emotionHistory: voiceService.emotionHistory,
                 isPresented: $showEmotionDetail,
                 onDisableEmotions: {
+                    emotionAnalysisEnabled = false  // Persist the setting
                     voiceService.setEmotionAnalysisEnabled(false)
                 }
             )
@@ -515,6 +519,12 @@ struct VoiceModeView: View {
 
     private func startVoiceSession() async {
         _ = stateMachine.send(.tapStart)
+
+        // Enable emotion analysis based on user preference
+        #if DEBUG
+        print("[VoiceMode] Starting with emotionAnalysisEnabled=\(emotionAnalysisEnabled)")
+        #endif
+        voiceService.setEmotionAnalysisEnabled(emotionAnalysisEnabled)
 
         do {
             try await voiceService.connect()
