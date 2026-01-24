@@ -8,6 +8,10 @@ import {
   generateRequestId,
   getUserIdFromRequest,
 } from "../_shared/logger.ts";
+import {
+  createErrorMonitor,
+  ERROR_RATE_THRESHOLDS,
+} from "../_shared/errorMonitor.ts";
 
 interface TrajectoryPoint {
   timestamp: string;
@@ -278,10 +282,33 @@ serve(async (req) => {
     );
   } catch (error) {
     const duration = performance.now() - startTime;
-    logger.error(
-      "Unhandled error in calculate-efficacy",
-      error instanceof Error ? error : new Error(String(error)),
-    );
+    const errorObj = error instanceof Error ? error : new Error(String(error));
+
+    logger.error("Unhandled error in calculate-efficacy", errorObj);
+
+    // Record error for monitoring
+    try {
+      const supabaseAdmin = createClient(
+        Deno.env.get("SUPABASE_URL") ?? "",
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      );
+      const errorMonitor = createErrorMonitor(
+        "calculate-efficacy",
+        supabaseAdmin,
+        logger,
+      );
+      await errorMonitor.recordError(errorObj, {
+        requestId,
+        duration,
+        path: "/calculate-efficacy",
+      });
+
+      // Check error rate and trigger alerts if needed
+      await errorMonitor.checkErrorRate(ERROR_RATE_THRESHOLDS.CRITICAL);
+    } catch (monitorError) {
+      // Don't fail the response if monitoring fails
+      logger.warn("Error monitoring failed", { error: monitorError });
+    }
     logger.logResponse("POST", "/calculate-efficacy", 500, duration);
 
     return new Response(
