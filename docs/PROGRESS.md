@@ -1,5 +1,72 @@
 # MindFriend Development Progress Log
 
+## [2026-01-24] N005: Intervention Efficacy Engine (Phase 1 Complete)
+
+**Type:** Feature
+**Status:** Phase 1 Complete - Infrastructure Ready
+
+### Summary
+
+Implemented the Intervention Efficacy Engine infrastructure that tracks emotional state during exercises to measure what actually works for each user. Completed database schema, Edge Functions, iOS models and services. Ready for UI integration and testing in Phase 2.
+
+### Changes
+
+**Database:**
+| File | Change |
+|------|--------|
+| `supabase/migrations/20260124070000_create_emotional_trajectories.sql` | Created `emotional_trajectories` table for time-series emotion snapshots during sessions |
+| `supabase/migrations/20260124070001_create_intervention_efficacy.sql` | Created `intervention_efficacy` table for calculated efficacy scores per session |
+| `supabase/migrations/20260124070002_create_user_efficacy_profiles.sql` | Created `user_efficacy_profiles` table for aggregated user-exercise profiles |
+| All migrations | Added RLS policies, indexes, and CASCADE foreign keys |
+
+**Edge Functions:**
+| File | Change |
+|------|--------|
+| `supabase/functions/calculate-efficacy/index.ts` | Efficacy calculation with CORRECTED formula: `2 * (weighted_sum) - 1`, breakthrough detection, server-side validation |
+| `supabase/functions/get-recommendations/index.ts` | Context-aware exercise recommendations based on efficacy profiles |
+| `supabase/functions/get-efficacy-dashboard/index.ts` | Dashboard data aggregation (top exercises, recent sessions, insights) |
+| `supabase/functions/aggregate-efficacy-profiles/index.ts` | Nightly cron job for profile aggregation with weighted averages and trend detection |
+
+**iOS Models:**
+| File | Change |
+|------|--------|
+| `apps/ios/MindFriendApp/Core/Models/InterventionEfficacyModels.swift` | Defined all data structures: EmotionalTrajectory, TrajectoryPoint, InterventionEfficacy, UserEfficacyProfile, ExerciseRecommendation, EfficacyDashboardData |
+
+**iOS Services:**
+| File | Change |
+|------|--------|
+| `apps/ios/MindFriendApp/Core/Services/EfficacyCalculator.swift` | Client-side efficacy calculation matching Edge Function algorithm |
+| `apps/ios/MindFriendApp/Core/Services/TrajectoryTracker.swift` | Real-time emotional state sampling every 30 seconds during exercise sessions |
+| `apps/ios/MindFriendApp/Core/Services/EfficacyBasedRecommender.swift` | Context-aware recommendation fetching from Edge Function |
+| `apps/ios/MindFriendApp/Core/Services/InterventionEfficacyEngine.swift` | Main coordinator service orchestrating tracker, calculator, and recommender |
+| `apps/ios/MindFriendApp/App/DependencyContainer.swift` | Registered all efficacy services with lazy initialization |
+
+### Testing
+
+- [ ] Unit tests for EfficacyCalculator (composite score, breakthrough detection, trajectory shape)
+- [ ] Unit tests for TrajectoryTracker (sampling, timer lifecycle)
+- [ ] Integration tests for full session flow
+- [ ] Edge Function tests (Deno tests for all 4 functions)
+- [ ] Manual verification (pending UI integration)
+
+### Notes
+
+- Applied spec fixes: corrected composite score formula from spec-analyzer feedback
+- Used morph edit_file pattern for efficient code creation
+- TrajectoryTracker includes placeholders for NervousSystemStateEngine and EmotionAnalyzer integration
+- UI views (EfficacyDashboardView, TrajectoryVisualizationView, BreakthroughCelebrationView) deferred to Phase 2
+- ExercisePlayerView integration deferred to Phase 2
+
+### Next Steps (Phase 2)
+
+1. Create UI views for dashboard, trajectory visualization, and breakthrough celebration
+2. Integrate TrajectoryTracker with ExercisePlayerView session lifecycle
+3. Wire up NervousSystemStateEngine and EmotionAnalyzer to TrajectoryTracker
+4. Create unit and integration tests
+5. Deploy Edge Functions and test end-to-end flow
+
+---
+
 ## [2026-01-24] F009: Personalized Daily Briefing (MVP Implementation)
 
 **Type:** Feature

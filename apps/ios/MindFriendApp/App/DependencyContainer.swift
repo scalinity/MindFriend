@@ -347,6 +347,29 @@ final class DependencyContainer: ObservableObject {
         )
     }()
 
+    // MARK: - Intervention Efficacy Services
+
+    lazy var efficacyCalculator: EfficacyCalculator = {
+        EfficacyCalculator()
+    }()
+
+    lazy var trajectoryTracker: TrajectoryTracker = {
+        TrajectoryTracker(supabase: self.supabaseClient)
+    }()
+
+    lazy var efficacyRecommender: EfficacyBasedRecommender = {
+        EfficacyBasedRecommender(supabase: self.supabaseClient)
+    }()
+
+    lazy var interventionEfficacyEngine: InterventionEfficacyEngine = {
+        InterventionEfficacyEngine(
+            tracker: self.trajectoryTracker,
+            calculator: self.efficacyCalculator,
+            recommender: self.efficacyRecommender,
+            supabase: self.supabaseClient
+        )
+    }()
+
     // MARK: - Incomplete Feature Services (TODO: Add when features are ready)
     // lazy var microMomentsService: MicroMomentsService
     // lazy var peerSupportService: PeerSupportService
