@@ -11,6 +11,8 @@ interface SuggestionRequest {
   energyPreference?: string;
   excludeTypes?: string[];
   limit?: number;
+  triggerType?: string; // NEW: 'time_based' | 'biometric' | 'pattern'
+  triggerConfidence?: number; // NEW: 0-1 scale
 }
 
 interface MicroMomentTemplate {
@@ -162,6 +164,41 @@ serve(async (req) => {
     const recentTemplateIds =
       recentCompletions?.map((c) => c.template_id) || [];
 
+    // NEW: Get recent intervention deliveries (last 6 hours) for stronger exclusion
+    const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
+    const { data: recentDeliveries } = await supabase
+      .from("intervention_deliveries")
+      .select("intervention_id, rating")
+      .eq("user_id", user.id)
+      .gte("delivered_at", sixHoursAgo)
+      .order("delivered_at", { ascending: false });
+
+    const recentDeliveryIds =
+      recentDeliveries?.map((d) => d.intervention_id) || [];
+
+    // NEW: Get user's rating history for all templates
+    const { data: ratingHistory } = await supabase
+      .from("intervention_deliveries")
+      .select("intervention_id, rating")
+      .eq("user_id", user.id)
+      .not("rating", "is", null)
+      .order("delivered_at", { ascending: false })
+      .limit(50);
+
+    // Calculate average rating per template
+    const ratingMap = new Map<string, { total: number; count: number }>();
+    ratingHistory?.forEach((r) => {
+      if (!r.rating) return;
+      const existing = ratingMap.get(r.intervention_id) || {
+        total: 0,
+        count: 0,
+      };
+      ratingMap.set(r.intervention_id, {
+        total: existing.total + r.rating,
+        count: existing.count + 1,
+      });
+    });
+
     // Build query for templates
     let query = supabase
       .from("micro_moment_templates")
@@ -209,8 +246,12 @@ serve(async (req) => {
     }
 
     // Score and sort templates
-    const scoredTemplates = (templates || []).map(
-      (template: MicroMomentTemplate) => {
+    const scoredTemplates = (templates || [])
+      .filter((template: MicroMomentTemplate) => {
+        // EXCLUDE templates delivered in last 6 hours
+        return !recentDeliveryIds.includes(template.id);
+      })
+      .map((template: MicroMomentTemplate) => {
         let score = 100;
 
         // Boost context match
@@ -218,9 +259,34 @@ serve(async (req) => {
           score += 50;
         }
 
-        // Penalize recently completed
+        // NEW: Boost triggerType match (if provided)
+        if (body.triggerType) {
+          const triggerContextMap: Record<string, string[]> = {
+            time_based: ["morning", "evening", "break", "transition"],
+            biometric: ["stress", "anxiety", "grounding"],
+            pattern: ["grounding", "stress", "anxiety"],
+          };
+          const triggerContexts = triggerContextMap[body.triggerType] || [];
+          const matchesTrigger = triggerContexts.some((ctx) =>
+            template.suggested_contexts?.includes(ctx),
+          );
+          if (matchesTrigger) {
+            score += 40;
+          }
+        }
+
+        // NEW: Weight by user's average rating for this template
+        const ratingData = ratingMap.get(template.id);
+        if (ratingData && ratingData.count > 0) {
+          const avgRating = ratingData.total / ratingData.count;
+          // Rating boost: 5-star avg = +20, 4-star = +10, 3-star = 0, 2-star = -10, 1-star = -20
+          const ratingBoost = (avgRating - 3) * 10;
+          score += ratingBoost;
+        }
+
+        // Penalize recently completed (last 24h, weaker penalty than 6h exclusion)
         if (recentTemplateIds.includes(template.id)) {
-          score -= 30;
+          score -= 20;
         }
 
         // Slight boost for preferred types
@@ -233,9 +299,14 @@ serve(async (req) => {
           score += Math.max(0, 30 - template.duration_seconds);
         }
 
+        // NEW: Reduce score for low-confidence triggers
+        if (body.triggerConfidence !== undefined) {
+          const confidencePenalty = (1 - body.triggerConfidence) * 10;
+          score -= confidencePenalty;
+        }
+
         return { template, score };
-      },
-    );
+      });
 
     // Sort by score descending, then by sort_order
     scoredTemplates.sort((a, b) => {
