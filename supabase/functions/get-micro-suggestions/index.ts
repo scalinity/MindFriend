@@ -34,6 +34,40 @@ interface MicroMomentTemplate {
   sort_order: number;
 }
 
+// Singleton Supabase client to prevent connection pool exhaustion
+let supabaseClient: ReturnType<typeof createClient> | null = null;
+
+function getSupabaseClient() {
+  if (!supabaseClient) {
+    supabaseClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+  }
+  return supabaseClient;
+}
+
+// Retry helper with exponential backoff
+async function withRetry<T>(
+  operation: () => Promise<T>,
+  maxRetries = 3,
+  baseDelay = 1000
+): Promise<T> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error as Error;
+      if (attempt < maxRetries - 1) {
+        const delay = baseDelay * Math.pow(2, attempt);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  }
+  throw lastError;
+}
+
 serve(async (req) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
@@ -44,10 +78,7 @@ serve(async (req) => {
   }
 
   try {
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
+    const supabase = getSupabaseClient();
 
     // Authenticate user
     const authHeader = req.headers.get("Authorization");
@@ -133,19 +164,23 @@ serve(async (req) => {
       : [];
 
     // Get user preferences
-    const { data: preferences } = await supabase
-      .from("micro_delivery_preferences")
-      .select("preferred_types, preferred_durations, silent_mode_only")
-      .eq("user_id", user.id)
-      .single();
+    const { data: preferences } = await withRetry(() =>
+      supabase
+        .from("micro_delivery_preferences")
+        .select("preferred_types, preferred_durations, silent_mode_only")
+        .eq("user_id", user.id)
+        .maybeSingle()
+    );
 
     // Check subscription status for premium content
-    const { data: subscription } = await supabase
-      .from("subscriptions")
-      .select("status")
-      .eq("user_id", user.id)
-      .eq("status", "active")
-      .single();
+    const { data: subscription } = await withRetry(() =>
+      supabase
+        .from("subscriptions")
+        .select("status")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .maybeSingle()
+    );
 
     const isPremium = subscription !== null;
 
@@ -153,37 +188,41 @@ serve(async (req) => {
     const twentyFourHoursAgo = new Date(
       Date.now() - 24 * 60 * 60 * 1000,
     ).toISOString();
-    const { data: recentCompletions } = await supabase
-      .from("micro_moment_completions")
-      .select("template_id")
-      .eq("user_id", user.id)
-      .gte("created_at", twentyFourHoursAgo)
-      .order("created_at", { ascending: false })
-      .limit(5);
+    const { data: recentCompletions } = await withRetry(() =>
+      supabase
+        .from("micro_moment_completions")
+        .select("template_id")
+        .eq("user_id", user.id)
+        .gte("completed_at", twentyFourHoursAgo)
+    );
 
     const recentTemplateIds =
       recentCompletions?.map((c) => c.template_id) || [];
 
     // NEW: Get recent intervention deliveries (last 6 hours) for stronger exclusion
     const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
-    const { data: recentDeliveries } = await supabase
-      .from("intervention_deliveries")
-      .select("intervention_id, rating")
-      .eq("user_id", user.id)
-      .gte("delivered_at", sixHoursAgo)
-      .order("delivered_at", { ascending: false });
+    const { data: recentDeliveries } = await withRetry(() =>
+      supabase
+        .from("intervention_deliveries")
+        .select("intervention_id, rating")
+        .eq("user_id", user.id)
+        .gte("delivered_at", sixHoursAgo)
+        .order("delivered_at", { ascending: false })
+    );
 
     const recentDeliveryIds =
       recentDeliveries?.map((d) => d.intervention_id) || [];
 
     // NEW: Get user's rating history for all templates
-    const { data: ratingHistory } = await supabase
-      .from("intervention_deliveries")
-      .select("intervention_id, rating")
-      .eq("user_id", user.id)
-      .not("rating", "is", null)
-      .order("delivered_at", { ascending: false })
-      .limit(50);
+    const { data: ratingHistory } = await withRetry(() =>
+      supabase
+        .from("intervention_deliveries")
+        .select("intervention_id, rating")
+        .eq("user_id", user.id)
+        .not("rating", "is", null)
+        .order("delivered_at", { ascending: false })
+        .limit(50)
+    );
 
     // Calculate average rating per template
     const ratingMap = new Map<string, { total: number; count: number }>();
@@ -199,7 +238,7 @@ serve(async (req) => {
       });
     });
 
-    // Build query for templates
+    // Build and execute templates query with retry
     let query = supabase
       .from("micro_moment_templates")
       .select("*")
@@ -232,7 +271,7 @@ serve(async (req) => {
     // Order by sort_order
     query = query.order("sort_order", { ascending: true }).limit(20);
 
-    const { data: templates, error: templatesError } = await query;
+    const { data: templates, error: templatesError } = await withRetry(() => query);
 
     if (templatesError) {
       console.error("Templates query error:", templatesError);
@@ -333,10 +372,13 @@ serve(async (req) => {
       },
     );
   } catch (error) {
-    console.error("Error getting micro-suggestions:", error);
-    return new Response(JSON.stringify({ error: "Internal server error" }), {
-      status: 500,
-      headers: { ...getCorsHeaders(null), "Content-Type": "application/json" },
+    console.error("Error in get-micro-suggestions:", {
+      error: (error as Error).message,
     });
+
+    return new Response(
+      JSON.stringify({ error: "Internal server error" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   }
 });
