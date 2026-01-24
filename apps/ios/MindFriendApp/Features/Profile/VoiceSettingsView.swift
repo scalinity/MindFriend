@@ -5,7 +5,7 @@ struct VoiceSettingsView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var showUpgradeSheet = false
-    @AppStorage("voiceEmotionAnalysisEnabled") private var emotionAnalysisEnabled = false
+    @AppStorage("voiceEmotionAnalysisEnabled") private var emotionAnalysisEnabled = true
 
     var body: some View {
         NavigationStack {

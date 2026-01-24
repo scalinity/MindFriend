@@ -114,9 +114,8 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
 
     // Emotion analysis
     private let emotionAnalyzer = EmotionAnalyzer()
-    // Emotion analysis disabled by default - feature extraction is too slow without FFT optimization
-    // Users can enable in Voice Settings if they want to try it
-    private var emotionAnalysisEnabled: Bool = UserDefaults.standard.object(forKey: "voiceEmotionAnalysisEnabled") as? Bool ?? false
+    // Emotion analysis enabled by default - uses Accelerate/vDSP for fast FFT
+    private var emotionAnalysisEnabled: Bool = UserDefaults.standard.object(forKey: "voiceEmotionAnalysisEnabled") as? Bool ?? true
     private var emotionSensitivityThreshold: Double = 0.6
     private var lastEmotionAnalysisTime: Date?
     private let emotionAnalysisCooldown: TimeInterval = 2.0  // Min 2s between analyses

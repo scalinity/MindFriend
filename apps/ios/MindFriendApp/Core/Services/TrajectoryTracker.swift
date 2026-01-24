@@ -48,65 +48,61 @@ final class TrajectoryTracker: ObservableObject {
     }
     
     /// Stop tracking and return completed trajectory
-    func stopTracking() async -> [TrajectoryPoint] {
+    /// - Throws: Database error if trajectory save fails
+    func stopTracking() async throws -> [TrajectoryPoint] {
         timer?.invalidate()
         timer = nil
         isTracking = false
-        
+
         // Capture final state
         captureSample()
-        
-        // Save trajectory to database
+
+        // Save trajectory to database (throws on failure to prevent silent data loss)
         if let sessionId = sessionId,
            let exerciseId = exerciseId,
            let userId = userId,
            let startTime = startTime,
            !currentTrajectory.isEmpty {
-            
-            do {
-                let trajectoryData: [String: Any] = [
-                    "session_id": sessionId.uuidString,
-                    "user_id": userId.uuidString,
-                    "exercise_id": exerciseId.uuidString,
-                    "start_time": ISO8601DateFormatter().string(from: startTime),
-                    "end_time": ISO8601DateFormatter().string(from: Date()),
-                    "samples": currentTrajectory.map { point in
-                        [
-                            "timestamp": ISO8601DateFormatter().string(from: point.timestamp),
-                            "seconds_from_start": point.secondsFromStart,
-                            "nervous_system_state": point.nervousSystemState ?? "unknown",
-                            "emotion_classification": point.emotionClassification.map { emotion in
-                                [
-                                    "primary": emotion.primary,
-                                    "valence": emotion.valence,
-                                    "arousal": emotion.arousal ?? 0
-                                ]
-                            } ?? [:],
-                            "hrv_reading": point.hrvReading ?? 0,
-                            "composite_score": point.compositeScore
-                        ]
-                    }
-                ]
-                
-                try await supabase
-                    .from("emotional_trajectories")
-                    .insert(trajectoryData)
-                    .execute()
-                
-            } catch {
-                print("Failed to save trajectory: \(error)")
-            }
+
+            let trajectoryData: [String: Any] = [
+                "session_id": sessionId.uuidString,
+                "user_id": userId.uuidString,
+                "exercise_id": exerciseId.uuidString,
+                "start_time": ISO8601DateFormatter().string(from: startTime),
+                "end_time": ISO8601DateFormatter().string(from: Date()),
+                "samples": currentTrajectory.map { point in
+                    [
+                        "timestamp": ISO8601DateFormatter().string(from: point.timestamp),
+                        "seconds_from_start": point.secondsFromStart,
+                        "nervous_system_state": point.nervousSystemState ?? "unknown",
+                        "emotion_classification": point.emotionClassification.map { emotion in
+                            [
+                                "primary": emotion.primary,
+                                "valence": emotion.valence,
+                                "arousal": emotion.arousal ?? 0
+                            ]
+                        } ?? [:],
+                        "hrv_reading": point.hrvReading ?? 0,
+                        "composite_score": point.compositeScore
+                    ]
+                }
+            ]
+
+            try await supabase
+                .from("emotional_trajectories")
+                .insert(trajectoryData)
+                .execute()
         }
-        
+
         let trajectory = currentTrajectory
-        
+
         // Clear state
         self.sessionId = nil
         self.exerciseId = nil
         self.userId = nil
         self.startTime = nil
         self.currentTrajectory = []
-        
+
         return trajectory
     }
     
@@ -139,26 +135,61 @@ final class TrajectoryTracker: ObservableObject {
         // - NervousSystemStateEngine for state
         // - EmotionAnalyzer for emotion valence
         // - HealthKit for HRV (if available)
-        
-        // Mock implementation returns baseline neutral state
-        return 0.0
+
+        // Mock implementation: Simulate realistic improvement trajectory
+        // Start at negative state, gradually improve with some variability
+        guard let startTime = startTime else { return 0.0 }
+        let elapsed = Date().timeIntervalSince(startTime)
+        let progress = min(1.0, elapsed / 300.0) // 5 minutes to full improvement
+
+        // Base improvement curve: starts at -0.3, ends at +0.6
+        let baseScore = -0.3 + (0.9 * progress)
+
+        // Add realistic variability (±0.15)
+        let noise = Double.random(in: -0.15...0.15)
+
+        return max(-1.0, min(1.0, baseScore + noise))
     }
-    
+
     // MARK: - Mock Data Providers (Replace with real integrations)
-    
+
     private func getMockNervousSystemState() -> String? {
         // TODO: Integrate with NervousSystemStateEngine.getCurrentState()
-        return "rest"
+        // Mock: Transition from fight_flight -> rest over time
+        guard let startTime = startTime else { return "rest" }
+        let elapsed = Date().timeIntervalSince(startTime)
+
+        if elapsed < 60 { return "fight_flight" }
+        else if elapsed < 180 { return "transition" }
+        else { return "rest" }
     }
-    
+
     private func getMockEmotionClassification() -> EmotionClassification? {
         // TODO: Integrate with EmotionAnalyzer.getCurrentEmotion()
-        return EmotionClassification(primary: "neutral", valence: 0.0, arousal: 0.5)
+        // Mock: Transition from anxious -> calm
+        guard let startTime = startTime else {
+            return EmotionClassification(primary: "neutral", valence: 0.0, arousal: 0.5)
+        }
+        let elapsed = Date().timeIntervalSince(startTime)
+        let progress = min(1.0, elapsed / 300.0)
+
+        if progress < 0.3 {
+            return EmotionClassification(primary: "anxious", valence: -0.4, arousal: 0.8)
+        } else if progress < 0.7 {
+            return EmotionClassification(primary: "neutral", valence: 0.0, arousal: 0.5)
+        } else {
+            return EmotionClassification(primary: "calm", valence: 0.6, arousal: 0.3)
+        }
     }
-    
+
     private func getMockHRV() -> Double? {
         // TODO: Integrate with HealthKit HRV readings
-        return nil
+        // Mock: HRV increases as user relaxes (40ms → 80ms)
+        guard let startTime = startTime else { return 50.0 }
+        let elapsed = Date().timeIntervalSince(startTime)
+        let progress = min(1.0, elapsed / 300.0)
+
+        return 40.0 + (40.0 * progress) + Double.random(in: -5.0...5.0)
     }
     
     deinit {

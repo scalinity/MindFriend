@@ -3,6 +3,22 @@ import Accelerate
 import CoreML
 import os.log
 
+/// Wrapper class for FFTSetupD to handle cleanup in deinit
+/// This avoids @MainActor isolation issues since this class is not actor-isolated
+private final class FFTSetupWrapper {
+    let setup: FFTSetupD?
+
+    init(log2n: vDSP_Length) {
+        setup = vDSP_create_fftsetupD(log2n, FFTRadix(kFFTRadix2))
+    }
+
+    deinit {
+        if let setup = setup {
+            vDSP_destroy_fftsetupD(setup)
+        }
+    }
+}
+
 /// Emotion classification result
 struct EmotionResult {
     let emotion: String
@@ -197,7 +213,8 @@ final class EmotionAnalyzer: ObservableObject {
 
     /// FFT setup for spectral analysis - log2(2048) = 11
     private let fftLog2n: vDSP_Length = 11
-    private lazy var fftSetup: FFTSetupD? = vDSP_create_fftsetupD(fftLog2n, FFTRadix(kFFTRadix2))
+    private lazy var fftSetupWrapper = FFTSetupWrapper(log2n: fftLog2n)
+    private var fftSetup: FFTSetupD? { fftSetupWrapper.setup }
 
     /// Hann window for frame windowing (precomputed)
     private lazy var hannWindow: [Double] = {
@@ -213,14 +230,8 @@ final class EmotionAnalyzer: ObservableObject {
         loadModel()
     }
 
-    deinit {
-        // Clean up FFT setup
-        if let setup = fftSetup {
-            vDSP_destroy_fftsetupD(setup)
-        }
-        // Note: Cannot call @MainActor methods from deinit
-        // clearSensitiveData() must be called explicitly before deinit if cleanup needed
-    }
+    // Note: FFTSetupD cleanup handled automatically by ARC when the object is deallocated.
+    // Cannot explicitly call vDSP_destroy_fftsetupD in deinit because fftSetup is @MainActor isolated.
 
     // MARK: - Consent Management
 
@@ -245,8 +256,12 @@ final class EmotionAnalyzer: ObservableObject {
         try validateURL(url)
         try checkRateLimit(for: userId ?? "anonymous")
 
+        // Capture FFT resources before entering detached task (main actor isolated)
+        let capturedWindow = hannWindow
+        let capturedFFTSetup = fftSetup
+
         return try await performAnalysis {
-            try self.extractFeatures(from: url)
+            try self.extractFeatures(from: url, window: capturedWindow, fftSetup: capturedFFTSetup)
         }
     }
 
@@ -259,8 +274,12 @@ final class EmotionAnalyzer: ObservableObject {
         try validateConsent()
         try checkRateLimit(for: userId ?? "anonymous")
 
+        // Capture FFT resources before entering detached task (main actor isolated)
+        let capturedWindow = hannWindow
+        let capturedFFTSetup = fftSetup
+
         return try await performAnalysis {
-            try self.extractFeatures(from: audioBuffer)
+            try self.extractFeatures(from: audioBuffer, window: capturedWindow, fftSetup: capturedFFTSetup)
         }
     }
 
@@ -442,7 +461,7 @@ final class EmotionAnalyzer: ObservableObject {
 
     // MARK: - Private Methods - Feature Extraction
 
-    nonisolated private func extractFeatures(from url: URL) throws -> [Double] {
+    nonisolated private func extractFeatures(from url: URL, window: [Double], fftSetup: FFTSetupD?) throws -> [Double] {
         let audioFile: AVAudioFile
         do {
             audioFile = try AVAudioFile(forReading: url)
@@ -478,7 +497,7 @@ final class EmotionAnalyzer: ObservableObject {
             return Array(ptr)
         }
 
-        return try extractFeatures(from: samples)
+        return try extractFeatures(from: samples, window: window, fftSetup: fftSetup)
     }
 
     nonisolated private func extractFeatures(from samples: [Float], window: [Double], fftSetup: FFTSetupD?) throws -> [Double] {

@@ -61,7 +61,7 @@ final class InterventionEfficacyEngine: ObservableObject {
         }
         
         // Stop tracking and get trajectory
-        let trajectory = await tracker.stopTracking()
+        let trajectory = try await tracker.stopTracking()
         
         guard trajectory.count >= 3 else {
             // Insufficient data for efficacy calculation
@@ -109,7 +109,6 @@ final class InterventionEfficacyEngine: ObservableObject {
         do {
             let requestBody: [String: Any] = [
                 "sessionId": sessionId.uuidString,
-                "userId": efficacy.userId.uuidString,
                 "exerciseId": exerciseId.uuidString,
                 "trajectoryPoints": trajectory.map { point in
                     [
@@ -249,7 +248,8 @@ final class InterventionEfficacyEngine: ObservableObject {
     
     private func getCurrentUserId() async throws -> UUID {
         let session = try await supabase.auth.session
-        guard let userId = UUID(uuidString: session.user.id.uuidString) else {
+        guard let userIdString = session.user.id.uuidString,
+              let userId = UUID(uuidString: userIdString) else {
             throw EfficacyError.invalidUserId
         }
         return userId

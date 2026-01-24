@@ -22,8 +22,8 @@ struct VoiceModeView: View {
     @State private var errorMessage: String?
     @State private var showError = false
 
-    // Emotion analysis setting (persisted) - disabled by default until FFT optimization
-    @AppStorage("voiceEmotionAnalysisEnabled") private var emotionAnalysisEnabled = false
+    // Emotion analysis setting (persisted) - uses Accelerate/vDSP for fast FFT
+    @AppStorage("voiceEmotionAnalysisEnabled") private var emotionAnalysisEnabled = true
 
     // Transcript state
     @State private var userTranscript = ""

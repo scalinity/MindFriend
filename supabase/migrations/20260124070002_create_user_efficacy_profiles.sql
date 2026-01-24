@@ -34,6 +34,8 @@ CREATE INDEX IF NOT EXISTS idx_profiles_efficacy_desc ON user_efficacy_profiles(
 ALTER TABLE user_efficacy_profiles ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies
+-- Note: This table is maintained by the aggregate-efficacy-profiles cron job using service role.
+-- Users can only read their own profiles. INSERT/UPDATE/DELETE are blocked for regular users.
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -46,6 +48,10 @@ BEGIN
         FOR SELECT
         USING (auth.uid() = user_id);
     END IF;
+
+    -- Service role can INSERT/UPDATE profiles (cron job)
+    -- Regular users cannot INSERT/UPDATE/DELETE (denied by default when no policy exists)
+    -- These policies are intentionally omitted to enforce service-role-only modification
 END $$;
 
 -- Add helpful comments

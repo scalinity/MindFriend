@@ -32,6 +32,13 @@ struct EfficacyCalculator {
         
         // Regulation quality: 1 - std_dev of middle 60%
         let midScores = midPhase.map { $0.compositeScore }
+
+        // Guard against empty midPhase (shouldn't happen with >= 3 points, but defensive)
+        guard !midScores.isEmpty else {
+            // Return neutral baseline if midPhase is empty
+            return nil
+        }
+
         let midMean = midScores.reduce(0, +) / Double(midScores.count)
         let midVariance = midScores.reduce(0) { $0 + pow($1 - midMean, 2) } / Double(midScores.count)
         let midStdDev = sqrt(midVariance)
@@ -119,19 +126,24 @@ struct EfficacyCalculator {
         let endingScore = trajectory.last?.compositeScore ?? 0
         let midpoint = trajectory[trajectory.count / 2].compositeScore
         
+        // Trajectory shape classification (fixed unreachable code bug)
+        let trajectoryShape: TrajectoryShape
         if netChange > 0.3 {
-            if midpoint > startingScore {
-                return .steadyImprovement
+            // Check earlyPeak first (peak in middle but decline at end)
+            if midpoint > endingScore && midpoint > startingScore {
+                trajectoryShape = .earlyPeak
+            } else if midpoint > startingScore {
+                trajectoryShape = .steadyImprovement
             } else {
-                return .lateBreakthrough
+                trajectoryShape = .lateBreakthrough
             }
-        } else if netChange > 0.3 && midpoint > endingScore {
-            return .earlyPeak
-        } else if netChange < -0.1 {
-            return .deterioration
+        } else if netChange < -0.2 {
+            trajectoryShape = .deterioration
         } else {
-            return .flat
+            trajectoryShape = .flat
         }
+        
+        return trajectoryShape
     }
     
     private func determineTimeOfDay(date: Date) -> InterventionEfficacy.TimeOfDay {
