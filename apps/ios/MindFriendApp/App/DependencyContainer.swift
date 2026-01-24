@@ -49,6 +49,10 @@ final class DependencyContainer: ObservableObject {
         CreativeExpressionService()
     }()
 
+    lazy var transitionService: TransitionService = {
+        TransitionService(supabase: self.supabaseClient)
+    }()
+
     lazy var personalizationService: PersonalizationService = {
         PersonalizationService(supabase: self.supabaseClient)
     }()
@@ -394,6 +398,12 @@ final class DependencyContainer: ObservableObject {
             recommender: self.efficacyRecommender,
             supabase: self.supabaseClient
         )
+    }()
+
+    // MARK: - Contextual Micro-Interventions Services
+
+    lazy var interventionService: InterventionService = {
+        InterventionService(supabase: self.supabaseClient)
     }()
 
     // MARK: - Incomplete Feature Services (TODO: Add when features are ready)
