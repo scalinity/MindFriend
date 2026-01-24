@@ -3,6 +3,11 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  createLogger,
+  generateRequestId,
+  getUserIdFromRequest,
+} from "../_shared/logger.ts";
 
 interface TrajectoryPoint {
   timestamp: string;
@@ -40,9 +45,17 @@ interface EfficacyResult {
 }
 
 serve(async (req) => {
+  const startTime = performance.now();
+  const requestId = generateRequestId();
+  const logger = createLogger("calculate-efficacy", { requestId });
+
   try {
+    logger.logRequest(req.method, "/calculate-efficacy");
+
     // Validate HTTP method
     if (req.method !== "POST") {
+      logger.warn("Invalid HTTP method", { method: req.method });
+
       return new Response(
         JSON.stringify({
           error: "METHOD_NOT_ALLOWED",
@@ -82,6 +95,7 @@ serve(async (req) => {
     } = await supabaseAdmin.auth.getUser(token);
 
     if (authError || !user) {
+      logger.warn("Authentication failed", { error: authError?.message });
       return new Response(
         JSON.stringify({
           error: "UNAUTHORIZED",
@@ -94,11 +108,24 @@ serve(async (req) => {
       );
     }
 
+    logger.addContext({ userId: user.id });
+    logger.info("User authenticated");
+
     // Parse request
     const body: CalculateEfficacyRequest = await req.json();
+    logger.addContext({
+      sessionId: body.sessionId,
+      exerciseId: body.exerciseId,
+      trajectoryPointsCount: body.trajectoryPoints.length,
+    });
+    logger.info("Request parsed");
 
     // Validate input
     if (body.trajectoryPoints.length < 3) {
+      logger.warn("Insufficient trajectory data", {
+        pointCount: body.trajectoryPoints.length,
+      });
+
       return new Response(
         JSON.stringify({
           error: "INSUFFICIENT_DATA",
@@ -132,6 +159,10 @@ serve(async (req) => {
     }
 
     if (session.user_id !== user.id) {
+      logger.warn("Session ownership mismatch", {
+        sessionUserId: session.user_id,
+        requestUserId: user.id,
+      });
       return new Response(
         JSON.stringify({
           error: "FORBIDDEN",
@@ -145,8 +176,18 @@ serve(async (req) => {
       );
     }
 
+    logger.info("Session ownership verified");
+
     // Calculate efficacy
-    const efficacy = calculateEfficacy(body.trajectoryPoints);
+    logger.debug("Starting efficacy calculation");
+    const efficacy = await logger.measure("calculateEfficacy", async () =>
+      calculateEfficacy(body.trajectoryPoints),
+    );
+    logger.info("Efficacy calculated", {
+      efficacyScore: efficacy.efficacyScore,
+      trajectoryShape: efficacy.trajectoryShape,
+      breakthroughDetected: efficacy.breakthroughDetected,
+    });
 
     // Determine time of day
     const completedAt = new Date();
@@ -174,6 +215,7 @@ serve(async (req) => {
     };
 
     // Insert efficacy record using service role client
+    logger.debug("Inserting efficacy record to database");
     const { data: efficacyRecord, error: insertError } = await supabaseAdmin
       .from("intervention_efficacy")
       .insert({
@@ -194,7 +236,12 @@ serve(async (req) => {
       .single();
 
     if (insertError) {
-      console.error("Failed to insert efficacy record:", insertError);
+      logger.error(
+        "Failed to insert efficacy record",
+        insertError instanceof Error
+          ? insertError
+          : new Error(String(insertError)),
+      );
       return new Response(
         JSON.stringify({
           error: "DATABASE_ERROR",
@@ -206,6 +253,11 @@ serve(async (req) => {
         },
       );
     }
+
+    logger.info("Efficacy record saved", { efficacyId: efficacyRecord.id });
+
+    const duration = performance.now() - startTime;
+    logger.logResponse("POST", "/calculate-efficacy", 200, duration);
 
     return new Response(
       JSON.stringify({
@@ -225,7 +277,13 @@ serve(async (req) => {
       },
     );
   } catch (error) {
-    console.error("Error in calculate-efficacy:", error);
+    const duration = performance.now() - startTime;
+    logger.error(
+      "Unhandled error in calculate-efficacy",
+      error instanceof Error ? error : new Error(String(error)),
+    );
+    logger.logResponse("POST", "/calculate-efficacy", 500, duration);
+
     return new Response(
       JSON.stringify({
         error: "CALCULATION_FAILED",

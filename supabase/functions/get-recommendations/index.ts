@@ -3,6 +3,11 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  createLogger,
+  generateRequestId,
+  getUserIdFromRequest,
+} from "../_shared/logger.ts";
 
 interface GetRecommendationsRequest {
   currentState: string;
@@ -24,10 +29,18 @@ interface ExerciseRecommendation {
 }
 
 serve(async (req) => {
+  const startTime = performance.now();
+  const requestId = generateRequestId();
+  const logger = createLogger("get-recommendations", { requestId });
+
   try {
+    logger.logRequest(req.method, "/get-recommendations");
+
     // Validate authentication
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
+      logger.warn("Missing authorization header");
+
       return new Response(
         JSON.stringify({
           error: "UNAUTHORIZED",
@@ -49,6 +62,7 @@ serve(async (req) => {
     } = await supabaseAdmin.auth.getUser(token);
 
     if (authError || !user) {
+      logger.warn("Authentication failed", { error: authError?.message });
       return new Response(
         JSON.stringify({
           error: "UNAUTHORIZED",
@@ -57,6 +71,9 @@ serve(async (req) => {
         { status: 401, headers: { "Content-Type": "application/json" } },
       );
     }
+
+    logger.addContext({ userId: user.id });
+    logger.info("User authenticated");
 
     // Parse parameters from POST body or query params (supports both)
     const url = new URL(req.url);
@@ -69,7 +86,11 @@ serve(async (req) => {
       body.timeOfDay || url.searchParams.get("timeOfDay") || "morning";
     const limit = parseInt(body.limit || url.searchParams.get("limit") || "5");
 
+    logger.addContext({ currentState, currentEmotion, timeOfDay, limit });
+    logger.info("Request parameters parsed");
+
     // Fetch user efficacy profiles
+    logger.debug("Fetching user efficacy profiles");
     const { data: profiles, error: profilesError } = await supabaseAdmin
       .from("user_efficacy_profiles")
       .select(
@@ -87,7 +108,12 @@ serve(async (req) => {
       .gte("completion_count", 5); // Minimum 5 sessions for reliable data
 
     if (profilesError) {
-      console.error("Failed to fetch profiles:", profilesError);
+      logger.error(
+        "Failed to fetch profiles",
+        profilesError instanceof Error
+          ? profilesError
+          : new Error(String(profilesError)),
+      );
       return new Response(
         JSON.stringify({
           error: "DATABASE_ERROR",
@@ -100,9 +126,14 @@ serve(async (req) => {
       );
     }
 
+    logger.info("Efficacy profiles fetched", {
+      profileCount: profiles?.length || 0,
+    });
+
     let recommendations: ExerciseRecommendation[] = [];
 
     if (profiles && profiles.length > 0) {
+      logger.debug("Calculating contextual scores for profiles");
       // Calculate contextual scores for each profile
       recommendations = profiles
         .filter((profile) => profile.exercises) // Filter out profiles with deleted exercises
@@ -140,10 +171,16 @@ serve(async (req) => {
 
       // Return top N
       recommendations = recommendations.slice(0, limit);
+      logger.info("Personalized recommendations generated", {
+        count: recommendations.length,
+      });
     }
 
     // If no proven exercises (< 3 recommendations), blend with generic recommendations
     if (recommendations.length < 3) {
+      logger.debug("Fetching generic recommendations", {
+        needed: limit - recommendations.length,
+      });
       const genericRecs = await getGenericRecommendations(
         supabaseAdmin,
         currentState,
@@ -152,7 +189,14 @@ serve(async (req) => {
       );
 
       recommendations = [...recommendations, ...genericRecs];
+      logger.info("Generic recommendations added", {
+        genericCount: genericRecs.length,
+        totalCount: recommendations.length,
+      });
     }
+
+    const duration = performance.now() - startTime;
+    logger.logResponse("POST", "/get-recommendations", 200, duration);
 
     return new Response(
       JSON.stringify({
@@ -167,7 +211,13 @@ serve(async (req) => {
       },
     );
   } catch (error) {
-    console.error("Error in get-recommendations:", error);
+    const duration = performance.now() - startTime;
+    logger.error(
+      "Unhandled error in get-recommendations",
+      error instanceof Error ? error : new Error(String(error)),
+    );
+    logger.logResponse("POST", "/get-recommendations", 500, duration);
+
     return new Response(
       JSON.stringify({
         error: "RECOMMENDATION_FAILED",
