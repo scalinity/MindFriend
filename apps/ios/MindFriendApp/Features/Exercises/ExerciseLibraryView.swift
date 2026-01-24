@@ -8,6 +8,8 @@ struct ExerciseLibraryView: View {
     @State private var selectedType: ExerciseType?
     @State private var isLoading = true
     @State private var showOnlyRecommended = false
+    @State private var showGenerateExercise = false
+    @State private var showSavedExercises = false
 
     var filteredExercises: [Exercise] {
         var filtered = exercises
@@ -53,6 +55,51 @@ struct ExerciseLibraryView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
+                // AI-Generated Exercise Actions
+                VStack(spacing: 12) {
+                    Button {
+                        showGenerateExercise = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "sparkles")
+                                .font(.title3)
+                            Text("Generate New Exercise")
+                                .font(.headline)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding()
+                        .background(Color.accentColor.opacity(0.1))
+                        .foregroundStyle(Color.accentColor)
+                        .cornerRadius(12)
+                    }
+                    
+                    Button {
+                        showSavedExercises = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "heart.text.square")
+                                .font(.title3)
+                            Text("My Saved Exercises")
+                                .font(.headline)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding()
+                        .background(Color(.secondarySystemBackground))
+                        .foregroundStyle(.primary)
+                        .cornerRadius(12)
+                    }
+                }
+                .padding(.horizontal)
+                
+                Divider()
+                    .padding(.vertical, 8)
+                
                 // Type filter
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 12) {
@@ -135,6 +182,12 @@ struct ExerciseLibraryView: View {
         // Load exercises on appear
         .task {
             await loadExercises()
+        }
+        .sheet(isPresented: $showGenerateExercise) {
+            GenerateExerciseView(container: container)
+        }
+        .sheet(isPresented: $showSavedExercises) {
+            SavedExercisesView(container: container)
         }
     }
 

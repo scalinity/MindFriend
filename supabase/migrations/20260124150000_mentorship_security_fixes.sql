@@ -68,13 +68,7 @@ BEGIN
             mp.avg_rating,
             mp.total_mentorships,
             mp.timezone AS mentor_timezone,
-            mp.max_active_mentees,
-            (
-                SELECT COUNT(*)
-                FROM mentorship_matches mm
-                WHERE mm.mentor_id = mp.user_id
-                AND mm.status IN ('pending', 'accepted', 'active')
-            ) AS active_mentees
+            mp.max_active_mentees
         FROM mentorship_profiles mp
         WHERE mp.is_mentor_available = true
         AND mp.verified = true
@@ -82,6 +76,16 @@ BEGIN
         AND mp.user_id != p_user_id
         -- Filter by expertise overlap
         AND mp.expertise_areas && p_seeking_areas
+    ),
+    mentor_capacity AS (
+        -- Get active mentee count for each mentor in one query
+        SELECT
+            mentor_id,
+            COUNT(*) AS active_mentees
+        FROM mentorship_matches
+        WHERE status IN ('pending', 'accepted', 'active')
+        AND mentor_id IN (SELECT mentor_user_id FROM mentor_candidates)
+        GROUP BY mentor_id
     )
     SELECT
         mc.mentor_user_id,
@@ -100,6 +104,7 @@ BEGIN
         scores.availability_score AS availability_match_score,
         scores.match_reason
     FROM mentor_candidates mc
+    LEFT JOIN mentor_capacity cap ON mc.mentor_user_id = cap.mentor_id
     CROSS JOIN LATERAL calculate_mentor_match_score(
         p_seeking_areas,
         mc.expertise_areas,
@@ -110,8 +115,8 @@ BEGIN
         mc.availability_hours_week,
         mentee_profile.needed_hours
     ) AS scores
-    -- FIXED: Use max_active_mentees instead of rough calculation
-    WHERE mc.active_mentees < mc.max_active_mentees
+    -- FIXED: Use max_active_mentees check with null-safe coalesce
+    WHERE COALESCE(cap.active_mentees, 0) < mc.max_active_mentees
     ORDER BY scores.total_score DESC
     LIMIT LEAST(p_limit, 10); -- Cap at 10 for safety
 END;
@@ -312,9 +317,22 @@ BEGIN
     -- Sanitize HTML/script tags to prevent XSS
     NEW.content := regexp_replace(NEW.content, '<[^>]*>', '', 'g');
 
-    -- Remove potential script injections
+    -- Remove potential script injections (javascript: protocol)
     NEW.content := regexp_replace(NEW.content, 'javascript:', '', 'gi');
-    NEW.content := regexp_replace(NEW.content, 'on\w+\s*=', '', 'gi');
+    
+    -- Remove event handlers with various quote styles: onclick=, onload=, etc.
+    -- Match double-quoted: on\w+="[^"]*"
+    NEW.content := regexp_replace(NEW.content, 'on\w+\s*=\s*"[^"]*"', '', 'gi');
+    -- Match single-quoted: on\w+='[^']*'
+    NEW.content := regexp_replace(NEW.content, 'on\w+\s*=\s*''[^'']*''', '', 'gi');
+    -- Match unquoted: on\w+=[^\s>]*
+    NEW.content := regexp_replace(NEW.content, 'on\w+\s*=\s*[^\s>]*', '', 'gi');
+    
+    -- Remove data: protocol
+    NEW.content := regexp_replace(NEW.content, 'data:text/html', '', 'gi');
+    
+    -- Remove vbscript: protocol
+    NEW.content := regexp_replace(NEW.content, 'vbscript:', '', 'gi');
 
     -- Trim and limit length
     NEW.content := trim(NEW.content);
@@ -520,7 +538,7 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Schedule cleanup (requires pg_cron extension)
--- SELECT cron.schedule('cleanup-mentorship-data', '0 3 * * 0', 'SELECT cleanup_old_mentorship_data()');
+SELECT cron.schedule('cleanup-mentorship-data', '0 3 * * 0', 'SELECT cleanup_old_mentorship_data()');
 
 COMMENT ON FUNCTION cleanup_old_mentorship_data() IS 'Data retention: cleans up mentorship messages older than 1 year from ended matches';
 

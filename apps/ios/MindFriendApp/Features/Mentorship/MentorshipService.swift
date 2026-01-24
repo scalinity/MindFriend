@@ -51,19 +51,56 @@ final class MentorshipService: ObservableObject {
         currentMessages = []
     }
 
+    // MARK: - Timeout Helper
+
+    /// Wrap an async operation with a timeout using structured concurrency
+    private func withTimeout<T>(
+        seconds: UInt64,
+        operation: @escaping () async throws -> T
+    ) async throws -> T {
+        return try await withThrowingTaskGroup(of: T.self) { group in
+            // Main operation task
+            group.addTask {
+                try await operation()
+            }
+
+            // Timeout task
+            group.addTask {
+                try await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+                throw MentorshipError.networkError(NSError(
+                    domain: "Timeout",
+                    code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "Operation timed out"]
+                ))
+            }
+
+            // Wait for first result (whichever completes first)
+            guard let result = try await group.next() else {
+                throw MentorshipError.networkError(NSError(domain: "Unknown", code: -1))
+            }
+
+            // Cancel remaining tasks
+            group.cancelAll()
+
+            return result
+        }
+    }
+
     // MARK: - Profile Management
 
     /// Fetch the current user's mentorship profile
     func fetchProfile() async throws -> DBMentorshipProfile? {
         guard let userId = supabase.auth.currentUser?.id else { return nil }
 
-        let response: [DBMentorshipProfile] = try await supabase
-            .from("mentorship_profiles")
-            .select()
-            .eq("user_id", value: userId)
-            .limit(1)
-            .execute()
-            .value
+        let response: [DBMentorshipProfile] = try await withTimeout(seconds: 5) { [self] in
+            try await self.supabase
+                .from("mentorship_profiles")
+                .select()
+                .eq("user_id", value: userId)
+                .limit(1)
+                .execute()
+                .value
+        }
 
         profile = response.first
         return profile
@@ -80,21 +117,23 @@ final class MentorshipService: ObservableObject {
         timezone: String? = nil,
         mentorshipStyle: DBMentorshipProfile.MentorshipStyle? = nil
     ) async throws -> UUID {
-        let response: UUID = try await supabase.rpc(
-            "upsert_mentorship_profile",
-            params: [
-                "p_is_mentor_available": AnyEncodable(isMentorAvailable),
-                "p_expertise_areas": AnyEncodable(expertiseAreas),
-                "p_seeking_areas": AnyEncodable(seekingAreas),
-                "p_bio": AnyEncodable(bio),
-                "p_availability_hours_week": AnyEncodable(availabilityHoursWeek),
-                "p_languages": AnyEncodable(languages),
-                "p_timezone": AnyEncodable(timezone),
-                "p_mentorship_style": AnyEncodable(mentorshipStyle?.rawValue),
-            ]
-        )
-        .execute()
-        .value
+        let response: UUID = try await withTimeout(seconds: 8) { [self] in
+            try await self.supabase.rpc(
+                "upsert_mentorship_profile",
+                params: [
+                    "p_is_mentor_available": AnyEncodable(isMentorAvailable),
+                    "p_expertise_areas": AnyEncodable(expertiseAreas),
+                    "p_seeking_areas": AnyEncodable(seekingAreas),
+                    "p_bio": AnyEncodable(bio),
+                    "p_availability_hours_week": AnyEncodable(availabilityHoursWeek),
+                    "p_languages": AnyEncodable(languages),
+                    "p_timezone": AnyEncodable(timezone),
+                    "p_mentorship_style": AnyEncodable(mentorshipStyle?.rawValue),
+                ]
+            )
+            .execute()
+            .value
+        }
 
         // Refresh profile
         _ = try await fetchProfile()
@@ -118,10 +157,12 @@ final class MentorshipService: ObservableObject {
             limit: limit
         )
 
-        let response: FindMentorMatchesResponse = try await supabase.functions.invoke(
-            "find-mentor-matches",
-            options: .init(body: request)
-        )
+        let response: FindMentorMatchesResponse = try await withTimeout(seconds: 10) { [self] in
+            try await self.supabase.functions.invoke(
+                "find-mentor-matches",
+                options: .init(body: request)
+            )
+        }
 
         return response.matches
     }
@@ -136,10 +177,12 @@ final class MentorshipService: ObservableObject {
             introductionMessage: introductionMessage
         )
 
-        let response: RequestMentorshipResponse = try await supabase.functions.invoke(
-            "request-mentorship",
-            options: .init(body: request)
-        )
+        let response: RequestMentorshipResponse = try await withTimeout(seconds: 12) { [self] in
+            try await self.supabase.functions.invoke(
+                "request-mentorship",
+                options: .init(body: request)
+            )
+        }
 
         // Refresh matches
         _ = try await fetchMatches()
@@ -151,10 +194,12 @@ final class MentorshipService: ObservableObject {
 
     /// Fetch user's mentorship matches
     func fetchMatches() async throws -> [DBMentorshipMatch] {
-        let response: [DBMentorshipMatch] = try await supabase
-            .rpc("get_my_mentorship_matches")
-            .execute()
-            .value
+        let response: [DBMentorshipMatch] = try await withTimeout(seconds: 5) { [self] in
+            try await self.supabase
+                .rpc("get_my_mentorship_matches")
+                .execute()
+                .value
+        }
 
         matches = response
         return response
@@ -162,41 +207,47 @@ final class MentorshipService: ObservableObject {
 
     /// Accept a mentorship request (for mentors)
     func acceptMatch(_ matchId: UUID, responseMessage: String? = nil) async throws {
-        let _: Bool = try await supabase
-            .rpc("respond_to_mentorship_request", params: [
-                "p_match_id": AnyEncodable(matchId.uuidString),
-                "p_accept": AnyEncodable(true),
-                "p_response_message": AnyEncodable(responseMessage),
-            ])
-            .execute()
-            .value
+        let _: Bool = try await withTimeout(seconds: 8) { [self] in
+            try await self.supabase
+                .rpc("respond_to_mentorship_request", params: [
+                    "p_match_id": AnyEncodable(matchId.uuidString),
+                    "p_accept": AnyEncodable(true),
+                    "p_response_message": AnyEncodable(responseMessage),
+                ])
+                .execute()
+                .value
+        }
 
         _ = try await fetchMatches()
     }
 
     /// Decline a mentorship request (for mentors)
     func declineMatch(_ matchId: UUID, responseMessage: String? = nil) async throws {
-        let _: Bool = try await supabase
-            .rpc("respond_to_mentorship_request", params: [
-                "p_match_id": AnyEncodable(matchId.uuidString),
-                "p_accept": AnyEncodable(false),
-                "p_response_message": AnyEncodable(responseMessage),
-            ])
-            .execute()
-            .value
+        let _: Bool = try await withTimeout(seconds: 8) { [self] in
+            try await self.supabase
+                .rpc("respond_to_mentorship_request", params: [
+                    "p_match_id": AnyEncodable(matchId.uuidString),
+                    "p_accept": AnyEncodable(false),
+                    "p_response_message": AnyEncodable(responseMessage),
+                ])
+                .execute()
+                .value
+        }
 
         _ = try await fetchMatches()
     }
 
     /// End a mentorship
     func endMentorship(_ matchId: UUID, reason: String = "completed") async throws {
-        let _: Bool = try await supabase
-            .rpc("end_mentorship", params: [
-                "p_match_id": AnyEncodable(matchId.uuidString),
-                "p_reason": AnyEncodable(reason),
-            ])
-            .execute()
-            .value
+        let _: Bool = try await withTimeout(seconds: 8) { [self] in
+            try await self.supabase
+                .rpc("end_mentorship", params: [
+                    "p_match_id": AnyEncodable(matchId.uuidString),
+                    "p_reason": AnyEncodable(reason),
+                ])
+                .execute()
+                .value
+        }
 
         _ = try await fetchMatches()
     }
@@ -205,13 +256,15 @@ final class MentorshipService: ObservableObject {
 
     /// Fetch messages for a match
     func fetchMessages(matchId: UUID) async throws -> [DBMentorshipMessage] {
-        let response: [DBMentorshipMessage] = try await supabase
-            .from("mentorship_messages")
-            .select()
-            .eq("match_id", value: matchId)
-            .order("sent_at", ascending: true)
-            .execute()
-            .value
+        let response: [DBMentorshipMessage] = try await withTimeout(seconds: 5) { [self] in
+            try await self.supabase
+                .from("mentorship_messages")
+                .select()
+                .eq("match_id", value: matchId)
+                .order("sent_at", ascending: true)
+                .execute()
+                .value
+        }
 
         currentMessages = response
         return response
@@ -233,17 +286,21 @@ final class MentorshipService: ObservableObject {
             throw MentorshipError.invalidMessage("Message too long (max 2000 characters)")
         }
 
-        // Use secure RPC function with rate limiting
+        // Use secure RPC function with rate limiting and timeout
         do {
-            let _: UUID = try await supabase.rpc(
-                "send_mentorship_message",
-                params: [
-                    "p_match_id": AnyEncodable(matchId.uuidString),
-                    "p_content": AnyEncodable(trimmedContent)
-                ]
-            )
-            .execute()
-            .value
+            let result: UUID = try await withTimeout(seconds: 8) { [self] in
+                try await self.supabase.rpc(
+                    "send_mentorship_message",
+                    params: [
+                        "p_match_id": AnyEncodable(matchId.uuidString),
+                        "p_content": AnyEncodable(trimmedContent)
+                    ]
+                )
+                .execute()
+                .value as UUID
+            }
+            
+            _ = result
         } catch {
             // Handle specific errors
             if let errorMessage = (error as NSError).userInfo["message"] as? String {
@@ -260,7 +317,11 @@ final class MentorshipService: ObservableObject {
     /// Subscribe to realtime messages for a match
     func subscribeToMessages(matchId: UUID) async {
         subscriptionTask?.cancel()
-        await messageChannel?.unsubscribe()
+        
+        // Wait for old subscription to fully unsubscribe before starting new one
+        if let oldChannel = messageChannel {
+            await oldChannel.unsubscribe()
+        }
 
         let channel = supabase.realtimeV2.channel("mentorship:\(matchId)")
 
@@ -294,7 +355,11 @@ final class MentorshipService: ObservableObject {
     func unsubscribeFromMessages() async {
         subscriptionTask?.cancel()
         subscriptionTask = nil
-        await messageChannel?.unsubscribe()
+        
+        // Ensure subscription is fully unsubscribed before clearing
+        if let channel = messageChannel {
+            await channel.unsubscribe()
+        }
         messageChannel = nil
         currentMessages = []
     }
@@ -303,13 +368,15 @@ final class MentorshipService: ObservableObject {
     func markMessagesAsRead(matchId: UUID) async throws {
         guard let userId = supabase.auth.currentUser?.id else { return }
 
-        try await supabase
-            .from("mentorship_messages")
-            .update(["read_at": Date().ISO8601Format()])
-            .eq("match_id", value: matchId)
-            .neq("sender_id", value: userId)
-            .is("read_at", value: nil)
-            .execute()
+        try await withTimeout(seconds: 5) { [self] in
+            try await self.supabase
+                .from("mentorship_messages")
+                .update(["read_at": Date().ISO8601Format()])
+                .eq("match_id", value: matchId)
+                .neq("sender_id", value: userId)
+                .is("read_at", value: nil)
+                .execute()
+        }
     }
 
     // MARK: - Reporting
@@ -335,10 +402,12 @@ final class MentorshipService: ObservableObject {
             messageIds: messageIds.map { $0.uuidString }
         )
 
-        try await supabase
-            .from("mentorship_reports")
-            .insert(report)
-            .execute()
+        try await withTimeout(seconds: 8) { [self] in
+            try await self.supabase
+                .from("mentorship_reports")
+                .insert(report)
+                .execute()
+        }
     }
 }
 

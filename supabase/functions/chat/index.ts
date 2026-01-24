@@ -133,26 +133,43 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Get user from the user-scoped client
-    const {
-      data: { user },
-      error: authError,
-    } = await supabaseUser.auth.getUser();
+    // Get authenticated user with timeout
+    let user;
+    let userAuthError;
+    try {
+      const authTimeoutPromise = new Promise((_resolve, reject) =>
+        setTimeout(() => reject(new Error("Auth timeout")), 5000)
+      );
+      
+      const authPromise = (async () => {
+        return await supabaseUser.auth.getUser();
+      })();
+      
+      const authResult = await Promise.race([authPromise, authTimeoutPromise]);
+      user = authResult.data?.user;
+      userAuthError = authResult.error;
+    } catch (error) {
+      console.error("Auth error:", error instanceof Error ? error.message : String(error));
+      return new Response(
+        JSON.stringify({ error: "Authentication failed" }),
+        { status: 401, headers: baseCorsHeaders },
+      );
+    }
 
-    if (authError || !user) {
+    if (userAuthError || !user) {
       console.error(
         "Auth validation failed:",
-        authError?.message || "No user returned",
+        userAuthError?.message || "No user returned",
         "Code:",
-        authError?.code,
+        userAuthError?.code,
       );
       return new Response(
         JSON.stringify({
           error: "Invalid token",
           details:
-            authError?.message ||
+            userAuthError?.message ||
             "Session validation failed. Please sign out and sign back in.",
-          code: authError?.code,
+          code: userAuthError?.code,
         }),
         {
           status: 401,
