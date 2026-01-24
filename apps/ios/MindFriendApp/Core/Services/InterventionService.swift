@@ -61,6 +61,9 @@ final class InterventionService: ObservableObject {
 
     private let supabase: SupabaseClient
     private let healthStore: HKHealthStore?
+    private let calendarMonitor: CalendarTriggerMonitor
+    private let timingAnalyzer: OptimalTimingAnalyzer
+    private let notificationManager: InterventionNotificationManager
     private var monitoringTimer: Timer?
     private let monitoringInterval: TimeInterval = InterventionConstants.monitoringIntervalSeconds
     
@@ -73,8 +76,16 @@ final class InterventionService: ObservableObject {
 
     // MARK: - Initialization
 
-    init(supabase: SupabaseClient) {
+    init(
+        supabase: SupabaseClient,
+        calendarMonitor: CalendarTriggerMonitor,
+        timingAnalyzer: OptimalTimingAnalyzer,
+        notificationManager: InterventionNotificationManager
+    ) {
         self.supabase = supabase
+        self.calendarMonitor = calendarMonitor
+        self.timingAnalyzer = timingAnalyzer
+        self.notificationManager = notificationManager
 
         // Initialize HealthKit if available
         if HKHealthStore.isHealthDataAvailable() {
@@ -109,6 +120,16 @@ final class InterventionService: ObservableObject {
         }
 
         isMonitoring = true
+        
+        // Start calendar monitoring if permission granted
+        if calendarMonitor.hasCalendarPermission() {
+            calendarMonitor.startPeriodicScanning()
+            print("Started calendar event monitoring")
+        }
+        
+        // Start timing analysis periodic refresh
+        timingAnalyzer.startPeriodicRefresh()
+        print("Started ML timing analysis")
 
         // Start timer for periodic checks
         monitoringTimer = Timer.scheduledTimer(
@@ -131,6 +152,11 @@ final class InterventionService: ObservableObject {
         isMonitoring = false
         monitoringTimer?.invalidate()
         monitoringTimer = nil
+        
+        // Stop calendar and timing monitoring
+        calendarMonitor.stopPeriodicScanning()
+        timingAnalyzer.stopPeriodicRefresh()
+        
         print("Stopped intervention monitoring")
     }
 
@@ -356,6 +382,20 @@ final class InterventionService: ObservableObject {
         if let healthStore = healthStore {
             biometrics = await gatherBiometrics(from: healthStore)
         }
+        
+        // Scan upcoming calendar events
+        var upcomingEvents: [ClassifiedEvent] = []
+        do {
+            upcomingEvents = try await calendarMonitor.scanUpcomingEvents()
+            print("Found \(upcomingEvents.count) upcoming high-stress calendar events")
+        } catch {
+            print("Calendar scan failed: \(error.localizedDescription)")
+        }
+        
+        // Get timing confidence boost for current hour
+        let currentHour = Calendar.current.component(.hour, from: Date())
+        let timingConfidence = timingAnalyzer.getConfidenceBoost(for: currentHour)
+        print("ML timing confidence for hour \(currentHour): \(timingConfidence)")
 
         // TODO: Get recent mood from mood service
         let recentMood: Int? = nil
@@ -363,7 +403,9 @@ final class InterventionService: ObservableObject {
         return TriggerContext(
             biometrics: biometrics,
             timeOfDay: timeOfDay,
-            recentMood: recentMood
+            recentMood: recentMood,
+            upcomingEvents: upcomingEvents,
+            timingConfidence: timingConfidence
         )
     }
 

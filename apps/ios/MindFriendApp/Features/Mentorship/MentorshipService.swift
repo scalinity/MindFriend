@@ -9,9 +9,9 @@ final class MentorshipService: ObservableObject {
 
     @Published private(set) var profile: DBMentorshipProfile?
     @Published private(set) var matches: [DBMentorshipMatch] = []
-    @Published private(set) var currentMessages: [DBMentorshipMessage] = []
-    @Published private(set) var isLoading = false
-    @Published private(set) var error: String?
+    @Published var currentMessages: [DBMentorshipMessage] = []
+    @Published var isLoading = false
+    @Published var error: String?
 
     // MARK: - Private Properties
 
@@ -19,27 +19,42 @@ final class MentorshipService: ObservableObject {
     private var messageChannel: RealtimeChannelV2?
     private var subscriptionTask: Task<Void, Never>?
 
+    // MARK: - Constants
+
+    private static let MAX_MESSAGES_PER_LOAD = 100
+    private static let INITIAL_MESSAGE_LIMIT = 50
+    
+    // Timeout constants (in seconds)
+    private static let TIMEOUT_FETCH_PROFILE: UInt64 = 5
+    private static let TIMEOUT_UPSERT_PROFILE: UInt64 = 8
+    private static let TIMEOUT_FIND_MATCHES: UInt64 = 10
+    private static let TIMEOUT_REQUEST_MENTORSHIP: UInt64 = 12
+    private static let TIMEOUT_FETCH_MATCHES: UInt64 = 5
+    private static let TIMEOUT_ACCEPT_DECLINE_MATCH: UInt64 = 8
+    private static let TIMEOUT_END_MENTORSHIP: UInt64 = 8
+    private static let TIMEOUT_FETCH_MESSAGES: UInt64 = 5
+    private static let TIMEOUT_SEND_MESSAGE: UInt64 = 8
+    private static let TIMEOUT_MARK_AS_READ: UInt64 = 5
+    private static let TIMEOUT_REPORT_ISSUE: UInt64 = 8
+    private static let TIMEOUT_DELETE_MESSAGE: UInt64 = 5
+    
+    // Message constraints
+    private static let MAX_MESSAGE_LENGTH = 2000
+
+    // MARK: - Pagination State
+
+    private var messagePaginationOffsets: [UUID: Int] = [:]
+    private var hasMoreMessagesMap: [UUID: Bool] = [:]
+    private var backfilledMessageIds: Set<UUID> = []
+
+    // Add these properties for subscription management
+    private var currentMatchId: UUID?
+    private var subscriptionReconnectAttempts = 0
+
     // MARK: - Initialization
 
     init(supabase: SupabaseClient) {
         self.supabase = supabase
-    }
-
-    deinit {
-        // Cancel subscription task first
-        subscriptionTask?.cancel()
-        subscriptionTask = nil
-
-        // Capture channel reference before deinit completes
-        let channel = messageChannel
-        messageChannel = nil
-
-        // Unsubscribe in detached task to avoid actor isolation issues
-        if let channel = channel {
-            Task.detached {
-                await channel.unsubscribe()
-            }
-        }
     }
 
     /// Cleanup method for explicit teardown (preferred over relying on deinit)
@@ -49,6 +64,9 @@ final class MentorshipService: ObservableObject {
         await messageChannel?.unsubscribe()
         messageChannel = nil
         currentMessages = []
+        backfilledMessageIds.removeAll()
+        messagePaginationOffsets.removeAll()
+        hasMoreMessagesMap.removeAll()
     }
 
     // MARK: - Timeout Helper
@@ -92,7 +110,7 @@ final class MentorshipService: ObservableObject {
     func fetchProfile() async throws -> DBMentorshipProfile? {
         guard let userId = supabase.auth.currentUser?.id else { return nil }
 
-        let response: [DBMentorshipProfile] = try await withTimeout(seconds: 5) { [self] in
+        let response: [DBMentorshipProfile] = try await withTimeout(seconds: Self.TIMEOUT_FETCH_PROFILE) { [self] in
             try await self.supabase
                 .from("mentorship_profiles")
                 .select()
@@ -117,7 +135,7 @@ final class MentorshipService: ObservableObject {
         timezone: String? = nil,
         mentorshipStyle: DBMentorshipProfile.MentorshipStyle? = nil
     ) async throws -> UUID {
-        let response: UUID = try await withTimeout(seconds: 8) { [self] in
+        let response: UUID = try await withTimeout(seconds: Self.TIMEOUT_UPSERT_PROFILE) { [self] in
             try await self.supabase.rpc(
                 "upsert_mentorship_profile",
                 params: [
@@ -157,7 +175,7 @@ final class MentorshipService: ObservableObject {
             limit: limit
         )
 
-        let response: FindMentorMatchesResponse = try await withTimeout(seconds: 10) { [self] in
+        let response: FindMentorMatchesResponse = try await withTimeout(seconds: Self.TIMEOUT_FIND_MATCHES) { [self] in
             try await self.supabase.functions.invoke(
                 "find-mentor-matches",
                 options: .init(body: request)
@@ -177,7 +195,7 @@ final class MentorshipService: ObservableObject {
             introductionMessage: introductionMessage
         )
 
-        let response: RequestMentorshipResponse = try await withTimeout(seconds: 12) { [self] in
+        let response: RequestMentorshipResponse = try await withTimeout(seconds: Self.TIMEOUT_REQUEST_MENTORSHIP) { [self] in
             try await self.supabase.functions.invoke(
                 "request-mentorship",
                 options: .init(body: request)
@@ -194,7 +212,7 @@ final class MentorshipService: ObservableObject {
 
     /// Fetch user's mentorship matches
     func fetchMatches() async throws -> [DBMentorshipMatch] {
-        let response: [DBMentorshipMatch] = try await withTimeout(seconds: 5) { [self] in
+        let response: [DBMentorshipMatch] = try await withTimeout(seconds: Self.TIMEOUT_FETCH_MATCHES) { [self] in
             try await self.supabase
                 .rpc("get_my_mentorship_matches")
                 .execute()
@@ -207,7 +225,7 @@ final class MentorshipService: ObservableObject {
 
     /// Accept a mentorship request (for mentors)
     func acceptMatch(_ matchId: UUID, responseMessage: String? = nil) async throws {
-        let _: Bool = try await withTimeout(seconds: 8) { [self] in
+        let _: Bool = try await withTimeout(seconds: Self.TIMEOUT_ACCEPT_DECLINE_MATCH) { [self] in
             try await self.supabase
                 .rpc("respond_to_mentorship_request", params: [
                     "p_match_id": AnyEncodable(matchId.uuidString),
@@ -223,7 +241,7 @@ final class MentorshipService: ObservableObject {
 
     /// Decline a mentorship request (for mentors)
     func declineMatch(_ matchId: UUID, responseMessage: String? = nil) async throws {
-        let _: Bool = try await withTimeout(seconds: 8) { [self] in
+        let _: Bool = try await withTimeout(seconds: Self.TIMEOUT_ACCEPT_DECLINE_MATCH) { [self] in
             try await self.supabase
                 .rpc("respond_to_mentorship_request", params: [
                     "p_match_id": AnyEncodable(matchId.uuidString),
@@ -239,7 +257,7 @@ final class MentorshipService: ObservableObject {
 
     /// End a mentorship
     func endMentorship(_ matchId: UUID, reason: String = "completed") async throws {
-        let _: Bool = try await withTimeout(seconds: 8) { [self] in
+        let _: Bool = try await withTimeout(seconds: Self.TIMEOUT_END_MENTORSHIP) { [self] in
             try await self.supabase
                 .rpc("end_mentorship", params: [
                     "p_match_id": AnyEncodable(matchId.uuidString),
@@ -254,101 +272,351 @@ final class MentorshipService: ObservableObject {
 
     // MARK: - Messaging
 
-    /// Fetch messages for a match
-    func fetchMessages(matchId: UUID) async throws -> [DBMentorshipMessage] {
-        let response: [DBMentorshipMessage] = try await withTimeout(seconds: 5) { [self] in
-            try await self.supabase
+    /// Fetch messages for a match (with pagination and batch decryption)
+    func fetchMessages(matchId: UUID, offset: Int = 0) async throws -> [DBMentorshipMessage] {
+        let limit = offset == 0 ? Self.INITIAL_MESSAGE_LIMIT : Self.MAX_MESSAGES_PER_LOAD
+        
+        let response: [DBMentorshipMessage] = try await withTimeout(seconds: Self.TIMEOUT_FETCH_MESSAGES) { [self] in
+            // Fetch raw encrypted messages with pagination
+            let rawMessages: [EncryptedMessageRow] = try await self.supabase
                 .from("mentorship_messages")
                 .select()
                 .eq("match_id", value: matchId)
                 .order("sent_at", ascending: true)
+                .range(offset, offset + limit)
                 .execute()
                 .value
+
+            // Batch decrypt all messages in single RPC call (fixes N+1 queries)
+            let messageIds = rawMessages.compactMap { $0.id }
+            guard !messageIds.isEmpty else { return [] }
+            
+            let decryptResults: [DecryptResult] = try await self.supabase
+                .rpc(
+                    "decrypt_messages_batch",
+                    params: ["p_message_ids": AnyEncodable(messageIds)]
+                )
+                .execute()
+                .value
+            
+            // Map decrypted results back to messages
+            let decryptMap = Dictionary(uniqueKeysWithValues: 
+                decryptResults.map { ($0.message_id, $0) }
+            )
+            
+            let decryptedMessages: [DBMentorshipMessage] = rawMessages.compactMap { rawMsg in
+                guard let decryptResult = decryptMap[rawMsg.id] else {
+                    // Skip messages that failed to decrypt
+                    return nil
+                }
+
+                if !decryptResult.decryption_success {
+                    print("Warning: Message \(rawMsg.id) failed decryption: \(decryptResult.error_message ?? "Unknown error")")
+                }
+
+                return DBMentorshipMessage(
+                    id: rawMsg.id,
+                    matchId: rawMsg.match_id,
+                    senderId: rawMsg.sender_id,
+                    content: decryptResult.decrypted_content ?? "[Decryption failed]",
+                    sentAt: rawMsg.sent_at,
+                    readAt: rawMsg.read_at,
+                    flagged: rawMsg.flagged,
+                    flagReason: rawMsg.flag_reason,
+                    reviewed: rawMsg.reviewed,
+                    reviewedAt: rawMsg.reviewed_at,
+                    reviewedBy: rawMsg.reviewed_by,
+                    createdAt: rawMsg.created_at
+                )
+            }
+
+            // Track pagination state per match
+            messagePaginationOffsets[matchId] = offset + limit
+            hasMoreMessagesMap[matchId] = rawMessages.count == limit
+
+            return decryptedMessages
         }
 
-        currentMessages = response
+        if offset == 0 {
+            currentMessages = response
+        } else {
+            currentMessages.append(contentsOf: response)
+        }
         return response
     }
 
-    /// Send a message in a mentorship (uses secure RPC with rate limiting)
-    func sendMessage(matchId: UUID, content: String) async throws {
+    /// Load more messages (pagination)
+    func loadMoreMessages(matchId: UUID) async throws -> [DBMentorshipMessage] {
+        guard let offset = messagePaginationOffsets[matchId],
+              let hasMore = hasMoreMessagesMap[matchId],
+              hasMore else { return [] }
+        return try await fetchMessages(matchId: matchId, offset: offset)
+    }
+
+    /// Delete user's own message (GDPR right to be forgotten)
+    func deleteMessage(messageId: UUID) async throws {
         guard supabase.auth.currentUser != nil else {
             throw MentorshipError.notAuthenticated
         }
 
-        // Validate content client-side
-        let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedContent.isEmpty else {
-            throw MentorshipError.invalidMessage("Message cannot be empty")
+        let _: Bool = try await withTimeout(seconds: Self.TIMEOUT_DELETE_MESSAGE) { [self] in
+            try await self.supabase.rpc(
+                "delete_mentorship_message",
+                params: ["p_message_id": AnyEncodable(messageId.uuidString)]
+            )
+            .execute()
+            .value
         }
 
-        guard trimmedContent.count <= 2000 else {
-            throw MentorshipError.invalidMessage("Message too long (max 2000 characters)")
-        }
-
-        // Use secure RPC function with rate limiting and timeout
-        do {
-            let result: UUID = try await withTimeout(seconds: 8) { [self] in
-                try await self.supabase.rpc(
-                    "send_mentorship_message",
-                    params: [
-                        "p_match_id": AnyEncodable(matchId.uuidString),
-                        "p_content": AnyEncodable(trimmedContent)
-                    ]
-                )
-                .execute()
-                .value as UUID
-            }
-            
-            _ = result
-        } catch {
-            // Handle specific errors
-            if let errorMessage = (error as NSError).userInfo["message"] as? String {
-                if errorMessage.contains("Rate limit") {
-                    throw MentorshipError.rateLimited
-                } else if errorMessage.contains("not active") {
-                    throw MentorshipError.matchNotFound
-                }
-            }
-            throw MentorshipError.networkError(error)
-        }
+        // Remove from local state
+        currentMessages.removeAll { $0.id == messageId }
     }
 
-    /// Subscribe to realtime messages for a match
-    func subscribeToMessages(matchId: UUID) async {
-        subscriptionTask?.cancel()
-        
-        // Wait for old subscription to fully unsubscribe before starting new one
-        if let oldChannel = messageChannel {
-            await oldChannel.unsubscribe()
+    /// Send a message with comprehensive error handling
+    func sendMessage(matchId: UUID, content: String) async throws {
+        // Validate inputs
+        guard !content.trimmingCharacters(in: .whitespaces).isEmpty else {
+            throw MentorshipError.validationError("Message cannot be empty")
         }
-
-        let channel = supabase.realtimeV2.channel("mentorship:\(matchId)")
-
-        let insertions = channel.postgresChange(
-            InsertAction.self,
-            schema: "public",
-            table: "mentorship_messages",
-            filter: "match_id=eq.\(matchId)"
+        
+        guard content.count <= Self.MAX_MESSAGE_LENGTH else {
+            throw MentorshipError.validationError("Message exceeds \(Self.MAX_MESSAGE_LENGTH) character limit")
+        }
+        
+        // Verify match exists and user is participant
+        let matchCheck = try await supabase
+            .from("mentorship_matches")
+            .select("id, status, mentor_id, mentee_id")
+            .eq("id", value: matchId)
+            .single()
+            .execute()
+        
+        guard let match = try? matchCheck.json() as? [String: Any],
+              let mentorId = match["mentor_id"] as? String,
+              let menteeId = match["mentee_id"] as? String,
+              let currentUserId = supabase.auth.currentUser?.id,
+              (mentorId == currentUserId || menteeId == currentUserId) else {
+            throw MentorshipError.notFound("Mentorship match not found or access denied")
+        }
+        
+        // Encrypt content before sending
+        let keyId = try await getActiveEncryptionKeyId()
+        let encryptionResult = try await supabase.rpc(
+            "encrypt_message_content_aes_gcm",
+            params: [
+                "p_content": content,
+                "p_key_id": keyId
+            ]
         )
+        
+        // Parse encryption RPC result - comes as RECORD with three fields
+        struct EncryptionResult: Codable {
+            let v_encrypted: String  // bytea encoded as base64 string in JSON
+            let v_iv: String?        // NULL with pgp_sym_encrypt (HMAC included in encrypted blob)
+            let v_key_id_out: String
+            
+            enum CodingKeys: String, CodingKey {
+                case v_encrypted
+                case v_iv
+                case v_key_id_out
+            }
+        }
+        
+        let encryptionResultDecoded = try encryptionResult.json(as: EncryptionResult.self)
+        let encryptedContent = encryptionResultDecoded.v_encrypted
+        // Note: v_iv is NULL since pgp_sym_encrypt includes HMAC in encrypted blob
+        
+        // Send with retry on conflict
+        var retryCount = 0
+        let maxRetries = 3
+        
+        while retryCount < maxRetries {
+            do {
+                _ = try await supabase
+                    .from("mentorship_messages")
+                    .insert([
+                        "match_id": matchId,
+                        "sender_id": supabase.auth.currentUser?.id ?? "",
+                        "encrypted_content": encryptedContent,
+                        "iv": nil,
+                        "encryption_key_id": keyId,
+                        "sent_at": Date().ISO8601Format()
+                    ])
+                    .execute()
+                
+                error = nil
+                return
+            } catch let error as PostgrestError where error.code == "23505" {
+                // Unique constraint violation - retry with slight delay
+                retryCount += 1
+                if retryCount < maxRetries {
+                    try await Task.sleep(nanoseconds: UInt64(Double(retryCount) * 100_000_000))
+                    continue
+                }
+                throw MentorshipError.networkError("Failed to send message after retries")
+            } catch {
+                self.error = "Failed to send message: \(error.localizedDescription)"
+                throw error
+            }
+        }
+    }
+    
+    // MARK: - Encryption Key Management
+    
+    private func getActiveEncryptionKeyId() async throws -> String {
+        let keyId = try await supabase.rpc("get_active_encryption_key").json() as? String
+        guard let keyId = keyId, !keyId.isEmpty else {
+            throw MentorshipError.encryptionError("No active encryption key found")
+        }
+        return keyId
+    }
 
-        await channel.subscribe()
-
-        subscriptionTask = Task {
-            for await insertion in insertions {
-                if Task.isCancelled { break }
-
-                if let message = try? insertion.decodeRecord(as: DBMentorshipMessage.self, decoder: JSONDecoder()) {
-                    await MainActor.run {
-                        if !Task.isCancelled {
-                            self.currentMessages.append(message)
+    // MARK: - Subscription with Reconnection + Backfill
+    
+    func subscribeToMessages(matchId: UUID) async {
+        // Unsubscribe from previous subscription
+        await unsubscribeFromMessages()
+        
+        // Clear backfilled message tracking when switching matches
+        backfilledMessageIds.removeAll()
+        
+        self.currentMatchId = matchId
+        let channelName = "mentorship_messages:\(matchId)"
+        
+        let channel = supabase.realtimeV2.channel(channelName)
+        
+        // Track last received message timestamp for backfill
+        var lastReceivedTimestamp = Date()
+        
+        // Listen for new messages
+        channel.onPostgresChange(
+            event: .insert,
+            schema: "public",
+            table: "mentorship_messages"
+        ) { [weak self] payload in
+            Task { @MainActor [weak self] in
+                // Verify message belongs to this match
+                guard let message = try? JSONDecoder().decode(
+                    DBMentorshipMessage.self,
+                    from: JSONEncoder().encode(payload.newRecord)
+                ) else { return }
+                
+                guard message.matchId == matchId else { return }
+                
+                // Update timestamp for potential backfill
+                lastReceivedTimestamp = max(lastReceivedTimestamp, message.sentAt)
+                
+                // Batch decrypt and append
+                do {
+                    let decryptResult = try await self?.supabase.rpc(
+                        "decrypt_messages_batch",
+                        params: ["p_message_ids": [message.id]]
+                    )
+                    
+                    let results: [DecryptResult] = try decryptResult?.json(as: [DecryptResult].self) ?? []
+                    
+                    if let result = results.first, result.decryption_success,
+                       let decryptedContent = result.decrypted_content {
+                        // Create message with decrypted content
+                        var decryptedMessage = message
+                        decryptedMessage.content = decryptedContent
+                        
+                        // Check if this was a backfilled message to prevent duplicates
+                        if !self?.backfilledMessageIds.contains(message.id) ?? true {
+                            self?.currentMessages.insert(decryptedMessage, at: 0)
                         }
+                    } else if let result = results.first {
+                        // Decryption failed - log error but don't crash
+                        print("Message decryption failed: \(result.error_message ?? "Unknown error")")
                     }
+                } catch {
+                    print("Failed to decrypt realtime message: \(error.localizedDescription)")
                 }
             }
         }
-
-        messageChannel = channel
+        
+        // Listen for DELETE events (restored messages support)
+        channel.onPostgresChange(
+            event: .delete,
+            schema: "public",
+            table: "mentorship_messages"
+        ) { [weak self] payload in
+            Task { @MainActor [weak self] in
+                guard let deletedId = payload.oldRecord["id"] as? String,
+                      let uuid = UUID(uuidString: deletedId) else { return }
+                self?.currentMessages.removeAll { $0.id == uuid }
+            }
+        }
+        
+        // Subscribe with reconnection handler
+        do {
+            try await channel.subscribe()
+            self.messageChannel = channel
+            self.subscriptionReconnectAttempts = 0
+        } catch {
+            self.error = "Failed to subscribe to messages"
+            // Pass current attempt count to prevent infinite loop
+            scheduleSubscriptionReconnect(matchId: matchId, attempt: subscriptionReconnectAttempts)
+        }
+    }
+    
+    // MARK: - Subscription Reconnection with Exponential Backoff
+    
+    private func scheduleSubscriptionReconnect(matchId: UUID, attempt: Int) {
+        let maxAttempts = 5
+        let backoffSeconds = pow(2.0, Double(attempt)) * 5.0  // 5s, 10s, 20s, 40s, 80s
+        
+        guard attempt < maxAttempts else {
+            error = "Connection lost. Please refresh."
+            return
+        }
+        
+        Task {
+            try await Task.sleep(nanoseconds: UInt64(backoffSeconds * 1_000_000_000))
+            
+            // Fetch messages since last known timestamp to backfill
+            guard let lastMessage = currentMessages.first else {
+                await subscribeToMessages(matchId: matchId)
+                return
+            }
+            
+            // Backfill missing messages during offline period
+            do {
+                let backfillMessages = try await supabase
+                    .from("mentorship_messages")
+                    .select()
+                    .eq("match_id", matchId)
+                    .gt("sent_at", lastMessage.sentAt.ISO8601Format())
+                    .execute()
+                
+                // Batch decrypt backfilled messages
+                if let backfilled = try? backfillMessages.json() as? [[String: Any]] {
+                    let backfillIds = backfilled.compactMap { $0["id"] as? String }.compactMap(UUID.init)
+                    
+                    // Track backfilled messages to prevent duplicates (limit to 500 most recent)
+                    backfilledMessageIds.formUnion(backfillIds)
+                    if backfilledMessageIds.count > 500 {
+                        // Keep only the most recent messages
+                        let toRemove = backfilledMessageIds.count - 500
+                        let sortedIds = backfilledMessageIds.sorted { $0.uuidString < $1.uuidString }
+                        backfilledMessageIds.subtract(sortedIds.prefix(toRemove))
+                    }
+                    
+                    _ = try await supabase.rpc(
+                        "decrypt_messages_batch",
+                        params: ["p_message_ids": backfillIds]
+                    )
+                }
+            } catch {
+                // Retry on backfill failure
+                scheduleSubscriptionReconnect(matchId: matchId, attempt: attempt + 1)
+                return
+            }
+            
+            // Attempt reconnection
+            await subscribeToMessages(matchId: matchId)
+            subscriptionReconnectAttempts = attempt + 1
+        }
     }
 
     /// Unsubscribe from messages
@@ -368,7 +636,7 @@ final class MentorshipService: ObservableObject {
     func markMessagesAsRead(matchId: UUID) async throws {
         guard let userId = supabase.auth.currentUser?.id else { return }
 
-        try await withTimeout(seconds: 5) { [self] in
+        try await withTimeout(seconds: Self.TIMEOUT_MARK_AS_READ) { [self] in
             try await self.supabase
                 .from("mentorship_messages")
                 .update(["read_at": Date().ISO8601Format()])
@@ -402,7 +670,7 @@ final class MentorshipService: ObservableObject {
             messageIds: messageIds.map { $0.uuidString }
         )
 
-        try await withTimeout(seconds: 8) { [self] in
+        try await withTimeout(seconds: Self.TIMEOUT_REPORT_ISSUE) { [self] in
             try await self.supabase
                 .from("mentorship_reports")
                 .insert(report)
@@ -447,29 +715,32 @@ private struct RequestMentorshipRequest: Encodable {
 
 enum MentorshipError: LocalizedError {
     case notAuthenticated
-    case matchNotFound
-    case alreadyMatched
-    case mentorUnavailable
-    case rateLimited
+    case notFound(String)
     case invalidMessage(String)
+    case rateLimited
+    case matchNotFound
     case networkError(Error)
-
+    case validationError(String)
+    case encryptionError(String)
+    
     var errorDescription: String? {
         switch self {
         case .notAuthenticated:
-            return "You must be signed in to use mentorship features."
-        case .matchNotFound:
-            return "The mentorship match could not be found."
-        case .alreadyMatched:
-            return "You already have an active match with this mentor."
-        case .mentorUnavailable:
-            return "This mentor is not currently available."
+            return "Not authenticated"
+        case .notFound(let message):
+            return message
+        case .invalidMessage(let message):
+            return message
         case .rateLimited:
-            return "Too many messages. Please wait a moment before sending more."
-        case .invalidMessage(let reason):
-            return reason
+            return "Too many requests. Please wait before trying again."
+        case .matchNotFound:
+            return "Mentorship match not found"
         case .networkError(let error):
             return "Network error: \(error.localizedDescription)"
+        case .validationError(let message):
+            return message
+        case .encryptionError(let message):
+            return message
         }
     }
 }

@@ -96,6 +96,10 @@ final class DependencyContainer: ObservableObject {
         FamilyService(supabase: self.supabaseClient)
     }()
 
+    lazy var mentorshipService: MentorshipService = {
+        MentorshipService(supabase: self.supabaseClient)
+    }()
+
     lazy var sleepService: SleepService = {
         SleepService(supabase: self.supabaseClient)
     }()
@@ -403,7 +407,24 @@ final class DependencyContainer: ObservableObject {
     // MARK: - Contextual Micro-Interventions Services
 
     lazy var interventionService: InterventionService = {
-        InterventionService(supabase: self.supabaseClient)
+        InterventionService(
+            supabase: self.supabaseClient,
+            calendarMonitor: self.calendarTriggerMonitor,
+            timingAnalyzer: self.optimalTimingAnalyzer,
+            notificationManager: self.interventionNotificationManager
+        )
+    }()
+    
+    lazy var calendarTriggerMonitor: CalendarTriggerMonitor = {
+        CalendarTriggerMonitor(supabase: self.supabaseClient)
+    }()
+    
+    lazy var optimalTimingAnalyzer: OptimalTimingAnalyzer = {
+        OptimalTimingAnalyzer(supabase: self.supabaseClient)
+    }()
+    
+    lazy var interventionNotificationManager: InterventionNotificationManager = {
+        InterventionNotificationManager()
     }()
 
     // MARK: - Incomplete Feature Services (TODO: Add when features are ready)

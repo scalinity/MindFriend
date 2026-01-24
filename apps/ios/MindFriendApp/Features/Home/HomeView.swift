@@ -41,6 +41,9 @@ struct HomeView: View {
     @State private var todayPrediction: MoodPrediction?
     @State private var pendingMoodIntervention: PreemptiveIntervention?
     @State private var showInterventionSheet = false
+    // Life Transition Pathways state
+    @State private var activePathways: [UserPathway] = []
+    @State private var showPathwaySelection = false
 
     /// Background color adapts to mood context
     private var adaptiveBackgroundColor: Color {
@@ -143,6 +146,59 @@ struct HomeView: View {
                         .task {
                             await container.dailyBriefingViewModel.loadTodaysBriefing()
                         }
+
+                    // Life Transition Pathways (F015)
+                    if !activePathways.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Text("Your Journeys")
+                                    .font(.headline)
+                                Spacer()
+                                Button("View All") {
+                                    showPathwaySelection = true
+                                }
+                                .font(.subheadline)
+                                .foregroundColor(.blue)
+                            }
+                            .padding(.horizontal)
+                            
+                            ForEach(activePathways) { pathway in
+                                ActivePathwayCard(userPathway: pathway) {
+                                    // Navigate to PathwayDashboardView
+                                    // TODO: Add navigation
+                                }
+                                .padding(.horizontal)
+                            }
+                        }
+                    } else {
+                        Button {
+                            showPathwaySelection = true
+                        } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    HStack {
+                                        Image(systemName: "map.fill")
+                                            .font(.title2)
+                                        Text("Explore Life Transitions")
+                                            .font(.headline)
+                                    }
+                                    Text("Get structured support through major life changes")
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                        .multilineTextAlignment(.center)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding()
+                            .frame(maxWidth: .infinity)
+                            .background(Color(.secondarySystemGroupedBackground))
+                            .cornerRadius(12)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .padding(.horizontal)
+                    }
 
                     // Level progress (moved to top for visibility)
                     LevelProgressView(userLevel: displayLevel)
@@ -336,30 +392,13 @@ struct HomeView: View {
             }
             .sheet(isPresented: $showInterventionSheet) {
                 if let intervention = pendingMoodIntervention {
-                    PreemptiveInterventionView(
-                        intervention: intervention,
-                        prediction: todayPrediction,
-                        onAccept: {
-                            Task {
-                                try? await container.predictiveService.respondToMoodIntervention(
-                                    intervention,
-                                    response: "accepted",
-                                    accepted: true
-                                )
-                                pendingMoodIntervention = nil
-                            }
-                        },
-                        onDismiss: { feedback in
-                            Task {
-                                try? await container.predictiveService.respondToMoodIntervention(
-                                    intervention,
-                                    response: feedback,
-                                    accepted: false
-                                )
-                                pendingMoodIntervention = nil
-                            }
-                        }
-                    )
+                    PreemptiveInterventionView(intervention: intervention)
+                }
+            }
+            .sheet(isPresented: $showPathwaySelection) {
+                NavigationView {
+                    PathwaySelectionView()
+                        .environmentObject(container)
                 }
             }
             } // End of else block for standard home
@@ -542,6 +581,8 @@ struct HomeView: View {
             async let interventionTask: Void? = try? await container.predictiveService.fetchPendingMoodIntervention()
             // Load user experience (XP/level from user_experience table)
             async let experienceTask: Void? = try? await container.achievementService.loadUserExperience()
+            // Load active pathways
+            async let pathwaysTask = try? await container.transitionService.fetchActivePathways()
 
             // Await all results concurrently
             let questResult = try await questTask
@@ -562,6 +603,7 @@ struct HomeView: View {
             _ = await interventionTask
             // Await experience load (updates achievementService.userExperience)
             _ = await experienceTask
+            let pathwaysResult = await pathwaysTask ?? []
 
             // Compute level info from user_stats (via achievementService)
             let levelResult: UserLevel
@@ -639,6 +681,9 @@ struct HomeView: View {
 
                 // Set active quest arc
                 activeQuestArc = questArcResult
+
+                // Set active pathways
+                activePathways = pathwaysResult
 
                 // Queue any pending celebrations
                 if !pendingCelebrations.isEmpty {

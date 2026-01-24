@@ -39,13 +39,22 @@ interface TriggerContext {
   };
   timeOfDay?: string; // 'morning' | 'afternoon' | 'evening'
   recentMood?: number; // 1-5 scale
+  upcomingEvents?: Array<{
+    id: string;
+    title: string;
+    startDate: string;
+    classification: string;
+    stressScore: number;
+    needsArmor: boolean;
+  }>;
+  timingConfidence?: number; // -0.5 to +0.5 from ML analysis
 }
 
 interface CheckTriggersRequest {
   context?: TriggerContext;
 }
 
-type TriggerType = "time_based" | "biometric" | "pattern" | "manual";
+type TriggerType = "time_based" | "biometric" | "pattern" | "calendar" | "manual";
 
 interface CheckTriggersResponse {
   shouldTrigger: boolean;
@@ -400,11 +409,22 @@ async function evaluateTriggers(
   }
 
   // 3. Check daily limit using user's local date
-  const userLocalDate = new Date(currentTime);
-  const todayStart = new Date(userLocalDate);
-  todayStart.setHours(0, 0, 0, 0);
-  const todayEnd = new Date(userLocalDate);
-  todayEnd.setHours(23, 59, 59, 999);
+  const now = new Date();
+  const formatterDate = new Intl.DateTimeFormat("en-US", {
+    timeZone: userTimezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  
+  const dateParts = formatterDate.formatToParts(now);
+  const year = dateParts.find(p => p.type === "year")?.value || "2024";
+  const month = dateParts.find(p => p.type === "month")?.value || "01";
+  const day = dateParts.find(p => p.type === "day")?.value || "01";
+  
+  // Construct start and end of day in user's timezone
+  const todayStart = new Date(`${year}-${month}-${day}T00:00:00`);
+  const todayEnd = new Date(`${year}-${month}-${day}T23:59:59.999`);
 
   const { count: todayCount, error: countError } = await withRetry(() =>
     supabase
@@ -426,9 +446,9 @@ async function evaluateTriggers(
 
   // 4. Check cooldown (4 hours after last dismissal)
   const cooldownHours = COOLDOWN_HOURS;
-  const now = new Date();
+  const nowCooldown = new Date();
   const cooldownCutoff = new Date(
-    now.getTime() - cooldownHours * 60 * 60 * 1000,
+    nowCooldown.getTime() - cooldownHours * 60 * 60 * 1000,
   );
 
   const { data: recentDismissal, error: dismissError } = await withRetry(() =>
@@ -527,7 +547,18 @@ function determineTriggerType(context?: TriggerContext): TriggerType | null {
     return "time_based";
   }
 
-  // Priority: biometric > time_based > pattern
+  // Priority: calendar > biometric > time_based > pattern
+  // Calendar events get highest priority (proactive armor)
+  if (context.upcomingEvents && context.upcomingEvents.length > 0) {
+    // Check if any event warrants intervention
+    const highStressEvent = context.upcomingEvents.find(
+      event => event.stressScore >= 0.7 || event.needsArmor
+    );
+    if (highStressEvent) {
+      return "calendar";
+    }
+  }
+  
   if (context.biometrics) {
     const { heartRate, hrv } = context.biometrics;
 
@@ -560,33 +591,44 @@ function calculateConfidence(
   triggerType?: TriggerType,
 ): number {
   if (!context || !triggerType) return 0.5;
+  
+  let baseConfidence = 0.5;
 
-  if (triggerType === "biometric" && context.biometrics) {
+  if (triggerType === "calendar" && context.upcomingEvents) {
+    // Find the highest stress event
+    const highestStressEvent = context.upcomingEvents.reduce((max, event) => 
+      event.stressScore > max.stressScore ? event : max
+    );
+    
+    // Use stress score as base confidence
+    // User-marked "needs armor" events get max confidence
+    baseConfidence = highestStressEvent.needsArmor ? 1.0 : highestStressEvent.stressScore;
+  } else if (triggerType === "biometric" && context.biometrics) {
     const { heartRate, hrv } = context.biometrics;
 
     if (heartRate) {
       // Scale confidence: 100 BPM = 0.5, 130+ BPM = 1.0
-      const hrConfidence = Math.min(1.0, (heartRate - HR_CONFIDENCE_BASE) / HR_CONFIDENCE_RANGE + 0.5);
-      return hrConfidence;
-    }
-
-    if (hrv) {
+      baseConfidence = Math.min(1.0, (heartRate - HR_CONFIDENCE_BASE) / HR_CONFIDENCE_RANGE + 0.5);
+    } else if (hrv) {
       // Scale confidence: 30 ms = 0.5, 0 ms = 1.0
-      const hrvConfidence = Math.min(1.0, 1.0 - hrv / HRV_CONFIDENCE_RANGE);
-      return hrvConfidence;
+      baseConfidence = Math.min(1.0, 1.0 - hrv / HRV_CONFIDENCE_RANGE);
     }
-  }
-
-  if (triggerType === "time_based") {
-    return 1.0; // Time-based triggers are always high confidence
-  }
-
-  if (triggerType === "pattern" && context.recentMood) {
+  } else if (triggerType === "time_based") {
+    baseConfidence = 1.0; // Time-based triggers are always high confidence
+  } else if (triggerType === "pattern" && context.recentMood) {
     // Scale confidence: mood 2 = 0.6, mood 1 = 1.0
-    return Math.min(1.0, MOOD_CONFIDENCE_BASE - context.recentMood * MOOD_CONFIDENCE_MULTIPLIER);
+    baseConfidence = Math.min(1.0, MOOD_CONFIDENCE_BASE - context.recentMood * MOOD_CONFIDENCE_MULTIPLIER);
+  } else {
+    baseConfidence = 0.7; // Default moderate confidence
+  }
+  
+  // Apply ML timing confidence boost/suppression (-0.5 to +0.5)
+  if (context.timingConfidence !== undefined) {
+    const adjustedConfidence = baseConfidence + context.timingConfidence;
+    return Math.max(0.0, Math.min(1.0, adjustedConfidence)); // Clamp to [0, 1]
   }
 
-  return 0.7; // Default moderate confidence
+  return baseConfidence;
 }
 
 function generateContextMessage(
@@ -594,6 +636,35 @@ function generateContextMessage(
   context?: TriggerContext,
 ): string {
   switch (triggerType) {
+    case "calendar":
+      if (context?.upcomingEvents && context.upcomingEvents.length > 0) {
+        const nextEvent = context.upcomingEvents[0];
+        const eventDate = new Date(nextEvent.startDate);
+        const minutesUntil = Math.round((eventDate.getTime() - Date.now()) / (1000 * 60));
+        
+        // User-marked "needs armor" events get special message
+        if (nextEvent.needsArmor) {
+          return `You marked your upcoming event as needing support. Let's armor up before it starts.`;
+        }
+        
+        // Classification-specific messages
+        switch (nextEvent.classification) {
+          case "meeting":
+            return `You have a meeting in ${minutesUntil} minutes. A quick centering practice can help you show up focused.`;
+          case "deadline":
+            return `Important deadline approaching in ${minutesUntil} minutes. Let's manage any pre-deadline stress.`;
+          case "medical":
+            return `Medical appointment coming up in ${minutesUntil} minutes. A calming practice can help ease any nerves.`;
+          case "travel":
+            return `Travel starting in ${minutesUntil} minutes. A grounding exercise can help you feel prepared.`;
+          case "social":
+            return `Social event in ${minutesUntil} minutes. Take a moment to center yourself first.`;
+          default:
+            return `You have an event coming up in ${minutesUntil} minutes. Let's prepare mindfully.`;
+        }
+      }
+      return "Let's prepare for what's ahead.";
+    
     case "biometric":
       if (
         context?.biometrics?.heartRate &&

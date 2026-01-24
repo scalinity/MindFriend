@@ -160,6 +160,8 @@ struct TriggerContext: Codable {
     let biometrics: Biometrics?
     let timeOfDay: String?
     let recentMood: Int?
+    let upcomingEvents: [ClassifiedEvent]?
+    let timingConfidence: Double?
 
     struct Biometrics: Codable {
         let heartRate: Double?
@@ -170,6 +172,8 @@ struct TriggerContext: Codable {
         case biometrics
         case timeOfDay = "time_of_day"
         case recentMood = "recent_mood"
+        case upcomingEvents = "upcoming_events"
+        case timingConfidence = "timing_confidence"
     }
 }
 
