@@ -6,11 +6,18 @@ struct QuestChoiceView: View {
     @EnvironmentObject var container: DependencyContainer
     @Environment(\.dismiss) var dismiss
 
+    /// The quest that was already assigned (passed from HomeView)
+    let assignedQuest: Quest?
+
     @State private var alternatives: QuestAlternatives?
     @State private var isLoading = true
     @State private var isRerolling = false
     @State private var errorMessage: String?
     @State private var selectedQuest: Quest?
+
+    init(assignedQuest: Quest? = nil) {
+        self.assignedQuest = assignedQuest
+    }
 
     var body: some View {
         NavigationStack {
@@ -22,10 +29,12 @@ struct QuestChoiceView: View {
                 } else if let alternatives = alternatives {
                     QuestOptionsContent(
                         alternatives: alternatives,
+                        assignedQuest: assignedQuest,
                         isRerolling: isRerolling,
                         onSelectPrimary: { selectVariant(.primary) },
                         onSelectQuick: { selectVariant(.quick) },
                         onSelectAlt: { selectVariant(.alt) },
+                        onSelectAssigned: selectAssignedQuest,
                         onReroll: rerollQuest
                     )
                 }
@@ -162,16 +171,24 @@ struct QuestChoiceView: View {
             isRerolling = false
         }
     }
+
+    /// Select the already-assigned quest (dismiss with that quest)
+    private func selectAssignedQuest() {
+        guard let quest = assignedQuest else { return }
+        selectedQuest = quest
+    }
 }
 
 // MARK: - Content View
 
 private struct QuestOptionsContent: View {
     let alternatives: QuestAlternatives
+    let assignedQuest: Quest?
     let isRerolling: Bool
     let onSelectPrimary: () -> Void
     let onSelectQuick: () -> Void
     let onSelectAlt: () -> Void
+    let onSelectAssigned: () -> Void
     let onReroll: () -> Void
 
     var body: some View {
@@ -191,6 +208,14 @@ private struct QuestOptionsContent: View {
 
                 // Quest options
                 VStack(spacing: 16) {
+                    // Assigned quest (Your Current Quest) - show at top if user has one
+                    if let assignedQuest = assignedQuest {
+                        AssignedQuestCard(
+                            quest: assignedQuest,
+                            onSelect: onSelectAssigned
+                        )
+                    }
+
                     // Primary (Recommended)
                     if let primaryQuest = alternatives.primaryQuest {
                         QuestOptionCard(
@@ -303,6 +328,66 @@ struct QuestOptionCard: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
                     .stroke(badgeColor.opacity(0.3), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Assigned Quest Card (Your Current Quest)
+
+struct AssignedQuestCard: View {
+    let quest: Quest
+    let onSelect: () -> Void
+
+    var body: some View {
+        Button(action: onSelect) {
+            VStack(alignment: .leading, spacing: 12) {
+                // Header with badge
+                HStack {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(.blue)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Your Current Quest")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.blue)
+
+                        Text(quest.template.title)
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Text(quest.template.description)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+
+                // Metadata
+                HStack(spacing: 16) {
+                    Label("\(quest.template.estimatedMinutes) min", systemImage: "clock")
+                    Label(quest.template.difficulty, systemImage: "speedometer")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.secondarySystemBackground))
+            .cornerRadius(16)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.blue.opacity(0.3), lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -462,7 +547,7 @@ private struct ErrorView: View {
 // MARK: - Preview
 
 #Preview {
-    QuestChoiceView()
+    QuestChoiceView(assignedQuest: nil)
         .environmentObject(AppState())
         .environmentObject(DependencyContainer())
 }
