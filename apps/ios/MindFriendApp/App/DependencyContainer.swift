@@ -104,6 +104,23 @@ final class DependencyContainer: ObservableObject {
         AudioPlayerService(supabase: self.supabaseClient)
     }()
 
+    // MARK: - Daily Briefing (F009)
+
+    lazy var calendarService: CalendarService = {
+        CalendarService()
+    }()
+
+    lazy var dailyBriefingService: DailyBriefingService = {
+        DailyBriefingService(supabase: self.supabaseClient)
+    }()
+
+    lazy var dailyBriefingViewModel: DailyBriefingViewModel = {
+        DailyBriefingViewModel(
+            briefingService: self.dailyBriefingService,
+            calendarService: self.calendarService
+        )
+    }()
+
     // MARK: - Sensory Regulation Services
 
     lazy var tactilePatternService: TactilePatternService = {
