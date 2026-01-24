@@ -373,11 +373,11 @@ struct TipRow: View {
                     MoodPredictionFactor(factor: "day_of_week", impact: 0.2, description: "Fridays are usually better for you")
                 ],
                 modelVersion: "v1.0",
-                featuresUsed: nil,
-                actualMood: nil,
-                predictionAccuracy: nil,
+                featuresUsed: nil as [String: AnyCodableValue]?,
+                actualMood: nil as Decimal?,
+                predictionAccuracy: nil as Decimal?,
                 notificationSent: false,
-                notificationSentAt: nil,
+                notificationSentAt: nil as Date?,
                 createdAt: Date()
             )
         )
@@ -396,9 +396,9 @@ struct TipRow: View {
                     MoodPredictionFactor(factor: "day_of_week", impact: -0.3, description: "Mondays tend to be harder for you")
                 ],
                 modelVersion: "v1.0",
-                featuresUsed: nil,
-                actualMood: nil,
-                predictionAccuracy: nil,
+                featuresUsed: nil as [String: AnyCodableValue]?,
+                actualMood: nil as Decimal?,
+                predictionAccuracy: nil as Decimal?,
                 notificationSent: true,
                 notificationSentAt: Date(),
                 createdAt: Date()

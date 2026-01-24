@@ -8,6 +8,28 @@ import Foundation
 import Supabase
 import HealthKit
 
+// MARK: - AnyCodableValue Extension
+
+extension AnyCodableValue {
+    init(_ value: Any) {
+        if let int = value as? Int {
+            self = .int(int)
+        } else if let double = value as? Double {
+            self = .double(double)
+        } else if let string = value as? String {
+            self = .string(string)
+        } else if let bool = value as? Bool {
+            self = .bool(bool)
+        } else if let array = value as? [Any] {
+            self = .array(array.map { AnyCodableValue($0) })
+        } else if let dict = value as? [String: Any] {
+            self = .dictionary(dict.mapValues { AnyCodableValue($0) })
+        } else {
+            self = .null
+        }
+    }
+}
+
 @MainActor
 final class InterventionService: ObservableObject {
     // MARK: - Published Properties
@@ -81,7 +103,12 @@ final class InterventionService: ObservableObject {
 
     /// Manually check if an intervention should be triggered
     func checkTriggers(context: TriggerContext? = nil) async throws -> CheckTriggersResponse {
-        let contextToSend = context ?? await gatherCurrentContext()
+        let contextToSend: TriggerContext
+        if let context = context {
+            contextToSend = context
+        } else {
+            contextToSend = await gatherCurrentContext()
+        }
 
         let request = CheckTriggersRequest(context: contextToSend)
 
@@ -105,38 +132,31 @@ final class InterventionService: ObservableObject {
         triggerType: TriggerType?,
         context: [String: Any]?
     ) async throws -> UUID {
-        guard let userId = try await supabase.auth.session.user.id else {
-            throw NSError(domain: "InterventionService", code: 401, userInfo: [
-                NSLocalizedDescriptionKey: "User not authenticated"
-            ])
-        }
+        let session = try await supabase.auth.session
+        let userId = session.user.id
 
-        let contextSnapshot = context.map { dict in
-            dict.mapValues { AnyCodableValue($0) }
-        }
+        // Create delivery record (let database generate ID)
+        let deliveryId = UUID()
 
-        let delivery: [String: Any] = [
-            "user_id": userId.uuidString,
-            "intervention_id": interventionId,
-            "trigger_type": triggerType?.rawValue as Any,
-            "context_snapshot": contextSnapshot as Any,
-            "delivered_at": ISO8601DateFormatter().string(from: Date()),
-            "completed": false
-        ]
+        let delivery = InterventionDelivery(
+            id: deliveryId,
+            userId: userId,
+            interventionId: UUID(uuidString: interventionId) ?? UUID(),
+            triggerId: nil,
+            triggerType: triggerType,
+            contextSnapshot: context?.mapValues { AnyCodableValue($0) },
+            deliveredAt: Date(),
+            completed: false,
+            completedAt: nil,
+            dismissedAt: nil,
+            rating: nil,
+            feedback: nil
+        )
 
-        let response: [String: Any] = try await supabase
+        try await supabase
             .from("intervention_deliveries")
             .insert(delivery)
-            .select()
-            .single()
             .execute()
-            .value
-
-        guard let id = response["id"] as? String, let deliveryId = UUID(uuidString: id) else {
-            throw NSError(domain: "InterventionService", code: 500, userInfo: [
-                NSLocalizedDescriptionKey: "Failed to parse delivery ID"
-            ])
-        }
 
         // Refresh recent deliveries
         try await loadRecentDeliveries()
@@ -151,27 +171,34 @@ final class InterventionService: ObservableObject {
         rating: Int? = nil,
         feedback: String? = nil
     ) async throws {
-        var updates: [String: Any] = [
-            "completed": completed
-        ]
+        // Build update struct
+        struct DeliveryUpdate: Encodable {
+            let completed: Bool
+            let completedAt: String?
+            let dismissedAt: String?
+            let rating: Int?
+            let feedback: String?
 
-        if completed {
-            updates["completed_at"] = ISO8601DateFormatter().string(from: Date())
-        } else {
-            updates["dismissed_at"] = ISO8601DateFormatter().string(from: Date())
+            enum CodingKeys: String, CodingKey {
+                case completed
+                case completedAt = "completed_at"
+                case dismissedAt = "dismissed_at"
+                case rating
+                case feedback
+            }
         }
 
-        if let rating = rating {
-            updates["rating"] = rating
-        }
-
-        if let feedback = feedback {
-            updates["feedback"] = feedback
-        }
+        let update = DeliveryUpdate(
+            completed: completed,
+            completedAt: completed ? ISO8601DateFormatter().string(from: Date()) : nil,
+            dismissedAt: completed ? nil : ISO8601DateFormatter().string(from: Date()),
+            rating: rating,
+            feedback: feedback
+        )
 
         try await supabase
             .from("intervention_deliveries")
-            .update(updates)
+            .update(update)
             .eq("id", value: deliveryId.uuidString)
             .execute()
 
@@ -181,24 +208,9 @@ final class InterventionService: ObservableObject {
 
     /// Update user preferences
     func updatePreferences(_ preferences: InterventionPreferences) async throws {
-        guard let userId = try await supabase.auth.session.user.id else {
-            throw NSError(domain: "InterventionService", code: 401, userInfo: [
-                NSLocalizedDescriptionKey: "User not authenticated"
-            ])
-        }
-
-        let prefsData: [String: Any] = [
-            "user_id": userId.uuidString,
-            "enabled": preferences.enabled,
-            "max_daily": preferences.maxDaily,
-            "quiet_hours_start": preferences.quietHoursStart as Any,
-            "quiet_hours_end": preferences.quietHoursEnd as Any,
-            "updated_at": ISO8601DateFormatter().string(from: Date())
-        ]
-
         try await supabase
             .from("intervention_preferences")
-            .upsert(prefsData)
+            .upsert(preferences)
             .execute()
 
         self.preferences = preferences
@@ -213,10 +225,8 @@ final class InterventionService: ObservableObject {
 
     /// Load user preferences from database
     func loadPreferences() async throws {
-        guard let userId = try await supabase.auth.session.user.id else {
-            self.preferences = nil
-            return
-        }
+        let session = try await supabase.auth.session
+        let userId = session.user.id
 
         do {
             let response: InterventionPreferences = try await supabase
@@ -236,10 +246,8 @@ final class InterventionService: ObservableObject {
 
     /// Load recent delivery history
     func loadRecentDeliveries() async throws {
-        guard let userId = try await supabase.auth.session.user.id else {
-            self.recentDeliveries = []
-            return
-        }
+        let session = try await supabase.auth.session
+        let userId = session.user.id
 
         let response: [InterventionDelivery] = try await supabase
             .from("intervention_deliveries")

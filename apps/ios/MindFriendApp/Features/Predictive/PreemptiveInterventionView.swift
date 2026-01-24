@@ -455,9 +455,9 @@ struct InterventionFeedbackButton: View {
                 MoodPredictionFactor(factor: "day_of_week", impact: -0.3, description: "Mondays tend to be harder for you")
             ],
             modelVersion: "v1.0",
-            featuresUsed: nil,
-            actualMood: nil,
-            predictionAccuracy: nil,
+            featuresUsed: nil as [String: AnyCodableValue]?,
+            actualMood: nil as Decimal?,
+            predictionAccuracy: nil as Decimal?,
             notificationSent: true,
             notificationSentAt: Date(),
             createdAt: Date()
