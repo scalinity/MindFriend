@@ -182,6 +182,14 @@ final class NotificationManager: NSObject, ObservableObject {
     func handleNotificationResponse(_ response: UNNotificationResponse) {
         let userInfo = response.notification.request.content.userInfo
         Log.notifications.debug("[Notifications] Notification tapped: \(userInfo)")
+        
+        // Handle intervention notifications specially
+        if let type = userInfo["type"] as? String, type == "intervention" {
+            Task {
+                await handleInterventionNotificationResponse(response)
+            }
+            return
+        }
 
         let deepLink = parseDeepLink(from: userInfo)
         let notificationType = userInfo["type"] as? String ?? "unknown"
@@ -207,6 +215,78 @@ final class NotificationManager: NSObject, ObservableObject {
             object: nil,
             userInfo: ["deepLink": deepLink]
         )
+    }
+    
+    /// Handle intervention notification with actions (complete, dismiss, remind later)
+    private func handleInterventionNotificationResponse(_ response: UNNotificationResponse) async {
+        guard let container = container else {
+            Log.notifications.debug("[Notifications] Container not available for intervention response")
+            return
+        }
+        
+        let notificationManager = container.interventionNotificationManager
+        let interventionService = container.interventionService
+        
+        // Parse intervention deep link
+        guard let deepLink = await notificationManager.handleNotificationResponse(response) else {
+            Log.notifications.debug("[Notifications] Failed to parse intervention deep link")
+            return
+        }
+        
+        // Handle action
+        switch deepLink.action {
+        case .complete:
+            // Navigate to intervention and mark as completed
+            do {
+                try await interventionService.updateDelivery(
+                    deliveryId: deepLink.deliveryId,
+                    completed: true
+                )
+                
+                // Navigate to micro-moments hub
+                let navDeepLink = NotificationDeepLink.micro(templateId: deepLink.interventionId.uuidString)
+                NotificationCenter.default.post(
+                    name: .notificationDeepLinkReceived,
+                    object: nil,
+                    userInfo: ["deepLink": navDeepLink]
+                )
+                
+                Log.notifications.debug("[Notifications] Intervention marked complete via notification action")
+            } catch {
+                Log.notifications.debug("[Notifications] Failed to mark intervention complete: \(error)")
+            }
+            
+        case .dismiss:
+            // Mark as dismissed
+            do {
+                try await interventionService.updateDelivery(
+                    deliveryId: deepLink.deliveryId,
+                    completed: false
+                )
+                Log.notifications.debug("[Notifications] Intervention dismissed via notification action")
+            } catch {
+                Log.notifications.debug("[Notifications] Failed to mark intervention dismissed: \(error)")
+            }
+            
+        case .remindLater:
+            // Reschedule for 30 minutes later
+            // This requires fetching the intervention template
+            Log.notifications.debug("[Notifications] Intervention remind later requested")
+            // TODO: Implement reschedule logic
+            
+        case .open:
+            // Navigate to intervention
+            let navDeepLink = NotificationDeepLink.micro(templateId: deepLink.interventionId.uuidString)
+            NotificationCenter.default.post(
+                name: .notificationDeepLinkReceived,
+                object: nil,
+                userInfo: ["deepLink": navDeepLink]
+            )
+            Log.notifications.debug("[Notifications] Opening intervention from notification")
+        }
+        
+        // Remove delivered notification
+        notificationManager.removeDeliveredNotification(deliveryId: deepLink.deliveryId)
     }
 
     /// Mark notification as opened in backend
@@ -253,6 +333,11 @@ final class NotificationManager: NSObject, ObservableObject {
 
         case "mood_reminder":
             return .mood
+        
+        case "intervention":
+            // Intervention notifications from InterventionNotificationManager
+            let interventionId = userInfo["intervention_id"] as? String
+            return .micro(templateId: interventionId)
 
         case "bedtime_reminder":
             let contentId = userInfo["content_id"] as? String
