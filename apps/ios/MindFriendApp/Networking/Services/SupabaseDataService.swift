@@ -4840,21 +4840,24 @@ final class SupabaseDataService: ObservableObject {
             .from("generated_content")
             .select()
             .eq("user_id", value: try userId)
-            .order("created_at", ascending: false)
-            .limit(limit)
-        
+
         // Apply type filter if specified
         if let type = type {
             query = query.eq("content_type", value: type.rawValue)
         }
-        
+
         // Apply favorites filter if requested
         if favoritesOnly {
             query = query.eq("is_favorite", value: true)
         }
-        
-        let results: [GeneratedContent] = try await query.execute().value
-        
+
+        // Apply order and limit, then execute
+        let results: [GeneratedContent] = try await query
+            .order("created_at", ascending: false)
+            .limit(limit)
+            .execute()
+            .value
+
         Log.data.info("[Data] Fetched \(results.count) generated content items")
         return results
     }

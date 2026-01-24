@@ -130,6 +130,12 @@ final class DependencyContainer: ObservableObject {
         )
     }()
 
+    // MARK: - Wellbeing Debt Calculator (N006)
+
+    lazy var wellbeingDebtService: WellbeingDebtService = {
+        WellbeingDebtService(supabase: self.supabaseClient)
+    }()
+
     // MARK: - Sensory Regulation Services
 
     lazy var tactilePatternService: TactilePatternService = {
