@@ -115,7 +115,9 @@ final class DifficultyService: ObservableObject {
             print("[DifficultyService] Calling calculate-capacity edge function with localDate=\(localDate), timezone=\(timezone)")
             print("[DifficultyService] Current user session exists: \(supabase.auth.currentSession != nil)")
             if let session = supabase.auth.currentSession {
+                #if DEBUG
                 print("[DifficultyService] Session token (first 20 chars): \(String(session.accessToken.prefix(20)))...")
+                #endif
             }
 
             // Call Edge Function with timeout and retry

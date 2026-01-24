@@ -1,5 +1,52 @@
 # MindFriend Development Progress Log
 
+## [2026-01-24] F016: AI-Generated Exercises - Integration Complete
+
+**Type:** Feature
+**Status:** Complete
+
+### Summary
+
+Completed iOS integration for AI-Generated Exercises feature. Added three new views to the exercise library: GenerateExerciseView for creating personalized exercises, GeneratedExercisePlayerView for type-specific playback, and SavedExercisesView for managing favorites. Successfully wired navigation from ExerciseLibraryView and resolved all compilation issues.
+
+### Changes
+
+**iOS Views:**
+
+- **File:** `apps/ios/MindFriendApp/Features/Exercises/SavedExercisesView.swift` (286 lines) — Library view with filtering (type, favorites), rating UI, pull-to-refresh
+- **File:** `apps/ios/MindFriendApp/Features/Exercises/GenerateExerciseView.swift` (303 lines) — Exercise generation UI with type selector, duration picker, mood input, quota status
+- **File:** `apps/ios/MindFriendApp/Features/Exercises/GeneratedExercisePlayerView.swift` (753 lines) — Unified player with type-specific rendering:
+  - Breathing: Animated circle synced to pattern (inhale/hold/exhale/pause phases)
+  - Meditation/Grounding: Auto-advancing scrollable script with TTS
+  - Journaling: Prompt-by-prompt display with reflection questions
+  - Rating prompt with 1-5 stars and optional feedback
+
+**iOS Integration:**
+
+- **File:** `apps/ios/MindFriendApp/Features/Exercises/ExerciseLibraryView.swift` — Added "Generate New Exercise" and "My Saved Exercises" buttons with sheet presentations
+
+**Build System:**
+
+- **File:** `apps/ios/add_exercise_views.rb` (89 lines) — Ruby script using xcodeproj gem to add new files to Xcode project
+
+### Testing
+
+- [x] Build succeeds (verified with xcodebuild)
+- [x] Files added to Xcode project correctly
+- [x] Navigation wired from ExerciseLibraryView
+- [ ] Manual UI testing (pending)
+- [ ] End-to-end generation flow (pending)
+
+### Notes
+
+**Backend Integration:** The backend context-aware generation system (Edge Functions, database extensions) was completed in previous session. This session focused solely on iOS UI integration.
+
+**ButtonStyle Fix:** Resolved ButtonStyle protocol conformance by using `Self.Configuration` instead of `Configuration` in makeBody signature.
+
+**Next Steps:** Manual testing of complete flow from generation → playback → rating → favorites.
+
+---
+
 ## [2026-01-24] F012: Sleep Optimization System - Complete Implementation
 
 **Type:** Feature
@@ -10284,44 +10331,44 @@ Applied critical fixes identified during Phase 2 code review. Addressed division
 
 **Correctness Fixes:**
 
-| File                                                    | Change                                                           | Impact                                         |
-| ------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------- |
-| `supabase/functions/_shared/wellbeing-debt-utils.ts:24` | Added denominator zero check in `calculateSlope()`              | Prevents crash on constant input arrays        |
-| `supabase/functions/_shared/wellbeing-debt-utils.ts:24` | Added NaN and infinity checks                                    | Robust edge case handling                      |
-| `supabase/functions/_shared/wellbeing-debt-utils.ts:127` | Implemented linear interpolation for `calculatePercentile10()`   | Accurate 10th percentile calculation           |
+| File                                                     | Change                                                         | Impact                                  |
+| -------------------------------------------------------- | -------------------------------------------------------------- | --------------------------------------- |
+| `supabase/functions/_shared/wellbeing-debt-utils.ts:24`  | Added denominator zero check in `calculateSlope()`             | Prevents crash on constant input arrays |
+| `supabase/functions/_shared/wellbeing-debt-utils.ts:24`  | Added NaN and infinity checks                                  | Robust edge case handling               |
+| `supabase/functions/_shared/wellbeing-debt-utils.ts:127` | Implemented linear interpolation for `calculatePercentile10()` | Accurate 10th percentile calculation    |
 
 **Security Fixes:**
 
-| File                                                                       | Change                                                     | Impact                                  |
-| -------------------------------------------------------------------------- | ---------------------------------------------------------- | --------------------------------------- |
-| `supabase/migrations/20260124120000_fix_wellbeing_debt_cron_security.sql` | Created PL/pgSQL wrapper functions for cron jobs           | Removed hardcoded service role keys     |
-| `supabase/migrations/20260124120000_fix_wellbeing_debt_cron_security.sql` | Use database settings for credentials                      | Credentials managed via ALTER DATABASE  |
-| Configuration                                                              | Added instructions for secure credential management        | Manual deployment step documented       |
+| File                                                                      | Change                                              | Impact                                 |
+| ------------------------------------------------------------------------- | --------------------------------------------------- | -------------------------------------- |
+| `supabase/migrations/20260124120000_fix_wellbeing_debt_cron_security.sql` | Created PL/pgSQL wrapper functions for cron jobs    | Removed hardcoded service role keys    |
+| `supabase/migrations/20260124120000_fix_wellbeing_debt_cron_security.sql` | Use database settings for credentials               | Credentials managed via ALTER DATABASE |
+| Configuration                                                             | Added instructions for secure credential management | Manual deployment step documented      |
 
 **Performance Improvements:**
 
-| File                                                                   | Change                                            | Impact                                      |
-| ---------------------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------- |
-| `supabase/migrations/20260124130000_add_wellbeing_debt_indexes.sql`   | Created 14 indexes on wellbeing debt tables       | Prevent N+1 queries, optimize lookups       |
-| Index: `idx_wellbeing_transactions_user_date`                          | Composite index for user + date queries          | Primary access pattern optimization         |
-| Index: `idx_wellbeing_transactions_analysis`                           | Composite index with INCLUDE for category stats  | Efficient top drains/deposits analysis      |
-| Index: `idx_wellbeing_debt_scores_user_date`                           | Composite index for score lookups                | Fast debt score retrieval                   |
-| Index: `idx_wellbeing_debt_profiles_top_drains`                        | GIN index on JSONB column                        | Fast category lookups in profiles           |
+| File                                                                | Change                                          | Impact                                 |
+| ------------------------------------------------------------------- | ----------------------------------------------- | -------------------------------------- |
+| `supabase/migrations/20260124130000_add_wellbeing_debt_indexes.sql` | Created 14 indexes on wellbeing debt tables     | Prevent N+1 queries, optimize lookups  |
+| Index: `idx_wellbeing_transactions_user_date`                       | Composite index for user + date queries         | Primary access pattern optimization    |
+| Index: `idx_wellbeing_transactions_analysis`                        | Composite index with INCLUDE for category stats | Efficient top drains/deposits analysis |
+| Index: `idx_wellbeing_debt_scores_user_date`                        | Composite index for score lookups               | Fast debt score retrieval              |
+| Index: `idx_wellbeing_debt_profiles_top_drains`                     | GIN index on JSONB column                       | Fast category lookups in profiles      |
 
 **Reliability Improvements:**
 
-| File                                                  | Change                                       | Impact                                     |
-| ----------------------------------------------------- | -------------------------------------------- | ------------------------------------------ |
-| `supabase/functions/_shared/retry-utils.ts`          | Created retry utility with exponential backoff | Resilient external API calls               |
-| `retry-utils.ts:retryWithBackoff()`                  | Configurable max attempts, delays, errors    | Flexible retry configuration               |
-| `retry-utils.ts:retrySupabaseQuery()`                | Wrapper for Supabase queries                 | Easy integration for database operations   |
+| File                                        | Change                                         | Impact                                   |
+| ------------------------------------------- | ---------------------------------------------- | ---------------------------------------- |
+| `supabase/functions/_shared/retry-utils.ts` | Created retry utility with exponential backoff | Resilient external API calls             |
+| `retry-utils.ts:retryWithBackoff()`         | Configurable max attempts, delays, errors      | Flexible retry configuration             |
+| `retry-utils.ts:retrySupabaseQuery()`       | Wrapper for Supabase queries                   | Easy integration for database operations |
 
 **Database Schema:**
 
-| File                                                                    | Change                                    | Impact                                     |
-| ----------------------------------------------------------------------- | ----------------------------------------- | ------------------------------------------ |
-| `supabase/migrations/20260124030001_wellbeing_debt_tables.sql`         | Created core tables (transactions, scores, profiles) | Fixed missing schema issue           |
-| Tables: wellbeing_transactions, wellbeing_debt_scores, wellbeing_debt_profiles | Full RLS policies and constraints         | Secure data access                         |
+| File                                                                           | Change                                               | Impact                     |
+| ------------------------------------------------------------------------------ | ---------------------------------------------------- | -------------------------- |
+| `supabase/migrations/20260124030001_wellbeing_debt_tables.sql`                 | Created core tables (transactions, scores, profiles) | Fixed missing schema issue |
+| Tables: wellbeing_transactions, wellbeing_debt_scores, wellbeing_debt_profiles | Full RLS policies and constraints                    | Secure data access         |
 
 ### Testing
 
@@ -10379,26 +10426,25 @@ Applied critical fixes identified during Phase 2 code review. Addressed division
 - All migrations applied successfully to production database
 - Edge Functions redeployed with fixes (74-76kB each)
 
-
 ### Additional Fixes Applied (Auto-Fix Loop Iteration 2)
 
 **Critical Correctness Fixes:**
 
-| File                                                    | Change                                                    | Impact                                         |
-| ------------------------------------------------------- | --------------------------------------------------------- | ---------------------------------------------- |
-| `supabase/functions/_shared/wellbeing-debt-utils.ts:89` | Added guard for `totalSleepSeconds <= 0` in calculateSleepQuality() | Prevents division by zero crash                |
-| `supabase/functions/_shared/wellbeing-debt-utils.ts:93` | Added data integrity check for quality > total sleep      | Handles corrupted HealthKit data gracefully    |
-| `supabase/functions/_shared/wellbeing-debt-utils.ts:139` | Added NaN/infinity filtering to calculatePercentile10()   | Robust handling of invalid crash history data  |
-| `supabase/functions/_shared/wellbeing-debt-utils.ts:210` | Added guard for `startDate > endDate` in getDateRange()  | Prevents infinite loop                         |
-| `supabase/functions/calculate-debt-score/index.ts:244` | Added guard for `threshold === 0` in calculateThresholdStatus() | Prevents division by zero crash                |
-| `supabase/functions/calculate-debt-score/index.ts:280` | Fixed confidence calculation: 0 if <3 crashes             | Matches spec requirement (min 3 crashes)       |
+| File                                                     | Change                                                              | Impact                                        |
+| -------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------- |
+| `supabase/functions/_shared/wellbeing-debt-utils.ts:89`  | Added guard for `totalSleepSeconds <= 0` in calculateSleepQuality() | Prevents division by zero crash               |
+| `supabase/functions/_shared/wellbeing-debt-utils.ts:93`  | Added data integrity check for quality > total sleep                | Handles corrupted HealthKit data gracefully   |
+| `supabase/functions/_shared/wellbeing-debt-utils.ts:139` | Added NaN/infinity filtering to calculatePercentile10()             | Robust handling of invalid crash history data |
+| `supabase/functions/_shared/wellbeing-debt-utils.ts:210` | Added guard for `startDate > endDate` in getDateRange()             | Prevents infinite loop                        |
+| `supabase/functions/calculate-debt-score/index.ts:244`   | Added guard for `threshold === 0` in calculateThresholdStatus()     | Prevents division by zero crash               |
+| `supabase/functions/calculate-debt-score/index.ts:280`   | Fixed confidence calculation: 0 if <3 crashes                       | Matches spec requirement (min 3 crashes)      |
 
 **Critical Security Fixes:**
 
-| File                                                                  | Change                                               | Impact                                         |
-| --------------------------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------- |
-| `supabase/migrations/20260124100000_wellbeing_debt_cron_jobs.sql`    | **DELETED** - file contained hardcoded service role key | Removed plaintext credentials from repository  |
-| Migration history                                                      | Original migration replaced by secure PL/pgSQL version | Use migration `20260124120000` instead        |
+| File                                                              | Change                                                  | Impact                                        |
+| ----------------------------------------------------------------- | ------------------------------------------------------- | --------------------------------------------- |
+| `supabase/migrations/20260124100000_wellbeing_debt_cron_jobs.sql` | **DELETED** - file contained hardcoded service role key | Removed plaintext credentials from repository |
+| Migration history                                                 | Original migration replaced by secure PL/pgSQL version  | Use migration `20260124120000` instead        |
 
 **Edge Function Redeployment:**
 
@@ -10426,6 +10472,7 @@ Applied critical fixes identified during Phase 2 code review. Addressed division
 ### Review Scores (After Auto-Fix Loop Iteration 2)
 
 **Expected improvements:**
+
 1. Correctness: 7/10 → **9.5/10** (all critical division by zero bugs fixed)
 2. Auth/Access Security: 6.5/10 → **8/10** (hardcoded credentials removed, but JWT verification still needed)
 3. Performance: 8.5/10 → **8.5/10** (no changes)
@@ -10446,17 +10493,16 @@ Applied critical fixes identified during Phase 2 code review. Addressed division
    - Implement parallel batch processing in `calculateDebtScoresForAllUsers`
    - Add execution time logging to cron jobs
 
-
 ### Additional Fixes Applied (Auto-Fix Loop Iteration 3)
 
 **Auth/Access Security Enhancements:**
 
-| File                                                     | Change                                                  | Impact                                         |
-| -------------------------------------------------------- | ------------------------------------------------------- | ---------------------------------------------- |
-| `supabase/functions/detect-transactions/index.ts:26-66` | Added JWT verification for manual triggers              | Users can only trigger detection for themselves |
-| `supabase/functions/detect-transactions/index.ts:31-41` | Added cron secret verification for automated triggers   | Prevents unauthorized cron execution           |
-| `supabase/functions/calculate-debt-score/index.ts:26-61` | Added JWT verification for manual triggers              | Users can only trigger calculation for themselves |
-| `supabase/functions/calculate-debt-score/index.ts:31-41` | Added cron secret verification for automated triggers   | Prevents unauthorized cron execution           |
+| File                                                     | Change                                                | Impact                                            |
+| -------------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------- |
+| `supabase/functions/detect-transactions/index.ts:26-66`  | Added JWT verification for manual triggers            | Users can only trigger detection for themselves   |
+| `supabase/functions/detect-transactions/index.ts:31-41`  | Added cron secret verification for automated triggers | Prevents unauthorized cron execution              |
+| `supabase/functions/calculate-debt-score/index.ts:26-61` | Added JWT verification for manual triggers            | Users can only trigger calculation for themselves |
+| `supabase/functions/calculate-debt-score/index.ts:31-41` | Added cron secret verification for automated triggers | Prevents unauthorized cron execution              |
 
 **Security Pattern Implemented:**
 
@@ -10465,10 +10511,10 @@ Applied critical fixes identified during Phase 2 code review. Addressed division
 if (req.method === "GET" || !req.headers.get("Authorization")) {
   const cronSecret = req.headers.get("X-Cron-Secret");
   const expectedSecret = Deno.env.get("CRON_SECRET");
-  
+
   if (!expectedSecret || cronSecret !== expectedSecret) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401
+      status: 401,
     });
   }
   // Process all users
@@ -10476,14 +10522,15 @@ if (req.method === "GET" || !req.headers.get("Authorization")) {
 
 // Manual requests: verify JWT
 const authHeader = req.headers.get("Authorization");
-const { data: { user }, error } = await supabase.auth.getUser(
-  authHeader.replace("Bearer ", "")
-);
+const {
+  data: { user },
+  error,
+} = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
 
 // Authorization check: user can only trigger for themselves
 if (user_id && user_id !== user.id) {
   return new Response(JSON.stringify({ error: "Forbidden" }), {
-    status: 403
+    status: 403,
   });
 }
 ```
@@ -10499,6 +10546,7 @@ if (user_id && user_id !== user.id) {
 **Total Fixes Applied:** 15 critical/high priority issues resolved
 
 **Correctness (5 fixes):**
+
 - Division by zero in `calculateSlope()` - epsilon check + NaN guards
 - Division by zero in `calculateSleepQuality()` - zero/negative guard + data integrity check
 - Division by zero in `calculateThresholdStatus()` - zero threshold guard
@@ -10508,6 +10556,7 @@ if (user_id && user_id !== user.id) {
 - Confidence calculation - return 0 for <3 crashes (matches spec)
 
 **Security (4 fixes):**
+
 - Hardcoded service role key - **DELETED** migration file
 - Secure cron jobs - PL/pgSQL wrapper functions with database settings
 - JWT verification - added to `detect-transactions` function
@@ -10515,6 +10564,7 @@ if (user_id && user_id !== user.id) {
 - Cron secret authentication - added to both cron-triggered functions
 
 **Performance (6 fixes):**
+
 - Missing FK indexes - added 14 indexes including composite indexes
 - GIN indexes on JSONB - fast category lookups
 - Index-only scans - composite indexes with INCLUDE columns
@@ -10524,6 +10574,7 @@ if (user_id && user_id !== user.id) {
 ### Review Scores (After Auto-Fix Loop Iteration 3)
 
 **Expected final scores:**
+
 1. **Correctness**: 7/10 → **9.5/10** (all critical bugs fixed, integration tests pending)
 2. **Auth/Access Security**: 6.5/10 → **9/10** (JWT + cron secret verification added, hardcoded credentials removed)
 3. **Performance**: 8.5/10 → **8.5/10** (indexes applied, parallelization deferred to future enhancement)
@@ -10531,6 +10582,7 @@ if (user_id && user_id !== user.id) {
 **Overall Phase 2 Status**: ✅ READY FOR PHASE 3
 
 All critical and high-priority issues identified by review agents have been resolved. The remaining items to reach 10/10 are:
+
 - Integration tests for edge case coverage (defer to Phase 3)
 - Parallel batch processing in cron jobs (defer to future optimization)
 - Cron secret environment variable configuration (manual deployment step)
@@ -10540,17 +10592,20 @@ All critical and high-priority issues identified by review agents have been reso
 **Before running cron jobs in production:**
 
 1. **Configure database settings** (for cron job wrapper functions):
+
    ```sql
    ALTER DATABASE postgres SET app.service_role_key = '<service-role-key>';
    ALTER DATABASE postgres SET app.supabase_url = 'https://***REMOVED***';
    ```
 
 2. **Set cron secret environment variable** (in Supabase Dashboard):
+
    ```
    CRON_SECRET=<generate-random-secret>
    ```
 
 3. **Update cron job wrapper functions** to use cron secret:
+
    ```sql
    -- Update PL/pgSQL wrappers to pass X-Cron-Secret header
    -- See migration 20260124120000_fix_wellbeing_debt_cron_security.sql
@@ -10562,4 +10617,3 @@ All critical and high-priority issues identified by review agents have been reso
    curl -X GET https://project.supabase.co/functions/v1/detect-transactions \
      -H "X-Cron-Secret: <secret>"
    ```
-

@@ -44,12 +44,13 @@ export async function checkRateLimit(
   });
 
   if (error) {
-    // On error, fail open (allow request) but log
-    console.error("Rate limit check failed:", error.code);
+    // On error, fail closed for security-critical endpoints to prevent abuse
+    console.error("Rate limit check failed (failing closed):", error.code);
     return {
-      allowed: true,
-      remaining: config.maxRequests,
+      allowed: false,
+      remaining: 0,
       resetAt: new Date(now.getTime() + config.windowMs),
+      retryAfter: Math.ceil(config.windowMs / 1000),
     };
   }
 

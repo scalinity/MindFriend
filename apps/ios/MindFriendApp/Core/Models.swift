@@ -1982,7 +1982,7 @@ struct BuddyWidgetData: Codable, Equatable {
 
 // MARK: - Exercise
 
-struct Exercise: Codable, Identifiable, Equatable {
+struct Exercise: Codable, Identifiable, Equatable, Hashable {
     let id: String
     let type: ExerciseType
     let title: String
