@@ -1,6 +1,90 @@
 import Foundation
 import SwiftUI
 
+// MARK: - Helper Types
+
+/// Universal Codable value that can represent any JSON-compatible type
+enum AnyCodableValue: Codable, Equatable {
+    case int(Int)
+    case double(Double)
+    case string(String)
+    case bool(Bool)
+    case array([AnyCodableValue])
+    case dictionary([String: AnyCodableValue])
+    case null
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let int = try? container.decode(Int.self) {
+            self = .int(int)
+        } else if let double = try? container.decode(Double.self) {
+            self = .double(double)
+        } else if let string = try? container.decode(String.self) {
+            self = .string(string)
+        } else if let bool = try? container.decode(Bool.self) {
+            self = .bool(bool)
+        } else if let array = try? container.decode([AnyCodableValue].self) {
+            self = .array(array)
+        } else if let dict = try? container.decode([String: AnyCodableValue].self) {
+            self = .dictionary(dict)
+        } else {
+            self = .null
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .int(let int):
+            try container.encode(int)
+        case .double(let double):
+            try container.encode(double)
+        case .string(let string):
+            try container.encode(string)
+        case .bool(let bool):
+            try container.encode(bool)
+        case .array(let array):
+            try container.encode(array)
+        case .dictionary(let dictionary):
+            try container.encode(dictionary)
+        case .null:
+            try container.encodeNil()
+        }
+    }
+
+    /// Returns the string value if this is a string, otherwise nil
+    var stringValue: String? {
+        if case .string(let value) = self {
+            return value
+        }
+        return nil
+    }
+
+    /// Returns the int value if this is an int, otherwise nil
+    var intValue: Int? {
+        if case .int(let value) = self {
+            return value
+        }
+        return nil
+    }
+
+    /// Returns the double value if this is a double, otherwise nil
+    var doubleValue: Double? {
+        if case .double(let value) = self {
+            return value
+        }
+        return nil
+    }
+
+    /// Returns the bool value if this is a bool, otherwise nil
+    var boolValue: Bool? {
+        if case .bool(let value) = self {
+            return value
+        }
+        return nil
+    }
+}
+
 // MARK: - Stub Types (from files not yet in Xcode project target)
 // TODO: Remove other stubs as their feature modules are added
 
@@ -4455,7 +4539,22 @@ struct UserQuestArc: Codable, Identifiable, Equatable {
     var completedMilestones: [Int] {
         snapshotMilestoneDays.filter { $0 <= currentDay }
     }
-    
+
+    /// Checks if current day is a milestone day
+    var isMilestoneDay: Bool {
+        snapshotMilestoneDays.contains(currentDay)
+    }
+
+    /// Checks if the arc is completed
+    var isCompleted: Bool {
+        currentDay >= snapshotDurationDays || status == .completed
+    }
+
+    /// Alias for expiresAt (for test compatibility)
+    var pausedExpiresAt: Date? {
+        expiresAt
+    }
+
     /// Convenience accessor for the joined QuestArc (matches property name in CodingKeys)
     var questArc: QuestArc? {
         arc
