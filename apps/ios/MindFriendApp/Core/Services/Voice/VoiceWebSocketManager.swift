@@ -83,6 +83,9 @@ final class VoiceWebSocketManager {
     // MARK: - Message Sending
 
     func send(_ message: [String: Any]) {
+        // Early exit if not connected (prevents spam after disconnect)
+        guard isConnected, webSocket != nil else { return }
+
         guard let data = try? JSONSerialization.data(withJSONObject: message),
               let jsonString = String(data: data, encoding: .utf8) else {
             #if DEBUG

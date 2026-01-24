@@ -114,7 +114,9 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
 
     // Emotion analysis
     private let emotionAnalyzer = EmotionAnalyzer()
-    private var emotionAnalysisEnabled: Bool = false
+    // Emotion analysis disabled by default - feature extraction is too slow without FFT optimization
+    // Users can enable in Voice Settings if they want to try it
+    private var emotionAnalysisEnabled: Bool = UserDefaults.standard.object(forKey: "voiceEmotionAnalysisEnabled") as? Bool ?? false
     private var emotionSensitivityThreshold: Double = 0.6
     private var lastEmotionAnalysisTime: Date?
     private let emotionAnalysisCooldown: TimeInterval = 2.0  // Min 2s between analyses
@@ -182,8 +184,15 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
     init(supabase: SupabaseClient) {
         self.supabase = supabase
         setupComponentCallbacks()
-        // DO NOT auto-grant consent - consent is granted only when user enables emotion analysis
-        // This ensures proper opt-in compliance with privacy regulations
+
+        // Grant consent if user previously enabled emotion analysis (persisted in UserDefaults)
+        // This respects the user's previous opt-in choice
+        if emotionAnalysisEnabled {
+            emotionAnalyzer.setVoiceConsent(true)
+            #if DEBUG
+            print("[GrokVoiceService] Init: emotion analysis enabled from UserDefaults, consent granted")
+            #endif
+        }
     }
     
     private func setupComponentCallbacks() {
@@ -527,6 +536,9 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
     func setEmotionAnalysisEnabled(_ enabled: Bool) {
         emotionAnalysisEnabled = enabled
 
+        // Persist the setting
+        UserDefaults.standard.set(enabled, forKey: "voiceEmotionAnalysisEnabled")
+
         // Grant or revoke consent based on user preference
         emotionAnalyzer.setVoiceConsent(enabled)
 
@@ -631,13 +643,21 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
             case .httpError(let code, let data):
                 #if DEBUG
                 Log.voice.debug("[VoiceToken] HTTP error status: \(code)")
+                // Always log raw data for debugging
+                if let rawString = String(data: data, encoding: .utf8) {
+                    Log.voice.debug("[VoiceToken] Raw error response: \(rawString)")
+                } else {
+                    Log.voice.debug("[VoiceToken] Raw error data (non-UTF8): \(data.count) bytes")
+                }
                 #endif
 
                 // Try to decode the error response
                 let errorResponse = try? JSONDecoder().decode(VoiceErrorResponse.self, from: data)
                 #if DEBUG
                 if let errorResponse = errorResponse {
-                    Log.voice.debug("[VoiceToken] Error code: \(errorResponse.code), message: \(errorResponse.error)")
+                    Log.voice.debug("[VoiceToken] Decoded error - code: \(errorResponse.code), message: \(errorResponse.error)")
+                } else {
+                    Log.voice.debug("[VoiceToken] Failed to decode error response as VoiceErrorResponse")
                 }
                 #endif
 

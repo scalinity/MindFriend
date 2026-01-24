@@ -135,6 +135,27 @@ Any additional context, blockers, or follow-ups.
 - **Note:** `512x512` only available for DALL-E 2, not GPT image models
 - **Lesson learned:** Always verify API parameters via Context7 before implementation
 
+**xcconfig URL Escaping Pattern (2026-01-23)**
+
+When building URLs in Xcode `.xcconfig` files, `//` is treated as a comment delimiter. The correct pattern is:
+
+```xcconfig
+SLASH = /
+SUPABASE_PROTOCOL = https
+SUPABASE_HOST = your-project.supabase.co
+SUPABASE_URL = $(SUPABASE_PROTOCOL):$(SLASH)$(SLASH)$(SUPABASE_HOST)
+```
+
+This constructs `https://your-project.supabase.co` without literal `//` in the file.
+
+**INCORRECT patterns that fail:**
+
+- `https://host` - Everything after `://` is treated as a comment
+- `$(PROTOCOL)://$(HOST)` - Still has literal `://` which triggers comment parsing
+- `$(PROTOCOL):/$()/$(HOST)` - `$()` expands AFTER comment parsing, so `://` still treated as comment
+
+**Lesson learned:** Use a `SLASH = /` variable and construct `:$(SLASH)$(SLASH)` instead of literal `://`
+
 ---
 
 ## 2) Architecture Overview

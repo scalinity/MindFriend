@@ -2454,16 +2454,16 @@ final class SupabaseDataService: ObservableObject {
         quietHoursStartLocal: String? = nil,
         quietHoursEndLocal: String? = nil,
         remindersEnabled: Bool? = nil,
+        nudgeAfterDaysInactive: Int? = nil,
+        shareMoodInCircles: Bool? = nil,
+        aiTone: AITone? = nil,
+        privacyMode: PrivacyMode? = nil,
         notifyCircleActivity: Bool? = nil,
         notifyHugs: Bool? = nil,
         notifyChallenges: Bool? = nil,
         notifyStreakRisk: Bool? = nil,
         notifyWeeklySummary: Bool? = nil,
-        preferredNotifyHour: Int? = nil,
-        nudgeAfterDaysInactive: Int? = nil,
-        shareMoodInCircles: Bool? = nil,
-        aiTone: AITone? = nil,
-        privacyMode: PrivacyMode? = nil
+        preferredNotifyHour: Int? = nil
     ) async throws {
         var updates: [String: AnyEncodable] = [:]
 
@@ -2478,6 +2478,18 @@ final class SupabaseDataService: ObservableObject {
         }
         if let remindersEnabled = remindersEnabled {
             updates["reminders_enabled"] = AnyEncodable(remindersEnabled)
+        }
+        if let nudgeAfterDaysInactive = nudgeAfterDaysInactive {
+            updates["nudge_after_days_inactive"] = AnyEncodable(nudgeAfterDaysInactive)
+        }
+        if let shareMoodInCircles = shareMoodInCircles {
+            updates["share_mood_in_circles"] = AnyEncodable(shareMoodInCircles)
+        }
+        if let aiTone = aiTone {
+            updates["ai_tone"] = AnyEncodable(aiTone.rawValue)
+        }
+        if let privacyMode = privacyMode {
+            updates["privacy_mode"] = AnyEncodable(privacyMode.rawValue)
         }
         if let notifyCircleActivity = notifyCircleActivity {
             updates["notify_circle_activity"] = AnyEncodable(notifyCircleActivity)
@@ -2496,18 +2508,6 @@ final class SupabaseDataService: ObservableObject {
         }
         if let preferredNotifyHour = preferredNotifyHour {
             updates["preferred_notify_hour"] = AnyEncodable(preferredNotifyHour)
-        }
-        if let nudgeAfterDaysInactive = nudgeAfterDaysInactive {
-            updates["nudge_after_days_inactive"] = AnyEncodable(nudgeAfterDaysInactive)
-        }
-        if let shareMoodInCircles = shareMoodInCircles {
-            updates["share_mood_in_circles"] = AnyEncodable(shareMoodInCircles)
-        }
-        if let aiTone = aiTone {
-            updates["ai_tone"] = AnyEncodable(aiTone.rawValue)
-        }
-        if let privacyMode = privacyMode {
-            updates["privacy_mode"] = AnyEncodable(privacyMode.rawValue)
         }
 
         guard !updates.isEmpty else { return }
@@ -2796,7 +2796,7 @@ final class SupabaseDataService: ObservableObject {
         let memberships: [DBCircleMembership] = try await supabase
             .from(Tables.circleMembers)
             .select("*, circles(*)")
-            .eq("user_id", value: currentUserId)
+            .eq("user_id", value: currentUserId.uuidString)
             .execute()
             .value
 
@@ -4691,25 +4691,53 @@ final class SupabaseDataService: ObservableObject {
     /// - Returns: Response containing base64 image and quota info
     /// - Throws: GenerateProfilePictureError for various failure modes
     func generateProfilePicture(prompt: String) async throws -> GenerateProfilePictureResponse {
-        Log.data.debug("[Data] generateProfilePicture: Starting with prompt length \(prompt.count)")
-        
+        print("[Debug] generateProfilePicture: Starting request")
+        print("[Debug] generateProfilePicture: Prompt length = \(prompt.count)")
+
+        // Get current session token
+        guard let session = try? await supabase.auth.session else {
+            print("[Debug] generateProfilePicture: No active session")
+            throw GenerateProfilePictureError.networkError
+        }
+
+        print("[Debug] generateProfilePicture: Session found")
+        print("[Debug] generateProfilePicture: Access token prefix = \(session.accessToken.prefix(20))...")
+        print("[Debug] generateProfilePicture: Token expires at = \(session.expiresAt)")
+
         do {
-            // Fixed: functions.invoke returns typed response, not tuple
-            let response: GenerateProfilePictureResponse = try await supabase.functions.invoke(
+            let requestBody = ["prompt": prompt]
+            print("[Debug] generateProfilePicture: Request body = \(requestBody)")
+
+            let result: GenerateProfilePictureResponse = try await supabase.functions.invoke(
                 "generate-profile-picture",
-                options: .init(
-                    body: ["prompt": prompt]
+                options: FunctionInvokeOptions(
+                    body: requestBody
                 )
             )
-            
-            Log.data.debug("[Data] generateProfilePicture: Success, quota remaining: \(response.quotaRemaining ?? -1)")
-            return response
+
+            print("[Debug] generateProfilePicture: Success, quota remaining = \(result.quotaRemaining ?? -1)")
+            return result
+        } catch let error as FunctionsError {
+            Log.data.error("[Data] generateProfilePicture: FunctionsError - \(error)")
+
+            // Check for specific error types
+            let errorString = String(describing: error)
+
+            if errorString.contains("quota") || errorString.contains("limit") {
+                Log.data.warning("[Data] generateProfilePicture: Quota exceeded")
+                throw GenerateProfilePictureError.quotaExceeded
+            }
+            if errorString.contains("Inappropriate") || errorString.contains("inappropriate") {
+                Log.data.warning("[Data] generateProfilePicture: Inappropriate content detected")
+                throw GenerateProfilePictureError.inappropriateContent
+            }
+
+            throw GenerateProfilePictureError.apiError(errorString)
         } catch {
             Log.data.error("[Data] generateProfilePicture: Failed - \(error.localizedDescription)")
-            
-            // If the error can be converted to data, try parsing the error response
+
             let errorString = String(describing: error)
-            
+
             if errorString.contains("quota") || errorString.contains("limit") {
                 Log.data.warning("[Data] generateProfilePicture: Quota exceeded")
                 throw GenerateProfilePictureError.quotaExceeded

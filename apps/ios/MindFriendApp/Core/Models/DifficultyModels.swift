@@ -344,6 +344,7 @@ struct CalculateCapacityResponse: Codable {
 
         // SAFETY: Parse dates with validation
         let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         guard let calculatedDate = formatter.date(from: calculatedAt),
               let expiresDate = formatter.date(from: expiresAt) else {
             #if DEBUG
