@@ -316,24 +316,38 @@ final class WindDownRoutineViewModel: ObservableObject {
     }
 
     func completeActivity(_ activity: WindDownActivity, trackingService: SleepTrackingService) {
-        guard let session = session else { return }
+        guard let currentSession = session else { return }
 
         Task {
             do {
                 try await trackingService.completeWindDownActivity(
-                    sessionId: session.id,
+                    sessionId: currentSession.id,
                     activityId: activity.id
                 )
 
-                // Update local state
-                if let index = self.session?.routine.firstIndex(where: { $0.id == activity.id }) {
-                    self.session?.routine[index].completed = true
+                // Update local state - create new routine with updated completion
+                var updatedRoutine = currentSession.routine
+                if let index = updatedRoutine.firstIndex(where: { $0.id == activity.id }) {
+                    updatedRoutine[index].completed = true
                 }
 
                 // Check if all completed
-                if self.session?.routine.allSatisfy({ $0.completed }) == true {
-                    self.session?.completed = true
-                }
+                let allCompleted = updatedRoutine.allSatisfy { $0.completed }
+
+                // Create updated session
+                self.session = WindDownSession(
+                    id: currentSession.id,
+                    userId: currentSession.userId,
+                    startedAt: currentSession.startedAt,
+                    completedAt: allCompleted ? Date() : currentSession.completedAt,
+                    routine: updatedRoutine,
+                    durationPlannedMinutes: currentSession.durationPlannedMinutes,
+                    durationActualMinutes: currentSession.durationActualMinutes,
+                    completed: allCompleted,
+                    sleepEntryId: currentSession.sleepEntryId,
+                    feedbackRating: currentSession.feedbackRating,
+                    createdAt: currentSession.createdAt
+                )
             } catch {
                 print("Failed to complete activity: \(error)")
             }

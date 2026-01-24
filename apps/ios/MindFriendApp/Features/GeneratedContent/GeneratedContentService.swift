@@ -433,6 +433,8 @@ extension GeneratedContent {
             isFavorite: false,
             playCount: 5,
             lastPlayedAt: Date().addingTimeInterval(-3600),
+            generationContext: nil,
+            userRating: nil,
             createdAt: Date().addingTimeInterval(-86400),
             updatedAt: Date().addingTimeInterval(-86400)
         )

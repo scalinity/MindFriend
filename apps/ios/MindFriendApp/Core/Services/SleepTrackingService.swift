@@ -207,24 +207,28 @@ final class SleepTrackingService: ObservableObject {
     ) async throws -> WindDownSession {
         let prefs = preferences ?? ["breathing", "meditation"]
 
-        let request: [String: Any] = [
-            "targetBedtime": targetBedtime.ISO8601Format(),
-            "availableMinutes": availableMinutes,
-            "preferences": prefs
-        ]
+        struct GenerateWindDownRequest: Encodable {
+            let targetBedtime: String
+            let availableMinutes: Int
+            let preferences: [String]
+        }
 
-        let response = try await supabase.functions.invoke(
+        let request = GenerateWindDownRequest(
+            targetBedtime: targetBedtime.ISO8601Format(),
+            availableMinutes: availableMinutes,
+            preferences: prefs
+        )
+
+        struct GenerateWindDownResponse: Codable {
+            let session: WindDownSession
+        }
+
+        let response: GenerateWindDownResponse = try await supabase.functions.invoke(
             "generate-wind-down",
             options: FunctionInvokeOptions(body: request)
         )
 
-        guard let data = response.data,
-              let json = try? JSONDecoder().decode([String: WindDownSession].self, from: data),
-              let session = json["session"] else {
-            throw SleepTrackingError.windDownGenerationFailed
-        }
-
-        return session
+        return response.session
     }
 
     /// Complete a wind-down activity
@@ -251,11 +255,17 @@ final class SleepTrackingService: ObservableObject {
         let allCompleted = updatedRoutine.allSatisfy { $0.completed }
 
         // Update session
-        let updates: [String: Any] = [
-            "routine": updatedRoutine,
-            "completed": allCompleted,
-            "completed_at": allCompleted ? Date().ISO8601Format() : NSNull()
-        ]
+        struct WindDownUpdateRequest: Encodable {
+            let routine: [WindDownActivity]
+            let completed: Bool
+            let completed_at: String?
+        }
+
+        let updates = WindDownUpdateRequest(
+            routine: updatedRoutine,
+            completed: allCompleted,
+            completed_at: allCompleted ? Date().ISO8601Format() : nil
+        )
 
         try await supabase
             .from("wind_down_sessions")
@@ -281,16 +291,14 @@ final class SleepTrackingService: ObservableObject {
 
     /// Request sleep pattern analysis (calls Edge Function)
     func analyzeSleepPatterns() async throws -> SleepAnalysisResponse {
-        let response = try await supabase.functions.invoke(
+        struct EmptyRequest: Encodable {}
+
+        let response: SleepAnalysisResponse = try await supabase.functions.invoke(
             "analyze-sleep-patterns",
-            options: FunctionInvokeOptions()
+            options: FunctionInvokeOptions(body: EmptyRequest())
         )
 
-        guard let data = response.data else {
-            throw SleepTrackingError.analysisGenerationFailed
-        }
-
-        return try JSONDecoder().decode(SleepAnalysisResponse.self, from: data)
+        return response
     }
 
     // MARK: - Helpers
