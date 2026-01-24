@@ -97,7 +97,19 @@ serve(async (req) => {
       recordsByPair.get(key)!.push(record);
     }
 
-    const aggregatedProfiles = [];
+    const aggregatedProfiles: Array<{
+      user_id: string;
+      exercise_id: string;
+      overall_efficacy_score: number;
+      completion_count: number;
+      confidence: number;
+      efficacy_by_state: Record<string, number>;
+      efficacy_by_time_of_day: Record<string, number>;
+      efficacy_by_emotion: Record<string, number>;
+      best_context: string | null;
+      trend: string;
+      updated_at: string;
+    }> = [];
 
     // Process each unique pair
     for (const [key, { userId, exerciseId }] of uniquePairs) {

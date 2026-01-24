@@ -4,6 +4,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logError, createErrorResponse } from "../_shared/error-logger.ts";
 
 interface DeletedMedia {
   id: string;
@@ -29,11 +30,14 @@ serve(async (_req) => {
       .limit(100); // Process 100 per run to avoid timeouts
 
     if (fetchError) {
-      console.error("Failed to fetch deleted media:", fetchError);
-      return new Response(
-        JSON.stringify({ error: "Failed to fetch deleted media" }),
-        { status: 500, headers: { "Content-Type": "application/json" } },
+      logError(
+        {
+          function: "cleanup-deleted-capsule-media",
+          operation: "fetch_deleted_media",
+        },
+        fetchError,
       );
+      return createErrorResponse(fetchError);
     }
 
     if (!deletedMedia || deletedMedia.length === 0) {
@@ -58,8 +62,12 @@ serve(async (_req) => {
           .remove([media.storage_path]);
 
         if (storageError) {
-          console.error(
-            `Failed to delete storage file ${media.storage_path}:`,
+          logError(
+            {
+              function: "cleanup-deleted-capsule-media",
+              operation: "delete_storage_file",
+              metadata: { mediaId: media.id, path: media.storage_path },
+            },
             storageError,
           );
           errors.push({
@@ -77,7 +85,14 @@ serve(async (_req) => {
           .eq("id", media.id);
 
         if (dbError) {
-          console.error(`Failed to delete DB record for ${media.id}:`, dbError);
+          logError(
+            {
+              function: "cleanup-deleted-capsule-media",
+              operation: "delete_db_record",
+              metadata: { mediaId: media.id },
+            },
+            dbError,
+          );
           errors.push({
             mediaId: media.id,
             error: `DB deletion failed: ${dbError.message}`,
@@ -88,7 +103,14 @@ serve(async (_req) => {
 
         successCount++;
       } catch (error) {
-        console.error(`Error cleaning media ${media.id}:`, error);
+        logError(
+          {
+            function: "cleanup-deleted-capsule-media",
+            operation: "process_media_file",
+            metadata: { mediaId: media.id },
+          },
+          error,
+        );
         errors.push({
           mediaId: media.id,
           error: error instanceof Error ? error.message : "Unknown error",
@@ -114,16 +136,13 @@ serve(async (_req) => {
       },
     );
   } catch (error) {
-    console.error("Error in cleanup-deleted-capsule-media cron:", error);
-    return new Response(
-      JSON.stringify({
-        error: "Internal server error",
-        message: error instanceof Error ? error.message : "Unknown error",
-      }),
+    logError(
       {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
+        function: "cleanup-deleted-capsule-media",
+        operation: "cron_execution",
       },
+      error,
     );
+    return createErrorResponse(error);
   }
 });

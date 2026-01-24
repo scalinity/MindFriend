@@ -12,6 +12,7 @@ import {
   formatTimeAgo,
   UserSnapshot,
 } from "../_shared/capsule-utils.ts";
+import { logError, createErrorResponse } from "../_shared/error-logger.ts";
 
 // TypeScript interfaces for type safety
 interface TimeCapsule {
@@ -43,25 +44,24 @@ serve(async (_req) => {
     );
 
     // Find capsules due for delivery
+    const now = new Date();
     const { data: dueCapsules, error: fetchError } = await supabase
       .from("time_capsules")
-      .select(
-        `
-        *,
-        capsule_snapshots (*)
-      `,
-      )
+      .select("*")
       .eq("status", "sealed")
-      .lte("deliver_at", new Date().toISOString())
-      .is("deleted_at", null)
-      .limit(100); // Process 100 per run
+      .lte("deliver_at", now.toISOString())
+      .order("deliver_at", { ascending: true })
+      .limit(50);
 
     if (fetchError) {
-      console.error("Failed to fetch due capsules:", fetchError);
-      return new Response(
-        JSON.stringify({ error: "Failed to fetch capsules" }),
-        { status: 500 },
+      logError(
+        {
+          function: "deliver-capsules",
+          operation: "fetch_due_capsules",
+        },
+        fetchError,
       );
+      return createErrorResponse(fetchError);
     }
 
     if (!dueCapsules || dueCapsules.length === 0) {
@@ -118,8 +118,12 @@ serve(async (_req) => {
             nowSnapshot,
           );
         } catch (letterError) {
-          console.error(
-            `Failed to generate companion letter for capsule ${capsule.id}:`,
+          logError(
+            {
+              function: "deliver-capsules",
+              operation: "generate_companion_letter",
+              metadata: { capsuleId: capsule.id },
+            },
             letterError,
           );
           // Use minimal fallback on total failure
@@ -138,7 +142,14 @@ serve(async (_req) => {
           .eq("id", capsule.id);
 
         if (updateError) {
-          console.error(`Failed to update capsule ${capsule.id}:`, updateError);
+          logError(
+            {
+              function: "deliver-capsules",
+              operation: "update_capsule_status",
+              metadata: { capsuleId: capsule.id },
+            },
+            updateError,
+          );
           failureCount++;
           continue;
         }
@@ -156,7 +167,14 @@ serve(async (_req) => {
 
         successCount++;
       } catch (error) {
-        console.error(`Error delivering capsule ${capsule.id}:`, error);
+        logError(
+          {
+            function: "deliver-capsules",
+            operation: "process_capsule",
+            metadata: { capsuleId: capsule.id },
+          },
+          error,
+        );
         failureCount++;
       }
     }
@@ -177,17 +195,14 @@ serve(async (_req) => {
       },
     );
   } catch (error) {
-    console.error("Error in deliver-capsules cron:", error);
-    return new Response(
-      JSON.stringify({
-        error: "Internal server error",
-        message: error instanceof Error ? error.message : "Unknown error",
-      }),
+    logError(
       {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
+        function: "deliver-capsules",
+        operation: "cron_execution",
       },
+      error,
     );
+    return createErrorResponse(error);
   }
 });
 
