@@ -3,9 +3,16 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createLogger, generateRequestId } from "../_shared/logger.ts";
 
 serve(async (req) => {
+  const startTime = performance.now();
+  const requestId = generateRequestId();
+  const logger = createLogger("aggregate-efficacy-profiles", { requestId });
+
   try {
+    logger.logRequest(req.method, "/aggregate-efficacy-profiles");
+
     // Authenticate cron job (service role or cron secret)
     const authHeader = req.headers.get("Authorization");
     const cronSecret = Deno.env.get("CRON_SECRET");
@@ -17,6 +24,7 @@ serve(async (req) => {
     const isCronSecret = cronSecret && authHeader?.includes(cronSecret);
 
     if (!isServiceRole && !isCronSecret) {
+      logger.warn("Unauthorized cron job request");
       return new Response(
         JSON.stringify({
           error:
@@ -26,7 +34,9 @@ serve(async (req) => {
       );
     }
 
-    console.log("Starting efficacy profile aggregation...");
+    logger.info("Starting efficacy profile aggregation", {
+      authMethod: isServiceRole ? "serviceRole" : "cronSecret",
+    });
 
     // This is a cron job, use service role key
     const supabaseAdmin = createClient(
@@ -35,6 +45,7 @@ serve(async (req) => {
     );
 
     // Get all unique user-exercise pairs that need aggregation
+    logger.debug("Fetching recent intervention efficacy records");
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const { data: recentRecords, error: recordsError } = await supabaseAdmin
       .from("intervention_efficacy")
@@ -42,6 +53,12 @@ serve(async (req) => {
       .gte("completed_at", sevenDaysAgo.toISOString());
 
     if (recordsError) {
+      logger.error(
+        "Failed to fetch recent records",
+        recordsError instanceof Error
+          ? recordsError
+          : new Error(String(recordsError)),
+      );
       throw recordsError;
     }
 
@@ -57,11 +74,13 @@ serve(async (req) => {
       });
     }
 
-    console.log(
-      `Found ${uniquePairs.size} unique user-exercise pairs to aggregate`,
-    );
+    logger.info("Unique user-exercise pairs identified", {
+      pairCount: uniquePairs.size,
+      recordCount: recentRecords?.length || 0,
+    });
 
     // Fetch all intervention efficacy records for these pairs in ONE query (fix N+1 pattern)
+    logger.debug("Fetching all efficacy records for aggregation");
     const { data: allRecords, error: allRecordsError } = await supabaseAdmin
       .from("intervention_efficacy")
       .select("*")
@@ -84,10 +103,21 @@ serve(async (req) => {
       .order("completed_at", { ascending: false });
 
     if (allRecordsError) {
+      logger.error(
+        "Failed to fetch all records",
+        allRecordsError instanceof Error
+          ? allRecordsError
+          : new Error(String(allRecordsError)),
+      );
       throw allRecordsError;
     }
 
+    logger.info("All efficacy records fetched", {
+      totalRecords: allRecords?.length || 0,
+    });
+
     // Group records by user-exercise pair
+    logger.debug("Grouping records by user-exercise pair");
     const recordsByPair = new Map<string, typeof allRecords>();
     for (const record of allRecords || []) {
       const key = `${record.user_id}:${record.exercise_id}`;
@@ -112,10 +142,12 @@ serve(async (req) => {
     }> = [];
 
     // Process each unique pair
+    logger.debug("Starting aggregation loop", { pairCount: uniquePairs.size });
     for (const [key, { userId, exerciseId }] of uniquePairs) {
       const records = recordsByPair.get(key) || [];
 
       if (records.length === 0) {
+        logger.debug("No records for pair, skipping", { key });
         continue;
       }
 
@@ -222,18 +254,42 @@ serve(async (req) => {
       });
     }
 
+    logger.info("Aggregation loop completed", {
+      profilesGenerated: aggregatedProfiles.length,
+    });
+
     // Batch upsert all profiles in a single database operation
     let errorCount = 0;
     if (aggregatedProfiles.length > 0) {
+      logger.debug("Upserting aggregated profiles to database");
       const { error: batchError } = await supabaseAdmin
         .from("user_efficacy_profiles")
         .upsert(aggregatedProfiles, { onConflict: "user_id,exercise_id" });
 
       if (batchError) {
-        console.error("Batch upsert error:", batchError);
+        logger.error(
+          "Batch upsert failed",
+          batchError instanceof Error
+            ? batchError
+            : new Error(String(batchError)),
+        );
         errorCount = aggregatedProfiles.length; // All failed
+      } else {
+        logger.info("Profiles upserted successfully", {
+          count: aggregatedProfiles.length,
+        });
       }
     }
+
+    const duration = performance.now() - startTime;
+    logger.logResponse("POST", "/aggregate-efficacy-profiles", 200, duration);
+    logger.info("Aggregation job completed", {
+      success: errorCount === 0,
+      updatedCount: aggregatedProfiles.length - errorCount,
+      errorCount,
+      totalPairs: uniquePairs.size,
+      durationMs: duration,
+    });
 
     return new Response(
       JSON.stringify({
@@ -247,7 +303,13 @@ serve(async (req) => {
       },
     );
   } catch (error) {
-    console.error("Error in aggregate-efficacy-profiles:", error);
+    const duration = performance.now() - startTime;
+    logger.error(
+      "Unhandled error in aggregate-efficacy-profiles",
+      error instanceof Error ? error : new Error(String(error)),
+    );
+    logger.logResponse("POST", "/aggregate-efficacy-profiles", 500, duration);
+
     return new Response(
       JSON.stringify({
         error: "AGGREGATION_FAILED",
