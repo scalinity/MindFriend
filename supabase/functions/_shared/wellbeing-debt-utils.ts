@@ -21,8 +21,13 @@ export function calculateSlope(values: number[]): number {
     sumXX += i * i;
   }
 
-  const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
-  return isNaN(slope) ? 0 : slope;
+  const denominator = n * sumXX - sumX * sumX;
+  
+  // Prevent division by zero (constant values case)
+  if (Math.abs(denominator) < 1e-10) return 0;
+  
+  const slope = (n * sumXY - sumX * sumY) / denominator;
+  return isNaN(slope) || !isFinite(slope) ? 0 : slope;
 }
 
 /**
@@ -81,9 +86,21 @@ export function calculateSleepQuality(
   deepSleepSeconds: number | null,
   remSleepSeconds: number | null,
 ): number {
+  // Guard: Return 0 quality if no sleep data
+  if (totalSleepSeconds <= 0) return 0;
+
   if (deepSleepSeconds !== null && remSleepSeconds !== null) {
     // iOS 16+: Use sleep stages
-    const qualitySleepSeconds = deepSleepSeconds + remSleepSeconds;
+    const qualitySleepSeconds = Math.max(0, deepSleepSeconds + remSleepSeconds);
+    
+    // Data integrity check: quality sleep cannot exceed total sleep
+    if (qualitySleepSeconds > totalSleepSeconds) {
+      console.warn(
+        `Sleep data integrity issue: quality=${qualitySleepSeconds}s > total=${totalSleepSeconds}s. Clamping.`
+      );
+      return 1.0;
+    }
+    
     return Math.min(1.0, qualitySleepSeconds / totalSleepSeconds);
   } else {
     // iOS <16: Duration-based fallback
@@ -112,6 +129,7 @@ export function calculatePoorSleepWithdrawal(hoursSlept: number): number {
 
 /**
  * Calculate 10th percentile of an array (for threshold learning)
+ * Uses linear interpolation for accuracy
  * Assumption #3 from decisions.md (2026-01-24)
  *
  * @param values Array of numbers
@@ -119,11 +137,24 @@ export function calculatePoorSleepWithdrawal(hoursSlept: number): number {
  */
 export function calculatePercentile10(values: number[]): number {
   if (values.length === 0) return 0;
-  if (values.length === 1) return values[0];
+  
+  // Filter out NaN and infinite values
+  const validValues = values.filter(v => !isNaN(v) && isFinite(v));
+  
+  if (validValues.length === 0) return 0;
+  if (validValues.length === 1) return validValues[0];
 
-  const sorted = [...values].sort((a, b) => a - b);
-  const index = Math.floor(sorted.length * 0.1);
-  return sorted[index];
+  const sorted = [...validValues].sort((a, b) => a - b);
+  const position = (sorted.length - 1) * 0.1;
+  const lowerIndex = Math.floor(position);
+  const upperIndex = Math.ceil(position);
+  
+  if (lowerIndex === upperIndex) {
+    return sorted[lowerIndex];
+  }
+  
+  const weight = position - lowerIndex;
+  return sorted[lowerIndex] * (1 - weight) + sorted[upperIndex] * weight;
 }
 
 /**
@@ -176,6 +207,12 @@ export function getDateRange(startDate: string, endDate: string): string[] {
   const dates: string[] = [];
   const current = new Date(startDate);
   const end = new Date(endDate);
+
+  // Guard: Return empty array if date range is invalid
+  if (current > end) {
+    console.warn(`Invalid date range: start=${startDate}, end=${endDate}`);
+    return [];
+  }
 
   while (current <= end) {
     dates.push(current.toISOString().split("T")[0]);
