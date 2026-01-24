@@ -32,6 +32,7 @@ struct TimeCapsule: Codable, Identifiable {
     let wordCount: Int?
     let mediaCount: Int
     let encryptionKeyId: String
+    let metadataSignature: String?
     let deletedAt: Date?
 
     enum CodingKeys: String, CodingKey {
@@ -51,6 +52,7 @@ struct TimeCapsule: Codable, Identifiable {
         case wordCount = "word_count"
         case mediaCount = "media_count"
         case encryptionKeyId = "encryption_key_id"
+        case metadataSignature = "metadata_signature"
         case deletedAt = "deleted_at"
     }
 

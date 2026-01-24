@@ -96,6 +96,7 @@ Completed Phase 2 of Intervention Efficacy Engine (N005): Created UI views, inte
 ### Phase 3 Deployment (Complete)
 
 **Database Migrations:**
+
 - ✅ Verified all 3 efficacy migrations applied to remote database
   - `20260124070000_create_emotional_trajectories.sql`
   - `20260124070001_create_intervention_efficacy.sql`
@@ -111,17 +112,20 @@ Completed Phase 2 of Intervention Efficacy Engine (N005): Created UI views, inte
 | `aggregate-efficacy-profiles` | ✅ Deployed | 70.99kB | [View](https://supabase.com/dashboard/project/zfaucivtzfwnrijsbfug/functions) |
 
 **Deployment Issues Fixed:**
+
 - Fixed template literal syntax in `get-efficacy-dashboard/index.ts:39` (escaped backticks → regular template strings)
-- Changed `.select(\`...\`)` to `.select(\`...\`)` for proper Deno parsing
+- Changed `.select(\`...\`)`to`.select(\`...\`)` for proper Deno parsing
 
 **Testing Status:**
+
 - [x] Database schema deployed and verified
-- [x] All 4 Edge Functions deployed successfully  
+- [x] All 4 Edge Functions deployed successfully
 - [ ] iOS unit tests (blocked by pre-existing test compilation errors in other files)
 - [ ] End-to-end flow testing (requires manual simulator testing)
 - [ ] Dashboard UI verification (requires simulator testing)
 
 **Production Readiness:**
+
 - ✅ **Backend**: Fully deployed (database + Edge Functions)
 - ✅ **iOS Client**: Compiles successfully, ready for testing
 - ⚠️ **Testing**: Unit tests require fixing pre-existing test file errors
@@ -130,6 +134,7 @@ Completed Phase 2 of Intervention Efficacy Engine (N005): Created UI views, inte
 ### Remaining Work (Optional)
 
 **Production Verification:**
+
 - [ ] iOS unit tests run and pass
 - [ ] Manual end-to-end flow testing in production
 - [ ] Dashboard UI testing in simulator
@@ -137,11 +142,13 @@ Completed Phase 2 of Intervention Efficacy Engine (N005): Created UI views, inte
 - [ ] Performance optimization review
 
 **Documentation:**
+
 - [ ] Update README.md with Phase 2 completion
 - [ ] Create Phase 2 testing documentation
 - [ ] Document Phase 3 deployment steps
 
 **Next Steps:**
+
 1. Implement test suites (scaffolds created)
 2. Manual end-to-end testing in production
 3. Monitor Edge Function logs for errors
@@ -149,6 +156,7 @@ Completed Phase 2 of Intervention Efficacy Engine (N005): Created UI views, inte
 5. Phase 2 infrastructure improvements (rate limiting, logging, docs)
 
 **Recommended Cron Schedule:**
+
 ```sql
 -- Run aggregate-efficacy-profiles nightly at 2 AM UTC
 SELECT cron.schedule(
@@ -166,18 +174,21 @@ SELECT cron.schedule(
 ### Impact
 
 **Before Phase 2:**
+
 - UI views missing (no dashboard, visualization, celebration views)
 - Integration incomplete (no UI elements in ExercisePlayerView)
 - No unit tests (0 coverage)
 - Compilation errors blocking deployment
 
 **After Phase 2:**
+
 - ✅ **UI**: All views complete and integrated
 - ✅ **Integration**: TrajectoryTracker fully integrated with ExercisePlayerView
 - ✅ **Testing**: Comprehensive test suite created
 - ✅ **Production**: Ready for deployment with 0 compilation errors
 
 **Production Readiness:**
+
 - ✅ All critical components complete
 - ✅ All integration points verified
 - ✅ All error handling implemented
@@ -647,6 +658,125 @@ $ deno check functions/cleanup-deleted-capsule-media/index.ts
 
 ---
 
+## [2026-01-23] Time Capsule Security Enhancements - P3 LOW
+
+**Type:** Security
+**Status:** Complete
+
+### Summary
+
+Implemented two low-priority security enhancements for Time Capsule feature: metadata HMAC signatures and constant-time comparison functions.
+
+### Changes
+
+**iOS Security Enhancements:**
+
+| File                                          | Change                                                                 |
+| --------------------------------------------- | ---------------------------------------------------------------------- |
+| `CapsuleEncryptionService.swift:29-44`        | Added `CapsuleMetadata` struct with `serialize()` method               |
+| `CapsuleEncryptionService.swift:56`           | Added `signatureVerificationFailed` error case                         |
+| `CapsuleEncryptionService.swift:160-176`      | **NEW:** `signMetadata()` - HMAC-SHA256 signature generation           |
+| `CapsuleEncryptionService.swift:186-207`      | **NEW:** `verifyMetadata()` - HMAC signature verification with CT comp |
+| `CapsuleEncryptionService.swift:343-357`      | **NEW:** `secureCompare()` - Constant-time Data comparison             |
+| `CapsuleEncryptionService.swift:365-371`      | **NEW:** `secureCompareStrings()` - Constant-time String comparison    |
+| `TimeCapsuleModels.swift:35`                  | Added `metadataSignature: String?` property                            |
+| `TimeCapsuleModels.swift:55`                  | Added `metadataSignature` CodingKeys case                              |
+| `20260123220000_add_metadata_signature_*.sql` | Added `metadata_signature TEXT` column with comment                    |
+
+### Security Improvements
+
+**1. Metadata HMAC Signatures:**
+
+- **Purpose:** Prevent database administrators from tampering with metadata (title, theme, created_at, deliver_at) without detection
+- **Algorithm:** HMAC-SHA256 using the capsule encryption key
+- **Serialization:** `"title|theme|createdAt|deliverAt"` (ISO8601 dates)
+- **Storage:** Base64-encoded signature in `time_capsules.metadata_signature`
+
+**2. Constant-Time Comparison:**
+
+- **Purpose:** Prevent timing attacks when comparing signatures or key IDs
+- **Implementation:** XOR all bytes and accumulate result (`result |= byte1 ^ byte2`)
+- **Properties:**
+  - Always compares all bytes (no short-circuit)
+  - Execution time independent of where differences occur
+  - Returns true only if `result == 0` (all bytes matched)
+
+### Verification
+
+**✅ iOS Build:**
+
+```bash
+$ xcodebuild -scheme MindFriendApp -destination 'platform=iOS Simulator,name=iPhone 17' clean build
+** BUILD SUCCEEDED **
+```
+
+**✅ Migration Applied:**
+
+```bash
+$ supabase db push
+Remote database is up to date.
+```
+
+### Testing
+
+- [x] iOS build succeeds
+- [x] TimeCapsule model includes metadataSignature field
+- [x] CapsuleEncryptionService compiles without errors
+- [x] Database migration applied successfully
+
+### Security Impact
+
+| Enhancement           | Before           | After                        | Impact |
+| --------------------- | ---------------- | ---------------------------- | ------ |
+| Metadata integrity    | No verification  | HMAC-SHA256 signatures       | ✅ LOW |
+| Timing attack surface | String `==`      | Constant-time XOR comparison | ✅ LOW |
+| DBA tampering         | Undetectable     | Signature mismatch error     | ✅ LOW |
+| Key ID comparison     | Standard compare | Constant-time compare        | ✅ LOW |
+
+### Usage Pattern
+
+**Creating a Capsule (Sign Metadata):**
+
+```swift
+let metadata = CapsuleMetadata(
+    title: "My Capsule",
+    theme: "gratitude",
+    createdAt: Date(),
+    deliverAt: futureDate
+)
+let signature = try encryptionService.signMetadata(metadata, keyId: keyId)
+// Store signature in database: time_capsules.metadata_signature
+```
+
+**Opening a Capsule (Verify Metadata):**
+
+```swift
+let metadata = CapsuleMetadata(
+    title: capsule.title,
+    theme: capsule.theme,
+    createdAt: capsule.createdAt,
+    deliverAt: capsule.deliverAt
+)
+let isValid = try encryptionService.verifyMetadata(
+    metadata,
+    signature: capsule.metadataSignature,
+    keyId: capsule.encryptionKeyId
+)
+if !isValid {
+    throw EncryptionError.signatureVerificationFailed
+}
+```
+
+### Notes
+
+- Metadata signature verification is **optional** (field is nullable)
+- Existing capsules without signatures will work normally
+- Constant-time comparison prevents theoretical timing attacks (extremely difficult to exploit in practice)
+- HMAC signatures use the same capsule key used for content encryption
+- Signature covers only metadata, not content (content already encrypted with AES-GCM authentication)
+
+---
+
 ## [2026-01-24] N005: Intervention Efficacy Engine (Phase 1 Complete)
 
 **Type:** Feature
@@ -888,8 +1018,8 @@ Conducted comprehensive multi-agent code review of N005 implementation, fixed 21
 |------|-------|-----|
 | `calculate-efficacy/index.ts:27` | Missing TrajectoryShape type | Added type definition |
 | `calculate-efficacy/index.ts:225` | TypeScript error handling | Added `(error as Error).message` |
-| `get-recommendations/index.ts:218,222,255` | Template literal escaping | Fixed `\`` → ``` ` ``` |
-| `aggregate-efficacy-profiles/index.ts:100` | Type inference failure | Added explicit array type |
+| `get-recommendations/index.ts:218,222,255` | Template literal escaping | Fixed `\`` → ``` ` ```|
+|`aggregate-efficacy-profiles/index.ts:100` | Type inference failure | Added explicit array type |
 
 **Test Suite Creation:**
 | File | Status |
@@ -917,11 +1047,13 @@ Conducted comprehensive multi-agent code review of N005 implementation, fixed 21
 ### Notes
 
 **Quality Improvement:**
+
 - **Before:** Average score 5.3/10 across all review categories
 - **After:** Estimated 8-9/10 for most categories (pending re-review)
 - **Result:** Production-ready code with all critical bugs resolved
 
 **Deferred Work (documented in decisions.md #2026-01-24):**
+
 - JWT verification documentation
 - Rate limiting implementation
 - Replace print() with structured logging (project-wide)
@@ -929,6 +1061,7 @@ Conducted comprehensive multi-agent code review of N005 implementation, fixed 21
 - Implement comprehensive test suite
 
 **Next Steps:**
+
 1. Implement test suites (scaffolds created)
 2. Manual end-to-end testing in production
 3. Monitor Edge Function logs for errors
@@ -936,6 +1069,7 @@ Conducted comprehensive multi-agent code review of N005 implementation, fixed 21
 5. Phase 2 infrastructure improvements (rate limiting, logging, docs)
 
 **Recommended Cron Schedule:**
+
 ```sql
 -- Run aggregate-efficacy-profiles nightly at 2 AM UTC
 SELECT cron.schedule(
@@ -953,11 +1087,13 @@ SELECT cron.schedule(
 ### Impact
 
 **Before Review:**
+
 - 🔴 6 Critical bugs causing crashes, data loss, security vulnerabilities
 - 🟡 8 High priority issues causing data integrity problems
 - 🟡 12 Medium priority issues causing API mismatches
 
 **After Fixes:**
+
 - ✅ 0 Critical bugs remaining
 - ✅ 6 High priority issues resolved, 2 infrastructure improvements deferred
 - ✅ 6 Medium priority issues resolved, 6 improvements deferred
@@ -9466,3 +9602,142 @@ Implemented F009 Personalized Daily Briefing feature with reduced scope MVP: dai
 | File | Change |
 |------|--------|
 | `apps/ios/MindFriend
+
+---
+
+## [2026-01-24] N005: Cron Job Configuration for Efficacy Profile Aggregation
+
+**Type:** Infrastructure
+**Status:** Complete
+
+### Summary
+
+Configured automated nightly cron job to run the `aggregate-efficacy-profiles` Edge Function at 2 AM UTC. This ensures user efficacy profiles are updated daily with the latest intervention data.
+
+### Changes
+
+**Migration Created:**
+| File | Change |
+|------|--------|
+| `supabase/migrations/20260124020128_setup_efficacy_cron_job.sql` | Created cron job using pg_cron extension |
+
+**Cron Job Configuration:**
+| Parameter | Value |
+|-----------|-------|
+| Job Name | `aggregate-efficacy-profiles-nightly` |
+| Schedule | `0 2 * * *` (2 AM UTC daily) |
+| Function URL | `https://zfaucivtzfwnrijsbfug.supabase.co/functions/v1/aggregate-efficacy-profiles` |
+| Authentication | Service role key (from Supabase secrets) |
+| Extension | `pg_cron` (enabled) |
+
+**Migration Output:**
+
+```
+NOTICE: extension "pg_cron" already exists, skipping
+NOTICE: Cron job "aggregate-efficacy-profiles-nightly" created successfully
+```
+
+### Implementation Details
+
+**Cron Expression:** `0 2 * * *`
+
+- Runs at 2:00 AM UTC every day
+- Off-peak hours to minimize database load
+- Before most users wake up (covers US/EU/Asia timezones)
+
+**Job Actions:**
+
+1. Fetches all user-exercise pairs modified in last 7 days
+2. Bulk fetches intervention_efficacy records (last 30 days)
+3. Calculates weighted averages (recent sessions weighted higher)
+4. Computes contextual breakdowns (by state, time, emotion)
+5. Determines trend (improving/stable/declining via linear regression)
+6. Batch upserts to user_efficacy_profiles table
+
+**Performance Optimizations:**
+
+- Single bulk query instead of N+1 pattern (fixed in code review)
+- Batch upsert for all profiles
+- Processes only recently active user-exercise pairs
+
+### Testing
+
+- [x] Migration applied successfully to remote database
+- [x] Cron job created (verified via NOTICE message)
+- [ ] Manual trigger test (verify function executes correctly)
+- [ ] Wait for first scheduled run (tomorrow at 2 AM UTC)
+- [ ] Verify profiles updated after first run
+
+### Verification
+
+To verify the cron job is active:
+
+```sql
+SELECT
+  jobid,
+  jobname,
+  schedule,
+  active,
+  LEFT(command, 100) as command_preview
+FROM cron.job
+WHERE jobname = 'aggregate-efficacy-profiles-nightly';
+```
+
+Expected result:
+
+- `jobname`: aggregate-efficacy-profiles-nightly
+- `schedule`: 0 2 \* \* \*
+- `active`: true
+
+To view cron job execution history:
+
+```sql
+SELECT
+  jobid,
+  runid,
+  job_pid,
+  database,
+  username,
+  command,
+  status,
+  return_message,
+  start_time,
+  end_time
+FROM cron.job_run_details
+WHERE jobid = (
+  SELECT jobid FROM cron.job
+  WHERE jobname = 'aggregate-efficacy-profiles-nightly'
+)
+ORDER BY start_time DESC
+LIMIT 10;
+```
+
+### Notes
+
+**Why 2 AM UTC:**
+
+- Off-peak hours for database load
+- Before most users in US (6-9 PM PST/EST)
+- Before most users in EU (3-4 AM CET)
+- Before most users in Asia (10-11 AM JST/CST)
+
+**Security:**
+
+- Service role key hardcoded in cron job (required by Supabase)
+- Function validates cron secret in addition to service role key
+- Only service role can bypass RLS policies to update profiles
+
+**Monitoring:**
+
+- Check `cron.job_run_details` for execution history
+- Monitor Edge Function logs for errors
+- Alert if job fails 3+ consecutive times
+
+**Next Steps:**
+
+1. Monitor first scheduled run (2026-01-25 at 2:00 AM UTC)
+2. Verify profiles updated correctly
+3. Set up alerting for cron job failures (Phase 2)
+4. Consider adding Slack/email notifications for failures (Phase 2)
+
+---
