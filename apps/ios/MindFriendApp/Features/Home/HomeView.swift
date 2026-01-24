@@ -157,6 +157,15 @@ struct HomeView: View {
                     WellnessScoreCard()
                         .padding(.horizontal)
 
+                    // Sleep Dashboard Card (F012)
+                    NavigationLink {
+                        SleepDashboardView()
+                            .environmentObject(container)
+                    } label: {
+                        SleepHomeCard()
+                    }
+                    .padding(.horizontal)
+
                     // Mood Prediction Card (shows today's AI prediction)
                     if let prediction = todayPrediction {
                         MoodPredictionCard(prediction: prediction) {

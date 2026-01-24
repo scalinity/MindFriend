@@ -100,6 +100,7 @@ final class NotificationCategoryManager {
     private let notificationCenter = UNUserNotificationCenter.current()
 
     func registerCategories() {
+        // Medication reminder actions
         let logTakenAction = UNNotificationAction(
             identifier: "LOG_TAKEN",
             title: "Mark as Taken",
@@ -124,7 +125,27 @@ final class NotificationCategoryManager {
             intentIdentifiers: [],
             options: [.customDismissAction]
         )
+        
+        // Sleep reminder actions
+        let startWindDownAction = UNNotificationAction(
+            identifier: "START_WIND_DOWN",
+            title: "Start Wind-Down",
+            options: [.foreground]
+        )
+        
+        let snoozeSleepReminderAction = UNNotificationAction(
+            identifier: "SNOOZE_SLEEP_REMINDER",
+            title: "Snooze 10 min",
+            options: []
+        )
+        
+        let sleepReminderCategory = UNNotificationCategory(
+            identifier: "SLEEP_REMINDER",
+            actions: [startWindDownAction, snoozeSleepReminderAction],
+            intentIdentifiers: [],
+            options: [.customDismissAction]
+        )
 
-        notificationCenter.setNotificationCategories([medicationCategory])
+        notificationCenter.setNotificationCategories([medicationCategory, sleepReminderCategory])
     }
 }

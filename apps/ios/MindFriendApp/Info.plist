@@ -66,6 +66,10 @@
 	<string>MindFriend needs access to your photos to let you add images to your journal entries and profile.</string>
 	<key>NSUserTrackingUsageDescription</key>
 	<string>MindFriend uses this to provide personalized wellness insights. You can opt out at any time in Settings.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>MindFriend analyzes your sleep data to provide personalized recommendations and track your sleep quality over time.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>MindFriend writes your logged sleep sessions to the Health app to keep your sleep data synchronized.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
