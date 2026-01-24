@@ -137,6 +137,13 @@ struct HomeView: View {
                         timeOfDay: homeContext?.timeOfDay ?? .current
                     )
 
+                    // Daily Briefing Card (F009)
+                    DailyBriefingCard(viewModel: container.dailyBriefingViewModel)
+                        .padding(.horizontal)
+                        .task {
+                            await container.dailyBriefingViewModel.loadTodaysBriefing()
+                        }
+
                     // Level progress (moved to top for visibility)
                     LevelProgressView(userLevel: displayLevel)
                         .padding(.horizontal)
