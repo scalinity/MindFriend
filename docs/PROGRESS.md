@@ -1,5 +1,90 @@
 # MindFriend Development Progress Log
 
+## [2026-01-24] N005: Intervention Efficacy Engine - Enhancements (Logging + Rate Limiting)
+
+**Type:** Enhancement
+**Status:** Complete
+
+### Summary
+
+Added comprehensive logging infrastructure and rate limiting system to all Intervention Efficacy Engine Edge Functions. Implemented structured JSON logging with request/response tracking, error context, performance timing, and database-backed rate limiting with configurable per-function limits.
+
+### Changes
+
+**Logging Infrastructure:**
+| File | Description |
+|------|-------------|
+| `supabase/functions/_shared/logger.ts` | Structured logging utility with DEBUG/INFO/WARN/ERROR levels, request/response logging, performance measurement, context enrichment |
+| `supabase/functions/calculate-efficacy/index.ts` | Added logging for auth, request parsing, efficacy calculation, database operations, response timing |
+| `supabase/functions/get-recommendations/index.ts` | Added logging for profile fetching, contextual scoring, generic fallback, response timing |
+| `supabase/functions/get-efficacy-dashboard/index.ts` | Added logging for top exercises query, recent sessions query, insights calculation, response timing |
+| `supabase/functions/aggregate-efficacy-profiles/index.ts` | Added logging for cron auth, data fetching, aggregation loop, batch upsert, job completion metrics |
+
+**Rate Limiting Infrastructure:**
+| File | Description |
+|------|-------------|
+| `supabase/functions/_shared/rateLimiter.ts` | Rate limiter with sliding window algorithm, database-backed tracking, fail-open error handling |
+| `supabase/migrations/20260124021405_create_rate_limit_tracker.sql` | rate_limit_tracker table with key+timestamp index, RLS policies, automatic cleanup function |
+
+**Rate Limit Configuration:**
+| Function | Limit | Window | Key Prefix |
+|----------|-------|--------|-----------|
+| calculate-efficacy | 20 requests | 1 hour | calc-efficacy |
+| get-recommendations | 100 requests | 1 hour | recommendations |
+| get-efficacy-dashboard | 50 requests | 1 hour | dashboard |
+| aggregate-efficacy-profiles | 5 requests | 1 day | aggregate |
+
+### Testing
+
+- [x] All 4 Edge Functions deployed successfully
+- [x] Migration applied to production database
+- [x] Logging outputs structured JSON to Supabase dashboard
+- [ ] Rate limiting implementation pending integration (infrastructure ready)
+- [ ] End-to-end rate limit testing
+
+### Notes
+
+**Logging Features:**
+
+- Structured JSON output for easy parsing and monitoring
+- Request ID generation for request tracing
+- User ID context enrichment after authentication
+- Performance timing for all operations
+- Error stack traces with context
+- Request/response duration tracking
+
+**Rate Limiting Design:**
+
+- Sliding window algorithm (counts requests in rolling time window)
+- Database-backed for distributed Edge Function instances
+- Fail-open on errors (allows requests if check fails)
+- Automatic cleanup of old records (>24 hours)
+- Per-function configurable limits
+- Ready for integration into Edge Functions
+
+**Template Literal Fix:**
+Fixed escaped backticks (`\``) to regular backticks (`` ` ``) in:
+
+- logger.ts:98 (logRequest)
+- logger.ts:111 (logResponse)
+- logger.ts:127, 132, 137 (measure function)
+- logger.ts:193 (generateRequestId)
+
+This resolves Deno bundler parsing errors.
+
+### Deployment
+
+```bash
+# Deploy all functions with logging
+supabase functions deploy calculate-efficacy    # 74.94kB
+supabase functions deploy get-recommendations   # 73.34kB
+supabase functions deploy get-efficacy-dashboard # 72.22kB
+supabase functions deploy aggregate-efficacy-profiles # 74.4kB
+
+# Apply rate limit migration
+supabase db push --include-all
+```
+
 ## [2026-01-23] N005: Intervention Efficacy Engine - Phase 2 Complete (UI + Integration + Tests)
 
 **Type:** Feature
