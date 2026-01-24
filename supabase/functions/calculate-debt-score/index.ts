@@ -27,27 +27,72 @@ serve(async (req) => {
   try {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Manual trigger: calculate for specific user and date
-    if (req.method === "POST") {
-      const { user_id, date } = await req.json();
-      const score = await calculateUserDebtScore(
-        supabase,
-        user_id,
-        date || getYesterdayISO(),
+    // CRON requests: verify secret token
+    if (req.method === "GET" || !req.headers.get("Authorization")) {
+      const cronSecret = req.headers.get("X-Cron-Secret");
+      const expectedSecret = Deno.env.get("CRON_SECRET");
+      
+      if (!expectedSecret || cronSecret !== expectedSecret) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      
+      await calculateDebtScoresForAllUsers(supabase);
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: "Debt score calculation completed",
+        }),
+        { headers: { "Content-Type": "application/json" } },
       );
+    }
 
-      return new Response(JSON.stringify({ success: true, score }), {
+    // MANUAL requests: verify JWT
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Missing authorization" }), {
+        status: 401,
         headers: { "Content-Type": "application/json" },
       });
     }
 
-    // Cron trigger: calculate for all active users
-    await calculateDebtScoresForAllUsers(supabase);
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
+
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // Manual trigger: calculate for specific user and date
+    const { user_id, date } = await req.json();
+    
+    // Authorization check: user can only trigger for themselves
+    if (user_id && user_id !== user.id) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const score = await calculateUserDebtScore(
+      supabase,
+      user_id || user.id,
+      date || getYesterdayISO(),
+    );
+    await insertDebtScore(supabase, score);
+    await updateUserProfile(supabase, user_id || user.id, date || getYesterdayISO());
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: "Debt score calculation completed",
+        score,
       }),
       { headers: { "Content-Type": "application/json" } },
     );
@@ -238,9 +283,22 @@ function calculateThresholdStatus(
   profile: UserProfile,
 ): ThresholdStatus {
   const threshold = profile.personal_threshold || -50; // Default -50
+  
+  // Guard: Prevent division by zero
+  const absThreshold = Math.abs(threshold);
+  if (absThreshold < 1e-10) {
+    // Threshold is effectively zero - default to safe
+    return {
+      current_debt: currentDebt,
+      threshold,
+      severity: "safe",
+      days_until_crash: null,
+      confidence: 0,
+    };
+  }
 
   // Calculate how close to threshold (as ratio)
-  const debtRatio = currentDebt / Math.abs(threshold);
+  const debtRatio = currentDebt / absThreshold;
 
   // Determine severity
   let severity: "safe" | "warning" | "danger";
@@ -257,15 +315,15 @@ function calculateThresholdStatus(
   if (
     trend.direction === "worsening" &&
     trend.velocity < 0 &&
-    currentDebt < Math.abs(threshold)
+    currentDebt < absThreshold
   ) {
-    const debtRemaining = Math.abs(threshold) - currentDebt;
+    const debtRemaining = absThreshold - currentDebt;
     daysUntilCrash = Math.ceil(debtRemaining / Math.abs(trend.velocity));
   }
 
-  // Confidence based on crash history size (Assumption #3: min 3 crashes)
+  // Confidence: 0 if <3 crashes, scale to 1.0 at 10+ crashes (Assumption #3: min 3 crashes)
   const crashCount = profile.crash_history.crashes.length;
-  const confidence = Math.min(1.0, crashCount / 10);
+  const confidence = crashCount < 3 ? 0 : Math.min(1.0, crashCount / 10);
 
   return {
     current_debt: currentDebt,
