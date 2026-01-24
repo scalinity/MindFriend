@@ -1,105 +1,191 @@
-// Structured logging utility for Edge Functions
-// Provides consistent JSON log format for Supabase logging
+/**
+ * Structured logging utility for Edge Functions
+ * Provides consistent log formatting and levels
+ */
 
-type LogLevel = "debug" | "info" | "warn" | "error";
+export enum LogLevel {
+  DEBUG = "DEBUG",
+  INFO = "INFO",
+  WARN = "WARN",
+  ERROR = "ERROR",
+}
 
-interface LogEntry {
-  level: LogLevel;
-  message: string;
-  timestamp: string;
-  function?: string;
+interface LogContext {
   userId?: string;
+  requestId?: string;
+  functionName?: string;
   [key: string]: unknown;
 }
 
-const LOG_LEVEL = Deno.env.get("LOG_LEVEL") || "info";
-
-const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
-  debug: 0,
-  info: 1,
-  warn: 2,
-  error: 3,
-};
-
-function shouldLog(level: LogLevel): boolean {
-  const currentPriority = LOG_LEVEL_PRIORITY[LOG_LEVEL as LogLevel] ?? 1;
-  const messagePriority = LOG_LEVEL_PRIORITY[level];
-  return messagePriority >= currentPriority;
-}
-
-function formatLog(entry: LogEntry): string {
-  return JSON.stringify(entry);
+interface LogEntry {
+  timestamp: string;
+  level: LogLevel;
+  message: string;
+  context?: LogContext;
+  error?: {
+    name: string;
+    message: string;
+    stack?: string;
+  };
+  duration?: number;
 }
 
 /**
- * Structured logger for Edge Functions
- * Outputs JSON-formatted logs that are easily searchable in Supabase
- *
- * Usage:
- *   const log = createLogger("chat");
- *   log.info("Processing message", { conversationId: "..." });
- *   log.error("Failed to send", { error: err.message });
+ * Logger class for structured logging
  */
-export function createLogger(functionName: string) {
-  const log = (
-    level: LogLevel,
-    message: string,
-    data?: Record<string, unknown>
-  ) => {
-    if (!shouldLog(level)) return;
+export class Logger {
+  private functionName: string;
+  private context: LogContext;
 
-    const entry: LogEntry = {
-      level,
-      message,
+  constructor(functionName: string, baseContext: LogContext = {}) {
+    this.functionName = functionName;
+    this.context = { ...baseContext, functionName };
+  }
+
+  /**
+   * Add additional context to all subsequent logs
+   */
+  addContext(context: LogContext): void {
+    this.context = { ...this.context, ...context };
+  }
+
+  /**
+   * Log a debug message
+   */
+  debug(message: string, context?: LogContext): void {
+    this.log(LogLevel.DEBUG, message, context);
+  }
+
+  /**
+   * Log an info message
+   */
+  info(message: string, context?: LogContext): void {
+    this.log(LogLevel.INFO, message, context);
+  }
+
+  /**
+   * Log a warning message
+   */
+  warn(message: string, context?: LogContext): void {
+    this.log(LogLevel.WARN, message, context);
+  }
+
+  /**
+   * Log an error message
+   */
+  error(message: string, error?: Error, context?: LogContext): void {
+    const logEntry: LogEntry = {
       timestamp: new Date().toISOString(),
-      function: functionName,
-      ...data,
+      level: LogLevel.ERROR,
+      message,
+      context: { ...this.context, ...context },
+      error: error
+        ? {
+            name: error.name,
+            message: error.message,
+            stack: error.stack,
+          }
+        : undefined,
     };
 
-    // Redact sensitive fields
-    if (entry.token) entry.token = "[REDACTED]";
-    if (entry.password) entry.password = "[REDACTED]";
-    if (entry.secret) entry.secret = "[REDACTED]";
-    if (entry.apiKey) entry.apiKey = "[REDACTED]";
+    console.error(JSON.stringify(logEntry));
+  }
 
-    const formatted = formatLog(entry);
+  /**
+   * Log request start
+   */
+  logRequest(method: string, path: string, context?: LogContext): void {
+    this.info(`${method} ${path}`, { ...context, type: "request" });
+  }
 
-    switch (level) {
-      case "debug":
-      case "info":
-        console.log(formatted);
-        break;
-      case "warn":
-        console.warn(formatted);
-        break;
-      case "error":
-        console.error(formatted);
-        break;
+  /**
+   * Log request completion with duration
+   */
+  logResponse(
+    method: string,
+    path: string,
+    status: number,
+    durationMs: number,
+    context?: LogContext,
+  ): void {
+    this.info(`${method} ${path} ${status}`, {
+      ...context,
+      type: "response",
+      status,
+      duration: durationMs,
+    });
+  }
+
+  /**
+   * Measure execution time of an async function
+   */
+  async measure<T>(operationName: string, fn: () => Promise<T>): Promise<T> {
+    const startTime = performance.now();
+    this.debug(`Starting ${operationName}`);
+
+    try {
+      const result = await fn();
+      const duration = performance.now() - startTime;
+      this.debug(`Completed ${operationName}`, { duration });
+      return result;
+    } catch (error) {
+      const duration = performance.now() - startTime;
+      this.error(
+        `Failed ${operationName}`,
+        error instanceof Error ? error : new Error(String(error)),
+        { duration },
+      );
+      throw error;
     }
-  };
+  }
 
-  return {
-    debug: (message: string, data?: Record<string, unknown>) =>
-      log("debug", message, data),
-    info: (message: string, data?: Record<string, unknown>) =>
-      log("info", message, data),
-    warn: (message: string, data?: Record<string, unknown>) =>
-      log("warn", message, data),
-    error: (message: string, data?: Record<string, unknown>) =>
-      log("error", message, data),
+  /**
+   * Base logging method
+   */
+  private log(level: LogLevel, message: string, context?: LogContext): void {
+    const logEntry: LogEntry = {
+      timestamp: new Date().toISOString(),
+      level,
+      message,
+      context: { ...this.context, ...context },
+    };
 
-    // Log with user context (userId is hashed for privacy in non-debug mode)
-    userAction: (
-      message: string,
-      userId: string,
-      data?: Record<string, unknown>
-    ) => {
-      const userIdDisplay =
-        LOG_LEVEL === "debug" ? userId : `${userId.slice(0, 8)}...`;
-      log("info", message, { userId: userIdDisplay, ...data });
-    },
-  };
+    const logFn = level === LogLevel.ERROR ? console.error : console.log;
+    logFn(JSON.stringify(logEntry));
+  }
 }
 
-// Default logger for quick use
-export const logger = createLogger("edge-function");
+/**
+ * Create a logger instance for a function
+ */
+export function createLogger(
+  functionName: string,
+  context?: LogContext,
+): Logger {
+  return new Logger(functionName, context);
+}
+
+/**
+ * Extract user ID from request authorization header
+ */
+export function getUserIdFromRequest(req: Request): string | undefined {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) return undefined;
+
+  try {
+    // Extract JWT payload (naive approach - in production use proper JWT library)
+    const token = authHeader.replace("Bearer ", "");
+    const payload = token.split(".")[1];
+    const decoded = JSON.parse(atob(payload));
+    return decoded.sub || decoded.user_id;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Generate a unique request ID
+ */
+export function generateRequestId(): string {
+  return `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}

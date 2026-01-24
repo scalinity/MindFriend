@@ -3,15 +3,28 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  createLogger,
+  generateRequestId,
+  getUserIdFromRequest,
+} from "../_shared/logger.ts";
 
 serve(async (req) => {
+  const startTime = performance.now();
+  const requestId = generateRequestId();
+  const logger = createLogger("get-efficacy-dashboard", { requestId });
+
   try {
+    logger.logRequest(req.method, "/get-efficacy-dashboard");
+
     // Validate authentication
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
+      logger.warn("Missing authorization header");
+
       return new Response(
         JSON.stringify({ error: "Missing authorization header" }),
-        { status: 401, headers: { "Content-Type": "application/json" } }
+        { status: 401, headers: { "Content-Type": "application/json" } },
       );
     }
 
@@ -27,59 +40,92 @@ serve(async (req) => {
     } = await supabaseAdmin.auth.getUser(token);
 
     if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { "Content-Type": "application/json" } }
-      );
+      logger.warn("Authentication failed", { error: authError?.message });
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
+    logger.addContext({ userId: user.id });
+    logger.info("User authenticated");
+
     // Fetch top exercises
+    logger.debug("Fetching top exercises");
     const { data: topExercises, error: topError } = await supabaseAdmin
       .from("user_efficacy_profiles")
-      .select(`
+      .select(
+        `
         *,
         exercises:exercise_id (
           id,
           name,
           type
         )
-      `)
+      `,
+      )
       .eq("user_id", user.id)
       .order("overall_efficacy_score", { ascending: false })
       .limit(5);
 
     if (topError) {
-      console.error("Failed to fetch top exercises:", topError);
+      logger.error(
+        "Failed to fetch top exercises",
+        topError instanceof Error ? topError : new Error(String(topError)),
+      );
+    } else {
+      logger.info("Top exercises fetched", {
+        count: topExercises?.length || 0,
+      });
     }
 
     // Fetch recent sessions
+    logger.debug("Fetching recent sessions");
     const { data: recentSessions, error: sessionsError } = await supabaseAdmin
       .from("intervention_efficacy")
-      .select(`
+      .select(
+        `
         *,
         exercises:exercise_id (
           id,
           name,
           type
         )
-      `)
+      `,
+      )
       .eq("user_id", user.id)
       .order("completed_at", { ascending: false })
       .limit(10);
 
     if (sessionsError) {
-      console.error("Failed to fetch recent sessions:", sessionsError);
+      logger.error(
+        "Failed to fetch recent sessions",
+        sessionsError instanceof Error
+          ? sessionsError
+          : new Error(String(sessionsError)),
+      );
+    } else {
+      logger.info("Recent sessions fetched", {
+        count: recentSessions?.length || 0,
+      });
     }
 
     // Calculate insights
+    logger.debug("Calculating insights from session data");
     const insights: string[] = [];
     let totalBreakthroughs = 0;
     let averageEfficacy = 0;
     let mostEffectiveContext = "";
 
     if (recentSessions && recentSessions.length > 0) {
-      totalBreakthroughs = recentSessions.filter((s: any) => s.breakthrough_detected).length;
-      averageEfficacy = recentSessions.reduce((sum: number, s: any) => sum + s.efficacy_score, 0) / recentSessions.length;
+      totalBreakthroughs = recentSessions.filter(
+        (s: any) => s.breakthrough_detected,
+      ).length;
+      averageEfficacy =
+        recentSessions.reduce(
+          (sum: number, s: any) => sum + s.efficacy_score,
+          0,
+        ) / recentSessions.length;
 
       // Find most effective context (time of day with highest avg efficacy)
       const efficacyByTime: Record<string, number[]> = {};
@@ -101,37 +147,62 @@ serve(async (req) => {
 
       // Generate insight messages
       if (totalBreakthroughs > 0) {
-        insights.push(`You've had ${totalBreakthroughs} breakthrough moment${totalBreakthroughs > 1 ? 's' : ''} recently`);
+        insights.push(
+          `You've had ${totalBreakthroughs} breakthrough moment${totalBreakthroughs > 1 ? "s" : ""} recently`,
+        );
       }
 
-      if (mostEffectiveContext && efficacyByTime[mostEffectiveContext].length >= 3) {
-        insights.push(`Exercises work better for you in the ${mostEffectiveContext}`);
+      if (
+        mostEffectiveContext &&
+        efficacyByTime[mostEffectiveContext].length >= 3
+      ) {
+        insights.push(
+          `Exercises work better for you in the ${mostEffectiveContext}`,
+        );
       }
 
-      if (topExercises && topExercises.length > 0 && topExercises[0].trend === 'improving') {
-        insights.push(`Your efficacy with ${(topExercises[0].exercises as any).name} is improving over time`);
+      if (
+        topExercises &&
+        topExercises.length > 0 &&
+        topExercises[0].trend === "improving"
+      ) {
+        insights.push(
+          `Your efficacy with ${(topExercises[0].exercises as any).name} is improving over time`,
+        );
       }
+
+      logger.info("Insights calculated", {
+        totalBreakthroughs,
+        averageEfficacy,
+        mostEffectiveContext,
+        insightCount: insights.length,
+      });
     }
+
+    const duration = performance.now() - startTime;
+    logger.logResponse("GET", "/get-efficacy-dashboard", 200, duration);
 
     return new Response(
       JSON.stringify({
-        topExercises: topExercises?.map((profile: any) => ({
-          exerciseId: profile.exercise_id,
-          exerciseName: (profile.exercises as any).name,
-          efficacyScore: profile.overall_efficacy_score,
-          completionCount: profile.completion_count,
-          bestContext: profile.best_context,
-          trend: profile.trend,
-        })) || [],
-        recentSessions: recentSessions?.map((session: any) => ({
-          sessionId: session.session_id,
-          exerciseId: session.exercise_id,
-          exerciseName: (session.exercises as any).name,
-          completedAt: session.completed_at,
-          efficacyScore: session.efficacy_score,
-          netChange: session.net_emotional_change,
-          breakthroughDetected: session.breakthrough_detected,
-        })) || [],
+        topExercises:
+          topExercises?.map((profile: any) => ({
+            exerciseId: profile.exercise_id,
+            exerciseName: (profile.exercises as any).name,
+            efficacyScore: profile.overall_efficacy_score,
+            completionCount: profile.completion_count,
+            bestContext: profile.best_context,
+            trend: profile.trend,
+          })) || [],
+        recentSessions:
+          recentSessions?.map((session: any) => ({
+            sessionId: session.session_id,
+            exerciseId: session.exercise_id,
+            exerciseName: (session.exercises as any).name,
+            completedAt: session.completed_at,
+            efficacyScore: session.efficacy_score,
+            netChange: session.net_emotional_change,
+            breakthroughDetected: session.breakthrough_detected,
+          })) || [],
         insights: {
           totalBreakthroughs,
           averageEfficacy: Math.round(averageEfficacy * 10) / 10,
@@ -141,10 +212,16 @@ serve(async (req) => {
       }),
       {
         headers: { "Content-Type": "application/json" },
-      }
+      },
     );
   } catch (error) {
-    console.error("Error in get-efficacy-dashboard:", error);
+    const duration = performance.now() - startTime;
+    logger.error(
+      "Unhandled error in get-efficacy-dashboard",
+      error instanceof Error ? error : new Error(String(error)),
+    );
+    logger.logResponse("GET", "/get-efficacy-dashboard", 500, duration);
+
     return new Response(
       JSON.stringify({
         error: "DASHBOARD_FAILED",
@@ -153,7 +230,7 @@ serve(async (req) => {
       {
         status: 500,
         headers: { "Content-Type": "application/json" },
-      }
+      },
     );
   }
 });
