@@ -264,6 +264,18 @@ enum BackgroundSoundType: String, Codable, CaseIterable, Identifiable {
         case .silence: return "speaker.slash.fill"
         }
     }
+
+    /// Check if the audio file for this sound is available in the bundle
+    var isAvailable: Bool {
+        // Silence is always available (it's a no-op)
+        if self == .silence { return true }
+        return Bundle.main.url(forResource: rawValue, withExtension: "mp3") != nil
+    }
+
+    /// Returns only sounds that have audio files bundled
+    static var availableSounds: [BackgroundSoundType] {
+        allCases.filter { $0.isAvailable }
+    }
 }
 
 // MARK: - Generated Content

@@ -182,7 +182,7 @@ struct ContentRequestView: View {
 
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 12) {
-                            ForEach(BackgroundSoundType.allCases, id: \.rawValue) { sound in
+                            ForEach(BackgroundSoundType.availableSounds, id: \.rawValue) { sound in
                                 BackgroundSoundCard(
                                     sound: sound,
                                     isSelected: viewModel.backgroundSound == sound
