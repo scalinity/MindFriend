@@ -7,10 +7,11 @@ import {
   SupabaseClient,
 } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { checkRateLimit } from "../_shared/rate-limit.ts";
+import { checkRateLimit } from "../_shared/ratelimit.ts";
 
 // Type alias for untyped Supabase client
-type UntypedSupabaseClient = SupabaseClient<unknown, "public", unknown>;
+// deno-lint-ignore no-explicit-any
+type UntypedSupabaseClient = SupabaseClient<any, "public", any>;
 
 interface RateContentRequest {
   contentId: string;
@@ -75,8 +76,12 @@ serve(async (req) => {
       });
     }
 
-    // Rate limiting
-    const rateLimitResult = await checkRateLimit(user.id, "content_ratings");
+    // Rate limiting (pass supabaseAdmin as first arg per checkRateLimit signature)
+    const rateLimitResult = await checkRateLimit(
+      supabaseAdmin,
+      user.id,
+      "content_ratings",
+    );
     if (!rateLimitResult.allowed) {
       return new Response(
         JSON.stringify({
@@ -93,8 +98,29 @@ serve(async (req) => {
     // Parse request
     const request: RateContentRequest = await req.json();
 
+    // Validate contentId format (must be valid UUID)
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!request.contentId || !uuidRegex.test(request.contentId)) {
+      return new Response(
+        JSON.stringify({
+          error: "INVALID_REQUEST",
+          message: "Valid contentId is required",
+        }),
+        {
+          status: 400,
+          headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
     // Validate rating
-    if (request.rating < 1 || request.rating > 5) {
+    if (
+      typeof request.rating !== "number" ||
+      !Number.isInteger(request.rating) ||
+      request.rating < 1 ||
+      request.rating > 5
+    ) {
       return new Response(
         JSON.stringify({
           error: "INVALID_RATING",
@@ -127,19 +153,33 @@ serve(async (req) => {
       );
     }
 
+    // Verify ownership - users can only rate their own generated content
+    if (content.user_id !== user.id) {
+      return new Response(
+        JSON.stringify({
+          error: "FORBIDDEN",
+          message: "You can only rate your own content",
+        }),
+        {
+          status: 403,
+          headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
     // Upsert rating (insert or update)
     const { data: rating, error: ratingError } = await supabaseAdmin
       .from("gen_content_ratings")
       .upsert(
         {
           user_id: user.id,
-          generated_content_id: request.contentId,
+          content_id: request.contentId,
           rating: request.rating,
           helpful: request.helpful,
-          feedback_text: request.feedback,
+          feedback: request.feedback,
         },
         {
-          onConflict: "user_id,generated_content_id",
+          onConflict: "user_id,content_id",
         },
       )
       .select("id")
@@ -159,17 +199,29 @@ serve(async (req) => {
       );
     }
 
-    // Log analytics event
-    await supabaseAdmin.from("analytics_events").insert({
-      user_id: user.id,
-      event_type: "content_rated",
-      event_data: {
-        content_id: request.contentId,
-        rating: request.rating,
-        helpful: request.helpful,
-        has_feedback: !!request.feedback,
-      },
-    });
+    // Also update user_rating on generated_content for quick access
+    await supabaseAdmin
+      .from("generated_content")
+      .update({
+        user_rating: request.rating,
+        rated_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", request.contentId);
+
+    // Log analytics event (non-blocking, fire-and-forget)
+    Promise.resolve(
+      supabaseAdmin.from("analytics_events").insert({
+        user_id: user.id,
+        event_type: "content_rated",
+        event_data: {
+          content_id: request.contentId,
+          rating: request.rating,
+          helpful: request.helpful,
+          has_feedback: !!request.feedback,
+        },
+      }),
+    ).catch((e: unknown) => console.warn("Analytics insert failed:", e));
 
     const response: RateContentResponse = {
       success: true,
@@ -182,14 +234,14 @@ serve(async (req) => {
       headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
+    // Log full error details server-side only
     console.error("Rate content error:", error);
-    const errorMessage =
-      error instanceof Error ? error.message : "An unexpected error occurred";
 
+    // Return generic message to client to avoid leaking internal details
     return new Response(
       JSON.stringify({
         error: "RATING_FAILED",
-        message: errorMessage,
+        message: "An unexpected error occurred. Please try again.",
       }),
       {
         status: 500,

@@ -171,6 +171,8 @@ struct VoiceOption: Codable, Identifiable, Equatable {
     let gender: VoiceGender
     let style: String
     let language: VoiceLanguage
+    let accent: String?
+    let isPremium: Bool
     let previewUrl: String?
     let sampleText: String?
 
@@ -180,8 +182,22 @@ struct VoiceOption: Codable, Identifiable, Equatable {
         case gender
         case style
         case language
+        case accent
+        case isPremium = "is_premium"
         case previewUrl = "preview_url"
         case sampleText = "sample_text"
+    }
+    
+    init(id: String, name: String, gender: VoiceGender, style: String, language: VoiceLanguage, accent: String? = nil, isPremium: Bool = false, previewUrl: String? = nil, sampleText: String? = nil) {
+        self.id = id
+        self.name = name
+        self.gender = gender
+        self.style = style
+        self.language = language
+        self.accent = accent
+        self.isPremium = isPremium
+        self.previewUrl = previewUrl
+        self.sampleText = sampleText
     }
 }
 
@@ -211,14 +227,18 @@ struct VoicePreference: Codable, Identifiable {
     }
 }
 
-enum BackgroundSoundType: String, Codable, CaseIterable {
+enum BackgroundSoundType: String, Codable, CaseIterable, Identifiable {
     case rain
     case ocean
     case forest
     case fireplace
     case whiteNoise = "white_noise"
+    case brownNoise = "brown_noise"
+    case pinkNoise = "pink_noise"
     case silence
 
+    var id: String { rawValue }
+    
     var displayName: String {
         switch self {
         case .rain: return "Rain"
@@ -226,6 +246,8 @@ enum BackgroundSoundType: String, Codable, CaseIterable {
         case .forest: return "Forest"
         case .fireplace: return "Fireplace"
         case .whiteNoise: return "White Noise"
+        case .brownNoise: return "Brown Noise"
+        case .pinkNoise: return "Pink Noise"
         case .silence: return "Silence"
         }
     }
@@ -237,6 +259,8 @@ enum BackgroundSoundType: String, Codable, CaseIterable {
         case .forest: return "tree.fill"
         case .fireplace: return "flame.fill"
         case .whiteNoise: return "waveform"
+        case .brownNoise: return "waveform.path"
+        case .pinkNoise: return "waveform.circle"
         case .silence: return "speaker.slash.fill"
         }
     }
