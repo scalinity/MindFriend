@@ -2,9 +2,23 @@
 // SF Symbol particle animation for ambient backgrounds
 
 import SwiftUI
+#if DEBUG
+import OSLog
+#endif
 
 /// A view that renders animated particles (SF Symbols) floating across the screen.
 /// Respects accessibility settings and automatically disables when Reduce Motion is enabled.
+///
+/// ## Performance Characteristics
+/// - Runs at 30 FPS to balance visual quality with battery usage
+/// - Caches SF Symbol image to avoid ~750 allocations/sec
+/// - Uses Canvas for efficient GPU-accelerated rendering
+/// - Automatically disabled when `reduceMotion` accessibility setting is enabled
+///
+/// ## Usage
+/// ```swift
+/// ParticleView(theme: .ocean, particleCount: 25)
+/// ```
 struct ParticleView: View {
     // MARK: - Properties
 
@@ -15,6 +29,12 @@ struct ParticleView: View {
     @State private var isActive = true
     @State private var cachedSymbolImage: Image?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    #if DEBUG
+    @State private var frameCount: Int = 0
+    @State private var lastFPSCheck: Date = Date()
+    private let logger = Logger(subsystem: "com.mindfriend.app", category: "ParticleView")
+    #endif
 
     // MARK: - Particle Model
 
@@ -51,6 +71,9 @@ struct ParticleView: View {
                     }
                     .onChange(of: timeline.date) { _, newDate in
                         updateParticles(deltaTime: 1.0 / 30.0, bounds: geometry.size)
+                        #if DEBUG
+                        trackFPS()
+                        #endif
                     }
                 }
                 .onAppear {
@@ -67,6 +90,7 @@ struct ParticleView: View {
             }
         }
         .allowsHitTesting(false)
+        .accessibilityHidden(true) // Decorative element, hidden from VoiceOver
     }
 
     // MARK: - Particle Rendering
@@ -125,6 +149,29 @@ struct ParticleView: View {
             particles[i].update(deltaTime: deltaTime, bounds: bounds)
         }
     }
+
+    // MARK: - Performance Monitoring (DEBUG only)
+
+    #if DEBUG
+    /// Track FPS for performance monitoring
+    private func trackFPS() {
+        frameCount += 1
+        let now = Date()
+        let elapsed = now.timeIntervalSince(lastFPSCheck)
+
+        // Log FPS every 5 seconds
+        if elapsed >= 5.0 {
+            let fps = Double(frameCount) / elapsed
+            if fps < 25 {
+                logger.warning("ParticleView FPS dropped to \(fps, format: .fixed(precision: 1))")
+            } else {
+                logger.debug("ParticleView FPS: \(fps, format: .fixed(precision: 1))")
+            }
+            frameCount = 0
+            lastFPSCheck = now
+        }
+    }
+    #endif
 }
 
 // MARK: - Preview

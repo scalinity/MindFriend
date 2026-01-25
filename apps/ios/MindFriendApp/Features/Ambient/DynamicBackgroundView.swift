@@ -35,6 +35,8 @@ struct DynamicBackgroundView: View {
             }
         }
         .ignoresSafeArea()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Ambient background with \(theme.displayName) theme")
         .onAppear {
             if backgroundType == .dynamic && !reduceMotion {
                 startDynamicShift()
@@ -44,6 +46,30 @@ struct DynamicBackgroundView: View {
             // Cancel task to prevent memory leak
             dynamicShiftTask?.cancel()
             dynamicShiftTask = nil
+        }
+        .onChange(of: backgroundType) { _, newType in
+            // Cancel dynamic task when switching away from dynamic mode
+            if newType != .dynamic {
+                dynamicShiftTask?.cancel()
+                dynamicShiftTask = nil
+                // Reset hue rotation for static mode
+                if newType == .static {
+                    hueRotation = .zero
+                }
+            } else if !reduceMotion {
+                // Start dynamic shift when switching to dynamic mode
+                startDynamicShift()
+            }
+        }
+        .onChange(of: reduceMotion) { _, newValue in
+            // Respect reduce motion changes
+            if newValue {
+                dynamicShiftTask?.cancel()
+                dynamicShiftTask = nil
+                hueRotation = .zero
+            } else if backgroundType == .dynamic {
+                startDynamicShift()
+            }
         }
     }
 
