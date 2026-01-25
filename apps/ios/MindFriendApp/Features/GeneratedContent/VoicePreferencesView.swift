@@ -47,7 +47,7 @@ struct VoicePreferencesView: View {
                 Toggle("Enable Background Sounds", isOn: $viewModel.backgroundEnabled)
 
                 if viewModel.backgroundEnabled {
-                    ForEach(BackgroundSoundType.allCases, id: \.rawValue) { sound in
+                    ForEach(BackgroundSoundType.availableSounds, id: \.rawValue) { sound in
                         BackgroundSoundRow(
                             sound: sound,
                             isSelected: viewModel.defaultBackgroundSound == sound
@@ -252,7 +252,7 @@ private struct ContentTypeVoiceSettingsView: View {
                 }
 
                 Section("Background") {
-                    ForEach(BackgroundSoundType.allCases, id: \.rawValue) { sound in
+                    ForEach(BackgroundSoundType.availableSounds, id: \.rawValue) { sound in
                         BackgroundSoundRow(
                             sound: sound,
                             isSelected: backgroundSound == sound

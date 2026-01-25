@@ -15,11 +15,19 @@ struct BackgroundSoundsSheet: View {
                     GridItem(.flexible()),
                     GridItem(.flexible())
                 ], spacing: 16) {
-                    ForEach(BackgroundSoundType.allCases) { sound in
+                    ForEach(BackgroundSoundType.availableSounds) { sound in
                         soundButton(for: sound)
                     }
                 }
                 .padding(.horizontal)
+
+                // Note if only silence is available (no audio files bundled)
+                if BackgroundSoundType.availableSounds.count == 1 {
+                    Text("Background sound files not yet installed")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 8)
+                }
                 
                 // Volume slider (only if sound selected)
                 if selectedSound != nil && selectedSound != .silence {
