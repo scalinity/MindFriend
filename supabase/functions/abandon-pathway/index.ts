@@ -28,7 +28,7 @@ serve(async (req) => {
         },
       );
     }
-    
+
     const token = authHeader.replace("Bearer ", "");
     const {
       data: { user },
@@ -57,13 +57,10 @@ serve(async (req) => {
       .single();
 
     if (error || !data) {
-      return new Response(
-        JSON.stringify({ error: "PATHWAY_NOT_FOUND" }),
-        {
-          status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+      return new Response(JSON.stringify({ error: "PATHWAY_NOT_FOUND" }), {
+        status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Clear active transition from profile
@@ -82,9 +79,13 @@ serve(async (req) => {
       },
     );
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    console.error("Error in abandon-pathway:", error); // Log full error server-side
+    return new Response(
+      JSON.stringify({ error: "An unexpected error occurred" }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   }
 });

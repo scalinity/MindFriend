@@ -1,8 +1,8 @@
 import Foundation
 
-// MARK: - Transition Pathway Models
+// MARK: - Transition Pathway Models (All structs are Sendable for Swift 6 concurrency)
 
-struct TransitionPathway: Codable, Identifiable, Hashable {
+struct TransitionPathway: Codable, Identifiable, Hashable, Sendable {
     let id: UUID
     let key: String
     let name: String
@@ -26,7 +26,7 @@ struct TransitionPathway: Codable, Identifiable, Hashable {
     }
 }
 
-enum PathwayCategory: String, Codable, CaseIterable, Hashable {
+enum PathwayCategory: String, Codable, CaseIterable, Hashable, Sendable {
     case career
     case relationship
     case loss
@@ -57,19 +57,19 @@ enum PathwayCategory: String, Codable, CaseIterable, Hashable {
     }
 }
 
-struct PathwayPhaseOverview: Codable, Hashable, Identifiable {
+struct PathwayPhaseOverview: Codable, Hashable, Identifiable, Sendable {
     var id: Int { number }
     let number: Int
     let name: String
     let focus: String
 }
 
-struct PathwayCrisisResources: Codable, Hashable {
+struct PathwayCrisisResources: Codable, Hashable, Sendable {
     let hotline: String?
     let resources: [String]?
 }
 
-struct PathwayPhase: Codable, Identifiable, Hashable {
+struct PathwayPhase: Codable, Identifiable, Hashable, Sendable {
     let id: UUID
     let pathwayId: UUID
     let phaseNumber: Int
@@ -94,8 +94,9 @@ struct PathwayPhase: Codable, Identifiable, Hashable {
     }
 }
 
-struct DailyTheme: Codable, Hashable {
+struct DailyTheme: Codable, Hashable, Identifiable, Sendable {
     let day: Int
+    var id: Int { day }  // ✅ FIX: Add id property for Identifiable conformance
     let title: String
     let message: String
     let focusArea: String
@@ -106,20 +107,26 @@ struct DailyTheme: Codable, Hashable {
     }
 }
 
-struct PhaseMilestone: Codable, Hashable {
+struct PhaseMilestone: Codable, Hashable, Identifiable, Sendable {
     let key: String
+    var id: String { key }  // ✅ FIX: Add id property for Identifiable conformance
     let name: String
     let description: String
     let criteria: String
+
+    enum CodingKeys: String, CodingKey {
+        case key, name, description, criteria
+    }
 }
 
-struct UserPathway: Codable, Identifiable, Hashable {
+struct UserPathway: Codable, Identifiable, Hashable, Sendable {
     let id: UUID
     let userId: UUID
     let pathwayId: UUID
     let startedAt: Date
     var currentPhase: Int
     var currentDay: Int
+    var currentPhaseDay: Int
     var status: PathwayStatus
     var pausedAt: Date?
     var completedAt: Date?
@@ -136,7 +143,8 @@ struct UserPathway: Codable, Identifiable, Hashable {
     }
 
     var progressPercentage: Double {
-        Double(currentDay) / Double(totalDays)
+        guard totalDays > 0 else { return 0.0 }
+        return Double(currentDay) / Double(totalDays)
     }
 
     var currentPhaseName: String {
@@ -150,6 +158,7 @@ struct UserPathway: Codable, Identifiable, Hashable {
         case startedAt = "started_at"
         case currentPhase = "current_phase"
         case currentDay = "current_day"
+        case currentPhaseDay = "current_phase_day"
         case pausedAt = "paused_at"
         case completedAt = "completed_at"
         case createdAt = "created_at"
@@ -157,7 +166,7 @@ struct UserPathway: Codable, Identifiable, Hashable {
     }
 }
 
-enum PathwayStatus: String, Codable, Hashable {
+enum PathwayStatus: String, Codable, CaseIterable, Hashable, Sendable {
     case active
     case paused
     case completed
@@ -173,7 +182,7 @@ enum PathwayStatus: String, Codable, Hashable {
     }
 }
 
-struct PathwayPersonalization: Codable, Hashable {
+struct PathwayPersonalization: Codable, Hashable, Sendable {
     var transitionDate: Date?
     var specificContext: String?
     var supportPeople: [String]?
@@ -194,7 +203,7 @@ struct PathwayPersonalization: Codable, Hashable {
     }
 }
 
-struct PathwayProgress: Codable, Identifiable, Hashable {
+struct PathwayProgress: Codable, Identifiable, Hashable, Sendable {
     let id: UUID
     let userPathwayId: UUID
     let dayNumber: Int
@@ -220,14 +229,14 @@ struct PathwayProgress: Codable, Identifiable, Hashable {
     }
 }
 
-struct CheckInData: Codable, Hashable {
+struct CheckInData: Codable, Hashable, Sendable {
     let mood: Int
     let energy: Int
     let notes: String?
     let responses: [String: String]?
 }
 
-struct PathwayMilestone: Codable, Identifiable, Hashable {
+struct PathwayMilestone: Codable, Identifiable, Hashable, Sendable {
     let id: UUID
     let userPathwayId: UUID
     let milestoneKey: String
@@ -247,9 +256,10 @@ struct PathwayMilestone: Codable, Identifiable, Hashable {
 
 // MARK: - Daily Content
 
-struct DailyPathwayContent: Codable, Hashable {
+struct DailyPathwayContent: Codable, Identifiable, Hashable, Sendable {
     let dayNumber: Int
     let phaseNumber: Int
+    var id: String { "\(dayNumber)-\(phaseNumber)" }  // ✅ FIX: Add composite id property
     let theme: DailyTheme
     let checkInPrompt: String
     let exercises: [Exercise]
@@ -262,15 +272,16 @@ struct DailyPathwayContent: Codable, Hashable {
         case phaseNumber = "phase_number"
         case theme
         case checkInPrompt = "check_in_prompt"
-        case exercises
+        case exercises = "exercises"
         case journalPrompt = "journal_prompt"
         case affirmation
         case upcomingMilestone = "upcoming_milestone"
     }
 }
 
-struct UpcomingMilestone: Codable, Hashable {
+struct UpcomingMilestone: Codable, Identifiable, Hashable, Sendable {
     let key: String
+    var id: String { key }  // ✅ FIX: Add id property for Identifiable conformance
     let name: String
     let daysAway: Int
 
@@ -282,7 +293,7 @@ struct UpcomingMilestone: Codable, Hashable {
 
 // MARK: - API Response Types
 
-struct EnrollPathwayResponse: Codable {
+struct EnrollPathwayResponse: Codable, Sendable {
     let userPathway: UserPathway
     let todayContent: DailyPathwayContent
 
@@ -292,7 +303,7 @@ struct EnrollPathwayResponse: Codable {
     }
 }
 
-struct AdvancePhaseResponse: Codable {
+struct AdvancePhaseResponse: Codable, Sendable {
     let success: Bool
     let newPhase: Int
     let phaseName: String
@@ -306,22 +317,24 @@ struct AdvancePhaseResponse: Codable {
     }
 }
 
-struct Celebration: Codable {
+struct Celebration: Codable, Sendable {
     let title: String
     let message: String
     let milestones: [String]
 }
 
-struct CheckInResponse: Codable {
+struct CheckInResponse: Codable, Sendable {
     let success: Bool
     let newDay: Int
     let newPhase: Int
     let phaseAdvanced: Bool
-    
+    let pathwayCompleted: Bool  // ✅ FIX: Add missing field from database response
+
     enum CodingKeys: String, CodingKey {
         case success
         case newDay = "newDay"
         case newPhase = "newPhase"
         case phaseAdvanced = "phaseAdvanced"
+        case pathwayCompleted = "pathwayCompleted"  // ✅ FIX: Add missing coding key
     }
 }
