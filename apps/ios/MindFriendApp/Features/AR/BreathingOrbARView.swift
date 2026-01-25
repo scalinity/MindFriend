@@ -104,6 +104,8 @@ public struct BreathingOrbARView: View {
                             .font(.title)
                             .foregroundStyle(.white.opacity(0.8))
                     }
+                    .accessibilityLabel("End exercise")
+                    .accessibilityHint("Double tap to exit and save progress")
                 }
                 .padding()
                 .background(.ultraThinMaterial.opacity(0.6))
@@ -117,12 +119,14 @@ public struct BreathingOrbARView: View {
                         .fontWeight(.semibold)
                         .foregroundStyle(.white)
                         .shadow(radius: 4)
+                        .accessibilityLabel("Current phase: \(currentPhase.instruction)")
 
                     // Phase progress
                     ProgressView(value: phaseProgress)
                         .progressViewStyle(.linear)
                         .frame(width: 200)
                         .tint(phaseColor)
+                        .accessibilityLabel("Phase progress: \(Int(phaseProgress * 100)) percent")
                 }
 
                 Spacer()
@@ -142,6 +146,7 @@ public struct BreathingOrbARView: View {
                             .foregroundStyle(.white)
                             .frame(width: 44, height: 44)
                     }
+                    .accessibilityLabel(exerciseService.isSpeaking ? "Stop voice guidance" : "Start voice guidance")
 
                     Spacer()
 
@@ -149,6 +154,7 @@ public struct BreathingOrbARView: View {
                     Text("Cycle \(cyclesCompleted + 1)/\(totalCycles)")
                         .font(.headline)
                         .foregroundStyle(.white)
+                        .accessibilityLabel("Cycle \(cyclesCompleted + 1) of \(totalCycles)")
 
                     Spacer()
 
@@ -161,6 +167,7 @@ public struct BreathingOrbARView: View {
                             .foregroundStyle(.white)
                             .frame(width: 44, height: 44)
                     }
+                    .accessibilityLabel(isPaused ? "Resume exercise" : "Pause exercise")
                 }
                 .padding()
                 .background(.ultraThinMaterial.opacity(0.6))
@@ -208,6 +215,7 @@ public struct BreathingOrbARView: View {
                 Circle()
                     .stroke(.white.opacity(0.3), lineWidth: 1)
             }
+            .accessibilityLabel("AR tracking status: \(trackingState == .normal ? "good" : "limited")")
     }
 
     private var trackingColor: Color {
@@ -230,6 +238,7 @@ public struct BreathingOrbARView: View {
         Text(formatTime(timeRemaining))
             .font(.title2.monospacedDigit())
             .foregroundStyle(.white)
+            .accessibilityLabel("Time remaining: \(formatTime(timeRemaining))")
     }
 
     private func trackingWarningOverlay(reason: ARCamera.TrackingState.Reason?) -> some View {
@@ -304,6 +313,8 @@ public struct BreathingOrbARView: View {
                                     .font(.title)
                                     .foregroundStyle(rating <= effectivenessRating ? .yellow : .gray)
                             }
+                            .accessibilityLabel("\(rating) star\(rating != 1 ? "s" : "")")
+                            .accessibilityAddTraits(rating <= effectivenessRating ? .isSelected : [])
                         }
                     }
                 }

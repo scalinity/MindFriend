@@ -2,6 +2,7 @@ import XCTest
 @testable import MindFriendApp
 
 /// Tests for AR Grounding Exercise functionality
+@MainActor
 final class ARExerciseTests: XCTestCase {
 
     // MARK: - ARCapabilityService Tests
@@ -390,6 +391,7 @@ final class ARExerciseTests: XCTestCase {
 
 // MARK: - Integration Tests
 
+@MainActor
 final class ARExerciseIntegrationTests: XCTestCase {
 
     func testARCapabilityDetectionFlow() {

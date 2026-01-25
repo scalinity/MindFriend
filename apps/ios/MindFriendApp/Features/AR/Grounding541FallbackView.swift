@@ -154,6 +154,7 @@ public struct Grounding541FallbackView: View {
             Image(systemName: stepIcon)
                 .font(.system(size: 48))
                 .foregroundStyle(stepColor(for: currentStep))
+                .accessibilityHidden(true)
 
             // Instruction
             Text(currentStep.instruction)
@@ -165,6 +166,7 @@ public struct Grounding541FallbackView: View {
             Text("\(itemsIdentified)/\(currentStep.count)")
                 .font(.headline)
                 .foregroundStyle(.secondary)
+                .accessibilityLabel("\(itemsIdentified) of \(currentStep.count) items identified")
 
             // Hint
             Text(stepHint)
@@ -174,9 +176,11 @@ public struct Grounding541FallbackView: View {
         }
         .padding()
         .frame(maxWidth: .infinity)
-        .background(.white)
+        .background(Color(.secondarySystemBackground))
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.05), radius: 8)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(currentStep.displayName) step. \(currentStep.instruction). \(itemsIdentified) of \(currentStep.count) items identified.")
     }
 
     private var stepIcon: String {
@@ -210,6 +214,7 @@ public struct Grounding541FallbackView: View {
                     Circle()
                         .fill(stepColor(for: currentStep))
                         .frame(width: 8, height: 8)
+                        .accessibilityHidden(true)
 
                     Text(identifiedItems[index])
                         .font(.body)
@@ -222,12 +227,13 @@ public struct Grounding541FallbackView: View {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.secondary)
                     }
+                    .accessibilityLabel("Remove \(identifiedItems[index])")
                 }
                 .padding(.vertical, 4)
             }
         }
         .padding()
-        .background(.white)
+        .background(Color(.secondarySystemBackground))
         .cornerRadius(12)
     }
 
@@ -239,6 +245,7 @@ public struct Grounding541FallbackView: View {
                 .onSubmit {
                     addItem()
                 }
+                .accessibilityLabel("Enter something you \(currentStep.displayName.lowercased())")
 
             Button {
                 addItem()
@@ -255,6 +262,8 @@ public struct Grounding541FallbackView: View {
                 .cornerRadius(12)
             }
             .disabled(currentInput.isEmpty)
+            .accessibilityLabel("Add item")
+            .accessibilityHint(currentInput.isEmpty ? "Enter an item first" : "Add \(currentInput) to the list")
         }
     }
 
@@ -277,6 +286,8 @@ public struct Grounding541FallbackView: View {
             .background(.green)
             .cornerRadius(12)
         }
+        .accessibilityLabel(currentStep.next != nil ? "Continue to next step" : "Complete exercise")
+        .accessibilityHint(currentStep.next != nil ? "Proceed to \(currentStep.next?.displayName ?? "") step" : "Finish the grounding exercise")
     }
 
     private var completionView: some View {
@@ -308,6 +319,8 @@ public struct Grounding541FallbackView: View {
                                     .font(.title)
                                     .foregroundStyle(rating <= effectivenessRating ? .yellow : .gray)
                             }
+                            .accessibilityLabel("\(rating) star\(rating != 1 ? "s" : "")")
+                            .accessibilityAddTraits(rating <= effectivenessRating ? .isSelected : [])
                         }
                     }
                 }

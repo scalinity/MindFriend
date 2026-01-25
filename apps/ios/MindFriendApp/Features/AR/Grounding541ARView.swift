@@ -83,6 +83,8 @@ public struct Grounding541ARView: View {
                             .font(.title)
                             .foregroundStyle(.white.opacity(0.8))
                     }
+                    .accessibilityLabel("End exercise")
+                    .accessibilityHint("Double tap to exit and save progress")
                 }
                 .padding()
                 .background(.ultraThinMaterial.opacity(0.6))
@@ -109,6 +111,7 @@ public struct Grounding541ARView: View {
                             .foregroundStyle(.white)
                             .frame(width: 44, height: 44)
                     }
+                    .accessibilityLabel(exerciseService.isSpeaking ? "Stop voice guidance" : "Start voice guidance")
 
                     Spacer()
 
@@ -116,6 +119,7 @@ public struct Grounding541ARView: View {
                     Text("\(markersPlaced)/\(currentStep.count)")
                         .font(.title2.bold())
                         .foregroundStyle(.white)
+                        .accessibilityLabel("\(markersPlaced) of \(currentStep.count) items identified")
 
                     Spacer()
 
@@ -129,6 +133,8 @@ public struct Grounding541ARView: View {
                             .frame(width: 44, height: 44)
                     }
                     .disabled(markersPlaced == 0)
+                    .accessibilityLabel("Undo last marker")
+                    .accessibilityHint(markersPlaced > 0 ? "Removes the last placed marker" : "No markers to undo")
                 }
                 .padding()
                 .background(.ultraThinMaterial.opacity(0.6))
@@ -180,6 +186,7 @@ public struct Grounding541ARView: View {
                     .fill(.white.opacity(0.3))
                     .frame(width: 8, height: 8)
             }
+            .accessibilityHidden(true)
     }
 
     private var trackingIndicator: some View {
@@ -190,6 +197,7 @@ public struct Grounding541ARView: View {
                 Circle()
                     .stroke(.white.opacity(0.3), lineWidth: 1)
             }
+            .accessibilityLabel("AR tracking status: \(trackingState == .normal ? "good" : "limited")")
     }
 
     private var trackingColor: Color {
@@ -212,8 +220,11 @@ public struct Grounding541ARView: View {
                                 .stroke(.white, lineWidth: 2)
                         }
                     }
+                    .accessibilityLabel("\(step.displayName): \(step == currentStep ? "current step" : step.rawValue > currentStep.rawValue ? "upcoming" : "completed")")
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Progress: \(currentStep.displayName) step")
     }
 
     private func stepColor(for step: GroundingStep) -> Color {
@@ -335,6 +346,8 @@ public struct Grounding541ARView: View {
                                     .font(.title)
                                     .foregroundStyle(rating <= effectivenessRating ? .yellow : .gray)
                             }
+                            .accessibilityLabel("\(rating) star\(rating != 1 ? "s" : "")")
+                            .accessibilityAddTraits(rating <= effectivenessRating ? .isSelected : [])
                         }
                     }
                 }

@@ -72,6 +72,7 @@ public struct ARExerciseListView: View {
         VStack(spacing: 16) {
             ProgressView()
                 .scaleEffect(1.2)
+                .accessibilityLabel("Loading exercises")
 
             Text("Loading exercises...")
                 .font(.subheadline)
@@ -100,6 +101,7 @@ public struct ARExerciseListView: View {
                 }
             }
             .buttonStyle(.borderedProminent)
+            .accessibilityHint("Retry loading AR exercises")
         }
         .padding()
     }
@@ -207,11 +209,13 @@ public struct ARExerciseListView: View {
                 }
             }
             .padding()
-            .background(.white)
+            .background(Color(.secondarySystemBackground))
             .cornerRadius(16)
             .shadow(color: .black.opacity(0.05), radius: 8)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("\(exercise.exerciseName), \(exercise.arType.displayName)")
+        .accessibilityHint(exercise.isPremium ? "Premium exercise. \(exercise.description)" : exercise.description)
     }
 
     private func exerciseTypeIcon(_ type: ARExerciseTypeEnum) -> some View {
@@ -346,6 +350,8 @@ public struct ARExerciseListView: View {
             Image(systemName: available ? "checkmark.circle.fill" : "xmark.circle.fill")
                 .foregroundStyle(available ? .green : .red)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(name): \(available ? "available" : "not available")")
     }
 
     // MARK: - Exercise Views
