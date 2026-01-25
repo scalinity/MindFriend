@@ -41,6 +41,19 @@ struct AmbientSettingsView: View {
         } message: {
             Text(errorMessage)
         }
+        .overlay {
+            if ambientService.isLoading {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.black.opacity(0.1))
+            }
+        }
+        .onChange(of: ambientService.errorMessage) { _, newError in
+            if let error = newError {
+                errorMessage = error
+                showError = true
+            }
+        }
     }
 
     // MARK: - Preview Section
