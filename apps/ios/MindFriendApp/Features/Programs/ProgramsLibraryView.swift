@@ -10,6 +10,7 @@ struct ProgramsLibraryView: View {
     @State private var activeEnrollment: ProgramEnrollment?
     @State private var isLoading = true
     @State private var selectedCategory: ProgramCategory?
+    @State private var showARExercises = false
 
     var filteredPrograms: [Program] {
         guard let category = selectedCategory else { return programs }
@@ -25,6 +26,10 @@ struct ProgramsLibraryView: View {
                         ActiveProgramCard(enrollment: enrollment)
                             .padding(.horizontal)
                     }
+
+                    // AR Grounding section
+                    ARGroundingCard(showARExercises: $showARExercises)
+                        .padding(.horizontal)
 
                     // Category filter
                     CategoryFilterRow(selected: $selectedCategory)
@@ -61,6 +66,12 @@ struct ProgramsLibraryView: View {
             .navigationTitle("Programs")
             .task { await loadData() }
             .refreshable { await loadData() }
+            .fullScreenCover(isPresented: $showARExercises) {
+                ARExerciseListView()
+                    .environmentObject(container)
+                    .environmentObject(container.arExerciseService)
+                    .environmentObject(container.arCapabilityService)
+            }
         }
     }
 
@@ -77,6 +88,59 @@ struct ProgramsLibraryView: View {
         } catch {
             appState.showError(.apiError(error.localizedDescription))
         }
+    }
+}
+
+// MARK: - AR Grounding Card
+
+struct ARGroundingCard: View {
+    @Binding var showARExercises: Bool
+    
+    var body: some View {
+        Button {
+            showARExercises = true
+        } label: {
+            HStack(spacing: 16) {
+                // AR Icon
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(
+                            LinearGradient(
+                                colors: [.indigo, .purple],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 56, height: 56)
+                    
+                    Image(systemName: "arkit")
+                        .font(.title2)
+                        .foregroundStyle(.white)
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("AR Grounding")
+                        .font(.headline)
+                    
+                    Text("Immersive exercises using augmented reality")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                
+                Spacer()
+                
+                Image(systemName: "chevron.right")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .padding()
+            .background(Color(.secondarySystemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("AR Grounding")
+        .accessibilityHint("Open immersive augmented reality grounding exercises")
     }
 }
 

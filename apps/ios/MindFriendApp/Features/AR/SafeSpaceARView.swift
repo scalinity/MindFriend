@@ -85,6 +85,8 @@ public struct SafeSpaceARView: View {
                             .font(.title)
                             .foregroundStyle(.white.opacity(0.8))
                     }
+                    .accessibilityLabel("End exercise")
+                    .accessibilityHint("Double tap to exit without saving")
                 }
                 .padding()
                 .background(.ultraThinMaterial.opacity(0.6))
@@ -107,6 +109,7 @@ public struct SafeSpaceARView: View {
                     Text("\(placedObjects.count) objects")
                         .font(.subheadline)
                         .foregroundStyle(.white)
+                        .accessibilityLabel("\(placedObjects.count) objects placed")
 
                     Spacer()
 
@@ -119,6 +122,8 @@ public struct SafeSpaceARView: View {
                             .foregroundStyle(placedObjects.isEmpty ? .white.opacity(0.3) : .white)
                     }
                     .disabled(placedObjects.isEmpty)
+                    .accessibilityLabel("Remove last object")
+                    .accessibilityHint(placedObjects.isEmpty ? "No objects to remove" : "Removes the last placed object")
 
                     Spacer()
 
@@ -135,6 +140,8 @@ public struct SafeSpaceARView: View {
                             .cornerRadius(8)
                     }
                     .disabled(placedObjects.isEmpty)
+                    .accessibilityLabel("Save safe space")
+                    .accessibilityHint(placedObjects.isEmpty ? "Place at least one object first" : "Save your current safe space configuration")
                 }
                 .padding()
                 .background(.ultraThinMaterial.opacity(0.6))
@@ -176,6 +183,7 @@ public struct SafeSpaceARView: View {
         Circle()
             .fill(trackingColor)
             .frame(width: 12, height: 12)
+            .accessibilityLabel("AR tracking status: \(trackingState == .normal ? "good" : "limited")")
     }
 
     private var trackingColor: Color {
@@ -246,6 +254,9 @@ public struct SafeSpaceARView: View {
                     .foregroundStyle(.white)
             }
         }
+        .accessibilityLabel("\(name)")
+        .accessibilityHint(selectedObjectType == type ? "Currently selected. Tap to deselect" : "Tap to select, then tap in scene to place")
+        .accessibilityAddTraits(selectedObjectType == type ? .isSelected : [])
     }
 
     private func trackingWarningOverlay(reason: ARCamera.TrackingState.Reason?) -> some View {
@@ -331,6 +342,8 @@ public struct SafeSpaceARView: View {
                                     .font(.title)
                                     .foregroundStyle(rating <= effectivenessRating ? .yellow : .gray)
                             }
+                            .accessibilityLabel("\(rating) star\(rating != 1 ? "s" : "")")
+                            .accessibilityAddTraits(rating <= effectivenessRating ? .isSelected : [])
                         }
                     }
                 }
