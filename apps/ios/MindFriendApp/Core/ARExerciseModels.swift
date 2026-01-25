@@ -350,6 +350,24 @@ public struct ARScenePreference: Codable, Identifiable, Equatable {
     public let createdAt: Date
     public var updatedAt: Date
 
+    public init(
+        id: UUID,
+        userId: UUID,
+        sceneName: String,
+        sceneData: ARSceneData,
+        isDefault: Bool = false,
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
+        self.id = id
+        self.userId = userId
+        self.sceneName = sceneName
+        self.sceneData = sceneData
+        self.isDefault = isDefault
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
     enum CodingKeys: String, CodingKey {
         case id
         case userId = "user_id"

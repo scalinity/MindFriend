@@ -82,6 +82,7 @@ public struct BreathingOrbFallbackView: View {
                     Text(formatTime(timeRemaining))
                         .font(.title2.monospacedDigit())
                         .foregroundStyle(.white)
+                        .accessibilityLabel("Time remaining: \(formatTime(timeRemaining))")
 
                     Spacer()
 
@@ -92,6 +93,8 @@ public struct BreathingOrbFallbackView: View {
                             .font(.title)
                             .foregroundStyle(.white.opacity(0.8))
                     }
+                    .accessibilityLabel("End exercise")
+                    .accessibilityHint("Double tap to exit and save progress")
                 }
                 .padding()
 
@@ -130,12 +133,14 @@ public struct BreathingOrbFallbackView: View {
                         .font(.largeTitle)
                         .fontWeight(.semibold)
                         .foregroundStyle(.white)
+                        .accessibilityLabel("Current phase: \(currentPhase.instruction)")
 
                     // Phase progress bar
                     ProgressView(value: phaseProgress)
                         .progressViewStyle(.linear)
                         .frame(width: 200)
                         .tint(phaseColor)
+                        .accessibilityLabel("Phase progress: \(Int(phaseProgress * 100)) percent")
                 }
 
                 Spacer()
@@ -155,6 +160,7 @@ public struct BreathingOrbFallbackView: View {
                             .foregroundStyle(.white)
                             .frame(width: 44, height: 44)
                     }
+                    .accessibilityLabel(exerciseService.isSpeaking ? "Stop voice guidance" : "Start voice guidance")
 
                     Spacer()
 
@@ -162,6 +168,7 @@ public struct BreathingOrbFallbackView: View {
                     Text("Cycle \(cyclesCompleted + 1)/\(totalCycles)")
                         .font(.headline)
                         .foregroundStyle(.white)
+                        .accessibilityLabel("Cycle \(cyclesCompleted + 1) of \(totalCycles)")
 
                     Spacer()
 
@@ -174,6 +181,7 @@ public struct BreathingOrbFallbackView: View {
                             .foregroundStyle(.white)
                             .frame(width: 44, height: 44)
                     }
+                    .accessibilityLabel(isPaused ? "Resume exercise" : "Pause exercise")
                 }
                 .padding()
                 .background(.ultraThinMaterial.opacity(0.3))
@@ -271,6 +279,8 @@ public struct BreathingOrbFallbackView: View {
                                     .font(.title)
                                     .foregroundStyle(rating <= effectivenessRating ? .yellow : .gray)
                             }
+                            .accessibilityLabel("\(rating) star\(rating != 1 ? "s" : "")")
+                            .accessibilityAddTraits(rating <= effectivenessRating ? .isSelected : [])
                         }
                     }
                 }
