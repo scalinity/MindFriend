@@ -392,7 +392,18 @@ struct HomeView: View {
             }
             .sheet(isPresented: $showInterventionSheet) {
                 if let intervention = pendingMoodIntervention {
-                    PreemptiveInterventionView(intervention: intervention)
+                    PreemptiveInterventionView(
+                        intervention: intervention,
+                        prediction: todayPrediction,
+                        onAccept: {
+                            showInterventionSheet = false
+                            pendingMoodIntervention = nil
+                        },
+                        onDismiss: { reason in
+                            showInterventionSheet = false
+                            pendingMoodIntervention = nil
+                        }
+                    )
                 }
             }
             .sheet(isPresented: $showPathwaySelection) {
@@ -1158,6 +1169,17 @@ struct QuickActionsSection: View {
                         title: "Therapists",
                         icon: "person.2.wave.2.fill",
                         color: .teal
+                    )
+                }
+
+                // Warning Signs - Early detection (F026)
+                NavigationLink {
+                    WarningSignsDashboardView(engine: container.stressSignatureEngine)
+                } label: {
+                    HomeQuickActionButton(
+                        title: "Warning Signs",
+                        icon: "shield.checkered",
+                        color: .purple
                     )
                 }
 
