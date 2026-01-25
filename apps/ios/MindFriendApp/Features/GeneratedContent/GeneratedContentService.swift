@@ -175,6 +175,43 @@ final class GeneratedContentService: ObservableObject {
 
     // MARK: - Voice Preferences
 
+    /// Fetch available voice options
+    func fetchVoiceOptions() async throws -> [VoiceOption] {
+        // Return default voices - could be fetched from backend in future
+        return DefaultVoice.all
+    }
+    
+    /// Fetch user's voice preference (single, not array)
+    func fetchVoicePreference() async throws -> VoicePreference? {
+        let preferences = try await fetchVoicePreferences()
+        return preferences.first
+    }
+    
+    /// Save voice preference (simplified API for VoicePreferencesView)
+    func saveVoicePreference(voiceId: String, speed: Float) async throws {
+        try await updateVoicePreference(
+            contentType: .meditation, // Default content type
+            voiceId: voiceId,
+            speed: Double(speed)
+        )
+    }
+    
+    /// Preview a voice with sample text
+    func previewVoice(voiceId: String, speed: Float) async throws -> URL? {
+        // Find the voice to get its preview URL
+        guard let voice = DefaultVoice.voice(for: voiceId) else {
+            return nil
+        }
+        
+        if let previewUrlString = voice.previewUrl,
+           let url = URL(string: previewUrlString) {
+            return url
+        }
+        
+        // Could call synthesize-voice edge function for dynamic preview
+        return nil
+    }
+
     /// Fetch voice preferences
     func fetchVoicePreferences() async throws -> [VoicePreference] {
         let preferences: [VoicePreference] = try await supabase

@@ -12,6 +12,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         CrashReporter.shared.initialize()
         CrashReporter.shared.setAppContext()
 
+        // Restore screen brightness if app was force-quit during sleep story playback
+        GeneratedStoryView.restoreBrightnessIfNeeded()
+
         // Track app launch
         Analytics.shared.track(.appLaunched, properties: [
             "launch_options": launchOptions?.keys.map { $0.rawValue } ?? []
