@@ -362,6 +362,7 @@
 		748F7EE10BB52F9D3891E7D0 /* TherapistModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC070F926F780E2FC99941A5 /* TherapistModels.swift */; };
 		74978E5EA481A3812C45EA3E /* JournalEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9B8A46207B463477D4E2921 /* JournalEntryView.swift */; };
 		74C86163898DF06F99F63B7F /* TherapeuticProgramService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BC7E03914A87BD97889B4E5 /* TherapeuticProgramService.swift */; };
+		753E08AAB097D2747F0CBCC0 /* StressSignatureViewModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA8E5A4C4270664E649DDDE7 /* StressSignatureViewModels.swift */; };
 		759B2E31CF38FD6426791F2B /* CreateRitualSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CFD093D2AED7DEB249E27ED /* CreateRitualSheet.swift */; };
 		75A955BA0D23085CCED86D5F /* NotificationScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CFB03D0A80A60380FCA37C6 /* NotificationScheduler.swift */; };
 		75DCA9D2C538FDB2F08B4028 /* NarrativeDetailViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C71B1232C66BC00691BA49A /* NarrativeDetailViewModelTests.swift */; };
@@ -455,6 +456,7 @@
 		96A6AF0B8F771353EDEBC4EB /* FamilyAlertsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 764F38A04B293434E329300B /* FamilyAlertsView.swift */; };
 		96B2F50E0A6E1935A9F32372 /* EfficacyDashboardViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 483E36ECC8421BDB057F4F49 /* EfficacyDashboardViewModel.swift */; };
 		96D16A9E343BA4CA04D635C8 /* PathwayCacheServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECE18E8F1A71A97D463E7BE /* PathwayCacheServiceTests.swift */; };
+		971900BAE9E10F48CC35AB3B /* StressSignatureModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67EBC5358C957F30630BBE28 /* StressSignatureModels.swift */; };
 		974C3C1CB34BA05D7803A6B1 /* MindFriendAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39A519521BAC54826AC65757 /* MindFriendAppTests.swift */; };
 		9769AF3A3F309416789EAAAF /* TransitionPathwayModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B610DD3B3571244334DB671 /* TransitionPathwayModels.swift */; };
 		9770FDE426861698311EC18A /* ChatViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 869CC35357198FED1AACEBB6 /* ChatViewModelTests.swift */; };
@@ -484,7 +486,6 @@
 		A036829AD04A9570DBE92A3B /* MethodologyInfoSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6048B72FC0362A88BA58C7C /* MethodologyInfoSheet.swift */; };
 		A130CE06FFF7090ACAF0102F /* MedicationListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABB456F7FB8F9DCFBEEADBA9 /* MedicationListViewModel.swift */; };
 		A1E773B3EAD2F9A102FB6C4B /* TrajectoryVisualizationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B4150F77E8DB0F1D0A8F15F /* TrajectoryVisualizationView.swift */; };
-		A22279E089225DDD5172BCD0 /* StressSignatureModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCC78DF75E6DCEFD19B1CA00 /* StressSignatureModels.swift */; };
 		A2630DA2335D1E12516262A2 /* BadgesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86F398CE0564681AA95CADD4 /* BadgesView.swift */; };
 		A2829E37A9D86A1535D5FDAA /* ReportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EECFFF49AFB848F25882063 /* ReportView.swift */; };
 		A29CE8FE83C8C89E3982343E /* RewriteModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EE0062F3B89D92FF07FFA46 /* RewriteModels.swift */; };
@@ -1474,7 +1475,6 @@
 		7E23B1D1744817F84B8E1EE1 /* VoiceEmotionModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VoiceEmotionModels.swift; sourceTree = "<group>"; };
 		7E40ACB54791747FA353EAEF /* CouplesModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CouplesModels.swift; sourceTree = "<group>"; };
 		7EA5A1B51034FF3F00746EC2 /* ActionPlanSheet.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ActionPlanSheet.swift; sourceTree = "<group>"; };
-		7EB4145FB307BD020ECEE007 /* StressSignatureModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StressSignatureModels.swift; sourceTree = "<group>"; };
 		7EB62364EB9472FD8D4127EA /* SOSModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SOSModels.swift; sourceTree = "<group>"; };
 		7F454937FB40D7F4840A3F59 /* CalendarTriggerMonitorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarTriggerMonitorTests.swift; sourceTree = "<group>"; };
 		7F566A5354EB9CC4B3058A7B /* ActionPlanFeedbackSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionPlanFeedbackSheet.swift; sourceTree = "<group>"; };
@@ -1789,6 +1789,7 @@
 		BA3654F6A5AE151082C8761B /* RewriteOptionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewriteOptionsView.swift; sourceTree = "<group>"; };
 		BA4955166E27A7F50F0A66E9 /* PathwayCard.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PathwayCard.swift; sourceTree = "<group>"; };
 		BA629D01B23003FA5334FE56 /* AudioModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AudioModels.swift; sourceTree = "<group>"; };
+		BA8E5A4C4270664E649DDDE7 /* StressSignatureViewModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StressSignatureViewModels.swift; sourceTree = "<group>"; };
 		BA9FAF2E6CA778F3CED12697 /* RitualModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RitualModelsTests.swift; sourceTree = "<group>"; };
 		BAAE21BB1D2C7A36D57BE4C2 /* PartnerOnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PartnerOnboardingView.swift; sourceTree = "<group>"; };
 		BAD7FB10FB2BB6FDC9A998A7 /* TrajectoryVisualizationView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TrajectoryVisualizationView.swift; sourceTree = "<group>"; };
@@ -1890,7 +1891,6 @@
 		CBEE650A142174506F164484 /* SleepHomeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SleepHomeView.swift; sourceTree = "<group>"; };
 		CC02D85E39D5025BB4233EAB /* SharedExercisesView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedExercisesView.swift; sourceTree = "<group>"; };
 		CC2396F636A7F4365A253F09 /* AudioContentService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioContentService.swift; sourceTree = "<group>"; };
-		CCC78DF75E6DCEFD19B1CA00 /* StressSignatureModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StressSignatureModels.swift; sourceTree = "<group>"; };
 		CCD1F5FD7EC83C18D4D64F4D /* MedicationLogRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MedicationLogRepository.swift; sourceTree = "<group>"; };
 		CCF6D54913B2790320FAAC84 /* MoodEnergyPickerView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MoodEnergyPickerView.swift; sourceTree = "<group>"; };
 		CCFCFCCE03E22BE1EAA7F845 /* PatternsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatternsView.swift; sourceTree = "<group>"; };
@@ -3183,7 +3183,7 @@
 		4D7574F6550F09DCD16BDBB3 /* Models */ = {
 			isa = PBXGroup;
 			children = (
-				7EB4145FB307BD020ECEE007 /* StressSignatureModels.swift */,
+				BA8E5A4C4270664E649DDDE7 /* StressSignatureViewModels.swift */,
 			);
 			name = Models;
 			path = Models;
@@ -3572,7 +3572,6 @@
 		75582A948C60B426FBB3440C /* Models */ = {
 			isa = PBXGroup;
 			children = (
-				CCC78DF75E6DCEFD19B1CA00 /* StressSignatureModels.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -6199,7 +6198,6 @@
 				18E468D0875D8E314BFB2BEB /* StreakCardWithShields.swift in Sources */,
 				CA578C57A6BBA2B79935792D /* StreakShieldIndicator.swift in Sources */,
 				497E46FD9578189BAA35EF08 /* StreamingAudioPlayer.swift in Sources */,
-				A22279E089225DDD5172BCD0 /* StressSignatureModels.swift in Sources */,
 				84D684CAE62270C5E02B1138 /* StressSignatureView.swift in Sources */,
 				7CB30FDB19CD5671219A1AAA /* StressSignatureViewModel.swift in Sources */,
 				0391160F66A087E2A4F5F256 /* String+Localization.swift in Sources */,
@@ -6418,6 +6416,8 @@
 				4C7920A041C4CDE688AB6F05 /* LongitudinalService.swift in Sources */,
 				C1A32837B369D6A2033F4443 /* ReportsView.swift in Sources */,
 				ED19BA76F4D77C1DBFEFB7D9 /* LongitudinalComponents.swift in Sources */,
+				753E08AAB097D2747F0CBCC0 /* StressSignatureViewModels.swift in Sources */,
+				971900BAE9E10F48CC35AB3B /* StressSignatureModels.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

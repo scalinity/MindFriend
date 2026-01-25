@@ -16,7 +16,12 @@ final class DependencyContainer: ObservableObject {
 
     // MARK: - Supabase Services
     lazy var supabaseAuthService: SupabaseAuthService = {
-        SupabaseAuthService()
+        let service = SupabaseAuthService(secureStorage: secureStorage)
+        // ✅ ARCHITECTURE FIX: Wire up logout handler to break circular dependency
+        service.setLogoutHandler { [weak self] in
+            self?.pathwayCacheService.clearAllCaches()
+        }
+        return service
     }()
 
     lazy var supabaseDataService: SupabaseDataService = {
@@ -50,7 +55,13 @@ final class DependencyContainer: ObservableObject {
     }()
 
     lazy var transitionService: TransitionService = {
-        TransitionService(supabase: self.supabaseClient)
+        // ✅ ARCHITECTURE FIX: Inject centralized services (no default parameters)
+        TransitionService(
+            supabase: self.supabaseClient,
+            networkRetry: self.networkRetryService,
+            cacheService: self.pathwayCacheService,
+            encryptionService: self.pathwayEncryptionService
+        )
     }()
 
     lazy var personalizationService: PersonalizationService = {
@@ -96,12 +107,23 @@ final class DependencyContainer: ObservableObject {
         FamilyService(supabase: self.supabaseClient)
     }()
 
-    lazy var mentorshipService: MentorshipService = {
-        MentorshipService(supabase: self.supabaseClient)
-    }()
+    // TODO: Re-enable after fixing Mentorship module interface mismatches
+    // lazy var mentorshipService: MentorshipService = {
+    //     MentorshipService(supabase: self.supabaseClient)
+    // }()
+
+    // lazy var mentorshipDataService: MentorshipDataService = {
+    //     MentorshipDataService(supabase: self.supabaseClient, userId: UUID())
+    // }()
 
     lazy var sleepService: SleepService = {
         SleepService(supabase: self.supabaseClient)
+    }()
+
+    // MARK: - Ambient Wellness Presence
+
+    lazy var ambientThemeService: AmbientThemeService = {
+        AmbientThemeService(dataService: self.supabaseDataService)
     }()
 
     // Sleep Tracking Services
@@ -414,17 +436,80 @@ final class DependencyContainer: ObservableObject {
             notificationManager: self.interventionNotificationManager
         )
     }()
-    
+
     lazy var calendarTriggerMonitor: CalendarTriggerMonitor = {
         CalendarTriggerMonitor(supabase: self.supabaseClient)
     }()
-    
+
     lazy var optimalTimingAnalyzer: OptimalTimingAnalyzer = {
         OptimalTimingAnalyzer(supabase: self.supabaseClient)
     }()
-    
+
     lazy var interventionNotificationManager: InterventionNotificationManager = {
         InterventionNotificationManager()
+    }()
+
+    // MARK: - AR Grounding Exercise Services
+
+    /// Service for detecting device AR capabilities (ARKit, TrueDepth, LiDAR)
+    lazy var arCapabilityService: ARCapabilityService = {
+        ARCapabilityService()
+    }()
+
+    /// Service for AR exercise session management and data persistence
+    lazy var arExerciseService: ARExerciseService = {
+        ARExerciseService(
+            supabase: self.supabaseDataService,
+            authService: self.supabaseAuthService,
+            capabilityService: self.arCapabilityService
+        )
+    }()
+
+    // MARK: - Autonomous Wellness Agent Services
+
+    /// Service for the autonomous wellness agent
+    lazy var agentService: AgentService = {
+        AgentService(supabase: self.supabaseClient)
+    }()
+
+    // MARK: - Stress Signature Fingerprint Services (F026)
+
+    /// Service for learning signature patterns from historical crisis data
+    lazy var patternLearner: PatternLearner = {
+        PatternLearner(supabaseDataService: self.supabaseDataService)
+    }()
+
+    /// Service for real-time signal monitoring from multiple data sources
+    lazy var signalMonitor: SignalMonitor = {
+        SignalMonitor(supabaseDataService: self.supabaseDataService)
+    }()
+
+    /// Service for pattern detection and weight adjustment
+    lazy var patternDetector: PatternDetector = {
+        PatternDetector(supabaseDataService: self.supabaseDataService)
+    }()
+
+    /// Service for delivering early interventions when patterns emerge
+    lazy var earlyInterventionService: EarlyInterventionService = {
+        EarlyInterventionService(supabaseDataService: self.supabaseDataService)
+    }()
+
+    /// Main coordinator for the Stress Signature system
+    lazy var stressSignatureEngine: StressSignatureEngine = {
+        StressSignatureEngine(
+            supabaseDataService: self.supabaseDataService,
+            patternLearner: self.patternLearner,
+            signalMonitor: self.signalMonitor,
+            patternDetector: self.patternDetector,
+            interventionService: self.earlyInterventionService
+        )
+    }()
+
+    // MARK: - Longitudinal Mental Health Intelligence Services (F027)
+
+    /// Service for longitudinal wellness data aggregation and pattern detection
+    lazy var longitudinalService: LongitudinalService = {
+        LongitudinalService(authService: self.supabaseAuthService)
     }()
 
     // MARK: - Incomplete Feature Services (TODO: Add when features are ready)
@@ -450,4 +535,26 @@ final class DependencyContainer: ObservableObject {
     static var preview: DependencyContainer {
         DependencyContainer()
     }
+
+    // MARK: - Centralized Services
+
+    // ✅ ARCHITECTURE FIX: Centralize SecureStorage creation
+    lazy var secureStorage: SecureStorage = {
+        SecureStorage()
+    }()
+
+    // ✅ ARCHITECTURE FIX: Centralize PathwayCacheService creation
+    lazy var pathwayCacheService: PathwayCacheService = {
+        PathwayCacheService(secureStorage: secureStorage)
+    }()
+
+    // ✅ ARCHITECTURE FIX: Centralize PathwayEncryptionService creation
+    lazy var pathwayEncryptionService: PathwayEncryptionService = {
+        PathwayEncryptionService(secureStorage: secureStorage)
+    }()
+
+    // ✅ ARCHITECTURE FIX: Centralize NetworkRetryService creation
+    lazy var networkRetryService: NetworkRetryService = {
+        NetworkRetryService()
+    }()
 }
