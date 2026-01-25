@@ -9,99 +9,125 @@ struct WisdomFeedView: View {
     @State private var showingError = false
     
     var body: some View {
+        mainContent
+            .navigationTitle("Community Wisdom")
+            .toolbar { toolbarContent }
+            .sheet(isPresented: $showingContributeSheet) {
+                ContributeStrategySheet()
+            }
+            .refreshable { await refreshWisdom() }
+            .task { await refreshWisdom() }
+            .overlay { loadingOverlay }
+            .alert("Unable to Load", isPresented: $showingError) {
+                alertButtons
+            } message: {
+                Text(wisdomService.error?.localizedDescription ?? "Please try again later.")
+            }
+            .onChange(of: wisdomService.error) { _, newError in
+                showingError = newError != nil
+            }
+    }
+
+    // MARK: - View Components
+
+    @ViewBuilder
+    private var mainContent: some View {
         ScrollView {
             VStack(spacing: 24) {
-                // Not Alone Section
-                if let notAlone = wisdomService.notAloneInsight {
-                    NotAloneCard(insight: notAlone)
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel("You're not alone. \(notAlone.content)")
-                }
-                
-                // Recommendations Section
-                if !wisdomService.recommendations.isEmpty {
-                    WisdomRecommendationsSection(
-                        recommendations: wisdomService.recommendations,
-                        onFeedback: { id, helpful in
-                            Task {
-                                try? await wisdomService.recordFeedback(
-                                    recommendationId: id,
-                                    helpful: helpful
-                                )
-                            }
-                        }
-                    )
-                }
-                
-                // Strategies Section
-                if !wisdomService.strategies.isEmpty {
-                    StrategiesSection(
-                        strategies: wisdomService.strategies,
-                        onVote: { id, voteType in
-                            Task {
-                                try? await wisdomService.voteStrategy(
-                                    strategyId: id,
-                                    voteType: voteType
-                                )
-                            }
-                        }
-                    )
-                }
-                
-                // Empty State
-                if !wisdomService.isLoading && 
-                   wisdomService.recommendations.isEmpty && 
-                   wisdomService.strategies.isEmpty {
-                    EmptyWisdomState(
-                        canReceive: wisdomService.canReceiveRecommendations
-                    )
-                }
-                
+                notAloneSection
+                recommendationsSection
+                strategiesSection
+                emptyStateSection
                 Spacer(minLength: 100)
             }
             .padding()
         }
-        .navigationTitle("Community Wisdom")
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                    showingContributeSheet = true
-                } label: {
-                    Image(systemName: "plus.bubble")
+    }
+
+    @ViewBuilder
+    private var notAloneSection: some View {
+        if let notAlone = wisdomService.notAloneInsight {
+            NotAloneCard(insight: notAlone)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("You're not alone. \(notAlone.content)")
+        }
+    }
+
+    @ViewBuilder
+    private var recommendationsSection: some View {
+        if !wisdomService.recommendations.isEmpty {
+            WisdomRecommendationsSection(
+                recommendations: wisdomService.recommendations,
+                onFeedback: { id, helpful in
+                    Task {
+                        try? await wisdomService.recordFeedback(
+                            recommendationId: id,
+                            helpful: helpful
+                        )
+                    }
                 }
-                .disabled(!wisdomService.canContribute)
-                .accessibilityLabel("Share a strategy")
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var strategiesSection: some View {
+        if !wisdomService.strategies.isEmpty {
+            StrategiesSection(
+                strategies: wisdomService.strategies,
+                onVote: { id, voteType in
+                    Task {
+                        try? await wisdomService.voteStrategy(
+                            strategyId: id,
+                            voteType: voteType
+                        )
+                    }
+                }
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var emptyStateSection: some View {
+        if !wisdomService.isLoading &&
+           wisdomService.recommendations.isEmpty &&
+           wisdomService.strategies.isEmpty {
+            EmptyWisdomState(
+                canReceive: wisdomService.canReceiveRecommendations
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var loadingOverlay: some View {
+        if wisdomService.isLoading && wisdomService.recommendations.isEmpty {
+            ProgressView()
+                .scaleEffect(1.5)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.black.opacity(0.1))
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .navigationBarTrailing) {
+            Button {
+                showingContributeSheet = true
+            } label: {
+                Image(systemName: "plus.bubble")
             }
+            .disabled(!wisdomService.canContribute)
+            .accessibilityLabel("Share a strategy")
         }
-        .sheet(isPresented: $showingContributeSheet) {
-            ContributeStrategySheet()
+    }
+
+    @ViewBuilder
+    private var alertButtons: some View {
+        Button("Retry") {
+            Task { await refreshWisdom() }
         }
-        .refreshable {
-            await refreshWisdom()
-        }
-        .task {
-            await refreshWisdom()
-        }
-        .overlay {
-            if wisdomService.isLoading && wisdomService.recommendations.isEmpty {
-                ProgressView()
-                    .scaleEffect(1.5)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.black.opacity(0.1))
-            }
-        }
-        .alert("Unable to Load", isPresented: $showingError) {
-            Button("Retry") {
-                Task { await refreshWisdom() }
-            }
-            Button("OK", role: .cancel) {
-                wisdomService.clearError()
-            }
-        } message: {
-            Text(wisdomService.error?.localizedDescription ?? "Please try again later.")
-        }
-        .onChange(of: wisdomService.error) { _, newError in
-            showingError = newError != nil
+        Button("OK", role: .cancel) {
+            wisdomService.clearError()
         }
     }
     

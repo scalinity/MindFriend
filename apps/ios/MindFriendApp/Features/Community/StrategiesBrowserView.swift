@@ -10,73 +10,12 @@ struct StrategiesBrowserView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Category Picker
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(StrategyCategory.allCases, id: \.self) { category in
-                        CategoryChip(
-                            category: category,
-                            isSelected: selectedCategory == category
-                        ) {
-                            selectedCategory = category
-                            Task {
-                                try? await wisdomService.fetchStrategies(category: category)
-                            }
-                        }
-                        .accessibilityLabel("\(category.displayName) category")
-                        .accessibilityAddTraits(selectedCategory == category ? .isSelected : [])
-                    }
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 12)
-            }
-            .background(Color(.systemBackground))
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel("Category filter")
-            
+            categoryPicker
             Divider()
-            
-            // Strategies List
-            if wisdomService.isLoading && wisdomService.strategies.isEmpty {
-                Spacer()
-                ProgressView()
-                    .accessibilityLabel("Loading strategies")
-                Spacer()
-            } else if wisdomService.strategies.isEmpty {
-                EmptyStrategiesState(category: selectedCategory)
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 16) {
-                        ForEach(wisdomService.strategies) { strategy in
-                            StrategyDetailCard(
-                                strategy: strategy,
-                                onVote: { voteType in
-                                    Task {
-                                        try? await wisdomService.voteStrategy(
-                                            strategyId: strategy.id,
-                                            voteType: voteType
-                                        )
-                                    }
-                                }
-                            )
-                        }
-                    }
-                    .padding()
-                }
-            }
+            contentArea
         }
         .navigationTitle("Community Strategies")
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                    showingContributeSheet = true
-                } label: {
-                    Image(systemName: "plus")
-                }
-                .disabled(!wisdomService.canContribute)
-                .accessibilityLabel("Share a new strategy")
-            }
-        }
+        .toolbar { toolbarContent }
         .sheet(isPresented: $showingContributeSheet) {
             ContributeStrategySheet(preselectedCategory: selectedCategory)
         }
@@ -87,19 +26,106 @@ struct StrategiesBrowserView: View {
             try? await wisdomService.fetchStrategies(category: selectedCategory)
         }
         .alert("Unable to Load", isPresented: $showingError) {
-            Button("Retry") {
-                Task {
-                    try? await wisdomService.fetchStrategies(category: selectedCategory)
-                }
-            }
-            Button("OK", role: .cancel) {
-                wisdomService.clearError()
-            }
+            alertButtons
         } message: {
             Text(wisdomService.error?.localizedDescription ?? "Please try again later.")
         }
         .onChange(of: wisdomService.error) { _, newError in
             showingError = newError != nil
+        }
+    }
+
+    // MARK: - View Components
+
+    @ViewBuilder
+    private var categoryPicker: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 12) {
+                ForEach(StrategyCategory.allCases, id: \.self) { category in
+                    CategoryChip(
+                        category: category,
+                        isSelected: selectedCategory == category
+                    ) {
+                        selectedCategory = category
+                        Task {
+                            try? await wisdomService.fetchStrategies(category: category)
+                        }
+                    }
+                    .accessibilityLabel("\(category.displayName) category")
+                    .accessibilityAddTraits(selectedCategory == category ? .isSelected : [])
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 12)
+        }
+        .background(Color(.systemBackground))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Category filter")
+    }
+
+    @ViewBuilder
+    private var contentArea: some View {
+        if wisdomService.isLoading && wisdomService.strategies.isEmpty {
+            loadingState
+        } else if wisdomService.strategies.isEmpty {
+            EmptyStrategiesState(category: selectedCategory)
+        } else {
+            strategiesList
+        }
+    }
+
+    @ViewBuilder
+    private var loadingState: some View {
+        Spacer()
+        ProgressView()
+            .accessibilityLabel("Loading strategies")
+        Spacer()
+    }
+
+    @ViewBuilder
+    private var strategiesList: some View {
+        ScrollView {
+            LazyVStack(spacing: 16) {
+                ForEach(wisdomService.strategies) { strategy in
+                    StrategyDetailCard(
+                        strategy: strategy,
+                        onVote: { voteType in
+                            Task {
+                                try? await wisdomService.voteStrategy(
+                                    strategyId: strategy.id,
+                                    voteType: voteType
+                                )
+                            }
+                        }
+                    )
+                }
+            }
+            .padding()
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .navigationBarTrailing) {
+            Button {
+                showingContributeSheet = true
+            } label: {
+                Image(systemName: "plus")
+            }
+            .disabled(!wisdomService.canContribute)
+            .accessibilityLabel("Share a new strategy")
+        }
+    }
+
+    @ViewBuilder
+    private var alertButtons: some View {
+        Button("Retry") {
+            Task {
+                try? await wisdomService.fetchStrategies(category: selectedCategory)
+            }
+        }
+        Button("OK", role: .cancel) {
+            wisdomService.clearError()
         }
     }
 }

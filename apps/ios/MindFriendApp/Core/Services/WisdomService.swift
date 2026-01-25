@@ -1,6 +1,43 @@
 import Foundation
 import Supabase
 
+// MARK: - Request Types for Edge Functions
+
+private struct ContributeWisdomRequest: Encodable {
+    let contributionType: String
+    let data: ContributionData
+
+    struct ContributionData: Encodable {
+        var moodScore: Int?
+        var timeOfDay: String?
+        var emotion: String?
+        var exerciseType: String?
+        var effectivenessRating: Int?
+        var pathwayType: String?
+        var phaseNumber: Int?
+    }
+}
+
+private struct WisdomRecommendationsRequest: Encodable {
+    let contextTags: [String]
+    let limit: Int
+    var moodScore: Int?
+    var emotion: String?
+    var goals: [String]?
+    var challenges: [String]?
+}
+
+private struct SubmitStrategyRequest: Encodable {
+    let category: String
+    let strategyText: String
+    var context: String?
+}
+
+private struct VoteStrategyRequest: Encodable {
+    let strategyId: String
+    let voteType: String
+}
+
 /// Service for Community Wisdom Engine features
 /// Handles consent management, contributions, recommendations, and strategies
 @MainActor
@@ -110,23 +147,26 @@ final class WisdomService: ObservableObject {
     func contributeMoodPattern(moodScore: Int, emotion: String? = nil) async {
         guard canContribute else { return }
         guard shouldAllowContribution() else { return }
-        
+
         // Validate inputs
         guard moodScore >= 1 && moodScore <= 5 else { return }
-        
+
         let timeOfDay = getTimeOfDay()
-        var data: [String: Any] = [
-            "moodScore": moodScore,
-            "timeOfDay": timeOfDay
-        ]
+        var sanitizedEmotion: String?
         if let emotion = emotion, !emotion.isEmpty, emotion.count <= 30 {
             // Sanitize emotion input
             let sanitized = emotion.replacingOccurrences(of: "[^a-zA-Z]", with: "", options: .regularExpression)
             if !sanitized.isEmpty {
-                data["emotion"] = sanitized.lowercased()
+                sanitizedEmotion = sanitized.lowercased()
             }
         }
-        
+
+        let data = ContributeWisdomRequest.ContributionData(
+            moodScore: moodScore,
+            timeOfDay: timeOfDay,
+            emotion: sanitizedEmotion
+        )
+
         await contribute(type: .moodPattern, data: data)
     }
     
@@ -137,19 +177,19 @@ final class WisdomService: ObservableObject {
     func contributeExerciseEffectiveness(exerciseType: String, rating: Int) async {
         guard canContribute else { return }
         guard shouldAllowContribution() else { return }
-        
+
         // Validate inputs
         guard rating >= 1 && rating <= 5 else { return }
         guard !exerciseType.isEmpty && exerciseType.count <= 50 else { return }
-        
-        let data: [String: Any] = [
-            "exerciseType": exerciseType,
-            "effectivenessRating": rating
-        ]
-        
+
+        let data = ContributeWisdomRequest.ContributionData(
+            exerciseType: exerciseType,
+            effectivenessRating: rating
+        )
+
         await contribute(type: .exerciseEffectiveness, data: data)
     }
-    
+
     /// Contribute pathway progress data anonymously
     /// - Parameters:
     ///   - pathwayType: Type of pathway
@@ -157,16 +197,16 @@ final class WisdomService: ObservableObject {
     func contributePathwayProgress(pathwayType: String, phaseNumber: Int) async {
         guard canContribute else { return }
         guard shouldAllowContribution() else { return }
-        
+
         // Validate inputs
         guard phaseNumber >= 1 && phaseNumber <= 10 else { return }
         guard !pathwayType.isEmpty && pathwayType.count <= 50 else { return }
-        
-        let data: [String: Any] = [
-            "pathwayType": pathwayType,
-            "phaseNumber": phaseNumber
-        ]
-        
+
+        let data = ContributeWisdomRequest.ContributionData(
+            pathwayType: pathwayType,
+            phaseNumber: phaseNumber
+        )
+
         await contribute(type: .pathwayProgress, data: data)
     }
     
@@ -181,18 +221,18 @@ final class WisdomService: ObservableObject {
     }
     
     /// Generic contribution method
-    private func contribute(type: ContributionType, data: [String: Any]) async {
+    private func contribute(type: ContributionType, data: ContributeWisdomRequest.ContributionData) async {
         do {
-            let body: [String: Any] = [
-                "contributionType": type.rawValue,
-                "data": data
-            ]
-            
+            let body = ContributeWisdomRequest(
+                contributionType: type.rawValue,
+                data: data
+            )
+
             _ = try await supabase.functions.invoke(
                 "contribute-wisdom",
-                options: .init(body: AnyEncodable(body))
+                options: .init(body: body)
             )
-            
+
             // Update rate limiting timestamp on success
             lastContributionTime = Date()
         } catch {
@@ -222,39 +262,36 @@ final class WisdomService: ObservableObject {
             notAloneInsight = nil
             return
         }
-        
+
         clearError()
         isLoading = true
         defer { isLoading = false }
-        
-        var body: [String: Any] = [
-            "contextTags": [] as [String],
-            "limit": 5
-        ]
-        
+
+        var validatedMoodScore: Int?
         if let moodScore = moodScore, moodScore >= 1, moodScore <= 5 {
-            body["moodScore"] = moodScore
+            validatedMoodScore = moodScore
         }
+
+        var validatedEmotion: String?
         if let emotion = emotion, !emotion.isEmpty, emotion.count <= 30 {
-            body["emotion"] = emotion
+            validatedEmotion = emotion
         }
-        if !goals.isEmpty {
-            body["goals"] = Array(goals.prefix(5))
-        }
-        if !challenges.isEmpty {
-            body["challenges"] = Array(challenges.prefix(5))
-        }
-        
+
+        let body = WisdomRecommendationsRequest(
+            contextTags: [],
+            limit: 5,
+            moodScore: validatedMoodScore,
+            emotion: validatedEmotion,
+            goals: goals.isEmpty ? nil : Array(goals.prefix(5)),
+            challenges: challenges.isEmpty ? nil : Array(challenges.prefix(5))
+        )
+
         do {
-            let response = try await supabase.functions.invoke(
+            let result: WisdomRecommendationsResponse = try await supabase.functions.invoke(
                 "get-wisdom-recommendations",
-                options: .init(body: AnyEncodable(body))
+                options: .init(body: body)
             )
-            
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            let result = try decoder.decode(WisdomRecommendationsResponse.self, from: response.data)
-            
+
             recommendations = result.insights
             notAloneInsight = result.notAloneInsight
         } catch {
@@ -345,22 +382,16 @@ final class WisdomService: ObservableObject {
         strategyText: String,
         context: String? = nil
     ) async throws -> UUID? {
-        var body: [String: Any] = [
-            "category": category.rawValue,
-            "strategyText": strategyText
-        ]
-
-        if let context = context {
-            body["context"] = context
-        }
-
-        let response = try await supabase.functions.invoke(
-            "submit-strategy",
-            options: .init(body: AnyEncodable(body))
+        var body = SubmitStrategyRequest(
+            category: category.rawValue,
+            strategyText: strategyText
         )
+        body.context = context
 
-        let decoder = JSONDecoder()
-        let result = try decoder.decode(SubmitStrategyResponse.self, from: response.data)
+        let result: SubmitStrategyResponse = try await supabase.functions.invoke(
+            "submit-strategy",
+            options: .init(body: body)
+        )
 
         if result.success {
             return result.strategyId
@@ -374,18 +405,15 @@ final class WisdomService: ObservableObject {
     ///   - strategyId: ID of the strategy
     ///   - voteType: Vote type (helpful or not_helpful)
     func voteStrategy(strategyId: UUID, voteType: VoteType) async throws {
-        let body: [String: Any] = [
-            "strategyId": strategyId.uuidString,
-            "voteType": voteType.rawValue
-        ]
-
-        let response = try await supabase.functions.invoke(
-            "vote-strategy",
-            options: .init(body: AnyEncodable(body))
+        let body = VoteStrategyRequest(
+            strategyId: strategyId.uuidString,
+            voteType: voteType.rawValue
         )
 
-        let decoder = JSONDecoder()
-        let result = try decoder.decode(VoteStrategyResponse.self, from: response.data)
+        let result: VoteStrategyResponse = try await supabase.functions.invoke(
+            "vote-strategy",
+            options: .init(body: body)
+        )
 
         if result.success, let stats = result.strategy {
             // Update local strategy with new counts
@@ -414,7 +442,7 @@ final class WisdomService: ObservableObject {
 
 // MARK: - Wisdom Errors
 
-enum WisdomError: LocalizedError {
+enum WisdomError: LocalizedError, Equatable {
     case consentRequired
     case submissionFailed(String)
     case voteFailed(String)
