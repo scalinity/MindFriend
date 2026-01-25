@@ -1,0 +1,349 @@
+import AVFoundation
+import Combine
+import Foundation
+
+/// ViewModel for managing AVFoundation audio playback for generated wellness content
+/// Supports playback speed control, sleep timer with fade-out, and background sound mixing
+@MainActor
+final class AudioPlayerViewModel: ObservableObject {
+    // MARK: - Published State
+
+    @Published private(set) var isLoading = false
+    @Published private(set) var isPlaying = false
+    @Published private(set) var currentTime: TimeInterval = 0
+    @Published private(set) var duration: TimeInterval = 0
+    @Published var error: String?
+
+    @Published var playbackRate: Float = 1.0 {
+        didSet {
+            player?.rate = isPlaying ? playbackRate : 0
+        }
+    }
+
+    @Published var sleepTimerMinutes: Int? = nil {
+        didSet {
+            if let minutes = sleepTimerMinutes {
+                startSleepTimer(minutes: minutes)
+            } else {
+                cancelSleepTimer()
+            }
+        }
+    }
+
+    @Published var sleepTimerRemaining: TimeInterval = 0
+    @Published var backgroundSound: BackgroundSoundType? = nil {
+        didSet {
+            updateBackgroundSound()
+        }
+    }
+    @Published var backgroundSoundVolume: Float = 0.3
+
+    // MARK: - Private Properties
+
+    private var player: AVPlayer?
+    private var backgroundPlayer: AVAudioPlayer?
+    private var timeObserver: Any?
+    private var sleepTimerTask: Task<Void, Never>?
+    private var fadeOutTask: Task<Void, Never>?
+    private var cancellables = Set<AnyCancellable>()
+
+    // MARK: - Initialization
+
+    init() {
+        setupAudioSession()
+    }
+
+    deinit {
+        // Note: cleanup() is MainActor isolated, so we do minimal cleanup here
+        // The view should call cleanup() in onDisappear
+        sleepTimerTask?.cancel()
+        fadeOutTask?.cancel()
+    }
+
+    // MARK: - Audio Session Setup
+
+    private func setupAudioSession() {
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .spokenAudio, options: [.mixWithOthers])
+            try session.setActive(true)
+
+            // Handle interruptions (phone calls, alarms)
+            NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)
+                .sink { [weak self] notification in
+                    self?.handleInterruption(notification)
+                }
+                .store(in: &cancellables)
+        } catch {
+            print("Failed to setup audio session: \(error)")
+        }
+    }
+
+    private func handleInterruption(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: typeValue)
+        else { return }
+
+        switch type {
+        case .began:
+            pause()
+        case .ended:
+            if let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt {
+                let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
+                if options.contains(.shouldResume) {
+                    play()
+                }
+            }
+        @unknown default:
+            break
+        }
+    }
+
+    // MARK: - Playback Control
+
+    /// Load audio from URL
+    func load(audioURL: URL) async throws {
+        isLoading = true
+        error = nil
+
+        // Create player item and player
+        let asset = AVURLAsset(url: audioURL)
+        let playerItem = AVPlayerItem(asset: asset)
+
+        // Wait for duration to be available
+        do {
+            let duration = try await asset.load(.duration)
+            self.duration = CMTimeGetSeconds(duration)
+        } catch {
+            self.duration = 0
+        }
+
+        player = AVPlayer(playerItem: playerItem)
+        player?.actionAtItemEnd = .pause
+
+        // Observe playback end
+        NotificationCenter.default.publisher(for: .AVPlayerItemDidPlayToEndTime, object: playerItem)
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    self?.handlePlaybackEnd()
+                }
+            }
+            .store(in: &cancellables)
+
+        // Setup time observer
+        let interval = CMTime(seconds: 0.5, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
+        timeObserver = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
+            Task { @MainActor in
+                self?.currentTime = CMTimeGetSeconds(time)
+            }
+        }
+
+        isLoading = false
+    }
+
+    /// Start or resume playback
+    func play() {
+        player?.rate = playbackRate
+        isPlaying = true
+        backgroundPlayer?.play()
+    }
+
+    /// Pause playback
+    func pause() {
+        player?.pause()
+        isPlaying = false
+        backgroundPlayer?.pause()
+    }
+
+    /// Seek to a specific time
+    func seek(to time: TimeInterval) {
+        let cmTime = CMTime(seconds: time, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
+        player?.seek(to: cmTime)
+    }
+
+    /// Toggle play/pause
+    func togglePlayback() {
+        if isPlaying {
+            pause()
+        } else {
+            play()
+        }
+    }
+
+    /// Skip forward by seconds
+    func skipForward(_ seconds: TimeInterval = 15) {
+        let newTime = min(currentTime + seconds, duration)
+        seek(to: newTime)
+    }
+
+    /// Skip backward by seconds
+    func skipBackward(_ seconds: TimeInterval = 15) {
+        let newTime = max(currentTime - seconds, 0)
+        seek(to: newTime)
+    }
+
+    /// Cleanup resources
+    func cleanup() {
+        if let observer = timeObserver {
+            player?.removeTimeObserver(observer)
+            timeObserver = nil
+        }
+        player?.pause()
+        player = nil
+        backgroundPlayer?.stop()
+        backgroundPlayer = nil
+        sleepTimerTask?.cancel()
+        fadeOutTask?.cancel()
+        cancellables.removeAll()
+    }
+
+    // MARK: - Sleep Timer
+
+    private func startSleepTimer(minutes: Int) {
+        cancelSleepTimer()
+
+        let totalSeconds = TimeInterval(minutes * 60)
+        sleepTimerRemaining = totalSeconds
+
+        sleepTimerTask = Task {
+            var remaining = totalSeconds
+
+            while remaining > 0 && !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+                remaining -= 1
+                await MainActor.run {
+                    sleepTimerRemaining = remaining
+                }
+
+                // Start fade-out 30 seconds before timer ends
+                if remaining == 30 {
+                    await startFadeOut()
+                }
+            }
+
+            if !Task.isCancelled {
+                await MainActor.run {
+                    pause()
+                    sleepTimerMinutes = nil
+                }
+            }
+        }
+    }
+
+    private func cancelSleepTimer() {
+        sleepTimerTask?.cancel()
+        sleepTimerTask = nil
+        fadeOutTask?.cancel()
+        fadeOutTask = nil
+        sleepTimerRemaining = 0
+
+        // Reset volume if fade was in progress
+        player?.volume = 1.0
+    }
+
+    private func startFadeOut() async {
+        fadeOutTask = Task {
+            let steps = 30 // 30 steps over 30 seconds
+            for step in 0..<steps {
+                if Task.isCancelled { break }
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                let volume = Float(steps - step - 1) / Float(steps)
+                await MainActor.run {
+                    player?.volume = volume
+                    backgroundPlayer?.volume = volume * backgroundSoundVolume
+                }
+            }
+        }
+    }
+
+    // MARK: - Background Sound
+
+    private func updateBackgroundSound() {
+        backgroundPlayer?.stop()
+        backgroundPlayer = nil
+
+        guard let soundType = backgroundSound, soundType != .silence else {
+            return
+        }
+
+        // Load bundled background sound
+        guard let url = Bundle.main.url(forResource: soundType.rawValue, withExtension: "mp3") else {
+            print("Background sound not found: \(soundType.rawValue)")
+            return
+        }
+
+        do {
+            backgroundPlayer = try AVAudioPlayer(contentsOf: url)
+            backgroundPlayer?.numberOfLoops = -1 // Loop indefinitely
+            backgroundPlayer?.volume = backgroundSoundVolume
+            if isPlaying {
+                backgroundPlayer?.play()
+            }
+        } catch {
+            print("Failed to load background sound: \(error)")
+        }
+    }
+
+    /// Update background sound volume
+    func setBackgroundSoundVolume(_ volume: Float) {
+        backgroundSoundVolume = max(0, min(1, volume))
+        backgroundPlayer?.volume = backgroundSoundVolume
+    }
+
+    // MARK: - Playback End
+
+    private func handlePlaybackEnd() {
+        isPlaying = false
+        currentTime = duration
+
+        // Cancel sleep timer if story ended naturally
+        if sleepTimerMinutes != nil {
+            cancelSleepTimer()
+        }
+    }
+
+    // MARK: - Computed Properties
+
+    var progress: Double {
+        guard duration > 0 else { return 0 }
+        return currentTime / duration
+    }
+
+    var formattedCurrentTime: String {
+        formatTime(currentTime)
+    }
+
+    var formattedDuration: String {
+        formatTime(duration)
+    }
+
+    var formattedSleepTimerRemaining: String {
+        formatTime(sleepTimerRemaining)
+    }
+
+    private func formatTime(_ time: TimeInterval) -> String {
+        let minutes = Int(time) / 60
+        let seconds = Int(time) % 60
+        return String(format: "%d:%02d", minutes, seconds)
+    }
+
+    /// Supported playback speeds
+    static let playbackSpeeds: [Float] = [0.75, 1.0, 1.25, 1.5]
+
+    /// Sleep timer presets in minutes
+    static let sleepTimerPresets: [Int?] = [nil, 15, 30, 45, 60]
+}
+
+// MARK: - Preview Helpers
+
+#if DEBUG
+extension AudioPlayerViewModel {
+    static var preview: AudioPlayerViewModel {
+        let vm = AudioPlayerViewModel()
+        vm.duration = 600
+        vm.currentTime = 120
+        return vm
+    }
+}
+#endif
