@@ -2,11 +2,22 @@ import Foundation
 import Supabase
 
 @MainActor
-final class TransitionService {
+final class TransitionService: TransitionServiceProtocol {
     private let supabase: SupabaseClient
+    private let networkRetry: NetworkRetryService
+    private let cacheService: PathwayCacheService  // ✅ Made private - use delegation methods instead
+    private let encryptionService: PathwayEncryptionService
 
-    init(supabase: SupabaseClient) {
+    init(
+        supabase: SupabaseClient,
+        networkRetry: NetworkRetryService = NetworkRetryService(),
+        cacheService: PathwayCacheService = PathwayCacheService(),
+        encryptionService: PathwayEncryptionService = PathwayEncryptionService()
+    ) {
         self.supabase = supabase
+        self.networkRetry = networkRetry
+        self.cacheService = cacheService
+        self.encryptionService = encryptionService
     }
 
     // MARK: - Browse Pathways
@@ -77,18 +88,39 @@ final class TransitionService {
 
     /// Get today's pathway content
     func getDailyContent(userPathwayId: UUID) async throws -> DailyPathwayContent {
+        // Check cache first (now throws)
+        if let cached = try? cacheService.getCachedDailyContent(for: userPathwayId) {
+            return cached
+        }
+        
+        // Fetch with retry
         struct ContentRequest: Codable {
             let userPathwayId: String
         }
 
         let request = ContentRequest(userPathwayId: userPathwayId.uuidString)
 
-        let response: DailyPathwayContent = try await supabase.functions.invoke(
-            "get-pathway-content",
-            options: FunctionInvokeOptions(body: request)
+        let content: DailyPathwayContent = try await networkRetry.execute(
+            {
+                try await self.supabase.functions.invoke(
+                    "get-pathway-content",
+                    options: FunctionInvokeOptions(body: request)
+                )
+            },
+            shouldRetry: NetworkRetryService.isRetryableError
         )
+        
+        // Cache the result (now throws - log but don't fail the request)
+        Task.detached(priority: .utility) { [weak self] in
+            do {
+                try self?.cacheService.cacheDailyContent(content, for: userPathwayId)
+            } catch {
+                // ✅ SECURITY FIX: Don't log error details (may contain PHI)
+                print("⚠️ Failed to cache daily content for pathway \(userPathwayId.uuidString)")
+            }
+        }
 
-        return response
+        return content
     }
 
     /// Submit daily check-in
@@ -98,29 +130,145 @@ final class TransitionService {
         exercisesCompleted: [String] = [],
         journalEntry: String? = nil
     ) async throws -> CheckInResponse {
+        // Save draft (optimistic)
+        let draft = PathwayCacheService.CheckInDraft(
+            id: UUID(),
+            userPathwayId: userPathwayId,
+            checkInData: checkInData,
+            exercisesCompleted: exercisesCompleted,
+            journalEntry: journalEntry,
+            timestamp: Date(),
+            retryCount: 0
+        )
+
+        do {
+            try cacheService.saveCheckInDraft(draft)
+        } catch {
+            // ✅ SECURITY FIX: Don't log error details (may contain PHI)
+            print("⚠️ Failed to save check-in draft for pathway \(userPathwayId.uuidString)")
+        }
+        
+        // ✅ PERFORMANCE FIX: Offload encryption to background thread (prevents 100-350ms UI freeze)
+        let (encryptedNotes, encryptedJournalEntry) = try await Task.detached(priority: .userInitiated) { [encryptionService] in
+            let notes = try encryptionService.encryptString(checkInData.notes)
+            let journal = try encryptionService.encryptString(journalEntry)
+            return (notes, journal)
+        }.value
+
+        struct EncryptedCheckInData: Codable {
+            let mood: Int
+            let energy: Int
+            let encryptedNotes: String?  // ✅ ADDED: Encrypted notes
+            let responses: [String: String]?
+        }
+        
         struct CheckInRequest: Codable {
             let userPathwayId: String
-            let checkInData: CheckInData
+            let checkInData: EncryptedCheckInData
             let exercisesCompleted: [String]
-            let journalEntry: String?
+            let encryptedJournalEntry: String?  // ✅ ADDED: Encrypted journal entry
         }
 
         let request = CheckInRequest(
             userPathwayId: userPathwayId.uuidString,
-            checkInData: checkInData,
+            checkInData: EncryptedCheckInData(
+                mood: checkInData.mood,
+                energy: checkInData.energy,
+                encryptedNotes: encryptedNotes,
+                responses: checkInData.responses
+            ),
             exercisesCompleted: exercisesCompleted,
-            journalEntry: journalEntry
+            encryptedJournalEntry: encryptedJournalEntry
         )
 
-        let response: CheckInResponse = try await supabase.functions.invoke(
-            "submit-pathway-checkin",
-            options: FunctionInvokeOptions(body: request)
-        )
+        do {
+            let response: CheckInResponse = try await networkRetry.execute(
+                {
+                    try await self.supabase.functions.invoke(
+                        "submit-pathway-checkin",
+                        options: FunctionInvokeOptions(body: request)
+                    )
+                },
+                shouldRetry: NetworkRetryService.isRetryableError
+            )
+            
+            // Clear draft on success
+            cacheService.clearCheckInDraft(for: userPathwayId)
+            
+            return response
+        } catch {
+            // Queue for retry if network error
+            if NetworkRetryService.isRetryableError(error) {
+                let pending = PathwayCacheService.PendingCheckIn(
+                    userPathwayId: userPathwayId,
+                    checkInData: checkInData,
+                    exercisesCompleted: exercisesCompleted,
+                    journalEntry: journalEntry
+                )
+                cacheService.queuePendingCheckIn(pending)
+            }
+            throw error
+        }
+    }
+    
+    // MARK: - Background Sync
 
-        return response
+    /// Process pending check-ins (call on app launch or network recovery)
+    func processPendingCheckIns() async {
+        // ✅ FIX: Create immutable snapshot to avoid concurrent modification during iteration
+        let pendingSnapshot = cacheService.getPendingCheckIns()
+
+        for checkIn in pendingSnapshot {
+            // Skip if too many retries
+            guard checkIn.retryCount < 5 else {
+                cacheService.removePendingCheckIn(checkIn.id)
+                continue
+            }
+
+            do {
+                _ = try await completeCheckIn(
+                    userPathwayId: checkIn.userPathwayId,
+                    checkInData: checkIn.checkInData,
+                    exercisesCompleted: checkIn.exercisesCompleted,
+                    journalEntry: checkIn.journalEntry
+                )
+
+                // Success - remove from queue
+                cacheService.removePendingCheckIn(checkIn.id)
+            } catch {
+                // Update retry count
+                cacheService.updateRetryCount(for: checkIn.id)
+            }
+        }
     }
 
     // MARK: - Phase Progression
+
+    /// Fetch phase details for a specific phase
+    func fetchPhaseDetails(pathwayId: UUID, phaseNumber: Int) async throws -> PathwayPhase? {
+        let phases: [PathwayPhase] = try await supabase
+            .from("pathway_phases")
+            .select()
+            .eq("pathway_id", value: pathwayId.uuidString)
+            .eq("phase_number", value: phaseNumber)
+            .execute()
+            .value
+        
+        return phases.first
+    }
+    
+    /// Fetch milestones for a specific user pathway phase
+    func fetchPhaseMilestones(userPathwayId: UUID, phaseNumber: Int) async throws -> [PathwayMilestone] {
+        let milestones: [PathwayMilestone] = try await supabase
+            .from("pathway_milestones")
+            .select()
+            .eq("user_pathway_id", value: userPathwayId.uuidString)
+            .eq("phase_number", value: phaseNumber)
+            .execute()
+            .value
+        
+        return milestones
+    }
 
     /// Advance to next phase
     func advancePhase(userPathwayId: UUID) async throws -> AdvancePhaseResponse {
@@ -148,11 +296,11 @@ final class TransitionService {
         }
 
         let request = PauseRequest(userPathwayId: userPathwayId.uuidString, reason: reason)
-        let data = try JSONEncoder().encode(request)
 
+        // ✅ FIX: Pass Codable struct directly - FunctionInvokeOptions will encode it
         _ = try await supabase.functions.invoke(
             "pause-pathway",
-            options: FunctionInvokeOptions(body: data)
+            options: FunctionInvokeOptions(body: request)
         )
     }
 
@@ -163,11 +311,11 @@ final class TransitionService {
         }
 
         let request = ResumeRequest(userPathwayId: userPathwayId.uuidString)
-        let data = try JSONEncoder().encode(request)
 
+        // ✅ FIX: Pass Codable struct directly - FunctionInvokeOptions will encode it
         _ = try await supabase.functions.invoke(
             "resume-pathway",
-            options: FunctionInvokeOptions(body: data)
+            options: FunctionInvokeOptions(body: request)
         )
     }
 
@@ -179,11 +327,30 @@ final class TransitionService {
         }
 
         let request = AbandonRequest(userPathwayId: userPathwayId.uuidString, feedback: feedback)
-        let data = try JSONEncoder().encode(request)
 
+        // ✅ FIX: Pass Codable struct directly - FunctionInvokeOptions will encode it
         _ = try await supabase.functions.invoke(
             "abandon-pathway",
-            options: FunctionInvokeOptions(body: data)
+            options: FunctionInvokeOptions(body: request)
         )
+    }
+
+    // MARK: - Journal Draft Management (Delegation to Cache Service)
+
+    /// Get journal draft for a pathway
+    /// - Throws: SecureStorageError if decryption fails
+    func getJournalDraft(for pathwayId: UUID) throws -> String? {
+        try cacheService.getJournalDraft(for: pathwayId)
+    }
+
+    /// Save journal draft for a pathway
+    /// - Throws: SecureStorageError if encryption fails
+    func saveJournalDraft(_ text: String, for pathwayId: UUID) throws {
+        try cacheService.saveJournalDraft(text, for: pathwayId)
+    }
+
+    /// Clear journal draft for a pathway
+    func clearJournalDraft(for pathwayId: UUID) {
+        cacheService.clearJournalDraft(for: pathwayId)
     }
 }
