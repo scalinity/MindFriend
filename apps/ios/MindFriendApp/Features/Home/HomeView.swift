@@ -1153,6 +1153,16 @@ struct QuickActionsSection: View {
             // Second row
             HStack(spacing: 12) {
                 NavigationLink {
+                    GenerativeHomeView()
+                } label: {
+                    HomeQuickActionButton(
+                        title: "For You",
+                        icon: "wand.and.stars",
+                        color: .indigo
+                    )
+                }
+
+                NavigationLink {
                     BadgesView()
                 } label: {
                     HomeQuickActionButton(
