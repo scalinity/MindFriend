@@ -8,9 +8,15 @@ struct PathwayDashboardView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var showDailyView = false
+    @State private var showPhaseProgress = false
+    @State private var showCompletion = false
 
     var body: some View {
-        ScrollView {
+        // Show completion view if pathway is completed
+        if userPathway.status == .completed {
+            PathwayCompletionView(userPathway: userPathway)
+        } else {
+            ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 // Header
                 VStack(alignment: .leading, spacing: 8) {
@@ -27,8 +33,22 @@ struct PathwayDashboardView: View {
 
                 // Current phase
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Current Phase: \(userPathway.currentPhaseName)")
-                        .font(.headline)
+                    HStack {
+                        Text("Current Phase: \(userPathway.currentPhaseName)")
+                            .font(.headline)
+
+                        Spacer()
+
+                        NavigationLink(destination: PhaseProgressView(userPathway: userPathway, transitionService: container.transitionService)) {
+                            HStack(spacing: 4) {
+                                Text("Details")
+                                    .font(.subheadline)
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                            }
+                            .foregroundColor(.blue)
+                        }
+                    }
 
                     if let phases = userPathway.pathway?.phases {
                         HStack(spacing: 12) {
@@ -98,6 +118,7 @@ struct PathwayDashboardView: View {
         }
         .task {
             await loadDailyContent()
+        }
         }
     }
 

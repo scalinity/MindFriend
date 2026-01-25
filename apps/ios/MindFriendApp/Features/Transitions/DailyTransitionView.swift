@@ -5,7 +5,7 @@ struct DailyTransitionView: View {
     let userPathway: UserPathway
     let content: DailyPathwayContent
     @Environment(\.dismiss) var dismiss
-    
+
     @State private var mood: Double = 5
     @State private var energy: Double = 5
     @State private var notes = ""
@@ -28,7 +28,7 @@ struct DailyTransitionView: View {
         .navigationTitle("Day \(content.dayNumber)")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(primaryAction: .confirmationAction) {
+            ToolbarItem(placement: .confirmationAction) {
                 Button("Submit") {
                     submitCheckIn()
                 }
@@ -50,12 +50,24 @@ struct DailyTransitionView: View {
             Text(errorMessage ?? "Unknown error occurred")
         }
         .onAppear {
-            if let draft = UserDefaults.standard.string(forKey: "draft_journal_\(userPathway.id)") {
-                journalEntry = draft
+            // ✅ Load encrypted journal draft via service layer (proper encapsulation)
+            do {
+                if let draft = try container.transitionService.getJournalDraft(for: userPathway.id) {
+                    journalEntry = draft
+                }
+            } catch {
+                // ✅ SECURITY FIX: Don't log error details (may contain decrypted PHI)
+                print("⚠️ Failed to load journal draft for pathway \(userPathway.id.uuidString)")
             }
         }
         .onChange(of: journalEntry) { newValue in
-            UserDefaults.standard.set(newValue, forKey: "draft_journal_\(userPathway.id)")
+            // ✅ Save encrypted journal draft via service layer (proper encapsulation)
+            do {
+                try container.transitionService.saveJournalDraft(newValue, for: userPathway.id)
+            } catch {
+                // ✅ SECURITY FIX: Don't log error details (may contain PHI)
+                print("⚠️ Failed to save journal draft for pathway \(userPathway.id.uuidString)")
+            }
         }
     }
 
@@ -166,8 +178,8 @@ struct DailyTransitionView: View {
                     checkInData: checkInData,
                     journalEntry: journalEntry.isEmpty ? nil : journalEntry
                 )
-                // Clear draft on success
-                UserDefaults.standard.removeObject(forKey: "draft_journal_\(userPathway.id)")
+                // ✅ Clear encrypted draft on success via service layer
+                container.transitionService.clearJournalDraft(for: userPathway.id)
                 isSubmitting = false
                 dismiss()
             } catch {

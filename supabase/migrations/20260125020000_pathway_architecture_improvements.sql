@@ -22,12 +22,22 @@ CREATE OR REPLACE FUNCTION enroll_user_in_pathway(
     p_pathway_id UUID,
     p_personalization JSONB,
     p_context_content TEXT
-) RETURNS JSONB AS $$
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
 DECLARE
     v_user_pathway_id UUID;
     v_pathway_key TEXT;
     v_result JSONB;
 BEGIN
+    -- ✅ CRITICAL SECURITY CHECK: Verify user ownership
+    IF p_user_id != auth.uid() THEN
+        RAISE EXCEPTION 'Unauthorized: Cannot enroll pathway for another user';
+    END IF;
+
     -- Get pathway key for profile update
     SELECT key INTO v_pathway_key FROM transition_pathways WHERE id = p_pathway_id;
 
@@ -93,18 +103,25 @@ BEGIN
     RETURN v_result;
 
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 -- ==========================================
 -- 3. Transaction-safe check-in function
 -- ==========================================
 
+-- ✅ NOTE: This function is superseded by 20260125090000_fix_phase_advancement_logic.sql
+-- Keeping for migration history; later migration adds pathwayCompleted and fixes off-by-one error
 CREATE OR REPLACE FUNCTION submit_pathway_checkin(
     p_user_pathway_id UUID,
     p_check_in_data JSONB,
     p_exercises_completed TEXT[],
     p_journal_entry TEXT
-) RETURNS JSONB AS $$
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
 DECLARE
     v_current_day INT;
     v_current_phase INT;
@@ -115,6 +132,7 @@ DECLARE
     v_new_phase INT;
     v_new_day INT;
     v_new_phase_day INT;
+    v_pathway_completed BOOLEAN := false;
     v_result JSONB;
 BEGIN
     -- Get current pathway state
@@ -134,7 +152,7 @@ BEGIN
     v_new_phase := v_current_phase;
     v_new_phase_day := v_current_phase_day + 1;
 
-    -- Check if we should advance phase
+    -- Check if we should advance phase (NOTE: off-by-one error fixed in later migration)
     IF v_current_phase_day >= v_phase_duration THEN
         v_should_advance := true;
         v_new_phase := v_current_phase + 1;
@@ -176,13 +194,14 @@ BEGIN
         'success', true,
         'newDay', v_new_day,
         'newPhase', v_new_phase,
-        'phaseAdvanced', v_should_advance
+        'phaseAdvanced', v_should_advance,
+        'pathwayCompleted', v_pathway_completed
     );
 
     RETURN v_result;
 
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 -- ==========================================
 -- 4. Content templates table

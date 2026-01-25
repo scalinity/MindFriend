@@ -28,7 +28,7 @@ serve(async (req) => {
         },
       );
     }
-    
+
     const token = authHeader.replace("Bearer ", "");
     const {
       data: { user },
@@ -107,10 +107,13 @@ serve(async (req) => {
       },
     );
   } catch (error) {
-    console.error("Error advancing phase:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    console.error("Error advancing phase:", error); // Log full error server-side
+    return new Response(
+      JSON.stringify({ error: "An unexpected error occurred" }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   }
 });
