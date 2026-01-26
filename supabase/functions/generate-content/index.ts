@@ -15,15 +15,18 @@ import {
   getContentDisclaimer,
 } from "../_shared/content-validation.ts";
 import {
-  createElevenLabsClient,
+  createGoogleTTSClient,
   estimateTTSCost,
   estimateDuration,
   DEFAULT_VOICE_ID,
-  ElevenLabsError,
-} from "../_shared/elevenlabs.ts";
+  GoogleTTSError,
+} from "../_shared/google-tts.ts";
 import { checkRateLimit } from "../_shared/ratelimit.ts";
 // NEW: Import context-aware generation modules
-import { gatherGenerationContext, GenerationContext } from "./context-gatherer.ts";
+import {
+  gatherGenerationContext,
+  GenerationContext,
+} from "./context-gatherer.ts";
 import { buildContextualPrompt } from "./prompt-builder.ts";
 
 // Type alias for untyped Supabase client
@@ -398,23 +401,36 @@ serve(async (req) => {
     try {
       // NEW: Gather user context for personalized generation (for exercise types)
       let generationContext: GenerationContext | null = null;
-      const exerciseTypes = ["breathing", "meditation", "grounding", "journaling", "mindfulness"];
-      
+      const exerciseTypes = [
+        "breathing",
+        "meditation",
+        "grounding",
+        "journaling",
+        "mindfulness",
+      ];
+
       if (exerciseTypes.includes(request.contentType)) {
         try {
           generationContext = await gatherGenerationContext(
             supabaseAdmin,
             user.id,
-            request.contentType
+            request.contentType,
           );
         } catch (contextError) {
-          console.warn("Context gathering failed, proceeding with minimal context:", contextError);
+          console.warn(
+            "Context gathering failed, proceeding with minimal context:",
+            contextError,
+          );
           // Continue with null context - generateTextContent will handle this
         }
       }
 
       // Generate text content with xAI (now context-aware for exercises)
-      const textContent = await generateTextContent(request, user.id, generationContext);
+      const textContent = await generateTextContent(
+        request,
+        user.id,
+        generationContext,
+      );
 
       // Validate generated content
       const contentValidation = validateGeneratedContent(textContent);
@@ -449,7 +465,7 @@ serve(async (req) => {
         safety_flags: contentValidation.flags,
         status: "completed",
       };
-      
+
       // NEW: Store generation context if available
       if (generationContext) {
         updateData.generation_context = generationContext;
@@ -460,48 +476,57 @@ serve(async (req) => {
         .update(updateData)
         .eq("id", contentId);
 
-      // Attempt TTS synthesis (non-blocking - can fail gracefully)
+      // TTS synthesis - PREMIUM ONLY to control costs
+      // Free tier users get text_content only; iOS app uses native AVSpeechSynthesizer
       let audioUrl: string | undefined;
       let actualDuration: number | undefined;
       let generationCost = 0;
 
-      try {
-        const elevenLabs = createElevenLabsClient();
-        const voiceId = request.params.voiceId || DEFAULT_VOICE_ID;
+      if (isPremium) {
+        try {
+          const googleTTS = createGoogleTTSClient();
+          const voiceId = request.params.voiceId || DEFAULT_VOICE_ID;
 
-        // Synthesize voice
-        const ttsResult = await elevenLabs.textToSpeech({
-          text: textContent,
-          voiceId,
-        });
-
-        // Upload to Supabase Storage
-        const fileName = `${user.id}/${contentId}.mp3`;
-        const { error: uploadError } = await supabaseAdmin.storage
-          .from("generated-audio")
-          .upload(fileName, ttsResult.audioData, {
-            contentType: ttsResult.contentType,
-            upsert: true,
+          // Synthesize voice with Google Cloud TTS (premium feature)
+          const ttsResult = await googleTTS.textToSpeech({
+            text: textContent,
+            voiceId,
           });
 
-        if (!uploadError) {
-          // Get public URL
-          const { data: urlData } = supabaseAdmin.storage
+          // Upload to Supabase Storage
+          const fileName = `${user.id}/${contentId}.mp3`;
+          const { error: uploadError } = await supabaseAdmin.storage
             .from("generated-audio")
-            .getPublicUrl(fileName);
+            .upload(fileName, ttsResult.audioData, {
+              contentType: ttsResult.contentType,
+              upsert: true,
+            });
 
-          audioUrl = urlData?.publicUrl;
-          actualDuration = estimateDuration(textContent);
-          generationCost = estimateTTSCost(ttsResult.characterCount);
-        } else {
-          console.error("Audio upload error:", uploadError);
+          if (!uploadError) {
+            // Get public URL
+            const { data: urlData } = supabaseAdmin.storage
+              .from("generated-audio")
+              .getPublicUrl(fileName);
+
+            audioUrl = urlData?.publicUrl;
+            actualDuration = estimateDuration(textContent);
+            generationCost = estimateTTSCost(ttsResult.characterCount);
+          } else {
+            console.error("Audio upload error:", uploadError);
+          }
+        } catch (ttsError) {
+          // Log TTS error but don't fail the request
+          console.error("TTS error (non-fatal):", ttsError);
+          if (ttsError instanceof GoogleTTSError) {
+            console.error("Google TTS error code:", ttsError.code);
+          }
         }
-      } catch (ttsError) {
-        // Log TTS error but don't fail the request
-        console.error("TTS error (non-fatal):", ttsError);
-        if (ttsError instanceof ElevenLabsError) {
-          console.error("ElevenLabs error code:", ttsError.code);
-        }
+      } else {
+        // Free tier: estimate duration from text for UI display
+        actualDuration = estimateDuration(textContent);
+        console.log(
+          `Free tier user ${user.id}: skipping TTS, text-only content`,
+        );
       }
 
       // Calculate quality score (simple heuristic)
@@ -607,8 +632,15 @@ async function generateTextContent(
   }
 
   // Check if this is an exercise type that should use contextual prompts
-  const exerciseTypes = ["breathing", "meditation", "grounding", "journaling", "mindfulness"];
-  const useContextualPrompt = exerciseTypes.includes(request.contentType) && context !== null;
+  const exerciseTypes = [
+    "breathing",
+    "meditation",
+    "grounding",
+    "journaling",
+    "mindfulness",
+  ];
+  const useContextualPrompt =
+    exerciseTypes.includes(request.contentType) && context !== null;
 
   let systemPrompt: string;
   let userPrompt: string;
@@ -619,7 +651,7 @@ async function generateTextContent(
       request.contentType,
       context!,
       request.params.duration,
-      request.params.theme || request.params.customPrompt
+      request.params.theme || request.params.customPrompt,
     );
     systemPrompt = prompts.systemPrompt;
     userPrompt = prompts.userPrompt;
@@ -647,7 +679,8 @@ async function generateTextContent(
       userPrompt += `\n\nAdditional user request: ${request.params.customPrompt}`;
     }
 
-    systemPrompt = "You are a professional wellness content creator specializing in mental health and relaxation content. Create calming, therapeutic content that promotes wellbeing.";
+    systemPrompt =
+      "You are a professional wellness content creator specializing in mental health and relaxation content. Create calming, therapeutic content that promotes wellbeing.";
   }
 
   const response = await fetch(XAI_API_URL, {
