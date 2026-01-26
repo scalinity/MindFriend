@@ -128,7 +128,7 @@ serve(async (req) => {
       );
     }
 
-    // Check premium status - ElevenLabs voice synthesis is PREMIUM ONLY
+    // Check premium status - Google Cloud TTS voice synthesis is PREMIUM ONLY
     // Free tier users use native iOS AVSpeechSynthesizer instead (zero cost)
     const { data: profile } = await supabaseAdmin
       .from("profiles")
@@ -140,7 +140,7 @@ serve(async (req) => {
       profile?.subscription_tier === "premium" ||
       profile?.subscription_tier === "family";
 
-    // PREMIUM GATE: Block free tier users from ElevenLabs synthesis
+    // PREMIUM GATE: Block free tier users from server-side TTS synthesis
     if (!isPremium) {
       return new Response(
         JSON.stringify({
@@ -152,54 +152,6 @@ serve(async (req) => {
         }),
         {
           status: 403,
-          headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    // Premium users: Check daily quota to prevent runaway costs (20/day cap)
-    const { data: quotaResult, error: quotaError } = await supabaseAdmin.rpc(
-      "check_and_increment_synthesis_quota",
-      {
-        p_user_id: user.id,
-        p_is_premium: isPremium,
-      },
-    );
-
-    if (quotaError) {
-      console.error("Synthesis quota check error:", quotaError);
-      // Fail closed on quota check errors to prevent abuse
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: "Failed to check synthesis quota",
-          code: "QUOTA_CHECK_ERROR",
-        }),
-        {
-          status: 500,
-          headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    const quota = quotaResult?.[0] || {
-      allowed: false,
-      quota_used: 0,
-      quota_limit: 20,
-    };
-
-    if (!quota.allowed) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error:
-            "Daily voice synthesis limit reached (20/day). Your limit resets tomorrow.",
-          code: "SYNTHESIS_QUOTA_EXCEEDED",
-          quotaUsed: quota.quota_used,
-          quotaLimit: quota.quota_limit,
-        }),
-        {
-          status: 429,
           headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
         },
       );
@@ -287,6 +239,100 @@ serve(async (req) => {
         }),
         {
           status: 400,
+          headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    // ── Monthly TTS Budget Check ($5/month cap = 1,250,000 chars) ──
+    const charCount = textContent.length;
+    const { data: budgetResult, error: budgetError } = await supabaseAdmin.rpc(
+      "check_tts_monthly_budget",
+      {
+        p_user_id: user.id,
+        p_character_count: charCount,
+      },
+    );
+
+    if (budgetError) {
+      console.error("Monthly budget check error:", budgetError);
+      // Fail closed on budget check errors to prevent overrun
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Failed to check synthesis budget",
+          code: "BUDGET_CHECK_ERROR",
+        }),
+        {
+          status: 500,
+          headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    const budget = budgetResult?.[0];
+    if (!budget?.allowed) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error:
+            "Monthly voice synthesis budget reached. Your budget resets next month. Content is still available as text.",
+          code: "MONTHLY_BUDGET_EXCEEDED",
+          charsUsed: budget?.chars_used ?? 0,
+          charsLimit: budget?.chars_limit ?? 0,
+          charsRemaining: budget?.chars_remaining ?? 0,
+        }),
+        {
+          status: 429,
+          headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    // ── Daily Quota Check (10/day secondary safeguard) ──
+    const { data: quotaResult, error: quotaError } = await supabaseAdmin.rpc(
+      "check_and_increment_synthesis_quota",
+      {
+        p_user_id: user.id,
+        p_is_premium: isPremium,
+        p_character_count: charCount,
+      },
+    );
+
+    if (quotaError) {
+      console.error("Synthesis quota check error:", quotaError);
+      // Fail closed on quota check errors to prevent abuse
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Failed to check synthesis quota",
+          code: "QUOTA_CHECK_ERROR",
+        }),
+        {
+          status: 500,
+          headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    const quota = quotaResult?.[0] || {
+      allowed: false,
+      quota_used: 0,
+      quota_limit: 10,
+    };
+
+    if (!quota.allowed) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error:
+            "Daily voice synthesis limit reached (10/day). Your limit resets tomorrow.",
+          code: "SYNTHESIS_QUOTA_EXCEEDED",
+          quotaUsed: quota.quota_used,
+          quotaLimit: quota.quota_limit,
+        }),
+        {
+          status: 429,
           headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
         },
       );

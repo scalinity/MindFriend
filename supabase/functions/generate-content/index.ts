@@ -483,44 +483,70 @@ serve(async (req) => {
       let generationCost = 0;
 
       if (isPremium) {
-        try {
-          const googleTTS = createGoogleTTSClient();
-          const voiceId = request.params.voiceId || DEFAULT_VOICE_ID;
-
-          // Synthesize voice with Google Cloud TTS (premium feature)
-          const ttsResult = await googleTTS.textToSpeech({
-            text: textContent,
-            voiceId,
+        // Check monthly TTS character budget ($5/month cap)
+        const charCount = textContent.length;
+        const { data: budgetResult, error: budgetError } =
+          await supabaseAdmin.rpc("check_tts_monthly_budget", {
+            p_user_id: user.id,
+            p_character_count: charCount,
           });
 
-          // Upload to Supabase Storage
-          const fileName = `${user.id}/${contentId}.mp3`;
-          const { error: uploadError } = await supabaseAdmin.storage
-            .from("generated-audio")
-            .upload(fileName, ttsResult.audioData, {
-              contentType: ttsResult.contentType,
-              upsert: true,
+        const budget = budgetResult?.[0];
+        if (budgetError || !budget?.allowed) {
+          // Monthly budget exceeded — fall back to text-only like free tier
+          console.log(
+            `Premium user ${user.id}: monthly TTS budget exceeded (${budget?.chars_used || "?"}/${budget?.chars_limit || "?"} chars), returning text-only`,
+          );
+          actualDuration = estimateDuration(textContent);
+        }
+
+        if (budget?.allowed) {
+          try {
+            const googleTTS = createGoogleTTSClient();
+            const voiceId = request.params.voiceId || DEFAULT_VOICE_ID;
+
+            // Synthesize voice with Google Cloud TTS (premium feature)
+            const ttsResult = await googleTTS.textToSpeech({
+              text: textContent,
+              voiceId,
             });
 
-          if (!uploadError) {
-            // Get public URL
-            const { data: urlData } = supabaseAdmin.storage
+            // Upload to Supabase Storage
+            const fileName = `${user.id}/${contentId}.mp3`;
+            const { error: uploadError } = await supabaseAdmin.storage
               .from("generated-audio")
-              .getPublicUrl(fileName);
+              .upload(fileName, ttsResult.audioData, {
+                contentType: ttsResult.contentType,
+                upsert: true,
+              });
 
-            audioUrl = urlData?.publicUrl;
-            actualDuration = estimateDuration(textContent);
-            generationCost = estimateTTSCost(ttsResult.characterCount);
-          } else {
-            console.error("Audio upload error:", uploadError);
+            if (!uploadError) {
+              // Get public URL
+              const { data: urlData } = supabaseAdmin.storage
+                .from("generated-audio")
+                .getPublicUrl(fileName);
+
+              audioUrl = urlData?.publicUrl;
+              actualDuration = estimateDuration(textContent);
+              generationCost = estimateTTSCost(ttsResult.characterCount);
+            } else {
+              console.error("Audio upload error:", uploadError);
+            }
+          } catch (ttsError) {
+            // Log TTS error but don't fail the request
+            console.error("TTS error (non-fatal):", ttsError);
+            if (ttsError instanceof GoogleTTSError) {
+              console.error("Google TTS error code:", ttsError.code);
+            }
           }
-        } catch (ttsError) {
-          // Log TTS error but don't fail the request
-          console.error("TTS error (non-fatal):", ttsError);
-          if (ttsError instanceof GoogleTTSError) {
-            console.error("Google TTS error code:", ttsError.code);
-          }
-        }
+
+          // Record synthesis for monthly budget tracking
+          await supabaseAdmin.rpc("check_and_increment_synthesis_quota", {
+            p_user_id: user.id,
+            p_is_premium: true,
+            p_character_count: charCount,
+          });
+        } // end budget?.allowed
       } else {
         // Free tier: estimate duration from text for UI display
         actualDuration = estimateDuration(textContent);
