@@ -1,5 +1,5 @@
 // MindFriend Voice Synthesis Edge Function
-// Synthesize audio from existing generated_content using ElevenLabs TTS
+// Synthesize audio from existing generated_content using Google Cloud TTS
 // Supports re-synthesis with different voice settings
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -9,60 +9,29 @@ import {
 } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import {
-  createElevenLabsClient,
+  createGoogleTTSClient,
   estimateDuration,
   DEFAULT_VOICE_ID,
-  ElevenLabsError,
-} from "../_shared/elevenlabs.ts";
+  GoogleTTSError,
+  GOOGLE_VOICE_PRESETS,
+} from "../_shared/google-tts.ts";
 import { checkRateLimit } from "../_shared/ratelimit.ts";
 
 // deno-lint-ignore no-explicit-any
 type UntypedSupabaseClient = SupabaseClient<any, "public", any>;
 
-// Voice styling presets per content type
-const VOICE_STYLE_PRESETS: Record<string, VoiceSettings> = {
-  meditation: {
-    stability: 0.75,
-    similarityBoost: 0.75,
-    style: 0.3,
-    speed: 0.9,
-  },
-  sleep_story: {
-    stability: 0.8,
-    similarityBoost: 0.75,
-    style: 0.2,
-    speed: 0.85,
-  },
-  breathing: { stability: 0.7, similarityBoost: 0.75, style: 0.3, speed: 0.85 },
-  affirmation: {
-    stability: 0.6,
-    similarityBoost: 0.75,
-    style: 0.4,
-    speed: 1.0,
-  },
-  grounding: { stability: 0.7, similarityBoost: 0.75, style: 0.3, speed: 0.9 },
-  mindfulness: {
-    stability: 0.75,
-    similarityBoost: 0.75,
-    style: 0.3,
-    speed: 0.9,
-  },
-  cbt: { stability: 0.5, similarityBoost: 0.75, style: 0.3, speed: 1.0 },
-  journaling: { stability: 0.5, similarityBoost: 0.75, style: 0.3, speed: 1.0 },
-  default: { stability: 0.5, similarityBoost: 0.75, style: 0.3, speed: 1.0 },
-};
-
-interface VoiceSettings {
-  stability: number;
-  similarityBoost: number;
-  style: number;
-  speed: number;
-}
-
 interface SynthesizeVoiceRequest {
   contentId: string;
-  voiceId?: string;
-  voiceSettings?: Partial<VoiceSettings>;
+  voiceId?: string; // Content-type preset key (e.g., "meditation", "breathing")
+  voiceSettings?: {
+    speakingRate?: number; // 0.25-4.0 (Google TTS range)
+    pitch?: number; // -20.0 to 20.0 semitones
+    // Legacy ElevenLabs params (ignored, kept for backward compat)
+    stability?: number;
+    similarityBoost?: number;
+    style?: number;
+    speed?: number;
+  };
 }
 
 interface SynthesizeVoiceResponse {
@@ -71,11 +40,10 @@ interface SynthesizeVoiceResponse {
   durationSeconds?: number;
   voiceSettingsUsed?: {
     voiceId: string;
-    stability: number;
-    similarityBoost: number;
-    style: number;
-    speed: number;
-    modelId: string;
+    voiceName: string;
+    speakingRate: number;
+    pitch: number;
+    provider: string;
   };
   error?: string;
   code?: string;
@@ -152,6 +120,83 @@ serve(async (req) => {
           success: false,
           error: "Too many requests. Please wait a moment.",
           code: "RATE_LIMIT_EXCEEDED",
+        }),
+        {
+          status: 429,
+          headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    // Check premium status - ElevenLabs voice synthesis is PREMIUM ONLY
+    // Free tier users use native iOS AVSpeechSynthesizer instead (zero cost)
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("subscription_tier")
+      .eq("id", user.id)
+      .single();
+
+    const isPremium =
+      profile?.subscription_tier === "premium" ||
+      profile?.subscription_tier === "family";
+
+    // PREMIUM GATE: Block free tier users from ElevenLabs synthesis
+    if (!isPremium) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error:
+            "Professional voice synthesis is a Premium feature. Upgrade to unlock studio-quality voices!",
+          code: "PREMIUM_REQUIRED",
+          upgradeRequired: true,
+        }),
+        {
+          status: 403,
+          headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    // Premium users: Check daily quota to prevent runaway costs (20/day cap)
+    const { data: quotaResult, error: quotaError } = await supabaseAdmin.rpc(
+      "check_and_increment_synthesis_quota",
+      {
+        p_user_id: user.id,
+        p_is_premium: isPremium,
+      },
+    );
+
+    if (quotaError) {
+      console.error("Synthesis quota check error:", quotaError);
+      // Fail closed on quota check errors to prevent abuse
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Failed to check synthesis quota",
+          code: "QUOTA_CHECK_ERROR",
+        }),
+        {
+          status: 500,
+          headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    const quota = quotaResult?.[0] || {
+      allowed: false,
+      quota_used: 0,
+      quota_limit: 20,
+    };
+
+    if (!quota.allowed) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error:
+            "Daily voice synthesis limit reached (20/day). Your limit resets tomorrow.",
+          code: "SYNTHESIS_QUOTA_EXCEEDED",
+          quotaUsed: quota.quota_used,
+          quotaLimit: quota.quota_limit,
         }),
         {
           status: 429,
@@ -249,25 +294,23 @@ serve(async (req) => {
 
     // Determine voice settings
     const contentType = content.content_type || "default";
-    const presetSettings =
-      VOICE_STYLE_PRESETS[contentType] || VOICE_STYLE_PRESETS.default;
+    const preset =
+      GOOGLE_VOICE_PRESETS[contentType] || GOOGLE_VOICE_PRESETS.default;
     const voiceId = request.voiceId || content.voice_id || DEFAULT_VOICE_ID;
 
-    const finalSettings: VoiceSettings = {
-      stability: request.voiceSettings?.stability ?? presetSettings.stability,
-      similarityBoost:
-        request.voiceSettings?.similarityBoost ??
-        presetSettings.similarityBoost,
-      style: request.voiceSettings?.style ?? presetSettings.style,
-      speed: request.voiceSettings?.speed ?? presetSettings.speed,
-    };
+    // Resolve speaking rate: prefer explicit request > legacy speed param > preset default
+    const speakingRate =
+      request.voiceSettings?.speakingRate ??
+      request.voiceSettings?.speed ??
+      preset.speakingRate;
+    const pitch = request.voiceSettings?.pitch ?? preset.pitch;
 
-    // Validate settings ranges
-    if (finalSettings.stability < 0 || finalSettings.stability > 1) {
+    // Validate settings ranges (Google TTS limits)
+    if (speakingRate < 0.25 || speakingRate > 4.0) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: "stability must be between 0 and 1",
+          error: "speakingRate must be between 0.25 and 4.0",
           code: "INVALID_REQUEST",
         }),
         {
@@ -276,11 +319,11 @@ serve(async (req) => {
         },
       );
     }
-    if (finalSettings.speed < 0.5 || finalSettings.speed > 2.0) {
+    if (pitch < -20.0 || pitch > 20.0) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: "speed must be between 0.5 and 2.0",
+          error: "pitch must be between -20.0 and 20.0",
           code: "INVALID_REQUEST",
         }),
         {
@@ -295,31 +338,32 @@ serve(async (req) => {
     let durationSeconds: number;
 
     try {
-      const elevenLabs = createElevenLabsClient();
+      const googleTTS = createGoogleTTSClient();
 
-      // Handle long text by chunking if needed
-      const maxChars = 5000;
+      // Handle long text by truncating if needed (Google limit: 5000 bytes)
+      const maxBytes = 4500; // Safe margin under 5000 byte limit
       let processedText = textContent;
+      const textBytes = new TextEncoder().encode(textContent);
 
-      if (textContent.length > maxChars) {
-        // For now, truncate to max length with ellipsis warning
-        // Future: implement chunking and concatenation
+      if (textBytes.length > maxBytes) {
+        // Truncate by decoding back from byte limit
+        const truncatedBytes = textBytes.slice(0, maxBytes);
         processedText =
-          textContent.substring(0, maxChars - 50) +
+          new TextDecoder().decode(truncatedBytes).slice(0, -10) +
           "... (content truncated for synthesis)";
         console.warn(
-          `Text truncated from ${textContent.length} to ${maxChars} chars for synthesis`,
+          `Text truncated from ${textBytes.length} to ~${maxBytes} bytes for synthesis`,
         );
       }
 
-      const ttsResult = await elevenLabs.textToSpeech({
+      // Use the content-type preset key as voiceId for Google TTS
+      // Google TTS client resolves preset key → voice name internally
+      const resolvedVoiceId =
+        GOOGLE_VOICE_PRESETS[voiceId] ? voiceId : contentType;
+
+      const ttsResult = await googleTTS.textToSpeech({
         text: processedText,
-        voiceId,
-        voiceSettings: {
-          stability: finalSettings.stability,
-          similarityBoost: finalSettings.similarityBoost,
-          style: finalSettings.style,
-        },
+        voiceId: resolvedVoiceId,
       });
 
       // Upload to Supabase Storage
@@ -356,7 +400,7 @@ serve(async (req) => {
     } catch (ttsError) {
       console.error("TTS error:", ttsError);
 
-      if (ttsError instanceof ElevenLabsError) {
+      if (ttsError instanceof GoogleTTSError) {
         if (ttsError.code === "RATE_LIMIT_EXCEEDED") {
           return new Response(
             JSON.stringify({
@@ -405,13 +449,16 @@ serve(async (req) => {
     }
 
     // Build voice settings used record
+    const resolvedPreset =
+      GOOGLE_VOICE_PRESETS[voiceId] ||
+      GOOGLE_VOICE_PRESETS[contentType] ||
+      GOOGLE_VOICE_PRESETS.default;
     const voiceSettingsUsed = {
       voiceId,
-      stability: finalSettings.stability,
-      similarityBoost: finalSettings.similarityBoost,
-      style: finalSettings.style,
-      speed: finalSettings.speed,
-      modelId: "eleven_multilingual_v2",
+      voiceName: resolvedPreset.voiceName,
+      speakingRate,
+      pitch,
+      provider: "google-cloud-tts-standard",
     };
 
     // Update database with new audio URL and settings
