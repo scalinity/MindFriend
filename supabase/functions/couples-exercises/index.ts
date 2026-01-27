@@ -2,7 +2,7 @@
 // List available couples exercises based on entitlements
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { userHasPremiumAccess } from "../_shared/couples-utils.ts";
 import { CouplesErrors, formatSuccess } from "../_shared/couples-errors.ts";
 

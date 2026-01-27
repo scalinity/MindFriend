@@ -2,7 +2,7 @@
 // Enables or disables vacation mode (streak freeze) for users
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 const OPERATION_TIMEOUT_MS = 15000; // 15s timeout for database operations

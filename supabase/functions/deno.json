@@ -1,28 +1,19 @@
 {
-    "compilerOptions": {
-        "lib": [
-            "deno.ns",
-            "deno.unstable",
-            "dom",
-            "dom.iterable",
-            "esnext"
-        ],
-        "strict": true,
-        "noImplicitAny": false
-    },
-    "imports": {
-        "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2"
-    },
-    "lint": {
-        "rules": {
-            "exclude": [
-                "no-explicit-any",
-                "no-import-prefix"
-            ]
-        }
-    },
-    "fmt": {
-        "indentWidth": 2,
-        "singleQuote": false
+  "compilerOptions": {
+    "lib": ["deno.ns", "deno.unstable", "dom", "dom.iterable", "esnext"],
+    "strict": true,
+    "noImplicitAny": false
+  },
+  "imports": {
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.49.1"
+  },
+  "lint": {
+    "rules": {
+      "exclude": ["no-explicit-any", "no-import-prefix"]
     }
+  },
+  "fmt": {
+    "indentWidth": 2,
+    "singleQuote": false
+  }
 }

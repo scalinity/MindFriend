@@ -155,9 +155,36 @@ struct SensorySettingsView: View {
             return
         }
 
-        // TODO: Persist settings to backend when service is available
-        settings = newSettings
-        dismiss()
+        do {
+            guard let userId = container.supabaseAuthService.currentUser?.id else {
+                errorMessage = "You must be signed in to save settings"
+                isSaving = false
+                return
+            }
+
+            struct SensorySettingsUpdate: Encodable {
+                let sensory_default_speed: String
+                let sensory_haptic_intensity: Float
+                let sensory_enable_autopause: Bool
+                let sensory_default_duration: Int
+            }
+
+            try await container.supabase
+                .from("user_settings")
+                .update(SensorySettingsUpdate(
+                    sensory_default_speed: defaultSpeed.rawValue,
+                    sensory_haptic_intensity: hapticIntensity,
+                    sensory_enable_autopause: enableAutoPause,
+                    sensory_default_duration: defaultSessionDuration
+                ))
+                .eq("user_id", value: userId.uuidString)
+                .execute()
+
+            settings = newSettings
+            dismiss()
+        } catch {
+            errorMessage = "Failed to save: \(error.localizedDescription)"
+        }
 
         isSaving = false
     }

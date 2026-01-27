@@ -287,10 +287,15 @@ final class SensoryRegulationService: ObservableObject {
                 throw SensoryError.networkError
             }
 
+            // ✅ CORRECTNESS FIX: Validate session ID from backend
+            guard let sessionId = UUID(uuidString: decodedResponse.sessionId) else {
+                throw SensoryError.networkError
+            }
+
             // Create local session object
             let userId = try await getCurrentUserId()
             let session = SensorySession(
-                id: UUID(uuidString: decodedResponse.sessionId) ?? UUID(),
+                id: sessionId,
                 userId: userId,
                 modality: modality,
                 patternId: patternId.uuidString,

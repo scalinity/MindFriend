@@ -96,7 +96,7 @@ struct ProfileView: View {
                             showSubscription = true
                         } label: {
                             HStack {
-                                Image(systemName: "star.fill")
+                                Image(systemName: "crown.fill")
                                     .foregroundStyle(.yellow)
                                 Text("Upgrade to Premium")
                                     .fontWeight(.semibold)
@@ -127,6 +127,12 @@ struct ProfileView: View {
                         NarrativeListView(dataService: container.supabaseDataService)
                     } label: {
                         Label("My Stories", systemImage: "book.closed")
+                    }
+
+                    NavigationLink {
+                        LongitudinalDashboardView()
+                    } label: {
+                        Label("Your Journey", systemImage: "chart.line.uptrend.xyaxis")
                     }
                 }
 
@@ -161,7 +167,12 @@ struct ProfileView: View {
                     NavigationLink {
                         PeerSupportHubView(supabase: container.supabase)
                     } label: {
-                        Label("Peer Support & Mentorship", systemImage: "person.3.fill")
+                        Label {
+                            Text("Peer Support & Mentorship")
+                        } icon: {
+                            Image(systemName: "person.3.fill")
+                                .font(.system(size: 14))
+                        }
                     }
 
                     NavigationLink {
@@ -293,6 +304,12 @@ struct ProfileView: View {
                     }
 
                     NavigationLink {
+                        AgentDashboardView()
+                    } label: {
+                        Label("Wellness Agent", systemImage: "brain.head.profile")
+                    }
+
+                    NavigationLink {
                         SOSSettingsView()
                     } label: {
                         Label("SOS Panic Button", systemImage: "heart.fill")
@@ -408,6 +425,9 @@ struct ProfileView: View {
 
     private func logout() {
         Task {
+            // Stop ambient theme monitoring
+            container.ambientThemeService.stop()
+            
             do {
                 try await container.supabaseAuthService.signOut()
             } catch {

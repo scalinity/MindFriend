@@ -12,8 +12,10 @@ struct ArtGeneratorView: View {
     @State private var isGenerating = false
     @State private var generatedWork: CreativeWork?
     @State private var generatedImageURL: URL?
+    @State private var partialImage: UIImage?  // For streaming progressive updates
     @State private var quotaRemaining: Int?
     @State private var error: String?
+    @State private var generationTask: Task<Void, Never>?
 
     private let moodTags = ["happy", "sad", "calm", "anxious", "hopeful", "grateful", "peaceful", "energetic"]
 
@@ -50,6 +52,10 @@ struct ArtGeneratorView: View {
                 if let error = error {
                     Text(error)
                 }
+            }
+            .onDisappear {
+                generationTask?.cancel()
+                generationTask = nil
             }
         }
     }
@@ -147,9 +153,42 @@ struct ArtGeneratorView: View {
 
             Spacer(minLength: 20)
 
+            // Streaming partial image preview during generation
+            if isGenerating {
+                VStack(spacing: 12) {
+                    if let partialImage {
+                        ZStack {
+                            Image(uiImage: partialImage)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(maxHeight: 300)
+                                .clipShape(RoundedRectangle(cornerRadius: 16))
+                                .opacity(0.8)
+                                .blur(radius: 1)
+
+                            ProgressView()
+                                .scaleEffect(1.5)
+                                .tint(.white)
+                        }
+                        .accessibilityLabel("Generating art")
+                        .accessibilityValue("Preview showing, refining details")
+                    } else {
+                        ProgressView()
+                            .scaleEffect(1.2)
+                    }
+                    Text(partialImage != nil ? "Refining your artwork..." : "Creating your artwork...")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .padding()
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Generating")
+                .accessibilityValue("Please wait while your artwork is being created")
+            }
+
             // Generate Button
             Button {
-                Task { await generateArt() }
+                generateArt()
             } label: {
                 HStack {
                     if isGenerating {
@@ -200,11 +239,13 @@ struct ArtGeneratorView: View {
             }
             .frame(maxHeight: 400)
 
+            // Prompt display - keep quote marks together with text
             Text("\"\(prompt)\"")
                 .font(.subheadline)
                 .italic()
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                .lineLimit(3)
                 .padding(.horizontal)
 
             HStack(spacing: 4) {
@@ -214,21 +255,24 @@ struct ArtGeneratorView: View {
             .font(.caption)
             .foregroundStyle(.secondary)
 
-            // Action Buttons
-            HStack(spacing: 16) {
+            // Action Buttons - prevent text wrapping
+            HStack(spacing: 12) {
                 Button {
                     generatedImageURL = nil
                     generatedWork = nil
+                    partialImage = nil
                     prompt = ""
                 } label: {
-                    Label("Create Another", systemImage: "arrow.counterclockwise")
+                    Label("New", systemImage: "arrow.counterclockwise")
                         .font(.subheadline)
+                        .lineLimit(1)
                 }
                 .buttonStyle(.bordered)
 
                 ShareLink(item: url) {
                     Label("Share", systemImage: "square.and.arrow.up")
                         .font(.subheadline)
+                        .lineLimit(1)
                 }
                 .buttonStyle(.bordered)
 
@@ -237,10 +281,11 @@ struct ArtGeneratorView: View {
                         Task { await toggleFavorite(work: work) }
                     } label: {
                         Label(
-                            work.isFavorite ? "Favorited" : "Favorite",
+                            work.isFavorite ? "Saved" : "Save",
                             systemImage: work.isFavorite ? "heart.fill" : "heart"
                         )
                         .font(.subheadline)
+                        .lineLimit(1)
                     }
                     .buttonStyle(.bordered)
                     .tint(work.isFavorite ? .red : nil)
@@ -293,36 +338,88 @@ struct ArtGeneratorView: View {
 
     // MARK: - Actions
 
-    private func generateArt() async {
+    private func generateArt() {
+        // Cancel any existing task
+        generationTask?.cancel()
+
         isGenerating = true
         error = nil
+        partialImage = nil
 
-        do {
-            let work = try await container.creativeExpressionService.generateArt(
-                prompt: prompt,
-                style: selectedStyle,
-                moodScore: moodScore,
-                moodTags: Array(selectedMoodTags)
-            )
+        generationTask = Task {
+            do {
+                // Try streaming API first for progressive image updates
+                let work: CreativeWork
+                do {
+                    work = try await container.creativeExpressionService.generateArtStreaming(
+                        prompt: prompt,
+                        style: selectedStyle,
+                        moodScore: moodScore,
+                        moodTags: Array(selectedMoodTags),
+                        onPartialImage: { imageData, _ in
+                            Task { @MainActor in
+                                guard !Task.isCancelled else { return }
+                                if let image = UIImage(data: imageData) {
+                                    self.partialImage = image
+                                }
+                            }
+                        }
+                    )
+                } catch {
+                    // If streaming fails, fall back to non-streaming
+                    guard !Task.isCancelled else { return }
+                    print("[ArtGenerator] Streaming failed (\(error.localizedDescription)), falling back to non-streaming")
+                    await MainActor.run { partialImage = nil }
+                    work = try await container.creativeExpressionService.generateArt(
+                        prompt: prompt,
+                        style: selectedStyle,
+                        moodScore: moodScore,
+                        moodTags: Array(selectedMoodTags)
+                    )
+                }
 
-            generatedWork = work
+                guard !Task.isCancelled else { return }
 
-            if let path = work.storagePath {
-                generatedImageURL = SupabaseConfig.projectURL.appendingPathComponent("storage/v1/object/public/creative-works/\(path)")
+                await MainActor.run {
+                    generatedWork = work
+                    partialImage = nil
+
+                    if let path = work.storagePath {
+                        generatedImageURL = SupabaseConfig.projectURL.appendingPathComponent("storage/v1/object/public/creative-works/\(path)")
+                    }
+
+                    isGenerating = false
+                }
+
+                // Update quota display
+                if let quota = try? await container.creativeExpressionService.fetchQuota() {
+                    await MainActor.run {
+                        quotaRemaining = quota.aiArtLimit - quota.aiArtCount
+                    }
+                }
+            } catch CreativeError.quotaExceeded {
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    // Show paywall directly without error message
+                    appState.showPaywall = true
+                    partialImage = nil
+                    isGenerating = false
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    // Check if error message indicates quota exceeded (fallback)
+                    let errorString = error.localizedDescription.lowercased()
+                    if errorString.contains("429") || errorString.contains("quota") || errorString.contains("limit") {
+                        appState.showPaywall = true
+                    } else {
+                        self.error = error.localizedDescription
+                    }
+                    partialImage = nil
+                    isGenerating = false
+                }
             }
-
-            // Update quota display
-            if let quota = try? await container.creativeExpressionService.fetchQuota() {
-                quotaRemaining = quota.aiArtLimit - quota.aiArtCount
-            }
-        } catch CreativeError.quotaExceeded {
-            error = "You've used your free daily AI art generation. Upgrade to MindFriend Premium for 20 generations per day!"
-            appState.showPaywall = true
-        } catch {
-            self.error = error.localizedDescription
         }
-
-        isGenerating = false
     }
 
     private func toggleFavorite(work: CreativeWork) async {

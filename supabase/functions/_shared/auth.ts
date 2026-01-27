@@ -5,7 +5,7 @@ import {
   createClient,
   SupabaseClient,
   User,
-} from "https://esm.sh/@supabase/supabase-js@2";
+} from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getCorsHeaders } from "./cors.ts";
 
 export interface AuthResult {

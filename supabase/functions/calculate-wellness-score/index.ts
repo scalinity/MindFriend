@@ -3,7 +3,7 @@
 // and persist to daily_signals table
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { calculateWellnessScore } from "./algorithm.ts";
 import type { WellnessScoreInput } from "./types.ts";
 
@@ -79,11 +79,14 @@ serve(async (req) => {
       },
     );
   } catch (error) {
-    console.error("Wellness score calculation failed:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      headers: { "Content-Type": "application/json" },
-      status: 500,
-    });
+    console.error("Wellness score calculation failed:", error); // Log full error server-side
+    return new Response(
+      JSON.stringify({ error: "An unexpected error occurred" }),
+      {
+        headers: { "Content-Type": "application/json" },
+        status: 500,
+      },
+    );
   }
 });
 

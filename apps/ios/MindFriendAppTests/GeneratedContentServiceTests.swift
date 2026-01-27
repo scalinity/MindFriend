@@ -240,6 +240,8 @@ final class GeneratedContentServiceTests: XCTestCase {
             isFavorite: false,
             playCount: 0,
             lastPlayedAt: nil,
+            generationContext: nil,
+            userRating: nil,
             createdAt: Date(),
             updatedAt: Date()
         )

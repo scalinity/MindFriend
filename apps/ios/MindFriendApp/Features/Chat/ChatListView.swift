@@ -69,12 +69,16 @@ struct ChatListView: View {
 
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button {
-                        showVoiceChat = true
+                        if appState.entitlements.tier == .premium {
+                            showVoiceChat = true
+                        } else {
+                            appState.showPaywall = true
+                        }
                     } label: {
                         Image(systemName: "mic.fill")
                     }
                     .accessibilityLabel("Voice mode")
-                    .accessibilityHint("Start a voice conversation")
+                    .accessibilityHint(appState.entitlements.tier == .premium ? "Start a voice conversation" : "Premium feature - tap to upgrade")
 
                     Button {
                         showNewChat = true

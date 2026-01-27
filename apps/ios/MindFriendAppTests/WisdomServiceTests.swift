@@ -195,10 +195,11 @@ final class WisdomServiceTests: XCTestCase {
     // MARK: - Insight Type Tests
 
     func testInsightTypeRawValues() {
-        XCTAssertEqual(InsightType.notAlone.rawValue, "not_alone")
+        // InsightType has: pattern, milestone, suggestion, trend
+        XCTAssertEqual(InsightType.pattern.rawValue, "pattern")
+        XCTAssertEqual(InsightType.milestone.rawValue, "milestone")
+        XCTAssertEqual(InsightType.suggestion.rawValue, "suggestion")
         XCTAssertEqual(InsightType.trend.rawValue, "trend")
-        XCTAssertEqual(InsightType.strategyHighlight.rawValue, "strategy_highlight")
-        XCTAssertEqual(InsightType.exerciseEffectiveness.rawValue, "exercise_effectiveness")
     }
 
     // MARK: - WisdomInsight Formatted Display Tests

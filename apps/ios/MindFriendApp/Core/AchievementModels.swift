@@ -469,6 +469,92 @@ struct AchievementBadge: Identifiable, Hashable {
     static func == (lhs: AchievementBadge, rhs: AchievementBadge) -> Bool {
         lhs.id == rhs.id
     }
+
+    /// Returns an appropriate SF Symbol name based on the badge's category and slug.
+    /// Used instead of loading from iconUrl which contains relative paths.
+    var sfSymbolName: String {
+        // Normalize slug for comparison (handle both - and _ separators)
+        let normalizedSlug = slug.lowercased().replacingOccurrences(of: "_", with: "-")
+
+        // First check for specific slug-based icons
+        switch normalizedSlug {
+        case "first-quest", "first-steps":
+            return "star.circle.fill"
+        case "mood-logger", "mood-bronze", "mood-silver", "mood-gold",
+             "moods-1", "moods-10", "moods-50", "moods-100":
+            return "face.smiling.fill"
+        case "streak-3", "streak-7", "streak-14", "streak-30", "streak-100",
+             "streaks-3", "streaks-7", "streaks-14", "streaks-30", "streaks-100":
+            return "flame.fill"
+        case "circle-joiner", "circle-active":
+            return "person.3.fill"
+        case "breath-master", "breathing-bronze", "breathing-silver", "breathing-gold":
+            return "wind"
+        case "grounding-guru", "grounding-bronze", "grounding-silver", "grounding-gold":
+            return "leaf.fill"
+        case "meditation-master", "meditation-bronze", "meditation-silver", "meditation-gold":
+            return "brain.head.profile.fill"
+        case "exercise-bronze", "exercise-silver", "exercise-gold",
+             "exercises-1", "exercises-10", "exercises-50":
+            return "figure.walk"
+        case "journaling-bronze", "journaling-silver", "journaling-gold":
+            return "book.fill"
+        case "early-bird":
+            return "sunrise.fill"
+        case "night-owl":
+            return "moon.stars.fill"
+        case "weekend-warrior":
+            return "calendar.badge.clock"
+        case "consistency-king", "consistency-queen":
+            return "crown.fill"
+        case "level-5", "level-10", "level-25", "level-50":
+            return "arrow.up.circle.fill"
+        case "explorer":
+            return "binoculars.fill"
+        case "completionist":
+            return "checkmark.seal.fill"
+        case "quests-1", "quests-10", "quests-50", "quests-100":
+            return "flag.fill"
+        default:
+            break
+        }
+
+        // Check if the name contains keywords for better matching
+        let nameLower = name.lowercased()
+        if nameLower.contains("mood") {
+            return "face.smiling.fill"
+        } else if nameLower.contains("streak") || nameLower.contains("flame") {
+            return "flame.fill"
+        } else if nameLower.contains("quest") {
+            return "flag.fill"
+        } else if nameLower.contains("exercise") || nameLower.contains("moving") {
+            return "figure.walk"
+        }
+
+        // Fall back to category-based icons
+        switch category {
+        case .gettingStarted:
+            return "star.circle.fill"
+        case .streaks:
+            return "flame.fill"
+        case .quests:
+            return "flag.fill"
+        case .exercises:
+            return "figure.walk"
+        case .meditation:
+            return "brain.head.profile.fill"
+        case .mood:
+            return "face.smiling.fill"
+        case .circles:
+            return "person.3.fill"
+        case .sensory:
+            return "hand.raised.fill"
+        case .special:
+            return "sparkles"
+        case .seasonal:
+            return "gift.fill"
+        }
+    }
 }
 
 struct UserBadgeProgress: Identifiable {

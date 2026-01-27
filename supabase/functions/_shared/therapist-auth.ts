@@ -7,7 +7,7 @@
 import {
   createClient,
   SupabaseClient,
-} from "https://esm.sh/@supabase/supabase-js@2";
+} from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 export interface APIKeyRecord {
   id: string;

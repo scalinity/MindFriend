@@ -136,6 +136,8 @@ final class SupabaseDataService: ObservableObject {
             anxietyScore: mood.anxietyScore,
             energyScore: mood.energyScore,
             note: mood.note,
+            encryptedNote: nil,
+            noteEncryptionKeyId: nil,
             createdAt: nil
         )
 
@@ -887,15 +889,23 @@ final class SupabaseDataService: ObservableObject {
             let title: String
         }
 
-        let response: TitleResponse = try await supabase.functions.invoke(
-            "generate-conversation-title",
-            options: .init(body: [
-                "conversationId": conversationId,
-                "content": content
-            ])
-        )
+        Log.data.debug("[Data] Generating title for conversation \(conversationId) with content: '\(content.prefix(50))...'")
 
-        return response.title
+        do {
+            let response: TitleResponse = try await supabase.functions.invoke(
+                "generate-conversation-title",
+                options: .init(body: [
+                    "conversationId": conversationId,
+                    "content": content
+                ])
+            )
+
+            Log.data.debug("[Data] Generated title: '\(response.title)'")
+            return response.title
+        } catch {
+            Log.data.error("[Data] Failed to generate conversation title: \(error)")
+            throw error
+        }
     }
 
     func getMessages(conversationId: String, limit: Int = 50) async throws -> [Message] {
@@ -1206,10 +1216,10 @@ final class SupabaseDataService: ObservableObject {
             throw DataError.invalidId
         }
 
-        // Fetch circle with members
+        // Fetch circle with members (include role for owner detection)
         let circle: DBCircleWithMembers = try await supabase
             .from(Tables.circles)
-            .select("*, circle_members(user_id, joined_at, profiles(display_name, avatar_url))")
+            .select("*, circle_members(user_id, role, joined_at, profiles(display_name, avatar_url))")
             .eq("id", value: circleId)
             .single()
             .execute()
@@ -1217,11 +1227,13 @@ final class SupabaseDataService: ObservableObject {
 
         let members = (circle.circleMembers ?? []).compactMap { member -> CircleMember? in
             guard let profile = member.profiles else { return nil }
+            // Determine role: check member.role first, then fall back to checking ownerId
+            let role: CircleRole = member.role ?? (member.userId == circle.ownerId ? .owner : .member)
             return CircleMember(
                 id: member.userId.uuidString,
                 userId: member.userId.uuidString,
                 displayName: profile.displayName ?? "User",
-                role: .member, // TODO: Determine owner role from membership data
+                role: role,
                 joinedAt: member.joinedAt ?? Date(),
                 premiumBadge: profile.premiumBadge
             )
@@ -1801,7 +1813,24 @@ final class SupabaseDataService: ObservableObject {
             .execute()
             .value
 
-        // TODO: Send invite email/SMS via edge function
+        // Send invite email/SMS via edge function (fire-and-forget)
+        Task {
+            do {
+                let _ = try await supabase.functions.invoke(
+                    "send-circle-invite",
+                    options: .init(body: [
+                        "inviteId": result.id?.uuidString ?? "",
+                        "circleId": circleId,
+                        "inviteeEmail": email,
+                        "inviteePhone": phone as Any,
+                        "inviteCode": result.inviteCode
+                    ])
+                )
+            } catch {
+                // Log but don't fail the invite creation
+                print("Failed to send circle invite notification: \(error)")
+            }
+        }
 
         return CircleInvite(
             id: result.id?.uuidString ?? "",
@@ -2285,8 +2314,19 @@ final class SupabaseDataService: ObservableObject {
         }
 
         if exercise.requiresPremium {
-            // TODO: Check if either user has premium entitlement
-            throw CouplesModeError.exercisePremiumOnly
+            // Check if either user has an active premium subscription
+            let subscriptions: [DBSubscription] = try await supabase
+                .from("subscriptions")
+                .select("user_id, status")
+                .in("user_id", values: [currentUserId.uuidString, partnerId.uuidString])
+                .eq("status", value: "active")
+                .execute()
+                .value
+
+            let hasPremium = !subscriptions.isEmpty
+            if !hasPremium {
+                throw CouplesModeError.exercisePremiumOnly
+            }
         }
 
         let isUser1 = link.userId1 == currentUserId
@@ -3776,43 +3816,194 @@ final class SupabaseDataService: ObservableObject {
             .execute()
     }
 
-    // MARK: - Program Methods (TODO: Implement these methods)
+    // MARK: - Program Methods
 
+    /// Get a specific program day by program ID and day number
     func getProgramDay(programId: String, dayNumber: Int) async throws -> ProgramDay? {
-        // TODO: Implement getProgramDay
-        return nil
+        let response: [DBProgramDay] = try await supabase
+            .from("program_days")
+            .select()
+            .eq("program_id", value: programId)
+            .eq("day_number", value: dayNumber)
+            .limit(1)
+            .execute()
+            .value
+        return response.first?.toProgramDay()
     }
 
-    func getDayProgress(enrollmentId: String, dayNumber: Int) async throws -> ProgramDayProgress? {
-        // TODO: Implement getDayProgress
-        return nil
-    }
-
-    func saveProgramDayProgress(enrollmentId: String, dayNumber: Int, contentCompleted: [String: Bool], reflectionResponse: String?, applyReport: String?, moodBefore: Int?) async throws {
-        // TODO: Implement saveProgramDayProgress
-    }
-
-    func completeProgramDay(enrollmentId: String) async throws -> (programComplete: Bool, certificateNumber: String?) {
-        // TODO: Implement completeProgramDay
-        return (programComplete: false, certificateNumber: nil)
-    }
-
-    func skipProgramDay(enrollmentId: String, dayNumber: Int) async throws {
-        // TODO: Implement skipProgramDay
-    }
-
-    func pauseEnrollment(enrollmentId: String) async throws {
-        // TODO: Implement pauseEnrollment
-    }
-
+    /// Get all days for a program
     func getProgramDays(programId: String) async throws -> [ProgramDay] {
-        // TODO: Implement getProgramDays
-        return []
+        let response: [DBProgramDay] = try await supabase
+            .from("program_days")
+            .select()
+            .eq("program_id", value: programId)
+            .order("day_number")
+            .execute()
+            .value
+        return response.map { $0.toProgramDay() }
     }
 
+    /// Get user's enrollment for a specific program
     func getEnrollment(programId: String) async throws -> ProgramEnrollment? {
-        // TODO: Implement getEnrollment
-        return nil
+        let currentUserId = try userId
+        let response: [DBProgramEnrollment] = try await supabase
+            .from("program_enrollments")
+            .select("*, programs(*)")
+            .eq("user_id", value: currentUserId.uuidString)
+            .eq("program_id", value: programId)
+            .execute()
+            .value
+        return response.first?.toEnrollment()
+    }
+
+    /// Get progress for a specific day in an enrollment
+    func getDayProgress(enrollmentId: String, dayNumber: Int) async throws -> ProgramDayProgress? {
+        let response: [DBProgramDayProgress] = try await supabase
+            .from("program_day_progress")
+            .select()
+            .eq("enrollment_id", value: enrollmentId)
+            .eq("day_number", value: dayNumber)
+            .limit(1)
+            .execute()
+            .value
+        return response.first?.toDayProgress()
+    }
+
+    /// Save or update progress for a program day
+    func saveProgramDayProgress(enrollmentId: String, dayNumber: Int, contentCompleted: [String: Bool], reflectionResponse: String?, applyReport: String?, moodBefore: Int?) async throws {
+        struct ProgressUpsert: Encodable {
+            let enrollment_id: String
+            let day_number: Int
+            let status: String
+            let content_completed: [String: Bool]
+            let reflection_response: String?
+            let apply_report: String?
+            let mood_before: Int?
+            let started_at: String
+        }
+
+        let data = ProgressUpsert(
+            enrollment_id: enrollmentId,
+            day_number: dayNumber,
+            status: "in_progress",
+            content_completed: contentCompleted,
+            reflection_response: reflectionResponse,
+            apply_report: applyReport,
+            mood_before: moodBefore,
+            started_at: ISO8601DateFormatter().string(from: Date())
+        )
+
+        try await supabase
+            .from("program_day_progress")
+            .upsert(data)
+            .execute()
+    }
+
+    /// Complete the current day and advance to next day or complete program
+    func completeProgramDay(enrollmentId: String) async throws -> (programComplete: Bool, certificateNumber: String?) {
+        // Get enrollment with program details
+        let enrollmentResponse: [DBProgramEnrollment] = try await supabase
+            .from("program_enrollments")
+            .select("*, programs(*)")
+            .eq("id", value: enrollmentId)
+            .limit(1)
+            .execute()
+            .value
+
+        guard let enrollment = enrollmentResponse.first else {
+            throw DataError.notFound
+        }
+
+        let currentDay = enrollment.currentDay
+        let totalDays = enrollment.programs?.durationDays ?? 0
+
+        // Mark current day as completed
+        try await supabase
+            .from("program_day_progress")
+            .update([
+                "status": "completed",
+                "completed_at": ISO8601DateFormatter().string(from: Date())
+            ])
+            .eq("enrollment_id", value: enrollmentId)
+            .eq("day_number", value: currentDay)
+            .execute()
+
+        let programComplete = currentDay >= totalDays
+
+        if programComplete {
+            // Mark enrollment as completed and generate certificate
+            let certificateNumber = "MF-\(UUID().uuidString.prefix(8).uppercased())"
+            try await supabase
+                .from("program_enrollments")
+                .update([
+                    "status": "completed",
+                    "completed_at": ISO8601DateFormatter().string(from: Date())
+                ])
+                .eq("id", value: enrollmentId)
+                .execute()
+            return (programComplete: true, certificateNumber: certificateNumber)
+        } else {
+            // Advance to next day and update streak
+            let newStreak = enrollment.streakDays + 1
+            let longestStreak = max(newStreak, enrollment.longestStreak)
+            try await supabase
+                .from("program_enrollments")
+                .update([
+                    "current_day": currentDay + 1,
+                    "streak_days": newStreak,
+                    "longest_streak": longestStreak
+                ])
+                .eq("id", value: enrollmentId)
+                .execute()
+            return (programComplete: false, certificateNumber: nil)
+        }
+    }
+
+    /// Skip the current day (uses a skip allowance)
+    func skipProgramDay(enrollmentId: String, dayNumber: Int) async throws {
+        // Mark day as skipped
+        try await supabase
+            .from("program_day_progress")
+            .upsert([
+                "enrollment_id": enrollmentId,
+                "day_number": dayNumber,
+                "status": "skipped"
+            ])
+            .execute()
+
+        // Get current enrollment to update counters
+        let enrollmentResponse: [DBProgramEnrollment] = try await supabase
+            .from("program_enrollments")
+            .select()
+            .eq("id", value: enrollmentId)
+            .limit(1)
+            .execute()
+            .value
+
+        guard let enrollment = enrollmentResponse.first else { return }
+
+        // Advance day, increment skips used, reset streak
+        try await supabase
+            .from("program_enrollments")
+            .update([
+                "current_day": enrollment.currentDay + 1,
+                "skips_used": enrollment.skipsUsed + 1,
+                "streak_days": 0
+            ])
+            .eq("id", value: enrollmentId)
+            .execute()
+    }
+
+    /// Pause an enrollment
+    func pauseEnrollment(enrollmentId: String) async throws {
+        try await supabase
+            .from("program_enrollments")
+            .update([
+                "status": "paused",
+                "paused_at": ISO8601DateFormatter().string(from: Date())
+            ])
+            .eq("id", value: enrollmentId)
+            .execute()
     }
 
     // MARK: - Programs
@@ -4662,6 +4853,9 @@ final class SupabaseDataService: ObservableObject {
     struct GenerateProfilePictureResponse: Codable {
         let success: Bool
         let imageBase64: String
+        let imageUrl: String?
+        let generationId: String?
+        let storagePath: String?
         let quotaRemaining: Int?
     }
 
@@ -4714,7 +4908,8 @@ final class SupabaseDataService: ObservableObject {
 
             let result: GenerateProfilePictureResponse = try await supabase.functions.invoke(
                 "generate-profile-picture",
-                options: FunctionInvokeOptions(
+                options: .init(
+                    headers: ["Authorization": "Bearer \(session.accessToken)"],
                     body: requestBody
                 )
             )
@@ -4725,36 +4920,134 @@ final class SupabaseDataService: ObservableObject {
             Log.data.error("[Data] generateProfilePicture: FunctionsError - \(error)")
 
             // Check for specific error types
-            let errorString = String(describing: error)
+            let errorString = String(describing: error).lowercased()
 
-            if errorString.contains("quota") || errorString.contains("limit") {
-                Log.data.warning("[Data] generateProfilePicture: Quota exceeded")
+            if errorString.contains("429") || errorString.contains("quota") || errorString.contains("limit") {
+                Log.data.warning("[Data] generateProfilePicture: Quota exceeded (429)")
                 throw GenerateProfilePictureError.quotaExceeded
             }
-            if errorString.contains("Inappropriate") || errorString.contains("inappropriate") {
+            if errorString.contains("inappropriate") {
                 Log.data.warning("[Data] generateProfilePicture: Inappropriate content detected")
                 throw GenerateProfilePictureError.inappropriateContent
             }
 
-            throw GenerateProfilePictureError.apiError(errorString)
+            throw GenerateProfilePictureError.apiError(String(describing: error))
         } catch {
             Log.data.error("[Data] generateProfilePicture: Failed - \(error.localizedDescription)")
 
-            let errorString = String(describing: error)
+            let errorString = String(describing: error).lowercased()
 
-            if errorString.contains("quota") || errorString.contains("limit") {
-                Log.data.warning("[Data] generateProfilePicture: Quota exceeded")
+            if errorString.contains("429") || errorString.contains("quota") || errorString.contains("limit") {
+                Log.data.warning("[Data] generateProfilePicture: Quota exceeded (429)")
                 throw GenerateProfilePictureError.quotaExceeded
             }
-            if errorString.contains("Inappropriate") || errorString.contains("inappropriate") {
+            if errorString.contains("inappropriate") {
                 Log.data.warning("[Data] generateProfilePicture: Inappropriate content detected")
                 throw GenerateProfilePictureError.inappropriateContent
             }
-            
+
+            throw GenerateProfilePictureError.apiError(String(describing: error))
+        }
+    }
+
+    /// Generate profile picture with streaming for progressive image updates
+    /// - Parameters:
+    ///   - prompt: User's prompt for image generation (3-200 chars)
+    ///   - onPartialImage: Callback for partial image updates during generation
+    /// - Returns: Final GenerateProfilePictureResponse
+    /// - Throws: GenerateProfilePictureError for various failure modes
+    func generateProfilePictureStreaming(
+        prompt: String,
+        onPartialImage: @escaping (Data, Int) -> Void
+    ) async throws -> GenerateProfilePictureResponse {
+        print("[Debug] generateProfilePictureStreaming: Starting streaming request")
+
+        var finalImageData: Data?
+        var finalMetadata: [String: Any]?
+
+        let stream = SSEStreamingHelper.streamImageGeneration(
+            functionName: "generate-profile-picture",
+            body: ["prompt": prompt]
+        )
+
+        do {
+            for try await event in stream {
+                switch event {
+                case .partial(let index, let imageData):
+                    print("[Debug] generateProfilePictureStreaming: Partial image \(index)")
+                    onPartialImage(imageData, index)
+
+                case .complete(let imageData, let metadata):
+                    print("[Debug] generateProfilePictureStreaming: Complete image received")
+                    finalImageData = imageData
+                    finalMetadata = metadata
+                    if let imageUrl = metadata?["imageUrl"] as? String {
+                        print("[Debug] generateProfilePictureStreaming: imageUrl = \(imageUrl)")
+                    }
+                    if let quotaRemaining = metadata?["quotaRemaining"] as? Int {
+                        print("[Debug] generateProfilePictureStreaming: quotaRemaining = \(quotaRemaining)")
+                    }
+
+                case .error(let error):
+                    print("[Debug] generateProfilePictureStreaming: Error - \(error)")
+                    // Check for quota exceeded in error message
+                    let errorString = error.localizedDescription.lowercased()
+                    if errorString.contains("429") || errorString.contains("quota") || errorString.contains("limit") {
+                        throw GenerateProfilePictureError.quotaExceeded
+                    }
+                    throw GenerateProfilePictureError.apiError(error.localizedDescription)
+                }
+            }
+
+            guard let imageData = finalImageData else {
+                throw GenerateProfilePictureError.apiError("No image generated")
+            }
+
+            // Extract metadata from SSE complete event
+            let imageUrl = finalMetadata?["imageUrl"] as? String
+            let generationId = finalMetadata?["generationId"] as? String
+            let storagePath = finalMetadata?["storagePath"] as? String
+            let quotaRemaining = finalMetadata?["quotaRemaining"] as? Int
+
+            return GenerateProfilePictureResponse(
+                success: true,
+                imageBase64: imageData.base64EncodedString(),
+                imageUrl: imageUrl,
+                generationId: generationId,
+                storagePath: storagePath,
+                quotaRemaining: quotaRemaining
+            )
+        } catch let error as GenerateProfilePictureError {
+            throw error
+        } catch let error as SSEStreamError {
+            // Check for 429 status code
+            if case .httpError(let statusCode, _) = error, statusCode == 429 {
+                print("[Debug] generateProfilePictureStreaming: 429 quota exceeded")
+                throw GenerateProfilePictureError.quotaExceeded
+            }
+            // Also check error message for quota indicators
+            let errorString = error.localizedDescription.lowercased()
+            if errorString.contains("429") || errorString.contains("quota") || errorString.contains("limit") {
+                print("[Debug] generateProfilePictureStreaming: Quota exceeded from error message")
+                throw GenerateProfilePictureError.quotaExceeded
+            }
+            switch error {
+            case .noSession:
+                throw GenerateProfilePictureError.networkError
+            default:
+                throw GenerateProfilePictureError.apiError(error.localizedDescription)
+            }
+        } catch {
+            // Check generic errors for quota indicators
+            let errorString = error.localizedDescription.lowercased()
+            if errorString.contains("429") || errorString.contains("quota") || errorString.contains("limit") {
+                print("[Debug] generateProfilePictureStreaming: Quota exceeded from generic error")
+                throw GenerateProfilePictureError.quotaExceeded
+            }
             throw GenerateProfilePictureError.apiError(error.localizedDescription)
         }
     }
-    
+
     // MARK: - Generated Content (Exercise Management)
     
     /// Rate a generated exercise
@@ -4869,7 +5162,7 @@ final class SupabaseDataService: ObservableObject {
     /// Get a specific generated content item by ID
     func getGeneratedContent(id: String) async throws -> GeneratedContent? {
         guard let contentUUID = UUID(uuidString: id) else { return nil }
-        
+
         let results: [GeneratedContent] = try await supabase
             .from("generated_content")
             .select()
@@ -4877,7 +5170,34 @@ final class SupabaseDataService: ObservableObject {
             .eq("user_id", value: try userId)
             .execute()
             .value
-        
+
         return results.first
+    }
+
+    // MARK: - Ambient Wellness Presence
+
+    /// Fetch ambient preferences for current user
+    func fetchAmbientPreferences() async throws -> AmbientPreferences? {
+        let currentUserId = try userId
+
+        let response: [AmbientPreferences] = try await supabase
+            .from(Tables.ambientPreferences)
+            .select()
+            .eq("user_id", value: currentUserId)
+            .limit(1)
+            .execute()
+            .value
+
+        return response.first
+    }
+
+    /// Upsert ambient preferences for current user
+    func upsertAmbientPreferences(_ prefs: AmbientPreferences) async throws {
+        _ = try userId  // Verify authenticated
+
+        try await supabase
+            .from(Tables.ambientPreferences)
+            .upsert(prefs, onConflict: "user_id")
+            .execute()
     }
 }

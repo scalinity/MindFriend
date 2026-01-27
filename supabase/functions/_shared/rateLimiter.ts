@@ -3,7 +3,7 @@
  * Uses Supabase database for tracking request counts
  */
 
-import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 export interface RateLimitConfig {
   maxRequests: number; // Max requests allowed

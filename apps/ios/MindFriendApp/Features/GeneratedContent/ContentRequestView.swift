@@ -3,6 +3,7 @@ import SwiftUI
 /// View for requesting new AI-generated content
 struct ContentRequestView: View {
     @StateObject private var viewModel: ContentRequestViewModel
+    @EnvironmentObject var appState: AppState
     @Environment(\.dismiss) private var dismiss
 
     init(service: GeneratedContentService, contentType: GeneratedContentType? = nil) {
@@ -49,7 +50,7 @@ struct ContentRequestView: View {
                 Button("OK", role: .cancel) { }
                 if viewModel.error?.recoverySuggestion != nil {
                     Button("Upgrade") {
-                        viewModel.showPaywall = true
+                        appState.showPaywall = true
                     }
                 }
             } message: {
@@ -96,6 +97,25 @@ struct ContentRequestView: View {
                 if !quota.isPremium {
                     ProgressView(value: quota.percentUsed)
                         .tint(quota.isExhausted ? .red : .blue)
+                }
+
+                // Upgrade prompt when quota exhausted
+                if quota.isExhausted && !quota.isPremium {
+                    Button {
+                        appState.showPaywall = true
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "crown.fill")
+                                .foregroundStyle(.yellow)
+                            Text("Upgrade to Premium for unlimited generations")
+                                .font(.subheadline)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                        }
+                        .padding(12)
+                        .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+                    }
                 }
             }
         }
@@ -243,23 +263,43 @@ struct ContentRequestView: View {
     // MARK: - Generate Button
 
     private var generateButton: some View {
-        Button {
-            Task {
-                await viewModel.generateContent()
+        Group {
+            if viewModel.quotaStatus?.isExhausted == true && viewModel.quotaStatus?.isPremium != true {
+                // Exhausted free tier: show upgrade button instead
+                Button {
+                    appState.showPaywall = true
+                } label: {
+                    HStack {
+                        Image(systemName: "star.fill")
+                        Text("Upgrade to Generate")
+                    }
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.accentColor)
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+            } else {
+                Button {
+                    Task {
+                        await viewModel.generateContent()
+                    }
+                } label: {
+                    HStack {
+                        Image(systemName: "sparkles")
+                        Text("Generate \(viewModel.selectedType.displayName)")
+                    }
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(viewModel.canGenerate ? Color.accentColor : Color.gray)
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .disabled(!viewModel.canGenerate)
             }
-        } label: {
-            HStack {
-                Image(systemName: "sparkles")
-                Text("Generate \(viewModel.selectedType.displayName)")
-            }
-            .font(.headline)
-            .frame(maxWidth: .infinity)
-            .padding()
-            .background(viewModel.canGenerate ? Color.accentColor : Color.gray)
-            .foregroundStyle(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
         }
-        .disabled(!viewModel.canGenerate)
     }
 
     // MARK: - Disclaimer

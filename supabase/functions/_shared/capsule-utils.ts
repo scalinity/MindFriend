@@ -1,7 +1,7 @@
 // Shared utilities for time capsule Edge Functions
 // Eliminates code duplication and centralizes business logic
 
-import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 /**
  * User wellness snapshot structure

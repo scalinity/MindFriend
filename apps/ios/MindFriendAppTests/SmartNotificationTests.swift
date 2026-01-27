@@ -158,7 +158,7 @@ final class SmartNotificationTests: XCTestCase {
                 priority: .normal,
                 engagementScore: 0.7,
                 scheduledFor: nil,
-                context: nil,
+                context: .default,
                 createdAt: Date()
             )
             queue.enqueue(notification)
@@ -240,7 +240,7 @@ final class SmartNotificationTests: XCTestCase {
             priority: .normal,
             engagementScore: 0.7,
             scheduledFor: nil,
-            context: nil,
+            context: .default,
             createdAt: Date(timeIntervalSinceNow: -25 * 60 * 60)
         )
         queue.enqueue(expiredNotification)
@@ -283,22 +283,26 @@ final class SmartNotificationTests: XCTestCase {
     func testUnifiedContextSuppression() {
         // Focus mode suppresses
         var context = UnifiedContext(
-            calendar: CalendarContext(isBusy: false, nextEventInMinutes: nil, eventType: nil),
-            location: LocationContext(type: .home, isStale: false, lastUpdated: Date()),
-            biometric: BiometricContext(heartRate: 70, hrv: 50, isStressed: false, sleepState: nil, lastUpdated: Date()),
-            focusMode: FocusModeContext(mode: .sleep, shouldSuppress: true),
-            timestamp: Date()
+            calendar: CalendarContext(isBusy: false, currentEventTitle: nil, minutesUntilNextEvent: nil, eventCount24h: 0),
+            location: LocationContext(type: .home, confidenceScore: 0.9),
+            biometric: BiometricContext(heartRate: 70, hrvBaseline: 50, hrvCurrent: 45, sleepHoursLastNight: 7, isStressed: false, isLowEnergy: false),
+            focusMode: FocusModeContext(activeMode: .sleep, shouldSuppress: true),
+            timestamp: Date(),
+            shouldSuppressNotification: true,
+            suppressionReason: "Sleep Focus active"
         )
 
         XCTAssertTrue(context.shouldSuppressNotification, "Sleep Focus should suppress")
 
         // No suppression when Focus mode is off
         context = UnifiedContext(
-            calendar: CalendarContext(isBusy: false, nextEventInMinutes: nil, eventType: nil),
-            location: LocationContext(type: .home, isStale: false, lastUpdated: Date()),
-            biometric: BiometricContext(heartRate: 70, hrv: 50, isStressed: false, sleepState: nil, lastUpdated: Date()),
-            focusMode: FocusModeContext(mode: .none, shouldSuppress: false),
-            timestamp: Date()
+            calendar: CalendarContext(isBusy: false, currentEventTitle: nil, minutesUntilNextEvent: nil, eventCount24h: 0),
+            location: LocationContext(type: .home, confidenceScore: 0.9),
+            biometric: BiometricContext(heartRate: 70, hrvBaseline: 50, hrvCurrent: 45, sleepHoursLastNight: 7, isStressed: false, isLowEnergy: false),
+            focusMode: FocusModeContext(activeMode: .none, shouldSuppress: false),
+            timestamp: Date(),
+            shouldSuppressNotification: false,
+            suppressionReason: nil
         )
 
         XCTAssertFalse(context.shouldSuppressNotification, "No Focus mode should not suppress")
@@ -333,7 +337,7 @@ final class SmartNotificationTests: XCTestCase {
             priority: priority,
             engagementScore: 0.7,
             scheduledFor: nil,
-            context: nil,
+            context: .default,
             createdAt: Date()
         )
     }

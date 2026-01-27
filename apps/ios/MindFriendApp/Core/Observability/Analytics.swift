@@ -15,6 +15,16 @@ enum AnalyticsEvent: String {
     case onboardingCompleted = "onboarding_completed"
     case onboardingSkipped = "onboarding_skipped"
 
+    // Activation (Magic Moment) - Progressive Disclosure
+    case activationStarted = "activation_started"
+    case activationEngagementQuest = "activation_engagement_quest"
+    case activationEngagementMood = "activation_engagement_mood"
+    case activationValueChat = "activation_value_chat"
+    case activationCompleted = "activation_completed"
+    case activationTimedOut = "activation_timed_out"
+    case featureUnlocked = "feature_unlocked"
+    case lockedFeatureTapped = "locked_feature_tapped"
+
     // Quests
     case questViewed = "quest_viewed"
     case questStarted = "quest_started"
@@ -196,13 +206,29 @@ protocol AnalyticsProvider {
 
 /// Console-based analytics for development
 final class ConsoleAnalyticsProvider: AnalyticsProvider {
+    /// Events that are too noisy to log during normal development
+    private static let quietEvents: Set<String> = [
+        "app_launched", "app_foregrounded", "app_backgrounded",
+        "screen_viewed", "session_started"
+    ]
+
     func track(event: String, properties: [String: Any]?) {
-        var message = "[Analytics] Event: \(event)"
+        // Skip common lifecycle events that add console noise
+        guard !Self.quietEvents.contains(event) else { return }
+
+        var message = "[Analytics] \(event)"
         if let properties = properties, !properties.isEmpty {
-            let propsString = properties.map { key, value in
-                "\(key)=\(String(describing: value))"
-            }.joined(separator: ", ")
-            message += " | Properties: \(propsString)"
+            // Only include non-global properties
+            let filtered = properties.filter { key, _ in
+                !["platform", "os_version", "app_version", "device_model",
+                  "build_number", "timestamp"].contains(key)
+            }
+            if !filtered.isEmpty {
+                let propsString = filtered.map { key, value in
+                    "\(key)=\(String(describing: value))"
+                }.joined(separator: ", ")
+                message += " (\(propsString))"
+            }
         }
         Log.data.debug("\(message)")
     }

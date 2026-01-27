@@ -26,13 +26,35 @@ final class GeneratedContentService: ObservableObject {
 
         defer { isGenerating = false }
 
+        // === DEBUG LOGGING START ===
+        print("[GeneratedContentService] generateContent called for type: \(type.rawValue)")
+
+        // Ensure session is loaded before making function call
+        // This forces the SDK to restore session from storage if needed
+        let session: Session
+        do {
+            session = try await supabase.auth.session
+            print("[GeneratedContentService] Session loaded successfully")
+            print("[GeneratedContentService] User ID: \(session.user.id)")
+            print("[GeneratedContentService] User email: \(session.user.email ?? "none")")
+            print("[GeneratedContentService] Token expires at: \(session.expiresAt)")
+            print("[GeneratedContentService] Token length: \(session.accessToken.count)")
+            print("[GeneratedContentService] Token prefix: \(String(session.accessToken.prefix(30)))...")
+        } catch {
+            print("[GeneratedContentService] ERROR: Failed to get session: \(error)")
+            self.error = .notAuthenticated
+            throw GeneratedContentError.notAuthenticated
+        }
+
         let request = GenerateContentRequest(contentType: type, params: params)
+        print("[GeneratedContentService] Invoking edge function 'generate-content'...")
 
         do {
             let response: GenerateContentResponse = try await supabase.functions.invoke(
                 "generate-content",
                 options: FunctionInvokeOptions(body: request)
             )
+            print("[GeneratedContentService] Edge function returned successfully")
 
             // Update quota status from response
             quotaStatus = ContentQuotaStatus(
@@ -48,9 +70,20 @@ final class GeneratedContentService: ObservableObject {
 
             return response
         } catch let functionError as FunctionsError {
+            print("[GeneratedContentService] ERROR: FunctionsError occurred")
+            print("[GeneratedContentService] FunctionsError details: \(functionError)")
+            if case .httpError(let code, let data) = functionError {
+                print("[GeneratedContentService] HTTP Status Code: \(code)")
+                if let bodyString = String(data: data, encoding: .utf8) {
+                    print("[GeneratedContentService] Response body: \(bodyString)")
+                }
+            }
             let contentError = mapFunctionsError(functionError)
             error = contentError
             throw contentError
+        } catch {
+            print("[GeneratedContentService] ERROR: Unknown error: \(error)")
+            throw error
         }
     }
 
@@ -367,10 +400,13 @@ final class GeneratedContentService: ObservableObject {
     // MARK: - Helpers
 
     private func getCurrentUserId() async throws -> UUID {
-        guard let user = supabase.auth.currentUser else {
+        // Use async session to properly wait for session restoration
+        do {
+            let session = try await supabase.auth.session
+            return session.user.id
+        } catch {
             throw GeneratedContentError.notAuthenticated
         }
-        return user.id
     }
 
     private func mapFunctionsError(_ error: FunctionsError) -> GeneratedContentError {
@@ -379,6 +415,8 @@ final class GeneratedContentService: ObservableObject {
             switch code {
             case 401:
                 return .notAuthenticated
+            case 403:
+                return .premiumRequired
             case 429:
                 return .quotaExceeded
             case 400:
@@ -396,6 +434,7 @@ final class GeneratedContentService: ObservableObject {
 
 enum GeneratedContentError: LocalizedError {
     case notAuthenticated
+    case premiumRequired
     case quotaExceeded
     case invalidRequest(String)
     case generationFailed(String)
@@ -407,6 +446,8 @@ enum GeneratedContentError: LocalizedError {
         switch self {
         case .notAuthenticated:
             return "Please sign in to generate content"
+        case .premiumRequired:
+            return "Premium voice synthesis is a Premium feature. Upgrade to unlock studio-quality AI voices!"
         case .quotaExceeded:
             return "Daily generation limit reached. Upgrade to Premium for unlimited content."
         case .invalidRequest(let message):
@@ -424,10 +465,8 @@ enum GeneratedContentError: LocalizedError {
 
     var recoverySuggestion: String? {
         switch self {
-        case .quotaExceeded:
-            return "Tap here to explore Premium"
-        case .networkError:
-            return "Check your internet connection and try again"
+        case .premiumRequired, .quotaExceeded:
+            return "Upgrade to Premium"
         default:
             return nil
         }

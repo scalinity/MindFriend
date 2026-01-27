@@ -41,10 +41,9 @@ final class DependencyContainer: ObservableObject {
         CoachService(supabase: self.supabaseClient)
     }()
 
-    // TODO: Fix GrokVoiceService compilation errors (inputNode, isPlayerPlaying references)
-    // lazy var grokVoiceService: GrokVoiceService = {
-    //     GrokVoiceService(supabase: self.supabaseClient)
-    // }()
+    // MARK: - Voice Services
+    // Note: GrokVoiceService is instantiated directly in VoiceModeView/VoiceChatView as @StateObject
+    // Direct instantiation preferred for audio services requiring tight lifecycle management
 
     lazy var liveService: LiveService = {
         LiveService()
@@ -107,14 +106,15 @@ final class DependencyContainer: ObservableObject {
         FamilyService(supabase: self.supabaseClient)
     }()
 
-    // TODO: Re-enable after fixing Mentorship module interface mismatches
-    // lazy var mentorshipService: MentorshipService = {
-    //     MentorshipService(supabase: self.supabaseClient)
-    // }()
+    lazy var activationService: ActivationService = {
+        ActivationService(supabase: self.supabaseClient, authService: self.supabaseAuthService)
+    }()
 
-    // lazy var mentorshipDataService: MentorshipDataService = {
-    //     MentorshipDataService(supabase: self.supabaseClient, userId: UUID())
-    // }()
+    // MARK: - Mentorship
+    lazy var mentorshipService: MentorshipService = {
+        let userId = self.supabaseAuthService.currentUser?.id ?? UUID()
+        return MentorshipService(supabase: self.supabaseClient, userId: userId)
+    }()
 
     lazy var sleepService: SleepService = {
         SleepService(supabase: self.supabaseClient)
@@ -236,7 +236,7 @@ final class DependencyContainer: ObservableObject {
     }()
 
     lazy var questArcsService: QuestArcsService = {
-        QuestArcsService(supabase: supabaseClient, difficultyService: difficultyService)
+        QuestArcsService(supabase: supabaseClient, authService: supabaseAuthService, difficultyService: difficultyService)
     }()
 
     lazy var insightLabService: InsightLabService = {
@@ -481,7 +481,10 @@ final class DependencyContainer: ObservableObject {
 
     /// Service for real-time signal monitoring from multiple data sources
     lazy var signalMonitor: SignalMonitor = {
-        SignalMonitor(supabaseDataService: self.supabaseDataService)
+        let monitor = SignalMonitor(supabaseDataService: self.supabaseDataService)
+        // Wire N006 Wellbeing Debt integration for F026 compound signals
+        monitor.wellbeingDebtService = self.wellbeingDebtService
+        return monitor
     }()
 
     /// Service for pattern detection and weight adjustment

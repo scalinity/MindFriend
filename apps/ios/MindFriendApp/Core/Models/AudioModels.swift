@@ -122,6 +122,7 @@ struct PlaybackState: Equatable {
     var duration: TimeInterval = 0
     var isBuffering: Bool = false
     var error: String?
+    var playbackRate: Float = 1.0
     
     // Alias for compatibility
     var track: AudioTrack? { currentTrack }

@@ -610,6 +610,9 @@ struct ExercisePlayerView: View {
                     newLevel: xpResult.leveledUp ? xpResult.newLevel : nil
                 )
 
+                // Check badge progress after exercise completion
+                _ = try? await container.achievementService.checkBadgeProgress()
+
                 await MainActor.run {
                     // Show level-up celebration if leveled up
                     if xpResult.leveledUp {

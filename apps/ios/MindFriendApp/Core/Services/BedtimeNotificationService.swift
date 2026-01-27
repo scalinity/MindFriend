@@ -9,7 +9,7 @@ import Foundation
 import UserNotifications
 
 /// Errors that can occur when managing bedtime notifications
-enum NotificationError: LocalizedError {
+enum BedtimeNotificationError: LocalizedError {
     case permissionDenied
     case schedulingFailed(Error)
 
@@ -80,7 +80,7 @@ final class BedtimeNotificationService: BedtimeNotificationServicing {
     ) async throws {
         // Validate input
         guard windDownMinutes > 0 && windDownMinutes <= 1440 else {
-            throw NotificationError.schedulingFailed(
+            throw BedtimeNotificationError.schedulingFailed(
                 NSError(domain: "BedtimeNotificationService", 
                        code: -1, 
                        userInfo: [NSLocalizedDescriptionKey: "Wind-down minutes must be between 1 and 1440"])
@@ -95,11 +95,11 @@ final class BedtimeNotificationService: BedtimeNotificationServicing {
             if status == .notDetermined {
                 let granted = await permissionManager.requestPermission()
                 guard granted else {
-                    throw NotificationError.permissionDenied
+                    throw BedtimeNotificationError.permissionDenied
                 }
             } else {
                 // Permission was denied
-                throw NotificationError.permissionDenied
+                throw BedtimeNotificationError.permissionDenied
             }
         }
 
@@ -110,7 +110,7 @@ final class BedtimeNotificationService: BedtimeNotificationServicing {
             value: -windDownMinutes,
             to: targetBedtime
         ) else {
-            throw NotificationError.schedulingFailed(
+            throw BedtimeNotificationError.schedulingFailed(
                 NSError(domain: "BedtimeNotificationService",
                        code: -2,
                        userInfo: [NSLocalizedDescriptionKey: "Failed to calculate notification time"])
@@ -143,7 +143,7 @@ final class BedtimeNotificationService: BedtimeNotificationServicing {
         do {
             try await notificationCenter.add(request)
         } catch {
-            throw NotificationError.schedulingFailed(error)
+            throw BedtimeNotificationError.schedulingFailed(error)
         }
     }
 

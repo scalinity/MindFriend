@@ -154,6 +154,30 @@ public struct ChallengeParticipant: Identifiable, Codable {
         case updatedAt = "updated_at"
     }
 
+    public init(
+        id: UUID,
+        challengeId: UUID,
+        userId: UUID,
+        currentProgress: Int,
+        completed: Bool,
+        completedAt: Date?,
+        finalRank: Int?,
+        showOnLeaderboard: Bool,
+        joinedAt: Date,
+        updatedAt: Date
+    ) {
+        self.id = id
+        self.challengeId = challengeId
+        self.userId = userId
+        self.currentProgress = currentProgress
+        self.completed = completed
+        self.completedAt = completedAt
+        self.finalRank = finalRank
+        self.showOnLeaderboard = showOnLeaderboard
+        self.joinedAt = joinedAt
+        self.updatedAt = updatedAt
+    }
+
     public func progressPercent(targetValue: Int) -> Double {
         guard targetValue > 0 else { return 0 }
         return Double(currentProgress) / Double(targetValue)

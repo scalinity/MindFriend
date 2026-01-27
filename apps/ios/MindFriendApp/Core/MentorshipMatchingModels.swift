@@ -3,7 +3,7 @@ import Foundation
 // MARK: - Mentorship Profile
 
 /// User profile for mentor/mentee preferences and availability
-struct DBMentorshipProfile: Codable, Identifiable {
+struct DBMentorshipProfile: Codable, Identifiable, Equatable {
     let id: UUID
     let userId: UUID
     var isMentorAvailable: Bool
@@ -80,7 +80,7 @@ struct DBMentorshipProfile: Codable, Identifiable {
 // MARK: - Mentorship Match
 
 /// A match between mentor and mentee with compatibility scores
-struct DBMentorshipMatch: Codable, Identifiable {
+struct DBMentorshipMatch: Codable, Identifiable, Equatable {
     let id: UUID
     let mentorId: UUID
     let menteeId: UUID
@@ -203,7 +203,7 @@ struct DBMentorshipReport: Codable, Identifiable {
     let reason: ReportReason
     var description: String?
     var messageIds: [UUID]
-    var status: ReportStatus
+    var status: MatchingReportStatus
     var resolution: String?
     var resolvedAt: Date?
     var resolvedBy: UUID?
@@ -232,7 +232,7 @@ struct DBMentorshipReport: Codable, Identifiable {
         }
     }
 
-    enum ReportStatus: String, Codable {
+    enum MatchingReportStatus: String, Codable {
         case pending
         case investigating
         case resolved
@@ -312,34 +312,11 @@ struct MentorMatchResult: Codable, Identifiable {
 
 // MARK: - Find Matches Response
 
-struct FindMentorMatchesResponse: Codable {
-    let success: Bool
-    let matches: [MentorMatchResult]
-    let count: Int
-}
+// REMOVED: FindMentorMatchesResponse - canonical version in MentorshipModels.swift
 
 // MARK: - Request Mentorship Response
 
-struct RequestMentorshipResponse: Codable {
-    let success: Bool
-    let matchId: UUID?
-    let match: MatchInfo?
-    let message: String?
-    let error: String?
-    let code: String?
-
-    struct MatchInfo: Codable {
-        let id: UUID
-        let mentorId: UUID
-        let menteeId: UUID
-        let status: String
-        let compatibilityScore: Double?
-        let matchReason: String?
-        let mentorAlias: String
-        let menteeAlias: String
-        let createdAt: Date?
-    }
-}
+// REMOVED: RequestMentorshipResponse - canonical version in MentorshipModels.swift
 
 // MARK: - Expertise Areas
 
@@ -401,5 +378,40 @@ enum MentorshipExpertiseArea: String, CaseIterable, Identifiable {
         case .chronicIllness: return "heart.circle"
         case .general: return "bubble.left.and.bubble.right"
         }
+    }
+}
+
+// MARK: - Encryption Support Models
+
+/// Raw database row for encrypted messages (before decryption)
+struct EncryptedMessageRow: Codable {
+    let id: UUID
+    let match_id: String
+    let sender_id: String
+    let content: String?  // For migration: plain text fallback
+    let encrypted_content: String?  // BASE64-encoded bytea from database
+    let encryption_key_id: String?  // Key used for encryption
+    let sent_at: Date
+    let read_at: Date?
+    let flagged: Bool
+    let flag_reason: String?
+    let reviewed: Bool
+    let reviewed_at: Date?
+    let reviewed_by: UUID?
+    let created_at: Date
+}
+
+/// Result of message decryption RPC call
+struct DecryptResult: Codable {
+    let message_id: UUID
+    let decrypted_content: String?
+    let decryption_success: Bool
+    let error_message: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case message_id
+        case decrypted_content
+        case decryption_success
+        case error_message
     }
 }

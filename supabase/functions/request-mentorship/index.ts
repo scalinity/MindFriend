@@ -1,381 +1,219 @@
-// Request Mentorship - Create a mentorship request to a mentor
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import {
-  getCorsHeaders,
-  validateContentType,
-  parseJsonBody,
-} from "../_shared/cors.ts";
-import { checkRateLimit, getRateLimitHeaders } from "../_shared/ratelimit.ts";
+  sanitizeInput,
+  validateUUID,
+  validateIntroductionMessage,
+} from "../_shared/validation.ts";
 
-interface MentorshipRequest {
-  mentorId: string;
-  introductionMessage: string;
+interface RequestMentorshipBody {
+  mentor_id: string;
+  introduction_message: string;
 }
 
-serve(async (req) => {
-  const origin = req.headers.get("Origin");
-  const corsHeaders = getCorsHeaders(origin);
+interface MentorshipRequestResponse {
+  success: boolean;
+  match_id?: string;
+  status?: string;
+  error?: string;
+  message?: string;
+}
 
-  // Handle CORS preflight
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
+serve(async (req: Request) => {
+  // Only allow POST
   if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), {
-      status: 405,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
-  // Validate content type
-  const contentTypeError = validateContentType(req, corsHeaders);
-  if (contentTypeError) return contentTypeError;
-
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  );
-
-  // Auth
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader) {
-    return new Response(
-      JSON.stringify({ error: "Unauthorized", code: "NO_AUTH" }),
-      {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
-  }
-
-  // Auth with timeout
-  const authTimeoutPromise = new Promise((_resolve, reject) =>
-    setTimeout(
-      () => reject(new Error("Auth timeout")),
-      5000, // 5 second timeout
-    ),
-  );
-
-  const authPromise = (async () => {
-    return await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
-  })();
-
-  let user;
-  let authError;
-  try {
-    const authResult = await Promise.race([authPromise, authTimeoutPromise]);
-    user = authResult.data?.user;
-    authError = authResult.error;
-  } catch (error) {
-    return new Response(
-      JSON.stringify({
-        error: "Authentication failed",
-        code: "AUTH_FAILED",
-      }),
-      {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
-  }
-
-  if (authError || !user) {
-    return new Response(
-      JSON.stringify({ error: "Unauthorized", code: "INVALID_TOKEN" }),
-      {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
-  }
-
-  // Rate limiting - 5 mentorship requests per hour
-  const rateLimit = await checkRateLimit(
-    supabase,
-    user.id,
-    "request-mentorship",
-    {
-      windowMs: 60 * 60 * 1000, // 1 hour
-      maxRequests: 5,
-    },
-  );
-
-  if (!rateLimit.allowed) {
-    return new Response(
-      JSON.stringify({
-        error: "Too many mentorship requests. Please wait before trying again.",
-        code: "RATE_LIMITED",
-        retryAfter: rateLimit.retryAfter,
-      }),
-      {
-        status: 429,
-        headers: {
-          ...corsHeaders,
-          ...getRateLimitHeaders(rateLimit),
-          "Content-Type": "application/json",
-        },
-      },
-    );
-  }
-
-  // Parse request body
-  const body = await parseJsonBody<MentorshipRequest>(req);
-  if (!body) {
-    return new Response(
-      JSON.stringify({ error: "Invalid JSON body", code: "PARSE_ERROR" }),
-      {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
-  }
-
-  // Validate required fields
-  if (!body.mentorId) {
-    return new Response(
-      JSON.stringify({
-        error: "mentorId is required",
-        code: "MISSING_MENTOR_ID",
-      }),
-      {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
-  }
-
-  // Validate UUID format
-  const uuidRegex =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (!uuidRegex.test(body.mentorId)) {
-    return new Response(
-      JSON.stringify({
-        error: "Invalid mentorId format",
-        code: "INVALID_MENTOR_ID",
-      }),
-      {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
-  }
-
-  // Introduction message validation
-  const introMessage = body.introductionMessage?.trim() || "";
-  if (introMessage.length < 20) {
-    return new Response(
-      JSON.stringify({
-        error: "Introduction message must be at least 20 characters",
-        code: "MESSAGE_TOO_SHORT",
-      }),
-      {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
-  }
-
-  if (introMessage.length > 1000) {
-    return new Response(
-      JSON.stringify({
-        error: "Introduction message must be less than 1000 characters",
-        code: "MESSAGE_TOO_LONG",
-      }),
-      {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
-  }
-
-  // Sanitize introduction message - remove HTML tags and JavaScript
-  const sanitizedIntro = introMessage
-    .replace(/<[^>]*>/g, "") // Remove HTML tags
-    .replace(/javascript:/gi, "") // Remove javascript: protocol
-    .replace(/on\w+\s*=/gi, "") // Remove event handlers
-    .replace(/data:text\/html/gi, "") // Remove data URIs
-    .trim();
-
-  if (sanitizedIntro.length === 0) {
-    return new Response(
-      JSON.stringify({
-        error: "Introduction message cannot contain only HTML/scripts",
-        code: "INVALID_MESSAGE_CONTENT",
-      }),
-      {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
+    return new Response("Method not allowed", { status: 405 });
   }
 
   try {
-    // Create the match via RPC (performs all checks under advisory lock)
-    // RPC with timeout
-    const rpcTimeoutPromise = new Promise((_resolve, reject) =>
-      setTimeout(
-        () => reject(new Error("RPC timeout")),
-        8000, // 8 second timeout
-      ),
+    // Extract JWT from Authorization header
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "Missing authorization header" }),
+        { status: 401, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    // Initialize Supabase client
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const rpcPromise = (async () => {
-      return await supabase.rpc("create_mentorship_request", {
-        p_mentor_id: body.mentorId,
-        p_introduction_message: sanitizedIntro,
+    // Get user from JWT
+    const token = authHeader.replace("Bearer ", "");
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
       });
-    })();
+    }
 
-    let matchIdResult;
+    // Parse and validate request body
+    const body: RequestMentorshipBody = await req.json();
+    const { mentor_id, introduction_message } = body;
+
+    // Validate mentor_id is a valid UUID
+    if (!validateUUID(mentor_id)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid mentor_id format" }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate introduction message
+    const messageValidation = validateIntroductionMessage(introduction_message);
+    if (!messageValidation.valid) {
+      return new Response(
+        JSON.stringify({
+          error: "Invalid introduction message",
+          details: messageValidation.errors,
+        }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    // Prevent self-mentorship
+    if (user.id === mentor_id) {
+      return new Response(
+        JSON.stringify({ error: "Cannot request mentorship from yourself" }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    // Check if mentor exists and is available
+    const { data: mentorProfile, error: mentorError } = await supabase
+      .from("mentorship_profiles")
+      .select("is_mentor_available, user_id")
+      .eq("user_id", mentor_id)
+      .single();
+
+    if (mentorError || !mentorProfile) {
+      return new Response(
+        JSON.stringify({ error: "Mentor not found or profile incomplete" }),
+        { status: 404, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!mentorProfile.is_mentor_available) {
+      return new Response(
+        JSON.stringify({
+          error: "Mentor is not currently available",
+          message: "This mentor is not accepting new mentees at the moment",
+        }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    // Check if a pending request already exists
+    const { data: existingRequest } = await supabase
+      .from("mentorship_matches")
+      .select("id, status")
+      .eq("mentee_id", user.id)
+      .eq("mentor_id", mentor_id)
+      .eq("status", "pending")
+      .single();
+
+    if (existingRequest) {
+      return new Response(
+        JSON.stringify({
+          error: "Request already pending",
+          message: "You have already sent a mentorship request to this mentor",
+          match_id: existingRequest.id,
+        }),
+        { status: 409, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    // Create mentorship match with pending status
+    const { data: match, error: createError } = await supabase
+      .from("mentorship_matches")
+      .insert({
+        mentor_id,
+        mentee_id: user.id,
+        status: "pending",
+        introduction_message: sanitizeInput(introduction_message),
+        compatibility_score: null,
+        match_reason: null,
+        created_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(), // 72 hours
+      })
+      .select("id, status, created_at")
+      .single();
+
+    if (createError) {
+      console.error("Error creating mentorship request:", createError);
+      return new Response(
+        JSON.stringify({
+          error: "Failed to create mentorship request",
+          details: createError.message,
+        }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    // Send notification to mentor (via send-notification function)
     try {
-      matchIdResult = await Promise.race([rpcPromise, rpcTimeoutPromise]);
-    } catch (timeoutError) {
-      return new Response(
-        JSON.stringify({
-          error: "Request took too long. Please try again.",
-          code: "TIMEOUT",
-        }),
+      const mentorNotificationResp = await supabase.functions.invoke(
+        "send-notification",
         {
-          status: 504,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    const { data: matchId, error: rpcError } = matchIdResult;
-
-    if (rpcError || !matchId) {
-      console.error("RPC error creating mentorship request:", rpcError?.message);
-      return new Response(
-        JSON.stringify({
-          error: "Unable to create mentorship request. Please try again.",
-          code: "REQUEST_FAILED",
-        }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    // Get the created match details with timeout
-    const queryTimeoutPromise = new Promise((_resolve, reject) =>
-      setTimeout(
-        () => reject(new Error("Query timeout")),
-        5000, // 5 second timeout
-      ),
-    );
-
-    const queryPromise = (async () => {
-      return await supabase
-        .from("mentorship_matches")
-        .select(
-          `
-          id,
-          mentor_id,
-          mentee_id,
-          status,
-          compatibility_score,
-          match_reason,
-          mentor_alias,
-          mentee_alias,
-          created_at
-        `
-        )
-        .eq("id", matchId)
-        .single();
-    })();
-
-    let matchQueryResult;
-    try {
-      matchQueryResult = await Promise.race([queryPromise, queryTimeoutPromise]);
-    } catch (timeoutError) {
-      console.error("Query timeout fetching match details");
-      // Match was created but we couldn't fetch details - still success
-      return new Response(
-        JSON.stringify({
-          success: true,
-          matchId: matchId,
-          match: null,
-          message:
-            "Your mentorship request has been sent. The mentor will respond soon.",
-        }),
-        {
-          status: 201,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    const { data: match } = matchQueryResult;
-
-    // Notify the mentor (non-blocking, fire-and-forget with timeout)
-    const notificationTimeoutPromise = new Promise((_resolve, reject) =>
-      setTimeout(
-        () => reject(new Error("Notification timeout")),
-        5000, // 5 second timeout
-      ),
-    );
-
-    const notificationPromise = (async () => {
-      return await supabase.functions.invoke("send-notification", {
-        body: {
-          userId: body.mentorId,
-          title: "New Mentorship Request",
-          body: "Someone would like you to be their mentor!",
-          data: {
+          body: {
+            user_id: mentor_id,
+            title: "New Mentorship Request",
+            body: "Someone is interested in being your mentee",
             type: "mentorship_request",
-            matchId: matchId,
+            data: {
+              match_id: match.id,
+              mentee_id: user.id,
+            },
           },
-        },
-      });
-    })();
+        }
+      );
 
-    // Fire notification but don't wait for it
-    Promise.race([notificationPromise, notificationTimeoutPromise]).catch(
-      (error) => {
-        console.error("Notification failed:", error.message || error);
+      if (mentorNotificationResp.error) {
+        console.error(
+          "Error sending notification to mentor:",
+          mentorNotificationResp.error
+        );
+        // Don't fail the request if notification fails
       }
-    );
+    } catch (notificationError) {
+      console.error("Notification service error:", notificationError);
+      // Continue - notification is best-effort
+    }
 
+    // Return success response
     return new Response(
       JSON.stringify({
         success: true,
-        matchId: matchId,
-        match: match
-          ? {
-              id: match.id,
-              mentorId: match.mentor_id,
-              menteeId: match.mentee_id,
-              status: match.status,
-              compatibilityScore: match.compatibility_score,
-              matchReason: match.match_reason,
-              mentorAlias: match.mentor_alias,
-              menteeAlias: match.mentee_alias,
-              createdAt: match.created_at,
-            }
-          : null,
+        match_id: match.id,
+        status: match.status,
         message:
-          "Your mentorship request has been sent. The mentor will respond soon.",
+          "Mentorship request sent! The mentor will review your request within 24 hours.",
+        timestamp: match.created_at,
       }),
       {
         status: 201,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
       }
     );
   } catch (error) {
-    console.error("Unexpected error:", error);
+    console.error("Unexpected error in request-mentorship:", error);
     return new Response(
       JSON.stringify({
         error: "Internal server error",
-        code: "INTERNAL_ERROR",
+        details: error instanceof Error ? error.message : "Unknown error",
       }),
       {
         status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
+        headers: { "Content-Type": "application/json" },
+      }
     );
   }
 });

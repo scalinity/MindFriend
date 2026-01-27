@@ -62,8 +62,7 @@ struct SocialHealthDashboardView: View {
                 }
             }
             .sheet(isPresented: $showSettings) {
-                // TODO: Settings view
-                Text("Settings Coming Soon")
+                SocialVitalitySettingsView(isPresented: $showSettings, engine: engine)
             }
             .task {
                 do {

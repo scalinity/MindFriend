@@ -19,7 +19,7 @@ struct MoodCheckInView: View {
     @State private var actionPlanItems: [ActionPlanItem] = []
     @State private var planSize: ActionPlanSize = .quick
 
-    private let moodEmojis = ["😢", "😔", "😐", "🙂", "😊"]
+    private let moodEmojis = ["😔", "😕", "😐", "🙂", "😄"]
     private let anxietyLabels = ["Very Low", "Low", "Moderate", "High", "Very High"]
     private let energyLabels = ["Exhausted", "Tired", "Okay", "Energetic", "Very High"]
 
@@ -179,6 +179,10 @@ struct MoodCheckInView: View {
                 var xpResult: XPAward?
                 if existingMood == nil {
                     xpResult = try await container.supabaseDataService.awardXP(activity: .moodCheckin)
+                    // Check badge progress after new mood logged
+                    _ = try? await container.achievementService.checkBadgeProgress()
+                    // Record first mood log for progressive disclosure activation
+                    try? await container.activationService.recordMoodLog()
                 }
 
                 await MainActor.run {

@@ -7,17 +7,16 @@ struct AudioPlayerView: View {
     let track: AudioTrack
 
     @EnvironmentObject private var container: DependencyContainer
-    @ObservedObject private var playerService: AudioPlayerService
 
     @Environment(\.dismiss) private var dismiss
     @State private var showSleepTimerMenu = false
     @State private var showNarratorInfo = false
     @State private var isFavorite = false
+    @State private var currentSpeed: Float = 1.0
 
-    init(track: AudioTrack) {
-        self.track = track
-        // Use shared supabase client for initialization
-        _playerService = ObservedObject(initialValue: AudioPlayerService(supabase: DependencyContainer.shared.supabase))
+    /// Access the shared audio player service from the container
+    private var playerService: AudioPlayerService {
+        container.audioPlayerService
     }
 
     var body: some View {
@@ -285,13 +284,19 @@ struct AudioPlayerView: View {
                 Menu {
                     ForEach([0.5, 0.75, 1.0, 1.25, 1.5], id: \.self) { speed in
                         Button(action: {
-                            // TODO: Implement playback speed control in AVPlayer
+                            playerService.setPlaybackSpeed(Float(speed))
+                            currentSpeed = Float(speed)
                         }) {
-                            Text("\(String(format: "%.2f", speed))x")
+                            HStack {
+                                Text("\(String(format: "%.2f", speed))x")
+                                if currentSpeed == Float(speed) {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
                         }
                     }
                 } label: {
-                    Text("1x")
+                    Text("\(String(format: "%.1f", currentSpeed))x")
                         .font(.system(size: 14, weight: .semibold))
                         .frame(width: 44, height: 44)
                         .background(Color(.secondarySystemBackground))

@@ -7,6 +7,15 @@
 -- Unlike risk scores (which detect negative patterns), wellness scores
 -- celebrate positive patterns and user progress
 
+-- Create table if it doesn't exist (idempotent)
+CREATE TABLE IF NOT EXISTS daily_signals (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    signal_date DATE NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    CONSTRAINT unique_daily_signal_per_user_date UNIQUE(user_id, signal_date)
+);
+
 -- Add columns
 ALTER TABLE daily_signals
 ADD COLUMN IF NOT EXISTS wellness_score INTEGER CHECK (wellness_score >= 0 AND wellness_score <= 100),

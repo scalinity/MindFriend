@@ -104,26 +104,38 @@ final class HealthKitService: ObservableObject {
     }
 
     func checkAuthorizationStatus() async {
-        var authorized: Set<HealthKitDataType> = []
-
-        for dataType in HealthKitDataType.allCases {
-            let types = dataType.healthKitTypes
-            // Note: authorizationStatus only tells us if we asked, not if granted
-            // We need to actually try to query to see if we have access
-            let allAsked = types.allSatisfy { type in
-                let status = healthStore.authorizationStatus(for: type)
-                return status == .sharingAuthorized || status == .sharingDenied
-            }
-            // For read-only access, we treat any status other than notDetermined as "asked"
-            // The actual data availability will be determined when we query
-            if allAsked {
-                authorized.insert(dataType)
-            }
+        guard isHealthKitAvailable else {
+            self.isAuthorized = false
+            self.authorizedTypes = []
+            return
         }
 
-        // If we've asked for any types, consider ourselves authorized
-        self.isAuthorized = !authorized.isEmpty
-        self.authorizedTypes = authorized
+        // authorizationStatus(for:) only reports write/sharing status.
+        // Since we request read-only access (toShare: []), it always
+        // returns .notDetermined regardless of user's choice.
+        // Use statusForAuthorizationRequest to check if we've already
+        // presented the dialog — Apple intentionally hides per-type
+        // read access decisions for privacy.
+        do {
+            let status = try await healthStore.statusForAuthorizationRequest(
+                toShare: [],
+                read: allReadTypes
+            )
+
+            if status == .unnecessary {
+                // Authorization dialog was already presented
+                self.isAuthorized = true
+                self.authorizedTypes = Set(HealthKitDataType.allCases)
+            } else {
+                // Authorization hasn't been requested yet
+                self.isAuthorized = false
+                self.authorizedTypes = []
+            }
+        } catch {
+            logger.error("Failed to check HealthKit authorization status: \(error.localizedDescription)")
+            self.isAuthorized = false
+            self.authorizedTypes = []
+        }
 
         // Update connection status in database
         await updateConnectionStatus()

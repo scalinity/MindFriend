@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 interface PayoutRequest {
   creatorId?: string; // If not provided, process all pending payouts
@@ -88,7 +88,7 @@ serve(async (req) => {
         .from("revenue_periods")
         .select("*")
         .eq("status", "finalized")
-        .order("period_month", ascending: false)
+        .order("period_month", { ascending: false })
         .limit(1)
         .single()) as unknown as { data: PeriodData | null };
       period = periodData;
@@ -123,10 +123,11 @@ serve(async (req) => {
       earningsQuery = earningsQuery.eq("creator_id", request.creatorId);
     }
 
-    const { data: earnings, error: earningsError } = (await earningsQuery) as unknown as {
-      data: (EarningsData & { creator: CreatorData })[];
-      error: Error | null;
-    };
+    const { data: earnings, error: earningsError } =
+      (await earningsQuery) as unknown as {
+        data: (EarningsData & { creator: CreatorData })[];
+        error: Error | null;
+      };
 
     if (earningsError) throw earningsError;
 
@@ -232,7 +233,8 @@ serve(async (req) => {
           creatorName: creator.display_name,
           amount: earning.net_earnings,
           status: "failed",
-          error: stripeError instanceof Error ? stripeError.message : "Stripe error",
+          error:
+            stripeError instanceof Error ? stripeError.message : "Stripe error",
         });
 
         console.error(
@@ -270,7 +272,9 @@ serve(async (req) => {
         periodId: period.id,
         periodMonth: period.period_month,
         totalPayouts: results.filter((r) => r.status === "processing").length,
-        skippedPayouts: results.filter((r) => r.status === "skipped" || r.status === "below_threshold").length,
+        skippedPayouts: results.filter(
+          (r) => r.status === "skipped" || r.status === "below_threshold",
+        ).length,
         failedPayouts: results.filter((r) => r.status === "failed").length,
         totalAmount,
         results,
