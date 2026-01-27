@@ -522,8 +522,8 @@ struct CalendarSelectionView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(calendar.title)
                                 .foregroundColor(.primary)
-                            if let sourceName = calendar.source.title {
-                                Text(sourceName)
+                            if !calendar.source.title.isEmpty {
+                                Text(calendar.source.title)
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }

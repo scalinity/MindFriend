@@ -11,6 +11,8 @@ struct VoiceModeView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @EnvironmentObject private var container: DependencyContainer
+    @EnvironmentObject private var appState: AppState
 
     // MARK: - State
 
@@ -29,6 +31,11 @@ struct VoiceModeView: View {
     @State private var userTranscript = ""
     @State private var assistantTranscript = ""
     @State private var showCaptions = true
+
+    // Conversation persistence state
+    @State private var userMessages: [String] = []
+    @State private var assistantMessages: [String] = []
+    @State private var didPersist = false
 
     // Animation state
     @State private var isAnimating = false
@@ -56,6 +63,23 @@ struct VoiceModeView: View {
     // MARK: - Body
 
     var body: some View {
+        // Premium gate: Voice mode is premium-only
+        if appState.entitlements.tier != .premium {
+            VoiceModePaywallView(onUpgrade: {
+                appState.showPaywall = true
+            }, onDismiss: {
+                dismiss()
+                onDismiss?()
+            })
+        } else {
+            voiceModeContent
+        }
+    }
+
+    // MARK: - Voice Mode Content (Premium Only)
+
+    @ViewBuilder
+    private var voiceModeContent: some View {
         GeometryReader { geometry in
             ZStack {
                 // Background gradient
@@ -65,12 +89,6 @@ struct VoiceModeView: View {
                     // Top bar with controls
                     topBar
                         .padding(.top, geometry.safeAreaInsets.top > 0 ? 0 : 16)
-
-                    // Usage bar (non-premium only)
-                    if !voiceService.isPremium {
-                        usageBar
-                            .padding(.top, 8)
-                    }
 
                     Spacer()
 
@@ -136,22 +154,38 @@ struct VoiceModeView: View {
         .onChange(of: voiceService.connectionState) { _, newState in
             updateStateMachineFromService(newState)
         }
-        .onChange(of: voiceService.isUserSpeaking) { _, isUserSpeaking in
+        .onChange(of: voiceService.isUserSpeaking) { oldValue, isUserSpeaking in
             if isUserSpeaking {
                 _ = stateMachine.send(.speechStart)
             } else {
                 _ = stateMachine.send(.speechEnd)
             }
         }
-        .onChange(of: voiceService.isSpeaking) { _, isSpeaking in
+        .onChange(of: voiceService.isSpeaking) { oldValue, isSpeaking in
             if isSpeaking {
                 _ = stateMachine.send(.serverAudioChunk(Data()))
             } else {
                 _ = stateMachine.send(.audioPlaybackFinished)
+                // Capture completed assistant response when AI finishes speaking
+                if oldValue && !isSpeaking {
+                    captureAssistantResponse()
+                }
             }
         }
         .onChange(of: voiceService.transcribedText) { _, newText in
-            assistantTranscript = newText
+            // Only update when there's actual content - don't clear when service resets
+            // This preserves the transcript for capture even after response.done clears it
+            if !newText.isEmpty {
+                assistantTranscript = newText
+            }
+        }
+        .onChange(of: voiceService.userTranscribedText) { oldValue, newText in
+            // Capture user message when transcription arrives (async from xAI)
+            // This is the only reliable way to get user transcripts since
+            // transcription arrives AFTER the user stops speaking
+            if !newText.isEmpty && newText != oldValue {
+                captureUserMessage(transcript: newText)
+            }
         }
         .onChange(of: voiceService.isIdleDisconnected) { _, isIdleDisconnected in
             if isIdleDisconnected {
@@ -245,68 +279,6 @@ struct VoiceModeView: View {
         }
         .padding(.horizontal, 20)
         .padding(.top, 12)
-    }
-
-    // MARK: - Usage Bar
-
-    private var usageBar: some View {
-        VStack(spacing: 6) {
-            HStack {
-                Image(systemName: "clock")
-                    .font(.caption)
-                Text("Voice Minutes")
-                    .font(.caption.weight(.medium))
-                Spacer()
-                Text("\(String(format: "%.1f", voiceService.minutesRemaining)) / 3 min")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .foregroundStyle(.white.opacity(0.7))
-
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(Color.white.opacity(0.15))
-                        .frame(height: 4)
-
-                    Capsule()
-                        .fill(usageBarColor)
-                        .frame(width: geometry.size.width * usagePercentage, height: 4)
-                }
-            }
-            .frame(height: 4)
-
-            if usagePercentage >= 0.8 {
-                Button {
-                    showUpgradeSheet = true
-                } label: {
-                    Text(usagePercentage >= 0.95 ? "Upgrade for Unlimited" : "Running low - Upgrade")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 4)
-                        .background(Color.orange)
-                        .cornerRadius(12)
-                }
-            }
-        }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 12)
-        .background(Color.white.opacity(0.05))
-        .cornerRadius(12)
-        .padding(.horizontal, 20)
-    }
-
-    private var usagePercentage: Double {
-        let total = 3.0
-        let used = total - voiceService.minutesRemaining
-        return min(1.0, max(0, used / total))
-    }
-
-    private var usageBarColor: Color {
-        if usagePercentage >= 0.95 { return .red }
-        if usagePercentage >= 0.8 { return .orange }
-        return .blue
     }
 
     // MARK: - Captions View
@@ -540,7 +512,17 @@ struct VoiceModeView: View {
 
     private func endVoiceSession() async {
         _ = stateMachine.send(.tapEnd)
+        // Capture any in-progress transcripts before disconnecting
+        // User messages are captured when transcription arrives via onChange,
+        // but capture the current one in case it hasn't been processed yet
+        let currentUserTranscript = voiceService.userTranscribedText
+        if !currentUserTranscript.isEmpty {
+            captureUserMessage(transcript: currentUserTranscript)
+        }
+        captureAssistantResponse()
         await voiceService.disconnect()
+        // Persist the conversation to database
+        await persistConversation()
     }
 
     private func handleOrbTap() {
@@ -624,6 +606,222 @@ struct VoiceModeView: View {
         case .leo: return .green
         }
     }
+
+    // MARK: - Conversation Persistence
+
+    /// Captures a user message from transcription
+    /// Called when transcription arrives from xAI (asynchronously after user stops speaking)
+    private func captureUserMessage(transcript: String) {
+        let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        // Avoid duplicates - xAI sometimes sends the same transcript multiple times
+        if userMessages.last != trimmed {
+            userMessages.append(trimmed)
+            Log.voice.debug("[VoiceMode] Captured user message: \(trimmed.prefix(50))...")
+        }
+    }
+
+    /// Captures the current assistant transcript as a completed response
+    /// Called when the AI finishes speaking (isSpeaking goes from true to false)
+    private func captureAssistantResponse() {
+        let trimmed = assistantTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        // Avoid duplicates
+        if assistantMessages.last != trimmed {
+            assistantMessages.append(trimmed)
+            Log.voice.debug("[VoiceMode] Captured assistant message: \(trimmed.prefix(50))...")
+        }
+    }
+
+    /// Persists the voice conversation to the database as a text chat
+    private func persistConversation() async {
+        guard !didPersist else { return }
+        didPersist = true
+
+        // Need at least one message to persist
+        guard !userMessages.isEmpty || !assistantMessages.isEmpty else {
+            Log.voice.debug("[VoiceMode] No messages to persist - userMessages: \(userMessages.count), assistantMessages: \(assistantMessages.count)")
+            return
+        }
+
+        do {
+            // Create a new conversation
+            let conversation = try await container.chatService.createConversation()
+            Log.voice.debug("[VoiceMode] Created conversation: \(conversation.id)")
+
+            // Interleave user and assistant messages (user speaks, then assistant responds)
+            let maxCount = max(userMessages.count, assistantMessages.count)
+            for i in 0..<maxCount {
+                // User message first (if exists)
+                if i < userMessages.count {
+                    _ = try await container.chatService.insertMessage(
+                        conversationId: conversation.id,
+                        role: .user,
+                        content: userMessages[i]
+                    )
+                }
+                // Then assistant response (if exists)
+                if i < assistantMessages.count {
+                    _ = try await container.chatService.insertMessage(
+                        conversationId: conversation.id,
+                        role: .assistant,
+                        content: assistantMessages[i]
+                    )
+                }
+            }
+            Log.voice.debug("[VoiceMode] Inserted \(userMessages.count) user + \(assistantMessages.count) assistant messages")
+
+            // Generate a title from the first user message (or assistant if no user messages)
+            let titleContent = userMessages.first ?? assistantMessages.first ?? ""
+            Log.voice.debug("[VoiceMode] Title content: '\(titleContent.prefix(100))...'")
+            if !titleContent.isEmpty {
+                do {
+                    let generatedTitle = try await container.chatService.generateConversationTitle(
+                        conversationId: conversation.id,
+                        content: titleContent
+                    )
+                    Log.voice.debug("[VoiceMode] Generated title: '\(generatedTitle)'")
+                } catch {
+                    Log.voice.error("[VoiceMode] Title generation failed: \(error)")
+                }
+            } else {
+                Log.voice.warning("[VoiceMode] No content for title generation")
+            }
+
+            Log.voice.info("[VoiceMode] Persisted conversation \(conversation.id) with \(userMessages.count) user + \(assistantMessages.count) assistant messages")
+        } catch {
+            Log.voice.error("[VoiceMode] Failed to persist conversation: \(error)")
+            // Don't show error to user - persistence is best-effort
+        }
+    }
+}
+
+// MARK: - Voice Mode Paywall View
+
+/// Paywall view shown to non-premium users when they try to access voice mode
+struct VoiceModePaywallView: View {
+    let onUpgrade: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        ZStack {
+            // Dark gradient background matching voice mode
+            LinearGradient(
+                colors: [
+                    Color(red: 0.05, green: 0.05, blue: 0.12),
+                    Color(red: 0.08, green: 0.08, blue: 0.18),
+                    Color(red: 0.05, green: 0.05, blue: 0.12)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+
+            VStack(spacing: 32) {
+                Spacer()
+
+                // Voice icon
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [.blue.opacity(0.3), .purple.opacity(0.3)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 140, height: 140)
+
+                    Image(systemName: "waveform.circle.fill")
+                        .font(.system(size: 80))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [.blue, .purple],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                }
+                .shadow(color: .blue.opacity(0.3), radius: 30, x: 0, y: 10)
+
+                // Title and description
+                VStack(spacing: 16) {
+                    Text("Voice Mode is Premium")
+                        .font(.title.bold())
+                        .foregroundStyle(.white)
+
+                    Text("Upgrade to have natural voice conversations with your AI companion. Talk hands-free, get real-time responses, and experience a more personal connection.")
+                        .font(.body)
+                        .foregroundStyle(.white.opacity(0.7))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                }
+
+                Spacer()
+
+                // Premium features list
+                VStack(alignment: .leading, spacing: 12) {
+                    PremiumFeatureRow(icon: "mic.fill", text: "Natural voice conversations")
+                    PremiumFeatureRow(icon: "person.wave.2.fill", text: "Real-time emotion detection")
+                    PremiumFeatureRow(icon: "captions.bubble.fill", text: "Live captions & transcripts")
+                    PremiumFeatureRow(icon: "infinity", text: "Unlimited voice minutes")
+                }
+                .padding(.horizontal, 40)
+
+                Spacer()
+
+                // Action buttons
+                VStack(spacing: 16) {
+                    Button(action: onUpgrade) {
+                        HStack {
+                            Image(systemName: "star.fill")
+                            Text("Upgrade to Premium")
+                        }
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(
+                            LinearGradient(
+                                colors: [.blue, .purple],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .cornerRadius(16)
+                    }
+
+                    Button(action: onDismiss) {
+                        Text("Maybe Later")
+                            .font(.subheadline)
+                            .foregroundStyle(.white.opacity(0.6))
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 40)
+            }
+        }
+        .preferredColorScheme(.dark)
+    }
+}
+
+/// A single row in the premium features list
+private struct PremiumFeatureRow: View {
+    let icon: String
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 16))
+                .foregroundStyle(.blue)
+                .frame(width: 24)
+
+            Text(text)
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.9))
+        }
+    }
 }
 
 // MARK: - Preview
@@ -634,5 +832,14 @@ struct VoiceModeView: View {
             supabaseURL: URL(string: "https://example.supabase.co")!,
             supabaseKey: "mock-key"
         )
+    )
+    .environmentObject(DependencyContainer.shared)
+    .environmentObject(AppState())
+}
+
+#Preview("Voice Mode Paywall") {
+    VoiceModePaywallView(
+        onUpgrade: {},
+        onDismiss: {}
     )
 }

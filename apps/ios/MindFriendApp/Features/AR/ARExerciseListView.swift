@@ -1,10 +1,31 @@
 import SwiftUI
 
+/// Presentation mode for AR exercises
+enum ARExercisePresentation: Identifiable {
+    case arMode(ARExercise)
+    case fallbackMode(ARExercise)
+    
+    var id: String {
+        switch self {
+        case .arMode(let e): return "ar-\(e.id)"
+        case .fallbackMode(let e): return "fb-\(e.id)"
+        }
+    }
+    
+    var exercise: ARExercise {
+        switch self {
+        case .arMode(let e), .fallbackMode(let e):
+            return e
+        }
+    }
+}
+
 /// Main list view for AR grounding exercises
 public struct ARExerciseListView: View {
 
     // MARK: - Environment
 
+    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var container: DependencyContainer
     @EnvironmentObject private var exerciseService: ARExerciseService
     @EnvironmentObject private var capabilityService: ARCapabilityService
@@ -14,9 +35,7 @@ public struct ARExerciseListView: View {
     @State private var exercises: [ARExercise] = []
     @State private var isLoading: Bool = true
     @State private var errorMessage: String?
-    @State private var selectedExercise: ARExercise?
-    @State private var showExercise: Bool = false
-    @State private var showFallback: Bool = false
+    @State private var exercisePresentation: ARExercisePresentation?
     @State private var showCapabilityInfo: Bool = false
 
     // MARK: - Body
@@ -36,6 +55,14 @@ public struct ARExerciseListView: View {
             }
             .navigationTitle("AR Grounding")
             .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "chevron.down")
+                    }
+                    .accessibilityLabel("Close")
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         showCapabilityInfo = true
@@ -53,13 +80,11 @@ public struct ARExerciseListView: View {
             .sheet(isPresented: $showCapabilityInfo) {
                 capabilityInfoSheet
             }
-            .fullScreenCover(isPresented: $showExercise) {
-                if let exercise = selectedExercise {
+            .fullScreenCover(item: $exercisePresentation) { presentation in
+                switch presentation {
+                case .arMode(let exercise):
                     exerciseView(for: exercise)
-                }
-            }
-            .fullScreenCover(isPresented: $showFallback) {
-                if let exercise = selectedExercise {
+                case .fallbackMode(let exercise):
                     fallbackView(for: exercise)
                 }
             }
@@ -372,8 +397,7 @@ public struct ARExerciseListView: View {
                 .environmentObject(exerciseService)
 
         case .natureImmersion:
-            // Nature immersion uses same safe space view with different config
-            SafeSpaceARView(exercise: exercise)
+            NatureImmersionARView(exercise: exercise)
                 .environmentObject(exerciseService)
         }
     }
@@ -412,12 +436,10 @@ public struct ARExerciseListView: View {
     }
 
     private func selectExercise(_ exercise: ARExercise) {
-        selectedExercise = exercise
-
         if capabilityService.shouldUseFallback(for: exercise) {
-            showFallback = true
+            exercisePresentation = .fallbackMode(exercise)
         } else {
-            showExercise = true
+            exercisePresentation = .arMode(exercise)
         }
     }
 }

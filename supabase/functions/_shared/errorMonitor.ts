@@ -3,7 +3,7 @@
  * Provides error rate tracking, metrics aggregation, and alerting
  */
 
-import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { Logger } from "./logger.ts";
 
 export interface ErrorMetrics {

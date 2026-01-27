@@ -5,8 +5,8 @@ import Foundation
 enum Constants {
     // MARK: - Quotas & Limits
 
-    /// Free tier daily AI chat quota
-    static let freeUserDailyAiQuota = 20
+    /// Free tier daily AI chat quota (reduced to drive conversions)
+    static let freeUserDailyAiQuota = 5
 
     /// Premium tier effectively unlimited quota
     static let premiumUserDailyAiQuota = 9999
@@ -57,8 +57,8 @@ enum Constants {
     /// Voice session token validity in seconds
     static let voiceTokenValiditySeconds = 300 // 5 minutes
 
-    /// Free tier monthly voice minutes
-    static let freeUserMonthlyVoiceMinutes = 10.0
+    /// Free tier monthly voice minutes (voice mode is premium-only)
+    static let freeUserMonthlyVoiceMinutes = 0.0
 
     /// Premium tier monthly voice minutes (effectively unlimited)
     static let premiumUserMonthlyVoiceMinutes = 999.0

@@ -97,7 +97,8 @@ final class AchievementService: ObservableObject {
                 .value
 
             // Calculate XP to next level using thresholds
-            let nextLevelIndex = min(statsRow.level + 1, 50)
+            // Array is 0-indexed: level 8 user needs index 8 (which is level 9 threshold = 2200)
+            let nextLevelIndex = min(statsRow.level, 49)
             let xpToNext = max(0, UserLevel.xpThresholds[nextLevelIndex] - statsRow.xpTotal)
 
             // FIX: Explicit MainActor wrapping
@@ -382,18 +383,21 @@ final class AchievementService: ObservableObject {
     func loadCurrentSeason() async throws {
         let now = ISO8601DateFormatter().string(from: Date())
 
-        let dbSeason: DBSeason? = try await supabase
+        // Query for active seasons (don't use .single() to avoid error when no seasons exist)
+        let dbSeasons: [DBSeason] = try await supabase
             .from("seasons")
             .select()
             .eq("is_active", value: true)
             .lte("starts_at", value: now)
             .gte("ends_at", value: now)
-            .single()
+            .limit(1)
             .execute()
             .value
 
-        if let dbSeason = dbSeason {
+        if let dbSeason = dbSeasons.first {
             self.currentSeason = Season(from: dbSeason)
+        } else {
+            self.currentSeason = nil
         }
     }
 

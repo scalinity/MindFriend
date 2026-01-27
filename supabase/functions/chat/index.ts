@@ -5,7 +5,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import {
   createClient,
   SupabaseClient,
-} from "https://esm.sh/@supabase/supabase-js@2";
+} from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 // Type alias for untyped Supabase client (no generated database types)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -30,10 +30,13 @@ const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Coach settings cache (5-minute TTL)
-const coachSettingsCache = new Map<string, {
-  data: any;
-  expiresAt: number;
-}>();
+const coachSettingsCache = new Map<
+  string,
+  {
+    data: any;
+    expiresAt: number;
+  }
+>();
 const COACH_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
@@ -42,7 +45,7 @@ const COACH_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
  */
 async function getCachedCoachSettings(
   supabase: UntypedSupabaseClient,
-  userId: string
+  userId: string,
 ): Promise<any> {
   // Check cache
   const cached = coachSettingsCache.get(userId);
@@ -53,7 +56,9 @@ async function getCachedCoachSettings(
   // Cache miss - fetch from database
   const { data: coachSettings } = await supabase
     .from("coach_settings")
-    .select("is_enabled, sensitivity_level, silent_hours_start, silent_hours_end, disabled_distortions, timezone")
+    .select(
+      "is_enabled, sensitivity_level, silent_hours_start, silent_hours_end, disabled_distortions, timezone",
+    )
     .eq("user_id", userId)
     .maybeSingle();
 
@@ -94,6 +99,9 @@ interface Message {
 }
 
 serve(async (req) => {
+  console.log("======== CHAT FUNCTION START ========");
+  console.log("[1] Method:", req.method);
+
   // Get origin first for consistent CORS handling
   const origin = req.headers.get("Origin");
   const baseCorsHeaders = getCorsHeaders(origin);
@@ -104,6 +112,7 @@ serve(async (req) => {
   }
 
   try {
+    console.log("[2] Processing request...");
     // Get auth header first
     const authHeader = req.headers.get("Authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -138,22 +147,25 @@ serve(async (req) => {
     let userAuthError;
     try {
       const authTimeoutPromise = new Promise((_resolve, reject) =>
-        setTimeout(() => reject(new Error("Auth timeout")), 5000)
+        setTimeout(() => reject(new Error("Auth timeout")), 5000),
       );
-      
+
       const authPromise = (async () => {
         return await supabaseUser.auth.getUser();
       })();
-      
+
       const authResult = await Promise.race([authPromise, authTimeoutPromise]);
       user = authResult.data?.user;
       userAuthError = authResult.error;
     } catch (error) {
-      console.error("Auth error:", error instanceof Error ? error.message : String(error));
-      return new Response(
-        JSON.stringify({ error: "Authentication failed" }),
-        { status: 401, headers: baseCorsHeaders },
+      console.error(
+        "Auth error:",
+        error instanceof Error ? error.message : String(error),
       );
+      return new Response(JSON.stringify({ error: "Authentication failed" }), {
+        status: 401,
+        headers: baseCorsHeaders,
+      });
     }
 
     if (userAuthError || !user) {
@@ -178,12 +190,16 @@ serve(async (req) => {
       );
     }
 
+    console.log("[3] Auth successful, user:", user.id);
+
     // Rate limiting check (10 requests per minute)
+    console.log("[4] Checking rate limit...");
     const rateLimitResult = await checkRateLimit(
       supabaseAdmin,
       user.id,
       "chat",
     );
+    console.log("[4] Rate limit result:", JSON.stringify(rateLimitResult));
 
     if (!rateLimitResult.allowed) {
       return new Response(
@@ -267,11 +283,17 @@ serve(async (req) => {
     }
 
     // Verify conversation ownership - SECURITY CRITICAL
+    console.log("[5] Verifying conversation ownership:", conversationId);
     const { data: conversation, error: convError } = await supabaseAdmin
       .from("conversations")
       .select("id, user_id")
       .eq("id", conversationId)
       .single();
+    console.log(
+      "[5] Conversation lookup:",
+      conversation ? "found" : "not found",
+      convError?.message || "",
+    );
 
     if (convError || !conversation) {
       return new Response(JSON.stringify({ error: "Conversation not found" }), {
@@ -334,12 +356,18 @@ serve(async (req) => {
     const isPremium = profile.subscription_tier === "premium";
 
     // Atomically check and increment quota (prevents race conditions)
+    console.log("[6] Checking AI quota, isPremium:", isPremium);
     const { data: quotaResult, error: quotaError } = await supabaseAdmin.rpc(
       "check_and_increment_ai_quota",
       {
         p_user_id: user.id,
         p_is_premium: isPremium,
       },
+    );
+    console.log(
+      "[6] Quota result:",
+      JSON.stringify(quotaResult),
+      quotaError?.message || "",
     );
 
     if (quotaError) {
@@ -474,6 +502,12 @@ serve(async (req) => {
         .update({ updated_at: now.toISOString() })
         .eq("id", conversationId);
 
+      // Helper to convert date to Unix timestamp (seconds) for iOS Swift Codable
+      const toUnixTs = (dateStr: string | null | undefined): number => {
+        if (!dateStr) return now.getTime() / 1000;
+        return new Date(dateStr).getTime() / 1000;
+      };
+
       return new Response(
         JSON.stringify({
           // EXE-007: Return full message objects for both user and assistant
@@ -481,14 +515,14 @@ serve(async (req) => {
             id: crisisUserMessage?.id,
             role: "user",
             content: trimmedContent,
-            createdAt: crisisUserMessage?.created_at || now.toISOString(),
+            createdAt: toUnixTs(crisisUserMessage?.created_at),
             blocked: false,
           },
           assistantMessage: {
             id: crisisMessage?.id,
             role: "assistant",
             content: CRISIS_RESPONSE,
-            createdAt: crisisMessage?.created_at || now.toISOString(),
+            createdAt: toUnixTs(crisisMessage?.created_at),
             blocked: true,
           },
           // Legacy field for backward compatibility
@@ -496,7 +530,7 @@ serve(async (req) => {
             id: crisisMessage?.id,
             role: "assistant",
             content: CRISIS_RESPONSE,
-            createdAt: crisisMessage?.created_at || now.toISOString(),
+            createdAt: toUnixTs(crisisMessage?.created_at),
             blocked: true,
           },
           isCrisisResponse: true,
@@ -724,14 +758,16 @@ serve(async (req) => {
       .single();
 
     // Call xAI (Grok)
+    console.log("[7] Calling xAI API...");
     const xaiKey = Deno.env.get("XAI_API_KEY");
     if (!xaiKey) {
-      console.error("XAI_API_KEY not configured");
+      console.error("[7] XAI_API_KEY not configured");
       return new Response(
         JSON.stringify({ error: "Service temporarily unavailable" }),
         { status: 503, headers: responseHeaders },
       );
     }
+    console.log("[7] XAI_API_KEY present, making request to:", XAI_API_URL);
 
     const aiResponse = await fetch(XAI_API_URL, {
       method: "POST",
@@ -747,9 +783,11 @@ serve(async (req) => {
       }),
     });
 
+    console.log("[7] xAI API response status:", aiResponse.status);
     if (!aiResponse.ok) {
-      // Log error code only, not response body (may contain sensitive info)
-      console.error("xAI API error:", aiResponse.status);
+      // Log error code and body for debugging
+      const errorBody = await aiResponse.text();
+      console.error("[7] xAI API error:", aiResponse.status, errorBody);
       return new Response(
         JSON.stringify({ error: "AI service temporarily unavailable" }),
         { status: 502, headers: responseHeaders },
@@ -757,6 +795,7 @@ serve(async (req) => {
     }
 
     const aiData = await aiResponse.json();
+    console.log("[7] xAI response received, has choices:", !!aiData.choices);
     const assistantContent =
       aiData.choices?.[0]?.message?.content ||
       "I'm sorry, I couldn't generate a response. Please try again.";
@@ -784,7 +823,10 @@ serve(async (req) => {
 
     try {
       // Fetch coach settings for this user (with 5-minute cache)
-      const coachSettings = await getCachedCoachSettings(supabaseAdmin, user.id);
+      const coachSettings = await getCachedCoachSettings(
+        supabaseAdmin,
+        user.id,
+      );
 
       // Fetch user's language preference
       const { data: userProfile } = await supabaseAdmin
@@ -802,7 +844,7 @@ serve(async (req) => {
         // Check silent hours - convert current time to user's timezone
         const userTimezone = coachSettings?.timezone || "UTC";
         const now = new Date();
-        
+
         // Use Intl API to get time in user's timezone
         const formatter = new Intl.DateTimeFormat("en-US", {
           timeZone: userTimezone,
@@ -810,14 +852,21 @@ serve(async (req) => {
           minute: "numeric",
           hour12: false,
         });
-        
+
         const parts = formatter.formatToParts(now);
-        const currentHour = parseInt(parts.find(p => p.type === "hour")?.value || "0");
-        const currentMinute = parseInt(parts.find(p => p.type === "minute")?.value || "0");
+        const currentHour = parseInt(
+          parts.find((p) => p.type === "hour")?.value || "0",
+        );
+        const currentMinute = parseInt(
+          parts.find((p) => p.type === "minute")?.value || "0",
+        );
         const currentTimeMinutes = currentHour * 60 + currentMinute;
 
         let inSilentHours = false;
-        if (coachSettings?.silent_hours_start && coachSettings?.silent_hours_end) {
+        if (
+          coachSettings?.silent_hours_start &&
+          coachSettings?.silent_hours_end
+        ) {
           const parseTime = (timeStr: string) => {
             const [h, m] = timeStr.split(":").map(Number);
             return h * 60 + m;
@@ -827,9 +876,13 @@ serve(async (req) => {
 
           // Handle midnight wrap (e.g., 22:00 to 02:00)
           if (startMinutes > endMinutes) {
-            inSilentHours = currentTimeMinutes >= startMinutes || currentTimeMinutes < endMinutes;
+            inSilentHours =
+              currentTimeMinutes >= startMinutes ||
+              currentTimeMinutes < endMinutes;
           } else {
-            inSilentHours = currentTimeMinutes >= startMinutes && currentTimeMinutes < endMinutes;
+            inSilentHours =
+              currentTimeMinutes >= startMinutes &&
+              currentTimeMinutes < endMinutes;
           }
         }
 
@@ -840,42 +893,52 @@ serve(async (req) => {
 
           if (!isNewTopic) {
             // Get sensitivity threshold
-            const sensitivityLevel = coachSettings?.sensitivity_level || "balanced";
+            const sensitivityLevel =
+              coachSettings?.sensitivity_level || "balanced";
             const threshold = getSensitivityThreshold(sensitivityLevel);
 
             // Run detection on user's message
-            const detection = detectDistortion(trimmedContent, userLanguage, threshold);
+            const detection = detectDistortion(
+              trimmedContent,
+              userLanguage,
+              threshold,
+            );
 
             if (detection) {
               // Check if this distortion is disabled
-              const disabledDistortions = coachSettings?.disabled_distortions || [];
+              const disabledDistortions =
+                coachSettings?.disabled_distortions || [];
               if (!disabledDistortions.includes(detection.distortionCode)) {
                 // Fetch reframe
                 const reframe = await getReframe(
                   supabaseAdmin,
                   detection.distortionCode,
                   trimmedContent,
-                  userLanguage
+                  userLanguage,
                 );
 
                 if (reframe) {
                   // Log encounter using atomic RPC function
-                  const { data: encounterResult, error: encounterError } = await supabaseAdmin
-                    .rpc("log_coach_encounter", {
-                      p_user_id: user.id,
-                      p_distortion_code: detection.distortionCode,
-                      p_conversation_id: conversationId,
-                      p_original_message_preview: trimmedContent.substring(0, 200),
-                      p_reframe_text: reframe.reframeText,
-                      p_confidence: detection.confidence,
-                      p_encounter_type: "chat",
-                    })
-                    .single();
+                  const { data: encounterResult, error: encounterError } =
+                    await supabaseAdmin
+                      .rpc("log_coach_encounter", {
+                        p_user_id: user.id,
+                        p_distortion_code: detection.distortionCode,
+                        p_conversation_id: conversationId,
+                        p_original_message_preview: trimmedContent.substring(
+                          0,
+                          200,
+                        ),
+                        p_reframe_text: reframe.reframeText,
+                        p_confidence: detection.confidence,
+                        p_encounter_type: "chat",
+                      })
+                      .single();
 
                   if (encounterError || !encounterResult?.success) {
                     console.error(
                       "Failed to log encounter:",
-                      encounterError || encounterResult?.error_message
+                      encounterError || encounterResult?.error_message,
                     );
                     // Continue anyway - don't block coach from showing
                   }
@@ -904,6 +967,17 @@ serve(async (req) => {
 
     // Auto-generate conversation title if this is the first message
     const isFirstMessage = !messages || messages.length === 0;
+
+    if (isFirstMessage) {
+      // Generate title in background (fire-and-forget)
+      generateConversationTitle(
+        supabaseAdmin,
+        conversationId,
+        trimmedContent,
+        assistantContent,
+        xaiKey,
+      ).catch((err) => console.error("Title generation failed:", err));
+    }
 
     // Note: Quota was already incremented atomically at the start of the function
 
@@ -938,6 +1012,15 @@ serve(async (req) => {
         });
     }
 
+    // Helper to convert date to Unix timestamp (seconds) for iOS Swift Codable
+    const toUnixTimestamp = (
+      dateStr: string | null | undefined,
+      fallback: Date,
+    ): number => {
+      if (!dateStr) return fallback.getTime() / 1000;
+      return new Date(dateStr).getTime() / 1000;
+    };
+
     return new Response(
       JSON.stringify({
         // EXE-007: Return full message objects for both user and assistant
@@ -945,14 +1028,14 @@ serve(async (req) => {
           id: userMessage?.id,
           role: "user",
           content: trimmedContent,
-          createdAt: userMessage?.created_at || now.toISOString(),
+          createdAt: toUnixTimestamp(userMessage?.created_at, now),
           blocked: false,
         },
         assistantMessage: {
           id: assistantMessage?.id,
           role: "assistant",
           content: assistantContent,
-          createdAt: assistantMessage?.created_at || now.toISOString(),
+          createdAt: toUnixTimestamp(assistantMessage?.created_at, now),
           blocked: false,
         },
         // Legacy field for backward compatibility during transition
@@ -960,7 +1043,7 @@ serve(async (req) => {
           id: assistantMessage?.id,
           role: "assistant",
           content: assistantContent,
-          createdAt: assistantMessage?.created_at || now.toISOString(),
+          createdAt: toUnixTimestamp(assistantMessage?.created_at, now),
           blocked: false,
         },
         userMessageId: userMessage?.id, // Legacy field for backward compatibility
@@ -974,11 +1057,15 @@ serve(async (req) => {
       { headers: responseHeaders },
     );
   } catch (error) {
-    // Generic error - don't leak internal details
+    // Log full error for debugging
+    console.error("======== CHAT FUNCTION ERROR ========");
+    console.error("Error type:", typeof error);
+    console.error("Error name:", error instanceof Error ? error.name : "N/A");
     console.error(
-      "Chat function error:",
-      error instanceof Error ? error.message : "Unknown",
+      "Error message:",
+      error instanceof Error ? error.message : String(error),
     );
+    console.error("Error stack:", error instanceof Error ? error.stack : "N/A");
     return new Response(
       JSON.stringify({ error: "An unexpected error occurred" }),
       { status: 500, headers: baseCorsHeaders },
@@ -1040,6 +1127,69 @@ function sanitizeForPrompt(input: string): string {
       // Markdown/formatting abuse
       .replace(/```(system|instruction|prompt)/gi, "```[redacted]")
   );
+}
+
+// Title generation function - runs in background, non-blocking
+async function generateConversationTitle(
+  supabaseAdmin: UntypedSupabaseClient,
+  conversationId: string,
+  userMessage: string,
+  assistantMessage: string,
+  xaiKey: string,
+): Promise<void> {
+  try {
+    // Use a fast model for title generation
+    const response = await fetch("https://api.x.ai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${xaiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "grok-3-mini",
+        messages: [
+          {
+            role: "system",
+            content: `Generate a short, descriptive title (3-6 words) for this conversation.
+The title should capture the main topic or theme.
+Return ONLY the title text, no quotes or punctuation at the end.
+Examples: "Anxiety About Work Presentation", "Morning Meditation Practice", "Dealing With Family Stress"`,
+          },
+          {
+            role: "user",
+            content: `User: ${userMessage.slice(0, 200)}${userMessage.length > 200 ? "..." : ""}\n\nAssistant: ${assistantMessage.slice(0, 200)}${assistantMessage.length > 200 ? "..." : ""}`,
+          },
+        ],
+        max_tokens: 30,
+        temperature: 0.3,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("Title generation API error:", response.status);
+      return;
+    }
+
+    const data = await response.json();
+    const title = data.choices?.[0]?.message?.content?.trim();
+
+    if (title && title.length > 0 && title.length <= 100) {
+      const { error } = await supabaseAdmin
+        .from("conversations")
+        .update({ title })
+        .eq("id", conversationId);
+
+      if (error) {
+        console.error("Failed to update conversation title:", error);
+      } else {
+        console.log(
+          `Generated title for conversation ${conversationId}: "${title}"`,
+        );
+      }
+    }
+  } catch (err) {
+    console.error("Title generation error:", err);
+  }
 }
 
 // Memory extraction function - runs in background, non-blocking

@@ -389,6 +389,10 @@ extension NotificationDeepLink: CustomStringConvertible {
             return "insights"
         case .buddy(let code):
             return "buddy(\(code))"
+        case .micro(let templateId):
+            return "micro(\(templateId ?? "nil"))"
+        case .sleep(let contentId):
+            return "sleep(\(contentId ?? "nil"))"
         case .none:
             return "none"
         }

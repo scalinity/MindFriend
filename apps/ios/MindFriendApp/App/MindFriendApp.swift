@@ -26,6 +26,7 @@ struct MindFriendApp: App {
                 .environmentObject(container)
                 .environmentObject(notificationManager)
                 .environmentObject(deepLinkRouter)
+                .environmentObject(container.ambientThemeService)
                 .preferredColorScheme(selectedTheme.colorScheme)
                 .task {
                     // Configure notification manager with container for device registration
@@ -75,6 +76,9 @@ struct MindFriendApp: App {
                                 if !notificationManager.isAuthorized {
                                     _ = await notificationManager.requestAuthorization()
                                 }
+
+                                // Start ambient theme service
+                                await container.ambientThemeService.start()
 
                                 // Sync any widget actions made while app was inactive
                                 await appState.processPendingWidgetSyncs(container: container)
@@ -242,6 +246,7 @@ struct MindFriendApp: App {
 struct RootView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
+    @EnvironmentObject var ambientService: AmbientThemeService
 
     var body: some View {
         Group {
@@ -254,6 +259,7 @@ struct RootView: View {
                 OnboardingFlow()
             case .authenticated:
                 MainTabView()
+                    .ambientBackground(service: ambientService)
             }
         }
         .animation(.easeInOut(duration: 0.3), value: appState.authState)

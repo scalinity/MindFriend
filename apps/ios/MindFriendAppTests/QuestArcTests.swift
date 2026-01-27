@@ -131,15 +131,16 @@ final class QuestArcTests: XCTestCase {
             id: UUID(),
             userId: UUID(),
             arcId: UUID(),
-            status: pausedAt != nil ? "paused" : "active",
             currentDay: currentDay,
-            snapshotDurationDays: durationDays,
-            snapshotMilestoneDays: milestones,
+            status: pausedAt != nil ? .paused : .active,
             startedAt: Date(),
             pausedAt: pausedAt,
             completedAt: nil,
             abandonedAt: nil,
-            questArc: nil
+            lastQuestCompletedAt: nil,
+            snapshotDurationDays: durationDays,
+            snapshotMilestoneDays: milestones,
+            arc: nil
         )
     }
 }
@@ -155,10 +156,14 @@ final class QuestArcModelTests: XCTestCase {
             description: "A test arc",
             category: "stress",
             durationDays: 14,
-            milestoneDays: [3, 7, 14],
+            difficultyLevel: "beginner",
             isPremium: false,
-            isActive: true,
-            createdAt: Date()
+            milestoneDays: [3, 7, 14],
+            iconName: "brain.head.profile",
+            stepCount: 14,
+            userEnrolled: false,
+            userCompleted: false,
+            userProgress: nil
         )
 
         XCTAssertEqual(arc.title, "Test Arc")

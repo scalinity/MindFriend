@@ -184,6 +184,7 @@ enum MainTab: String, CaseIterable {
     case chat
     case outcomes
     case circles
+    case mentorship
     case sleep
     case personalization
     case profile
@@ -195,6 +196,7 @@ enum MainTab: String, CaseIterable {
         case .chat: return "Chat"
         case .outcomes: return "Progress"
         case .circles: return "Circles"
+        case .mentorship: return "Mentorship"
         case .sleep: return "Sleep"
         case .personalization: return "For You"
         case .profile: return "Profile"
@@ -208,6 +210,7 @@ enum MainTab: String, CaseIterable {
         case .chat: return "bubble.left.and.bubble.right.fill"
         case .outcomes: return "chart.line.uptrend.xyaxis"
         case .circles: return "person.3.fill"
+        case .mentorship: return "star.fill"
         case .sleep: return "moon.fill"
         case .personalization: return "sparkles"
         case .profile: return "person.fill"

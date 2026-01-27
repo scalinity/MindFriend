@@ -1,7 +1,7 @@
 // Rate limiting using Supabase database
 // Uses sliding window approach with PostgreSQL
 
-import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 interface RateLimitResult {
   allowed: boolean;

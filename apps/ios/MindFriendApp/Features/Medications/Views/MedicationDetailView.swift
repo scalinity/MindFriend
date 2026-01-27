@@ -1,10 +1,12 @@
 import SwiftUI
 
 struct MedicationDetailView: View {
+    @EnvironmentObject private var container: DependencyContainer
     let medication: Medication
     @State private var adherenceStats: MedicationAdherenceStats?
     @State private var logs: [MedicationLog] = []
     @State private var isLoading = false
+    @State private var errorMessage: String?
 
     var body: some View {
         ScrollView {
@@ -102,10 +104,79 @@ struct MedicationDetailView: View {
         }
         .navigationTitle(medication.name)
         .navigationBarTitleDisplayMode(.inline)
+        .alert("Error", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK") { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "")
+        }
         .task {
             isLoading = true
-            // TODO: Load adherence stats and logs
-            isLoading = false
+            defer { isLoading = false }
+
+            do {
+                // Load adherence stats
+                struct DBMedicationStats: Decodable {
+                    let medication_id: String
+                    let taken_count: Int
+                    let total_scheduled: Int
+                    let streak_days: Int
+                }
+
+                let stats: [DBMedicationStats] = try await container.supabase
+                    .from("medication_adherence_stats")
+                    .select()
+                    .eq("medication_id", value: medication.id.uuidString)
+                    .execute()
+                    .value
+
+                if let stat = stats.first {
+                    adherenceStats = MedicationAdherenceStats(
+                        takenCount: stat.taken_count,
+                        totalScheduled: stat.total_scheduled,
+                        streakDays: stat.streak_days
+                    )
+                }
+
+                // Load recent logs
+                struct DBMedicationLog: Decodable {
+                    let id: String
+                    let medication_id: String
+                    let scheduled_at: Date
+                    let status: String
+                    let taken_at: Date?
+                    let notes: String?
+                }
+
+                let dbLogs: [DBMedicationLog] = try await container.supabase
+                    .from("medication_logs")
+                    .select()
+                    .eq("medication_id", value: medication.id.uuidString)
+                    .order("scheduled_at", ascending: false)
+                    .limit(30)
+                    .execute()
+                    .value
+
+                logs = dbLogs.compactMap { log in
+                    guard let status = MedicationStatus(rawValue: log.status),
+                          let id = UUID(uuidString: log.id),
+                          let medicationId = UUID(uuidString: log.medication_id) else {
+                        return nil
+                    }
+                    return MedicationLog(
+                        id: id,
+                        medicationId: medicationId,
+                        scheduledAt: log.scheduled_at,
+                        status: status,
+                        takenAt: log.taken_at,
+                        notes: log.notes
+                    )
+                }
+            } catch {
+                errorMessage = "Failed to load medication data"
+            }
         }
     }
 

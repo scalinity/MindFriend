@@ -9,7 +9,7 @@
  * Reduces: 201 queries → 5 queries (40× improvement, 99.88% reduction)
  */
 
-import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 // ============================================================================
 // TYPE DEFINITIONS - Batch RPC Function Interfaces

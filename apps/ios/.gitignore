@@ -1,0 +1,4 @@
+
+# iOS xcconfig files with credentials
+apps/ios/Debug.xcconfig
+apps/ios/Release.xcconfig

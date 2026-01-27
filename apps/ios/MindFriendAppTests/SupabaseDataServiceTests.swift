@@ -7,7 +7,7 @@ final class SupabaseDataServiceTests: XCTestCase {
 
     @MainActor
     func testIsUniqueConstraintViolation_PostgreSQLErrorCode() {
-        let service = SupabaseDataService(authService: SupabaseAuthService())
+        let service = SupabaseDataService(authService: DependencyContainer.preview.supabaseAuthService)
 
         // PostgreSQL error code 23505 indicates unique constraint violation
         let error = NSError(
@@ -21,7 +21,7 @@ final class SupabaseDataServiceTests: XCTestCase {
 
     @MainActor
     func testIsUniqueConstraintViolation_UniqueKeyword() {
-        let service = SupabaseDataService(authService: SupabaseAuthService())
+        let service = SupabaseDataService(authService: DependencyContainer.preview.supabaseAuthService)
 
         let error = NSError(
             domain: "PostgrestError",
@@ -34,7 +34,7 @@ final class SupabaseDataServiceTests: XCTestCase {
 
     @MainActor
     func testIsUniqueConstraintViolation_DuplicateKeyKeyword() {
-        let service = SupabaseDataService(authService: SupabaseAuthService())
+        let service = SupabaseDataService(authService: DependencyContainer.preview.supabaseAuthService)
 
         let error = NSError(
             domain: "PostgrestError",
@@ -47,7 +47,7 @@ final class SupabaseDataServiceTests: XCTestCase {
 
     @MainActor
     func testIsUniqueConstraintViolation_CaseInsensitive() {
-        let service = SupabaseDataService(authService: SupabaseAuthService())
+        let service = SupabaseDataService(authService: DependencyContainer.preview.supabaseAuthService)
 
         // Should match regardless of case
         let error = NSError(
@@ -61,7 +61,7 @@ final class SupabaseDataServiceTests: XCTestCase {
 
     @MainActor
     func testIsUniqueConstraintViolation_NotAUniqueError() {
-        let service = SupabaseDataService(authService: SupabaseAuthService())
+        let service = SupabaseDataService(authService: DependencyContainer.preview.supabaseAuthService)
 
         // Network error - not a unique constraint violation
         let networkError = NSError(
@@ -75,7 +75,7 @@ final class SupabaseDataServiceTests: XCTestCase {
 
     @MainActor
     func testIsUniqueConstraintViolation_AuthError() {
-        let service = SupabaseDataService(authService: SupabaseAuthService())
+        let service = SupabaseDataService(authService: DependencyContainer.preview.supabaseAuthService)
 
         // Auth error - not a unique constraint violation
         let authError = NSError(
@@ -89,7 +89,7 @@ final class SupabaseDataServiceTests: XCTestCase {
 
     @MainActor
     func testIsUniqueConstraintViolation_ForeignKeyError() {
-        let service = SupabaseDataService(authService: SupabaseAuthService())
+        let service = SupabaseDataService(authService: DependencyContainer.preview.supabaseAuthService)
 
         // Foreign key error (23503) - not a unique constraint (23505)
         let fkError = NSError(
@@ -103,7 +103,7 @@ final class SupabaseDataServiceTests: XCTestCase {
 
     @MainActor
     func testIsUniqueConstraintViolation_GenericError() {
-        let service = SupabaseDataService(authService: SupabaseAuthService())
+        let service = SupabaseDataService(authService: DependencyContainer.preview.supabaseAuthService)
 
         // Generic error with no specific keywords
         let genericError = NSError(
@@ -199,7 +199,7 @@ extension SupabaseDataServiceTests {
     /// Tests that various database error types are properly categorized
     @MainActor
     func testDatabaseErrorTypes() {
-        let service = SupabaseDataService(authService: SupabaseAuthService())
+        let service = SupabaseDataService(authService: DependencyContainer.preview.supabaseAuthService)
 
         // Row-level security violation (common when user lacks permission)
         let rlsError = NSError(

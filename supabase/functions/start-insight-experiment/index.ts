@@ -1,7 +1,7 @@
 // supabase/functions/start-insight-experiment/index.ts
 // Creates a new 7-day experiment for the authenticated user
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 const VALID_ACTION_TYPES = [

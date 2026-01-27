@@ -82,6 +82,83 @@ final class TherapeuticProgramService: ObservableObject {
         return therapeuticEnrollments.isEmpty
     }
 
+    /// Fetch user's active therapeutic program enrollment
+    func fetchActiveTherapeuticEnrollment() async throws -> ProgramEnrollment? {
+        guard let userId = supabase.auth.currentUser?.id else {
+            throw TherapeuticServiceError.notAuthenticated
+        }
+
+        let existingEnrollments: [DBProgramEnrollment] = try await supabase
+            .from("program_enrollments")
+            .select("*, programs(*)")
+            .eq("user_id", value: userId.uuidString)
+            .eq("status", value: "active")
+            .execute()
+            .value
+
+        // Filter to therapeutic enrollments (those with methodology)
+        let therapeuticEnrollment = existingEnrollments.first { enrollment in
+            enrollment.programs?.methodology != nil
+        }
+
+        return therapeuticEnrollment?.toEnrollment()
+    }
+
+    /// Enroll user in a therapeutic program
+    func enrollInProgram(programId: String) async throws -> ProgramEnrollment {
+        guard let userId = supabase.auth.currentUser?.id else {
+            throw TherapeuticServiceError.notAuthenticated
+        }
+
+        // Check if can enroll (no existing active enrollment)
+        guard try await canEnrollInTherapeuticProgram() else {
+            throw TherapeuticServiceError.enrollmentNotFound  // Use existing error - already enrolled
+        }
+
+        struct EnrollmentInsert: Encodable {
+            let userId: String
+            let programId: String
+            let status: String
+            let currentDay: Int
+            let streakDays: Int
+            let longestStreak: Int
+            let skipsUsed: Int
+            let enrolledAt: String
+
+            enum CodingKeys: String, CodingKey {
+                case userId = "user_id"
+                case programId = "program_id"
+                case status
+                case currentDay = "current_day"
+                case streakDays = "streak_days"
+                case longestStreak = "longest_streak"
+                case skipsUsed = "skips_used"
+                case enrolledAt = "enrolled_at"
+            }
+        }
+
+        let enrollment = EnrollmentInsert(
+            userId: userId.uuidString,
+            programId: programId,
+            status: "active",
+            currentDay: 1,
+            streakDays: 0,
+            longestStreak: 0,
+            skipsUsed: 0,
+            enrolledAt: ISO8601DateFormatter().string(from: Date())
+        )
+
+        let response: DBProgramEnrollment = try await supabase
+            .from("program_enrollments")
+            .insert(enrollment)
+            .select("*, programs(*)")
+            .single()
+            .execute()
+            .value
+
+        return response.toEnrollment()
+    }
+
     // MARK: - Clinical Assessment Operations
 
     /// Submit a clinical assessment (PHQ-9 or GAD-7)

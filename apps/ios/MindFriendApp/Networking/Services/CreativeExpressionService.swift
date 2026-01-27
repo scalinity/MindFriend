@@ -71,10 +71,21 @@ final class CreativeExpressionService: ObservableObject {
             moodTags: moodTags
         )
 
-        let response: GenerateArtResponse = try await supabase.functions.invoke(
-            "generate-art",
-            options: .init(body: request)
-        )
+        let response: GenerateArtResponse
+        do {
+            response = try await supabase.functions.invoke(
+                "generate-art",
+                options: .init(body: request)
+            )
+        } catch {
+            // Check if this is a 429 quota exceeded error
+            let errorString = error.localizedDescription.lowercased()
+            if errorString.contains("429") || errorString.contains("quota") || errorString.contains("limit") {
+                print("[ArtGen] Detected quota exceeded from error: \(error)")
+                throw CreativeError.quotaExceeded
+            }
+            throw error
+        }
 
         if let error = response.error {
             if response.quotaExceeded == true {
@@ -89,6 +100,130 @@ final class CreativeExpressionService: ObservableObject {
 
         // Fetch the created work
         let work = try await fetchCreativeWork(id: workId)
+
+        // Add to local cache
+        creativeWorks.insert(work, at: 0)
+
+        return work
+    }
+
+    /// Generate AI art from a prompt with streaming partial images
+    /// - Parameters:
+    ///   - prompt: The art description prompt
+    ///   - style: Optional art style
+    ///   - moodScore: Optional mood score (1-10)
+    ///   - moodTags: Optional mood tags
+    ///   - onPartialImage: Callback for partial image updates during generation
+    /// - Returns: The final CreativeWork with the generated art
+    func generateArtStreaming(
+        prompt: String,
+        style: ArtStyle? = nil,
+        moodScore: Int? = nil,
+        moodTags: [String]? = nil,
+        onPartialImage: @escaping (Data, Int) -> Void
+    ) async throws -> CreativeWork {
+        print("[ArtGen] Starting streaming generation with prompt: \(prompt.prefix(50))...")
+        try ensureAuthenticated()
+        print("[ArtGen] Authentication verified")
+
+        isLoading = true
+        defer {
+            isLoading = false
+            print("[ArtGen] isLoading set to false")
+        }
+
+        // Build request body for SSE streaming
+        var body: [String: Any] = ["prompt": prompt]
+        if let style = style {
+            body["style"] = style.rawValue
+        }
+        if let moodScore = moodScore {
+            body["moodScore"] = moodScore
+        }
+        if let moodTags = moodTags {
+            body["moodTags"] = moodTags
+        }
+        print("[ArtGen] Request body built: \(body)")
+
+        var finalWorkId: String?
+        var finalImageData: Data?
+
+        // Stream the generation
+        print("[ArtGen] Creating SSE stream...")
+        let stream = SSEStreamingHelper.streamImageGeneration(
+            functionName: "generate-art",
+            body: body
+        )
+
+        print("[ArtGen] Starting to iterate stream events...")
+        var eventCount = 0
+        do {
+            for try await event in stream {
+                eventCount += 1
+                print("[ArtGen] Event #\(eventCount) received")
+
+                switch event {
+                case .partial(let index, let imageData):
+                    print("[ArtGen] Partial image \(index), size: \(imageData.count)")
+                    onPartialImage(imageData, index)
+
+                case .complete(let imageData, let metadata):
+                    print("[ArtGen] Complete event received, image size: \(imageData.count)")
+                    finalImageData = imageData
+                    // Extract creativeWorkId from metadata
+                    if let workId = metadata?["creativeWorkId"] as? String {
+                        finalWorkId = workId
+                        print("[ArtGen] Got creativeWorkId: \(workId)")
+                    } else {
+                        let keys = metadata?.keys.map { String(describing: $0) } ?? []
+                        print("[ArtGen] WARNING: No creativeWorkId in metadata. Keys: \(keys)")
+                    }
+
+                case .error(let error):
+                    print("[ArtGen] ERROR event: \(error)")
+                    // Check if this is a quota exceeded error
+                    let errorString = error.localizedDescription.lowercased()
+                    if errorString.contains("429") || errorString.contains("quota") || errorString.contains("limit") {
+                        throw CreativeError.quotaExceeded
+                    }
+                    throw CreativeError.generationFailed(error.localizedDescription)
+                }
+            }
+        } catch let error as SSEStreamError {
+            // Check for 429 status code indicating quota exceeded
+            if case .httpError(let statusCode, _) = error, statusCode == 429 {
+                print("[ArtGen] Detected 429 quota exceeded from SSE error")
+                throw CreativeError.quotaExceeded
+            }
+            // Check error message for quota indicators
+            let errorString = error.localizedDescription.lowercased()
+            if errorString.contains("429") || errorString.contains("quota") || errorString.contains("limit") {
+                print("[ArtGen] Detected quota exceeded from error message: \(error)")
+                throw CreativeError.quotaExceeded
+            }
+            throw error
+        } catch let error as CreativeError {
+            throw error
+        } catch {
+            // Check if the generic error contains 429 indicators
+            let errorString = error.localizedDescription.lowercased()
+            if errorString.contains("429") || errorString.contains("quota") || errorString.contains("limit") {
+                print("[ArtGen] Detected quota exceeded from generic error: \(error)")
+                throw CreativeError.quotaExceeded
+            }
+            throw error
+        }
+        print("[ArtGen] Stream iteration complete. Total events: \(eventCount)")
+
+        // Fetch the created work
+        guard let workId = finalWorkId else {
+            print("[ArtGen] ERROR: No finalWorkId after stream")
+            throw CreativeError.generationFailed("No creative work created")
+        }
+
+        print("[ArtGen] Fetching creative work with id: \(workId)")
+        let work = try await fetchCreativeWork(id: workId)
+        print("[ArtGen] Creative work fetched successfully")
 
         // Add to local cache
         creativeWorks.insert(work, at: 0)

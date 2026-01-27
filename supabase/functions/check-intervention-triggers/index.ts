@@ -2,7 +2,7 @@
 // Evaluates trigger conditions and selects best intervention for user context
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { logSanitized, sanitizeForLogging } from "../_shared/logging-sanitization.ts";
 

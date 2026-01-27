@@ -54,6 +54,16 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
             }
         }
     }
+    
+    /// Transcribed text of user's speech (from input audio transcription)
+    @Published private(set) var userTranscribedText = "" {
+        didSet {
+            if userTranscribedText != oldValue {
+                delegate?.voiceService(self, didEmit: .userTranscriptUpdated(userTranscribedText))
+            }
+        }
+    }
+    
     @Published private(set) var minutesRemaining: Double = 0 {
         didSet {
             if minutesRemaining != oldValue {
@@ -703,11 +713,14 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
                 "voice": currentVoice.rawValue,
                 "input_audio_format": "pcm16",
                 "output_audio_format": "pcm16",
+                "input_audio_transcription": [
+                    "model": "whisper-1"
+                ],
                 "turn_detection": [
                     "type": "server_vad",
                     "threshold": 0.15,
                     "prefix_padding_ms": 400,
-                    "silence_duration_ms": 1200,
+                    "silence_duration_ms": 800,  // Reduced from 1200 for faster response
                     "create_response": true,
                 ],
             ],
@@ -727,9 +740,10 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
 
     // Echo gate: tracks consecutive frames above threshold during AI playback
     // Requires sustained speech (not just a brief spike) to trigger barge-in
+    // Higher threshold + more frames = stronger echo rejection
     private var echoGateFramesAboveThreshold: Int = 0
-    private let echoGateRequiredFrames: Int = 3  // ~125ms at 24kHz with 4096 buffer
-    private let echoGateThreshold: Float = 0.20  // Mic level threshold during AI speech
+    private let echoGateRequiredFrames: Int = 5  // ~210ms sustained speech required (increased from 3)
+    private let echoGateThreshold: Float = 0.35  // Higher threshold to filter speaker echo (increased from 0.20)
 
     private func sendAudioData(_ audioData: Data) {
         // Echo gate: when AI is speaking, require sustained high mic level
@@ -945,6 +959,15 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
                 Log.voice.debug("[Voice] Conversation item created")
             }
             #endif
+
+        case "conversation.item.input_audio_transcription.completed":
+            // User's speech has been transcribed
+            if let transcript = json["transcript"] as? String {
+                #if DEBUG
+                Log.voice.debug("[Voice] User transcript: \(transcript)")
+                #endif
+                userTranscribedText = transcript
+            }
 
         case "response.created":
             #if DEBUG

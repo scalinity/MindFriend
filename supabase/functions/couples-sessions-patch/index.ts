@@ -2,7 +2,7 @@
 // Update exercise session (join, rate, add notes, abandon)
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { COUPLES_MODE_CONSTANTS } from "../_shared/couples-utils.ts";
 import { CouplesErrors, formatSuccess } from "../_shared/couples-errors.ts";
 import { sendPartnerNotification } from "../_shared/couples-notifications.ts";

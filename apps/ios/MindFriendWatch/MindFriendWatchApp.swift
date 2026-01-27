@@ -1,4 +1,63 @@
+import Foundation
+import Security
 import SwiftUI
+import WatchKit
+import WidgetKit
+
+// MARK: - Watch Keychain Helper
+
+/// Lightweight Keychain wrapper for Watch app (stores small amounts of sensitive data)
+enum WatchKeychain {
+    private static let service = "app.mindfriend.watch"
+    
+    static func save(_ value: String, forKey key: String) {
+        guard let data = value.data(using: .utf8) else { return }
+        
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: key,
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        ]
+        
+        // Delete existing item first
+        SecItemDelete(query as CFDictionary)
+        
+        // Add new item
+        SecItemAdd(query as CFDictionary, nil)
+    }
+    
+    static func retrieve(forKey key: String) -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: key,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        
+        guard status == errSecSuccess,
+              let data = result as? Data,
+              let value = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        
+        return value
+    }
+    
+    static func delete(forKey key: String) {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: key
+        ]
+        SecItemDelete(query as CFDictionary)
+    }
+}
 
 @main
 struct MindFriendWatchApp: App {
@@ -471,8 +530,10 @@ struct WatchMoodView: View {
     }
 
     private func saveMood(_ mood: String) {
-        UserDefaults.standard.set(mood, forKey: "watch_today_mood")
-        UserDefaults.standard.set(Date(), forKey: "watch_mood_date")
+        // ✅ CHANGED: Use Keychain instead of UserDefaults for security
+        WatchKeychain.save(mood, forKey: "watch_today_mood")
+        WatchKeychain.save(Date().ISO8601Format(), forKey: "watch_mood_date")
+        // ✅ REMOVED: UserDefaults.standard.set() calls
     }
 }
 

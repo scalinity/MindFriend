@@ -365,10 +365,10 @@ struct OutcomeGoal: Identifiable, Codable, Equatable {
     }
 }
 
-// MARK: - Crisis Event
+// MARK: - Assessment Crisis Event
 
-/// Safety-critical event logged for audit trail
-struct CrisisEvent: Identifiable, Codable, Equatable {
+/// Safety-critical event logged for audit trail (from outcome assessments)
+struct AssessmentCrisisEvent: Identifiable, Codable, Equatable {
     let id: UUID
     let userId: UUID
     let assessmentTemplateId: UUID?
@@ -581,8 +581,8 @@ struct DBCrisisEvent: Codable {
     let response_action: String?
     let created_at: String  // ISO8601
 
-    func toCrisisEvent() -> CrisisEvent {
-        CrisisEvent(
+    func toAssessmentCrisisEvent() -> AssessmentCrisisEvent {
+        AssessmentCrisisEvent(
             id: id,
             userId: user_id,
             assessmentTemplateId: assessment_template_id,

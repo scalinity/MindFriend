@@ -1,7 +1,7 @@
 // Request validation utilities for MindFriend Edge Functions
 // Provides safe extraction of auth tokens and JSON body parsing
 
-import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 /**
  * Extract and validate Authorization header

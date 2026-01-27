@@ -1,7 +1,7 @@
 // MindFriend Delete Account Edge Function
 // Handles complete account deletion with proper cascade and cleanup
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { createLogger } from "../_shared/logger.ts";
 import { handleError, errorResponse } from "../_shared/error-handler.ts";

@@ -28,7 +28,7 @@ final class FamilyWellnessIntegrationTests: XCTestCase {
 
         XCTAssertNotNil(familyName)
         XCTAssertGreaterThan(ageFilter, 0)
-        XCTAssertGreater(maxMembers, 1)
+        XCTAssertGreaterThan(maxMembers, 1)
 
         // Step 2-5: Would be tested via FamilyService integration
     }

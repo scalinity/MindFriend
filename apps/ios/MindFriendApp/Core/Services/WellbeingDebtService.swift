@@ -146,19 +146,15 @@ actor WellbeingDebtService {
     // MARK: - Profile Operations
 
     /// Fetch the user's wellbeing debt profile
-    /// - Returns: User profile
-    func fetchProfile() async throws -> WellbeingDebtProfile {
+    /// - Returns: User profile, or nil if none exists yet
+    func fetchProfile() async throws -> WellbeingDebtProfile? {
         let response: [WellbeingDebtProfile] = try await supabase
             .from("wellbeing_debt_profiles")
             .select()
             .execute()
             .value
 
-        guard let profile = response.first else {
-            throw WellbeingDebtError.profileNotFound
-        }
-
-        return profile
+        return response.first
     }
 
     // MARK: - Recovery Program Operations

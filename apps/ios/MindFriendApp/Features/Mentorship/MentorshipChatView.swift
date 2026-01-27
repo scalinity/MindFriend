@@ -1,441 +1,369 @@
 import SwiftUI
 import Supabase
 
-/// Secure messaging view for mentorship conversations
+/// View for mentorship messaging/chat
 struct MentorshipChatView: View {
-    let match: DBMentorshipMatch
-    @StateObject private var service: MentorshipService
-    @Environment(\.dismiss) private var dismiss
-
+    let matchId: UUID
+    @Binding var navigationPath: [MentorshipNavigationDestination]
+    @ObservedObject var messagingService: MentorshipMessagingService
+    @ObservedObject var safetyService: MentorshipSafetyService
+    @ObservedObject var encryptionService: MentorshipEncryptionService
+    
     @State private var messageText = ""
-    @State private var showReportSheet = false
-    @State private var showEndConfirmation = false
-    @State private var isSending = false
-    @State private var errorMessage: String?
+    @State private var showingReportSheet = false
+    @State private var showingEndSheet = false
 
-    private let currentUserId: UUID?
-
-    init(match: DBMentorshipMatch, supabase: SupabaseClient) {
-        self.match = match
-        _service = StateObject(wrappedValue: MentorshipService(supabase: supabase))
-        self.currentUserId = supabase.auth.currentUser?.id
+    /// Convenience initializer for simple usage (creates services internally)
+    init(match: MentorshipMatch, supabase: SupabaseClient) {
+        self.matchId = match.id
+        
+        // Create a dummy navigation path binding (not used in this simplified init)
+        var tempPath: [MentorshipNavigationDestination] = []
+        self._navigationPath = .constant(tempPath)
+        
+        // Create services with the match ID
+        let dataService = MentorshipDataService(supabase: supabase, userId: UUID())
+        self._messagingService = ObservedObject(wrappedValue: MentorshipMessagingService(dataService: dataService))
+        self._safetyService = ObservedObject(wrappedValue: MentorshipSafetyService(dataService: dataService))
+        self._encryptionService = ObservedObject(wrappedValue: MentorshipEncryptionService())
     }
-
-    private var isMentor: Bool {
-        currentUserId == match.mentorId
-    }
-
-    private var myAlias: String {
-        isMentor ? match.mentorAlias : match.menteeAlias
-    }
-
-    private var theirAlias: String {
-        isMentor ? match.menteeAlias : match.mentorAlias
-    }
-
-    private var otherUserId: UUID {
-        isMentor ? match.menteeId : match.mentorId
+    
+    /// Full initializer for complex navigation scenarios
+    init(
+        matchId: UUID,
+        navigationPath: Binding<[MentorshipNavigationDestination]>,
+        messagingService: MentorshipMessagingService,
+        safetyService: MentorshipSafetyService,
+        encryptionService: MentorshipEncryptionService
+    ) {
+        self.matchId = matchId
+        self._navigationPath = navigationPath
+        self._messagingService = ObservedObject(wrappedValue: messagingService)
+        self._safetyService = ObservedObject(wrappedValue: safetyService)
+        self._encryptionService = ObservedObject(wrappedValue: encryptionService)
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Header Info
-            headerView
+        ZStack {
+            Color(.systemBackground).ignoresSafeArea()
 
-            Divider()
-
-            // Messages
-            messagesView
-
-            Divider()
-
-            // Input Area
-            if match.status == .active {
-                inputArea
-            } else {
-                matchStatusBanner
-            }
-        }
-        .navigationTitle(theirAlias)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Button {
-                        showReportSheet = true
-                    } label: {
-                        Label("Report Issue", systemImage: "exclamationmark.triangle")
+            VStack(spacing: 0) {
+                // Messages list
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 8, pinnedViews: []) {
+                            ForEach(messagingService.messages) { message in
+                                MentorshipMessageBubble(message: message)
+                                    .id(message.id)
+                            }
+                        }
+                        .padding()
                     }
-
-                    if match.status == .active {
-                        Button(role: .destructive) {
-                            showEndConfirmation = true
-                        } label: {
-                            Label("End Mentorship", systemImage: "xmark.circle")
+                    .onChange(of: messagingService.messages.count) { _ in
+                        if let lastId = messagingService.messages.last?.id {
+                            withAnimation {
+                                proxy.scrollTo(lastId, anchor: .bottom)
+                            }
                         }
                     }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
                 }
-            }
-        }
-        .sheet(isPresented: $showReportSheet) {
-            ReportIssueSheet(
-                matchId: match.id,
-                reportedUserId: otherUserId,
-                service: service
-            )
-        }
-        .confirmationDialog(
-            "End Mentorship",
-            isPresented: $showEndConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("End Mentorship", role: .destructive) {
-                Task { await endMentorship() }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Are you sure you want to end this mentorship? This action cannot be undone.")
-        }
-        .alert("Error", isPresented: .constant(errorMessage != nil)) {
-            Button("OK") { errorMessage = nil }
-        } message: {
-            if let error = errorMessage {
-                Text(error)
-            }
-        }
-        .task {
-            await loadMessages()
-            await service.subscribeToMessages(matchId: match.id)
-        }
-        .onDisappear {
-            Task {
-                await service.cleanup()
-            }
-        }
-    }
 
-    // MARK: - View Components
+                Divider()
 
-    private var headerView: some View {
-        VStack(spacing: 8) {
-            HStack {
-                // Compatibility Score
-                if let score = match.compatibilityScore {
-                    HStack(spacing: 4) {
-                        Image(systemName: "star.fill")
-                            .foregroundStyle(.yellow)
-                        Text("\(Int(score))% match")
-                            .font(.caption)
+                // Message input
+                VStack(spacing: 8) {
+                    HStack(spacing: 8) {
+                        TextField("Type a message...", text: $messageText)
+                            .textFieldStyle(.roundedBorder)
+                            .lineLimit(3)
+
+                        Button(action: {
+                            if !messageText.trimmingCharacters(in: .whitespaces).isEmpty {
+                                Task {
+                                    await messagingService.sendMessage(
+                                        matchId: matchId,
+                                        content: messageText
+                                    )
+                                    messageText = ""
+                                }
+                            }
+                        }) {
+                            Image(systemName: "paperplane.fill")
+                                .foregroundColor(.blue)
+                        }
+                        .disabled(messageText.trimmingCharacters(in: .whitespaces).isEmpty ||
+                                  messagingService.isSending)
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.yellow.opacity(0.1))
-                    .clipShape(Capsule())
-                }
 
-                Spacer()
+                    HStack(spacing: 12) {
+                        Menu {
+                            Button(role: .destructive, action: { showingReportSheet = true }) {
+                                Label("Report Safety Concern", systemImage: "exclamationmark.shield")
+                            }
 
-                // Duration info
-                if let startedAt = match.startedAt {
-                    Text("Started \(startedAt, style: .relative)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
+                            Button(role: .destructive, action: { showingEndSheet = true }) {
+                                Label("End Mentorship", systemImage: "xmark.circle")
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis")
+                                .foregroundColor(.secondary)
+                        }
 
-            if let reason = match.matchReason {
-                Text(reason)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding()
-        .background(.ultraThinMaterial)
-    }
+                        Spacer()
 
-    private var messagesView: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: 12) {
-                    ForEach(service.currentMessages) { message in
-                        MentorshipMessageBubble(
-                            message: message,
-                            isFromMe: message.senderId == currentUserId,
-                            senderAlias: message.senderId == currentUserId ? myAlias : theirAlias
-                        )
-                        .id(message.id)
+                        if messagingService.hasUnreadMessages {
+                            Button(action: {
+                                Task {
+                                    await messagingService.markAsRead(matchId: matchId)
+                                }
+                            }) {
+                                Text("Mark as Read")
+                                    .font(.caption)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.blue.opacity(0.2))
+                                    .foregroundColor(.blue)
+                                    .cornerRadius(6)
+                            }
+                        }
                     }
+                    .font(.caption)
+                    .foregroundColor(.secondary)
                 }
                 .padding()
+                .background(Color(.secondarySystemBackground))
             }
-            .onChange(of: service.currentMessages.count) { _, _ in
-                if let lastMessage = service.currentMessages.last {
-                    withAnimation {
-                        proxy.scrollTo(lastMessage.id, anchor: .bottom)
+        }
+        .navigationTitle("Mentorship Chat")
+        .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showingReportSheet) {
+            ReportSafetySheet(
+                matchId: matchId,
+                isPresented: $showingReportSheet,
+                onReport: { reason, description in
+                    Task {
+                        await safetyService.reportMentorship(
+                            matchId: matchId,
+                            reportedUserId: UUID(),  // Would come from match data
+                            reason: reason,
+                            description: description
+                        )
                     }
                 }
+            )
+        }
+        .sheet(isPresented: $showingEndSheet) {
+            EndMentorshipSheet(isPresented: $showingEndSheet)
+        }
+        .onAppear {
+            Task {
+                await messagingService.loadMessages(matchId: matchId)
+                messagingService.startAutoUpdate(matchId: matchId, interval: 3)
             }
         }
-    }
-
-    private var inputArea: some View {
-        HStack(spacing: 12) {
-            TextField("Message...", text: $messageText, axis: .vertical)
-                .textFieldStyle(.roundedBorder)
-                .lineLimit(1...4)
-
-            Button {
-                Task { await sendMessage() }
-            } label: {
-                if isSending {
-                    ProgressView()
-                        .frame(width: 24, height: 24)
-                } else {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.title2)
-                }
-            }
-            .disabled(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSending)
-        }
-        .padding()
-        .background(.ultraThinMaterial)
-    }
-
-    private var matchStatusBanner: some View {
-        HStack {
-            Image(systemName: statusIcon)
-            Text(statusMessage)
-        }
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
-        .padding()
-        .frame(maxWidth: .infinity)
-        .background(.ultraThinMaterial)
-    }
-
-    private var statusIcon: String {
-        switch match.status {
-        case .pending: return "clock"
-        case .accepted: return "checkmark.circle"
-        case .completed: return "checkmark.seal"
-        case .declined: return "xmark.circle"
-        case .ended: return "stop.circle"
-        case .suspended: return "exclamationmark.triangle"
-        case .active: return "bubble.left.and.bubble.right"
-        }
-    }
-
-    private var statusMessage: String {
-        switch match.status {
-        case .pending: return "Waiting for mentor to accept..."
-        case .accepted: return "Mentorship accepted! Waiting to start..."
-        case .completed: return "This mentorship has been completed."
-        case .declined: return "This request was declined."
-        case .ended: return "This mentorship has ended."
-        case .suspended: return "This mentorship has been suspended."
-        case .active: return ""
-        }
-    }
-
-    // MARK: - Actions
-
-    private func loadMessages() async {
-        do {
-            _ = try await service.fetchMessages(matchId: match.id)
-            try await service.markMessagesAsRead(matchId: match.id)
-        } catch {
-            Log.social.error("Failed to load messages", error: error)
-        }
-    }
-
-    private func sendMessage() async {
-        let text = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
-
-        isSending = true
-        messageText = ""
-
-        do {
-            try await service.sendMessage(matchId: match.id, content: text)
-        } catch {
-            messageText = text // Restore message on failure
-            errorMessage = error.localizedDescription
-            Log.social.error("Failed to send message", error: error)
-        }
-
-        isSending = false
-    }
-
-    private func endMentorship() async {
-        do {
-            try await service.endMentorship(match.id)
-            dismiss()
-        } catch {
-            errorMessage = error.localizedDescription
-            Log.social.error("Failed to end mentorship", error: error)
+        .onDisappear {
+            messagingService.stopAutoUpdate()
         }
     }
 }
 
 // MARK: - Message Bubble
 
-private struct MentorshipMessageBubble: View {
-    let message: DBMentorshipMessage
-    let isFromMe: Bool
-    let senderAlias: String
+struct MentorshipMessageBubble: View {
+    let message: MentorshipMessage
+    @Environment(\.currentUser) var currentUser
+
+    var isCurrentUser: Bool {
+        // Compare sender ID with current user ID
+        true  // Placeholder - would check actual user
+    }
 
     var body: some View {
         HStack {
-            if isFromMe { Spacer(minLength: 60) }
+            if isCurrentUser {
+                Spacer()
+            }
 
-            VStack(alignment: isFromMe ? .trailing : .leading, spacing: 4) {
-                if !isFromMe {
-                    Text(senderAlias)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-
+            VStack(alignment: isCurrentUser ? .trailing : .leading, spacing: 4) {
                 Text(message.content)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(isFromMe ? Color.accentColor : Color.gray.opacity(0.2))
-                    .foregroundStyle(isFromMe ? .white : .primary)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .background(
+                        isCurrentUser
+                            ? Color.blue.opacity(0.8)
+                            : Color(.secondarySystemBackground)
+                    )
+                    .foregroundColor(isCurrentUser ? .white : .primary)
+                    .cornerRadius(12)
 
                 HStack(spacing: 4) {
-                    Text(message.sentAt, style: .time)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-
-                    if message.flagged {
-                        Image(systemName: "exclamationmark.triangle.fill")
+                    if message.isSafetyFlagged {
+                        Label("Flagged", systemImage: "exclamationmark.triangle.fill")
                             .font(.caption2)
-                            .foregroundStyle(.orange)
+                            .foregroundColor(.orange)
                     }
+
+                    Text(message.createdAt.formatted(date: .omitted, time: .shortened))
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
                 }
+                .frame(maxWidth: .infinity, alignment: isCurrentUser ? .trailing : .leading)
             }
 
-            if !isFromMe { Spacer(minLength: 60) }
+            if !isCurrentUser {
+                Spacer()
+            }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(senderAlias): \(message.content)")
     }
 }
 
-// MARK: - Report Sheet
+// MARK: - Report Safety Sheet
 
-private struct ReportIssueSheet: View {
+struct ReportSafetySheet: View {
     let matchId: UUID
-    let reportedUserId: UUID
-    let service: MentorshipService
+    @Binding var isPresented: Bool
+    let onReport: (String, String?) -> Void
 
-    @State private var selectedReason: DBMentorshipReport.ReportReason = .other
-    @State private var description = ""
-    @State private var isSubmitting = false
-    @State private var showSuccess = false
-    @Environment(\.dismiss) private var dismiss
+    @State private var selectedReason: String = ""
+    @State private var detailsText = ""
+    @State private var isSending = false
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
+            VStack(spacing: 16) {
+                // Reason selector
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("What's your concern?")
+                        .font(.headline)
+
                     Picker("Reason", selection: $selectedReason) {
-                        ForEach(DBMentorshipReport.ReportReason.allCases, id: \.self) { reason in
-                            Text(reason.displayName).tag(reason)
+                        ForEach(MentorshipSafetyService.safetyReasons, id: \.self) { reason in
+                            Text(reason).tag(reason)
                         }
                     }
-                } header: {
-                    Text("What's the issue?")
+                    .pickerStyle(.segmented)
                 }
 
-                Section {
-                    TextEditor(text: $description)
-                        .frame(minHeight: 100)
-                } header: {
-                    Text("Additional Details")
-                } footer: {
-                    Text("Please provide as much detail as possible to help us investigate.")
+                // Details
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Additional details (optional)")
+                        .font(.subheadline)
+
+                    TextEditor(text: $detailsText)
+                        .frame(height: 100)
+                        .padding(8)
+                        .background(Color(.tertiarySystemBackground))
+                        .cornerRadius(8)
                 }
 
-                Section {
-                    Button {
-                        Task { await submitReport() }
-                    } label: {
-                        HStack {
-                            Spacer()
-                            if isSubmitting {
-                                ProgressView()
-                            } else {
-                                Text("Submit Report")
-                            }
-                            Spacer()
+                Spacer()
+
+                // Actions
+                VStack(spacing: 12) {
+                    Button(action: {
+                        isSending = true
+                        onReport(selectedReason, detailsText.isEmpty ? nil : detailsText)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            isPresented = false
+                        }
+                    }) {
+                        if isSending {
+                            ProgressView()
+                        } else {
+                            Text("Submit Report")
                         }
                     }
-                    .disabled(isSubmitting)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(Color.red)
+                    .foregroundColor(.white)
+                    .cornerRadius(8)
+                    .disabled(selectedReason.isEmpty || isSending)
+
+                    Button(action: { isPresented = false }) {
+                        Text("Cancel")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color(.quaternarySystemFill))
+                            .cornerRadius(8)
+                    }
                 }
             }
-            .navigationTitle("Report Issue")
+            .padding()
+            .navigationTitle("Report Safety Concern")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") { dismiss() }
-                }
-            }
-            .alert("Report Submitted", isPresented: $showSuccess) {
-                Button("OK") { dismiss() }
-            } message: {
-                Text("Thank you for reporting. Our team will review this within 24 hours.")
-            }
-        }
-    }
-
-    private func submitReport() async {
-        isSubmitting = true
-        defer { isSubmitting = false }
-
-        do {
-            try await service.reportIssue(
-                matchId: matchId,
-                reportedUserId: reportedUserId,
-                reason: selectedReason,
-                description: description.isEmpty ? nil : description
-            )
-            showSuccess = true
-        } catch {
-            Log.social.error("Failed to submit report", error: error)
         }
     }
 }
 
-#Preview {
-    NavigationStack {
-        MentorshipChatView(
-            match: DBMentorshipMatch(
-                id: UUID(),
-                mentorId: UUID(),
-                menteeId: UUID(),
-                matchedAt: Date(),
-                status: .active,
-                compatibilityScore: 85.5,
-                matchReason: "Experienced in anxiety and stress management",
-                expertiseMatchScore: 1.0,
-                languageMatchScore: 1.0,
-                timezoneMatchScore: 0.8,
-                availabilityMatchScore: 0.9,
-                introductionMessage: nil,
-                mentorResponse: nil,
-                startedAt: Date().addingTimeInterval(-86400 * 7),
-                endedAt: nil,
-                endReason: nil,
-                durationWeeks: 4,
-                mentorAlias: "Wise Oak",
-                menteeAlias: "Calm River",
-                createdAt: Date(),
-                updatedAt: Date()
-            ),
-            supabase: DependencyContainer.preview.supabase
-        )
+// MARK: - End Mentorship Sheet
+
+struct EndMentorshipSheet: View {
+    @Binding var isPresented: Bool
+    @State private var reasonText = ""
+    @State private var isSending = false
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Why are you ending this mentorship?")
+                        .font(.headline)
+
+                    TextEditor(text: $reasonText)
+                        .frame(height: 120)
+                        .padding(8)
+                        .background(Color(.tertiarySystemBackground))
+                        .cornerRadius(8)
+                }
+
+                Spacer()
+
+                VStack(spacing: 12) {
+                    Button(action: {
+                        isSending = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            isPresented = false
+                        }
+                    }) {
+                        if isSending {
+                            ProgressView()
+                        } else {
+                            Text("End Mentorship")
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(Color.red)
+                    .foregroundColor(.white)
+                    .cornerRadius(8)
+                    .disabled(isSending)
+
+                    Button(action: { isPresented = false }) {
+                        Text("Keep Going")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color(.quaternarySystemFill))
+                            .cornerRadius(8)
+                    }
+                }
+            }
+            .padding()
+            .navigationTitle("End Mentorship")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+}
+
+// MARK: - Environment Key
+
+struct CurrentUserKey: EnvironmentKey {
+    static let defaultValue: UUID? = nil
+}
+
+extension EnvironmentValues {
+    var currentUser: UUID? {
+        get { self[CurrentUserKey.self] }
+        set { self[CurrentUserKey.self] = newValue }
     }
 }

@@ -225,6 +225,7 @@ struct ProgramCard: View {
                     .font(.headline)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
+                    .frame(minHeight: 44, alignment: .top)
 
                 HStack {
                     Text(program.formattedDuration)
@@ -234,11 +235,10 @@ struct ProgramCard: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-                if program.premiumOnly {
-                    Label("Premium", systemImage: "crown.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
-                }
+                Label("Premium", systemImage: "crown.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .opacity(program.premiumOnly ? 1 : 0)
             }
         }
     }

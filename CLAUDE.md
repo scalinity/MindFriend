@@ -633,6 +633,28 @@ project.save
 
 ## 8) Edge Functions
 
+### Pinned Dependencies (CRITICAL)
+
+**ALWAYS use pinned versions for Edge Function imports.** Unpinned versions can break without warning.
+
+| Package                 | Pinned Version | Import URL                                     |
+| ----------------------- | -------------- | ---------------------------------------------- |
+| `@supabase/supabase-js` | **2.49.1**     | `https://esm.sh/@supabase/supabase-js@2.49.1`  |
+| `deno std`              | **0.168.0**    | `https://deno.land/std@0.168.0/http/server.ts` |
+
+**Why pinning matters (2026-01-26 incident):**
+
+- Using `@supabase/supabase-js@2` (unpinned) resolved to v2.92.0
+- v2.92.0 broke Deno Edge Runtime with error: `The argument 'filename' must be a file URL object`
+- All 200+ Edge Functions failed simultaneously
+- Fix: Pin to `@2.49.1` (known working version)
+
+**Never use:**
+
+- `@supabase/supabase-js@2` (resolves to latest, can break)
+- `@supabase/supabase-js@latest` (same problem)
+- `@supabase/supabase-js` (no version = latest)
+
 ### Function Inventory
 
 | Function            | Trigger      | Purpose                            |
@@ -647,7 +669,7 @@ project.save
 ```typescript
 // supabase/functions/chat/index.ts
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 serve(async (req) => {
   const supabase = createClient(

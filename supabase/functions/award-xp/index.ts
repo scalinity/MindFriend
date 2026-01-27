@@ -2,7 +2,7 @@
 // Awards XP to users and handles level-ups, multipliers, and season progress
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 interface AwardXPRequest {
@@ -34,14 +34,29 @@ interface LevelUpInfo {
   unlockedContent?: string[];
 }
 
-// Calculate level from total XP (matches database function)
+// XP thresholds matching iOS UserLevel.xpThresholds (50 levels)
+const XP_THRESHOLDS = [
+  0, 100, 250, 450, 700, 1000, 1350, 1750, 2200, 2700, 3250, 3850, 4500, 5200,
+  5950, 6750, 7600, 8500, 9450, 10450, 11500, 12600, 13750, 14950, 16200, 17500,
+  18850, 20250, 21700, 23200, 24750, 26350, 28000, 29700, 31450, 33250, 35100,
+  37000, 38950, 40950, 43000, 45100, 47250, 49450, 51700, 54000, 56350, 58750,
+  61200, 63700,
+];
+
+// Calculate level from total XP using threshold array
 function calculateLevel(totalXp: number): number {
-  return Math.max(1, Math.floor(Math.sqrt(totalXp / 50)) + 1);
+  for (let i = XP_THRESHOLDS.length - 1; i >= 0; i--) {
+    if (totalXp >= XP_THRESHOLDS[i]) return i + 1;
+  }
+  return 1;
 }
 
-// Calculate XP needed to reach a level
+// Get XP threshold for a level (1-indexed)
 function totalXpForLevel(level: number): number {
-  return 50 * (level - 1) * (level - 1);
+  if (level <= 0) return 0;
+  if (level > XP_THRESHOLDS.length)
+    return XP_THRESHOLDS[XP_THRESHOLDS.length - 1];
+  return XP_THRESHOLDS[level - 1];
 }
 
 // Get the start of the current week (Monday)
@@ -279,20 +294,23 @@ serve(async (req) => {
             unlockedContent: [], // Could populate with unlocked items
           }
         : null;
-    
+
     // Trigger milestone narrative generation for milestone levels (NEW)
     if (levelUp) {
       const milestones = [5, 10, 25, 50, 100];
       if (milestones.includes(newLevel)) {
         // Call in background (don't await - non-blocking)
-        fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/generate-milestone-narrative`, {
-          method: "POST",
-          headers: {
-            "Authorization": req.headers.get("Authorization")!,
-            "Content-Type": "application/json",
+        fetch(
+          `${Deno.env.get("SUPABASE_URL")}/functions/v1/generate-milestone-narrative`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: req.headers.get("Authorization")!,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ level: newLevel }),
           },
-          body: JSON.stringify({ level: newLevel }),
-        }).catch((error) => {
+        ).catch((error) => {
           console.error("Failed to trigger milestone narrative:", error);
           // Don't fail the XP award if narrative generation fails
         });

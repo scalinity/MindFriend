@@ -163,7 +163,7 @@ struct MentorshipFindMentorView: View {
                 limit: 5
             )
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = "Unable to find mentors. Please try again."
             Log.social.error("Failed to find mentors", error: error)
         }
     }
@@ -382,7 +382,7 @@ private struct RequestMentorshipSheet: View {
             if response.success {
                 onComplete(true)
             } else {
-                errorMessage = response.error ?? "Failed to send request"
+                errorMessage = response.message
             }
         } catch {
             errorMessage = error.localizedDescription

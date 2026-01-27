@@ -6,7 +6,6 @@ import SwiftUI
 struct ExperimentCatalogView: View {
     @EnvironmentObject private var insightLabService: InsightLabService
     @State private var selectedExperiment: ExperimentActionType?
-    @State private var showingStartConfirmation = false
     @State private var isStarting = false
     @State private var startError: String?
 
@@ -29,24 +28,21 @@ struct ExperimentCatalogView: View {
             .padding()
         }
         .navigationTitle("Insight Lab")
-        .sheet(isPresented: $showingStartConfirmation) {
-            if let experiment = selectedExperiment {
-                ExperimentStartConfirmationView(
-                    experiment: experiment,
-                    isStarting: isStarting,
-                    onStart: {
-                        Task {
-                            await startExperiment(experiment)
-                        }
-                    },
-                    onCancel: {
-                        showingStartConfirmation = false
-                        selectedExperiment = nil
+        .sheet(item: $selectedExperiment) { experiment in
+            ExperimentStartConfirmationView(
+                experiment: experiment,
+                isStarting: isStarting,
+                onStart: {
+                    Task {
+                        await startExperiment(experiment)
                     }
-                )
-                .presentationDetents([.height(280)])
-                .presentationDragIndicator(.visible)
-            }
+                },
+                onCancel: {
+                    selectedExperiment = nil
+                }
+            )
+            .presentationDetents([.height(280)])
+            .presentationDragIndicator(.visible)
         }
         .alert("Error", isPresented: .constant(startError != nil)) {
             Button("OK") {
@@ -130,7 +126,6 @@ struct ExperimentCatalogView: View {
                     isLoading: isStarting && selectedExperiment == actionType
                 ) {
                     selectedExperiment = actionType
-                    showingStartConfirmation = true
                 }
             }
         }
@@ -147,7 +142,6 @@ struct ExperimentCatalogView: View {
             let experiment = try await insightLabService.startExperiment(actionType: actionType)
             print("[ExperimentCatalogView] Experiment started successfully: \(experiment.title)")
             print("[ExperimentCatalogView] activeExperiment after start: \(insightLabService.activeExperiment?.title ?? "nil")")
-            showingStartConfirmation = false
             selectedExperiment = nil
             print("[ExperimentCatalogView] Sheet dismissed, selectedExperiment cleared")
         } catch {

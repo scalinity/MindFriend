@@ -85,6 +85,7 @@ struct ChatView: View {
 
                         if isSending {
                             TypingIndicator()
+                                .id("typing-indicator")
                         }
                     }
                     .padding()
@@ -96,6 +97,13 @@ struct ChatView: View {
                 .onChange(of: messages.count) { _, _ in
                     withAnimation {
                         proxy.scrollTo(messages.last?.id, anchor: .bottom)
+                    }
+                }
+                .onChange(of: isSending) { _, newValue in
+                    if newValue {
+                        withAnimation {
+                            proxy.scrollTo("typing-indicator", anchor: .bottom)
+                        }
                     }
                 }
             }
@@ -126,12 +134,16 @@ struct ChatView: View {
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Button {
-                    showVoiceMode = true
+                    if appState.entitlements.tier == .premium {
+                        showVoiceMode = true
+                    } else {
+                        appState.showPaywall = true
+                    }
                 } label: {
                     Image(systemName: "mic.fill")
                 }
                 .accessibilityLabel("Voice mode")
-                .accessibilityHint("Start a voice conversation")
+                .accessibilityHint(appState.entitlements.tier == .premium ? "Start a voice conversation" : "Premium feature - tap to upgrade")
 
                 Button {
                     appState.showCrisisResources = true
@@ -229,6 +241,9 @@ struct ChatView: View {
                     showQuotaWarning = false
                 }
 
+                // Record first chat message for progressive disclosure activation
+                try? await container.activationService.recordChatMessage()
+
                 // Update title if generated
                 if let newTitle = response.conversationTitle {
                     displayTitle = newTitle
@@ -287,12 +302,8 @@ struct MessageBubble: View {
             if isUser { Spacer(minLength: 60) }
 
             VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
-                Text(message.content)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(isUser ? Color.accentColor : Color(uiColor: .secondarySystemBackground))
-                    .foregroundStyle(isUser ? .white : .primary)
-                    .cornerRadius(20)
+                // MarkdownContentView handles all styling internally
+                MarkdownContentView(content: message.content, isUserMessage: isUser)
 
                 Text(message.createdAt, style: .time)
                     .font(.caption2)

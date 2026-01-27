@@ -3,6 +3,8 @@ import Supabase
 import AuthenticationServices
 import GoogleSignIn
 import OSLog
+import SwiftUI
+import Combine
 
 // MARK: - Auth Errors
 
@@ -15,6 +17,7 @@ enum AuthError: LocalizedError {
     case sessionExpired
     case handleTaken
     case invalidHandle
+    case signOutFailed(String)
     case unknown(String)
 
     var errorDescription: String? {
@@ -35,6 +38,8 @@ enum AuthError: LocalizedError {
             return "This handle is already taken. Please choose another."
         case .invalidHandle:
             return "Handle can only contain letters, numbers, and underscores"
+        case .signOutFailed(let message):
+            return "Failed to sign out: \(message)"
         case .unknown(let message):
             return message
         }
@@ -45,8 +50,15 @@ enum AuthError: LocalizedError {
 @MainActor
 final class SupabaseAuthService: ObservableObject {
     @Published private(set) var isSigningIn = false
+    @Published private(set) var isLoading = false
     @Published private(set) var currentUser: User?
     @Published private(set) var session: Session?
+
+    // MARK: - Dependencies
+    private let secureStorage: SecureStorage
+    // ✅ ARCHITECTURE FIX: Remove PathwayCacheService dependency (breaks circular reference)
+    // Use closure injection instead
+    private var onLogoutHandler: (() -> Void)?
 
     // MARK: - Caching Keys
     private enum CacheKeys {
@@ -70,46 +82,51 @@ final class SupabaseAuthService: ObservableObject {
         return ["Authorization": "Bearer \(accessToken)"]
     }
 
-    init() {
+    init(
+        secureStorage: SecureStorage = SecureStorage()
+    ) {
+        self.secureStorage = secureStorage
         // Listen for auth state changes
         Task {
-            for await (event, session) in supabase.auth.authStateChanges {
-                self.session = session
-                self.currentUser = session?.user
+            await setupAuthStateListener()
+        }
+    }
 
-                switch event {
-                case .initialSession:
-                    Log.auth.debug("Initial session loaded")
-                    // TODO: Enable when OfflineStorageManager is added to project
-                    // Initialize offline storage with user ID if session exists
-                    // if let userId = session?.user.id.uuidString {
-                    //     await OfflineStorageManager.shared.setCurrentUser(userId)
-                    // }
-                case .signedIn:
-                    Log.auth.userAction("User signed in", userId: session?.user.id.uuidString ?? "unknown")
-                    Analytics.shared.track(.signInCompleted, properties: ["provider": "supabase"])
-                    // TODO: Enable when OfflineStorageManager is added to project
-                    // Initialize offline storage with user ID for data isolation
-                    // if let userId = session?.user.id.uuidString {
-                    //     await OfflineStorageManager.shared.setCurrentUser(userId)
-                    // }
-                case .signedOut:
-                    Log.auth.info("User signed out")
-                    Analytics.shared.track(.signOut)
-                    CrashReporter.shared.clearUser()
-                case .tokenRefreshed:
-                    Log.auth.debug("Token refreshed")
-                case .userUpdated:
-                    Log.auth.debug("User updated")
-                case .passwordRecovery:
-                    break
-                case .mfaChallengeVerified:
-                    Log.auth.debug("MFA challenge verified")
-                case .userDeleted:
-                    Log.auth.info("User deleted")
-                @unknown default:
-                    break
-                }
+    // ✅ ARCHITECTURE FIX: Set logout handler (called by DependencyContainer)
+    func setLogoutHandler(_ handler: @escaping () -> Void) {
+        self.onLogoutHandler = handler
+    }
+
+    // MARK: - Auth State Listener
+
+    /// Listen for auth state changes from Supabase
+    private func setupAuthStateListener() async {
+        for await (event, session) in supabase.auth.authStateChanges {
+            self.session = session
+            self.currentUser = session?.user
+
+            switch event {
+            case .initialSession:
+                Log.auth.debug("Initial session loaded")
+            case .signedIn:
+                Log.auth.userAction("User signed in", userId: session?.user.id.uuidString ?? "unknown")
+                Analytics.shared.track(.signInCompleted, properties: ["provider": "supabase"])
+            case .signedOut:
+                Log.auth.info("User signed out")
+                Analytics.shared.track(.signOut)
+                CrashReporter.shared.clearUser()
+            case .tokenRefreshed:
+                Log.auth.debug("Token refreshed")
+            case .userUpdated:
+                Log.auth.debug("User updated")
+            case .passwordRecovery:
+                break
+            case .mfaChallengeVerified:
+                Log.auth.debug("MFA challenge verified")
+            case .userDeleted:
+                Log.auth.info("User deleted")
+            @unknown default:
+                break
             }
         }
     }
@@ -174,14 +191,24 @@ final class SupabaseAuthService: ObservableObject {
 
     /// Check if token is expiring within the threshold
     private func isTokenExpiringSoon(_ session: Session) -> Bool {
-        let expiresAt = Date(timeIntervalSince1970: TimeInterval(session.expiresAt ?? 0))
+        let expiresAt: Date
+        if let expiryTimestamp = session.expiresAt {
+            expiresAt = Date(timeIntervalSince1970: TimeInterval(expiryTimestamp))
+        } else {
+            expiresAt = Date.distantPast  // Treat missing expiry as expired
+        }
         let timeUntilExpiry = expiresAt.timeIntervalSinceNow
         return timeUntilExpiry < tokenRefreshThreshold
     }
 
     /// Check if token has actually expired
     private func isTokenExpired(_ session: Session) -> Bool {
-        let expiresAt = Date(timeIntervalSince1970: TimeInterval(session.expiresAt ?? 0))
+        let expiresAt: Date
+        if let expiryTimestamp = session.expiresAt {
+            expiresAt = Date(timeIntervalSince1970: TimeInterval(expiryTimestamp))
+        } else {
+            expiresAt = Date.distantPast  // Treat missing expiry as expired
+        }
         return expiresAt < Date()
     }
 
@@ -397,20 +424,30 @@ final class SupabaseAuthService: ObservableObject {
     // MARK: - Sign Out
 
     func signOut() async throws {
-        // Get user ID before signing out (for offline data cleanup)
-        // let userId = currentUser?.id.uuidString
+        isLoading = true
+        defer { isLoading = false }
 
-        try await supabase.auth.signOut()
-        session = nil
-        currentUser = nil
-        clearCachedAuthState()
-        clearCachedProfile()
-        CrashReporter.shared.clearUser()
-        Analytics.shared.reset()
+        do {
+            try await supabase.auth.signOut()
+            session = nil
+            currentUser = nil
+            clearCachedAuthState()
+            clearCachedProfile()
+            CrashReporter.shared.clearUser()
+            Analytics.shared.reset()
 
-        // TODO: Enable when offline services are added to project
-        // Clear offline data for the user
-        // await clearOfflineDataOnLogout(userId: userId)
+            // ✅ CRITICAL SECURITY FIX: Clear encryption keys and pathway caches
+            // Prevents next user on shared device from decrypting previous user's data
+            do {
+                try secureStorage.deleteEncryptionKey()
+                // ✅ ARCHITECTURE FIX: Use closure instead of direct dependency
+                onLogoutHandler?()
+            } catch {
+                Log.auth.warning("Failed to clear secure storage on logout: \(error.localizedDescription)")
+            }
+        } catch {
+            throw AuthError.signOutFailed(error.localizedDescription)
+        }
     }
 
     // TODO: Enable when offline services are added to project

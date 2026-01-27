@@ -118,8 +118,7 @@ struct ThreadView: View {
             Spacer()
 
             NavigationLink {
-                // TODO: Navigate to Crisis Resources screen
-                Text("Crisis Resources")
+                CrisisResourcesView()
             } label: {
                 Text("Get Help")
                     .font(.caption)

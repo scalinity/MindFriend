@@ -3,9 +3,12 @@
 // See: docs/specs/quest-arcs-formal-spec.md
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { enforceHTTPS, getSecurityHeaders } from "../_shared/https-enforcement.ts";
+import {
+  enforceHTTPS,
+  getSecurityHeaders,
+} from "../_shared/https-enforcement.ts";
 import { checkRateLimit } from "../_shared/rate-limit.ts";
 
 interface QuestArc {
@@ -78,17 +81,32 @@ serve(async (req) => {
           status: 429,
           headers: {
             ...headers,
-            "Retry-After": String(Math.ceil((rateLimit.resetAt.getTime() - Date.now()) / 1000)),
+            "Retry-After": String(
+              Math.ceil((rateLimit.resetAt.getTime() - Date.now()) / 1000),
+            ),
           },
         },
       );
     }
 
-    // Parse query parameters
-    const url = new URL(req.url);
-    const category = url.searchParams.get("category");
-    const includeCompleted =
-      url.searchParams.get("includeCompleted") === "true";
+    // Parse parameters from query string (GET) or body (POST)
+    let category: string | null = null;
+    let includeCompleted = false;
+
+    if (req.method === "GET") {
+      const url = new URL(req.url);
+      category = url.searchParams.get("category");
+      includeCompleted = url.searchParams.get("includeCompleted") === "true";
+    } else {
+      try {
+        const body = await req.json();
+        category = body.category || null;
+        includeCompleted =
+          body.includeCompleted === true || body.includeCompleted === "true";
+      } catch {
+        // No body or invalid JSON — use defaults
+      }
+    }
 
     // Get all active arcs - SECURITY: Explicit column selection
     let query = supabase
@@ -119,7 +137,9 @@ serve(async (req) => {
       .eq("user_id", user.id);
 
     if (enrollmentError) {
-      console.error("Error fetching enrollments:", { code: enrollmentError.code });
+      console.error("Error fetching enrollments:", {
+        code: enrollmentError.code,
+      });
     }
 
     // Get step counts for each arc
@@ -190,7 +210,9 @@ serve(async (req) => {
       headers,
     });
   } catch (error) {
-    console.error("get-quest-arcs error:", { message: (error as Error).message });
+    console.error("get-quest-arcs error:", {
+      message: (error as Error).message,
+    });
     return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500,
       headers,

@@ -5,7 +5,7 @@
  * Security: Append-only, service role access required
  */
 
-import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 export type AuditAction =
   | "view_mood"

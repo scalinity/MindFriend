@@ -10,6 +10,7 @@ struct AIProfileGeneratorView: View {
 
     @State private var prompt = ""
     @State private var generatedImage: UIImage?
+    @State private var partialImage: UIImage?  // For streaming progressive updates
     @State private var isGenerating = false
     @State private var errorMessage: String?
     @State private var quotaRemaining: Int?
@@ -90,9 +91,28 @@ struct AIProfileGeneratorView: View {
 
                         if isGenerating {
                             VStack(spacing: 12) {
-                                ProgressView()
-                                    .scaleEffect(1.2)
-                                Text("Generating your profile picture...")
+                                // Show partial image if available during streaming
+                                if let partialImage {
+                                    ZStack {
+                                        Image(uiImage: partialImage)
+                                            .resizable()
+                                            .aspectRatio(contentMode: .fill)
+                                            .frame(width: 250, height: 250)
+                                            .clipShape(Circle())
+                                            .opacity(0.7)
+                                            .blur(radius: 1)
+
+                                        ProgressView()
+                                            .scaleEffect(1.5)
+                                            .tint(.white)
+                                    }
+                                    .accessibilityLabel("Generating profile picture")
+                                    .accessibilityValue("Preview showing, refining details")
+                                } else {
+                                    ProgressView()
+                                        .scaleEffect(1.2)
+                                }
+                                Text(partialImage != nil ? "Refining your image..." : "Generating your profile picture...")
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                             }
@@ -158,10 +178,31 @@ struct AIProfileGeneratorView: View {
 
         isGenerating = true
         errorMessage = nil
+        partialImage = nil
 
         generationTask = Task {
             do {
-                let response = try await container.supabaseDataService.generateProfilePicture(prompt: prompt)
+                // Try streaming API first for progressive image updates, fall back to non-streaming
+                let response: SupabaseDataService.GenerateProfilePictureResponse
+                do {
+                    response = try await container.supabaseDataService.generateProfilePictureStreaming(
+                        prompt: prompt,
+                        onPartialImage: { imageData, index in
+                            Task { @MainActor in
+                                guard !Task.isCancelled else { return }
+                                if let image = UIImage(data: imageData) {
+                                    self.partialImage = image
+                                }
+                            }
+                        }
+                    )
+                } catch {
+                    // If streaming fails, fall back to non-streaming
+                    guard !Task.isCancelled else { return }
+                    print("[AIProfileGenerator] Streaming failed (\(error.localizedDescription)), falling back to non-streaming")
+                    await MainActor.run { partialImage = nil }
+                    response = try await container.supabaseDataService.generateProfilePicture(prompt: prompt)
+                }
 
                 // Check for cancellation before UI update
                 guard !Task.isCancelled else { return }
@@ -175,6 +216,7 @@ struct AIProfileGeneratorView: View {
 
                 await MainActor.run {
                     generatedImage = image
+                    partialImage = nil
                     quotaRemaining = response.quotaRemaining
                     isGenerating = false
                 }
@@ -183,21 +225,35 @@ struct AIProfileGeneratorView: View {
                 await MainActor.run {
                     switch error {
                     case .quotaExceeded:
-                        errorMessage = "Daily limit reached. Upgrade to Premium for unlimited generations!"
+                        // Show paywall directly without error message
                         showPaywall = true
                     case .inappropriateContent:
                         errorMessage = "This prompt contains inappropriate content. Please try a different description."
                     case .networkError:
                         errorMessage = "Network error. Please check your connection and try again."
                     case .apiError(let message):
-                        errorMessage = message
+                        // Check if error message indicates quota exceeded (fallback)
+                        let lowercaseMessage = message.lowercased()
+                        if lowercaseMessage.contains("429") || lowercaseMessage.contains("quota") || lowercaseMessage.contains("limit") {
+                            showPaywall = true
+                        } else {
+                            errorMessage = message
+                        }
                     }
+                    partialImage = nil
                     isGenerating = false
                 }
             } catch {
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
-                    errorMessage = "Failed to generate image. Please try again."
+                    // Check if error message indicates quota exceeded (fallback)
+                    let errorString = error.localizedDescription.lowercased()
+                    if errorString.contains("429") || errorString.contains("quota") || errorString.contains("limit") {
+                        showPaywall = true
+                    } else {
+                        errorMessage = "Failed to generate image. Please try again."
+                    }
+                    partialImage = nil
                     isGenerating = false
                 }
             }
@@ -206,6 +262,7 @@ struct AIProfileGeneratorView: View {
 
     private func regenerateImage() {
         generatedImage = nil
+        partialImage = nil
         generateImage()
     }
 

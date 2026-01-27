@@ -6,7 +6,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import {
   createClient,
   SupabaseClient,
-} from "https://esm.sh/@supabase/supabase-js@2";
+} from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import {
   validateContentRequest,
@@ -29,8 +29,8 @@ import {
 } from "./context-gatherer.ts";
 import { buildContextualPrompt } from "./prompt-builder.ts";
 
-// Type alias for untyped Supabase client
-type UntypedSupabaseClient = SupabaseClient<unknown, "public", unknown>;
+// deno-lint-ignore no-explicit-any
+type AnySupabaseClient = any;
 
 // Constants
 const XAI_API_URL = "https://api.x.ai/v1/chat/completions";
@@ -192,9 +192,23 @@ serve(async (req) => {
   const startTime = Date.now();
 
   try {
+    // === DEBUG LOGGING START ===
+    console.log(
+      `[generate-content] Request received at ${new Date().toISOString()}`,
+    );
+    console.log(`[generate-content] Method: ${req.method}, URL: ${req.url}`);
+
     // Auth validation
     const authHeader = req.headers.get("Authorization");
+    console.log(`[generate-content] Auth header present: ${!!authHeader}`);
+    console.log(
+      `[generate-content] Auth header starts with Bearer: ${authHeader?.startsWith("Bearer ")}`,
+    );
+
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      console.error(
+        `[generate-content] REJECTED: Missing or malformed authorization header`,
+      );
       return new Response(JSON.stringify({ error: "Missing authorization" }), {
         status: 401,
         headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
@@ -202,6 +216,10 @@ serve(async (req) => {
     }
 
     const token = authHeader.replace("Bearer ", "");
+    console.log(`[generate-content] Token length: ${token.length}`);
+    console.log(
+      `[generate-content] Token prefix: ${token.substring(0, 30)}...`,
+    );
 
     // Create Supabase clients
     const supabaseUser = createClient(
@@ -212,26 +230,40 @@ serve(async (req) => {
           headers: { Authorization: `Bearer ${token}` },
         },
       },
-    ) as UntypedSupabaseClient;
+    ) as AnySupabaseClient;
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    ) as UntypedSupabaseClient;
+    ) as AnySupabaseClient;
 
     // Get authenticated user
+    console.log(`[generate-content] Calling supabaseUser.auth.getUser()...`);
     const {
       data: { user },
       error: authError,
     } = await supabaseUser.auth.getUser();
 
+    console.log(
+      `[generate-content] getUser result - user: ${user?.id ?? "null"}, error: ${authError?.message ?? "none"}`,
+    );
+
     if (authError || !user) {
-      console.error("Auth error:", authError);
+      console.error(`[generate-content] REJECTED: Auth validation failed`);
+      console.error(`[generate-content] Auth error code: ${authError?.status}`);
+      console.error(`[generate-content] Auth error name: ${authError?.name}`);
+      console.error(
+        `[generate-content] Auth error message: ${authError?.message}`,
+      );
       return new Response(JSON.stringify({ error: "Invalid authentication" }), {
         status: 401,
         headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    console.log(
+      `[generate-content] SUCCESS: User authenticated - ID: ${user.id}, email: ${user.email}`,
+    );
 
     // Rate limiting
     const rateLimitResult = await checkRateLimit(user.id, "content_generation");
@@ -326,6 +358,15 @@ serve(async (req) => {
       profile?.subscription_tier === "family";
 
     // Check and enforce quota
+    console.log(
+      `[generate-content] About to call supabaseAdmin.rpc for quota check`,
+    );
+    console.log(
+      `[generate-content] supabaseAdmin type: ${typeof supabaseAdmin}`,
+    );
+    console.log(
+      `[generate-content] supabaseAdmin.rpc type: ${typeof supabaseAdmin.rpc}`,
+    );
     const { data: quotaResult, error: quotaError } = await supabaseAdmin.rpc(
       "check_and_increment_content_quota",
       {

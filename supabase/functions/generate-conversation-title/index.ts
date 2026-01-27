@@ -2,7 +2,7 @@
 // Used by voice mode and other flows that bypass the main chat function
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 const XAI_API_URL = "https://api.x.ai/v1/chat/completions";

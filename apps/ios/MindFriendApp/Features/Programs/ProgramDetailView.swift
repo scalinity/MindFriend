@@ -84,10 +84,15 @@ struct ProgramDetailView: View {
                     .controlSize(.large)
                 } else {
                     Button {
-                        showEnrollSheet = true
+                        // Gate premium programs behind paywall for free users
+                        if program.premiumOnly && appState.entitlements.tier != .premium {
+                            appState.showPaywall = true
+                        } else {
+                            showEnrollSheet = true
+                        }
                     } label: {
                         HStack {
-                            Text(program.premiumOnly ? "Start Program (Premium)" : "Start Program")
+                            Text("Start Program")
                             if program.premiumOnly {
                                 Image(systemName: "crown.fill")
                             }
@@ -177,10 +182,15 @@ struct ProgramHeaderView: View {
                     ForEach(program.tags, id: \.self) { tag in
                         Text(tag)
                             .font(.caption)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(Color(.tertiarySystemBackground))
-                            .clipShape(Capsule())
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color(.secondarySystemBackground))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color(.separator), lineWidth: 0.5)
+                            )
                             .accessibilityLabel("Tag: \(tag)")
                     }
                 }

@@ -121,9 +121,7 @@ final class CrashReporter {
             // DSN not configured - run without crash reporting
             isInitialized = true
             isSentryEnabled = false
-            #if DEBUG
-            logger.warning("Sentry DSN not configured, crash reporting disabled")
-            #endif
+            logger.warning("Sentry DSN not configured - add to Debug.xcconfig/Release.xcconfig")
             return
         }
 
@@ -221,13 +219,14 @@ final class CrashReporter {
             // Enables visual recording of user sessions for debugging while maintaining strict privacy.
             // All text and images are masked by default to protect mental health data.
             #if DEBUG
-            // Development: No session replay to avoid unnecessary overhead during active dev
-            let sessionSampleRate: Float = 0.0
-            let onErrorSampleRate: Float = 0.0
+            // Development: 100% capture for testing session replay
+            let sessionSampleRate: Float = 1.0
+            let onErrorSampleRate: Float = 1.0
+            // Allow Session Replay in simulator/debug environments for testing
+            options.experimental.enableSessionReplayInUnreliableEnvironment = true
             #else
-            // Production: 5% of sessions recorded, 100% of error sessions captured
-            // Low sample rate minimizes storage costs while providing sufficient debugging data
-            let sessionSampleRate: Float = 0.05
+            // Production: 10% of sessions recorded, 100% of error sessions captured
+            let sessionSampleRate: Float = 0.1
             let onErrorSampleRate: Float = 1.0
             #endif
 

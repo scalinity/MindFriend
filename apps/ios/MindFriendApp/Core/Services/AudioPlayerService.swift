@@ -94,7 +94,10 @@ final class AudioPlayerService: NSObject, ObservableObject {
         }
 
         // Check if offline available
-        let audioUrl = cacheManager.getCachedURL(for: track) ?? URL(string: track.audioUrl)!
+        guard let audioUrl = cacheManager.getCachedURL(for: track) ?? URL(string: track.audioUrl) else {
+            state.error = "Invalid audio URL"
+            return
+        }
 
         let asset = AVURLAsset(url: audioUrl)
         playerItem = AVPlayerItem(asset: asset)
@@ -203,6 +206,11 @@ final class AudioPlayerService: NSObject, ObservableObject {
         cancellables.removeAll()
 
         clearNowPlayingInfo()
+    }
+
+    func setPlaybackSpeed(_ speed: Float) {
+        player?.rate = speed
+        state.playbackRate = speed
     }
 
     // MARK: - Sleep Timer

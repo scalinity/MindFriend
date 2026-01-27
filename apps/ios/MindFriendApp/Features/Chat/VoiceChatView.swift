@@ -18,6 +18,9 @@ struct VoiceChatView: View {
     @State private var assistantTranscriptInProgress = ""
     @State private var didPersistTranscript = false
     
+    // User message tracking
+    @State private var userTranscriptSegments: [String] = []
+
     // Coordinator to handle voice service events
     @StateObject private var voiceCoordinator: VoiceCoordinator
 
@@ -106,6 +109,13 @@ struct VoiceChatView: View {
                 }
             }
 
+            voiceCoordinator.onUserTranscriptUpdate = { text in
+                // Capture user message when transcription arrives from xAI (async)
+                // This is the only reliable way to get user transcripts since
+                // transcription arrives AFTER the user stops speaking
+                captureUserTranscript(text)
+            }
+
             voiceCoordinator.onAssistantSpeechStart = { baselineTranscript in
                 assistantTranscriptBaseline = baselineTranscript
                 assistantTranscriptInProgress = ""
@@ -114,6 +124,9 @@ struct VoiceChatView: View {
             voiceCoordinator.onAssistantSpeechEnd = {
                 captureAssistantTranscriptIfNeeded()
             }
+
+            // Note: onUserSpeechEnd is no longer used for capturing transcripts
+            // because transcription arrives asynchronously after user stops speaking
             
             await startVoiceSession()
         }
@@ -415,6 +428,7 @@ struct VoiceChatView: View {
 
     private func endVoiceSession() async {
         _ = stateMachine.send(.tapEnd)
+        captureUserTranscriptIfNeeded()
         captureAssistantTranscriptIfNeeded()
         let transcriptText = buildTranscriptText()
         await voiceService.disconnect()
@@ -503,6 +517,27 @@ struct VoiceChatView: View {
         assistantTranscriptBaseline = ""
     }
 
+    /// Captures a user transcript when transcription arrives from xAI (async)
+    /// Called when transcription arrives, not when user stops speaking
+    private func captureUserTranscript(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        // Avoid duplicates - xAI sometimes sends the same transcript multiple times
+        if userTranscriptSegments.last != trimmed {
+            userTranscriptSegments.append(trimmed)
+            Log.voice.debug("[VoiceChatView] Captured user message: \(trimmed.prefix(50))...")
+        }
+    }
+
+    /// Captures the current user transcript from the service (used at end of session)
+    private func captureUserTranscriptIfNeeded() {
+        // Use the current user transcript from the service
+        let transcript = voiceService.userTranscribedText
+        if !transcript.isEmpty {
+            captureUserTranscript(transcript)
+        }
+    }
+
     private func trimmedTranscript(from text: String, baseline: String) -> String {
         let rawText = text
         guard !rawText.isEmpty else { return "" }
@@ -548,8 +583,9 @@ struct VoiceChatView: View {
     private func persistTranscriptIfNeeded(_ transcriptText: String) async {
         guard !didPersistTranscript else { return }
         didPersistTranscript = true
-        let trimmed = transcriptText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        
+        // Need at least one message to persist
+        guard !userTranscriptSegments.isEmpty || !assistantTranscriptSegments.isEmpty else { return }
 
         do {
             if targetConversationId == nil {
@@ -557,17 +593,40 @@ struct VoiceChatView: View {
                 targetConversationId = conversation.id
             }
             guard let conversationId = targetConversationId else { return }
-            _ = try await container.chatService.insertMessage(
-                conversationId: conversationId,
-                role: .assistant,
-                content: trimmed
-            )
+            
+            // Interleave user and assistant messages (user speaks, then assistant responds)
+            let maxCount = max(userTranscriptSegments.count, assistantTranscriptSegments.count)
+            for i in 0..<maxCount {
+                // User message first (if exists)
+                if i < userTranscriptSegments.count {
+                    _ = try await container.chatService.insertMessage(
+                        conversationId: conversationId,
+                        role: .user,
+                        content: userTranscriptSegments[i]
+                    )
+                }
+                // Then assistant response (if exists)
+                if i < assistantTranscriptSegments.count {
+                    _ = try await container.chatService.insertMessage(
+                        conversationId: conversationId,
+                        role: .assistant,
+                        content: assistantTranscriptSegments[i]
+                    )
+                }
+            }
 
-            // Generate a title for the conversation based on the transcript
-            _ = try await container.chatService.generateConversationTitle(
-                conversationId: conversationId,
-                content: trimmed
-            )
+            // Generate a title from the first user message (or assistant if no user messages)
+            let titleContent = userTranscriptSegments.first ?? assistantTranscriptSegments.first ?? ""
+            if !titleContent.isEmpty {
+                _ = try await container.chatService.generateConversationTitle(
+                    conversationId: conversationId,
+                    content: titleContent
+                )
+            }
+            
+            #if DEBUG
+            print("[VoiceChatView] Persisted conversation \(conversationId) with \(userTranscriptSegments.count) user + \(assistantTranscriptSegments.count) assistant messages")
+            #endif
         } catch {
             errorMessage = "Couldn't save transcript. \(error.localizedDescription)"
             showError = true

@@ -5,7 +5,8 @@ import WidgetKit
 
 /// Manages widget data stored in shared App Group container.
 /// Called by main app to update widget data; read by widget extensions.
-public final class SharedDataStore: Sendable {
+/// Note: Not Sendable because UserDefaults is not thread-safe. Access from main thread recommended.
+public final class SharedDataStore {
     // MARK: - Singleton
 
     public static let shared = SharedDataStore()
@@ -33,6 +34,11 @@ public final class SharedDataStore: Sendable {
         static let quickActions = "widget_quick_actions"
         static let userPreferences = "widget_user_preferences"
         static let dailyQuest = "widget_daily_quest"
+        // Ambient Wellness Presence keys
+        static let wellnessScore = "widget_wellness_score"
+        static let wellnessScoreTrend = "widget_wellness_score_trend"
+        static let lastBreathingSessionTime = "widget_last_breathing_session_time"
+        static let dailyAffirmation = "widget_daily_affirmation"
     }
 
     // MARK: - Read Methods
@@ -103,6 +109,36 @@ public final class SharedDataStore: Sendable {
         userDefaults?.object(forKey: Keys.lastUpdated) as? Date
     }
 
+    /// Current wellness score (0-100)
+    public var wellnessScore: Int? {
+        guard let score = userDefaults?.integer(forKey: Keys.wellnessScore),
+              score > 0
+        else {
+            return nil
+        }
+        return score
+    }
+
+    /// Wellness score trend: positive means improving, negative means declining
+    public var wellnessScoreTrend: Int {
+        userDefaults?.integer(forKey: Keys.wellnessScoreTrend) ?? 0
+    }
+
+    /// Last breathing exercise session timestamp
+    public var lastBreathingSessionTime: Date? {
+        userDefaults?.object(forKey: Keys.lastBreathingSessionTime) as? Date
+    }
+
+    /// Daily affirmation for widget display
+    public var dailyAffirmation: WidgetAffirmation? {
+        guard let data = userDefaults?.data(forKey: Keys.dailyAffirmation),
+              let affirmation = try? JSONDecoder().decode(WidgetAffirmation.self, from: data)
+        else {
+            return nil
+        }
+        return affirmation
+    }
+
     // MARK: - Write Methods
 
     /// Update current streak (called from main app when quest completed)
@@ -114,9 +150,12 @@ public final class SharedDataStore: Sendable {
 
     /// Update today's mood (called from main app or widget intent)
     public func updateTodayMood(_ mood: String?, score: Int?) {
-        userDefaults?.set(mood, forKey: Keys.todayMood)
+        // Validate mood string - only allow alphanumeric, spaces, and common punctuation
+        let sanitizedMood = mood.map { sanitizeString($0, maxLength: 100) }
+        userDefaults?.set(sanitizedMood, forKey: Keys.todayMood)
         if let score = score {
-            userDefaults?.set(score, forKey: Keys.todayMoodScore)
+            // Clamp score to valid range
+            userDefaults?.set(max(0, min(10, score)), forKey: Keys.todayMoodScore)
         } else {
             userDefaults?.removeObject(forKey: Keys.todayMoodScore)
         }
@@ -182,7 +221,63 @@ public final class SharedDataStore: Sendable {
         updateDailyQuest(completedQuest)
     }
 
+    /// Update wellness score and trend
+    public func updateWellnessScore(_ score: Int, trend: Int) {
+        userDefaults?.set(max(0, min(100, score)), forKey: Keys.wellnessScore)
+        userDefaults?.set(trend, forKey: Keys.wellnessScoreTrend)
+        updateTimestamp()
+        reloadWidgets()
+    }
+
+    /// Update last breathing session time
+    public func updateLastBreathingSession(_ date: Date = Date()) {
+        userDefaults?.set(date, forKey: Keys.lastBreathingSessionTime)
+        updateTimestamp()
+        reloadWidgets()
+    }
+
+    /// Update daily affirmation with input validation
+    public func updateDailyAffirmation(_ affirmation: WidgetAffirmation) {
+        // Create sanitized version to prevent injection
+        let sanitizedAffirmation = WidgetAffirmation(
+            text: sanitizeString(affirmation.text, maxLength: 500),
+            category: sanitizeString(affirmation.category, maxLength: 50),
+            date: affirmation.date
+        )
+
+        do {
+            let data = try JSONEncoder().encode(sanitizedAffirmation)
+            userDefaults?.set(data, forKey: Keys.dailyAffirmation)
+            updateTimestamp()
+            reloadWidgets()
+        } catch {
+            // Log encoding error but don't crash
+            #if DEBUG
+            print("Failed to encode affirmation: \(error)")
+            #endif
+        }
+    }
+
     // MARK: - Helpers
+
+    /// Sanitize string input to prevent injection attacks
+    /// - Parameters:
+    ///   - input: Raw string input
+    ///   - maxLength: Maximum allowed length
+    /// - Returns: Sanitized string with only safe characters
+    private func sanitizeString(_ input: String, maxLength: Int) -> String {
+        // Allow alphanumeric, spaces, and common punctuation
+        let allowedCharacters = CharacterSet.alphanumerics
+            .union(.whitespaces)
+            .union(CharacterSet(charactersIn: ".,!?'-"))
+
+        let sanitized = input
+            .unicodeScalars
+            .filter { allowedCharacters.contains($0) }
+            .map { Character($0) }
+
+        return String(sanitized.prefix(maxLength))
+    }
 
     private func updateTimestamp() {
         userDefaults?.set(Date(), forKey: Keys.lastUpdated)
@@ -210,6 +305,11 @@ public final class SharedDataStore: Sendable {
         userDefaults?.removeObject(forKey: Keys.quickActions)
         userDefaults?.removeObject(forKey: Keys.userPreferences)
         userDefaults?.removeObject(forKey: Keys.dailyQuest)
+        // Clear ambient wellness keys
+        userDefaults?.removeObject(forKey: Keys.wellnessScore)
+        userDefaults?.removeObject(forKey: Keys.wellnessScoreTrend)
+        userDefaults?.removeObject(forKey: Keys.lastBreathingSessionTime)
+        userDefaults?.removeObject(forKey: Keys.dailyAffirmation)
         reloadWidgets()
     }
 }

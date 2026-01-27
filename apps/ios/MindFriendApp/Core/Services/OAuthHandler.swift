@@ -105,7 +105,9 @@ final class OAuthHandler: NSObject, ObservableObject {
             throw OAuthError.stateStorageFailed
         }
 
-        var components = URLComponents(string: "https://api.notion.com/v1/oauth/authorize")!
+        guard var components = URLComponents(string: "https://api.notion.com/v1/oauth/authorize") else {
+            throw OAuthError.invalidAuthorizationURL
+        }
         components.queryItems = [
             URLQueryItem(name: "client_id", value: Configuration.notionClientId),
             URLQueryItem(name: "redirect_uri", value: "mindfriend://oauth/callback/notion"),
@@ -138,7 +140,10 @@ final class OAuthHandler: NSObject, ObservableObject {
             throw OAuthError.invalidState
         }
 
-        var request = URLRequest(url: URL(string: "https://api.notion.com/v1/oauth/token")!)
+        guard let tokenURL = URL(string: "https://api.notion.com/v1/oauth/token") else {
+            throw OAuthError.invalidTokenURL
+        }
+        var request = URLRequest(url: tokenURL)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Basic \(Data("\(Configuration.notionClientId):".utf8).base64EncodedString())", forHTTPHeaderField: "Authorization")
@@ -273,6 +278,7 @@ enum OAuthError: LocalizedError {
     case stateStorageFailed
     case tokenStorageFailed
     case invalidAuthorizationURL
+    case invalidTokenURL
     case invalidResponse
     case tokenExchangeFailed(Int)
     case tokenRefreshFailed(Int)
@@ -289,6 +295,7 @@ enum OAuthError: LocalizedError {
         case .stateStorageFailed: return "Failed to store authentication state"
         case .tokenStorageFailed: return "Failed to store authentication token"
         case .invalidAuthorizationURL: return "Invalid authorization URL"
+        case .invalidTokenURL: return "Invalid token URL"
         case .invalidResponse: return "Invalid server response"
         case .tokenExchangeFailed(let code): return "Token exchange failed (HTTP \(code))"
         case .tokenRefreshFailed(let code): return "Token refresh failed (HTTP \(code))"
@@ -429,7 +436,12 @@ final class OAuthEncryptionService: EncryptionServiceProtocol {
 
     // MARK: - Simple XOR Encryption (for demo - use AES in production)
 
-    private let encryptionKey = "MindFriendOAuthKey2024!".data(using: .utf8)!
+    private let encryptionKey: Data = {
+        guard let data = "MindFriendOAuthKey2024!".data(using: .utf8) else {
+            fatalError("Invalid encryption key encoding - programming error")
+        }
+        return data
+    }()
 
     private func encrypt(_ data: Data) -> Data? {
         var result = Data(count: data.count)

@@ -47,21 +47,142 @@ final class ChallengeService: ObservableObject {
     }
 
     private func fetchPublicChallenges(userId: UUID) async throws -> [ChallengeWithParticipation] {
-        // TODO: Implement RPC call to get_public_challenges_with_participation
-        // Currently returns empty to unblock build
-        return []
+        // Fetch public challenges with participant count
+        let challenges: [SocialChallenge] = try await supabaseClient
+            .from("social_challenges")
+            .select()
+            .eq("is_public", value: true)
+            .gte("ends_at", value: ISO8601DateFormatter().string(from: Date()))
+            .order("starts_at", ascending: true)
+            .execute()
+            .value
+
+        // Fetch user's participation for these challenges
+        let challengeIds = challenges.map { $0.id.uuidString }
+        let participations: [ChallengeParticipant] = challengeIds.isEmpty ? [] : try await supabaseClient
+            .from("challenge_participants")
+            .select()
+            .eq("user_id", value: userId.uuidString)
+            .in("challenge_id", values: challengeIds)
+            .execute()
+            .value
+
+        let participationMap = Dictionary(uniqueKeysWithValues: participations.map { ($0.challengeId, $0) })
+
+        return challenges.map { challenge in
+            ChallengeWithParticipation(
+                challenge: challenge,
+                participation: participationMap[challenge.id],
+                participantCount: 0 // Would need aggregation query for accurate count
+            )
+        }
     }
 
     private func fetchCircleChallenges(userId: UUID) async throws -> [ChallengeWithParticipation] {
-        // TODO: Implement RPC call to get_circle_challenges_with_participation
-        // Currently returns empty to unblock build
-        return []
+        // First get user's circle IDs
+        struct CircleMembership: Codable {
+            let circleId: UUID
+            enum CodingKeys: String, CodingKey {
+                case circleId = "circle_id"
+            }
+        }
+
+        let memberships: [CircleMembership] = try await supabaseClient
+            .from("circle_members")
+            .select("circle_id")
+            .eq("user_id", value: userId.uuidString)
+            .execute()
+            .value
+
+        let circleIds = memberships.map { $0.circleId.uuidString }
+        guard !circleIds.isEmpty else { return [] }
+
+        // Fetch challenges for those circles
+        let challenges: [SocialChallenge] = try await supabaseClient
+            .from("social_challenges")
+            .select()
+            .in("circle_id", values: circleIds)
+            .gte("ends_at", value: ISO8601DateFormatter().string(from: Date()))
+            .order("starts_at", ascending: true)
+            .execute()
+            .value
+
+        // Fetch user's participation
+        let challengeIds = challenges.map { $0.id.uuidString }
+        let participations: [ChallengeParticipant] = challengeIds.isEmpty ? [] : try await supabaseClient
+            .from("challenge_participants")
+            .select()
+            .eq("user_id", value: userId.uuidString)
+            .in("challenge_id", values: challengeIds)
+            .execute()
+            .value
+
+        let participationMap = Dictionary(uniqueKeysWithValues: participations.map { ($0.challengeId, $0) })
+
+        return challenges.map { challenge in
+            ChallengeWithParticipation(
+                challenge: challenge,
+                participation: participationMap[challenge.id],
+                participantCount: 0
+            )
+        }
     }
 
     private func fetchJoinedChallenges(userId: UUID) async throws -> [ChallengeWithParticipation] {
-        // TODO: Implement RPC call to get_joined_challenges_with_details
-        // Currently returns empty to unblock build
-        return []
+        // Fetch all participations for the user with challenge data
+        struct ParticipationWithChallenge: Codable {
+            let id: UUID
+            let challengeId: UUID
+            let currentProgress: Int
+            let completed: Bool
+            let completedAt: Date?
+            let finalRank: Int?
+            let showOnLeaderboard: Bool
+            let joinedAt: Date
+            let updatedAt: Date
+            let socialChallenges: SocialChallenge
+
+            enum CodingKeys: String, CodingKey {
+                case id
+                case challengeId = "challenge_id"
+                case currentProgress = "current_progress"
+                case completed
+                case completedAt = "completed_at"
+                case finalRank = "final_rank"
+                case showOnLeaderboard = "show_on_leaderboard"
+                case joinedAt = "joined_at"
+                case updatedAt = "updated_at"
+                case socialChallenges = "social_challenges"
+            }
+        }
+
+        let results: [ParticipationWithChallenge] = try await supabaseClient
+            .from("challenge_participants")
+            .select("*, social_challenges(*)")
+            .eq("user_id", value: userId.uuidString)
+            .order("joined_at", ascending: false)
+            .execute()
+            .value
+
+        return results.map { result in
+            let participation = ChallengeParticipant(
+                id: result.id,
+                challengeId: result.challengeId,
+                userId: userId,
+                currentProgress: result.currentProgress,
+                completed: result.completed,
+                completedAt: result.completedAt,
+                finalRank: result.finalRank,
+                showOnLeaderboard: result.showOnLeaderboard,
+                joinedAt: result.joinedAt,
+                updatedAt: result.updatedAt
+            )
+            return ChallengeWithParticipation(
+                challenge: result.socialChallenges,
+                participation: participation,
+                participantCount: 0
+            )
+        }
     }
 
     // MARK: - Join/Leave

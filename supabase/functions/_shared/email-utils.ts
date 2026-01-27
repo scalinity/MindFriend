@@ -1,6 +1,6 @@
 // Email utility functions for timezone handling, scheduling, rate limiting, crisis suppression, and retry logic
 
-import { PostgrestError } from "https://esm.sh/@supabase/supabase-js@2";
+import { PostgrestError } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 // Supported timezones (IANA format)
 const SUPPORTED_TIMEZONES = [

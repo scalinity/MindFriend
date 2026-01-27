@@ -36,6 +36,43 @@ public struct WidgetDailyQuote: Codable, Sendable {
     }
 }
 
+/// Daily affirmation for widget display
+public struct WidgetAffirmation: Codable, Sendable {
+    public let text: String
+    public let category: String
+    public let date: Date
+    
+    public init(text: String, category: String, date: Date = Date()) {
+        self.text = text
+        self.category = category
+        self.date = date
+    }
+    
+    public var categoryIcon: String {
+        switch category.lowercased() {
+        case "strength": return "bolt.fill"
+        case "calm": return "leaf.fill"
+        case "gratitude": return "heart.fill"
+        case "growth": return "arrow.up.circle.fill"
+        case "confidence": return "star.fill"
+        case "self-love": return "heart.circle.fill"
+        default: return "sparkles"
+        }
+    }
+    
+    /// Default affirmations for when no affirmation is stored
+    public static let defaults: [WidgetAffirmation] = [
+        WidgetAffirmation(text: "I am worthy of love and happiness.", category: "self-love"),
+        WidgetAffirmation(text: "Today I choose peace over worry.", category: "calm"),
+        WidgetAffirmation(text: "I am stronger than my challenges.", category: "strength"),
+        WidgetAffirmation(text: "I am grateful for this moment.", category: "gratitude"),
+        WidgetAffirmation(text: "I am growing every day.", category: "growth"),
+        WidgetAffirmation(text: "I believe in my abilities.", category: "confidence"),
+        WidgetAffirmation(text: "I release what no longer serves me.", category: "calm"),
+        WidgetAffirmation(text: "I am enough, just as I am.", category: "self-love")
+    ]
+}
+
 /// Daily quest for widget display
 public struct WidgetDailyQuest: Codable, Sendable {
     public let id: String
@@ -226,6 +263,12 @@ public enum WidgetDeepLink {
 
     public static let quest = "mindfriend://quest"
     public static let quote = "mindfriend://quote"
+    
+    // Ambient Wellness Presence deep links
+    public static let quickBreath = "mindfriend://breathing/quick"
+    public static let affirmation = "mindfriend://affirmation"
+    public static let wellnessScore = "mindfriend://wellness"
+    public static let ambientSettings = "mindfriend://settings/ambient"
 
     public static func exercise(id: String) -> String {
         return "mindfriend://exercise/\(id)"

@@ -13,10 +13,12 @@ import Supabase
 @MainActor
 final class QuestArcsService {
     private let supabase: SupabaseClient
+    private let authService: SupabaseAuthService
     private weak var difficultyService: DifficultyService?
 
-    init(supabase: SupabaseClient, difficultyService: DifficultyService? = nil) {
+    init(supabase: SupabaseClient, authService: SupabaseAuthService, difficultyService: DifficultyService? = nil) {
         self.supabase = supabase
+        self.authService = authService
         self.difficultyService = difficultyService
     }
 
@@ -37,21 +39,20 @@ final class QuestArcsService {
     /// - Returns: Array of quest arcs enriched with user enrollment status
     /// - Throws: QuestArcError with specific error context
     func getQuestArcs(category: String? = nil, includeCompleted: Bool = false) async throws -> [QuestArc] {
-        var queryItems: [URLQueryItem] = []
+        var body: [String: String] = [:]
         if let category = category {
-            queryItems.append(URLQueryItem(name: "category", value: category))
+            body["category"] = category
         }
         if includeCompleted {
-            queryItems.append(URLQueryItem(name: "includeCompleted", value: "true"))
+            body["includeCompleted"] = "true"
         }
 
         do {
-            let finalQueryItems = queryItems
             let response: GetQuestArcsResponse = try await supabase.functions.invoke(
                 "get-quest-arcs",
                 options: FunctionInvokeOptions(
-                    method: .get,
-                    query: finalQueryItems.isEmpty ? [] : finalQueryItems
+                    headers: authService.authHeaders,
+                    body: body.isEmpty ? nil : body
                 )
             )
             return response.arcs
@@ -71,6 +72,7 @@ final class QuestArcsService {
             let response: StartQuestArcResponse = try await supabase.functions.invoke(
                 "start-quest-arc",
                 options: FunctionInvokeOptions(
+                    headers: authService.authHeaders,
                     body: ["arcId": arcId.uuidString]
                 )
             )
@@ -104,6 +106,7 @@ final class QuestArcsService {
             let response: PauseQuestArcResponse = try await supabase.functions.invoke(
                 "pause-quest-arc",
                 options: FunctionInvokeOptions(
+                    headers: authService.authHeaders,
                     body: body.isEmpty ? nil : body
                 )
             )
@@ -124,6 +127,7 @@ final class QuestArcsService {
             let response: ResumeQuestArcResponse = try await supabase.functions.invoke(
                 "resume-quest-arc",
                 options: FunctionInvokeOptions(
+                    headers: authService.authHeaders,
                     body: ["userArcId": userArcId.uuidString]
                 )
             )
@@ -149,6 +153,7 @@ final class QuestArcsService {
             let response: ExitQuestArcResponse = try await supabase.functions.invoke(
                 "exit-quest-arc",
                 options: FunctionInvokeOptions(
+                    headers: authService.authHeaders,
                     body: body.isEmpty ? nil : body
                 )
             )

@@ -11,5 +11,9 @@ struct MindFriendWidgets: WidgetBundle {
         QuickActionsWidget()
         QuestWidget()
         QuoteWidget()
+        // Ambient Wellness Presence widgets
+        QuickBreathWidget()
+        AffirmationWidget()
+        WellnessScoreWidget()
     }
 }

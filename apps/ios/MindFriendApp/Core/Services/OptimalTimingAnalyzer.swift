@@ -57,9 +57,10 @@ final class OptimalTimingAnalyzer: OptimalTimingAnalyzing {
         }
 
         // Call Edge Function to perform server-side analysis
+        struct EmptyRequest: Codable {}
         let response: TimingPreferences = try await supabase.functions.invoke(
             "analyze-intervention-patterns",
-            options: FunctionInvokeOptions(body: [:])
+            options: FunctionInvokeOptions(body: EmptyRequest())
         )
 
         // Cache result

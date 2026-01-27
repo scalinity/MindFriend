@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2.49.1";
 import { corsHeaders } from "../_shared/cors.ts";
 import { toZonedTime, fromZonedTime } from "npm:date-fns-tz@3.2.0";
 import { addDays, startOfDay } from "npm:date-fns@4.1.0";

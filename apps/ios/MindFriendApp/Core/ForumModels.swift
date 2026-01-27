@@ -151,7 +151,7 @@ struct ForumReport: Codable, Identifiable, Equatable {
     let replyId: UUID?
     let reason: ReportReason
     let details: String?
-    let status: ReportStatus
+    let status: ForumReportStatus
     let reviewedBy: UUID?
     let reviewedAt: Date?
     let createdAt: Date
@@ -237,7 +237,8 @@ enum ReportReason: String, Codable, CaseIterable {
     }
 }
 
-enum ReportStatus: String, Codable, CaseIterable {
+// Disambiguate from MentorshipModels.ReportStatus
+enum ForumReportStatus: String, Codable, CaseIterable {
     case pending
     case reviewed
     case dismissed

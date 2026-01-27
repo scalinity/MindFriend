@@ -174,7 +174,7 @@ struct AlertCard: View {
         .opacity(alert.wasRead ? 0.7 : 1.0)
     }
 
-    private func severityIcon(_ severity: AlertSeverity) -> String {
+    private func severityIcon(_ severity: FamilyAlertSeverity) -> String {
         switch severity {
         case .info: return "info.circle.fill"
         case .attention: return "exclamationmark.circle.fill"
@@ -182,7 +182,7 @@ struct AlertCard: View {
         }
     }
 
-    private func severityColor(_ severity: AlertSeverity) -> Color {
+    private func severityColor(_ severity: FamilyAlertSeverity) -> Color {
         switch severity {
         case .info: return .blue
         case .attention: return .orange

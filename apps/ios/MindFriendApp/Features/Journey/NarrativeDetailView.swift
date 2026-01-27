@@ -260,7 +260,6 @@ private struct NarrativeDetailViewPreview: View {
     }
 
     private func createMockDataService() -> SupabaseDataService {
-        let authService = SupabaseAuthService()
-        return SupabaseDataService(authService: authService)
+        return SupabaseDataService(authService: DependencyContainer.preview.supabaseAuthService)
     }
 }

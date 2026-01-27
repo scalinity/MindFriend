@@ -2,11 +2,14 @@ import SwiftUI
 import AVFoundation
 
 /// View for playing generated audio content
+/// Supports both ElevenLabs audio (premium) and native iOS TTS (free tier)
 struct ContentPlayerView: View {
     let content: GeneratedContent
     let service: GeneratedContentService
 
+    @EnvironmentObject var appState: AppState
     @StateObject private var viewModel: ContentPlayerViewModel
+    @StateObject private var ttsService = NativeTTSService()
 
     init(content: GeneratedContent, service: GeneratedContentService) {
         self.content = content
@@ -23,9 +26,11 @@ struct ContentPlayerView: View {
                 // Header with artwork
                 headerSection
 
-                // Playback controls
+                // Playback controls - ElevenLabs audio (premium) or native TTS (free)
                 if content.hasAudio {
                     playbackSection
+                } else {
+                    nativeTTSSection
                 }
 
                 // Text content
@@ -67,6 +72,7 @@ struct ContentPlayerView: View {
         }
         .onDisappear {
             viewModel.stopPlayback()
+            ttsService.stop()
         }
     }
 
@@ -211,6 +217,77 @@ struct ContentPlayerView: View {
                 .onChange(of: viewModel.playbackSpeed) { _, newValue in
                     viewModel.setPlaybackSpeed(newValue)
                 }
+            }
+        }
+        .padding()
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    // MARK: - Native TTS Section (Free Tier)
+
+    private var nativeTTSSection: some View {
+        VStack(spacing: 16) {
+            // Info banner
+            HStack(spacing: 8) {
+                Image(systemName: "speaker.wave.2.fill")
+                    .foregroundStyle(.blue)
+                Text("Using device voice")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button {
+                    appState.showPaywall = true
+                } label: {
+                    Text("Upgrade")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                }
+            }
+            .padding(10)
+            .background(Color.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+
+            // Progress indicator
+            if ttsService.isSpeaking {
+                ProgressView(value: ttsService.progress)
+                    .tint(.accentColor)
+            }
+
+            // Controls
+            HStack(spacing: 40) {
+                // Play/Pause
+                Button {
+                    if ttsService.isSpeaking {
+                        if ttsService.isPaused {
+                            ttsService.resume()
+                        } else {
+                            ttsService.pause()
+                        }
+                    } else {
+                        let settings = NativeTTSService.settingsForContentType(content.contentType.rawValue)
+                        ttsService.speak(content.textContent, settings: settings)
+                    }
+                } label: {
+                    Image(systemName: ttsService.isSpeaking && !ttsService.isPaused ? "pause.circle.fill" : "play.circle.fill")
+                        .font(.system(size: 64))
+                }
+
+                // Stop
+                if ttsService.isSpeaking {
+                    Button {
+                        ttsService.stop()
+                    } label: {
+                        Image(systemName: "stop.circle")
+                            .font(.title)
+                    }
+                }
+            }
+            .foregroundStyle(.primary)
+
+            // Duration estimate
+            if let duration = content.duration {
+                Text("~\(duration / 60) min")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .padding()

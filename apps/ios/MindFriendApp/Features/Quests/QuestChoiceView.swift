@@ -191,6 +191,13 @@ private struct QuestOptionsContent: View {
     let onSelectAssigned: () -> Void
     let onReroll: () -> Void
 
+    /// Check if a quest template matches the assigned quest (to avoid showing duplicates)
+    private func isSameQuest(_ template: QuestTemplate, _ quest: Quest?) -> Bool {
+        guard let quest = quest else { return false }
+        // Compare by template ID or title (title is more reliable as IDs may differ)
+        return template.id == quest.template.id || template.title == quest.template.title
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
@@ -216,8 +223,9 @@ private struct QuestOptionsContent: View {
                         )
                     }
 
-                    // Primary (Recommended)
-                    if let primaryQuest = alternatives.primaryQuest {
+                    // Primary (Recommended) - only show if different from assigned quest
+                    if let primaryQuest = alternatives.primaryQuest,
+                       !isSameQuest(primaryQuest, assignedQuest) {
                         QuestOptionCard(
                             template: primaryQuest,
                             badge: "Recommended",

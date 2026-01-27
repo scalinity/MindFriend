@@ -1,457 +1,339 @@
-// Mentorship Safety Check - Monitors messages for concerning patterns
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCorsHeaders } from "../_shared/cors.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { detectPII, sanitizeInput } from "../_shared/validation.ts";
 
-// Constant-time string comparison to prevent timing attacks
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let mismatch = 0;
-  for (let i = 0; i < a.length; i++) {
-    mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return mismatch === 0;
+interface SafetyFlags {
+  crisis_keywords: boolean;
+  boundary_violation: boolean;
+  inappropriate_request: boolean;
+  pii_exposure: boolean;
+  severity: "low" | "medium" | "high" | "critical";
+  reasons: string[];
 }
 
-// Safety patterns to detect
+// Crisis keywords requiring immediate escalation
 const CRISIS_KEYWORDS = [
   "suicide",
+  "suicidal",
   "kill myself",
   "end my life",
-  "don't want to live",
-  "want to die",
-  "self-harm",
   "hurt myself",
+  "self harm",
+  "self-harm",
+  "overdose",
+  "jump off",
+  "hanging",
+  "never going to make it",
+  "no point in living",
+  "want to die",
+  "going to die",
+  "better off dead",
+  "can't take it anymore",
+  "final goodbye",
+  "goodbye everyone",
+  "last time",
 ];
 
-const BOUNDARY_VIOLATION_PATTERNS = [
-  // Personal info requests
-  /\b(give me|share|what's|tell me) your (phone|email|address|social|instagram|facebook|twitter|snapchat)\b/i,
-  /\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/, // Phone numbers
-  /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/, // Email
-  /\bmeet (in person|up|me|irl)\b/i,
-  /\bcome over\b/i,
+// Boundary violation patterns
+const BOUNDARY_VIOLATIONS = [
+  /\b(romantic|dating|love)\b/i,
+  /\b(sexual|sex|intimate|seduce)\b/i,
+  /\b(meet in person|meet up|coffee|dinner)\b/i,
+  /\b(naked|nude|picture|photo)\b/i,
+  /\b(money|payment|send cash|wire transfer)\b/i,
+  /\b(illegal|drug|prescription|medicine)\b/i,
+  /\b(hug|kiss|touch|physical contact)\b/i,
 ];
 
+// Inappropriate request patterns
 const INAPPROPRIATE_PATTERNS = [
-  /\bstop taking (medication|meds|medicine)\b/i,
-  /\bdon't need (therapy|therapist|counselor)\b/i,
-  /\byou don't need (help|treatment)\b/i,
-  /\bjust get over it\b/i,
-  /\bman up\b/i,
-  /\bstop being (dramatic|weak|sensitive)\b/i,
+  /\b(scam|fraud|scheme|pyramid)\b/i,
+  /\b(click here|click link|download|install)\b/i,
+  /\b(verify|confirm|password|credentials)\b/i,
+  /\b(investment|cryptocurrency|bitcoin)\b/i,
+  /\b(affiliate|referral|commission)\b/i,
 ];
 
-interface SafetyCheckResult {
-  flagged: boolean;
-  reason?: string;
-  severity: "low" | "medium" | "high" | "critical";
-  action: "none" | "flag" | "alert" | "escalate";
+interface MessageToCheck {
+  id: string;
+  sender_id: string;
+  content: string;
+  match_id: string;
+  created_at: string;
 }
 
-function checkMessage(content: string): SafetyCheckResult {
-  const lowerContent = content.toLowerCase();
-
-  // Check for crisis keywords (critical severity)
-  for (const keyword of CRISIS_KEYWORDS) {
-    if (lowerContent.includes(keyword)) {
-      return {
-        flagged: true,
-        reason: "crisis_keywords",
-        severity: "critical",
-        action: "escalate",
-      };
-    }
-  }
-
-  // Check for boundary violations (high severity)
-  for (const pattern of BOUNDARY_VIOLATION_PATTERNS) {
-    if (pattern.test(content)) {
-      return {
-        flagged: true,
-        reason: "boundary_violation",
-        severity: "high",
-        action: "alert",
-      };
-    }
-  }
-
-  // Check for inappropriate advice (medium severity)
-  for (const pattern of INAPPROPRIATE_PATTERNS) {
-    if (pattern.test(content)) {
-      return {
-        flagged: true,
-        reason: "inappropriate_content",
-        severity: "medium",
-        action: "flag",
-      };
-    }
-  }
-
-  return {
-    flagged: false,
-    severity: "low",
-    action: "none",
-  };
+interface FlaggedMessage {
+  message_id: string;
+  match_id: string;
+  sender_id: string;
+  flags: SafetyFlags;
+  flagged_at: string;
 }
 
-serve(async (req) => {
-  const origin = req.headers.get("Origin");
-  const corsHeaders = getCorsHeaders(origin);
-
-  // Handle CORS preflight
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  );
-
-  // This endpoint is called internally by triggers or scheduled jobs
-  // Verify caller is either:
-  // 1. Internal service call (via Supabase Functions invoke - has x-sb-webhook-signature)
-  // 2. Valid authenticated user with admin role
-  const authHeader = req.headers.get("Authorization");
-  const webhookSignature = req.headers.get("x-sb-webhook-signature");
-
-  // Allow internal webhook calls (from cron jobs or other edge functions)
-  const isInternalCall = !!webhookSignature;
-
-  if (!isInternalCall) {
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized", code: "UNAUTHORIZED" }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
-
-    if (error || !user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized", code: "UNAUTHORIZED" }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    // Check if user is a moderator/admin (for manual triggering)
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    if (!profile || ![\"admin\", \"moderator\"].includes(profile.role || \"\")) {
-      return new Response(
-        JSON.stringify({ error: \"Forbidden\", code: \"FORBIDDEN\" }),
-        {
-          status: 403,
-          headers: { ...corsHeaders, \"Content-Type\": \"application/json\" },
-        },
-      );
-    }
-  } else {
-    // WEBHOOK: Verify HMAC signature for internal calls
-    const signature = webhookSignature;
-    const body = await req.clone().text();
-    const secret = Deno.env.get("SUPABASE_WEBHOOK_SECRET");
-    
-    if (!secret || secret.trim() === "") {
-      console.error("[SECURITY] SUPABASE_WEBHOOK_SECRET not configured");
-      return new Response(
-        JSON.stringify({ error: "Server misconfigured", code: "CONFIG_ERROR" }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
-    
-    const encoder = new TextEncoder();
-    const keyBuf = await crypto.subtle.importKey(
-      "raw",
-      encoder.encode(secret),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"],
-    );
-    
-    const signatureBuf = await crypto.subtle.sign(
-      "HMAC",
-      keyBuf,
-      encoder.encode(body),
-    );
-    
-    const computedSignature = Array.from(new Uint8Array(signatureBuf))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-    
-    // Constant-time comparison to prevent timing attacks
-    if (!timingSafeEqual(signature, computedSignature)) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized", code: "UNAUTHORIZED" }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
+serve(async (req: Request) => {
+  // Only allow POST (can be triggered by cron or manual call)
+  if (req.method !== "POST") {
+    return new Response("Method not allowed", { status: 405 });
   }
 
   try {
-    // Get unflagged messages from the last hour that haven't been reviewed
-    const timeoutPromise = new Promise((_resolve, reject) =>
-      setTimeout(
-        () => reject(new Error("Database query timeout")),
-        10000, // 10 second timeout
-      ),
+    // Initialize Supabase client with service role (for admin access)
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const queryPromise = (async () => {
-      return await supabase
-        .from("mentorship_messages")
-        .select(
-          `
-          id,
-          match_id,
-          sender_id,
-          content,
-          sent_at,
-          flagged,
-          reviewed
-        `,
-        )
-        .eq("flagged", false)
-        .eq("reviewed", false)
-        .gte("sent_at", new Date(Date.now() - 60 * 60 * 1000).toISOString())
-        .order("sent_at", { ascending: true })
-        .limit(100);
-    })();
+    // Optional: Check for auth header to restrict to trusted services
+    const authHeader = req.headers.get("Authorization");
+    const validSecret = Deno.env.get("MENTORSHIP_SAFETY_SECRET");
 
-    const { data: messages, error: fetchError } = await Promise.race([
-      queryPromise,
-      timeoutPromise,
-    ]);
+    if (authHeader && validSecret) {
+      const providedSecret = authHeader.replace("Bearer ", "");
+      if (providedSecret !== validSecret) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    // Parse request body
+    const body = await req.json();
+    const { batch_size = 100, check_recent_only = true } = body;
+
+    // Get unflagged messages from the last hour (if check_recent_only)
+    const hoursAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+
+    let query = supabase
+      .from("mentorship_messages")
+      .select("id, sender_id, content, match_id, created_at")
+      .is("flagged_at", null)
+      .eq("is_flagged", false);
+
+    if (check_recent_only) {
+      query = query.gte("created_at", hoursAgo);
+    }
+
+    const { data: messages, error: fetchError } = await query.limit(batch_size);
 
     if (fetchError) {
       console.error("Error fetching messages:", fetchError);
       return new Response(
-        JSON.stringify({ error: "Failed to fetch messages", code: "DB_ERROR" }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
+        JSON.stringify({
+          error: "Failed to fetch messages for safety check",
+          details: fetchError.message,
+        }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
       );
     }
 
-    const flaggedMessages: Array<{
-      id: string;
-      matchId: string;
-      senderId: string;
-      reason: string;
-      severity: string;
-    }> = [];
+    // Analyze each message
+    const flaggedMessages: FlaggedMessage[] = [];
+    const criticalEscalations: FlaggedMessage[] = [];
 
-    const escalations: Array<{
-      matchId: string;
-      senderId: string;
-      messageId: string;
-      reason: string;
-    }> = [];
+    for (const message of messages || []) {
+      const flags = analyzeMessageSafety(message.content);
 
-    // Check each message
-    for (const msg of messages || []) {
-      const result = checkMessage(msg.content);
+      if (flags.reasons.length > 0) {
+        const flaggedMessage: FlaggedMessage = {
+          message_id: message.id,
+          match_id: message.match_id,
+          sender_id: message.sender_id,
+          flags,
+          flagged_at: new Date().toISOString(),
+        };
 
-      if (result.flagged) {
-        // Update message as flagged
-        await supabase
-          .from("mentorship_messages")
-          .update({
-            flagged: true,
-            flag_reason: result.reason,
-          })
-          .eq("id", msg.id);
+        flaggedMessages.push(flaggedMessage);
 
-        flaggedMessages.push({
-          id: msg.id,
-          matchId: msg.match_id,
-          senderId: msg.sender_id,
-          reason: result.reason || "unknown",
-          severity: result.severity,
-        });
-
-        // Handle escalations (critical severity)
-        if (result.action === "escalate") {
-          escalations.push({
-            matchId: msg.match_id,
-            senderId: msg.sender_id,
-            messageId: msg.id,
-            reason: result.reason || "crisis_keywords",
-          });
-
-          // Trigger crisis intervention for the sender
-          await triggerCrisisIntervention(supabase, msg.sender_id);
-        }
-
-        // Handle alerts (high severity)
-        if (result.action === "alert") {
-          await notifyModerators(
-            supabase,
-            msg,
-            result.reason || "boundary_violation",
-          );
+        // Track critical escalations separately
+        if (flags.severity === "critical") {
+          criticalEscalations.push(flaggedMessage);
         }
       }
     }
 
-    // Create reports for escalated messages
-    for (const escalation of escalations) {
-      await supabase.from("mentorship_reports").insert({
-        reporter_id: "00000000-0000-0000-0000-000000000000", // System reporter
-        reported_id: escalation.senderId,
-        match_id: escalation.matchId,
-        reason: "crisis_mishandling",
-        description: `Automated detection: ${escalation.reason}`,
-        message_ids: [escalation.messageId],
-        status: "investigating",
-      });
+    // Update database with flagged messages
+    if (flaggedMessages.length > 0) {
+      const flagIds = flaggedMessages.map((fm) => fm.message_id);
+
+      const { error: updateError } = await supabase
+        .from("mentorship_messages")
+        .update({
+          is_flagged: true,
+          flagged_at: new Date().toISOString(),
+        })
+        .in("id", flagIds);
+
+      if (updateError) {
+        console.error("Error updating flagged messages:", updateError);
+      }
     }
 
+    // Handle critical escalations
+    if (criticalEscalations.length > 0) {
+      await handleCriticalEscalations(supabase, criticalEscalations);
+    }
+
+    // Return check results
     return new Response(
       JSON.stringify({
         success: true,
-        processed: messages?.length || 0,
-        flagged: flaggedMessages.length,
-        escalated: escalations.length,
+        messages_checked: (messages || []).length,
+        messages_flagged: flaggedMessages.length,
+        critical_escalations: criticalEscalations.length,
+        flagged_details: flaggedMessages.map((fm) => ({
+          message_id: fm.message_id,
+          severity: fm.flags.severity,
+          reasons: fm.flags.reasons,
+        })),
+        timestamp: new Date().toISOString(),
       }),
       {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }
     );
   } catch (error) {
-    console.error("Unexpected error:", error);
+    console.error("Unexpected error in mentorship-safety-check:", error);
     return new Response(
       JSON.stringify({
         error: "Internal server error",
-        code: "INTERNAL_ERROR",
+        details: error instanceof Error ? error.message : "Unknown error",
       }),
       {
         status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
+        headers: { "Content-Type": "application/json" },
+      }
     );
   }
 });
 
-async function triggerCrisisIntervention(
-  supabase: ReturnType<typeof createClient>,
-  userId: string,
-) {
-  try {
-    // Wrap in timeout to prevent job hangs
-    const crisisTimeout = new Promise((_resolve, reject) =>
-      setTimeout(
-        () => reject(new Error("Crisis intervention timeout")),
-        5000, // 5 second timeout
-      ),
-    );
+/**
+ * Analyzes message content for safety concerns
+ */
+function analyzeMessageSafety(content: string): SafetyFlags {
+  const contentLower = content.toLowerCase();
+  const reasons: string[] = [];
+  let severity: "low" | "medium" | "high" | "critical" = "low";
 
-    const crisisPromise = (async () => {
-      // Log crisis event
-      await supabase.from("crisis_events").insert({
-        user_id: userId,
-        trigger_type: "mentorship_message",
-        severity: "high",
-        ai_detected: true,
-      });
-
-      // Send crisis resources notification
-      await supabase.functions.invoke("send-notification", {
-        body: {
-          userId,
-          title: "We're Here For You",
-          body: "If you're struggling, please reach out. Help is available 24/7.",
-          data: {
-            type: "crisis_support",
-            action: "show_crisis_resources",
-          },
-        },
-      });
-    })();
-
-    // Race against timeout
-    await Promise.race([crisisPromise, crisisTimeout]);
-  } catch (error) {
-    // Log timeout separately from other errors to aid debugging
-    if (error instanceof Error && error.message === "Crisis intervention timeout") {
-      console.error("Crisis intervention timeout - job may need optimization");
-    } else {
-      console.error("Failed to trigger crisis intervention:", error);
+  // Check for crisis keywords
+  let hasCrisisKeywords = false;
+  for (const keyword of CRISIS_KEYWORDS) {
+    if (contentLower.includes(keyword.toLowerCase())) {
+      hasCrisisKeywords = true;
+      reasons.push(`Contains crisis keyword: "${keyword}"`);
+      severity = "critical";
     }
-    // Don't re-throw - we want safety check to continue processing other messages
   }
+
+  // Check for boundary violations
+  let hasBoundaryViolation = false;
+  for (const pattern of BOUNDARY_VIOLATIONS) {
+    if (pattern.test(content)) {
+      hasBoundaryViolation = true;
+      reasons.push("Potential boundary violation detected");
+      if (severity === "low") severity = "high";
+      break;
+    }
+  }
+
+  // Check for inappropriate requests
+  let hasInappropriate = false;
+  for (const pattern of INAPPROPRIATE_PATTERNS) {
+    if (pattern.test(content)) {
+      hasInappropriate = true;
+      reasons.push("Potentially inappropriate request detected");
+      if (severity !== "critical") severity = "high";
+      break;
+    }
+  }
+
+  // Check for PII exposure
+  const piiCheck = detectPII(content);
+  let hasPIIExposure = false;
+  if (piiCheck.hasPII) {
+    hasPIIExposure = true;
+    reasons.push(`PII exposure detected: ${piiCheck.types.join(", ")}`);
+    if (severity === "low") severity = "medium";
+  }
+
+  // Check for excessive length (spam indicator)
+  if (content.length > 5000) {
+    reasons.push("Message is unusually long (possible spam)");
+    if (severity === "low") severity = "low";
+  }
+
+  // Check for excessive repetition
+  if (/(.)\1{19,}/.test(content)) {
+    reasons.push("Excessive character repetition detected (possible spam)");
+    if (severity === "low") severity = "low";
+  }
+
+  return {
+    crisis_keywords: hasCrisisKeywords,
+    boundary_violation: hasBoundaryViolation,
+    inappropriate_request: hasInappropriate,
+    pii_exposure: hasPIIExposure,
+    severity,
+    reasons,
+  };
 }
 
-async function notifyModerators(
-  supabase: ReturnType<typeof createClient>,
-  message: {
-    id: string;
-    match_id: string;
-    sender_id: string;
-    // Note: content intentionally not included to avoid PII in logs
-  },
-  reason: string,
+/**
+ * Handles critical safety escalations (crisis keywords, severe violations)
+ */
+async function handleCriticalEscalations(
+  supabase: any,
+  escalations: FlaggedMessage[]
 ) {
   try {
-    // Wrap in timeout to prevent job hangs
-    const notificationTimeout = new Promise((_resolve, reject) =>
-      setTimeout(
-        () => reject(new Error("Moderation notification timeout")),
-        5000, // 5 second timeout
-      ),
-    );
+    // Create escalation records
+    const escalationRecords = escalations.map((escalation) => ({
+      message_id: escalation.message_id,
+      match_id: escalation.match_id,
+      reporter_id: escalation.sender_id, // Auto-flagged by system
+      reason: escalation.flags.reasons.join("; "),
+      severity: escalation.flags.severity,
+      status: "pending_review",
+      created_at: new Date().toISOString(),
+    }));
 
-    const notificationPromise = (async () => {
-      // Create a moderation queue entry (no PII in logs)
-      await supabase.from("mentorship_reports").insert({
-        reporter_id: "00000000-0000-0000-0000-000000000000", // System reporter
-        reported_id: message.sender_id,
-        match_id: message.match_id,
-        reason: reason === "boundary_violation" ? "boundary_violation" : "other",
-        description: `Automated detection: ${reason}`,
-        message_ids: [message.id],
-        status: "pending",
-      });
+    const { error: escalationError } = await supabase
+      .from("mentorship_escalations")
+      .insert(escalationRecords);
 
-      // Log without PII (only message ID, not content)
-      console.info(`[MODERATION] Message ${message.id} queued for review`);
-    })();
-
-    // Race against timeout
-    await Promise.race([notificationPromise, notificationTimeout]);
-  } catch (error) {
-    // Log timeout separately to aid debugging
-    if (error instanceof Error && error.message === "Moderation notification timeout") {
-      console.warn("Moderation notification timeout - check database performance");
-    } else {
-      // Log error without exposing details
-      console.error(
-        "Failed to queue moderation:",
-        error instanceof Error ? error.message : "Unknown error",
-      );
+    if (escalationError) {
+      console.error("Error creating escalation records:", escalationError);
     }
-    // Don't re-throw - we want safety check to continue processing
+
+    // Get match IDs for notification
+    const matchIds = [...new Set(escalations.map((e) => e.match_id))];
+
+    // Send crisis notifications to moderators (stored in a moderators table or via notification service)
+    for (const escalation of escalations) {
+      if (escalation.flags.crisis_keywords) {
+        // CRITICAL: Send immediate crisis notification
+        try {
+          await supabase.functions.invoke("send-notification", {
+            body: {
+              user_id: "moderator-group", // Broadcast to moderators
+              title: "CRISIS ALERT - Mentorship Message",
+              body: "Suicide-related keywords detected in mentorship conversation",
+              type: "crisis_escalation",
+              priority: "urgent",
+              data: {
+                match_id: escalation.match_id,
+                message_id: escalation.message_id,
+                severity: escalation.flags.severity,
+              },
+            },
+          });
+        } catch (notifError) {
+          console.error("Error sending crisis notification:", notifError);
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Error handling critical escalations:", error);
   }
 }

@@ -27,10 +27,10 @@ final class VoiceAudioPlayback {
     private let noiseFloorDb: Float = -60.0
     private let ceilingDb: Float = -10.0
 
-    // Echo suppression: brief cooldown after playback to filter residual echo
-    // iOS voiceChat mode provides AEC, so we only need a short cooldown
+    // Echo suppression: cooldown after playback to filter residual echo
+    // iOS voiceChat mode provides AEC, but we need additional cooldown for speaker echo
     private(set) var lastPlaybackEndTime: Date?
-    let echoCooldownSeconds: TimeInterval = 0.3
+    let echoCooldownSeconds: TimeInterval = 0.6  // Increased from 0.3 to prevent echo pickup
 
     // Callbacks
     var onPlaybackStart: (() -> Void)?

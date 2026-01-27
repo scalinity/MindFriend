@@ -2,7 +2,7 @@
 // Nightly cron job to update user_efficacy_profiles from intervention_efficacy data
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { createLogger, generateRequestId } from "../_shared/logger.ts";
 
 serve(async (req) => {

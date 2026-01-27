@@ -20,6 +20,38 @@ final class InterventionNotificationManagerTests: XCTestCase {
         manager = nil
     }
 
+    // MARK: - Test Helpers
+
+    private func makeMicroMomentTemplate(
+        id: String = "test-123",
+        name: String = "Test Moment",
+        type: MicroMomentType = .breathing,
+        title: String = "Calm Breath",
+        description: String? = "A quick breathing exercise",
+        durationSeconds: Int = 60
+    ) -> MicroMomentTemplate {
+        MicroMomentTemplate(
+            id: id,
+            name: name,
+            slug: name.lowercased().replacingOccurrences(of: " ", with: "-"),
+            type: type,
+            title: title,
+            description: description,
+            durationSeconds: durationSeconds,
+            instructions: [],
+            animationType: nil,
+            audioUrl: nil,
+            hapticPattern: nil,
+            suggestedContexts: nil,
+            energyEffect: nil,
+            isPremium: false,
+            isActive: true,
+            sortOrder: 0,
+            createdAt: "2026-01-25T00:00:00Z",
+            updatedAt: "2026-01-25T00:00:00Z"
+        )
+    }
+
     // MARK: - Permission Tests
 
     func testHasNotificationPermissionWhenNotDetermined() async {
@@ -32,18 +64,7 @@ final class InterventionNotificationManagerTests: XCTestCase {
     // MARK: - Notification Content Tests
 
     func testDeliverInterventionCreatesNotificationWithCorrectContent() async throws {
-        let intervention = MicroMomentTemplate(
-            id: "test-123",
-            title: "Calm Breath",
-            description: "A quick breathing exercise",
-            type: .breathing,
-            durationSeconds: 60,
-            instructionSteps: [],
-            audioUrl: nil,
-            category: "stress",
-            tags: []
-        )
-
+        let intervention = makeMicroMomentTemplate()
         let context = "You have a meeting in 45 minutes"
         let deliveryId = UUID()
 
@@ -58,16 +79,12 @@ final class InterventionNotificationManagerTests: XCTestCase {
     }
 
     func testScheduleInterventionForFuture() async throws {
-        let intervention = MicroMomentTemplate(
+        let intervention = makeMicroMomentTemplate(
             id: "test-456",
-            title: "Grounding Exercise",
-            description: "5-4-3-2-1 technique",
+            name: "Grounding Exercise",
             type: .grounding,
-            durationSeconds: 120,
-            instructionSteps: [],
-            audioUrl: nil,
-            category: "anxiety",
-            tags: []
+            title: "5-4-3-2-1 technique",
+            durationSeconds: 120
         )
 
         let scheduledDate = Date().addingTimeInterval(60 * 60) // 1 hour from now
@@ -199,92 +216,27 @@ final class InterventionNotificationManagerTests: XCTestCase {
         XCTAssertEqual(pendingCount, 0)
     }
 
-    // MARK: - Icon Mapping Tests
+    // MARK: - Type Tests
 
-    func testIconForBreathingType() {
-        let intervention = MicroMomentTemplate(
-            id: "1",
-            title: "Test",
-            description: "",
-            type: .breathing,
-            durationSeconds: 60,
-            instructionSteps: [],
-            audioUrl: nil,
-            category: "",
-            tags: []
-        )
-
-        // Verify the type exists (icon mapping is private, but we can infer it works if delivery doesn't crash)
+    func testBreathingType() {
+        let intervention = makeMicroMomentTemplate(type: .breathing)
         XCTAssertEqual(intervention.type, .breathing)
     }
 
-    func testIconForGroundingType() {
-        let intervention = MicroMomentTemplate(
-            id: "2",
-            title: "Test",
-            description: "",
-            type: .grounding,
-            durationSeconds: 120,
-            instructionSteps: [],
-            audioUrl: nil,
-            category: "",
-            tags: []
-        )
-
+    func testGroundingType() {
+        let intervention = makeMicroMomentTemplate(type: .grounding)
         XCTAssertEqual(intervention.type, .grounding)
     }
 
-    // MARK: - Duration Formatting Tests
+    // MARK: - Duration Tests
 
-    func testFormatDurationUnderMinute() {
-        // Testing via intervention content which uses formatDuration internally
-        let intervention = MicroMomentTemplate(
-            id: "3",
-            title: "Quick Break",
-            description: "",
-            type: .checkIn,
-            durationSeconds: 45, // Should show "45 seconds"
-            instructionSteps: [],
-            audioUrl: nil,
-            category: "",
-            tags: []
-        )
-
+    func testDurationUnderMinute() {
+        let intervention = makeMicroMomentTemplate(durationSeconds: 45)
         XCTAssertEqual(intervention.durationSeconds, 45)
     }
 
-    func testFormatDurationInMinutes() {
-        let intervention = MicroMomentTemplate(
-            id: "4",
-            title: "Meditation",
-            description: "",
-            type: .breathing,
-            durationSeconds: 180, // Should show "3 min"
-            instructionSteps: [],
-            audioUrl: nil,
-            category: "",
-            tags: []
-        )
-
+    func testDurationInMinutes() {
+        let intervention = makeMicroMomentTemplate(durationSeconds: 180)
         XCTAssertEqual(intervention.durationSeconds, 180)
-    }
-}
-
-// MARK: - Mock Supabase Client
-
-class MockSupabaseClient {
-    var functionCallCount = 0
-    var mockFunctionResponse: String = "{}"
-    var shouldFailFunctionCall = false
-
-    func invoke<T: Decodable>(_ functionName: String, options: Any) async throws -> T {
-        functionCallCount += 1
-
-        if shouldFailFunctionCall {
-            throw NSError(domain: "MockError", code: 400, userInfo: ["message": mockFunctionResponse])
-        }
-
-        let data = mockFunctionResponse.data(using: .utf8)!
-        return try JSONDecoder().decode(T.self, from: data)
     }
 }

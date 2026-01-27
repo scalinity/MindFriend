@@ -177,7 +177,7 @@ final class AdherenceCalculatorTests: XCTestCase {
         let correlation = sut.calculateMoodCorrelation(medicationLogs: medicationLogs, moodLogs: moodLogs)
 
         // Then
-        XCTAssertGreater(correlation.averageMoodWhenAdherent, 0)
+        XCTAssertGreaterThan(correlation.averageMoodWhenAdherent, 0)
         XCTAssertEqual(correlation.adherentDays, 3)
         XCTAssertEqual(correlation.nonAdherentDays, 0)
     }
@@ -197,7 +197,7 @@ final class AdherenceCalculatorTests: XCTestCase {
         let correlation = sut.calculateMoodCorrelation(medicationLogs: medicationLogs, moodLogs: moodLogs)
 
         // Then
-        XCTAssertGreater(correlation.averageMoodWhenNotAdherent, 0)
+        XCTAssertGreaterThan(correlation.averageMoodWhenNotAdherent, 0)
         XCTAssertEqual(correlation.nonAdherentDays, 2)
         XCTAssertEqual(correlation.adherentDays, 0)
     }
@@ -219,7 +219,7 @@ final class AdherenceCalculatorTests: XCTestCase {
         let correlation = sut.calculateMoodCorrelation(medicationLogs: medicationLogs, moodLogs: moodLogs)
 
         // Then
-        XCTAssertGreater(correlation.averageMoodWhenAdherent, correlation.averageMoodWhenNotAdherent)
+        XCTAssertGreaterThan(correlation.averageMoodWhenAdherent, correlation.averageMoodWhenNotAdherent)
         XCTAssertEqual(correlation.moodDifference, correlation.averageMoodWhenAdherent - correlation.averageMoodWhenNotAdherent)
         XCTAssert(correlation.insight.contains("higher"))
     }
@@ -296,12 +296,13 @@ final class AdherenceCalculatorTests: XCTestCase {
 
     private func createMood(score: Int) -> MoodEntry {
         MoodEntry(
-            id: UUID(),
-            userId: UUID(),
+            id: UUID().uuidString,
+            localDate: ISO8601DateFormatter().string(from: Date()),
             moodScore: score,
-            title: "Test",
-            notes: nil,
-            activities: [],
+            anxietyScore: nil,
+            energyScore: nil,
+            note: nil,
+            source: .manual,
             createdAt: Date()
         )
     }

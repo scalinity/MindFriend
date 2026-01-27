@@ -374,28 +374,28 @@ private struct DataInfoSheet: View {
         NavigationStack {
             List {
                 Section {
-                    InfoRow(
+                    IconInfoRow(
                         icon: "lock.shield.fill",
                         iconColor: .green,
                         title: "End-to-End Security",
                         description: "Your prediction data is encrypted at rest and in transit."
                     )
 
-                    InfoRow(
+                    IconInfoRow(
                         icon: "person.crop.circle.badge.xmark",
                         iconColor: .blue,
                         title: "No Data Sharing",
                         description: "We never sell or share your personal data with third parties."
                     )
 
-                    InfoRow(
+                    IconInfoRow(
                         icon: "iphone.and.arrow.forward",
                         iconColor: .purple,
                         title: "On-Device Processing",
                         description: "Much of the analysis happens locally on your device."
                     )
 
-                    InfoRow(
+                    IconInfoRow(
                         icon: "trash",
                         iconColor: .red,
                         title: "Right to Delete",
@@ -404,14 +404,14 @@ private struct DataInfoSheet: View {
                 }
 
                 Section {
-                    InfoRow(
+                    IconInfoRow(
                         icon: "chart.line.uptrend.xyaxis",
                         iconColor: .orange,
                         title: "How It Works",
                         description: "We look for patterns in your mood, activity, and health data to predict when you might need support."
                     )
 
-                    InfoRow(
+                    IconInfoRow(
                         icon: "bell.badge",
                         iconColor: .yellow,
                         title: "Proactive Support",
@@ -430,7 +430,7 @@ private struct DataInfoSheet: View {
     }
 }
 
-private struct InfoRow: View {
+private struct IconInfoRow: View {
     let icon: String
     let iconColor: Color
     let title: String

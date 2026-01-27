@@ -162,7 +162,8 @@ final class CalendarTriggerMonitor: CalendarTriggerMonitoring {
 
         // Adjust stress score based on duration
         if !event.isAllDay {
-            let durationMinutes = event.duration / 60
+            let durationSeconds = event.endDate.timeIntervalSince(event.startDate)
+            let durationMinutes = durationSeconds / 60
             if durationMinutes <= CalendarConstants.shortEventThresholdMinutes {
                 // Short events are often more intense
                 stressScore = min(1.0, stressScore + 0.2)

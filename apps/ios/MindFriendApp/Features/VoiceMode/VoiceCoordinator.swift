@@ -11,8 +11,10 @@ final class VoiceCoordinator: ObservableObject, VoiceServiceDelegate {
     var onError: ((String) -> Void)?
     var onQuotaExceeded: (() -> Void)?
     var onTranscriptUpdate: ((String) -> Void)?
+    var onUserTranscriptUpdate: ((String) -> Void)?  // User's speech transcribed
     var onAssistantSpeechStart: ((String) -> Void)?
     var onAssistantSpeechEnd: (() -> Void)?
+    var onUserSpeechEnd: (() -> Void)?  // User finished speaking
 
     // Callback to send events to the state machine
     var onStateEvent: ((VoiceStateMachine.Event) -> Void)?
@@ -40,6 +42,7 @@ final class VoiceCoordinator: ObservableObject, VoiceServiceDelegate {
         case .userSpeechEnded:
             onStateEvent?(.speechEnd)
             onStateEvent?(.serverThinking)
+            onUserSpeechEnd?()  // Notify that user finished speaking
 
         case .assistantSpeechStarted:
             // Capture baseline transcript for this speech segment
@@ -61,6 +64,9 @@ final class VoiceCoordinator: ObservableObject, VoiceServiceDelegate {
 
         case .transcriptUpdated(let text):
             onTranscriptUpdate?(text)
+
+        case .userTranscriptUpdated(let text):
+            onUserTranscriptUpdate?(text)
 
         case .quotaUpdated:
             // Quota display is bound directly to service property

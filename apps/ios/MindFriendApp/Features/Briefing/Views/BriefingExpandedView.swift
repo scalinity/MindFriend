@@ -11,7 +11,29 @@ import SwiftUI
 /// Full briefing view presented as a sheet
 struct BriefingExpandedView: View {
     @ObservedObject var viewModel: DailyBriefingViewModel
+    @EnvironmentObject var appState: AppState
+    @EnvironmentObject var container: DependencyContainer
     @Environment(\.dismiss) var dismiss
+
+    /// Dynamic greeting using current user name (not cached briefing name)
+    private var currentGreeting: String {
+        let name = appState.currentUser?.displayName ?? "Friend"
+        return "Hello, \(name)!"
+    }
+
+    /// Current streak from user stats
+    private var currentStreak: Int {
+        appState.currentStreak
+    }
+
+    /// Recent badges (earned in last 7 days)
+    private var recentBadges: [UserBadgeProgress] {
+        let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+        return container.achievementService.earnedBadges.filter { badge in
+            guard let earnedAt = badge.earnedAt else { return false }
+            return earnedAt >= sevenDaysAgo
+        }.sorted { ($0.earnedAt ?? .distantPast) > ($1.earnedAt ?? .distantPast) }
+    }
 
     var body: some View {
         NavigationView {
@@ -54,6 +76,11 @@ struct BriefingExpandedView: View {
             // Greeting Section
             greetingSection(briefing)
 
+            // Streak Section (show if active streak)
+            if currentStreak > 0 {
+                streakSection
+            }
+
             // Mood Prediction Section
             if briefing.predictedMood != nil {
                 moodSection(briefing)
@@ -62,6 +89,11 @@ struct BriefingExpandedView: View {
             // Quest Section
             if briefing.questTitle != nil {
                 questSection(briefing)
+            }
+
+            // Recent Achievements Section
+            if !recentBadges.isEmpty {
+                achievementsSection
             }
 
             // Calendar Section
@@ -79,7 +111,7 @@ struct BriefingExpandedView: View {
 
     private func greetingSection(_ briefing: DailyBriefing) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(briefing.greeting)
+            Text(currentGreeting)
                 .font(.title2)
                 .fontWeight(.semibold)
 
@@ -121,8 +153,16 @@ struct BriefingExpandedView: View {
 
     private func questSection(_ briefing: DailyBriefing) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Today's Quest")
-                .font(.headline)
+            HStack {
+                Text("Today's Quest")
+                    .font(.headline)
+                Spacer()
+                if appState.todayQuest?.status == .completed {
+                    Label("Done", systemImage: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundColor(.green)
+                }
+            }
 
             if let questTitle = briefing.questTitle {
                 HStack {
@@ -187,6 +227,74 @@ struct BriefingExpandedView: View {
             Text(briefing.suggestion)
                 .font(.subheadline)
                 .foregroundColor(.primary)
+        }
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(12)
+    }
+
+    // MARK: - Streak Section
+
+    private var streakSection: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "flame.fill")
+                .font(.title2)
+                .foregroundColor(.orange)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("You're on a \(currentStreak)-day streak!")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+
+                Text("Keep it going!")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Spacer()
+        }
+        .padding()
+        .background(
+            LinearGradient(
+                colors: [.orange.opacity(0.1), .yellow.opacity(0.1)],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        )
+        .cornerRadius(12)
+    }
+
+    // MARK: - Achievements Section
+
+    private var achievementsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Recent Achievements")
+                .font(.headline)
+
+            ForEach(recentBadges.prefix(3)) { badgeProgress in
+                HStack(spacing: 12) {
+                    Image(systemName: "medal.fill")
+                        .foregroundColor(.yellow)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(badgeProgress.badge.name)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+
+                        Text(badgeProgress.badge.description)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer()
+
+                    Text("+\(badgeProgress.badge.xpReward) XP")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.blue)
+                }
+            }
         }
         .padding()
         .background(Color(.secondarySystemBackground))

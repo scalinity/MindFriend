@@ -62,7 +62,9 @@ final class DailyBriefingViewModel: ObservableObject {
             // No cached briefing, generate new one
             await generateBriefing()
         } catch {
-            self.error = error.localizedDescription
+            print("DailyBriefing: failed to load — \(error)")
+            self.briefing = nil
+            self.error = "Load failed: \(error.localizedDescription)"
             isLoading = false
         }
     }
@@ -136,7 +138,9 @@ final class DailyBriefingViewModel: ObservableObject {
             self.briefing = newBriefing
             isLoading = false
         } catch {
-            self.error = error.localizedDescription
+            print("DailyBriefing: failed to generate — \(error)")
+            self.briefing = nil
+            self.error = "Generate failed: \(error.localizedDescription)"
             isLoading = false
         }
     }

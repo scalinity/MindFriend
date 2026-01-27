@@ -251,7 +251,7 @@ class GenerateExerciseViewModel: ObservableObject {
     init(dataService: SupabaseDataService, container: DependencyContainer) {
         self.dataService = dataService
         self.container = container
-        loadQuotaStatus()
+        Task { await loadQuotaStatus() }
     }
 
     func generateExercise() async {
@@ -302,10 +302,34 @@ class GenerateExerciseViewModel: ObservableObject {
         }
     }
 
-    private func loadQuotaStatus() {
-        // TODO: Load actual quota from backend
-        // For now, use placeholder
-        quotaStatus = QuotaStatus(used: 0, limit: 3, remaining: 3, isPremium: false)
+    private func loadQuotaStatus() async {
+        do {
+            struct QuotaResponse: Decodable {
+                let used: Int
+                let limit: Int
+                let remaining: Int
+                let isPremium: Bool
+            }
+
+            let response: QuotaResponse = try await container.supabase.functions.invoke(
+                "get-exercise-quota",
+                options: .init()
+            )
+
+            await MainActor.run {
+                quotaStatus = QuotaStatus(
+                    used: response.used,
+                    limit: response.limit,
+                    remaining: response.remaining,
+                    isPremium: response.isPremium
+                )
+            }
+        } catch {
+            // Fall back to default quota on error
+            await MainActor.run {
+                quotaStatus = QuotaStatus(used: 0, limit: 3, remaining: 3, isPremium: false)
+            }
+        }
     }
 }
 
