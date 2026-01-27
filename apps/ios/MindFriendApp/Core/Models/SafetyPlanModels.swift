@@ -197,12 +197,24 @@ struct TrustedContact: Identifiable, Codable, Equatable {
 
     /// Phone number formatted for display
     var formattedPhone: String {
+        // Return as-is if already in international format
+        if phone.hasPrefix("+") { return phone }
         // Simple formatting: add dashes for 10-digit numbers
         let digits = phone.filter { $0.isNumber }
         guard digits.count == 10 else { return phone }
         let start = digits.index(digits.startIndex, offsetBy: 3)
         let middle = digits.index(start, offsetBy: 3)
         return "\(digits[..<start])-\(digits[start..<middle])-\(digits[middle...])"
+    }
+
+    /// Whether the phone number is valid (10+ digits or international format)
+    var isValidPhone: Bool {
+        let digits = phone.filter { $0.isNumber }
+        // Valid if: international format with 10+ digits, or exactly 10 digits
+        if phone.hasPrefix("+") {
+            return digits.count >= 10
+        }
+        return digits.count == 10
     }
 }
 

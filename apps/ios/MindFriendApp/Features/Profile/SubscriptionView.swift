@@ -129,9 +129,9 @@ struct SubscriptionView: View {
 
     private var headerSection: some View {
         VStack(spacing: 12) {
-            Image(systemName: "star.circle.fill")
+            Image(systemName: "crown.fill")
                 .font(.system(size: 60))
-                .foregroundStyle(.yellow)
+                .foregroundStyle(Color(red: 1.0, green: 0.84, blue: 0.0))
 
             Text("MindFriend Premium")
                 .font(.title)
@@ -565,29 +565,29 @@ struct PlanTypeCard: View {
                     .frame(width: 40)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack {
+                    HStack(spacing: 4) {
                         Text(planType.displayName)
                             .font(.headline)
                             .foregroundStyle(.primary)
 
                         if planType == .family {
-                            Text("Best Value")
-                                .font(.caption2)
-                                .fontWeight(.semibold)
-                                .padding(.horizontal, 6)
+                            Text("Best")
+                                .font(.system(size: 9, weight: .semibold))
+                                .padding(.horizontal, 4)
                                 .padding(.vertical, 2)
                                 .background(Color.green)
                                 .foregroundStyle(.white)
-                                .cornerRadius(4)
+                                .cornerRadius(3)
                         }
                     }
 
                     Text(planType.subtitle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
 
-                Spacer()
+                Spacer(minLength: 4)
 
                 // Price display (not for enterprise/gift)
                 if let price = price {
@@ -595,10 +595,13 @@ struct PlanTypeCard: View {
                         Text(price)
                             .font(.system(size: 17, weight: .bold))
                             .foregroundStyle(.primary)
+                            .lineLimit(1)
                         Text(billingPeriod == .monthly ? "/month" : "/year")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
+                    .fixedSize()
                 }
 
                 // Selection indicator
@@ -825,7 +828,7 @@ extension PlanType {
         switch self {
         case .individual: return "For personal use"
         case .couples: return "For 2 people"
-        case .family: return "For up to 6 people"
+        case .family: return "Up to 6 people"
         case .enterprise: return "For organizations"
         case .gift: return "Gift a subscription"
         }

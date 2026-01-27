@@ -57,6 +57,9 @@ enum Tables {
     // Mood tracking
     static let moods = "moods"
 
+    // Ambient preferences
+    static let ambientPreferences = "ambient_preferences"
+
     // Quests (correct table name - not "user_quests")
     static let questTemplates = "quest_templates"
     static let quests = "quests"
@@ -151,6 +154,14 @@ enum Tables {
     // Weekly Insights & Stories
     static let weeklySummaries = "weekly_summaries"
     static let weeklyStories = "weekly_stories"
+
+    // Longitudinal Intelligence
+    static let longitudinalWeeklyStats = "longitudinal_weekly_stats"
+    static let longitudinalMonthlyStats = "longitudinal_monthly_stats"
+    static let longitudinalYearlyStats = "longitudinal_yearly_stats"
+    static let longitudinalPatterns = "longitudinal_patterns"
+    static let longitudinalLifeEvents = "longitudinal_life_events"
+    static let longitudinalReports = "longitudinal_reports"
 }
 
 // MARK: - Database Models (matching Supabase schema)
@@ -538,6 +549,8 @@ struct DBMood: Codable {
     let anxietyScore: Int?
     let energyScore: Int?
     let note: String?
+    let encryptedNote: String?  // Base64-encoded encrypted note
+    let noteEncryptionKeyId: String?  // Key identifier for encryption
     let createdAt: Date?
 
     enum CodingKeys: String, CodingKey {
@@ -548,6 +561,8 @@ struct DBMood: Codable {
         case anxietyScore = "anxiety_score"
         case energyScore = "energy_score"
         case note
+        case encryptedNote = "encrypted_note"
+        case noteEncryptionKeyId = "note_encryption_key_id"
         case createdAt = "created_at"
     }
 }

@@ -41,20 +41,14 @@ struct BadgeEarnedView: View {
                         .scaleEffect(showContent ? 1.0 : 0.5)
                         .opacity(showContent ? 1.0 : 0.0)
 
-                    // Badge
-                    AsyncImage(url: URL(string: badge.iconUrl)) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                    } placeholder: {
-                        Image(systemName: "star.circle.fill")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .foregroundStyle(tierColor)
-                    }
-                    .frame(width: 120, height: 120)
-                    .scaleEffect(showContent ? 1.0 : 0.3)
-                    .rotationEffect(.degrees(showContent ? 0 : -30))
+                    // Badge Icon (using SF Symbols)
+                    Image(systemName: badge.sfSymbolName)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .foregroundStyle(tierColor)
+                        .frame(width: 120, height: 120)
+                        .scaleEffect(showContent ? 1.0 : 0.3)
+                        .rotationEffect(.degrees(showContent ? 0 : -30))
                 }
 
                 // Text

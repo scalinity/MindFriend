@@ -4,6 +4,7 @@ import SwiftUI
 struct SleepDashboardView: View {
     @EnvironmentObject private var dependencies: DependencyContainer
     @StateObject private var viewModel: SleepDashboardViewModel
+    @State private var showManualEntry = false
 
     init() {
         _viewModel = StateObject(wrappedValue: SleepDashboardViewModel())
@@ -57,6 +58,9 @@ struct SleepDashboardView: View {
             }
             .sheet(isPresented: $viewModel.showWindDown) {
                 WindDownRoutineView()
+            }
+            .sheet(isPresented: $showManualEntry) {
+                ManualSleepEntryView(isPresented: $showManualEntry)
             }
             .task {
                 await viewModel.loadData(
@@ -224,7 +228,7 @@ struct SleepDashboardView: View {
                     icon: "bed.double.fill",
                     color: .blue
                 ) {
-                    // TODO: Show manual entry
+                    showManualEntry = true
                 }
 
                 quickActionButton(

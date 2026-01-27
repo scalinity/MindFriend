@@ -3,7 +3,7 @@
 // Retrieves script templates based on filters
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { corsHeaders } from "../_shared/cors.ts";
 
 serve(async (req) => {

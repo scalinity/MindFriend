@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import Functions
 import Supabase
 
 /// Service for managing daily briefings
@@ -14,6 +15,27 @@ actor DailyBriefingService {
     // MARK: - Properties
 
     private let supabase: SupabaseClient
+
+    /// JSON decoder configured for ISO 8601 dates (matching Supabase timestamp format)
+    private static let iso8601Decoder: JSONDecoder = {
+        let decoder = JSONDecoder()
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let whole = ISO8601DateFormatter()
+        whole.formatOptions = [.withInternetDateTime]
+
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let string = try container.decode(String.self)
+            if let date = fractional.date(from: string) { return date }
+            if let date = whole.date(from: string) { return date }
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Invalid date format: \(string)"
+            )
+        }
+        return decoder
+    }()
 
     // MARK: - Initialization
 
@@ -61,11 +83,35 @@ actor DailyBriefingService {
                     "generate-daily-briefing",
                     options: FunctionInvokeOptions(
                         body: request
-                    )
+                    ),
+                    decoder: Self.iso8601Decoder
                 )
 
             return response
+        } catch let error as FunctionsError {
+            // Extract detailed error information from FunctionsError
+            var errorMessage = "Function invoke error"
+            switch error {
+            case .relayError:
+                errorMessage = "Relay error invoking Edge Function"
+            case .httpError(let code, let data):
+                errorMessage = "Edge Function returned status code \(code)"
+                if let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    print("[DailyBriefingService] Error response JSON: \(errorJson)")
+                    if let message = errorJson["message"] as? String {
+                        errorMessage = message
+                    }
+                    if let stack = errorJson["stack"] as? String {
+                        print("[DailyBriefingService] Error stack: \(stack)")
+                    }
+                } else if let errorString = String(data: data, encoding: .utf8) {
+                    print("[DailyBriefingService] Error response raw: \(errorString)")
+                }
+            }
+            print("[DailyBriefingService] FunctionsError: \(error)")
+            throw DailyBriefingError.generationFailed(errorMessage)
         } catch {
+            print("[DailyBriefingService] Unexpected error: \(error)")
             throw DailyBriefingError.generationFailed(error.localizedDescription)
         }
     }

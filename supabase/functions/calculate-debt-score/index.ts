@@ -3,7 +3,7 @@
 // Calculates rolling debts, trends, threshold status, and updates user profiles
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import type {
   Transaction,
   DebtScore,
@@ -31,14 +31,14 @@ serve(async (req) => {
     if (req.method === "GET" || !req.headers.get("Authorization")) {
       const cronSecret = req.headers.get("X-Cron-Secret");
       const expectedSecret = Deno.env.get("CRON_SECRET");
-      
+
       if (!expectedSecret || cronSecret !== expectedSecret) {
         return new Response(JSON.stringify({ error: "Unauthorized" }), {
           status: 401,
           headers: { "Content-Type": "application/json" },
         });
       }
-      
+
       await calculateDebtScoresForAllUsers(supabase);
       return new Response(
         JSON.stringify({
@@ -72,7 +72,7 @@ serve(async (req) => {
 
     // Manual trigger: calculate for specific user and date
     const { user_id, date } = await req.json();
-    
+
     // Authorization check: user can only trigger for themselves
     if (user_id && user_id !== user.id) {
       return new Response(JSON.stringify({ error: "Forbidden" }), {
@@ -87,7 +87,11 @@ serve(async (req) => {
       date || getYesterdayISO(),
     );
     await insertDebtScore(supabase, score);
-    await updateUserProfile(supabase, user_id || user.id, date || getYesterdayISO());
+    await updateUserProfile(
+      supabase,
+      user_id || user.id,
+      date || getYesterdayISO(),
+    );
 
     return new Response(
       JSON.stringify({
@@ -97,11 +101,14 @@ serve(async (req) => {
       { headers: { "Content-Type": "application/json" } },
     );
   } catch (error) {
-    console.error("Error in calculate-debt-score:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    console.error("Error in calculate-debt-score:", error); // Log full error server-side
+    return new Response(
+      JSON.stringify({ error: "An unexpected error occurred" }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
   }
 });
 
@@ -283,7 +290,7 @@ function calculateThresholdStatus(
   profile: UserProfile,
 ): ThresholdStatus {
   const threshold = profile.personal_threshold || -50; // Default -50
-  
+
   // Guard: Prevent division by zero
   const absThreshold = Math.abs(threshold);
   if (absThreshold < 1e-10) {

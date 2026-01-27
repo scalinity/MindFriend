@@ -5,7 +5,7 @@ import {
   assertEquals,
   assertExists,
 } from "https://deno.land/std@0.192.0/testing/asserts.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 // Mock Grok API for testing
 class MockGrokAPI {

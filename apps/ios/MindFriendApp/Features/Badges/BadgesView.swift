@@ -4,16 +4,16 @@ import SwiftUI
 struct BadgesView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
-
-    var earnedBadges: [Badge] {
-        // TODO: Get earned badges from AchievementService
-        []
-    }
+    @State private var earnedBadges: [Badge] = []
+    @State private var isLoading = true
 
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
-                if earnedBadges.isEmpty {
+                if isLoading {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, minHeight: 200)
+                } else if earnedBadges.isEmpty {
                     EmptyBadgesCard()
                 } else {
                     // Stats summary
@@ -27,6 +27,22 @@ struct BadgesView: View {
         }
         .navigationTitle("Badges")
         .background(Color(.systemGroupedBackground))
+        .task {
+            await loadBadges()
+        }
+    }
+
+    private func loadBadges() async {
+        isLoading = true
+        defer { isLoading = false }
+
+        await container.achievementService.loadBadges()
+        await container.achievementService.loadUserBadgeProgress()
+
+        // Map earned badge progress to Badge models
+        earnedBadges = container.achievementService.earnedBadges.compactMap { progress in
+            container.achievementService.badges.first { $0.id == progress.badgeId }
+        }
     }
 }
 

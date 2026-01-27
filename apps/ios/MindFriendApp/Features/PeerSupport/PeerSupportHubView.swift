@@ -132,55 +132,12 @@ struct PeerSupportHubView: View {
     }
 
     // MARK: - Mentorship Section
+    // TODO: Re-enable after fixing Mentorship module
 
     private var mentorshipSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Mentorship")
-                    .font(.headline)
-                Spacer()
-                NavigationLink("Find Mentor") {
-                    MentorshipFindMentorView(supabase: container.supabase)
-                }
-                .font(.subheadline)
-            }
-
-            // Mentorship Profile Management
-            HStack(spacing: 12) {
-                NavigationLink {
-                    MentorshipProfileView(supabase: container.supabase)
-                } label: {
-                    VStack(spacing: 8) {
-                        Image(systemName: "person.text.rectangle")
-                            .font(.title2)
-                            .foregroundStyle(.blue)
-                        Text("Profile")
-                            .font(.caption)
-                            .foregroundStyle(.primary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-                }
-                .buttonStyle(.plain)
-
-                NavigationLink {
-                    MentorshipMatchesView(supabase: container.supabase)
-                } label: {
-                    VStack(spacing: 8) {
-                        Image(systemName: "person.2.circle")
-                            .font(.title2)
-                            .foregroundStyle(.green)
-                        Text("My Matches")
-                            .font(.caption)
-                            .foregroundStyle(.primary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-                }
-                .buttonStyle(.plain)
-            }
+            Text("Mentorship")
+                .font(.headline)
 
             // Existing mentorships (legacy system)
             if service.mentorships.isEmpty {

@@ -295,6 +295,18 @@ struct JoinCircleView: View {
     }
 }
 
+// MARK: - Helper Functions
+
+/// Safely parse circle ID to UUID with logging
+/// Prevents silent data corruption from invalid UUIDs in the database
+private func safeParseCircleUUID(_ idString: String, context: String) -> UUID {
+    guard let uuid = UUID(uuidString: idString) else {
+        print("⚠️ Invalid circle UUID in \(context): \(idString)")
+        return UUID(uuidString: "00000000-0000-0000-0000-000000000000") ?? UUID()
+    }
+    return uuid
+}
+
 struct CircleDetailView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
@@ -340,7 +352,7 @@ struct CircleDetailView: View {
 
                 // Rituals
                 RitualScheduleCard(
-                    circleId: UUID(uuidString: circle.id) ?? UUID(),
+                    circleId: safeParseCircleUUID(circle.id, context: "RitualScheduleCard"),
                     isOwner: circle.role == .owner,
                     onJoinRitual: { ritual in
                         selectedRitual = ritual
@@ -470,7 +482,7 @@ struct CircleDetailView: View {
             )
         }
         .sheet(isPresented: $showCreateRitual) {
-            CreateRitualSheet(circleId: UUID(uuidString: circle.id) ?? UUID()) { ritual in
+            CreateRitualSheet(circleId: safeParseCircleUUID(circle.id, context: "CreateRitualSheet")) { ritual in
                 selectedRitual = ritual
             }
         }

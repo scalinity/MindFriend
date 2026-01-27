@@ -16,6 +16,7 @@ enum VoiceServiceEvent {
     case bargeInTriggered      // User interrupted AI with speech or tap
     case idleDisconnected      // WebSocket closed due to inactivity
     case transcriptUpdated(String)
+    case userTranscriptUpdated(String)  // User's speech transcribed
     case quotaUpdated(Double)
     case emotionDetected(EmotionResult)  // Emotion detected from voice
     case error(VoiceError)
@@ -70,6 +71,7 @@ protocol VoiceServiceProtocol: ObservableObject {
     var isUserSpeaking: Bool { get }
     var isIdleDisconnected: Bool { get }  // WebSocket closed due to idle timeout
     var transcribedText: String { get }
+    var userTranscribedText: String { get }  // User's transcribed speech
     var minutesRemaining: Double { get }
     var currentVoice: GrokVoice { get }
     var availableVoices: [GrokVoice] { get }
@@ -133,6 +135,7 @@ final class MockVoiceService: VoiceServiceProtocol {
     @Published var isUserSpeaking = false
     @Published var isIdleDisconnected = false
     @Published var transcribedText = ""
+    @Published var userTranscribedText: String = ""  // User's transcribed speech
     @Published var minutesRemaining: Double = 10.0
     @Published var currentVoice: GrokVoice = .ara
     @Published var availableVoices: [GrokVoice] = [.ara]

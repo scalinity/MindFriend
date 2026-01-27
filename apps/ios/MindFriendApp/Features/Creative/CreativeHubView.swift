@@ -43,13 +43,19 @@ struct CreativeHubView: View {
                 .accessibilityLabel("Gallery")
             }
         }
-        .sheet(isPresented: $showArtGenerator) {
+        .sheet(isPresented: $showArtGenerator, onDismiss: {
+            Task { await loadData() }
+        }) {
             ArtGeneratorView()
         }
-        .sheet(isPresented: $showVoiceRecorder) {
+        .sheet(isPresented: $showVoiceRecorder, onDismiss: {
+            Task { await loadData() }
+        }) {
             VoiceJournalRecorderView()
         }
-        .fullScreenCover(isPresented: $showDrawingCanvas) {
+        .fullScreenCover(isPresented: $showDrawingCanvas, onDismiss: {
+            Task { await loadData() }
+        }) {
             DrawingCanvasView()
         }
         .task {
@@ -191,25 +197,29 @@ struct QuotaCard: View {
     let quota: CreativeQuota
 
     var body: some View {
-        HStack(spacing: 20) {
+        HStack(spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
                 Label("\(quota.aiArtLimit - quota.aiArtCount) AI Art", systemImage: "wand.and.stars")
-                    .font(.caption)
-                Text("remaining today")
+                    .font(.caption.bold())
+                    .lineLimit(1)
+                Text("left today")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
+            .fixedSize(horizontal: true, vertical: false)
 
             Divider()
                 .frame(height: 30)
 
             VStack(alignment: .leading, spacing: 4) {
                 Label("\(quota.voiceMinutesLimit - quota.voiceMinutesUsed) min Voice", systemImage: "mic")
-                    .font(.caption)
-                Text("remaining today")
+                    .font(.caption.bold())
+                    .lineLimit(1)
+                Text("left today")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
+            .fixedSize(horizontal: true, vertical: false)
 
             Spacer()
 
@@ -225,6 +235,7 @@ struct QuotaCard: View {
                         .foregroundStyle(.white)
                         .cornerRadius(8)
                 }
+                .fixedSize()
             }
         }
         .padding()

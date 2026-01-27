@@ -44,6 +44,7 @@ struct HomeView: View {
     // Life Transition Pathways state
     @State private var activePathways: [UserPathway] = []
     @State private var showPathwaySelection = false
+    @State private var selectedPathwayId: String?
 
     /// Background color adapts to mood context
     private var adaptiveBackgroundColor: Color {
@@ -57,11 +58,13 @@ struct HomeView: View {
         }
         // Fallback to AchievementService data if available
         if let exp = container.achievementService.userExperience {
+            // Calculate threshold for next level (not remaining XP)
+            let nextLevelThreshold = UserLevel.xpThresholds[min(exp.currentLevel, 49)]
             return UserLevel(
                 level: exp.currentLevel,
                 title: levelTitle(for: exp.currentLevel),
                 currentXP: exp.totalXp,
-                nextLevelXP: exp.xpToNextLevel,
+                nextLevelXP: nextLevelThreshold,
                 xpThisWeek: exp.weeklyXp
             )
         }
@@ -140,12 +143,135 @@ struct HomeView: View {
                         timeOfDay: homeContext?.timeOfDay ?? .current
                     )
 
+                    // Level progress (top for visibility)
+                    LevelProgressView(userLevel: displayLevel)
+
+                    // Mood check-in prompt (adapted based on time)
+                    if let mood = appState.todayMood {
+                        TodayMoodCard(mood: mood)
+                    } else {
+                        AdaptiveMoodPromptCard(timeOfDay: homeContext?.timeOfDay ?? .current)
+                    }
+
+                    // Today's quest - with proper state handling
+                    questCard
+
+                    // Capacity indicator (difficulty adjustment)
+                    CapacityIndicator()
+                        .environmentObject(container.difficultyService)
+
+                    // Streak with shields (moved above briefing for visibility)
+                    StreakCardWithShields(
+                        currentStreak: appState.currentStreak,
+                        longestStreak: appState.currentUser?.stats?.longestStreakDays ?? 0,
+                        shieldsRemaining: shieldStatus?.shieldsRemaining ?? appState.currentUser?.stats?.streakShieldsRemaining ?? 1,
+                        shieldsMax: shieldStatus?.shieldsMax ?? appState.currentUser?.stats?.streakShieldsMax ?? 1,
+                        recoveryAvailable: shieldStatus?.recoveryQuestAvailable ?? false,
+                        streakBeforeBreak: shieldStatus?.streakBeforeBreak,
+                        recoveryExpiresAt: shieldStatus?.recoveryQuestExpiresAt,
+                        onStartRecovery: startRecoveryQuest
+                    )
+
+                    // Grace period banner (48-hour window to complete missed quest)
+                    if let shieldStatus = shieldStatus,
+                       shieldStatus.recoveryQuestAvailable,
+                       let expiresAt = shieldStatus.recoveryQuestExpiresAt {
+                        GracePeriodBanner(expiresAt: expiresAt) {
+                            startRecoveryQuest()
+                        }
+                    }
+
                     // Daily Briefing Card (F009)
                     DailyBriefingCard(viewModel: container.dailyBriefingViewModel)
-                        .padding(.horizontal)
                         .task {
                             await container.dailyBriefingViewModel.loadTodaysBriefing()
                         }
+
+                    // Wellbeing Debt Card (N006 - real data)
+                    WellbeingDebtCard()
+                        .environmentObject(container)
+
+                    // Sleep Dashboard Card (F012)
+                    NavigationLink {
+                        SleepDashboardView()
+                            .environmentObject(container)
+                    } label: {
+                        SleepHomeCard()
+                    }
+
+                    // Mood Prediction Card (shows today's AI prediction)
+                    if let prediction = todayPrediction {
+                        MoodPredictionCard(prediction: prediction) {
+                            // If there's a pending intervention, show it
+                            if pendingMoodIntervention != nil {
+                                showInterventionSheet = true
+                            }
+                        }
+                    }
+
+                    // Supportive message (mood-adaptive)
+                    if let message = homeContext?.supportiveMessage {
+                        SupportiveMessageCard(
+                            message: message,
+                            moodContext: homeContext?.moodContext ?? .neutral,
+                            showCrisisSupport: homeContext?.shouldShowCrisisSupport ?? false,
+                            onCrisisTap: { appState.showCrisisResources = true }
+                        )
+                    }
+
+                    // Active event (if participating)
+                    if let event = activeEvent {
+                        SeasonalEventCard(
+                            event: event,
+                            participation: eventParticipation,
+                            onJoin: { joinEvent(event) }
+                        )
+                    }
+
+                    // Contextual quick actions (mood-adaptive)
+                    if let actions = homeContext?.recommendedActions, !actions.isEmpty {
+                        ContextualActionsRow(actions: actions)
+                    }
+
+                    if let plan = appState.todayActionPlan,
+                       !appState.todayActionPlanItems.isEmpty,
+                       plan.isActive {
+                        ActionPlanHomeCard(plan: plan, items: appState.todayActionPlanItems)
+                    }
+
+                    // Quest Arc progress card
+                    if let arc = activeQuestArc {
+                        QuestArcProgressCard(userArc: arc) {
+                            showQuestArcCatalog = true
+                        }
+                    } else {
+                        NoActiveArcCard {
+                            showQuestArcCatalog = true
+                        }
+                    }
+
+                    // Buddy widget or invite prompt
+                    if let buddyData = buddyWidgetData {
+                        BuddyWidget(
+                            buddyData: buddyData,
+                            onSendEncouragement: sendBuddyEncouragement
+                        )
+                    } else {
+                        InviteBuddyPrompt(onTap: { showInviteBuddySheet = true })
+                    }
+
+                    // Weekly Insights
+                    InsightsPreviewCard(insight: weeklyInsight)
+
+                    // Sensory Regulation Toolkit
+                    SensoryToolkitCard()
+
+                    // Progress Stories - Weekly Recap
+                    ProgressStoryPreviewCard()
+
+                    // Insight Lab - 7-day experiments
+                    InsightLabHomeCard()
+                        .environmentObject(container.insightLabService)
 
                     // Life Transition Pathways (F015)
                     if !activePathways.isEmpty {
@@ -160,14 +286,11 @@ struct HomeView: View {
                                 .font(.subheadline)
                                 .foregroundColor(.blue)
                             }
-                            .padding(.horizontal)
-                            
+
                             ForEach(activePathways) { pathway in
                                 ActivePathwayCard(userPathway: pathway) {
-                                    // Navigate to PathwayDashboardView
-                                    // TODO: Add navigation
+                                    selectedPathwayId = pathway.id.uuidString
                                 }
-                                .padding(.horizontal)
                             }
                         }
                     } else {
@@ -197,136 +320,7 @@ struct HomeView: View {
                             .cornerRadius(12)
                         }
                         .buttonStyle(PlainButtonStyle())
-                        .padding(.horizontal)
                     }
-
-                    // Level progress (moved to top for visibility)
-                    LevelProgressView(userLevel: displayLevel)
-                        .padding(.horizontal)
-
-                    // Capacity indicator (difficulty adjustment)
-                    CapacityIndicator()
-                        .environmentObject(container.difficultyService)
-                        .padding(.horizontal)
-
-                    // Wellness Score Card (MVP - shows mock data)
-                    WellnessScoreCard()
-                        .padding(.horizontal)
-
-                    // Sleep Dashboard Card (F012)
-                    NavigationLink {
-                        SleepDashboardView()
-                            .environmentObject(container)
-                    } label: {
-                        SleepHomeCard()
-                    }
-                    .padding(.horizontal)
-
-                    // Mood Prediction Card (shows today's AI prediction)
-                    if let prediction = todayPrediction {
-                        MoodPredictionCard(prediction: prediction) {
-                            // If there's a pending intervention, show it
-                            if pendingMoodIntervention != nil {
-                                showInterventionSheet = true
-                            }
-                        }
-                        .padding(.horizontal)
-                    }
-
-                    // Supportive message (mood-adaptive)
-                    if let message = homeContext?.supportiveMessage {
-                        SupportiveMessageCard(
-                            message: message,
-                            moodContext: homeContext?.moodContext ?? .neutral,
-                            showCrisisSupport: homeContext?.shouldShowCrisisSupport ?? false,
-                            onCrisisTap: { appState.showCrisisResources = true }
-                        )
-                    }
-
-                    // Active event (if participating)
-                    if let event = activeEvent {
-                        SeasonalEventCard(
-                            event: event,
-                            participation: eventParticipation,
-                            onJoin: { joinEvent(event) }
-                        )
-                    }
-
-                    // Mood check-in prompt (adapted based on time)
-                    if let mood = appState.todayMood {
-                        TodayMoodCard(mood: mood)
-                    } else {
-                        AdaptiveMoodPromptCard(timeOfDay: homeContext?.timeOfDay ?? .current)
-                    }
-
-                    // Contextual quick actions (mood-adaptive)
-                    if let actions = homeContext?.recommendedActions, !actions.isEmpty {
-                        ContextualActionsRow(actions: actions)
-                    }
-
-                    if let plan = appState.todayActionPlan,
-                       !appState.todayActionPlanItems.isEmpty,
-                       plan.isActive {
-                        ActionPlanHomeCard(plan: plan, items: appState.todayActionPlanItems)
-                    }
-
-                    // Today's quest - with proper state handling
-                    questCard
-
-                    // Quest Arc progress card
-                    if let arc = activeQuestArc {
-                        QuestArcProgressCard(userArc: arc) {
-                            showQuestArcCatalog = true
-                        }
-                    } else {
-                        NoActiveArcCard {
-                            showQuestArcCatalog = true
-                        }
-                    }
-
-                    // Streak with shields
-                    StreakCardWithShields(
-                        currentStreak: appState.currentStreak,
-                        longestStreak: appState.currentUser?.stats?.longestStreakDays ?? 0,
-                        shieldsRemaining: shieldStatus?.shieldsRemaining ?? appState.currentUser?.stats?.streakShieldsRemaining ?? 1,
-                        shieldsMax: shieldStatus?.shieldsMax ?? appState.currentUser?.stats?.streakShieldsMax ?? 1,
-                        recoveryAvailable: shieldStatus?.recoveryQuestAvailable ?? false,
-                        streakBeforeBreak: shieldStatus?.streakBeforeBreak,
-                        recoveryExpiresAt: shieldStatus?.recoveryQuestExpiresAt,
-                        onStartRecovery: startRecoveryQuest
-                    )
-
-                    // Grace period banner (48-hour window to complete missed quest)
-                    if let shieldStatus = shieldStatus,
-                       shieldStatus.recoveryQuestAvailable,
-                       let expiresAt = shieldStatus.recoveryQuestExpiresAt {
-                        GracePeriodBanner(expiresAt: expiresAt) {
-                            startRecoveryQuest()
-                        }
-                    }
-
-                    // Buddy widget or invite prompt
-                    if let buddyData = buddyWidgetData {
-                        BuddyWidget(
-                            buddyData: buddyData,
-                            onSendEncouragement: sendBuddyEncouragement
-                        )
-                    } else {
-                        InviteBuddyPrompt(onTap: { showInviteBuddySheet = true })
-                    }
-
-                    // Weekly Insights
-                    InsightsPreviewCard(insight: weeklyInsight)
-
-                    // Sensory Regulation Toolkit
-                    SensoryToolkitCard()
-
-                    // Progress Stories - Weekly Recap
-                    ProgressStoryPreviewCard()
-
-                    // Insight Lab - 7-day experiments
-                    InsightLabHomeCard()
-                        .environmentObject(container.insightLabService)
 
                     // Standard quick actions (fallback)
                     QuickActionsSection(onSOSTapped: { showSOSIntervention = true })
@@ -409,6 +403,15 @@ struct HomeView: View {
             .sheet(isPresented: $showPathwaySelection) {
                 NavigationView {
                     PathwaySelectionView()
+                        .environmentObject(container)
+                }
+            }
+            .sheet(item: Binding(
+                get: { selectedPathwayId.flatMap { id in activePathways.first { $0.id.uuidString == id } } },
+                set: { selectedPathwayId = $0?.id.uuidString }
+            )) { pathway in
+                NavigationView {
+                    PathwayDashboardView(userPathway: pathway)
                         .environmentObject(container)
                 }
             }
@@ -512,7 +515,15 @@ struct HomeView: View {
     }
 
     private func loadData() async {
-        questState = .loading
+        // Only show loading state if we don't have a loaded quest
+        // This preserves existing data during refresh and prevents flickering if cancelled
+        switch questState {
+        case .loading, .noQuest, .error:
+            questState = .loading
+        case .loaded:
+            // Keep showing existing quest during refresh
+            break
+        }
 
         // Check if we're in dev mode (no real Supabase session)
         let isDevMode = container.supabaseAuthService.userId == nil
@@ -577,7 +588,7 @@ struct HomeView: View {
             // Note: Shield status is populated from protection check above to avoid duplicate call
             async let questTask = container.supabaseDataService.getTodayQuest()
             async let profileTask = container.supabaseAuthService.fetchProfile()
-            
+
             // Optional data (fail gracefully)
             async let eventsTask = try? await container.supabaseDataService.getActiveEvents()
             async let participationTask = try? await container.supabaseDataService.getEventParticipation()
@@ -619,11 +630,13 @@ struct HomeView: View {
             // Compute level info from user_stats (via achievementService)
             let levelResult: UserLevel
             if let exp = await MainActor.run(body: { container.achievementService.userExperience }) {
+                // Calculate threshold for next level (not remaining XP)
+                let nextLevelThreshold = UserLevel.xpThresholds[min(exp.currentLevel, 49)]
                 levelResult = UserLevel(
                     level: exp.currentLevel,
                     title: levelTitle(for: exp.currentLevel),
                     currentXP: exp.totalXp,
-                    nextLevelXP: exp.xpToNextLevel,
+                    nextLevelXP: nextLevelThreshold,
                     xpThisWeek: exp.weeklyXp
                 )
             } else {
@@ -707,6 +720,11 @@ struct HomeView: View {
 
                 // Shield status is set from protection check above
             }
+        } catch is CancellationError {
+            // Task was cancelled (e.g., user navigated away or pulled to refresh again)
+            // Don't show error state - just return and keep previous state
+            Log.ui.debug("HomeView loadData cancelled")
+            return
         } catch {
             Log.ui.error("HomeView loadData error", error: error)
             questState = .error(error.localizedDescription)
@@ -728,6 +746,8 @@ struct HomeView: View {
                     }
                 }
             }
+        } catch is CancellationError {
+            // Task cancelled - ignore silently
         } catch {
             // Don't fail the whole load if re-engagement check fails
             Log.data.error("Re-engagement check error", error: error)
@@ -1103,16 +1123,18 @@ struct QuickActionsSection: View {
     @AppStorage("safety_plan.pinned_quick_actions") private var pinnedSafetyPlan = false
     var onSOSTapped: () -> Void
 
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 4)
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Quick Actions")
                 .font(.headline)
 
-            HStack(spacing: 12) {
+            LazyVGrid(columns: columns, spacing: 12) {
                 NavigationLink {
                     LiveSessionsView()
                 } label: {
-                    HomeQuickActionButton(
+                    HomeQuickActionCard(
                         title: "Live",
                         icon: "person.3.sequence.fill",
                         color: .red
@@ -1122,7 +1144,7 @@ struct QuickActionsSection: View {
                 NavigationLink {
                     CreativeHubView()
                 } label: {
-                    HomeQuickActionButton(
+                    HomeQuickActionCard(
                         title: "Create",
                         icon: "paintpalette.fill",
                         color: .pink
@@ -1132,7 +1154,7 @@ struct QuickActionsSection: View {
                 NavigationLink {
                     ExerciseLibraryView()
                 } label: {
-                    HomeQuickActionButton(
+                    HomeQuickActionCard(
                         title: "Exercises",
                         icon: "figure.mind.and.body",
                         color: .purple
@@ -1142,20 +1164,17 @@ struct QuickActionsSection: View {
                 NavigationLink {
                     MoodHistoryView()
                 } label: {
-                    HomeQuickActionButton(
+                    HomeQuickActionCard(
                         title: "Mood",
                         icon: "chart.line.uptrend.xyaxis",
                         color: .blue
                     )
                 }
-            }
 
-            // Second row
-            HStack(spacing: 12) {
                 NavigationLink {
                     GenerativeHomeView()
                 } label: {
-                    HomeQuickActionButton(
+                    HomeQuickActionCard(
                         title: "For You",
                         icon: "wand.and.stars",
                         color: .indigo
@@ -1165,7 +1184,7 @@ struct QuickActionsSection: View {
                 NavigationLink {
                     BadgesView()
                 } label: {
-                    HomeQuickActionButton(
+                    HomeQuickActionCard(
                         title: "Badges",
                         icon: "medal.fill",
                         color: .yellow
@@ -1175,7 +1194,7 @@ struct QuickActionsSection: View {
                 NavigationLink {
                     TherapistDiscoveryView()
                 } label: {
-                    HomeQuickActionButton(
+                    HomeQuickActionCard(
                         title: "Therapists",
                         icon: "person.2.wave.2.fill",
                         color: .teal
@@ -1186,8 +1205,8 @@ struct QuickActionsSection: View {
                 NavigationLink {
                     WarningSignsDashboardView(engine: container.stressSignatureEngine)
                 } label: {
-                    HomeQuickActionButton(
-                        title: "Warning Signs",
+                    HomeQuickActionCard(
+                        title: "Alerts",
                         icon: "shield.checkered",
                         color: .purple
                     )
@@ -1195,7 +1214,7 @@ struct QuickActionsSection: View {
 
                 // SOS Button - accessible but not prominent
                 if container.sosCoordinator.settings?.sosEnabled != false {
-                    HomeQuickActionButton(
+                    HomeQuickActionCard(
                         title: "SOS",
                         icon: "heart.fill",
                         color: .red,
@@ -1207,15 +1226,13 @@ struct QuickActionsSection: View {
                     NavigationLink {
                         SafetyPlanView()
                     } label: {
-                        HomeQuickActionButton(
-                            title: "Safety Plan",
+                        HomeQuickActionCard(
+                            title: "Safety",
                             icon: "heart.shield.fill",
                             color: .orange
                         )
                     }
                 }
-
-                Spacer()
             }
         }
     }
@@ -1305,7 +1322,7 @@ struct HomeQuickActionButton: View {
             content
         }
     }
-    
+
     private var content: some View {
         VStack(spacing: 8) {
             ZStack {
@@ -1323,6 +1340,45 @@ struct HomeQuickActionButton: View {
                 .fontWeight(.medium)
                 .foregroundStyle(.primary)
         }
+    }
+}
+
+/// Uniform square card for Quick Actions grid
+struct HomeQuickActionCard: View {
+    let title: String
+    let icon: String
+    let color: Color
+    var action: (() -> Void)? = nil
+
+    var body: some View {
+        if let action = action {
+            Button(action: action) {
+                cardContent
+            }
+            .buttonStyle(.plain)
+        } else {
+            cardContent
+        }
+    }
+
+    private var cardContent: some View {
+        VStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 22))
+                .foregroundStyle(color)
+
+            Text(title)
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+        .padding(.horizontal, 4)
+        .background(color.opacity(0.1))
+        .cornerRadius(12)
     }
 }
 

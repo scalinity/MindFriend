@@ -240,9 +240,21 @@ final class TherapeuticProgramsListViewModel: ObservableObject {
         do {
             programs = try await service.fetchTherapeuticPrograms()
             canEnroll = try await service.canEnrollInTherapeuticProgram()
-            // TODO: Fetch active enrollment
+            activeEnrollment = try await service.fetchActiveTherapeuticEnrollment()
         } catch {
             print("Failed to load programs: \(error)")
+        }
+    }
+
+    func enrollInProgram(programId: String) async {
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            activeEnrollment = try await service.enrollInProgram(programId: programId)
+            canEnroll = false
+        } catch {
+            print("Failed to enroll: \(error)")
         }
     }
 }
@@ -302,7 +314,7 @@ struct TherapeuticProgramDetailSheet: View {
             .alert("Start Program?", isPresented: $showEnrollmentConfirmation) {
                 Button("Cancel", role: .cancel) {}
                 Button("Start") {
-                    // TODO: Enroll in program
+                    onEnroll(program.id)
                     dismiss()
                 }
             } message: {

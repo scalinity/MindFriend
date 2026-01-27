@@ -11,6 +11,13 @@ import SwiftUI
 /// Collapsed briefing card displayed on home screen
 struct DailyBriefingCard: View {
     @ObservedObject var viewModel: DailyBriefingViewModel
+    @EnvironmentObject var appState: AppState
+
+    /// Dynamic greeting using current user name (not cached briefing name)
+    private var currentGreeting: String {
+        let name = appState.currentUser?.displayName ?? "Friend"
+        return "Hello, \(name)!"
+    }
 
     var body: some View {
         Button {
@@ -60,8 +67,8 @@ struct DailyBriefingCard: View {
 
     private func briefingView(_ briefing: DailyBriefing) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Greeting
-            Text(briefing.greeting)
+            // Greeting - use current name, not cached
+            Text(currentGreeting)
                 .font(.headline)
 
             // Mood prediction
@@ -138,21 +145,6 @@ struct DailyBriefingCard: View {
     // MARK: - Empty State
 
     private var emptyView: some View {
-        VStack(spacing: 12) {
-            Text("Your daily briefing will appear here")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-            Button("Load Briefing") {
-                Task {
-                    await viewModel.loadTodaysBriefing()
-                }
-            }
-            .buttonStyle(.borderedProminent)
-        }
-        .padding()
-        .frame(maxWidth: .infinity)
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(radius: 2)
+        EmptyView()
     }
 }

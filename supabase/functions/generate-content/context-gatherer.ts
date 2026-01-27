@@ -3,7 +3,7 @@
 // Author: dev-pipeline
 // Date: 2026-01-24
 
-import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 export interface GenerationContext {
   mood: {

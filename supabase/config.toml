@@ -83,6 +83,9 @@ verify_jwt = false
 [functions.generate-profile-picture]
 verify_jwt = false  # Verified internally in function code
 
+[functions.generate-art]
+verify_jwt = false  # Verified internally in function code
+
 [functions.calculate-capacity]
 verify_jwt = false  # Verified internally in function code
 
@@ -94,5 +97,27 @@ verify_jwt = false  # Cron job, uses service role key internally
 verify_jwt = false  # Cron job, uses service role key internally
 
 [functions.generate-recovery-program]
+verify_jwt = false  # Verified internally in function code
+
+[functions.generate-content]
+verify_jwt = false  # Verified internally in function code
+
+[functions.generate-daily-briefing]
+verify_jwt = false  # Verified internally in function code
+
+# Quest Arc Functions
+[functions.get-quest-arcs]
+verify_jwt = false  # Verified internally in function code
+
+[functions.start-quest-arc]
+verify_jwt = false  # Verified internally in function code
+
+[functions.pause-quest-arc]
+verify_jwt = false  # Verified internally in function code
+
+[functions.resume-quest-arc]
+verify_jwt = false  # Verified internally in function code
+
+[functions.exit-quest-arc]
 verify_jwt = false  # Verified internally in function code
 

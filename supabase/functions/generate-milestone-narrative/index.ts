@@ -2,7 +2,7 @@
 // AI-powered personalized milestone story generation
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 interface MilestoneRequest {
@@ -49,10 +49,10 @@ serve(async (req) => {
     // Validate milestone level
     const milestones = [5, 10, 25, 50, 100];
     if (!milestones.includes(level)) {
-      return new Response(
-        JSON.stringify({ error: "Not a milestone level" }),
-        { status: 400, headers: corsHeaders },
-      );
+      return new Response(JSON.stringify({ error: "Not a milestone level" }), {
+        status: 400,
+        headers: corsHeaders,
+      });
     }
 
     // Check if narrative already exists
@@ -112,7 +112,8 @@ serve(async (req) => {
       total_circle_posts: 0,
       badges_earned: badges.count || 0,
       days_active: Math.floor(
-        (Date.now() - new Date(profile.data?.created_at || Date.now()).getTime()) /
+        (Date.now() -
+          new Date(profile.data?.created_at || Date.now()).getTime()) /
           (1000 * 60 * 60 * 24),
       ),
     };
@@ -135,7 +136,7 @@ Write in a warm, encouraging tone. Focus on growth, resilience, and self-compass
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${Deno.env.get("XAI_API_KEY")}`,
+        Authorization: `Bearer ${Deno.env.get("XAI_API_KEY")}`,
       },
       body: JSON.stringify({
         model: "grok-beta",
@@ -183,16 +184,17 @@ Write in a warm, encouraging tone. Focus on growth, resilience, and self-compass
     );
   } catch (error) {
     console.error("Error:", error);
-    
+
     // Fallback template
     const fallbackNarrative = `Congratulations on reaching level ${(await req.json()).level}! 🎉 This is a significant milestone in your wellness journey. You've shown incredible dedication and commitment to your mental health. Every quest completed, every mood logged, and every exercise practiced has brought you here. Your resilience and self-compassion are truly inspiring. Keep nurturing your well-being—you're doing amazing! 🌟`;
-    
+
+    console.error("Error generating milestone narrative:", error); // Log full error server-side
     return new Response(
       JSON.stringify({
         success: true,
         narrative: fallbackNarrative,
         fallback: true,
-        error: error.message,
+        error: "Failed to generate personalized narrative",
       }),
       { status: 200, headers: corsHeaders },
     );

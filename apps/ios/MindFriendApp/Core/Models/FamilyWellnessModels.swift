@@ -276,10 +276,11 @@ struct FamilyActivitySummary: Codable, Identifiable, Equatable {
     }
 }
 
-enum MoodTrend: String, Codable, Equatable {
+enum MoodTrend: String, Codable, Equatable, Hashable {
     case improving
     case stable
     case declining
+    case baseline
     case insufficientData = "insufficient_data"
 
     var icon: String {
@@ -287,7 +288,7 @@ enum MoodTrend: String, Codable, Equatable {
         case .improving: return "arrow.up.right"
         case .stable: return "arrow.right"
         case .declining: return "arrow.down.right"
-        case .insufficientData: return "questionmark.circle"
+        case .baseline, .insufficientData: return "questionmark.circle"
         }
     }
 
@@ -296,7 +297,7 @@ enum MoodTrend: String, Codable, Equatable {
         case .improving: return "green"
         case .stable: return "yellow"
         case .declining: return "orange"
-        case .insufficientData: return "gray"
+        case .baseline, .insufficientData: return "gray"
         }
     }
 
@@ -305,7 +306,7 @@ enum MoodTrend: String, Codable, Equatable {
         case .improving: return "📈"
         case .stable: return "➡️"
         case .declining: return "📉"
-        case .insufficientData: return "❓"
+        case .baseline, .insufficientData: return "❓"
         }
     }
 }
@@ -319,7 +320,7 @@ struct FamilyAlert: Codable, Identifiable, Equatable {
     let forParentId: String
 
     let alertType: FamilyAlertType
-    let severity: AlertSeverity
+    let severity: FamilyAlertSeverity
     let title: String
     let message: String
 
@@ -360,7 +361,7 @@ enum FamilyAlertType: String, Codable, Equatable {
     case milestone
 }
 
-enum AlertSeverity: String, Codable, Equatable {
+enum FamilyAlertSeverity: String, Codable, Equatable {
     case info
     case attention
     case concern

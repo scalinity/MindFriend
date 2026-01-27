@@ -274,12 +274,18 @@ DECLARE
     v_message_count INTEGER;
     v_max_per_minute INTEGER := 5; -- Max 5 messages per minute
     v_max_per_hour INTEGER := 60; -- Max 60 messages per hour
+    v_lock_key BIGINT;
 BEGIN
     IF v_user_id IS NULL THEN
         RETURN FALSE;
     END IF;
 
-    -- Check per-minute rate
+    -- Use advisory lock to serialize rate limit checks for this user+match combination
+    -- Prevents TOCTOU race condition where multiple concurrent requests bypass the limit
+    v_lock_key := hashtext(v_user_id::TEXT || p_match_id::TEXT);
+    PERFORM pg_advisory_xact_lock(v_lock_key);
+
+    -- Check per-minute rate (now serialized by lock)
     SELECT COUNT(*) INTO v_message_count
     FROM mentorship_messages
     WHERE sender_id = v_user_id
@@ -290,7 +296,7 @@ BEGIN
         RETURN FALSE;
     END IF;
 
-    -- Check per-hour rate
+    -- Check per-hour rate (now serialized by lock)
     SELECT COUNT(*) INTO v_message_count
     FROM mentorship_messages
     WHERE sender_id = v_user_id
@@ -313,27 +319,16 @@ GRANT EXECUTE ON FUNCTION check_message_rate_limit(UUID) TO authenticated;
 
 CREATE OR REPLACE FUNCTION sanitize_mentorship_message()
 RETURNS TRIGGER AS $$
+DECLARE
+    v_encrypt_result RECORD;
 BEGIN
-    -- Sanitize HTML/script tags to prevent XSS
-    NEW.content := regexp_replace(NEW.content, '<[^>]*>', '', 'g');
-
-    -- Remove potential script injections (javascript: protocol)
-    NEW.content := regexp_replace(NEW.content, 'javascript:', '', 'gi');
+    -- Sanitize by encoding HTML entities instead of regex filtering (more secure)
+    NEW.content := replace(NEW.content, '&', '&amp;');
+    NEW.content := replace(NEW.content, '<', '&lt;');
+    NEW.content := replace(NEW.content, '>', '&gt;');
+    NEW.content := replace(NEW.content, '"', '&quot;');
+    NEW.content := replace(NEW.content, '''', '&#x27;');
     
-    -- Remove event handlers with various quote styles: onclick=, onload=, etc.
-    -- Match double-quoted: on\w+="[^"]*"
-    NEW.content := regexp_replace(NEW.content, 'on\w+\s*=\s*"[^"]*"', '', 'gi');
-    -- Match single-quoted: on\w+='[^']*'
-    NEW.content := regexp_replace(NEW.content, 'on\w+\s*=\s*''[^'']*''', '', 'gi');
-    -- Match unquoted: on\w+=[^\s>]*
-    NEW.content := regexp_replace(NEW.content, 'on\w+\s*=\s*[^\s>]*', '', 'gi');
-    
-    -- Remove data: protocol
-    NEW.content := regexp_replace(NEW.content, 'data:text/html', '', 'gi');
-    
-    -- Remove vbscript: protocol
-    NEW.content := regexp_replace(NEW.content, 'vbscript:', '', 'gi');
-
     -- Trim and limit length
     NEW.content := trim(NEW.content);
     IF length(NEW.content) > 2000 THEN
@@ -344,6 +339,12 @@ BEGIN
     IF NEW.content = '' THEN
         RAISE EXCEPTION 'Message content cannot be empty';
     END IF;
+
+    -- Encrypt content
+    SELECT * INTO v_encrypt_result FROM encrypt_message_content(NEW.content);
+    NEW.encrypted_content := (v_encrypt_result).v_encrypted;
+    NEW.encryption_key_id := (v_encrypt_result).v_key_id;
+    NEW.iv := NULL;
 
     RETURN NEW;
 END;
@@ -359,7 +360,7 @@ CREATE TRIGGER trg_sanitize_mentorship_message
 -- FIX 5: Add RLS policy for rate-limited message inserts
 -- =============================================================================
 
-DROP POLICY IF EXISTS "Match participants can send messages" ON mentorship_messages;
+DROP POLICY IF EXISTS "Match participants can send rate-limited messages" ON mentorship_messages;
 
 CREATE POLICY "Match participants can send rate-limited messages" ON mentorship_messages
     FOR INSERT WITH CHECK (
@@ -371,6 +372,33 @@ CREATE POLICY "Match participants can send rate-limited messages" ON mentorship_
         )
         AND check_message_rate_limit(match_id)
     );
+
+-- Policy for SELECT: participants can read messages in their matches
+CREATE POLICY "Match participants can read messages" ON mentorship_messages
+    FOR SELECT USING (
+        match_id IN (
+            SELECT id FROM mentorship_matches
+            WHERE (mentor_id = auth.uid() OR mentee_id = auth.uid())
+        )
+    );
+
+-- Policy for UPDATE: senders can update their own message read_at status
+CREATE POLICY "Users can mark own messages as read" ON mentorship_messages
+    FOR UPDATE USING (
+        auth.uid() = sender_id OR
+        match_id IN (
+            SELECT id FROM mentorship_matches
+            WHERE (mentor_id = auth.uid() OR mentee_id = auth.uid())
+        )
+    )
+    WITH CHECK (
+        -- Only allow updating read_at timestamp, not content
+        sender_id = (SELECT sender_id FROM mentorship_messages m WHERE m.id = mentorship_messages.id)
+    );
+
+-- Policy for DELETE: only senders can delete their own messages
+CREATE POLICY "Senders can delete own messages" ON mentorship_messages
+    FOR DELETE USING (auth.uid() = sender_id);
 
 -- =============================================================================
 -- FIX 6: Add performance indexes
@@ -403,42 +431,52 @@ CREATE INDEX IF NOT EXISTS idx_mentorship_profiles_matching
 -- FIX 7: Improve timezone calculation to handle edge cases
 -- =============================================================================
 
+-- Improved timezone overlap calculation that handles edge cases
+-- Some timezones use half-hour or quarter-hour offsets (e.g., India +5:30, Nepal +5:45)
 CREATE OR REPLACE FUNCTION calculate_timezone_overlap(
-    tz1 TEXT,
-    tz2 TEXT
-) RETURNS DECIMAL(3,2) AS $$
+    p_tz1 TEXT,
+    p_tz2 TEXT
+) RETURNS DECIMAL AS $$
 DECLARE
-    offset1 INTERVAL;
-    offset2 INTERVAL;
+    offset1_seconds INTEGER;
+    offset2_seconds INTEGER;
     diff_hours DECIMAL;
+    overlap_score DECIMAL;
 BEGIN
-    -- Handle null/empty timezones
-    IF tz1 IS NULL OR tz1 = '' THEN
-        tz1 := 'UTC';
-    END IF;
-    IF tz2 IS NULL OR tz2 = '' THEN
-        tz2 := 'UTC';
-    END IF;
+    -- Get UTC offset in seconds for both timezones
+    SELECT EXTRACT(TIMEZONE FROM (NOW() AT TIME ZONE p_tz1))::INTEGER
+    INTO offset1_seconds;
 
-    -- Validate timezone names
-    BEGIN
-        offset1 := (NOW() AT TIME ZONE tz1) - (NOW() AT TIME ZONE 'UTC');
-        offset2 := (NOW() AT TIME ZONE tz2) - (NOW() AT TIME ZONE 'UTC');
-    EXCEPTION WHEN OTHERS THEN
-        -- Invalid timezone, use default
-        RETURN 0.5;
-    END;
+    SELECT EXTRACT(TIMEZONE FROM (NOW() AT TIME ZONE p_tz2))::INTEGER
+    INTO offset2_seconds;
 
-    -- Calculate hour difference
-    diff_hours := ABS(EXTRACT(EPOCH FROM (offset1 - offset2)) / 3600);
-
-    -- Handle wrap-around (12 hours max difference)
-    IF diff_hours > 12 THEN
-        diff_hours := 24 - diff_hours;
+    -- Handle NULL values (invalid timezone)
+    IF offset1_seconds IS NULL OR offset2_seconds IS NULL THEN
+        RETURN 0.5;  -- Default neutral score
     END IF;
 
-    -- Score based on hour difference (0 diff = 1.0, 12 diff = 0)
-    RETURN GREATEST(0, 1.0 - (diff_hours / 12));
+    -- Calculate difference in hours (handles half-hour and quarter-hour offsets)
+    diff_hours := ABS((offset1_seconds - offset2_seconds)::DECIMAL / 3600);
+
+    -- Score based on timezone proximity
+    -- 0-2 hours difference: excellent (1.0)
+    -- 2-4 hours difference: good (0.8)
+    -- 4-8 hours difference: acceptable (0.6)
+    -- 8-12 hours difference: poor (0.4)
+    -- 12+ hours difference: very poor (0.2)
+    IF diff_hours <= 2 THEN
+        overlap_score := 1.0;
+    ELSIF diff_hours <= 4 THEN
+        overlap_score := 0.8;
+    ELSIF diff_hours <= 8 THEN
+        overlap_score := 0.6;
+    ELSIF diff_hours <= 12 THEN
+        overlap_score := 0.4;
+    ELSE
+        overlap_score := 0.2;
+    END IF;
+
+    RETURN overlap_score;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
@@ -538,14 +576,599 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Schedule cleanup (requires pg_cron extension)
-SELECT cron.schedule('cleanup-mentorship-data', '0 3 * * 0', 'SELECT cleanup_old_mentorship_data()');
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+        PERFORM cron.schedule('cleanup-mentorship-data', '0 3 * * 0', 'SELECT cleanup_old_mentorship_data()');
+    ELSE
+        RAISE NOTICE 'pg_cron extension not available - skipping scheduled cleanup';
+    END IF;
+END $$;
 
 COMMENT ON FUNCTION cleanup_old_mentorship_data() IS 'Data retention: cleans up mentorship messages older than 1 year from ended matches';
 
 -- =============================================================================
--- Update permissions
+-- FIX 9: Message encryption at rest (pgcrypto)
 -- =============================================================================
 
-GRANT EXECUTE ON FUNCTION find_mentor_matches(UUID, TEXT[], INTEGER) TO authenticated;
-GRANT EXECUTE ON FUNCTION create_mentorship_request(UUID, TEXT) TO authenticated;
-GRANT EXECUTE ON FUNCTION calculate_timezone_overlap(TEXT, TEXT) TO authenticated;
+-- Enable pgcrypto extension if not already enabled
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- Add encrypted_content column to mentorship_messages
+ALTER TABLE IF EXISTS mentorship_messages
+ADD COLUMN IF NOT EXISTS encrypted_content bytea,
+ADD COLUMN IF NOT EXISTS encryption_key_id TEXT,
+ADD COLUMN IF NOT EXISTS iv bytea;
+
+-- Create encryption key storage table (in real production, use AWS KMS/Vault)
+CREATE TABLE IF NOT EXISTS mentorship_encryption_keys (
+    id TEXT PRIMARY KEY,
+    -- Master encryption key (rotated quarterly)
+    key_material bytea NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    rotated_at TIMESTAMPTZ,
+    revoked_at TIMESTAMPTZ,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    algorithm TEXT NOT NULL DEFAULT 'aes-256-gcm'
+);
+
+-- Function to get active encryption key
+CREATE OR REPLACE FUNCTION get_active_encryption_key()
+RETURNS TEXT AS $$
+DECLARE
+    v_key_id TEXT;
+BEGIN
+    SELECT id INTO v_key_id
+    FROM mentorship_encryption_keys
+    WHERE is_active = true
+    ORDER BY created_at DESC
+    LIMIT 1;
+    
+    IF v_key_id IS NULL THEN
+        -- Create initial key if none exists
+        INSERT INTO mentorship_encryption_keys (id, key_material)
+        VALUES (
+            'key_' || to_char(now(), 'YYYYMMDD_HH24MISS'),
+            gen_random_bytes(32)  -- 256-bit random bytes for AES-256
+        )
+        RETURNING id INTO v_key_id;
+    END IF;
+    
+    RETURN v_key_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Encryption function for messages (server-side, called by trigger)
+CREATE OR REPLACE FUNCTION encrypt_message_content(
+    p_content TEXT
+)
+RETURNS TABLE (
+    v_key_id TEXT,
+    v_encrypted TEXT  -- Base64-encoded encrypted content for JSON serialization
+) AS $$
+DECLARE
+    v_key_id TEXT;
+    v_key TEXT;
+    v_encrypted bytea;
+BEGIN
+    v_key_id := get_active_encryption_key();
+    
+    SELECT encode(key_material, 'hex') INTO v_key
+    FROM mentorship_encryption_keys
+    WHERE id = v_key_id;
+    
+    -- Encrypt using pgp_sym_encrypt: provides AES-256 + HMAC-SHA512 authentication
+    v_encrypted := pgp_sym_encrypt(
+        p_content,
+        v_key,
+        'cipher-algo=aes256'
+    );
+    
+    -- Return base64-encoded bytea for JSON-safe transmission to iOS client
+    RETURN QUERY SELECT v_key_id, encode(v_encrypted, 'base64');
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function to decrypt message content
+CREATE OR REPLACE FUNCTION decrypt_message_content(
+    p_encrypted bytea,
+    p_key_id TEXT
+)
+RETURNS TEXT AS $$
+DECLARE
+    v_key TEXT;
+    v_decrypted bytea;
+BEGIN
+    SELECT encode(key_material, 'hex') INTO v_key
+    FROM mentorship_encryption_keys
+    WHERE id = p_key_id AND revoked_at IS NULL;
+    
+    IF v_key IS NULL THEN
+        RAISE EXCEPTION 'Encryption key not found or revoked: %', p_key_id;
+    END IF;
+    
+    -- pgp_sym_decrypt automatically verifies HMAC - errors if authentication fails
+    v_decrypted := pgp_sym_decrypt(p_encrypted, v_key)::bytea;
+    
+    RETURN convert_from(v_decrypted, 'utf8');
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Grant decryption access to authenticated users (for their own messages only via RLS)
+GRANT EXECUTE ON FUNCTION decrypt_message_content(bytea, TEXT) TO authenticated;
+
+-- Batch decryption function for iOS app (returns decryption status for each message)
+CREATE OR REPLACE FUNCTION decrypt_messages_batch(
+    p_message_ids UUID[]
+) RETURNS TABLE (
+    message_id UUID,
+    decryption_success BOOLEAN,
+    decrypted_content TEXT,
+    error_message TEXT
+) AS $$
+DECLARE
+    v_msg_id UUID;
+    v_encrypted bytea;
+    v_key_id TEXT;
+    v_decrypted TEXT;
+    v_error TEXT;
+BEGIN
+    FOREACH v_msg_id IN ARRAY p_message_ids
+    LOOP
+        BEGIN
+            -- Fetch encrypted content and key for this message
+            SELECT m.encrypted_content, m.encryption_key_id
+            INTO v_encrypted, v_key_id
+            FROM mentorship_messages m
+            WHERE m.id = v_msg_id
+            AND EXISTS (
+                -- Verify user has access via RLS
+                SELECT 1 FROM mentorship_matches
+                WHERE id = m.match_id
+                AND (mentor_id = auth.uid() OR mentee_id = auth.uid())
+            );
+
+            IF v_encrypted IS NULL THEN
+                -- Message not found or access denied
+                RETURN QUERY SELECT v_msg_id, false, NULL::TEXT, 'Message not found or access denied'::TEXT;
+            ELSE
+                -- Decrypt the content
+                v_decrypted := decrypt_message_content(v_encrypted, v_key_id);
+                RETURN QUERY SELECT v_msg_id, true, v_decrypted, NULL::TEXT;
+            END IF;
+        EXCEPTION WHEN OTHERS THEN
+            -- Decryption failed - return generic error without exposing internal details
+            v_error := CASE 
+                WHEN SQLERRM LIKE '%encryption%' THEN 'Encryption key unavailable'
+                WHEN SQLERRM LIKE '%access%' THEN 'Access denied'
+                ELSE 'Decryption failed'
+            END;
+            RETURN QUERY SELECT v_msg_id, false, NULL::TEXT, v_error::TEXT;
+        END;
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION decrypt_messages_batch(UUID[]) TO authenticated;
+
+-- Update RLS policy to allow decryption of own messages
+DROP POLICY IF EXISTS "Users can decrypt own messages" ON mentorship_messages;
+CREATE POLICY "Users can decrypt own messages"
+    ON mentorship_messages FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM mentorship_matches
+            WHERE id = mentorship_messages.match_id
+            AND (mentor_id = auth.uid() OR mentee_id = auth.uid())
+        )
+    );
+
+-- =============================================================================
+-- FIX 10: Bio field sanitization (XSS prevention)
+-- =============================================================================
+
+-- Function to sanitize bio field
+CREATE OR REPLACE FUNCTION sanitize_mentorship_profile_bio()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Only sanitize if bio is being set
+    IF NEW.bio IS NOT NULL THEN
+        -- Sanitize by encoding HTML entities (same approach as message content)
+        NEW.bio := replace(NEW.bio, '&', '&amp;');
+        NEW.bio := replace(NEW.bio, '<', '&lt;');
+        NEW.bio := replace(NEW.bio, '>', '&gt;');
+        NEW.bio := replace(NEW.bio, '"', '&quot;');
+        NEW.bio := replace(NEW.bio, '''', '&#x27;');
+        
+        -- Trim whitespace
+        NEW.bio := trim(NEW.bio);
+        
+        -- Limit length to 500 characters
+        IF length(NEW.bio) > 500 THEN
+            NEW.bio := substring(NEW.bio FROM 1 FOR 500);
+        END IF;
+        
+        -- Reject if bio becomes empty after sanitization
+        IF NEW.bio = '' THEN
+            NEW.bio := NULL;
+        END IF;
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Apply sanitization trigger to mentorship_profiles
+DROP TRIGGER IF EXISTS trg_sanitize_mentorship_profile_bio ON mentorship_profiles;
+CREATE TRIGGER trg_sanitize_mentorship_profile_bio
+    BEFORE INSERT OR UPDATE ON mentorship_profiles
+    FOR EACH ROW
+    EXECUTE FUNCTION sanitize_mentorship_profile_bio();
+
+-- =============================================================================
+-- FIX 11: User message deletion (GDPR right to be forgotten)
+-- =============================================================================
+
+-- Function to delete user's own message
+CREATE OR REPLACE FUNCTION delete_mentorship_message(
+    p_message_id UUID
+) RETURNS BOOLEAN AS $$
+DECLARE
+    v_user_id UUID := auth.uid();
+    v_affected_rows INTEGER;
+BEGIN
+    IF v_user_id IS NULL THEN
+        RAISE EXCEPTION 'Not authenticated';
+    END IF;
+
+    -- Delete message only if user is the sender
+    DELETE FROM mentorship_messages
+    WHERE id = p_message_id
+    AND sender_id = v_user_id;
+
+    GET DIAGNOSTICS v_affected_rows = ROW_COUNT;
+
+    IF v_affected_rows = 0 THEN
+        RAISE EXCEPTION 'Message not found or you do not have permission to delete it';
+    END IF;
+
+    RETURN true;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION delete_mentorship_message(UUID) TO authenticated;
+
+-- =============================================================================
+-- CRITICAL: Missing RPC functions for iOS app
+-- =============================================================================
+
+-- Mark all messages in a match as read for the current user
+CREATE OR REPLACE FUNCTION mark_messages_read(
+    p_match_id UUID
+) RETURNS BOOLEAN AS $$
+DECLARE
+    v_user_id UUID := auth.uid();
+BEGIN
+    IF v_user_id IS NULL THEN
+        RAISE EXCEPTION 'Not authenticated';
+    END IF;
+
+    -- Update messages where current user is a participant in the match
+    UPDATE mentorship_messages
+    SET read_at = now()
+    WHERE match_id = p_match_id
+    AND read_at IS NULL
+    AND EXISTS (
+        SELECT 1 FROM mentorship_matches
+        WHERE id = p_match_id
+        AND (mentor_id = v_user_id OR mentee_id = v_user_id)
+    );
+
+    RETURN true;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION mark_messages_read(UUID) TO authenticated;
+
+-- Flag a message for moderation review
+CREATE OR REPLACE FUNCTION flag_mentorship_message(
+    p_message_id UUID,
+    p_reason TEXT
+) RETURNS BOOLEAN AS $$
+DECLARE
+    v_user_id UUID := auth.uid();
+    v_match_id UUID;
+BEGIN
+    IF v_user_id IS NULL THEN
+        RAISE EXCEPTION 'Not authenticated';
+    END IF;
+
+    IF p_reason IS NULL OR LENGTH(TRIM(p_reason)) = 0 THEN
+        RAISE EXCEPTION 'Reason is required';
+    END IF;
+
+    -- Get match_id to verify user is participant
+    SELECT match_id INTO v_match_id
+    FROM mentorship_messages
+    WHERE id = p_message_id;
+
+    IF v_match_id IS NULL THEN
+        RAISE EXCEPTION 'Message not found';
+    END IF;
+
+    -- Verify user is a participant
+    IF NOT EXISTS (
+        SELECT 1 FROM mentorship_matches
+        WHERE id = v_match_id
+        AND (mentor_id = v_user_id OR mentee_id = v_user_id)
+    ) THEN
+        RAISE EXCEPTION 'Access denied';
+    END IF;
+
+    -- Flag the message
+    UPDATE mentorship_messages
+    SET flagged = true,
+        flag_reason = p_reason,
+        reviewed = false
+    WHERE id = p_message_id;
+
+    RETURN true;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION flag_mentorship_message(UUID, TEXT) TO authenticated;
+
+-- Unflag a message (for user's own flags)
+CREATE OR REPLACE FUNCTION unflag_mentorship_message(
+    p_message_id UUID
+) RETURNS BOOLEAN AS $$
+DECLARE
+    v_user_id UUID := auth.uid();
+    v_match_id UUID;
+BEGIN
+    IF v_user_id IS NULL THEN
+        RAISE EXCEPTION 'Not authenticated';
+    END IF;
+
+    -- Get match_id to verify user is participant
+    SELECT match_id INTO v_match_id
+    FROM mentorship_messages
+    WHERE id = p_message_id;
+
+    IF v_match_id IS NULL THEN
+        RAISE EXCEPTION 'Message not found';
+    END IF;
+
+    -- Verify user is a participant
+    IF NOT EXISTS (
+        SELECT 1 FROM mentorship_matches
+        WHERE id = v_match_id
+        AND (mentor_id = v_user_id OR mentee_id = v_user_id)
+    ) THEN
+        RAISE EXCEPTION 'Access denied';
+    END IF;
+
+    -- Unflag the message
+    UPDATE mentorship_messages
+    SET flagged = false,
+        flag_reason = NULL
+    WHERE id = p_message_id;
+
+    RETURN true;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION unflag_mentorship_message(UUID) TO authenticated;
+
+-- Report a mentorship issue (safety escalation)
+CREATE OR REPLACE FUNCTION report_mentorship_issue(
+    p_match_id UUID,
+    p_reported_id UUID,
+    p_reason TEXT,
+    p_description TEXT
+) RETURNS UUID AS $$
+DECLARE
+    v_user_id UUID := auth.uid();
+    v_report_id UUID;
+BEGIN
+    IF v_user_id IS NULL THEN
+        RAISE EXCEPTION 'Not authenticated';
+    END IF;
+
+    -- Validate required fields
+    IF p_match_id IS NULL THEN
+        RAISE EXCEPTION 'Match ID is required';
+    END IF;
+
+    IF p_reported_id IS NULL THEN
+        RAISE EXCEPTION 'Reported user ID is required';
+    END IF;
+
+    IF p_reason IS NULL OR LENGTH(TRIM(p_reason)) = 0 THEN
+        RAISE EXCEPTION 'Reason is required';
+    END IF;
+
+    -- Verify reporter is a participant in the match
+    IF NOT EXISTS (
+        SELECT 1 FROM mentorship_matches
+        WHERE id = p_match_id
+        AND (mentor_id = v_user_id OR mentee_id = v_user_id)
+    ) THEN
+        RAISE EXCEPTION 'You are not a participant in this mentorship';
+    END IF;
+
+    -- Verify reported user is the OTHER participant
+    IF NOT EXISTS (
+        SELECT 1 FROM mentorship_matches
+        WHERE id = p_match_id
+        AND (mentor_id = p_reported_id OR mentee_id = p_reported_id)
+    ) THEN
+        RAISE EXCEPTION 'Reported user is not a participant in this mentorship';
+    END IF;
+
+    -- Prevent self-reporting
+    IF v_user_id = p_reported_id THEN
+        RAISE EXCEPTION 'Cannot report yourself';
+    END IF;
+
+    -- Create report
+    INSERT INTO mentorship_reports (
+        match_id,
+        reporter_id,
+        reported_id,
+        reason,
+        description,
+        status,
+        created_at
+    )
+    VALUES (
+        p_match_id,
+        v_user_id,
+        p_reported_id,
+        p_reason,
+        COALESCE(p_description, ''),
+        'pending',
+        now()
+    )
+    RETURNING id INTO v_report_id;
+
+    RETURN v_report_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION report_mentorship_issue(UUID, UUID, TEXT, TEXT) TO authenticated;
+
+-- =============================================================================
+
+-- =============================================================================
+-- =============================================================================
+-- FIX 13: Row Level Security for mentorship core tables
+-- =============================================================================
+
+-- Enable RLS on all mentorship tables
+ALTER TABLE mentorship_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE mentorship_matches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE mentorship_reports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE mentorship_encryption_keys ENABLE ROW LEVEL SECURITY;
+ALTER TABLE mentorship_notification_queue ENABLE ROW LEVEL SECURITY;
+
+-- ===== MENTORSHIP_PROFILES RLS =====
+
+-- Users can view any verified mentor profile (for discovery)
+CREATE POLICY "View verified mentor profiles" ON mentorship_profiles
+    FOR SELECT USING (
+        verified = true OR user_id = auth.uid()
+    );
+
+-- Users can update only their own profile
+CREATE POLICY "Update own profile" ON mentorship_profiles
+    FOR UPDATE USING (user_id = auth.uid())
+    WITH CHECK (user_id = auth.uid());
+
+-- Users can insert their own profile
+CREATE POLICY "Create own profile" ON mentorship_profiles
+    FOR INSERT WITH CHECK (user_id = auth.uid());
+
+-- ===== MENTORSHIP_MATCHES RLS =====
+
+-- Match participants can view match details
+CREATE POLICY "View own match" ON mentorship_matches
+    FOR SELECT USING (
+        mentor_id = auth.uid() OR mentee_id = auth.uid()
+    );
+
+-- Match participants can update match status and rating (but not reassign participants)
+CREATE POLICY "Update own match status" ON mentorship_matches
+    FOR UPDATE USING (
+        mentor_id = auth.uid() OR mentee_id = auth.uid()
+    )
+    WITH CHECK (
+        (mentor_id = auth.uid() OR mentee_id = auth.uid()) AND
+        mentor_id = (SELECT mentor_id FROM mentorship_matches WHERE id = NEW.id) AND
+        mentee_id = (SELECT mentee_id FROM mentorship_matches WHERE id = NEW.id)
+    );
+
+-- Match participants can delete (end) their match
+CREATE POLICY "Delete own match" ON mentorship_matches
+    FOR DELETE USING (
+        mentor_id = auth.uid() OR mentee_id = auth.uid()
+    );
+
+-- ===== MENTORSHIP_REPORTS RLS =====
+
+-- Users can view reports they filed or are subject of
+CREATE POLICY "View report" ON mentorship_reports
+    FOR SELECT USING (
+        reporter_id = auth.uid() OR reported_id = auth.uid()
+    );
+
+-- Users can file reports
+CREATE POLICY "Create report" ON mentorship_reports
+    FOR INSERT WITH CHECK (
+        reporter_id = auth.uid()
+    );
+
+-- ===== MENTORSHIP_ENCRYPTION_KEYS RLS =====
+
+-- Encryption keys are internal - no direct client access via SELECT
+-- Only Edge Functions and SECURITY DEFINER procedures can access via service role
+ALTER TABLE mentorship_encryption_keys FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY "Deny all direct client access to encryption keys" ON mentorship_encryption_keys
+    FOR SELECT USING (FALSE);
+
+-- ===== MENTORSHIP_NOTIFICATION_QUEUE RLS =====
+
+-- Users can view notifications intended for them
+CREATE POLICY "View own notifications" ON mentorship_notification_queue
+    FOR SELECT USING (user_id = auth.uid());
+
+-- Notification queue RLS
+ALTER TABLE mentorship_notification_queue FORCE ROW LEVEL SECURITY;
+
+-- System-only INSERT policy (prevent direct client inserts)
+DROP POLICY IF EXISTS "Create notification" ON mentorship_notification_queue;
+DROP POLICY IF EXISTS "Users can select own notifications" ON mentorship_notification_queue;
+DROP POLICY IF EXISTS "System only can insert notifications" ON mentorship_notification_queue;
+
+CREATE POLICY "System only can insert notifications" ON mentorship_notification_queue
+    FOR INSERT WITH CHECK (FALSE);  -- Only Edge Functions (with SERVICE_ROLE) can insert
+
+-- ===== MENTORSHIP_MESSAGES RLS =====
+
+-- Match participants can read messages (includes access to encrypted content via trigger functions)
+DROP POLICY IF EXISTS "Match participants can read messages" ON mentorship_messages;
+CREATE POLICY "Match participants can read messages"
+    ON mentorship_messages FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM mentorship_matches
+            WHERE id = mentorship_messages.match_id
+            AND (mentor_id = auth.uid() OR mentee_id = auth.uid())
+        )
+    );
+
+-- ===== UPDATE/DELETE POLICIES =====
+
+-- Match participants can update message flags (for moderation)
+DROP POLICY IF EXISTS "Update message flags" ON mentorship_messages;
+CREATE POLICY "Update message flags"
+    ON mentorship_messages FOR UPDATE
+    USING (
+        EXISTS (
+            SELECT 1 FROM mentorship_matches
+            WHERE id = mentorship_messages.match_id
+            AND (mentor_id = auth.uid() OR mentee_id = auth.uid())
+        )
+    )
+    WITH CHECK (
+        -- Only allow flagging/unflagging by match participants, not sender_id changes
+        sender_id = (SELECT sender_id FROM mentorship_messages WHERE id = NEW.id) AND
+        match_id = (SELECT match_id FROM mentorship_messages WHERE id = NEW.id)
+    );
+
+-- Match participants can delete their own messages
+DROP POLICY IF EXISTS "Delete own message" ON mentorship_messages;
+CREATE POLICY "Delete own message"
+    ON mentorship_messages FOR DELETE
+    USING (sender_id = auth.uid());

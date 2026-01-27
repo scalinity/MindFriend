@@ -125,6 +125,12 @@ struct QuestDetailView: View {
                     badgeId: nil
                 )
 
+                // Check badge progress after quest completion
+                _ = try? await container.achievementService.checkBadgeProgress()
+
+                // Record first quest completion for progressive disclosure activation
+                try? await container.activationService.recordQuestCompletion()
+
                 await MainActor.run {
                     appState.currentStreak = profile.stats?.currentStreakDays ?? 0
                     appState.currentUser = profile

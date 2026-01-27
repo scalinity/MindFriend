@@ -25,8 +25,15 @@ export function enforceHTTPS(req: Request): {
     return { secure: true };
   }
 
+  // Check X-Forwarded-Proto header (set by reverse proxy/load balancer)
+  // Supabase Edge Functions terminate TLS at the load balancer, so we need to check this header
+  const forwardedProto =
+    req.headers.get("X-Forwarded-Proto") ||
+    req.headers.get("x-forwarded-proto");
+  const isHttps = forwardedProto === "https" || url.protocol === "https:";
+
   // Enforce HTTPS in production
-  if (url.protocol !== "https:") {
+  if (!isHttps) {
     return {
       secure: false,
       error: new Response(

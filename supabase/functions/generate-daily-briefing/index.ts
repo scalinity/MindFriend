@@ -6,7 +6,7 @@
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { corsHeaders } from "../_shared/cors.ts";
 
 // MARK: - Types
@@ -47,15 +47,21 @@ interface SuggestionContext {
 // MARK: - Handler
 
 serve(async (req) => {
+  console.log("========== DAILY BRIEFING START ==========");
+  console.log(`[1] Request method: ${req.method}`);
+
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
+    console.log("[1] CORS preflight - returning 200");
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Validate JWT and get user
+    // Step 2: Check authorization header
+    console.log("[2] Checking authorization header...");
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
+      console.log("[2] ERROR: Missing authorization header");
       return new Response(
         JSON.stringify({ error: "Missing authorization header" }),
         {
@@ -64,21 +70,39 @@ serve(async (req) => {
         },
       );
     }
+    console.log("[2] Authorization header present");
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-    );
+    // Step 3: Create Supabase client
+    console.log("[3] Creating Supabase client...");
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    console.log(`[3] SUPABASE_URL present: ${!!supabaseUrl}`);
+    console.log(`[3] SUPABASE_SERVICE_ROLE_KEY present: ${!!supabaseKey}`);
 
+    if (!supabaseUrl || !supabaseKey) {
+      console.log("[3] ERROR: Missing Supabase env vars");
+      throw new Error("Missing Supabase configuration");
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    console.log("[3] Supabase client created");
+
+    // Step 4: Validate JWT and get user
+    console.log("[4] Validating JWT...");
     const token = authHeader.replace("Bearer ", "");
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser(token);
+    console.log(`[4] Token length: ${token.length}`);
 
-    if (authError || !user) {
+    const { data: authData, error: authError } =
+      await supabase.auth.getUser(token);
+
+    if (authError) {
+      console.log(`[4] ERROR: Auth error - ${authError.message}`);
       return new Response(
-        JSON.stringify({ error: "Unauthorized", code: "UNAUTHORIZED" }),
+        JSON.stringify({
+          error: "Unauthorized",
+          code: "UNAUTHORIZED",
+          details: authError.message,
+        }),
         {
           status: 401,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -86,15 +110,43 @@ serve(async (req) => {
       );
     }
 
-    // Parse request
-    const {
-      local_date,
-      timezone,
-      calendar_events = [],
-    }: GenerateBriefingRequest = await req.json();
+    const user = authData?.user;
+    if (!user) {
+      console.log("[4] ERROR: No user found from token");
+      return new Response(
+        JSON.stringify({
+          error: "Unauthorized",
+          code: "UNAUTHORIZED",
+          details: "No user found",
+        }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+    console.log(`[4] User authenticated: ${user.id}`);
 
-    // Validate date format (YYYY-MM-DD)
+    // Step 5: Parse request body
+    console.log("[5] Parsing request body...");
+    let requestBody: GenerateBriefingRequest;
+    try {
+      requestBody = await req.json();
+      console.log(`[5] Request body:`, JSON.stringify(requestBody));
+    } catch (parseError) {
+      console.log(`[5] ERROR: Failed to parse request body - ${parseError}`);
+      throw new Error(`Failed to parse request body: ${parseError}`);
+    }
+
+    const { local_date, timezone, calendar_events = [] } = requestBody;
+    console.log(
+      `[5] local_date: ${local_date}, timezone: ${timezone}, events count: ${calendar_events.length}`,
+    );
+
+    // Step 6: Validate date format
+    console.log("[6] Validating date format...");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(local_date)) {
+      console.log(`[6] ERROR: Invalid date format - ${local_date}`);
       return new Response(
         JSON.stringify({
           error: "Invalid date format",
@@ -107,39 +159,64 @@ serve(async (req) => {
         },
       );
     }
+    console.log("[6] Date format valid");
 
-    // Check if briefing already exists for this date (cache hit)
-    const { data: existingBriefing } = await supabase
+    // Step 7: Check for existing briefing
+    console.log("[7] Checking for existing briefing...");
+    const { data: existingBriefing, error: existingError } = await supabase
       .from("daily_briefings")
       .select("*")
       .eq("user_id", user.id)
       .eq("local_date", local_date)
       .maybeSingle();
 
-    if (existingBriefing) {
+    if (existingError) {
       console.log(
-        `Returning cached briefing for user ${user.id} on ${local_date}`,
+        `[7] ERROR checking existing briefing: ${existingError.message}`,
+        existingError,
       );
+    } else {
+      console.log(
+        `[7] Existing briefing check complete. Found: ${!!existingBriefing}`,
+      );
+    }
+
+    if (existingBriefing) {
+      console.log(`[7] Returning cached briefing: ${existingBriefing.id}`);
       return new Response(JSON.stringify(existingBriefing), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Fetch user preferences
-    const { data: preferences } = await supabase
+    // Step 8: Fetch user preferences
+    console.log("[8] Fetching user preferences...");
+    const { data: preferences, error: prefError } = await supabase
       .from("briefing_preferences")
       .select("*")
       .eq("user_id", user.id)
       .maybeSingle();
+
+    if (prefError) {
+      console.log(
+        `[8] ERROR fetching preferences: ${prefError.message}`,
+        prefError,
+      );
+    } else {
+      console.log(`[8] Preferences found: ${!!preferences}`);
+    }
 
     const userPrefs = preferences || {
       enabled: true,
       include_calendar: true,
       calendar_lookahead_hours: 24,
     };
+    console.log(
+      `[8] Using prefs: enabled=${userPrefs.enabled}, include_calendar=${userPrefs.include_calendar}`,
+    );
 
     if (!userPrefs.enabled) {
+      console.log("[8] Briefing disabled by user preferences");
       return new Response(
         JSON.stringify({
           error: "Briefing disabled",
@@ -153,79 +230,148 @@ serve(async (req) => {
       );
     }
 
-    // Fetch user profile for name
-    const { data: profile } = await supabase
+    // Step 9: Fetch user profile
+    console.log("[9] Fetching user profile...");
+    const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("display_name, timezone")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
+
+    if (profileError) {
+      console.log(
+        `[9] ERROR fetching profile: ${profileError.message}`,
+        profileError,
+      );
+    } else {
+      console.log(
+        `[9] Profile found: ${!!profile}, display_name: ${profile?.display_name}`,
+      );
+    }
 
     const userName = profile?.display_name || "there";
     const userTimezone = timezone || profile?.timezone || "UTC";
+    console.log(`[9] Using userName: ${userName}, timezone: ${userTimezone}`);
 
-    // Generate greeting
-    const greeting = generateGreeting(userName, userTimezone);
+    // Step 10: Generate greeting
+    console.log("[10] Generating greeting...");
+    let greeting: string;
+    try {
+      greeting = generateGreeting(userName, userTimezone);
+      console.log(`[10] Greeting generated: ${greeting}`);
+    } catch (greetingError) {
+      console.log(`[10] ERROR generating greeting: ${greetingError}`);
+      greeting = `Hello, ${userName}!`;
+    }
 
-    // Fetch mood prediction (F003)
+    // Step 11: Fetch mood prediction
+    console.log("[11] Fetching mood prediction...");
     const moodPrediction = await fetchMoodPrediction(supabase, user.id);
+    console.log(
+      `[11] Mood prediction: ${moodPrediction ? `mood=${moodPrediction.predicted_mood}` : "null"}`,
+    );
 
-    // Fetch today's quest (or assign new)
+    // Step 12: Fetch quest
+    console.log("[12] Fetching quest...");
     const quest = await fetchOrAssignQuest(supabase, user.id, local_date);
+    console.log(
+      `[12] Quest: ${quest ? `id=${quest.id}, title=${quest.title}` : "null"}`,
+    );
 
-    // Process calendar events (filter, sort, limit)
+    // Step 13: Process calendar events
+    console.log("[13] Processing calendar events...");
     const processedEvents = processCalendarEvents(
       calendar_events,
       userPrefs.include_calendar,
     );
+    console.log(`[13] Processed events count: ${processedEvents.length}`);
 
-    // Fetch sleep data for suggestion context
+    // Step 14: Fetch sleep data
+    console.log("[14] Fetching sleep data...");
     const sleepData = await fetchSleepData(supabase, user.id);
+    console.log(
+      `[14] Sleep data: ${sleepData ? `hours=${sleepData.sleep_duration_hours}` : "null"}`,
+    );
 
-    // Generate personalized suggestion
-    const suggestion = generateSuggestion({
-      sleepDurationHours: sleepData?.sleep_duration_hours,
-      calendarEvents: processedEvents,
-      predictedMood: moodPrediction?.predicted_mood,
-      userName,
-    });
+    // Step 15: Generate suggestion
+    console.log("[15] Generating suggestion...");
+    let suggestion: string;
+    try {
+      suggestion = generateSuggestion({
+        sleepDurationHours: sleepData?.sleep_duration_hours,
+        calendarEvents: processedEvents,
+        predictedMood: moodPrediction?.predicted_mood,
+        userName,
+      });
+      console.log(
+        `[15] Suggestion generated: ${suggestion.substring(0, 50)}...`,
+      );
+    } catch (suggestionError) {
+      console.log(`[15] ERROR generating suggestion: ${suggestionError}`);
+      suggestion =
+        "Your quest today is ready. Starting with a small win sets the tone for the day.";
+    }
 
-    // Insert briefing
+    // Step 16: Prepare insert data
+    console.log("[16] Preparing insert data...");
+    const insertData = {
+      user_id: user.id,
+      local_date,
+      greeting,
+      predicted_mood: moodPrediction?.predicted_mood ?? null,
+      mood_context: moodPrediction?.context ?? null,
+      quest_id: quest?.id ?? null,
+      quest_title: quest?.title ?? null,
+      calendar_events: processedEvents,
+      suggestion,
+      generated_at: new Date().toISOString(),
+    };
+    console.log(
+      "[16] Insert data prepared:",
+      JSON.stringify(insertData, null, 2),
+    );
+
+    // Step 17: Insert briefing
+    console.log("[17] Inserting briefing into database...");
     const { data: briefing, error: insertError } = await supabase
       .from("daily_briefings")
-      .insert({
-        user_id: user.id,
-        local_date,
-        greeting,
-        predicted_mood: moodPrediction?.predicted_mood,
-        mood_context: moodPrediction?.context,
-        quest_id: quest?.id,
-        quest_title: quest?.title,
-        calendar_events: processedEvents,
-        suggestion,
-        generated_at: new Date().toISOString(),
-      })
+      .insert(insertData)
       .select()
       .single();
 
     if (insertError) {
-      console.error("Failed to insert briefing:", insertError);
-      throw new Error(`Database insert failed: ${insertError.message}`);
+      console.log(`[17] ERROR inserting briefing: ${insertError.message}`);
+      console.log(`[17] Error code: ${insertError.code}`);
+      console.log(`[17] Error details:`, JSON.stringify(insertError, null, 2));
+      throw new Error(
+        `Database insert failed: ${insertError.message} (code: ${insertError.code})`,
+      );
     }
 
-    console.log(`Generated new briefing for user ${user.id} on ${local_date}`);
+    console.log(`[17] Briefing inserted successfully: ${briefing?.id}`);
+
+    // Step 18: Return response
+    console.log("[18] Returning success response");
+    console.log("========== DAILY BRIEFING END (SUCCESS) ==========");
 
     return new Response(JSON.stringify(briefing), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (error) {
-    console.error("Briefing generation error:", error);
+  } catch (err) {
+    const error = err as Error;
+    console.log("========== DAILY BRIEFING ERROR ==========");
+    console.log(`Error type: ${error?.constructor?.name}`);
+    console.log(`Error message: ${error?.message}`);
+    console.log(`Error stack: ${error?.stack}`);
+    console.log("==========================================");
 
     return new Response(
       JSON.stringify({
         error: "Briefing generation failed",
         code: "GENERATION_FAILED",
-        message: error.message,
+        message: error?.message || "Unknown error",
+        stack: error?.stack,
       }),
       {
         status: 500,
@@ -241,16 +387,25 @@ serve(async (req) => {
  * Generate personalized greeting based on time of day
  */
 function generateGreeting(userName: string, timezone: string): string {
+  console.log(`[generateGreeting] userName=${userName}, timezone=${timezone}`);
+
   // Get current hour in user's timezone
   const now = new Date();
-  const formatter = new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    hour12: false,
-    timeZone: timezone,
-  });
+  let hour: number;
 
-  const hourStr = formatter.format(now);
-  const hour = parseInt(hourStr, 10);
+  try {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      hour12: false,
+      timeZone: timezone,
+    });
+    const hourStr = formatter.format(now);
+    hour = parseInt(hourStr, 10);
+    console.log(`[generateGreeting] Parsed hour: ${hour}`);
+  } catch (tzError) {
+    console.log(`[generateGreeting] Timezone error, using UTC: ${tzError}`);
+    hour = now.getUTCHours();
+  }
 
   let timeGreeting: string;
   if (hour >= 5 && hour < 12) {
@@ -273,28 +428,41 @@ async function fetchMoodPrediction(
   supabase: any,
   userId: string,
 ): Promise<MoodPrediction | null> {
+  console.log(`[fetchMoodPrediction] userId=${userId}`);
+
   try {
+    const todayDate = new Date().toISOString().split("T")[0];
+    console.log(`[fetchMoodPrediction] Querying for date >= ${todayDate}`);
+
     const { data, error } = await supabase
       .from("mood_predictions")
-      .select("predicted_mood, confidence, prediction_context")
+      .select("predicted_mood, confidence, factors")
       .eq("user_id", userId)
-      .gte("prediction_date", new Date().toISOString().split("T")[0]) // Today or future
-      .order("prediction_date", { ascending: true })
+      .gte("predicted_for", todayDate)
+      .order("predicted_for", { ascending: true })
       .limit(1)
       .maybeSingle();
 
-    if (error || !data) {
-      console.log("No mood prediction found, omitting from briefing");
+    if (error) {
+      console.log(`[fetchMoodPrediction] Query error: ${error.message}`, error);
       return null;
     }
 
+    if (!data) {
+      console.log("[fetchMoodPrediction] No mood prediction found");
+      return null;
+    }
+
+    console.log(
+      `[fetchMoodPrediction] Found prediction: mood=${data.predicted_mood}`,
+    );
     return {
       predicted_mood: data.predicted_mood,
       confidence: data.confidence,
-      context: data.prediction_context,
+      context: data.factors?.primary_factor || null,
     };
   } catch (error) {
-    console.error("Error fetching mood prediction:", error);
+    console.log(`[fetchMoodPrediction] Exception: ${error}`);
     return null;
   }
 }
@@ -307,32 +475,55 @@ async function fetchOrAssignQuest(
   userId: string,
   localDate: string,
 ): Promise<Quest | null> {
+  console.log(`[fetchOrAssignQuest] userId=${userId}, localDate=${localDate}`);
+
   try {
     // First, try to fetch existing quest for today
-    const { data: existingQuest } = await supabase
+    console.log(
+      "[fetchOrAssignQuest] Querying quests table with join to quest_templates...",
+    );
+
+    const { data: existingQuest, error: questError } = await supabase
       .from("quests")
-      .select("id, title, description")
+      .select(
+        `
+        id,
+        template_id,
+        quest_templates!inner(title, description)
+      `,
+      )
       .eq("user_id", userId)
-      .eq("assigned_date", localDate)
+      .eq("local_date", localDate)
       .maybeSingle();
 
+    if (questError) {
+      console.log(
+        `[fetchOrAssignQuest] Query error: ${questError.message}`,
+        questError,
+      );
+      return null;
+    }
+
     if (existingQuest) {
+      console.log(`[fetchOrAssignQuest] Found quest: id=${existingQuest.id}`);
+      console.log(
+        `[fetchOrAssignQuest] Quest data:`,
+        JSON.stringify(existingQuest, null, 2),
+      );
+
+      // PostgREST returns nested object for joins
+      const template = existingQuest.quest_templates;
       return {
         id: existingQuest.id,
-        title: existingQuest.title,
-        description: existingQuest.description,
+        title: template?.title || "Daily Quest",
+        description: template?.description,
       };
     }
 
-    // No quest found, attempt to assign new quest via existing logic
-    // Note: This assumes assign-quest Edge Function logic is available
-    // For MVP, we'll just return null and let UI handle gracefully
-    console.log(
-      `No quest found for ${localDate}, quest assignment should happen separately`,
-    );
+    console.log(`[fetchOrAssignQuest] No quest found for ${localDate}`);
     return null;
   } catch (error) {
-    console.error("Error fetching quest:", error);
+    console.log(`[fetchOrAssignQuest] Exception: ${error}`);
     return null;
   }
 }
@@ -344,6 +535,10 @@ function processCalendarEvents(
   events: CalendarEventInput[],
   includeCalendar: boolean,
 ): CalendarEventInput[] {
+  console.log(
+    `[processCalendarEvents] events=${events?.length || 0}, includeCalendar=${includeCalendar}`,
+  );
+
   if (!includeCalendar || !events || events.length === 0) {
     return [];
   }
@@ -362,7 +557,9 @@ function processCalendarEvents(
   });
 
   // Limit: First 5 events
-  return futureEvents.slice(0, 5);
+  const result = futureEvents.slice(0, 5);
+  console.log(`[processCalendarEvents] Returning ${result.length} events`);
+  return result;
 }
 
 /**
@@ -372,10 +569,13 @@ async function fetchSleepData(
   supabase: any,
   userId: string,
 ): Promise<{ sleep_duration_hours: number } | null> {
+  console.log(`[fetchSleepData] userId=${userId}`);
+
   try {
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayDate = yesterday.toISOString().split("T")[0];
+    console.log(`[fetchSleepData] Querying for date=${yesterdayDate}`);
 
     const { data, error } = await supabase
       .from("biometric_daily_summaries")
@@ -384,13 +584,22 @@ async function fetchSleepData(
       .eq("summary_date", yesterdayDate)
       .maybeSingle();
 
-    if (error || !data || !data.sleep_duration_hours) {
+    if (error) {
+      console.log(`[fetchSleepData] Query error: ${error.message}`, error);
       return null;
     }
 
+    if (!data || !data.sleep_duration_hours) {
+      console.log("[fetchSleepData] No sleep data found");
+      return null;
+    }
+
+    console.log(
+      `[fetchSleepData] Found sleep data: ${data.sleep_duration_hours} hours`,
+    );
     return { sleep_duration_hours: data.sleep_duration_hours };
   } catch (error) {
-    console.error("Error fetching sleep data:", error);
+    console.log(`[fetchSleepData] Exception: ${error}`);
     return null;
   }
 }
@@ -400,6 +609,8 @@ async function fetchSleepData(
  * Priority: Sleep deficit > Calendar event prep > Low mood armor > Default encouragement
  */
 function generateSuggestion(context: SuggestionContext): string {
+  console.log(`[generateSuggestion] context:`, JSON.stringify(context));
+
   // Priority 1: Sleep deficit recovery
   if (context.sleepDurationHours && context.sleepDurationHours < 6) {
     const hours = context.sleepDurationHours.toFixed(1);
@@ -407,7 +618,7 @@ function generateSuggestion(context: SuggestionContext): string {
   }
 
   // Priority 2: Calendar event preparation
-  if (context.calendarEvents.length > 0) {
+  if (context.calendarEvents && context.calendarEvents.length > 0) {
     const nextEvent = context.calendarEvents[0];
     const startTime = new Date(nextEvent.start_time);
     const now = new Date();

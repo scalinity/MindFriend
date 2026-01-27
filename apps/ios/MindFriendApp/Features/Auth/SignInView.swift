@@ -201,6 +201,9 @@ struct SignInView: View {
                 }
 
                 let accessToken = result.user.accessToken.tokenString
+                guard !accessToken.isEmpty else {
+                    throw AuthError.missingIdToken
+                }
 
                 isLoading = true
                 // Use SupabaseAuthService for Google Sign-In

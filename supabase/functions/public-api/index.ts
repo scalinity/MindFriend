@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 interface RateLimitConfig {
   free: { requestsPerDay: number; burst: number };
@@ -244,10 +244,14 @@ async function handleMoodsGet(
   const { data, error } = await query;
 
   if (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    console.error("Public API error:", error); // Log full error server-side
+    return new Response(
+      JSON.stringify({ error: "An unexpected error occurred" }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
   }
 
   return new Response(JSON.stringify({ moods: data, limit, offset }), {
@@ -279,10 +283,14 @@ async function handleMoodsPost(supabase: any, userId: string, body: any) {
     .single();
 
   if (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    console.error("Public API error:", error); // Log full error server-side
+    return new Response(
+      JSON.stringify({ error: "An unexpected error occurred" }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
   }
 
   return new Response(JSON.stringify({ mood: data }), {
@@ -307,10 +315,14 @@ async function handleJournalGet(
     .range(offset, offset + limit - 1);
 
   if (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    console.error("Public API error:", error); // Log full error server-side
+    return new Response(
+      JSON.stringify({ error: "An unexpected error occurred" }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
   }
 
   return new Response(JSON.stringify({ entries: data, limit, offset }), {
@@ -340,10 +352,14 @@ async function handleJournalPost(supabase: any, userId: string, body: any) {
     .single();
 
   if (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    console.error("Public API error:", error); // Log full error server-side
+    return new Response(
+      JSON.stringify({ error: "An unexpected error occurred" }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
   }
 
   return new Response(JSON.stringify({ entry: data }), {
@@ -367,10 +383,14 @@ async function handleExercisesGet(supabase: any, params: URLSearchParams) {
   const { data, error } = await query;
 
   if (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    console.error("Public API error:", error); // Log full error server-side
+    return new Response(
+      JSON.stringify({ error: "An unexpected error occurred" }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
   }
 
   return new Response(JSON.stringify({ exercises: data }), {

@@ -22,6 +22,8 @@ private enum InterventionConstants {
     static let heartRateMax = 220.0 // BPM
     static let hrvMin = 10.0 // Milliseconds
     static let hrvMax = 200.0 // Milliseconds
+    static let heartRateElevatedThreshold = 100.0 // BPM - elevated stress indicator
+    static let hrvLowThreshold = 50.0 // Milliseconds - low parasympathetic tone
     static let preferencesCacheExpirationSeconds: TimeInterval = 5 * 60 // 5 minutes
 }
 
@@ -197,13 +199,22 @@ final class InterventionService: ObservableObject {
         let session = try await supabase.auth.session
         let userId = session.user.id
 
+        // ✅ CORRECTNESS FIX: Validate UUID instead of creating random one on failure
+        guard let parsedInterventionId = UUID(uuidString: interventionId) else {
+            throw NSError(
+                domain: "InterventionService",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid intervention ID format"]
+            )
+        }
+
         // Create delivery record (let database generate ID)
         let deliveryId = UUID()
 
         let delivery = InterventionDelivery(
             id: deliveryId,
             userId: userId,
-            interventionId: UUID(uuidString: interventionId) ?? UUID(),
+            interventionId: parsedInterventionId,
             triggerId: nil,
             triggerType: triggerType,
             contextSnapshot: context?.mapValues { AnyCodableValue($0) },

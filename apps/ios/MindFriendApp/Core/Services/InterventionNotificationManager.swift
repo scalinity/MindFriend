@@ -258,10 +258,18 @@ final class InterventionNotificationManager: NSObject, InterventionNotificationM
         // Relevance score (for notification priority)
         content.relevanceScore = 0.8
 
+        // ✅ CORRECTNESS FIX: Validate UUID before creating deep link
+        guard let interventionId = UUID(uuidString: intervention.id) else {
+            print("⚠️ Invalid intervention ID format: \(intervention.id)")
+            // Use deliveryId as fallback for deep link to prevent complete failure
+            content.userInfo = ["deliveryId": deliveryId.uuidString, "error": "invalid_intervention_id"]
+            return content
+        }
+
         // User info for deep linking
         let deepLink = InterventionDeepLink(
             deliveryId: deliveryId,
-            interventionId: UUID(uuidString: intervention.id) ?? UUID(),
+            interventionId: interventionId,
             action: .open
         )
         content.userInfo = deepLink.userInfo

@@ -4,7 +4,7 @@ import SwiftUI
 // MARK: - Helper Types
 
 /// Universal Codable value that can represent any JSON-compatible type
-enum AnyCodableValue: Codable, Equatable {
+enum AnyCodableValue: Codable, Equatable, Hashable {
     case int(Int)
     case double(Double)
     case string(String)
@@ -104,9 +104,27 @@ public struct UserProfile: Codable, Identifiable, Equatable {
     public let entitlements: UserEntitlements?
     public let badges: [UserBadge]?
 
+    // MARK: - Activation (Progressive Disclosure)
+
+    /// When the user completed activation (magic moment)
+    public var activationCompletedAt: Date? = nil
+    /// When the user completed their first quest
+    public var firstQuestCompletedAt: Date? = nil
+    /// When the user logged their first mood
+    public var firstMoodLoggedAt: Date? = nil
+    /// When the user sent their first chat message
+    public var firstChatMessageAt: Date? = nil
+    /// Features the user has unlocked
+    public var unlockedFeatures: [String]? = nil
+
     /// Returns true if the user hasn't completed onboarding yet
     var needsOnboarding: Bool {
         onboardingCompletedAt == nil
+    }
+
+    /// Returns true if the user has completed activation (magic moment)
+    var isActivated: Bool {
+        activationCompletedAt != nil
     }
 
     enum CodingKeys: String, CodingKey {
@@ -122,6 +140,11 @@ public struct UserProfile: Codable, Identifiable, Equatable {
         case settings
         case entitlements
         case badges
+        case activationCompletedAt = "activation_completed_at"
+        case firstQuestCompletedAt = "first_quest_completed_at"
+        case firstMoodLoggedAt = "first_mood_logged_at"
+        case firstChatMessageAt = "first_chat_message_at"
+        case unlockedFeatures = "unlocked_features"
     }
 }
 
@@ -619,7 +642,7 @@ struct Entitlements: Codable, Equatable {
         return remaining <= 3 && remaining > 0
     }
 
-    static let free = Entitlements(tier: .free, dailyAiQuota: 20, dailyAiUsed: 0)
+    static let free = Entitlements(tier: .free, dailyAiQuota: 5, dailyAiUsed: 0)
     static let premium = Entitlements(tier: .premium, dailyAiQuota: 9999, dailyAiUsed: 0)
 }
 
@@ -1542,6 +1565,8 @@ struct WeeklySummary: Codable, Identifiable, Equatable {
             return "Your mood has been steady."
         case .declining:
             return "It's been a tough week. We're here for you."
+        case .baseline:
+            return "This is your baseline mood."
         case .insufficientData:
             return "Log more moods to see trends."
         }

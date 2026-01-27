@@ -4,6 +4,7 @@ import SwiftUI
 /// Provides quick generate buttons, recent history, and favorites access
 struct GenerativeHomeView: View {
     @EnvironmentObject private var container: DependencyContainer
+    @EnvironmentObject var appState: AppState
     @StateObject private var service: GeneratedContentService
     @State private var recentContent: [GeneratedContent] = []
     @State private var favorites: [GeneratedContent] = []
@@ -37,7 +38,7 @@ struct GenerativeHomeView: View {
             }
             .padding()
         }
-        .navigationTitle("Generative Wellness")
+        .navigationTitle("AI Wellness")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -213,7 +214,7 @@ struct GenerativeHomeView: View {
 
             if quota.isExhausted {
                 Button("Upgrade") {
-                    // Show paywall
+                    appState.showPaywall = true
                 }
                 .font(.footnote.bold())
                 .foregroundStyle(.blue)
@@ -248,17 +249,30 @@ struct GenerativeHomeView: View {
     // MARK: - Data Loading
 
     private func loadData() async {
+        // Load content library and favorites (these use RLS, won't fail if authenticated)
         do {
             async let recentTask = service.fetchContentLibrary(limit: 5)
             async let favoritesTask = service.fetchFavorites()
-            async let quotaTask = service.fetchQuotaStatus()
 
-            let (recent, favs, quota) = try await (recentTask, favoritesTask, quotaTask)
+            let (recent, favs) = try await (recentTask, favoritesTask)
             recentContent = recent
             favorites = favs
-            quotaStatus = quota
         } catch {
-            print("Failed to load data: \(error)")
+            print("Failed to load content: \(error)")
+        }
+
+        // Load quota status separately - don't block UI if this fails
+        do {
+            quotaStatus = try await service.fetchQuotaStatus()
+        } catch {
+            // Default to free tier status if quota fetch fails
+            quotaStatus = ContentQuotaStatus(
+                used: 0,
+                limit: 3,
+                isPremium: false,
+                resetsAt: nil
+            )
+            print("Failed to load quota status: \(error)")
         }
     }
 

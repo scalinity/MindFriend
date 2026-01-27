@@ -1,5 +1,101 @@
 # MindFriend Development Progress Log
 
+## [2026-01-26] Audio Story Generation System
+
+**Type:** Feature
+**Status:** Complete
+
+### Summary
+
+Built a reusable admin Edge Function to generate AI-written sleep stories and synthesize audio using ElevenLabs TTS, with voice variation by tier.
+
+### Changes
+
+| Component                                                        | Change                                                                                                                       |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `supabase/migrations/20260125211117_sleep_content_synthesis.sql` | Added script, voice_id, synthesis_status, original_audio_url, synthesis_error, synthesized_at columns to sleep_content table |
+| `supabase/functions/_shared/story-generator.ts`                  | AI sleep story generator using xAI Grok API with sleep-optimized prompts                                                     |
+| `supabase/functions/_shared/audio-utils.ts`                      | Text chunking for ElevenLabs 5000-char limit and MP3 concatenation utilities                                                 |
+| `supabase/functions/generate-sleep-audio/index.ts`               | Admin Edge Function with generate/regenerate/preview/status actions                                                          |
+
+### Voice Mapping
+
+| Tier    | Voice                         | Style          |
+| ------- | ----------------------------- | -------------- |
+| Free    | Sarah (EXAVITQu4vr4xnSDxMaL)  | Calm, clear    |
+| Premium | Rachel (21m00Tcm4TlvDq8ikWAM) | Soothing, warm |
+| Kids    | Elli (MF3mGyEYCl7XYWbV9V6O)   | Gentle whisper |
+
+### Stories Generated
+
+All 10 unique active stories synthesized successfully (~$19.75 total cost):
+
+- Free tier (3): Jack and His Golden Snuff-Box, Jack the Giant-Killer, Whittington and His Cat
+- Premium tier (5): The Brave Tin Soldier, The Ugly Duckling, The Garden of Moonlight, The Silk Road Dreamer, The Lighthouse Keeper's Lullaby
+- Kids tier (2): The Ugly Duckling, Thumbelina
+
+### Testing
+
+- [x] Schema migration applied
+- [x] Status endpoint verified
+- [x] Single story end-to-end test (script generation + synthesis + upload)
+- [x] All 10 stories generated and audio files accessible
+- [ ] iOS app playback verification
+
+### Notes
+
+- Deployed with `--no-verify-jwt` to handle service role auth at function level
+- Stories target ~7 minutes to fit within Edge Function timeout (~150s)
+- Duplicate entries discovered and deactivated (7 duplicates removed)
+- Function uses JWT role claim decoding for auth (more robust than string comparison)
+
+---
+
+## [2026-01-25] N006: Wellbeing Debt Calculator - Integration Complete
+
+**Type:** Integration
+**Status:** Complete
+
+### Summary
+
+Completed N006 Wellbeing Debt Calculator integration by adding navigation entry point in HomeView, wiring to F026 SignalMonitor for compound signal detection, and adding unit tests.
+
+### Changes
+
+| Component                         | Change                                                                                  |
+| --------------------------------- | --------------------------------------------------------------------------------------- |
+| `WellbeingDebtCard.swift`         | New home card displaying debt status with navigation to dashboard                       |
+| `HomeView.swift`                  | Replaced mock WellnessScoreCard with real WellbeingDebtCard                             |
+| `SignalMonitor.swift`             | Added wellbeingDebtService integration for `high_debt` and `declining_wellness` signals |
+| `DependencyContainer.swift`       | Wired wellbeingDebtService to signalMonitor                                             |
+| `WellbeingDebtServiceTests.swift` | Unit tests for model decoding and error handling                                        |
+
+### F026 Integration
+
+SignalMonitor now emits two new signals from N006:
+
+- `high_debt`: Emitted when threshold severity is warning (0.7) or danger (0.9)
+- `declining_wellness`: Emitted when trend direction is worsening
+
+These signals are available to F026 Stress Signature for compound pattern detection.
+
+### Existing Infrastructure (Already Built)
+
+- **Models**: `WellbeingDebtModels.swift` - Transactions, scores, profiles, recovery programs
+- **Service**: `WellbeingDebtService.swift` - Actor-based Supabase integration
+- **Views**: `WellbeingDebtDashboardView.swift`, `RecoveryProgramView.swift`, `DebtBreakdownView.swift`
+- **Database**: 3 tables with RLS (`wellbeing_transactions`, `wellbeing_debt_scores`, `wellbeing_debt_profiles`)
+- **Edge Functions**: `calculate-debt-score`, `generate-recovery-program`, `detect-transactions`
+
+### Testing
+
+- [x] Unit tests for model decoding
+- [x] Unit tests for error handling
+- [x] Files added to Xcode project
+- [ ] Build verification (pending)
+
+---
+
 ## [2026-01-25] F026: Stress Signature Fingerprint - Early Warning System
 
 **Type:** Feature

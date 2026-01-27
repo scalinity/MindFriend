@@ -61,6 +61,7 @@ struct WellbeingDebtDashboardView: View {
                         } label: {
                             Label("View Breakdown", systemImage: "chart.bar")
                         }
+                        .disabled(latestScore == nil)
 
                         Button {
                             Task {
@@ -77,10 +78,29 @@ struct WellbeingDebtDashboardView: View {
             .sheet(isPresented: $showingBreakdown) {
                 if let score = latestScore {
                     DebtBreakdownView(debtScore: score)
+                        .environmentObject(container)
+                } else {
+                    VStack(spacing: 16) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.largeTitle)
+                            .foregroundStyle(.orange)
+                        Text("No Data Available")
+                            .font(.headline)
+                        Text("Please try again after loading your debt status.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                        Button("Close") {
+                            showingBreakdown = false
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    .padding()
                 }
             }
             .sheet(isPresented: $showingRecoveryProgram) {
                 RecoveryProgramView()
+                    .environmentObject(container)
             }
             .task {
                 await loadData()

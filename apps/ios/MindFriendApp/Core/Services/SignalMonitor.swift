@@ -27,6 +27,9 @@ final class SignalMonitor: ObservableObject {
     weak var cognitiveDetector: SignatureCognitiveDistortionDetector?
     weak var socialVitalityService: SignatureSocialVitalityService?
 
+    // N006 Wellbeing Debt integration (actor-based, polled during measurement)
+    var wellbeingDebtService: WellbeingDebtService?
+
     init(supabaseDataService: SupabaseDataService) {
         self.supabaseDataService = supabaseDataService
     }
@@ -116,11 +119,57 @@ final class SignalMonitor: ObservableObject {
         // Measure HealthKit signals
         await measureHealthKitSignals()
 
+        // Measure Wellbeing Debt signals (N006 integration)
+        await measureWellbeingDebtSignals()
+
         // Update timestamp
         lastUpdateTime = Date()
 
         // Persist signals to database
         await persistCurrentSignals()
+    }
+
+    // MARK: - Wellbeing Debt (N006)
+
+    private func measureWellbeingDebtSignals() async {
+        guard let debtService = wellbeingDebtService else { return }
+
+        do {
+            guard let score = try await debtService.fetchLatestDebtScore() else { return }
+
+            // Emit high_debt signal when severity is warning or danger
+            // This integrates with F026 Stress Signature for compound signal detection
+            let severity = score.thresholdStatus.severity
+
+            if severity == .warning || severity == .danger {
+                // Convert threshold severity to signal value (0.6-1.0 range)
+                let signalValue: Double = severity == .danger ? 0.9 : 0.7
+
+                let signal = SignalUpdate(
+                    signalType: "high_debt",
+                    value: signalValue,
+                    source: .wellbeingDebt
+                )
+                emitSignal(signal)
+            }
+
+            // Emit declining_wellness signal when trend is worsening
+            if score.trend.direction == .worsening {
+                let velocityValue = NSDecimalNumber(decimal: score.trend.velocity).doubleValue
+                // Convert velocity (-10 to 0) to signal value (0.5-1.0)
+                let normalizedVelocity = min(1.0, max(0.5, 0.5 - (velocityValue / 20.0)))
+
+                let signal = SignalUpdate(
+                    signalType: "declining_wellness",
+                    value: normalizedVelocity,
+                    source: .wellbeingDebt
+                )
+                emitSignal(signal)
+            }
+        } catch {
+            // Log without sensitive data
+            print("[SignalMonitor] Wellbeing debt query error occurred")
+        }
     }
 
     // MARK: - Integration Processing

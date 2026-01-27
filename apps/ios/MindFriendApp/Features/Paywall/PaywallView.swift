@@ -350,22 +350,9 @@ struct PaywallPlanCard: View {
 
                 // Plan info
                 VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 8) {
-                        Text(planType.displayName)
-                            .font(.headline)
-                            .foregroundStyle(.primary)
-
-                        if showBestValue {
-                            Text("Best Value")
-                                .font(.caption2)
-                                .fontWeight(.semibold)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 2)
-                                .background(Color.green)
-                                .foregroundStyle(.white)
-                                .cornerRadius(4)
-                        }
-                    }
+                    Text(planType.displayName)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
 
                     Text(planType.description)
                         .font(.caption)
@@ -377,6 +364,16 @@ struct PaywallPlanCard: View {
                 // Price display (not for enterprise/gift)
                 if let price = price {
                     VStack(alignment: .trailing, spacing: 2) {
+                        if showBestValue {
+                            Text("Best Value")
+                                .font(.caption2)
+                                .fontWeight(.semibold)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.green)
+                                .foregroundStyle(.white)
+                                .cornerRadius(4)
+                        }
                         Text(price)
                             .font(.system(size: 17, weight: .bold))
                             .foregroundStyle(.primary)
