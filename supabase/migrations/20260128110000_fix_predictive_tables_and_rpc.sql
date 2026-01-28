@@ -57,10 +57,10 @@ CREATE TABLE IF NOT EXISTS public.preemptive_interventions (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Indexes
-CREATE INDEX IF NOT EXISTS idx_interventions_user_status ON public.preemptive_interventions(user_id, status);
-CREATE INDEX IF NOT EXISTS idx_interventions_prediction ON public.preemptive_interventions(prediction_id);
-CREATE INDEX IF NOT EXISTS idx_interventions_pending ON public.preemptive_interventions(user_id, created_at DESC) WHERE status = 'pending';
+-- Indexes (using full table name prefix to avoid collision with interventions table indexes)
+CREATE INDEX IF NOT EXISTS idx_preemptive_interventions_user_status ON public.preemptive_interventions(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_preemptive_interventions_prediction ON public.preemptive_interventions(prediction_id);
+CREATE INDEX IF NOT EXISTS idx_preemptive_interventions_pending ON public.preemptive_interventions(user_id, created_at DESC) WHERE status = 'pending';
 
 -- RLS
 ALTER TABLE public.preemptive_interventions ENABLE ROW LEVEL SECURITY;
@@ -76,14 +76,18 @@ CREATE POLICY "Service role can manage interventions" ON public.preemptive_inter
 
 -- =====================================================
 -- 3. Fix get_home_context function (posted_at -> created_at)
+-- SECURITY: Added auth check to prevent IDOR (CWE-639)
+-- CORRECTNESS: Fixed date calculations to use date subtraction
 -- =====================================================
 CREATE OR REPLACE FUNCTION public.get_home_context(p_user_id uuid)
 RETURNS jsonb
 LANGUAGE plpgsql
+STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
+    v_caller_id UUID;
     v_today_mood INT;
     v_mood_trend TEXT;
     v_low_mood_days INT;
@@ -96,6 +100,15 @@ DECLARE
     v_actions JSONB;
     v_exercise_ids UUID[];
 BEGIN
+    -- SECURITY CHECK: Prevent IDOR - caller must be the user or service_role
+    v_caller_id := auth.uid();
+    IF v_caller_id IS NULL THEN
+        RAISE EXCEPTION 'Not authenticated';
+    END IF;
+    IF v_caller_id != p_user_id AND (SELECT auth.role()) != 'service_role' THEN
+        RAISE EXCEPTION 'Access denied: cannot view another user''s home context';
+    END IF;
+
     -- Get today's mood
     SELECT mood_score INTO v_today_mood
     FROM moods
@@ -123,17 +136,18 @@ BEGIN
         HAVING AVG(mood_score) <= 2
     ) low_days;
 
-    -- Days since last exercise
+    -- Days since last exercise (using date subtraction for accuracy)
     SELECT COALESCE(
-        EXTRACT(DAY FROM NOW() - MAX(completed_at))::INT,
+        (CURRENT_DATE - MAX(completed_at)::date)::INT,
         999
     ) INTO v_days_since_exercise
     FROM exercise_sessions
     WHERE user_id = p_user_id;
 
     -- Days since last circle check-in (FIXED: use created_at, not posted_at)
+    -- Using date subtraction instead of EXTRACT(DAY FROM interval) for accuracy
     SELECT COALESCE(
-        EXTRACT(DAY FROM NOW() - MAX(created_at))::INT,
+        (CURRENT_DATE - MAX(created_at)::date)::INT,
         999
     ) INTO v_days_since_circle
     FROM circle_posts

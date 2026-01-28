@@ -12,6 +12,10 @@ struct WeeklyInsightsView: View {
     @State private var isGenerating = false
     @State private var error: String?
 
+    // Insights tutorial state
+    @AppStorage("insights_tutorial_completed") private var insightsTutorialCompleted = false
+    @State private var showInsightsTutorial = false
+
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
@@ -70,6 +74,18 @@ struct WeeklyInsightsView: View {
             Task {
                 await loadInsights(forceRegenerate: false)
             }
+        }
+        .onAppear {
+            if !insightsTutorialCompleted {
+                showInsightsTutorial = true
+            }
+        }
+        .fullScreenCover(isPresented: $showInsightsTutorial) {
+            InsightsTutorialFlow(onComplete: {
+                insightsTutorialCompleted = true
+                showInsightsTutorial = false
+            })
+            .environmentObject(container)
         }
     }
 
@@ -157,13 +173,15 @@ struct CurrentWeekCard: View {
 
                     Spacer()
 
-                    if let trend = insight.moodTrend {
+                    // Only show trend for meaningful values (not baseline/insufficientData)
+                    if let trend = insight.moodTrend,
+                       trend != .baseline && trend != .insufficientData {
                         VStack(alignment: .trailing, spacing: 4) {
                             Text(trend.emoji)
                                 .font(.title)
                             Text(insight.moodTrendMessage)
                                 .font(.subheadline)
-                                .foregroundColor(Color(trend.color))
+                                .foregroundColor(trend.color)
                                 .multilineTextAlignment(.trailing)
                         }
                     }
@@ -174,6 +192,7 @@ struct CurrentWeekCard: View {
             }
         }
         .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.secondarySystemGroupedBackground))
         .cornerRadius(16)
     }
@@ -248,6 +267,7 @@ struct MoodChartCard: View {
             }
         }
         .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.secondarySystemGroupedBackground))
         .cornerRadius(16)
     }
@@ -295,6 +315,7 @@ struct PatternsCard: View {
             }
         }
         .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.secondarySystemGroupedBackground))
         .cornerRadius(16)
     }
@@ -338,6 +359,7 @@ struct AIInsightCard: View {
             }
         }
         .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.accentColor.opacity(0.1))
         .cornerRadius(16)
     }
@@ -375,6 +397,7 @@ struct ActivitySummaryCard: View {
             }
         }
         .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.secondarySystemGroupedBackground))
         .cornerRadius(16)
     }
@@ -438,9 +461,11 @@ struct PastWeekCard: View {
                         .font(.title2)
                         .fontWeight(.bold)
 
-                    if let trend = insight.moodTrend {
+                    // Only show trend icon for meaningful values
+                    if let trend = insight.moodTrend,
+                       trend != .insufficientData && trend != .baseline {
                         Image(systemName: trend.icon)
-                            .foregroundColor(Color(trend.color))
+                            .foregroundColor(trend.color)
                             .font(.caption)
                     }
                 }

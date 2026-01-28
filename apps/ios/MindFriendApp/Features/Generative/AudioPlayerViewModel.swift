@@ -243,7 +243,9 @@ final class AudioPlayerViewModel: ObservableObject {
         backgroundPlayer?.stop()
         backgroundPlayer = nil
         sleepTimerTask?.cancel()
+        sleepTimerTask = nil
         fadeOutTask?.cancel()
+        fadeOutTask = nil
         cancellables.removeAll()
     }
 
@@ -316,21 +318,74 @@ final class AudioPlayerViewModel: ObservableObject {
             return
         }
 
-        // Load bundled background sound
-        guard let url = Bundle.main.url(forResource: soundType.rawValue, withExtension: "mp3") else {
-            print("Background sound not found: \(soundType.rawValue)")
+        // Get audio URL (prefers local bundle, falls back to remote)
+        guard let url = soundType.audioUrl else {
+            print("[AudioPlayerViewModel] Background sound not available: \(soundType.rawValue)")
             return
         }
 
+        print("[AudioPlayerViewModel] Loading background sound from: \(url)")
+
+        // Use AVAudioPlayer for local files, download for remote
+        if soundType.localUrl != nil {
+            // Local file - use AVAudioPlayer directly
+            do {
+                backgroundPlayer = try AVAudioPlayer(contentsOf: url)
+                backgroundPlayer?.numberOfLoops = -1 // Loop indefinitely
+                backgroundPlayer?.volume = backgroundSoundVolume
+                if isPlaying {
+                    backgroundPlayer?.play()
+                }
+            } catch {
+                print("[AudioPlayerViewModel] Failed to load local background sound: \(error)")
+            }
+        } else {
+            // Remote file - download to cache first, then play
+            Task {
+                await loadRemoteBackgroundSound(from: url, for: soundType)
+            }
+        }
+    }
+
+    /// Download and cache remote background sound, then play it
+    private func loadRemoteBackgroundSound(from url: URL, for soundType: BackgroundSoundType) async {
+        let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("BackgroundSounds")
+
+        // Create cache directory if needed
+        try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+
+        let cachedFile = cacheDir.appendingPathComponent("\(soundType.rawValue).mp3")
+
+        // Check if already cached
+        if FileManager.default.fileExists(atPath: cachedFile.path) {
+            await playBackgroundSound(from: cachedFile)
+            return
+        }
+
+        // Download the file
         do {
-            backgroundPlayer = try AVAudioPlayer(contentsOf: url)
-            backgroundPlayer?.numberOfLoops = -1 // Loop indefinitely
-            backgroundPlayer?.volume = backgroundSoundVolume
+            let (tempUrl, _) = try await URLSession.shared.download(from: url)
+            try? FileManager.default.removeItem(at: cachedFile)
+            try FileManager.default.moveItem(at: tempUrl, to: cachedFile)
+            await playBackgroundSound(from: cachedFile)
+        } catch {
+            print("[AudioPlayerViewModel] Failed to download background sound: \(error)")
+        }
+    }
+
+    /// Play background sound from a local file URL
+    private func playBackgroundSound(from url: URL) async {
+        do {
+            let player = try AVAudioPlayer(contentsOf: url)
+            player.numberOfLoops = -1 // Loop indefinitely
+            player.volume = backgroundSoundVolume
+            self.backgroundPlayer = player
             if isPlaying {
-                backgroundPlayer?.play()
+                player.play()
             }
         } catch {
-            print("Failed to load background sound: \(error)")
+            print("[AudioPlayerViewModel] Failed to play background sound: \(error)")
         }
     }
 

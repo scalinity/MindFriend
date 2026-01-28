@@ -340,7 +340,20 @@ final class GeneratedContentService: ObservableObject {
         feedback: String? = nil
     ) async throws -> RateContentResponse {
         // Ensure session is loaded before making function call
-        _ = try await supabase.auth.session
+        let session: Session
+        do {
+            session = try await supabase.auth.session
+            #if DEBUG
+            print("[GeneratedContentService] rateContent - Session loaded for user: \(session.user.id)")
+            print("[GeneratedContentService] rateContent - Token prefix: \(String(session.accessToken.prefix(30)))...")
+            print("[GeneratedContentService] rateContent - Token expires at: \(session.expiresAt)")
+            #endif
+        } catch {
+            #if DEBUG
+            print("[GeneratedContentService] rateContent - ERROR: Failed to get session: \(error)")
+            #endif
+            throw GeneratedContentError.notAuthenticated
+        }
 
         let request = RateContentRequest(
             contentId: contentId.uuidString,
@@ -349,10 +362,18 @@ final class GeneratedContentService: ObservableObject {
             feedback: feedback
         )
 
+        #if DEBUG
+        print("[GeneratedContentService] rateContent - Invoking edge function 'rate-content'...")
+        #endif
+
         let response: RateContentResponse = try await supabase.functions.invoke(
             "rate-content",
             options: FunctionInvokeOptions(body: request)
         )
+
+        #if DEBUG
+        print("[GeneratedContentService] rateContent - Success: \(response.message)")
+        #endif
 
         return response
     }

@@ -7,6 +7,10 @@ struct LongitudinalDashboardView: View {
     @EnvironmentObject private var container: DependencyContainer
     @StateObject private var viewModel: LongitudinalDashboardViewModel
 
+    // Longitudinal tutorial state
+    @AppStorage("longitudinal_tutorial_completed") private var longitudinalTutorialCompleted = false
+    @State private var showLongitudinalTutorial = false
+
     init(container: DependencyContainer? = nil) {
         _viewModel = StateObject(wrappedValue: LongitudinalDashboardViewModel())
     }
@@ -15,9 +19,14 @@ struct LongitudinalDashboardView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
+                    // Show report generation error as a dismissible banner if we have data
+                    if let reportError = viewModel.reportError {
+                        reportErrorBanner(reportError)
+                    }
+                    
                     if viewModel.isLoading {
                         loadingView
-                    } else if let error = viewModel.error {
+                    } else if let error = viewModel.loadError {
                         errorView(error)
                     } else if !viewModel.hasData {
                         emptyStateView
@@ -50,7 +59,20 @@ struct LongitudinalDashboardView: View {
             }
             .task {
                 viewModel.setService(container.longitudinalService)
+                viewModel.setDataService(container.supabaseDataService)
                 await viewModel.loadData()
+            }
+            .onAppear {
+                if !longitudinalTutorialCompleted {
+                    showLongitudinalTutorial = true
+                }
+            }
+            .fullScreenCover(isPresented: $showLongitudinalTutorial) {
+                LongitudinalTutorialFlow(onComplete: {
+                    longitudinalTutorialCompleted = true
+                    showLongitudinalTutorial = false
+                })
+                .environmentObject(container)
             }
         }
     }
@@ -59,6 +81,9 @@ struct LongitudinalDashboardView: View {
 
     private var contentView: some View {
         VStack(spacing: 24) {
+            // Yearly Heat Map
+            yearlyHeatMapSection
+
             // Year at a Glance Card
             yearAtGlanceCard
 
@@ -78,6 +103,15 @@ struct LongitudinalDashboardView: View {
             // Quick Actions
             quickActionsSection
         }
+    }
+
+    // MARK: - Yearly Heat Map
+
+    private var yearlyHeatMapSection: some View {
+        YearlyHeatMapCard(
+            moodsByDate: viewModel.moodsByDate,
+            year: Calendar.current.component(.year, from: Date())
+        )
     }
 
     // MARK: - Year at a Glance
@@ -352,22 +386,45 @@ struct LongitudinalDashboardView: View {
     // MARK: - Empty State
 
     private var emptyStateView: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "chart.line.uptrend.xyaxis")
-                .font(.system(size: 48))
-                .foregroundStyle(.blue)
-            Text("Your Journey Starts Here")
-                .font(.headline)
-            Text("Track your mood regularly to see long-term patterns and insights about your wellness journey.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+        VStack(spacing: 24) {
+            // Show heat map even when no other data
+            yearlyHeatMapSection
+
+            VStack(spacing: 16) {
+                Image(systemName: "chart.line.uptrend.xyaxis")
+                    .font(.system(size: 48))
+                    .foregroundStyle(.blue)
+                Text("Your Journey Starts Here")
+                    .font(.headline)
+                Text("Track your mood regularly to see long-term patterns and insights about your wellness journey.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(32)
         }
-        .padding(32)
-        .frame(maxWidth: .infinity, minHeight: 300)
     }
 
     // MARK: - Helpers
+
+    private func reportErrorBanner(_ error: String) -> some View {
+        HStack {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            Text("Report generation failed")
+                .font(.subheadline)
+            Spacer()
+            Button {
+                viewModel.reportError = nil
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding()
+        .background(Color.orange.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
 
     private func trendIcon(for trend: MoodTrend) -> String {
         switch trend {
@@ -403,9 +460,12 @@ final class LongitudinalDashboardViewModel: ObservableObject {
     @Published var dashboardData: LongitudinalDashboardData?
     @Published var isLoading = false
     @Published var isExporting = false
-    @Published var error: String?
+    @Published var loadError: String?
+    @Published var reportError: String?
+    @Published var moodsByDate: [String: Int] = [:]
 
     private var service: LongitudinalService?
+    private var dataService: SupabaseDataService?
 
     var hasData: Bool {
         dashboardData?.hasData ?? false
@@ -431,19 +491,45 @@ final class LongitudinalDashboardViewModel: ObservableObject {
         self.service = service
     }
 
+    func setDataService(_ dataService: SupabaseDataService) {
+        self.dataService = dataService
+    }
+
     func loadData() async {
         guard let service else { return }
 
         isLoading = true
-        error = nil
+        loadError = nil
 
         do {
             dashboardData = try await service.fetchDashboardData()
+
+            // Load mood data for heat map (past 365 days)
+            await loadMoodDataForHeatMap()
         } catch {
-            self.error = error.localizedDescription
+            self.loadError = error.localizedDescription
         }
 
         isLoading = false
+    }
+
+    private func loadMoodDataForHeatMap() async {
+        guard let dataService else { return }
+
+        do {
+            let moods = try await dataService.getMoodsForPast(days: 365, limit: 1000)
+            var moodDict: [String: Int] = [:]
+
+            for mood in moods {
+                // localDate is already in yyyy-MM-dd format
+                moodDict[mood.localDate] = mood.moodScore
+            }
+
+            self.moodsByDate = moodDict
+        } catch {
+            // Silent failure - heat map will show no data
+            print("[LongitudinalDashboard] Failed to load moods for heat map: \(error)")
+        }
     }
 
     func refresh() async {
@@ -458,7 +544,7 @@ final class LongitudinalDashboardViewModel: ObservableObject {
                 _ = try await service.generateReport(type: .quarterly)
                 // Could show success notification
             } catch {
-                self.error = error.localizedDescription
+                self.reportError = error.localizedDescription
             }
         }
     }
@@ -474,7 +560,7 @@ final class LongitudinalDashboardViewModel: ObservableObject {
                 // Share the data
                 await shareExportData(data)
             } catch {
-                self.error = error.localizedDescription
+                self.reportError = error.localizedDescription
             }
             isExporting = false
         }
@@ -500,7 +586,7 @@ final class LongitudinalDashboardViewModel: ObservableObject {
                 rootVC.present(activityVC, animated: true)
             }
         } catch {
-            self.error = "Failed to export: \(error.localizedDescription)"
+            self.reportError = "Failed to export: \(error.localizedDescription)"
         }
     }
 }

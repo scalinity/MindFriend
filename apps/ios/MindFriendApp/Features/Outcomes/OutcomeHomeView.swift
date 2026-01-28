@@ -3,10 +3,16 @@ import SwiftUI
 /// Dashboard showing assessment status, recent results, and outcome goals
 @MainActor
 struct OutcomeHomeView: View {
+    @EnvironmentObject var appState: AppState
+    @EnvironmentObject var container: DependencyContainer
     @ObservedObject var outcomeService: OutcomeTrackingService
     @ObservedObject var authService: SupabaseAuthService
     @StateObject private var insightsService: WellnessInsightsService
     @State private var selectedAssessmentType: AssessmentType?
+
+    // Outcomes tutorial state
+    @AppStorage("outcomes_tutorial_completed") private var outcomesTutorialCompleted = false
+    @State private var showOutcomesTutorial = false
 
     init(outcomeService: OutcomeTrackingService, authService: SupabaseAuthService) {
         self.outcomeService = outcomeService
@@ -252,6 +258,19 @@ struct OutcomeHomeView: View {
                     print("[OutcomeHomeView] ERROR reloading on auth change: \(error)")
                 }
             }
+        }
+        .onChange(of: appState.selectedTab) { _, newTab in
+            // Only show tutorial when outcomes tab is actually selected
+            if newTab == .outcomes && !outcomesTutorialCompleted {
+                showOutcomesTutorial = true
+            }
+        }
+        .fullScreenCover(isPresented: $showOutcomesTutorial) {
+            OutcomesTutorialFlow(onComplete: {
+                outcomesTutorialCompleted = true
+                showOutcomesTutorial = false
+            })
+            .environmentObject(container)
         }
     }
 }

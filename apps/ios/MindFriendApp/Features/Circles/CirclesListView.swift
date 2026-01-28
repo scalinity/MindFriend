@@ -8,6 +8,10 @@ struct CirclesListView: View {
     @State private var showCreateCircle = false
     @State private var showJoinCircle = false
 
+    // Circles tutorial state
+    @AppStorage("circles_tutorial_completed") private var circlesTutorialCompleted = false
+    @State private var showCirclesTutorial = false
+
     var body: some View {
         NavigationStack {
             Group {
@@ -64,6 +68,18 @@ struct CirclesListView: View {
             }
             .task {
                 await loadCircles()
+            }
+            .onAppear {
+                if !circlesTutorialCompleted {
+                    showCirclesTutorial = true
+                }
+            }
+            .fullScreenCover(isPresented: $showCirclesTutorial) {
+                CirclesTutorialFlow(onComplete: {
+                    circlesTutorialCompleted = true
+                    showCirclesTutorial = false
+                })
+                .environmentObject(container)
             }
         }
     }

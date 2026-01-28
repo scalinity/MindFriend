@@ -2,6 +2,7 @@
 // Extended family models with Codable conformance and CodingKeys for snake_case conversion
 
 import Foundation
+import SwiftUI
 
 // MARK: - Family Group
 
@@ -292,12 +293,12 @@ enum MoodTrend: String, Codable, Equatable, Hashable {
         }
     }
 
-    var color: String {
+    var color: Color {
         switch self {
-        case .improving: return "green"
-        case .stable: return "yellow"
-        case .declining: return "orange"
-        case .baseline, .insufficientData: return "gray"
+        case .improving: return .green
+        case .stable: return .yellow
+        case .declining: return .orange
+        case .baseline, .insufficientData: return .gray
         }
     }
 
@@ -307,6 +308,17 @@ enum MoodTrend: String, Codable, Equatable, Hashable {
         case .stable: return "➡️"
         case .declining: return "📉"
         case .baseline, .insufficientData: return "❓"
+        }
+    }
+
+    /// User-friendly display name for the trend
+    var displayName: String {
+        switch self {
+        case .improving: return String(localized: "Improving")
+        case .stable: return String(localized: "Stable")
+        case .declining: return String(localized: "Declining")
+        case .baseline: return String(localized: "Baseline")
+        case .insufficientData: return String(localized: "Not enough data")
         }
     }
 }

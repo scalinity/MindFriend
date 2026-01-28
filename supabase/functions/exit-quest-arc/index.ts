@@ -4,8 +4,15 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import { getCorsHeaders, validateContentType, parseJsonBody } from "../_shared/cors.ts";
-import { enforceHTTPS, getSecurityHeaders } from "../_shared/https-enforcement.ts";
+import {
+  getCorsHeaders,
+  validateContentType,
+  parseJsonBody,
+} from "../_shared/cors.ts";
+import {
+  enforceHTTPS,
+  getSecurityHeaders,
+} from "../_shared/https-enforcement.ts";
 import { checkRateLimit } from "../_shared/rate-limit.ts";
 
 serve(async (req) => {
@@ -35,10 +42,13 @@ serve(async (req) => {
     // SECURITY: Validate Authorization header exists
     const authHeader = req.headers.get("Authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Missing or invalid Authorization header" }), {
-        status: 401,
-        headers,
-      });
+      return new Response(
+        JSON.stringify({ error: "Missing or invalid Authorization header" }),
+        {
+          status: 401,
+          headers,
+        },
+      );
     }
 
     const token = authHeader.replace("Bearer ", "");
@@ -66,14 +76,16 @@ serve(async (req) => {
           status: 429,
           headers: {
             ...headers,
-            "Retry-After": String(Math.ceil((rateLimit.resetAt.getTime() - Date.now()) / 1000)),
+            "Retry-After": String(
+              Math.ceil((rateLimit.resetAt.getTime() - Date.now()) / 1000),
+            ),
           },
         },
       );
     }
 
     // SECURITY: Safe JSON parsing (allow empty body)
-    const body = await parseJsonBody<{ userArcId?: string }>(req) || {};
+    const body = (await parseJsonBody<{ userArcId?: string }>(req)) || {};
     const { userArcId } = body;
 
     // Find active or paused arc
@@ -116,6 +128,24 @@ serve(async (req) => {
       });
     }
 
+    // Clear arc association from today's quest (if any) so it doesn't show as a journey quest
+    const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+    const { error: questUpdateError } = await supabase
+      .from("quests")
+      .update({ arc_user_id: null })
+      .eq("user_id", user.id)
+      .eq("arc_user_id", arc.id)
+      .eq("local_date", today)
+      .eq("status", "assigned"); // Only clear if not yet completed
+
+    if (questUpdateError) {
+      // Log but don't fail - the arc is already abandoned
+      console.warn(
+        "Failed to clear arc from today's quest:",
+        questUpdateError.message,
+      );
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -124,7 +154,9 @@ serve(async (req) => {
       { status: 200, headers },
     );
   } catch (error) {
-    console.error("exit-quest-arc error:", { message: (error as Error).message });
+    console.error("exit-quest-arc error:", {
+      message: (error as Error).message,
+    });
     return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500,
       headers,

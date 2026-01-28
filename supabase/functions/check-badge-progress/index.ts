@@ -294,7 +294,7 @@ async function fetchUserMetrics(
       .from("quests")
       .select("id", { count: "exact" })
       .eq("user_id", userId)
-      .eq("completed", true),
+      .eq("status", "completed"),
 
     // Moods logged
     supabase
@@ -361,7 +361,7 @@ async function fetchUserMetrics(
       .from("quests")
       .select("completed_at")
       .eq("user_id", userId)
-      .eq("completed", true)
+      .eq("status", "completed")
       .order("completed_at", { ascending: false })
       .limit(1)
       .single(),

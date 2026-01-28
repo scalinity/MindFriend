@@ -246,11 +246,13 @@ struct DebtScoreRing: View {
 
     @State private var animatedProgress: Double = 0
 
-    // Debt ranges from -100 to +100, normalize to 0-1 for display
+    // Debt is always 0 or positive: 0 = healthy, 50 = warning threshold, 100+ = danger
     private var normalizedProgress: Double {
-        // Map -100 to +100 range into 0 to 1
-        // -100 = 0 (empty), 0 = 0.5 (half), +100 = 1 (full)
-        return (Double(score) + 100) / 200.0
+        // Map 0-100 range into 0-1 for ring display
+        // 0 debt = empty ring (healthy)
+        // 50 debt = half ring (at threshold)
+        // 100+ debt = full ring (severe)
+        return min(1.0, max(0, Double(score) / 100.0))
     }
 
     private var ringColor: Color {

@@ -198,6 +198,30 @@ serve(async (req) => {
     );
     console.log(`[generate-content] Method: ${req.method}, URL: ${req.url}`);
 
+    // Validate required environment variables (rule-032)
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const XAI_API_KEY = Deno.env.get("XAI_API_KEY");
+    const GOOGLE_TTS_API_KEY = Deno.env.get("GOOGLE_TTS_API_KEY");
+
+    if (
+      !SUPABASE_URL ||
+      !SUPABASE_ANON_KEY ||
+      !SUPABASE_SERVICE_ROLE_KEY ||
+      !XAI_API_KEY ||
+      !GOOGLE_TTS_API_KEY
+    ) {
+      console.error("CRITICAL: Missing required environment variables");
+      return new Response(
+        JSON.stringify({ error: "Service configuration error" }),
+        {
+          status: 503,
+          headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
     // Auth validation
     const authHeader = req.headers.get("Authorization");
     console.log(`[generate-content] Auth header present: ${!!authHeader}`);
@@ -222,19 +246,15 @@ serve(async (req) => {
     );
 
     // Create Supabase clients
-    const supabaseUser = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      {
-        global: {
-          headers: { Authorization: `Bearer ${token}` },
-        },
+    const supabaseUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: {
+        headers: { Authorization: `Bearer ${token}` },
       },
-    ) as AnySupabaseClient;
+    }) as AnySupabaseClient;
 
     const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      SUPABASE_URL,
+      SUPABASE_SERVICE_ROLE_KEY,
     ) as AnySupabaseClient;
 
     // Get authenticated user
@@ -860,17 +880,28 @@ async function generateTextContent(
 }
 
 /**
+ * Capitalize the first letter of a string
+ */
+function capitalize(str: string): string {
+  if (!str) return str;
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+/**
  * Generate a title for the content
  */
 function generateTitle(
   contentType: ContentType,
   params: GenerateContentRequest["params"],
 ): string {
-  const theme = params.theme || params.focus || "Wellness";
+  const theme = capitalize(params.theme || params.focus || "Wellness");
+  const focus = capitalize(params.focus || "Mindfulness");
+  const pattern = capitalize(params.pattern || "Box");
+
   const titleMap: Record<ContentType, string> = {
     sleep_story: `Sleep Story: ${theme}`,
-    meditation: `${params.focus || "Mindfulness"} Meditation`,
-    breathing: `${params.pattern || "Box"} Breathing Exercise`,
+    meditation: `${focus} Meditation`,
+    breathing: `${pattern} Breathing Exercise`,
     grounding: `Grounding Exercise`,
     mindfulness: `Mindfulness Moment`,
     cbt: `Thought Reflection`,

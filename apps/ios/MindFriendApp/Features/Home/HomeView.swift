@@ -45,6 +45,9 @@ struct HomeView: View {
     @State private var activePathways: [UserPathway] = []
     @State private var showPathwaySelection = false
     @State private var selectedPathwayId: String?
+    // Home tutorial state
+    @AppStorage("home_tutorial_completed") private var homeTutorialCompleted = false
+    @State private var showHomeTutorial = false
 
     /// Background color adapts to mood context
     private var adaptiveBackgroundColor: Color {
@@ -380,6 +383,14 @@ struct HomeView: View {
                 SOSInterventionView()
                     .environmentObject(container)
             }
+            .fullScreenCover(isPresented: $showHomeTutorial) {
+                HomeTutorialFlow(onComplete: {
+                    homeTutorialCompleted = true
+                    showHomeTutorial = false
+                })
+                .environmentObject(container)
+                .environmentObject(appState)
+            }
             .sheet(isPresented: $showQuestArcCatalog) {
                 QuestArcCatalogView()
                     .environmentObject(container)
@@ -424,12 +435,23 @@ struct HomeView: View {
         }
         // Refresh data every time view appears (e.g., returning from mood log, exiting journey)
         .onAppear {
+            // Show tutorial on first visit
+            if !homeTutorialCompleted {
+                showHomeTutorial = true
+            }
+
             Task {
                 // Only refresh if we've loaded before (task already ran)
                 // and it's been at least 1 second since last load
                 if let lastLoad = lastLoadTime, Date().timeIntervalSince(lastLoad) > 1 {
                     await loadData()
                 }
+            }
+        }
+        // Refresh when quest arc changes (started, paused, resumed, or exited)
+        .onReceive(NotificationCenter.default.publisher(for: .questArcDidChange)) { _ in
+            Task {
+                await loadData()
             }
         }
     } // End of body
@@ -1369,13 +1391,15 @@ struct InsightsPreviewCard: View {
 
                         Spacer()
 
-                        // Trend indicator
-                        if let trend = insight.moodTrend {
+                        // Trend indicator (hide if insufficient data)
+                        if let trend = insight.moodTrend,
+                           trend != .insufficientData && trend != .baseline {
                             HStack(spacing: 4) {
-                                Text(trend.emoji)
-                                Text(trend.rawValue.capitalized)
+                                Image(systemName: trend.icon)
+                                    .foregroundStyle(trend.color)
+                                Text(trend.displayName)
                                     .font(.subheadline)
-                                    .foregroundStyle(Color(trend.color))
+                                    .foregroundStyle(trend.color)
                             }
                         }
                     }

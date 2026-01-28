@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 // MARK: - Weekly Statistics
 
@@ -75,11 +76,11 @@ struct MonthlyStat: Codable, Identifiable, Hashable {
         }
     }
 
-    var trendColor: String {
+    var trendColor: Color {
         switch moodTrend {
-        case .improving: return "green"
-        case .declining: return "red"
-        case .stable, .baseline, .insufficientData, .none: return "gray"
+        case .improving: return .green
+        case .declining: return .red
+        case .stable, .baseline, .insufficientData, .none: return .gray
         }
     }
 }

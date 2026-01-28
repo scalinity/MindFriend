@@ -238,7 +238,7 @@ enum BackgroundSoundType: String, Codable, CaseIterable, Identifiable {
     case silence
 
     var id: String { rawValue }
-    
+
     var displayName: String {
         switch self {
         case .rain: return "Rain"
@@ -265,14 +265,46 @@ enum BackgroundSoundType: String, Codable, CaseIterable, Identifiable {
         }
     }
 
-    /// Check if the audio file for this sound is available in the bundle
-    var isAvailable: Bool {
-        // Silence is always available (it's a no-op)
-        if self == .silence { return true }
-        return Bundle.main.url(forResource: rawValue, withExtension: "mp3") != nil
+    /// Remote URL for sounds stored in Supabase storage
+    var remoteUrl: URL? {
+        let baseUrl = "https://***REMOVED***/storage/v1/object/public/soundscapes"
+        switch self {
+        case .rain:
+            return URL(string: "\(baseUrl)/rain.mp3")
+        case .ocean:
+            return URL(string: "\(baseUrl)/ocean.mp3")
+        case .forest:
+            return URL(string: "\(baseUrl)/forest.mp3")
+        case .fireplace:
+            return URL(string: "\(baseUrl)/fireplace.mp3")
+        case .whiteNoise:
+            return URL(string: "\(baseUrl)/white_noise.mp3")
+        case .brownNoise:
+            return URL(string: "\(baseUrl)/brown_noise.mp3")
+        case .pinkNoise:
+            return URL(string: "\(baseUrl)/pink_noise.mp3")
+        case .silence:
+            return nil
+        }
     }
 
-    /// Returns only sounds that have audio files bundled
+    /// Local bundle URL if available
+    var localUrl: URL? {
+        Bundle.main.url(forResource: rawValue, withExtension: "mp3")
+    }
+
+    /// Best available URL - prefers local, falls back to remote
+    var audioUrl: URL? {
+        localUrl ?? remoteUrl
+    }
+
+    /// Check if the audio is available (local or remote)
+    var isAvailable: Bool {
+        if self == .silence { return true }
+        return audioUrl != nil
+    }
+
+    /// Returns only sounds that have audio available
     static var availableSounds: [BackgroundSoundType] {
         allCases.filter { $0.isAvailable }
     }

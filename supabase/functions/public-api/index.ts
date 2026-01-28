@@ -4,7 +4,7 @@ import { sanitizeErrorMessage, timingSafeEqual } from "../_shared/security.ts";
 
 interface RateLimitConfig {
   free: { requestsPerDay: number; burst: number };
-  developer: { requestsPerDay: number00; burst: number };
+  developer: { requestsPerDay: number; burst: number };
   enterprise: { requestsPerDay: number; burst: number };
 }
 
@@ -52,21 +52,33 @@ serve(async (req) => {
 
   const tier = apiKeyData.tier as keyof RateLimitConfig;
   const rateLimit = RATE_LIMITS[tier];
-
-  // Check rate limit
   const now = new Date();
   const periodStart = new Date(
     now.getFullYear(),
     now.getMonth(),
     now.getDate(),
   );
+  const resetTime = new Date(periodStart.getTime() + 24 * 60 * 60 * 1000);
 
-  if (
-    apiKeyData.rate_limit_remaining !== null &&
-    apiKeyData.rate_limit_remaining <= 0
-  ) {
-    const resetTime = new Date(periodStart.getTime() + 24 * 60 * 60 * 1000);
+  // Use atomic update with WHERE clause to prevent race conditions
+  // This ensures only requests that have remaining quota can proceed
+  const currentRemaining =
+    apiKeyData.rate_limit_remaining ?? rateLimit.requestsPerDay;
 
+  // Atomic decrement: only succeeds if rate_limit_remaining > 0
+  const { data: updateResult, error: updateError } = await supabase
+    .from("api_keys")
+    .update({
+      rate_limit_remaining: currentRemaining - 1,
+      last_request_at: now.toISOString(),
+    })
+    .eq("key", apiKey)
+    .gt("rate_limit_remaining", 0)
+    .select("rate_limit_remaining")
+    .single();
+
+  // If update failed or no rows affected, rate limit exceeded
+  if (updateError || !updateResult) {
     return new Response(
       JSON.stringify({
         error: "Rate limit exceeded",
@@ -87,16 +99,7 @@ serve(async (req) => {
     );
   }
 
-  // Decrement rate limit
-  const newRemaining =
-    (apiKeyData.rate_limit_remaining ?? rateLimit.requestsPerDay) - 1;
-  await supabase
-    .from("api_keys")
-    .update({
-      rate_limit_remaining: newRemaining,
-      last_request_at: now.toISOString(),
-    })
-    .eq("key", apiKey);
+  const newRemaining = updateResult.rate_limit_remaining;
 
   // Parse request path
   const url = new URL(req.url);

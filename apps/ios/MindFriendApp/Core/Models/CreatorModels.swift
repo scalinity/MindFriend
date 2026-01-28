@@ -2,6 +2,7 @@
 // Data models for content creator platform: profiles, content, earnings, and revenue sharing
 
 import Foundation
+import SwiftUI
 
 // MARK: - Enums
 
@@ -121,12 +122,12 @@ enum ContentStatus: String, Codable {
         }
     }
 
-    var color: String {
+    var color: Color {
         switch self {
-        case .draft: return "gray"
-        case .submitted, .inReview: return "yellow"
-        case .approved, .published: return "green"
-        case .rejected: return "red"
+        case .draft: return .gray
+        case .submitted, .inReview: return .yellow
+        case .approved, .published: return .green
+        case .rejected: return .red
         }
     }
 }

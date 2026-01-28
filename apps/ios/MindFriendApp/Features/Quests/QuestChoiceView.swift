@@ -15,6 +15,10 @@ struct QuestChoiceView: View {
     @State private var errorMessage: String?
     @State private var selectedQuest: Quest?
 
+    // Quest tutorial state
+    @AppStorage("quest_tutorial_completed") private var questTutorialCompleted = false
+    @State private var showQuestTutorial = false
+
     init(assignedQuest: Quest? = nil) {
         self.assignedQuest = assignedQuest
     }
@@ -52,6 +56,18 @@ struct QuestChoiceView: View {
         }
         .task {
             await loadAlternatives()
+        }
+        .onAppear {
+            if !questTutorialCompleted {
+                showQuestTutorial = true
+            }
+        }
+        .fullScreenCover(isPresented: $showQuestTutorial) {
+            QuestTutorialFlow(onComplete: {
+                questTutorialCompleted = true
+                showQuestTutorial = false
+            })
+            .environmentObject(container)
         }
     }
 
