@@ -369,7 +369,7 @@ struct MonthlyStatRow: View {
                 HStack(spacing: 4) {
                     Image(systemName: stat.trendIcon)
                         .font(.caption)
-                        .foregroundStyle(Color(stat.trendColor))
+                        .foregroundStyle(stat.trendColor)
                     Text(String(format: "%.1f", mood))
                         .font(.subheadline)
                         .fontWeight(.medium)

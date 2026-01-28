@@ -203,6 +203,7 @@ private struct ContentTypeVoiceSettingsView: View {
     let contentType: GeneratedContentType
     @ObservedObject var viewModel: VoicePreferencesViewModel
 
+    @State private var useCustomSettings: Bool = false
     @State private var selectedVoiceId: String?
     @State private var speed: Double = 1.0
     @State private var backgroundSound: BackgroundSoundType?
@@ -211,19 +212,24 @@ private struct ContentTypeVoiceSettingsView: View {
     var body: some View {
         List {
             Section {
-                Toggle("Use Custom Settings", isOn: Binding(
-                    get: { viewModel.preferences[contentType] != nil },
-                    set: { enabled in
+                Toggle("Use Custom Settings", isOn: $useCustomSettings)
+                    .onChange(of: useCustomSettings) { _, enabled in
                         if enabled {
+                            // Initialize with defaults when enabling
                             selectedVoiceId = viewModel.defaultVoiceId
+                            speed = viewModel.defaultSpeed
+                            backgroundSound = viewModel.defaultBackgroundSound
+                            backgroundVolume = viewModel.backgroundVolume
+                            updatePreference()
                         } else {
+                            // Clear the preference when disabling
                             viewModel.preferences[contentType] = nil
+                            viewModel.clearContentTypePreference(contentType: contentType)
                         }
                     }
-                ))
             }
 
-            if viewModel.preferences[contentType] != nil || selectedVoiceId != nil {
+            if useCustomSettings {
                 Section("Voice") {
                     ForEach(DefaultVoice.all) { voice in
                         VoiceRow(
@@ -285,11 +291,13 @@ private struct ContentTypeVoiceSettingsView: View {
 
     private func loadCurrentSettings() {
         if let preference = viewModel.preferences[contentType] {
+            useCustomSettings = true
             selectedVoiceId = preference.preferredVoiceId
             speed = preference.preferredSpeed
             backgroundSound = preference.backgroundSoundType
             backgroundVolume = preference.backgroundSoundVolume
         } else {
+            useCustomSettings = false
             selectedVoiceId = viewModel.defaultVoiceId
             speed = viewModel.defaultSpeed
             backgroundSound = viewModel.defaultBackgroundSound
@@ -364,6 +372,10 @@ final class VoicePreferencesViewModel: ObservableObject {
         backgroundVolume: Double
     ) {
         pendingPreferences[contentType] = (voiceId, speed, backgroundSound, backgroundVolume)
+    }
+
+    func clearContentTypePreference(contentType: GeneratedContentType) {
+        pendingPreferences[contentType] = nil
     }
 
     func savePreferences() async {

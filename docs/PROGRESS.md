@@ -1,5 +1,55 @@
 # MindFriend Development Progress Log
 
+## [2026-01-28] Fix Quest Arcs Not Showing Daily Quests
+
+**Type:** Bugfix
+**Status:** Complete
+
+### Summary
+
+Fixed "No quest available for today" bug in Quest Journeys/Arcs where users who started a quest arc would not see their daily quest.
+
+### Root Cause
+
+- `assign_daily_quest` RPC function only selected random quest templates
+- It did not check for active quest arcs before assignment
+- The Edge Function `assign-quest` had the correct logic, but iOS app called the RPC directly
+- Additionally, `update_challenge_progress_on_quest` trigger function referenced non-existent `NEW.completed` column (should be `NEW.status`)
+
+### Changes
+
+| File                                                                             | Change                                                                                                                                                           |
+| -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `supabase/migrations/20260128190000_fix_assign_daily_quest_arc_support.sql`      | Updated `assign_daily_quest` RPC to check for active quest arcs first via `user_quest_arcs` and `quest_arc_steps` tables before falling back to random selection |
+| `supabase/migrations/20260128190001_fix_existing_quests_missing_arc_context.sql` | Fixed broken `update_challenge_progress_on_quest` trigger, updated existing quests missing arc context, added performance index for arc lookups                  |
+
+### Testing
+
+- [x] Migration applied successfully
+- [x] 1 existing quest fixed for user with active arc
+- [x] Broken trigger function repaired
+- [x] Manual verification: Quest arc detail shows today's quest
+
+### Notes
+
+The fix ensures that when a user starts a quest journey:
+
+1. Their daily quest comes from the arc's scheduled steps
+2. The `arc_user_id` foreign key is set, providing arc context
+3. The quest detail view correctly shows it as part of the journey
+
+### Follow-up Fix: HomeView Auto-Refresh
+
+Added notification-based refresh so HomeView updates immediately when quest arcs change:
+
+| File                                                                  | Change                                           |
+| --------------------------------------------------------------------- | ------------------------------------------------ |
+| `apps/ios/MindFriendApp/Core/Observability/NotificationManager.swift` | Added `questArcDidChange` notification name      |
+| `apps/ios/MindFriendApp/Features/QuestArcs/QuestArcDetailView.swift`  | Post notification on start/pause/resume/exit arc |
+| `apps/ios/MindFriendApp/Features/Home/HomeView.swift`                 | Listen for notification and refresh quest data   |
+
+---
+
 ## [2026-01-28] Fix Missing Predictive Tables and RPC Bug
 
 **Type:** Bugfix

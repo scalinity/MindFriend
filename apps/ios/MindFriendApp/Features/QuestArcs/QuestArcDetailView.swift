@@ -22,6 +22,12 @@ struct QuestArcDetailView: View {
     @State private var errorMessage: String?
     @State private var showMilestonePreview = false
 
+    // Interactive features
+    @State private var todayQuest: Quest?
+    @State private var isLoadingQuest = false
+    @State private var arcSteps: [QuestArcStep] = []
+    @State private var navigateToQuest = false
+
     private var isEnrolled: Bool {
         activeArc?.arcId == arc.id
     }
@@ -31,6 +37,10 @@ struct QuestArcDetailView: View {
         return active.arcId != arc.id
     }
 
+    private var currentDay: Int {
+        activeArc?.currentDay ?? 0
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -38,9 +48,19 @@ struct QuestArcDetailView: View {
                     // Header
                     headerSection
 
+                    // Today's Quest (if enrolled and active)
+                    if isEnrolled, activeArc?.status == .active {
+                        todaysQuestSection
+                    }
+
                     // Progress (if enrolled)
                     if isEnrolled, let userArc = activeArc {
                         progressSection(userArc)
+                    }
+
+                    // Curriculum Preview
+                    if !arcSteps.isEmpty {
+                        curriculumPreviewSection
                     }
 
                     // Description
@@ -67,6 +87,17 @@ struct QuestArcDetailView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
+                }
+            }
+            .navigationDestination(isPresented: $navigateToQuest) {
+                if let quest = todayQuest {
+                    QuestDetailView(quest: quest)
+                }
+            }
+            .task {
+                await loadArcSteps()
+                if isEnrolled && activeArc?.status == .active {
+                    await loadTodayQuest()
                 }
             }
         }
@@ -431,6 +462,8 @@ struct QuestArcDetailView: View {
         do {
             _ = try await container.questArcsService.startQuestArc(arcId: arc.id)
             await onUpdate()
+            // Notify HomeView to refresh quest data
+            NotificationCenter.default.post(name: .questArcDidChange, object: nil)
             dismiss()
         } catch {
             errorMessage = error.localizedDescription
@@ -446,6 +479,8 @@ struct QuestArcDetailView: View {
         do {
             _ = try await container.questArcsService.pauseQuestArc(userArcId: activeArc?.id)
             await onUpdate()
+            // Notify HomeView to refresh quest data
+            NotificationCenter.default.post(name: .questArcDidChange, object: nil)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -461,6 +496,8 @@ struct QuestArcDetailView: View {
             guard let userArcId = activeArc?.id else { return }
             _ = try await container.questArcsService.resumeQuestArc(userArcId: userArcId)
             await onUpdate()
+            // Notify HomeView to refresh quest data
+            NotificationCenter.default.post(name: .questArcDidChange, object: nil)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -475,6 +512,8 @@ struct QuestArcDetailView: View {
         do {
             _ = try await container.questArcsService.exitQuestArc(userArcId: activeArc?.id)
             await onUpdate()
+            // Notify HomeView to refresh quest data
+            NotificationCenter.default.post(name: .questArcDidChange, object: nil)
             dismiss()
         } catch {
             errorMessage = error.localizedDescription
@@ -483,8 +522,233 @@ struct QuestArcDetailView: View {
         isExiting = false
     }
 
-    // MARK: - Helpers
+    // MARK: - Today's Quest Section
 
+    private var todaysQuestSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Image(systemName: "sparkles")
+                    .foregroundStyle(.orange)
+                Text("Today's Quest")
+                    .font(.headline)
+            }
+
+            if isLoadingQuest {
+                HStack {
+                    ProgressView()
+                    Text("Loading today's quest...")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color(.secondarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else if let quest = todayQuest {
+                VStack(alignment: .leading, spacing: 12) {
+                    // Quest info
+                    Text(quest.template.title)
+                        .font(.title3.weight(.semibold))
+
+                    Text(quest.template.description)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+
+                    // Coaching message
+                    if let coaching = quest.arcContext?.coachingMessage {
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "lightbulb.fill")
+                                .foregroundStyle(.yellow)
+                                .font(.subheadline)
+                            Text(coaching)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .italic()
+                        }
+                        .padding(12)
+                        .background(Color.yellow.opacity(0.1))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+
+                    // Estimated time
+                    HStack {
+                        Image(systemName: "clock")
+                            .foregroundStyle(.secondary)
+                        Text("~\(quest.template.estimatedMinutes) min")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    // Milestone indicator
+                    if quest.arcContext?.isMilestoneDay == true {
+                        HStack {
+                            Image(systemName: "star.fill")
+                                .foregroundStyle(.yellow)
+                            Text("Milestone Day!")
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.orange)
+                        }
+                    }
+
+                    // Start Quest button
+                    Button {
+                        navigateToQuest = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "play.fill")
+                            Text("Start Today's Quest")
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(QuestArcCategory.color(for: arc.category))
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+                }
+                .padding()
+                .background(Color(.secondarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else {
+                Text("No quest available for today")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color(.secondarySystemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+        }
+    }
+
+    // MARK: - Curriculum Preview Section
+
+    private var curriculumPreviewSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Your Journey")
+                .font(.headline)
+
+            // Show current day context + next few days
+            let stepsToShow = getRelevantSteps()
+
+            ForEach(stepsToShow) { step in
+                curriculumStepRow(step: step)
+            }
+
+            if arcSteps.count > stepsToShow.count {
+                Text("+ \(arcSteps.count - stepsToShow.count) more days")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 44)
+            }
+        }
+    }
+
+    private func curriculumStepRow(step: QuestArcStep) -> some View {
+        let isCompleted = isEnrolled && currentDay >= step.dayNumber
+        let isCurrent = isEnrolled && (currentDay + 1) == step.dayNumber
+        let isLocked = !isEnrolled || currentDay < step.dayNumber - 1
+
+        return HStack(spacing: 12) {
+            // Day indicator
+            ZStack {
+                Circle()
+                    .fill(isCompleted ? QuestArcCategory.color(for: arc.category) :
+                          isCurrent ? QuestArcCategory.color(for: arc.category).opacity(0.3) :
+                          Color(.systemGray5))
+                    .frame(width: 32, height: 32)
+
+                if isCompleted {
+                    Image(systemName: "checkmark")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.white)
+                } else {
+                    Text("\(step.dayNumber)")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(isCurrent ? QuestArcCategory.color(for: arc.category) : .secondary)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack {
+                    Text(step.customTitle ?? "Day \(step.dayNumber)")
+                        .font(.subheadline.weight(isCurrent ? .semibold : .regular))
+                        .foregroundStyle(isLocked && !isCurrent ? .secondary : .primary)
+
+                    if step.isMilestone {
+                        Image(systemName: "flag.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                    }
+
+                    if isCurrent {
+                        Text("Today")
+                            .font(.caption2.weight(.medium))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(QuestArcCategory.color(for: arc.category))
+                            .foregroundStyle(.white)
+                            .clipShape(Capsule())
+                    }
+                }
+
+                if let description = step.customDescription {
+                    Text(description)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer()
+        }
+        .padding(.vertical, 4)
+        .opacity(isLocked && !isCurrent ? 0.6 : 1.0)
+    }
+
+    /// Get steps to show: completed + current + next 3 upcoming
+    private func getRelevantSteps() -> [QuestArcStep] {
+        guard !arcSteps.isEmpty else { return [] }
+
+        if isEnrolled {
+            // Show from current day - 1 (yesterday) to current day + 3 (3 days ahead)
+            let startDay = max(1, currentDay) // yesterday or day 1
+            let endDay = min(arc.durationDays, currentDay + 4) // 3 days ahead
+
+            return arcSteps.filter { $0.dayNumber >= startDay && $0.dayNumber <= endDay }
+        } else {
+            // Not enrolled: show first 4 days as preview
+            return Array(arcSteps.prefix(4))
+        }
+    }
+
+    // MARK: - Data Loading
+
+    private func loadTodayQuest() async {
+        await MainActor.run { isLoadingQuest = true }
+
+        do {
+            let quest = try await container.supabaseDataService.getTodayQuest()
+            await MainActor.run {
+                // Only show quest if it belongs to this arc
+                if quest?.arcContext?.arcId == arc.id.uuidString {
+                    self.todayQuest = quest
+                }
+                isLoadingQuest = false
+            }
+        } catch {
+            await MainActor.run { isLoadingQuest = false }
+        }
+    }
+
+    private func loadArcSteps() async {
+        do {
+            let steps = try await container.questArcsService.getArcSteps(arcId: arc.id)
+            await MainActor.run { arcSteps = steps }
+        } catch {
+            // Silently fail - steps are optional enhancement
+        }
+    }
 }
 
 // MARK: - Milestone Preview Sheet

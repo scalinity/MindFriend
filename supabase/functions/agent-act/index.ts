@@ -192,7 +192,17 @@ serve(async (req) => {
             .eq("id", action.id)
             .single();
 
-          const createdAt = new Date(actionData?.created_at);
+          // Guard against null actionData - mark as cancelled if no data found
+          if (!actionData?.created_at) {
+            await supabase
+              .from("agent_actions")
+              .update({ status: "cancelled" })
+              .eq("id", action.id);
+            failed++;
+            continue;
+          }
+
+          const createdAt = new Date(actionData.created_at);
           const hoursSinceCreated =
             (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);
 

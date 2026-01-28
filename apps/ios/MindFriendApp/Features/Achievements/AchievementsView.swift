@@ -8,6 +8,10 @@ struct AchievementsView: View {
 
     @State private var selectedTab: AchievementTab = .badges
 
+    // Achievements tutorial state
+    @AppStorage("achievements_tutorial_completed") private var achievementsTutorialCompleted = false
+    @State private var showAchievementsTutorial = false
+
     enum AchievementTab: String, CaseIterable {
         case badges = "Badges"
         case skills = "Skills"
@@ -107,6 +111,17 @@ struct AchievementsView: View {
                         achievementService.pendingMilestone = nil
                     }
                 }
+        }
+        .onAppear {
+            if !achievementsTutorialCompleted {
+                showAchievementsTutorial = true
+            }
+        }
+        .fullScreenCover(isPresented: $showAchievementsTutorial) {
+            AchievementsTutorialFlow(onComplete: {
+                achievementsTutorialCompleted = true
+                showAchievementsTutorial = false
+            })
         }
     }
 }
@@ -340,6 +355,13 @@ struct BadgeGridItem: View {
     private var isEarned: Bool {
         progress?.isEarned ?? false
     }
+    
+    /// Tier color with consistent opacity for earned/unearned state
+    private var tierColor: Color {
+        guard let tier = badge.tier else { return .clear }
+        let baseColor = Color(hex: tier.color) ?? .gray
+        return isEarned ? baseColor : .gray
+    }
 
     var body: some View {
         VStack(spacing: 6) {
@@ -348,10 +370,9 @@ struct BadgeGridItem: View {
                 Image(systemName: badge.sfSymbolName)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .foregroundStyle(badge.tier != nil ? (Color(hex: badge.tier!.color) ?? .yellow) : .yellow)
+                    .foregroundStyle(isEarned ? (badge.tier != nil ? (Color(hex: badge.tier!.color) ?? .yellow) : .yellow) : .gray)
                     .frame(width: 56, height: 56)
-                    .opacity(isEarned ? 1.0 : 0.4)
-                    .grayscale(isEarned ? 0 : 1)
+                    .opacity(isEarned ? 1.0 : 0.35)
 
                 // Progress Ring (if not earned)
                 if !isEarned, let progress = progress {
@@ -378,10 +399,11 @@ struct BadgeGridItem: View {
                     .fontWeight(.medium)
                     .lineLimit(2, reservesSpace: true)
                     .multilineTextAlignment(.center)
+                    .foregroundStyle(isEarned ? .primary : .secondary)
 
                 Text(badge.tier?.displayName ?? " ")
                     .font(.caption2)
-                    .foregroundStyle(badge.tier != nil ? (Color(hex: badge.tier!.color) ?? .gray) : .clear)
+                    .foregroundStyle(tierColor)
             }
             .frame(height: 44)
         }
@@ -403,6 +425,16 @@ struct BadgeDetailView: View {
         achievementService.progressForBadge(badge.id)
     }
 
+    private var isEarned: Bool {
+        progress?.isEarned ?? false
+    }
+    
+    /// Tier color based on earned state
+    private var tierColor: Color {
+        guard let tier = badge.tier else { return .gray }
+        return isEarned ? (Color(hex: tier.color) ?? .gray) : .gray
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
@@ -410,10 +442,9 @@ struct BadgeDetailView: View {
                 Image(systemName: badge.sfSymbolName)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .foregroundStyle(badge.tier != nil ? (Color(hex: badge.tier!.color) ?? .purple) : .purple)
+                    .foregroundStyle(isEarned ? (badge.tier != nil ? (Color(hex: badge.tier!.color) ?? .purple) : .purple) : .gray)
                     .frame(width: 120, height: 120)
-                    .opacity(progress?.isEarned == true ? 1.0 : 0.5)
-                    .grayscale(progress?.isEarned == true ? 0 : 1)
+                    .opacity(isEarned ? 1.0 : 0.4)
 
                 // Badge Info
                 VStack(spacing: 8) {
@@ -424,10 +455,10 @@ struct BadgeDetailView: View {
                     if let tier = badge.tier {
                         Text(tier.displayName)
                             .font(.subheadline)
-                            .foregroundStyle(Color(hex: tier.color) ?? .gray)
+                            .foregroundStyle(tierColor)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 4)
-                            .background(Color(hex: tier.color)?.opacity(0.2) ?? .gray.opacity(0.2))
+                            .background(tierColor.opacity(0.2))
                             .clipShape(Capsule())
                     }
 
@@ -445,7 +476,7 @@ struct BadgeDetailView: View {
                 }
                 
                 // How to Progress (NEW - for non-earned badges)
-                if progress?.isEarned == false, let target = progress?.progressTarget {
+                if !isEarned, let target = progress?.progressTarget {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("How to Progress")
                             .font(.headline)
@@ -533,7 +564,7 @@ struct BadgeDetailView: View {
                 .padding(.horizontal)
 
                 // Favorite Button
-                if progress?.isEarned == true {
+                if isEarned {
                     Button {
                         Task {
                             try? await achievementService.toggleBadgeFavorite(

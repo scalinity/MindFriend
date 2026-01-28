@@ -116,7 +116,9 @@ async function detectMoodTrend(
       moods
         .slice(0, Math.min(3, moods.length))
         .reduce((sum, m) => sum + m.score, 0) / Math.min(3, moods.length);
-    const percentDrop = ((olderAvg - recentAvg) / olderAvg) * 100;
+    // Prevent division by zero when olderAvg is 0
+    const percentDrop =
+      olderAvg > 0 ? ((olderAvg - recentAvg) / olderAvg) * 100 : 0;
 
     return {
       type: "mood_decline",
@@ -150,7 +152,9 @@ async function detectMoodTrend(
       moods
         .slice(0, Math.min(3, moods.length))
         .reduce((sum, m) => sum + m.score, 0) / Math.min(3, moods.length);
-    const percentIncrease = ((recentAvg - olderAvg) / olderAvg) * 100;
+    // Prevent division by zero when olderAvg is 0
+    const percentIncrease =
+      olderAvg > 0 ? ((recentAvg - olderAvg) / olderAvg) * 100 : 0;
 
     return {
       type: "mood_improvement",

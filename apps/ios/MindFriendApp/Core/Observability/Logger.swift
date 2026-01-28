@@ -61,7 +61,10 @@ enum Log {
     
     /// Media playback and recording logs
     static let media = Logger(subsystem: subsystem, category: "Media")
-    
+
+    /// Profile and settings logs
+    static let profile = Logger(subsystem: subsystem, category: "Profile")
+
     /// General app logs
     static let general = Logger(subsystem: subsystem, category: "General")
     

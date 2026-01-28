@@ -554,4 +554,8 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
 
 extension Notification.Name {
     static let notificationDeepLinkReceived = Notification.Name("notificationDeepLinkReceived")
+    
+    /// Posted when a quest arc is started, paused, resumed, or exited.
+    /// HomeView and other views should refresh their quest data when this is received.
+    static let questArcDidChange = Notification.Name("questArcDidChange")
 }

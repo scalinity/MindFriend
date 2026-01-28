@@ -90,6 +90,12 @@ final class OAuthHandler: NSObject, ObservableObject {
 
     /// Initiates Notion OAuth flow
     func connectNotion(from viewController: UIViewController) async throws {
+        // Validate that Notion client ID is configured
+        guard !Configuration.notionClientId.isEmpty else {
+            logger.error("Notion OAuth failed: notionClientId is not configured")
+            throw OAuthError.providerError("Notion integration is not configured. Please contact support.")
+        }
+
         let state = generateState()
         let codeVerifier = generateCodeVerifier()
         let codeChallenge = generateCodeChallenge(from: codeVerifier)
@@ -139,6 +145,12 @@ final class OAuthHandler: NSObject, ObservableObject {
     func exchangeNotionCode(_ code: String) async throws -> OAuthToken {
         guard let storedState = encryptionService.retrieveOAuthState(for: .notion) else {
             throw OAuthError.invalidState
+        }
+
+        // Validate that Notion client ID is configured
+        guard !Configuration.notionClientId.isEmpty else {
+            logger.error("Notion token exchange failed: notionClientId is not configured")
+            throw OAuthError.providerError("Notion integration is not configured. Please contact support.")
         }
 
         guard let tokenURL = URL(string: "https://api.notion.com/v1/oauth/token") else {

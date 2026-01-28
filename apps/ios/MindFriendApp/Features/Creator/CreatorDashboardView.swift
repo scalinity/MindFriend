@@ -297,8 +297,8 @@ struct CreatorStatusBadge: View {
             .fontWeight(.medium)
             .padding(.horizontal, 8)
             .padding(.vertical, 2)
-            .background(Color(status.color).opacity(0.2))
-            .foregroundStyle(Color(status.color))
+            .background(status.color.opacity(0.2))
+            .foregroundStyle(status.color)
             .clipShape(Capsule())
     }
 }

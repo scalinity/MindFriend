@@ -12,6 +12,10 @@ struct ProgramsLibraryView: View {
     @State private var selectedCategory: ProgramCategory?
     @State private var showARExercises = false
 
+    // Programs tutorial state
+    @AppStorage("programs_tutorial_completed") private var programsTutorialCompleted = false
+    @State private var showProgramsTutorial = false
+
     var filteredPrograms: [Program] {
         guard let category = selectedCategory else { return programs }
         return programs.filter { $0.category == category }
@@ -71,6 +75,18 @@ struct ProgramsLibraryView: View {
                     .environmentObject(container)
                     .environmentObject(container.arExerciseService)
                     .environmentObject(container.arCapabilityService)
+            }
+            .onAppear {
+                if !programsTutorialCompleted {
+                    showProgramsTutorial = true
+                }
+            }
+            .fullScreenCover(isPresented: $showProgramsTutorial) {
+                ProgramsTutorialFlow(onComplete: {
+                    programsTutorialCompleted = true
+                    showProgramsTutorial = false
+                })
+                .environmentObject(container)
             }
         }
     }

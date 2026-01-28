@@ -11,6 +11,10 @@ struct ExerciseLibraryView: View {
     @State private var showGenerateExercise = false
     @State private var showSavedExercises = false
 
+    // Exercises tutorial state
+    @AppStorage("exercises_tutorial_completed") private var exercisesTutorialCompleted = false
+    @State private var showExercisesTutorial = false
+
     var filteredExercises: [Exercise] {
         var filtered = exercises
 
@@ -188,6 +192,18 @@ struct ExerciseLibraryView: View {
         }
         .sheet(isPresented: $showSavedExercises) {
             SavedExercisesView(container: container)
+        }
+        .onAppear {
+            if !exercisesTutorialCompleted {
+                showExercisesTutorial = true
+            }
+        }
+        .fullScreenCover(isPresented: $showExercisesTutorial) {
+            ExerciseTutorialFlow(onComplete: {
+                exercisesTutorialCompleted = true
+                showExercisesTutorial = false
+            })
+            .environmentObject(container)
         }
     }
 

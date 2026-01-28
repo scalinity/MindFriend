@@ -115,6 +115,29 @@ serve(async (req) => {
 
   try {
     console.log("[2] Processing request...");
+
+    // Validate required environment variables (rule-032)
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const XAI_API_KEY = Deno.env.get("XAI_API_KEY");
+
+    if (
+      !SUPABASE_URL ||
+      !SUPABASE_ANON_KEY ||
+      !SUPABASE_SERVICE_ROLE_KEY ||
+      !XAI_API_KEY
+    ) {
+      console.error("CRITICAL: Missing required environment variables");
+      return new Response(
+        JSON.stringify({ error: "Service configuration error" }),
+        {
+          status: 503,
+          headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
     // Get auth header first
     const authHeader = req.headers.get("Authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -128,21 +151,14 @@ serve(async (req) => {
 
     // Create user-scoped client with the JWT token
     // This is the recommended Supabase pattern for Edge Functions
-    const supabaseUser = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      {
-        global: {
-          headers: { Authorization: `Bearer ${token}` },
-        },
+    const supabaseUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: {
+        headers: { Authorization: `Bearer ${token}` },
       },
-    );
+    });
 
     // Initialize admin client for operations that need elevated privileges
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
+    const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Get authenticated user with timeout
     let user;

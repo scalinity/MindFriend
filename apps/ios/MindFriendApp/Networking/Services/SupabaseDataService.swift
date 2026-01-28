@@ -2771,34 +2771,18 @@ final class SupabaseDataService: ObservableObject {
     /// stats, detect patterns, and generate AI insights
     func generateWeeklyInsight() async throws -> WeeklySummary? {
         // Ensure we have a valid session before calling Edge Function
-        guard authService.session?.accessToken != nil else {
-            Log.data.warning("[generateWeeklyInsight] No access token available")
-            throw DataError.notAuthenticated
-        }
-
-        // Refresh token to ensure it's valid
-        do {
-            try await authService.ensureValidSession()
-        } catch {
-            Log.data.error("[generateWeeklyInsight] Session refresh failed: \(error)")
-            throw error
-        }
-
-        // Get the refreshed access token
-        guard let accessToken = authService.session?.accessToken else {
-            Log.data.warning("[generateWeeklyInsight] No access token after refresh")
+        guard authService.session != nil else {
+            Log.data.warning("[generateWeeklyInsight] No session available")
             throw DataError.notAuthenticated
         }
 
         Log.data.info("[generateWeeklyInsight] Calling generate-weekly-summary edge function...")
 
-        // Invoke the Edge Function with explicit auth header
+        // Invoke the Edge Function - SDK automatically includes auth from current session
         do {
             try await supabase.functions.invoke(
                 "generate-weekly-summary",
-                options: .init(
-                    headers: ["Authorization": "Bearer \(accessToken)"]
-                )
+                options: .init()
             )
             Log.data.info("[generateWeeklyInsight] Edge function completed successfully")
         } catch let error as FunctionsError {
@@ -4892,9 +4876,24 @@ final class SupabaseDataService: ObservableObject {
     }
     
     /// Shared pipeline for uploading and setting avatar (used by both upload and AI generation)
-    /// Automatically cleans up old avatars when uploading new one
-    func uploadAndSetAvatar(_ image: UIImage, userId: UUID) async throws -> String {
-        Log.data.debug("[Data] uploadAndSetAvatar: Starting for user \(userId)")
+    /// Automatically saves to history for reuse
+    /// - Parameters:
+    ///   - image: The image to upload
+    ///   - userId: User ID (validated against authenticated user)
+    ///   - source: Source of the picture ("upload" or "ai_generated"), defaults to "upload"
+    /// - Note: The userId parameter is validated against the authenticated user to ensure RLS compliance
+    func uploadAndSetAvatar(_ image: UIImage, userId: UUID, source: String = "upload") async throws -> String {
+        // SECURITY: Use authenticated user ID from Supabase auth to ensure RLS policies work correctly
+        // The storage RLS policy checks: (storage.foldername(name))[1] = auth.uid()::text
+        let authenticatedUserId = try self.userId
+        
+        // Validate that the passed userId matches the authenticated user (prevents IDOR)
+        guard userId == authenticatedUserId else {
+            Log.data.error("[Data] uploadAndSetAvatar: User ID mismatch - passed \(userId) but authenticated as \(authenticatedUserId)")
+            throw DataError.notAuthenticated
+        }
+        
+        Log.data.debug("[Data] uploadAndSetAvatar: Starting for user \(authenticatedUserId)")
         
         // Validate image before processing
         do {
@@ -4911,7 +4910,7 @@ final class SupabaseDataService: ObservableObject {
             let profileData: [String: String?] = try await supabase
                 .from("profiles")
                 .select("avatar_url")
-                .eq("id", value: userId.uuidString)
+                .eq("id", value: authenticatedUserId.uuidString)
                 .single()
                 .execute()
                 .value
@@ -4940,31 +4939,29 @@ final class SupabaseDataService: ObservableObject {
         }
         Log.data.debug("[Data] uploadAndSetAvatar: Image compressed to \(jpegData.count) bytes")
         
-        // Upload to Storage
-        let path = "\(userId)/avatar_\(Int(Date().timeIntervalSince1970)).jpg"
+        // Upload to Storage - use authenticated user ID for path to match RLS policy
+        // Use lowercased UUID to match Supabase's auth.uid()::text format
+        let path = "\(authenticatedUserId.uuidString.lowercased())/avatar_\(Int(Date().timeIntervalSince1970)).jpg"
         Log.data.debug("[Data] uploadAndSetAvatar: Uploading to path \(path)")
-        try await uploadProfilePicture(data: jpegData, path: path, userId: userId)
+        try await uploadProfilePicture(data: jpegData, path: path, userId: authenticatedUserId)
         Log.data.debug("[Data] uploadAndSetAvatar: Upload successful")
         
         // Get public URL and update profile
         let publicUrl = try getPublicUrl(bucket: "profile-pictures", path: path)
         Log.data.debug("[Data] uploadAndSetAvatar: Got public URL")
         
-        try await updateAvatarUrl(publicUrl, userId: userId)
+        try await updateAvatarUrl(publicUrl, userId: authenticatedUserId)
         Log.data.debug("[Data] uploadAndSetAvatar: Database updated with new avatar URL")
         
-        // Clean up old avatar file (best effort, don't fail if cleanup fails)
-        if let oldUrl = oldAvatarUrl,
-           !oldUrl.isEmpty,
-           let url = URL(string: oldUrl),
-           let oldPath = extractStoragePath(from: url, bucket: "profile-pictures") {
-            do {
-                try await deleteProfilePicture(path: oldPath)
-                Log.data.debug("[Data] uploadAndSetAvatar: Old avatar cleaned up successfully")
-            } catch {
-                Log.data.warning("[Data] uploadAndSetAvatar: Failed to clean up old avatar (non-fatal): \(error.localizedDescription)")
-            }
+        // Save to history (best effort, don't fail if history save fails)
+        do {
+            try await saveProfilePictureToHistory(storagePath: path, publicUrl: publicUrl, source: source)
+            Log.data.debug("[Data] uploadAndSetAvatar: Saved to history with source '\(source)'")
+        } catch {
+            Log.data.warning("[Data] uploadAndSetAvatar: Failed to save to history (non-fatal): \(error.localizedDescription)")
         }
+        
+        // Note: We no longer delete old avatars - they're kept in history for reuse
         
         Log.data.debug("[Data] uploadAndSetAvatar: Complete")
         return publicUrl
@@ -4981,6 +4978,92 @@ final class SupabaseDataService: ObservableObject {
             return components[(index + 1)...].joined(separator: "/")
         }
         return nil
+    }
+
+    // MARK: - Profile Picture History
+    
+    /// Profile picture history entry
+    struct ProfilePictureHistoryEntry: Codable, Identifiable {
+        let id: UUID
+        let userId: UUID
+        let storagePath: String
+        let publicUrl: String
+        let source: String
+        let createdAt: Date
+        
+        enum CodingKeys: String, CodingKey {
+            case id
+            case userId = "user_id"
+            case storagePath = "storage_path"
+            case publicUrl = "public_url"
+            case source
+            case createdAt = "created_at"
+        }
+    }
+    
+    /// Fetch profile picture history for current user
+    func getProfilePictureHistory() async throws -> [ProfilePictureHistoryEntry] {
+        let currentUserId = try userId
+        
+        let history: [ProfilePictureHistoryEntry] = try await supabase
+            .from("profile_picture_history")
+            .select()
+            .eq("user_id", value: currentUserId.uuidString)
+            .order("created_at", ascending: false)
+            .limit(30)  // Limit to last 30 pictures
+            .execute()
+            .value
+        
+        return history
+    }
+    
+    /// Save a profile picture to history
+    /// - Parameters:
+    ///   - storagePath: Path in storage bucket
+    ///   - publicUrl: Public URL of the picture
+    ///   - source: Source of the picture ("upload" or "ai_generated")
+    func saveProfilePictureToHistory(storagePath: String, publicUrl: String, source: String) async throws {
+        let currentUserId = try userId
+        
+        struct HistoryInsert: Encodable {
+            let user_id: UUID
+            let storage_path: String
+            let public_url: String
+            let source: String
+        }
+        
+        let entry = HistoryInsert(
+            user_id: currentUserId,
+            storage_path: storagePath,
+            public_url: publicUrl,
+            source: source
+        )
+        
+        // Use upsert to avoid duplicates
+        try await supabase
+            .from("profile_picture_history")
+            .upsert(entry, onConflict: "user_id,storage_path")
+            .execute()
+    }
+    
+    /// Delete a profile picture from history
+    func deleteProfilePictureFromHistory(id: UUID) async throws {
+        let currentUserId = try userId
+        
+        try await supabase
+            .from("profile_picture_history")
+            .delete()
+            .eq("id", value: id.uuidString)
+            .eq("user_id", value: currentUserId.uuidString)
+            .execute()
+    }
+    
+    /// Set avatar from a history entry (reuse existing picture)
+    func setAvatarFromHistory(historyEntry: ProfilePictureHistoryEntry) async throws {
+        let currentUserId = try userId
+        
+        // Just update the avatar_url in profiles
+        try await updateAvatarUrl(historyEntry.publicUrl, userId: currentUserId)
     }
 
     // MARK: - AI Profile Picture Generation

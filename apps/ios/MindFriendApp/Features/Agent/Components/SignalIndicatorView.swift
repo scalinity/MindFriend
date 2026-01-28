@@ -10,7 +10,7 @@ struct SignalIndicatorView: View {
                 // Signal Type Icon
                 Image(systemName: signal.signalType.iconName)
                     .font(.title3)
-                    .foregroundStyle(Color(signal.signalType.colorName))
+                    .foregroundStyle(signal.signalType.color)
                     .frame(width: 32)
 
                 VStack(alignment: .leading, spacing: 2) {

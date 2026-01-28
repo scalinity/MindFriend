@@ -209,6 +209,28 @@ final class QuestArcsService {
             throw QuestArcError.networkError("Failed to fetch arc history: \(error.localizedDescription)")
         }
     }
+
+    // MARK: - Get Arc Steps
+
+    /// Fetches all steps (daily curriculum) for a quest arc
+    /// - Parameter arcId: The ID of the arc to get steps for
+    /// - Returns: Array of QuestArcStep ordered by day number
+    /// - Throws: QuestArcError if database query fails
+    func getArcSteps(arcId: UUID) async throws -> [QuestArcStep] {
+        do {
+            let response: [QuestArcStep] = try await supabase
+                .from("quest_arc_steps")
+                .select("*")
+                .eq("arc_id", value: arcId)
+                .order("day_number", ascending: true)
+                .execute()
+                .value
+
+            return response
+        } catch {
+            throw QuestArcError.networkError("Failed to fetch arc steps: \(error.localizedDescription)")
+        }
+    }
 }
 
 // MARK: - Quest Arc Errors

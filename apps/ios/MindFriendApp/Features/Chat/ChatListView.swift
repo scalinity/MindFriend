@@ -11,6 +11,10 @@ struct ChatListView: View {
     @State private var loadError: String?
     @State private var refreshTrigger = UUID() // Changes to trigger refresh
 
+    // Chat tutorial state
+    @AppStorage("chat_tutorial_completed") private var chatTutorialCompleted = false
+    @State private var showChatTutorial = false
+
     var body: some View {
         NavigationStack {
             Group {
@@ -119,6 +123,19 @@ struct ChatListView: View {
                 showNewChat = true
                 appState.shouldOpenNewChat = false
             }
+        }
+        .onChange(of: appState.selectedTab) { _, newTab in
+            // Only show tutorial when chat tab is actually selected
+            if newTab == .chat && !chatTutorialCompleted {
+                showChatTutorial = true
+            }
+        }
+        .fullScreenCover(isPresented: $showChatTutorial) {
+            ChatTutorialFlow(onComplete: {
+                chatTutorialCompleted = true
+                showChatTutorial = false
+            })
+            .environmentObject(container)
         }
     }
 

@@ -36,20 +36,33 @@ BEGIN
   END IF;
 END $$;
 
--- Schedule the job using the same credentials as other assessment/wellness cron jobs
-SELECT cron.schedule(
-  'send-assessment-reminders-daily',
-  '0 9 * * *',
-  $$
-  SELECT net.http_post(
-    url := current_setting('app.settings.supabase_url', true) || '/functions/v1/send-assessment-reminders',
-    headers := jsonb_build_object(
-      'Authorization', 'Bearer ' || current_setting('app.settings.cron_secret', true),
-      'Content-Type', 'application/json'
-    )
-  ) as request_id;
-  $$
-);
+-- Schedule the job using the same credentials pattern as other cron jobs
+DO $$
+BEGIN
+    -- Check if pg_cron is available
+    IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+        PERFORM cron.schedule(
+            'send-assessment-reminders-daily',
+            '0 9 * * *',
+            $cron$
+            SELECT net.http_post(
+                url := 'https://***REMOVED***/functions/v1/send-assessment-reminders',
+                headers := jsonb_build_object(
+                    'Content-Type', 'application/json',
+                    'x-cron-secret', public.get_cron_secret()
+                ),
+                body := '{}'::jsonb
+            )
+            $cron$
+        );
+        RAISE NOTICE 'Cron job send-assessment-reminders-daily scheduled successfully';
+    ELSE
+        RAISE WARNING 'pg_cron extension not available - skipping scheduled reminder';
+    END IF;
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE WARNING 'Could not schedule assessment reminder cron job: %', SQLERRM;
+END $$;
 
 -- Log successful creation
 DO $$

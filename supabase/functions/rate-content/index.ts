@@ -38,7 +38,18 @@ serve(async (req) => {
   try {
     // Auth validation
     const authHeader = req.headers.get("Authorization");
+    console.log(
+      `[rate-content] Request received at ${new Date().toISOString()}`,
+    );
+    console.log(`[rate-content] Auth header present: ${!!authHeader}`);
+    console.log(
+      `[rate-content] Auth header prefix: ${authHeader?.substring(0, 30)}...`,
+    );
+
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      console.log(
+        "[rate-content] ERROR: Missing or invalid Authorization header",
+      );
       return new Response(JSON.stringify({ error: "Missing authorization" }), {
         status: 401,
         headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
@@ -46,6 +57,9 @@ serve(async (req) => {
     }
 
     const token = authHeader.replace("Bearer ", "");
+    console.log(
+      `[rate-content] Token length: ${token.length}, prefix: ${token.substring(0, 20)}...`,
+    );
 
     // Create Supabase clients
     const supabaseUser = createClient(
@@ -69,7 +83,14 @@ serve(async (req) => {
       error: authError,
     } = await supabaseUser.auth.getUser();
 
+    console.log(
+      `[rate-content] User validation - error: ${authError?.message || "none"}, userId: ${user?.id || "null"}`,
+    );
+
     if (authError || !user) {
+      console.log(
+        `[rate-content] ERROR: Auth validation failed - authError: ${JSON.stringify(authError)}`,
+      );
       return new Response(JSON.stringify({ error: "Invalid authentication" }), {
         status: 401,
         headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
@@ -173,13 +194,13 @@ serve(async (req) => {
       .upsert(
         {
           user_id: user.id,
-          content_id: request.contentId,
+          generated_content_id: request.contentId,
           rating: request.rating,
           helpful: request.helpful,
-          feedback: request.feedback,
+          feedback_text: request.feedback,
         },
         {
-          onConflict: "user_id,content_id",
+          onConflict: "user_id,generated_content_id",
         },
       )
       .select("id")
