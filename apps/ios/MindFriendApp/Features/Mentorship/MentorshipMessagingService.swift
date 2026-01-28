@@ -136,13 +136,23 @@ final class MentorshipMessagingService: ObservableObject {
         }
     }
 
+    /// Delete a message
+    func deleteMessage(messageId: UUID) async throws {
+        try await dataService.deleteMessage(messageId: messageId)
+
+        // Remove from local messages
+        if let index = messages.firstIndex(where: { $0.id == messageId }) {
+            messages.remove(at: index)
+        }
+    }
+
     /// Flag a message for safety review
     func flagMessage(messageId: UUID, reason: String) async {
         error = nil
 
         do {
             try await dataService.flagMessage(messageId: messageId, reason: reason)
-            
+
             // Update local message
             if let index = messages.firstIndex(where: { $0.id == messageId }) {
                 messages[index].isFlagged = true

@@ -37,6 +37,7 @@ struct ContentRequestView: View {
                 }
                 .padding()
             }
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Create Content")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -68,6 +69,7 @@ struct ContentRequestView: View {
                     generatingOverlay
                 }
             }
+            .keyboardDoneButton()
         }
     }
 

@@ -51,11 +51,108 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Parse request for optional user filtering
+    // Authenticate request - require service role or valid cron token
+    const authHeader = req.headers.get("Authorization");
+    const cronSecret = Deno.env.get("CRON_SECRET");
+
+    // Allow cron jobs with secret, or admin service calls
+    const isCronRequest =
+      cronSecret && req.headers.get("X-Cron-Secret") === cronSecret;
+    const isServiceRequest = authHeader?.includes(
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    );
+
+    if (!isCronRequest && !isServiceRequest) {
+      // Validate user token for manual triggers
+      if (!authHeader) {
+        return new Response(
+          JSON.stringify({ error: "Missing authorization" }),
+          {
+            status: 401,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
+
+      if (authError || !user) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Check if user has admin role for manual triggering
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+
+      if (profile?.role !== "admin") {
+        return new Response(
+          JSON.stringify({ error: "Admin access required" }),
+          {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+    }
+
+    // Parse request for optional user filtering with validation
     let userIds: string[] | null = null;
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const MAX_USER_IDS = 100; // Limit batch size to prevent DoS
+
     try {
       const body = await req.json();
-      userIds = body.user_ids || null;
+      if (body.user_ids) {
+        // Validate user_ids is an array
+        if (!Array.isArray(body.user_ids)) {
+          return new Response(
+            JSON.stringify({ error: "user_ids must be an array" }),
+            {
+              status: 400,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            },
+          );
+        }
+
+        // Limit array size
+        if (body.user_ids.length > MAX_USER_IDS) {
+          return new Response(
+            JSON.stringify({
+              error: `user_ids array exceeds maximum size of ${MAX_USER_IDS}`,
+            }),
+            {
+              status: 400,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            },
+          );
+        }
+
+        // Validate each UUID format
+        const invalidIds = body.user_ids.filter(
+          (id: unknown) => typeof id !== "string" || !uuidRegex.test(id),
+        );
+        if (invalidIds.length > 0) {
+          return new Response(
+            JSON.stringify({ error: "Invalid UUID format in user_ids array" }),
+            {
+              status: 400,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            },
+          );
+        }
+
+        userIds = body.user_ids;
+      }
     } catch {
       // No body, process all active users
     }
@@ -137,6 +234,27 @@ serve(async (req) => {
   }
 });
 
+// Cache for profiles to avoid N+1 queries
+const profileCache = new Map<string, Profile | null>();
+
+async function getProfileCached(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+): Promise<Profile | null> {
+  if (profileCache.has(userId)) {
+    return profileCache.get(userId) || null;
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id, display_name, current_streak")
+    .eq("id", userId)
+    .single();
+
+  profileCache.set(userId, profile as Profile | null);
+  return profile as Profile | null;
+}
+
 async function processUser(
   supabase: ReturnType<typeof createClient>,
   settings: AgentSettings,
@@ -160,12 +278,13 @@ async function processUser(
     (s) => s.confidence >= confidenceThreshold,
   );
 
-  // Get user profile for context
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id, display_name, current_streak")
-    .eq("id", userId)
-    .single();
+  // Early exit if no valid signals (avoids profile fetch)
+  if (validSignals.length === 0) {
+    return { signalsDetected, actionsCreated };
+  }
+
+  // Get user profile for context (cached)
+  const profile = await getProfileCached(supabase, userId);
 
   for (const signal of validSignals) {
     // Check for duplicate signals
@@ -196,7 +315,11 @@ async function processUser(
       .single();
 
     if (signalError) {
-      console.error(`Failed to insert signal for ${userId}:`, signalError);
+      // Log error without exposing full user ID (first 8 chars only for correlation)
+      console.error(
+        `Failed to insert signal for user ${userId.substring(0, 8)}...:`,
+        signalError.message,
+      );
       continue;
     }
 
@@ -221,11 +344,11 @@ async function processUser(
     const timeOfDay = getTimeOfDay();
 
     const content = await generateActionContent(actionType, {
-      userName: (profile as Profile)?.display_name || "friend",
+      userName: profile?.display_name || "friend",
       signalType: signal.type,
       severity: signal.severity,
       evidence: signal.evidence,
-      streak: (profile as Profile)?.current_streak || 0,
+      streak: profile?.current_streak || 0,
       timeOfDay,
     });
 
@@ -257,7 +380,11 @@ async function processUser(
       .single();
 
     if (actionError) {
-      console.error(`Failed to create action for ${userId}:`, actionError);
+      // Log error without exposing full user ID
+      console.error(
+        `Failed to create action for user ${userId.substring(0, 8)}...:`,
+        actionError.message,
+      );
       continue;
     }
 

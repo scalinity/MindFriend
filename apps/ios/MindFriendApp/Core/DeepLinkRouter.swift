@@ -1,6 +1,15 @@
 import Foundation
 import SwiftUI
 
+// MARK: - UUID Validation
+
+private extension String {
+    /// Validates if the string is a valid UUID format
+    var isValidUUID: Bool {
+        UUID(uuidString: self) != nil
+    }
+}
+
 // MARK: - Deep Link Route
 
 /// All supported deep link routes in the app
@@ -35,6 +44,7 @@ enum DeepLinkRoute: Equatable {
     case microMoments(templateId: String? = nil)
     case sleep(contentId: String? = nil)
     case quote
+    case assessment(code: String? = nil)
 
     // Social
     case buddy(code: String)
@@ -67,6 +77,7 @@ final class DeepLinkRouter: ObservableObject {
     @Published var circleDetailId: String?
     @Published var programDetailId: String?
     @Published var sleepContentId: String?
+    @Published var assessmentCode: String?
 
     // MARK: - Singleton
 
@@ -88,9 +99,25 @@ final class DeepLinkRouter: ObservableObject {
         case "home":
             return .home
         case "chat":
-            return .chat(conversationId: pathComponents.first)
+            // SEC-CRIT-005: Validate conversation ID as UUID if provided
+            if let conversationId = pathComponents.first {
+                guard conversationId.isValidUUID else {
+                    Log.general.warning("[DeepLink] Invalid conversation ID format: \(conversationId)")
+                    return .chat(conversationId: nil)
+                }
+                return .chat(conversationId: conversationId)
+            }
+            return .chat(conversationId: nil)
         case "circles", "circle":
-            return .circles(circleId: pathComponents.first)
+            // SEC-CRIT-005: Validate circle ID as UUID if provided
+            if let circleId = pathComponents.first {
+                guard circleId.isValidUUID else {
+                    Log.general.warning("[DeepLink] Invalid circle ID format: \(circleId)")
+                    return .circles(circleId: nil)
+                }
+                return .circles(circleId: circleId)
+            }
+            return .circles(circleId: nil)
         case "profile":
             return .profile
         case "settings":
@@ -103,7 +130,15 @@ final class DeepLinkRouter: ObservableObject {
             }
             return .mood
         case "quest":
-            return .quest(questId: pathComponents.first)
+            // SEC-CRIT-005: Validate quest ID as UUID if provided
+            if let questId = pathComponents.first {
+                guard questId.isValidUUID else {
+                    Log.general.warning("[DeepLink] Invalid quest ID format: \(questId)")
+                    return .quest(questId: nil)
+                }
+                return .quest(questId: questId)
+            }
+            return .quest(questId: nil)
         case "streak":
             return .streak
         case "progress":
@@ -119,6 +154,11 @@ final class DeepLinkRouter: ObservableObject {
                 if exerciseId == "meditation" {
                     return .meditation
                 }
+                // SEC-CRIT-005: Validate exercise ID as UUID
+                guard exerciseId.isValidUUID else {
+                    Log.general.warning("[DeepLink] Invalid exercise ID format: \(exerciseId)")
+                    return .exerciseLibrary
+                }
                 return .exercise(exerciseId: exerciseId)
             }
             return .exerciseLibrary
@@ -132,6 +172,11 @@ final class DeepLinkRouter: ObservableObject {
             return .therapeuticPrograms
         case "program":
             if let programId = pathComponents.first {
+                // SEC-CRIT-005: Validate program ID as UUID
+                guard programId.isValidUUID else {
+                    Log.general.warning("[DeepLink] Invalid program ID format: \(programId)")
+                    return .programs
+                }
                 return .program(programId: programId)
             }
             return .programs
@@ -145,10 +190,27 @@ final class DeepLinkRouter: ObservableObject {
             return .sleep(contentId: pathComponents.first)
         case "quote":
             return .quote
+        case "assessment":
+            // Assessment code (PHQ9, GAD7, WHO5, PSS10) - alphanumeric
+            if let code = pathComponents.first {
+                let codePattern = "^[A-Za-z0-9]{2,10}$"
+                guard code.range(of: codePattern, options: .regularExpression) != nil else {
+                    Log.general.warning("[DeepLink] Invalid assessment code format: \(code)")
+                    return .assessment(code: nil)
+                }
+                return .assessment(code: code.uppercased())
+            }
+            return .assessment(code: nil)
 
         // Social
         case "buddy":
             if let code = pathComponents.first {
+                // Validate buddy code format (alphanumeric, reasonable length)
+                let codePattern = "^[A-Za-z0-9]{4,32}$"
+                guard code.range(of: codePattern, options: .regularExpression) != nil else {
+                    Log.general.warning("[DeepLink] Invalid buddy code format")
+                    return .unknown
+                }
                 return .buddy(code: code)
             }
             return .unknown
@@ -163,6 +225,22 @@ final class DeepLinkRouter: ObservableObject {
             return .unknown
         }
     }
+    
+    // MARK: - Authentication Requirements
+    
+    /// Determines if a route requires authentication
+    private func routeRequiresAuthentication(_ route: DeepLinkRoute) -> Bool {
+        switch route {
+        case .home, .breathing, .meditation, .exerciseLibrary, .programs, .therapeuticPrograms, .unknown:
+            // Public routes that don't require auth
+            return false
+        case .chat, .circles, .profile, .settings, .mood, .moodHistory, .quest,
+             .streak, .progress, .exercise, .program, .journal, .microMoments,
+             .sleep, .quote, .buddy, .insights, .achievements, .assessment:
+            // Private routes that require authentication
+            return true
+        }
+    }
 
     // MARK: - Route Handling
 
@@ -175,6 +253,15 @@ final class DeepLinkRouter: ObservableObject {
     /// Handle a parsed deep link route
     func handleRoute(_ route: DeepLinkRoute, appState: AppState) {
         Log.general.info("[DeepLink] Handling route: \(String(describing: route))")
+        
+        // SEC-CRIT-005: Validate authentication for sensitive routes
+        let requiresAuth = routeRequiresAuthentication(route)
+        if requiresAuth && appState.authState != .authenticated {
+            Log.general.warning("[DeepLink] Blocked unauthenticated access to: \(String(describing: route))")
+            // Store route to handle after authentication
+            pendingRoute = route
+            return
+        }
 
         // Store pending route for views that need to respond
         pendingRoute = route
@@ -266,6 +353,12 @@ final class DeepLinkRouter: ObservableObject {
             // Quote is informational - could show a quote detail or just go home
             appState.selectedTab = .home
 
+        case .assessment(let code):
+            // Navigate to wellness tab and trigger assessment flow
+            appState.selectedTab = .home
+            assessmentCode = code
+            Log.general.info("[DeepLink] Navigate to assessment: \(code ?? "selection")")
+
         // Social
         case .buddy:
             // Buddy invite handling is special - done at app level
@@ -309,6 +402,7 @@ final class DeepLinkRouter: ObservableObject {
         circleDetailId = nil
         programDetailId = nil
         sleepContentId = nil
+        assessmentCode = nil
         pendingRoute = nil
     }
 
@@ -323,7 +417,7 @@ final class DeepLinkRouter: ObservableObject {
     func tabForRoute(_ route: DeepLinkRoute) -> MainTab? {
         switch route {
         case .home, .mood, .moodHistory, .quest, .streak, .progress,
-             .breathing, .journal, .microMoments, .quote, .insights:
+             .breathing, .journal, .microMoments, .quote, .insights, .assessment:
             return .home
         case .chat:
             return .chat
@@ -410,6 +504,11 @@ extension DeepLinkRoute {
             }
         case .quote:
             components.host = "quote"
+        case .assessment(let code):
+            components.host = "assessment"
+            if let code = code {
+                components.path = "/\(code)"
+            }
         case .buddy(let code):
             components.host = "buddy"
             components.path = "/\(code)"

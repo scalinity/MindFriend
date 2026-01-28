@@ -22,10 +22,20 @@ struct QuestArcCatalogView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
-                    // Active Arc Banner
+                    // Active Arc Banner (tappable to view details)
                     if let active = activeArc {
-                        ActiveArcBanner(userArc: active)
-                            .padding(.horizontal)
+                        Button {
+                            // Find the matching arc from the list or use the embedded one
+                            if let matchingArc = arcs.first(where: { $0.id == active.arcId }) {
+                                selectedArc = matchingArc
+                            } else if let embeddedArc = active.questArc {
+                                selectedArc = embeddedArc
+                            }
+                        } label: {
+                            ActiveArcBanner(userArc: active)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal)
                     }
 
                     // Category Filter
@@ -248,26 +258,34 @@ private struct ActiveArcBanner: View {
     let userArc: UserQuestArc
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: "flame.fill")
-                    .foregroundStyle(.orange)
-                Text("Active Journey")
-                    .font(.headline)
-                Spacer()
-                Text("Day \(userArc.currentDay)/\(userArc.snapshotDurationDays)")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+        HStack {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Image(systemName: "flame.fill")
+                        .foregroundStyle(.orange)
+                    Text("Active Journey")
+                        .font(.headline)
+                    Spacer()
+                    Text("Day \(userArc.currentDay)/\(userArc.snapshotDurationDays)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let arc = userArc.questArc {
+                    Text(arc.title)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                ProgressView(value: userArc.progressPercentage)
+                    .tint(.orange)
             }
 
-            if let arc = userArc.questArc {
-                Text(arc.title)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-
-            ProgressView(value: userArc.progressPercentage)
-                .tint(.orange)
+            // Chevron to indicate tappable
+            Image(systemName: "chevron.right")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .padding(.leading, 8)
         }
         .padding()
         .background(Color.orange.opacity(0.1))

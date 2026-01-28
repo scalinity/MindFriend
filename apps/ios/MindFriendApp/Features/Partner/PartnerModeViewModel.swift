@@ -43,6 +43,12 @@ final class PartnerModeViewModel: ObservableObject {
     init(dataService: SupabaseDataService) {
         self.dataService = dataService
     }
+    
+    // PERF-CRIT-002: Clean up timer on deallocation
+    deinit {
+        pollTimer?.invalidate()
+        pollTimer = nil
+    }
 
     // MARK: - Data Loading
 
@@ -366,7 +372,9 @@ fileprivate func partnerWithTimeout<T>(seconds: TimeInterval, operation: @escapi
         }
 
         // Return the first result (either success or timeout)
-        let result = try await group.next()!
+        guard let result = try await group.next() else {
+            throw TimeoutError()
+        }
         group.cancelAll()
         return result
     }

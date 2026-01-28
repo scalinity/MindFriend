@@ -53,8 +53,26 @@ serve(async (req) => {
     const url = new URL(req.url);
     const pathname = url.pathname.replace("/therapist-api", "");
 
-    // TODO: Implement rate limiting here (check request count in last hour)
-    // For MVP, trust rate_limit_per_hour setting in database
+    // SEC-HIGH-002: Implement rate limiting (check request count in last hour)
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const { count, error: countError } = await supabase
+      .from("therapy_access_log")
+      .select("*", { count: "exact", head: true })
+      .eq("therapist_id", therapistId)
+      .gte("accessed_at", oneHourAgo);
+
+    if (
+      !countError &&
+      count !== null &&
+      rateLimitPerHour &&
+      count >= rateLimitPerHour
+    ) {
+      return apiError(
+        "RATE_LIMIT_EXCEEDED",
+        `Rate limit of ${rateLimitPerHour} requests/hour exceeded. Please try again later.`,
+        429,
+      );
+    }
 
     // Route handling
     if (pathname === "/clients" && req.method === "GET") {

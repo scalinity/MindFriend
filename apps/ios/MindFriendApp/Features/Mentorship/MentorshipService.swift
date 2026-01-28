@@ -1,5 +1,6 @@
 import Foundation
 import Supabase
+import Combine
 
 /// Errors specific to mentorship operations
 enum MentorshipError: Error {

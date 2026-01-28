@@ -62,9 +62,13 @@ struct ProfileView: View {
                                     .foregroundStyle(.secondary)
 
                                 if appState.entitlements.tier == .premium {
-                                    Label("Premium", systemImage: "star.fill")
-                                        .font(.caption)
-                                        .foregroundStyle(.yellow)
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "crown.fill")
+                                        Text("Premium")
+                                    }
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundStyle(.yellow)
                                 }
                             }
 
@@ -165,14 +169,15 @@ struct ProfileView: View {
                 // Social
                 Section("Social") {
                     NavigationLink {
+                        MentorshipTabView()
+                    } label: {
+                        Label("Mentorship", systemImage: "star.fill")
+                    }
+
+                    NavigationLink {
                         PeerSupportHubView(supabase: container.supabase)
                     } label: {
-                        Label {
-                            Text("Peer Support & Mentorship")
-                        } icon: {
-                            Image(systemName: "person.3.fill")
-                                .font(.system(size: 14))
-                        }
+                        Label("Peer Support", systemImage: "person.3.fill")
                     }
 
                     NavigationLink {
@@ -1137,6 +1142,7 @@ struct EditProfileView: View {
                 }
             }
             .interactiveDismissDisabled(isSaving)
+            .keyboardDoneButton()
             .sheet(isPresented: $showProfilePictureEditor) {
                 ProfilePictureEditorView()
                     .environmentObject(appState)

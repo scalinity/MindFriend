@@ -185,6 +185,7 @@ struct EnterpriseInquirySheet: View {
                 Text("Your inquiry has been submitted. Our team will contact you within 24 hours.")
             }
             .interactiveDismissDisabled(isSubmitting)
+            .keyboardDoneButton()
         }
     }
 

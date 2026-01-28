@@ -13,95 +13,94 @@ struct SensoryHomeView: View {
     @State private var recentSessions: [SensorySession] = []
 
     var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(spacing: 24) {
-                    // Header
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Sensory Toolkit")
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
+        ScrollView {
+            VStack(spacing: 24) {
+                // Header
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Sensory Toolkit")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
 
-                        Text("Use gentle vibrations, calming visuals, or nature sounds to regulate your nervous system")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal)
+                    Text("Use gentle vibrations, calming visuals, or nature sounds to regulate your nervous system")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal)
 
-                    // Modality cards
-                    VStack(spacing: 16) {
-                        NavigationLink(destination: TactileLibraryView()) {
-                            ModalityCard(
-                                title: "Tactile",
-                                subtitle: "Feel gentle vibrations",
-                                icon: "hand.tap.fill",
-                                color: .blue,
-                                patternCount: TactilePattern.library.count
-                            )
-                        }
-
-                        NavigationLink(destination: VisualLibraryView()) {
-                            ModalityCard(
-                                title: "Visual",
-                                subtitle: "Watch calming animations",
-                                icon: "eye.fill",
-                                color: .purple,
-                                patternCount: VisualAnimation.library.count
-                            )
-                        }
-
-                        NavigationLink(destination: SensoryAudioLibraryView()) {
-                            ModalityCard(
-                                title: "Audio",
-                                subtitle: "Listen to nature sounds",
-                                icon: "speaker.wave.3.fill",
-                                color: .teal,
-                                patternCount: AudioSoundscape.library.count
-                            )
-                        }
-                    }
-                    .padding(.horizontal)
-
-                    // Recent sessions (if any)
-                    if !recentSessions.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Recent Sessions")
-                                .font(.headline)
-                                .padding(.horizontal)
-
-                            ForEach(recentSessions.prefix(3)) { session in
-                                RecentSessionRow(session: session)
-                            }
-                        }
+                // Modality cards
+                VStack(spacing: 16) {
+                    NavigationLink(destination: TactileLibraryView()) {
+                        ModalityCard(
+                            title: "Tactile",
+                            subtitle: "Feel gentle vibrations",
+                            icon: "hand.tap.fill",
+                            color: .blue,
+                            patternCount: TactilePattern.library.count
+                        )
                     }
 
-                    // Tips section
+                    NavigationLink(destination: VisualLibraryView()) {
+                        ModalityCard(
+                            title: "Visual",
+                            subtitle: "Watch calming animations",
+                            icon: "eye.fill",
+                            color: .purple,
+                            patternCount: VisualAnimation.library.count
+                        )
+                    }
+
+                    NavigationLink(destination: SensoryAudioLibraryView()) {
+                        ModalityCard(
+                            title: "Audio",
+                            subtitle: "Listen to nature sounds",
+                            icon: "speaker.wave.3.fill",
+                            color: .teal,
+                            patternCount: AudioSoundscape.library.count
+                        )
+                    }
+                }
+                .padding(.horizontal)
+
+                // Recent sessions (if any)
+                if !recentSessions.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Tips")
+                        Text("Recent Sessions")
                             .font(.headline)
                             .padding(.horizontal)
 
-                        SensoryTipCard(
-                            icon: "headphones",
-                            title: "Best Results",
-                            message: "Use headphones for audio soundscapes and find a quiet space for tactile patterns."
-                        )
-
-                        SensoryTipCard(
-                            icon: "moon.fill",
-                            title: "Session Length",
-                            message: "Start with 5-10 minutes. Sessions auto-pause at 30 minutes to prevent overuse."
-                        )
+                        ForEach(recentSessions.prefix(3)) { session in
+                            RecentSessionRow(session: session)
+                        }
                     }
-                    .padding(.horizontal)
                 }
-                .padding(.vertical)
+
+                // Tips section
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Tips")
+                        .font(.headline)
+                        .padding(.horizontal)
+
+                    SensoryTipCard(
+                        icon: "headphones",
+                        title: "Best Results",
+                        message: "Use headphones for audio soundscapes and find a quiet space for tactile patterns."
+                    )
+
+                    SensoryTipCard(
+                        icon: "moon.fill",
+                        title: "Session Length",
+                        message: "Start with 5-10 minutes. Sessions auto-pause at 30 minutes to prevent overuse."
+                    )
+                }
+                .padding(.horizontal)
             }
-            .navigationBarTitleDisplayMode(.inline)
-            .task {
-                await loadRecentSessions()
-            }
+            .padding(.vertical)
+        }
+        .navigationTitle("Sensory Toolkit")
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await loadRecentSessions()
         }
     }
 

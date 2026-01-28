@@ -179,7 +179,9 @@ struct MentorCard: View {
 
             // Expertise areas
             VStack(alignment: .leading, spacing: 6) {
-                Text("Expertise", font: .caption, color: .secondary)
+                Text("Expertise")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
 
                 FlowLayoutView(items: mentor.expertiseAreas) { expertise in
                     TagView(text: expertise, color: .blue)
@@ -189,14 +191,18 @@ struct MentorCard: View {
             // Availability
             HStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Available", font: .caption, color: .secondary)
+                    Text("Available")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                     Text("\(mentor.availabilityHoursWeek)h/week")
                         .font(.subheadline)
                         .fontWeight(.semibold)
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Languages", font: .caption, color: .secondary)
+                    Text("Languages")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                     Text(mentor.languages.prefix(2).joined(separator: ", "))
                         .font(.subheadline)
                         .fontWeight(.semibold)
@@ -365,10 +371,3 @@ struct TagView: View {
     }
 }
 
-extension Text {
-    init(_ text: String, font: Font, color: Color) {
-        self.init(text)
-            .font(font)
-            .foregroundColor(color)
-    }
-}

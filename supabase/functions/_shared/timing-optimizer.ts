@@ -161,15 +161,38 @@ export function isOutsideQuietHours(
 ): boolean {
   if (!settings) return true;
 
-  const start = parseInt(settings.quiet_hours_start?.split(":")[0] || "22");
-  const end = parseInt(settings.quiet_hours_end?.split(":")[0] || "8");
+  // Safely parse quiet hours with validation
+  const startParts = settings.quiet_hours_start?.split(":");
+  const endParts = settings.quiet_hours_end?.split(":");
+  const start = startParts?.length ? parseInt(startParts[0], 10) : 22;
+  const end = endParts?.length ? parseInt(endParts[0], 10) : 8;
+
+  // Validate parsed values
+  if (
+    isNaN(start) ||
+    isNaN(end) ||
+    start < 0 ||
+    start > 23 ||
+    end < 0 ||
+    end > 23
+  ) {
+    return true; // Default to outside quiet hours if invalid
+  }
 
   if (start > end) {
-    // Quiet hours span midnight (e.g., 22:00 - 07:00)
-    return hour < start && hour >= end;
+    // Quiet hours span midnight (e.g., 22:00 - 08:00)
+    // Inside quiet hours if: hour >= start OR hour < end
+    // Outside quiet hours if: hour < start AND hour >= end
+    const insideQuietHours = hour >= start || hour < end;
+    return !insideQuietHours;
+  } else if (start === end) {
+    // No quiet hours (same start and end)
+    return true;
   } else {
-    // Quiet hours within same day (e.g., 23:00 - 06:00)
-    return hour < start || hour >= end;
+    // Quiet hours within same day (e.g., 01:00 - 06:00)
+    // Inside quiet hours if: hour >= start AND hour < end
+    const insideQuietHours = hour >= start && hour < end;
+    return !insideQuietHours;
   }
 }
 

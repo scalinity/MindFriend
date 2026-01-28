@@ -315,11 +315,17 @@ struct GeneratedMeditationView: View {
     // MARK: - Actions
 
     private func loadAudio() {
+        print("[GeneratedMeditationView] loadAudio called for content: \(content.id)")
+        print("[GeneratedMeditationView] content.audioUrl: \(content.audioUrl ?? "nil")")
+        print("[GeneratedMeditationView] content.textContent length: \(content.textContent.count)")
+
         guard let urlString = content.audioUrl,
               let url = URL(string: urlString) else {
+            print("[GeneratedMeditationView] No audio URL available, setting error")
             player.error = "No audio available"
             return
         }
+        print("[GeneratedMeditationView] Loading audio from: \(urlString)")
 
         Task {
             do {
@@ -331,15 +337,20 @@ struct GeneratedMeditationView: View {
     }
 
     private func toggleFavorite() {
+        print("[GeneratedMeditationView] toggleFavorite called, current state: \(isFavorite)")
         isFavorite.toggle()
 
         Task {
             do {
                 let service = GeneratedContentService(supabase: supabase)
-                _ = try await service.toggleFavorite(contentId: content.id)
+                let newState = try await service.toggleFavorite(contentId: content.id)
+                print("[GeneratedMeditationView] toggleFavorite succeeded, new state: \(newState)")
             } catch {
+                print("[GeneratedMeditationView] toggleFavorite failed: \(error)")
                 // Revert on failure
-                isFavorite.toggle()
+                await MainActor.run {
+                    isFavorite.toggle()
+                }
             }
         }
     }
@@ -398,11 +409,14 @@ private struct ContentRatingSheetView: View {
 
         Task {
             do {
+                print("[ContentRatingSheet] Submitting rating \(rating) for content \(content.id)")
                 let service = GeneratedContentService(supabase: supabase)
-                _ = try await service.rateContent(contentId: content.id, rating: rating)
+                let response = try await service.rateContent(contentId: content.id, rating: rating)
+                print("[ContentRatingSheet] Rating submitted successfully: \(response.message)")
                 onRated()
                 dismiss()
             } catch {
+                print("[ContentRatingSheet] ERROR submitting rating: \(error)")
                 isSubmitting = false
             }
         }

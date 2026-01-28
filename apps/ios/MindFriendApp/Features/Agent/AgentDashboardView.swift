@@ -39,7 +39,11 @@ struct AgentDashboardView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showSettings) {
+            .sheet(isPresented: $showSettings, onDismiss: {
+                Task {
+                    await viewModel.loadData(service: dependencies.agentService)
+                }
+            }) {
                 AgentSettingsView()
                     .environmentObject(dependencies)
             }

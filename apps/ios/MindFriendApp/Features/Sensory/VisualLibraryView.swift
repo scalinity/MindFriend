@@ -11,7 +11,6 @@ import SwiftUI
 struct VisualLibraryView: View {
     @EnvironmentObject private var dependencies: DependencyContainer
     @State private var selectedAnimation: VisualAnimation?
-    @State private var showSession: Bool = false
 
     let columns = [
         GridItem(.flexible()),
@@ -40,7 +39,6 @@ struct VisualLibraryView: View {
                             animation: animation
                         ) {
                             selectedAnimation = animation
-                            showSession = true
                         }
                     }
                 }
@@ -49,18 +47,16 @@ struct VisualLibraryView: View {
             .padding(.vertical)
         }
         .navigationTitle("Visual")
-        .fullScreenCover(isPresented: $showSession) {
-            if let animation = selectedAnimation {
-                SessionView(
-                    modality: .visual,
-                    patternId: animation.id,
-                    patternName: animation.name,
-                    sensoryService: dependencies.sensoryRegulationService,
-                    tactileService: dependencies.tactilePatternService,
-                    visualService: dependencies.visualAnimationService,
-                    audioService: dependencies.audioSoundscapeService
-                )
-            }
+        .fullScreenCover(item: $selectedAnimation) { animation in
+            SessionView(
+                modality: .visual,
+                patternId: animation.id,
+                patternName: animation.name,
+                sensoryService: dependencies.sensoryRegulationService,
+                tactileService: dependencies.tactilePatternService,
+                visualService: dependencies.visualAnimationService,
+                audioService: dependencies.audioSoundscapeService
+            )
         }
     }
 }

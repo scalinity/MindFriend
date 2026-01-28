@@ -1,14 +1,18 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
-interface CrisisEventRequest {
-  assessmentTemplateId: string;
-  assessmentResponseId: string;
-  eventType: string;
-  severity: string;
-  context?: Record<string, unknown>;
-  responseAction?: string;
-}
+// SEC-CRIT-004: Zod schema for input validation
+const CrisisEventSchema = z.object({
+  assessmentTemplateId: z.string().uuid(),
+  assessmentResponseId: z.string().uuid().optional(),
+  eventType: z.string().min(1).max(50),
+  severity: z.enum(["low", "medium", "high", "critical"]),
+  context: z.record(z.unknown()).optional(),
+  responseAction: z.string().max(100).optional(),
+});
+
+type CrisisEventRequest = z.infer<typeof CrisisEventSchema>;
 
 serve(async (req) => {
   try {
@@ -23,7 +27,7 @@ serve(async (req) => {
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") || "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || ""
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
     );
 
     // Get user from JWT
@@ -40,30 +44,31 @@ serve(async (req) => {
       });
     }
 
-    // Parse request body
-    const body: CrisisEventRequest = await req.json();
-
-    // Validate required fields
-    if (!body.assessmentTemplateId || !body.eventType || !body.severity) {
-      return new Response(
-        JSON.stringify({ error: "Missing required fields" }),
-        {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        }
-      );
-    }
-
-    // Validate severity level
-    const validSeverities = ["low", "medium", "high", "critical"];
-    if (!validSeverities.includes(body.severity)) {
-      return new Response(
-        JSON.stringify({ error: "Invalid severity level" }),
-        {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        }
-      );
+    // Parse and validate request body with Zod schema
+    let body: CrisisEventRequest;
+    try {
+      const rawBody = await req.json();
+      body = CrisisEventSchema.parse(rawBody);
+    } catch (validationError) {
+      if (validationError instanceof z.ZodError) {
+        return new Response(
+          JSON.stringify({
+            error: "Validation failed",
+            details: validationError.errors.map((e) => ({
+              field: e.path.join("."),
+              message: e.message,
+            })),
+          }),
+          {
+            status: 400,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+      return new Response(JSON.stringify({ error: "Invalid request body" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
     // Log crisis event to database
@@ -89,7 +94,7 @@ serve(async (req) => {
         {
           status: 500,
           headers: { "Content-Type": "application/json" },
-        }
+        },
       );
     }
 
@@ -105,13 +110,10 @@ serve(async (req) => {
     });
   } catch (error) {
     console.error("Function error:", error);
-    return new Response(
-      JSON.stringify({ error: "Internal server error" }),
-      {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      }
-    );
+    return new Response(JSON.stringify({ error: "Internal server error" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 });
 
@@ -123,7 +125,7 @@ serve(async (req) => {
 async function escalateCrisisEvent(
   supabase: ReturnType<typeof createClient>,
   userId: string,
-  event: Record<string, unknown>
+  event: Record<string, unknown>,
 ): Promise<void> {
   try {
     // In MVP, critical events are logged for audit trail
@@ -134,7 +136,9 @@ async function escalateCrisisEvent(
     // 2. Alert crisis team via Slack/email
     // 3. Track high-risk users for follow-up
 
-    console.info(`Crisis escalation: User ${userId} - Event: ${event.event_type}`);
+    console.info(
+      `Crisis escalation: User ${userId} - Event: ${event.event_type}`,
+    );
 
     // For now, just ensure event is properly recorded
     // Future: Add crisis team notification logic

@@ -94,6 +94,10 @@ struct MoodCheckInView: View {
                                 TextField("What's on your mind?", text: $note, axis: .vertical)
                                     .textFieldStyle(.roundedBorder)
                                     .lineLimit(3...6)
+                                    .submitLabel(.done)
+                                    .onSubmit {
+                                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                                    }
                             }
                         }
                         .transition(.opacity.combined(with: .move(edge: .top)))
@@ -122,16 +126,10 @@ struct MoodCheckInView: View {
                 }
                 .padding()
             }
+            .scrollDismissesKeyboard(.interactively)
             .sentryMaskMood()
             .navigationTitle("Mood Check-In")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                }
-            }
             .onAppear {
                 if let mood = existingMood {
                     // Clamp scores to valid range [1, 5] to prevent array index out of bounds
@@ -179,10 +177,15 @@ struct MoodCheckInView: View {
                 var xpResult: XPAward?
                 if existingMood == nil {
                     xpResult = try await container.supabaseDataService.awardXP(activity: .moodCheckin)
-                    // Check badge progress after new mood logged
-                    _ = try? await container.achievementService.checkBadgeProgress()
-                    // Record first mood log for progressive disclosure activation
-                    try? await container.activationService.recordMoodLog()
+
+                    // Fire-and-forget: badge check and activation record run in background
+                    // These are slow operations that shouldn't block the UI
+                    let achievementService = container.achievementService
+                    let activationService = container.activationService
+                    Task.detached(priority: .utility) {
+                        _ = try? await achievementService.checkBadgeProgress()
+                        try? await activationService.recordMoodLog()
+                    }
                 }
 
                 await MainActor.run {

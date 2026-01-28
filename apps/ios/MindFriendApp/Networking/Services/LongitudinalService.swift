@@ -433,14 +433,15 @@ final class LongitudinalService: ObservableObject {
 
     /// Fetch aggregated dashboard data for the longitudinal overview
     func fetchDashboardData() async throws -> LongitudinalDashboardData {
-        async let weeklyTask = fetchRecentWeeklyStats(weeks: 12)
-        async let monthlyTask = fetchRecentMonthlyStats(months: 12)
-        async let yearlyTask = fetchYearlyStats(limit: 2)
-        async let patternsTask = fetchPatterns()
-        async let recentEventsTask = fetchLifeEvents(limit: 5)
-        async let reportsTask = fetchReports(limit: 3)
+        // Use resilient parallel fetches - return empty on failure so we can fall back to raw moods
+        async let weeklyTask = resilientFetch { try await self.fetchRecentWeeklyStats(weeks: 12) }
+        async let monthlyTask = resilientFetch { try await self.fetchRecentMonthlyStats(months: 12) }
+        async let yearlyTask = resilientFetch { try await self.fetchYearlyStats(limit: 2) }
+        async let patternsTask = resilientFetch { try await self.fetchPatterns() }
+        async let recentEventsTask = resilientFetch { try await self.fetchLifeEvents(limit: 5) }
+        async let reportsTask = resilientFetch { try await self.fetchReports(limit: 3) }
 
-        let (weekly, monthly, yearly, patterns, recentEvents, reports) = try await (
+        let (weekly, monthly, yearly, patterns, recentEvents, reports) = await (
             weeklyTask,
             monthlyTask,
             yearlyTask,
@@ -449,14 +450,220 @@ final class LongitudinalService: ObservableObject {
             reportsTask
         )
 
+        // If we have aggregated stats, return them
+        if !weekly.isEmpty || !monthly.isEmpty {
+            return LongitudinalDashboardData(
+                weeklyStats: weekly,
+                monthlyStats: monthly,
+                yearlyStats: yearly,
+                patterns: patterns,
+                recentLifeEvents: recentEvents,
+                recentReports: reports,
+                rawMoodStats: nil
+            )
+        }
+
+        // Fallback: compute stats from raw mood data
+        logger.debug("No aggregated stats found, computing from raw moods")
+        
+        // Make raw mood fallback resilient too
+        let rawStats: RawMoodStats
+        do {
+            rawStats = try await computeStatsFromRawMoods()
+        } catch {
+            logger.error("Raw mood fallback failed: \(error.localizedDescription)")
+            // Return empty data rather than throwing
+            rawStats = RawMoodStats(
+                totalEntries: 0,
+                avgMood: nil,
+                moodTrend: nil,
+                weeklyStats: [],
+                monthlyStats: [],
+                firstMoodDate: nil,
+                lastMoodDate: nil
+            )
+        }
+        
         return LongitudinalDashboardData(
-            weeklyStats: weekly,
-            monthlyStats: monthly,
+            weeklyStats: rawStats.weeklyStats,
+            monthlyStats: rawStats.monthlyStats,
             yearlyStats: yearly,
             patterns: patterns,
             recentLifeEvents: recentEvents,
-            recentReports: reports
+            recentReports: reports,
+            rawMoodStats: rawStats
         )
+    }
+    
+    /// Helper to fetch data resiliently - returns empty array on failure
+    private func resilientFetch<T>(_ fetch: @escaping () async throws -> [T]) async -> [T] {
+        do {
+            return try await fetch()
+        } catch {
+            logger.debug("Resilient fetch failed (returning empty): \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    // MARK: - Raw Mood Fallback
+    
+    /// Compute basic weekly/monthly stats from raw mood data (for users without aggregated stats yet)
+    private func computeStatsFromRawMoods() async throws -> RawMoodStats {
+        let uid = try userId
+        
+        // Fetch raw moods from the past 90 days
+        let ninetyDaysAgo = Calendar.current.date(byAdding: .day, value: -90, to: Date()) ?? Date()
+        
+        let moods: [RawMood] = try await supabase
+            .from(Tables.moods)
+            .select("id, mood_score, created_at")
+            .eq("user_id", value: uid)
+            .gte("created_at", value: ninetyDaysAgo.toISODateString())
+            .order("created_at", ascending: false)
+            .execute()
+            .value
+        
+        logger.debug("Fetched \(moods.count) raw moods for fallback stats")
+        
+        guard !moods.isEmpty else {
+            return RawMoodStats(
+                totalEntries: 0,
+                avgMood: nil,
+                moodTrend: nil,
+                weeklyStats: [],
+                monthlyStats: [],
+                firstMoodDate: nil,
+                lastMoodDate: nil
+            )
+        }
+        
+        // Group by week
+        let weeklyStats = computeWeeklyStats(from: moods, userId: uid)
+        
+        // Group by month
+        let monthlyStats = computeMonthlyStats(from: moods, userId: uid)
+        
+        // Calculate overall trend
+        let sortedByDate = moods.sorted { ($0.createdAt ?? Date.distantPast) < ($1.createdAt ?? Date.distantPast) }
+        let avgMood = moods.map { Double($0.moodScore) }.reduce(0, +) / Double(moods.count)
+        
+        // Simple trend calculation: compare first half to second half
+        let midpoint = moods.count / 2
+        var moodTrend: MoodTrend? = nil
+        if moods.count >= 6 {
+            let firstHalf = Array(sortedByDate.prefix(midpoint))
+            let secondHalf = Array(sortedByDate.suffix(midpoint))
+            let firstAvg = firstHalf.map { Double($0.moodScore) }.reduce(0, +) / Double(firstHalf.count)
+            let secondAvg = secondHalf.map { Double($0.moodScore) }.reduce(0, +) / Double(secondHalf.count)
+            
+            let delta = secondAvg - firstAvg
+            if delta > 0.3 {
+                moodTrend = .improving
+            } else if delta < -0.3 {
+                moodTrend = .declining
+            } else {
+                moodTrend = .stable
+            }
+        }
+        
+        return RawMoodStats(
+            totalEntries: moods.count,
+            avgMood: avgMood,
+            moodTrend: moodTrend,
+            weeklyStats: weeklyStats,
+            monthlyStats: monthlyStats,
+            firstMoodDate: sortedByDate.first?.createdAt,
+            lastMoodDate: sortedByDate.last?.createdAt
+        )
+    }
+    
+    private func computeWeeklyStats(from moods: [RawMood], userId: UUID) -> [WeeklyStat] {
+        let calendar = Calendar.current
+        
+        // Group moods by week
+        var weekGroups: [Date: [RawMood]] = [:]
+        for mood in moods {
+            guard let createdAt = mood.createdAt else { continue }
+            let weekStart = calendar.dateInterval(of: .weekOfYear, for: createdAt)?.start ?? createdAt
+            weekGroups[weekStart, default: []].append(mood)
+        }
+        
+        // Convert to WeeklyStat objects (sorted by date descending)
+        return weekGroups.sorted { $0.key > $1.key }.prefix(12).map { weekStart, weekMoods in
+            let scores = weekMoods.map { Double($0.moodScore) }
+            let avg = scores.reduce(0, +) / Double(scores.count)
+            let variance = scores.count > 1 ? calculateVariance(scores) : 0.0
+            let uniqueDays = Set(weekMoods.compactMap { $0.createdAt?.dayOfYear }).count
+            
+            return WeeklyStat(
+                id: UUID(),
+                userId: userId,
+                weekStart: weekStart,
+                avgMood: avg,
+                moodVariance: variance,
+                activeDays: uniqueDays,
+                exercisesCompleted: 0,
+                createdAt: Date(),
+                updatedAt: Date()
+            )
+        }
+    }
+    
+    private func computeMonthlyStats(from moods: [RawMood], userId: UUID) -> [MonthlyStat] {
+        let calendar = Calendar.current
+        
+        // Group moods by month
+        var monthGroups: [Date: [RawMood]] = [:]
+        for mood in moods {
+            guard let createdAt = mood.createdAt else { continue }
+            let monthStart = calendar.dateInterval(of: .month, for: createdAt)?.start ?? createdAt
+            monthGroups[monthStart, default: []].append(mood)
+        }
+        
+        // Convert to MonthlyStat objects (sorted by date descending)
+        let sortedMonths = monthGroups.sorted { $0.key > $1.key }
+        return sortedMonths.prefix(12).enumerated().map { index, element in
+            let (monthStart, monthMoods) = element
+            let scores = monthMoods.map { Double($0.moodScore) }
+            let avg = scores.reduce(0, +) / Double(scores.count)
+            
+            // Calculate trend vs previous month
+            var trend: MoodTrend? = nil
+            if index < sortedMonths.count - 1 {
+                let prevMonthMoods = sortedMonths[index + 1].value
+                let prevAvg = prevMonthMoods.map { Double($0.moodScore) }.reduce(0, +) / Double(prevMonthMoods.count)
+                let delta = avg - prevAvg
+                if delta > 0.3 {
+                    trend = .improving
+                } else if delta < -0.3 {
+                    trend = .declining
+                } else {
+                    trend = .stable
+                }
+            }
+            
+            let daysInMonth = calendar.range(of: .day, in: .month, for: monthStart)?.count ?? 30
+            let uniqueDays = Set(monthMoods.compactMap { $0.createdAt?.dayOfYear }).count
+            let activePct = (Double(uniqueDays) / Double(daysInMonth)) * 100
+            
+            return MonthlyStat(
+                id: UUID(),
+                userId: userId,
+                monthStart: monthStart,
+                avgMood: avg,
+                moodTrend: trend,
+                activeDaysPct: activePct,
+                notableEvents: [],
+                createdAt: Date()
+            )
+        }
+    }
+    
+    private func calculateVariance(_ values: [Double]) -> Double {
+        guard values.count > 1 else { return 0 }
+        let mean = values.reduce(0, +) / Double(values.count)
+        let squaredDiffs = values.map { pow($0 - mean, 2) }
+        return squaredDiffs.reduce(0, +) / Double(values.count)
     }
 
     // MARK: - Private Helpers
@@ -551,6 +758,44 @@ final class LongitudinalService: ObservableObject {
     }
 }
 
+// MARK: - Raw Mood Stats Model
+
+/// Statistics computed on-the-fly from raw mood data (used when aggregated stats don't exist yet)
+struct RawMoodStats {
+    let totalEntries: Int
+    let avgMood: Double?
+    let moodTrend: MoodTrend?
+    let weeklyStats: [WeeklyStat]
+    let monthlyStats: [MonthlyStat]
+    let firstMoodDate: Date?
+    let lastMoodDate: Date?
+    
+    var hasData: Bool {
+        totalEntries > 0
+    }
+}
+
+/// Minimal raw mood structure for fetching
+private struct RawMood: Codable {
+    let id: UUID
+    let moodScore: Int
+    let createdAt: Date?
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case moodScore = "mood_score"
+        case createdAt = "created_at"
+    }
+}
+
+// MARK: - Date Extension
+
+private extension Date {
+    var dayOfYear: Int {
+        Calendar.current.ordinality(of: .day, in: .year, for: self) ?? 0
+    }
+}
+
 // MARK: - Dashboard Data Model
 
 struct LongitudinalDashboardData {
@@ -560,9 +805,10 @@ struct LongitudinalDashboardData {
     let patterns: [LongitudinalPattern]
     let recentLifeEvents: [LifeEvent]
     let recentReports: [LongitudinalReport]
+    let rawMoodStats: RawMoodStats?
 
     var hasData: Bool {
-        !weeklyStats.isEmpty || !monthlyStats.isEmpty
+        !weeklyStats.isEmpty || !monthlyStats.isEmpty || (rawMoodStats?.hasData ?? false)
     }
 
     var currentYearStat: YearlyStat? {

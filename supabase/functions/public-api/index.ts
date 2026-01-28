@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { sanitizeErrorMessage, timingSafeEqual } from "../_shared/security.ts";
 
 interface RateLimitConfig {
   free: { requestsPerDay: number; burst: number };
@@ -204,10 +205,12 @@ serve(async (req) => {
 
     return response;
   } catch (error) {
+    // SEC-CRIT-006: Sanitize error messages to prevent information disclosure
+    console.error("Public API error:", error); // Log full error server-side only
     return new Response(
       JSON.stringify({
         error: "Internal server error",
-        message: String(error),
+        // Don't expose internal error details to clients
       }),
       {
         status: 500,

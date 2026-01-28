@@ -4,11 +4,98 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
+// CORS configuration - restrict to known origins for mobile app
+const ALLOWED_ORIGINS = [
+  "https://getmindfriend.app",
+  "capacitor://localhost",
+  "ionic://localhost",
+  "http://localhost:3000", // Development only
+];
+
+function getCorsHeaders(origin: string | null): Record<string, string> {
+  // For mobile apps, origin may be null or capacitor://
+  const isAllowedOrigin =
+    !origin ||
+    ALLOWED_ORIGINS.some(
+      (allowed) =>
+        origin === allowed ||
+        origin.startsWith("capacitor://") ||
+        origin.startsWith("ionic://"),
+    );
+  return {
+    "Access-Control-Allow-Origin": isAllowedOrigin
+      ? origin || "*"
+      : ALLOWED_ORIGINS[0],
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    Vary: "Origin",
+  };
+}
+
+// Rate limiting with distributed storage via Supabase RPC
+const RATE_LIMIT_WINDOW_SECONDS = 60;
+const RATE_LIMIT_MAX_REQUESTS = 60;
+const MAX_REQUEST_SIZE_BYTES = 10240; // 10KB max request body
+
+/**
+ * Distributed rate limiter using Supabase RPC
+ * Uses atomic increment to handle concurrent requests safely
+ */
+async function checkRateLimitDistributed(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+): Promise<{ allowed: boolean; remaining: number }> {
+  try {
+    // Use RPC for atomic rate limit check (falls back gracefully if RPC doesn't exist)
+    const { data, error } = await supabase.rpc("check_rate_limit", {
+      p_user_id: userId,
+      p_endpoint: "agent-learn",
+      p_window_seconds: RATE_LIMIT_WINDOW_SECONDS,
+      p_max_requests: RATE_LIMIT_MAX_REQUESTS,
+    });
+
+    if (error) {
+      // If RPC doesn't exist, fall back to in-memory (graceful degradation)
+      console.warn("Rate limit RPC not available, using in-memory fallback");
+      return checkRateLimitInMemory(userId);
+    }
+
+    return {
+      allowed: data?.allowed ?? true,
+      remaining: data?.remaining ?? RATE_LIMIT_MAX_REQUESTS,
+    };
+  } catch {
+    // On any error, allow request (fail-open for availability)
+    return { allowed: true, remaining: RATE_LIMIT_MAX_REQUESTS };
+  }
+}
+
+// In-memory fallback rate limiter
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+
+function checkRateLimitInMemory(userId: string): {
+  allowed: boolean;
+  remaining: number;
+} {
+  const now = Date.now();
+  const entry = rateLimitMap.get(userId);
+
+  if (!entry || now >= entry.resetAt) {
+    rateLimitMap.set(userId, {
+      count: 1,
+      resetAt: now + RATE_LIMIT_WINDOW_SECONDS * 1000,
+    });
+    return { allowed: true, remaining: RATE_LIMIT_MAX_REQUESTS - 1 };
+  }
+
+  if (entry.count >= RATE_LIMIT_MAX_REQUESTS) {
+    return { allowed: false, remaining: 0 };
+  }
+
+  entry.count++;
+  return { allowed: true, remaining: RATE_LIMIT_MAX_REQUESTS - entry.count };
+}
 
 interface LearnRequest {
   action_id: string;
@@ -29,11 +116,23 @@ interface AgentAction {
 }
 
 serve(async (req) => {
+  const origin = req.headers.get("Origin");
+  const corsHeaders = getCorsHeaders(origin);
+
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
+    // Check request size limit
+    const contentLength = req.headers.get("Content-Length");
+    if (contentLength && parseInt(contentLength) > MAX_REQUEST_SIZE_BYTES) {
+      return new Response(JSON.stringify({ error: "Request body too large" }), {
+        status: 413,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -60,12 +159,81 @@ serve(async (req) => {
       });
     }
 
-    const body: LearnRequest = await req.json();
+    // Distributed rate limit check with fallback
+    const rateLimit = await checkRateLimitDistributed(supabase, user.id);
+    if (!rateLimit.allowed) {
+      return new Response(
+        JSON.stringify({
+          error: "Rate limit exceeded. Please try again later.",
+        }),
+        {
+          status: 429,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+            "Retry-After": "60",
+            "X-RateLimit-Remaining": String(rateLimit.remaining),
+          },
+        },
+      );
+    }
+
+    let body: LearnRequest;
+    try {
+      // Read body with size limit enforcement
+      const bodyText = await req.text();
+      if (bodyText.length > MAX_REQUEST_SIZE_BYTES) {
+        return new Response(
+          JSON.stringify({ error: "Request body too large" }),
+          {
+            status: 413,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+      body = JSON.parse(bodyText);
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Invalid JSON in request body" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
     const { action_id, user_response } = body;
 
-    if (!action_id || !user_response) {
+    if (!action_id || typeof action_id !== "string") {
       return new Response(
-        JSON.stringify({ error: "Missing action_id or user_response" }),
+        JSON.stringify({ error: "Missing or invalid action_id" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    if (
+      !user_response ||
+      typeof user_response !== "object" ||
+      !user_response.response_type
+    ) {
+      return new Response(
+        JSON.stringify({ error: "Missing or invalid user_response" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    // Validate UUID format for action_id
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(action_id)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid action_id format" }),
         {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },

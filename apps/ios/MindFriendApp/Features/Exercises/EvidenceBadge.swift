@@ -14,6 +14,7 @@ struct EvidenceBadge: View {
                 .font(.caption2)
                 .fontWeight(.medium)
                 .foregroundColor(basis.color)
+                .lineLimit(1)
 
             if isReviewed {
                 Image(systemName: "checkmark.seal.fill")
@@ -33,10 +34,10 @@ struct EvidenceBadge: View {
                 .accessibilityLabel("More information about \(basis.displayName)")
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
         .background(basis.color.opacity(0.1))
-        .cornerRadius(8)
+        .cornerRadius(6)
         .sheet(isPresented: $showingInfo) {
             MethodologyInfoSheet(basis: basis)
         }

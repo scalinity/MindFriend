@@ -65,9 +65,23 @@ struct WeeklyInsightsView: View {
         .background(Color(.systemGroupedBackground))
         .task { await loadInsights(forceRegenerate: false) }
         .refreshable { await loadInsights(forceRegenerate: true) }
+        .onChange(of: container.supabaseAuthService.userId) { _, newValue in
+            guard newValue != nil else { return }
+            Task {
+                await loadInsights(forceRegenerate: false)
+            }
+        }
     }
 
     private func loadInsights(forceRegenerate: Bool) async {
+        // Wait for authentication to be ready
+        guard container.supabaseAuthService.userId != nil else {
+            print("[WeeklyInsightsView] Not authenticated yet, skipping data load")
+            isLoading = false
+            error = "Please sign in to view your insights"
+            return
+        }
+
         isLoading = true
         error = nil
 

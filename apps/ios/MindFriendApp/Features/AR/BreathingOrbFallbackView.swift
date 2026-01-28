@@ -147,23 +147,6 @@ public struct BreathingOrbFallbackView: View {
 
                 // Bottom bar
                 HStack {
-                    // Voice toggle
-                    Button {
-                        if exerciseService.isSpeaking {
-                            exerciseService.stopGuidance()
-                        } else {
-                            exerciseService.speakGuidance(currentPhase.instruction)
-                        }
-                    } label: {
-                        Image(systemName: exerciseService.isSpeaking ? "speaker.wave.2.fill" : "speaker.slash.fill")
-                            .font(.title2)
-                            .foregroundStyle(.white)
-                            .frame(width: 44, height: 44)
-                    }
-                    .accessibilityLabel(exerciseService.isSpeaking ? "Stop voice guidance" : "Start voice guidance")
-
-                    Spacer()
-
                     // Cycle counter
                     Text("Cycle \(cyclesCompleted + 1)/\(totalCycles)")
                         .font(.headline)
@@ -314,7 +297,6 @@ public struct BreathingOrbFallbackView: View {
                 sessionId = newSessionId
                 startBreathingCycle()
                 startSessionTimer()
-                exerciseService.speakNextGuidance(for: exercise)
             } catch {
                 // Log error without PHI exposure
                 #if DEBUG
@@ -420,7 +402,6 @@ public struct BreathingOrbFallbackView: View {
             endExercise(completed: true)
         } else {
             startBreathingCycle()
-            exerciseService.speakGuidance(currentPhase.instruction)
         }
     }
 

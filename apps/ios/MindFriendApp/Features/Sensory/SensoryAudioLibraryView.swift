@@ -11,7 +11,6 @@ import SwiftUI
 struct SensoryAudioLibraryView: View {
     @EnvironmentObject private var dependencies: DependencyContainer
     @State private var selectedSoundscape: AudioSoundscape?
-    @State private var showSession: Bool = false
 
     var body: some View {
         ScrollView {
@@ -35,7 +34,6 @@ struct SensoryAudioLibraryView: View {
                             soundscape: soundscape
                         ) {
                             selectedSoundscape = soundscape
-                            showSession = true
                         }
                     }
                 }
@@ -44,18 +42,16 @@ struct SensoryAudioLibraryView: View {
             .padding(.vertical)
         }
         .navigationTitle("Audio")
-        .fullScreenCover(isPresented: $showSession) {
-            if let soundscape = selectedSoundscape {
-                SessionView(
-                    modality: .audio,
-                    patternId: soundscape.id,
-                    patternName: soundscape.name,
-                    sensoryService: dependencies.sensoryRegulationService,
-                    tactileService: dependencies.tactilePatternService,
-                    visualService: dependencies.visualAnimationService,
-                    audioService: dependencies.audioSoundscapeService
-                )
-            }
+        .fullScreenCover(item: $selectedSoundscape) { soundscape in
+            SessionView(
+                modality: .audio,
+                patternId: soundscape.id,
+                patternName: soundscape.name,
+                sensoryService: dependencies.sensoryRegulationService,
+                tactileService: dependencies.tactilePatternService,
+                visualService: dependencies.visualAnimationService,
+                audioService: dependencies.audioSoundscapeService
+            )
         }
     }
 }

@@ -16,6 +16,8 @@ struct LanguageSettingsView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var isSaving = false
+    @State private var showRestartAlert = false
+    @State private var selectedLanguageName = ""
 
     var body: some View {
         List {
@@ -40,7 +42,7 @@ struct LanguageSettingsView: View {
                             isSelected: language.code == localization.currentLanguage,
                             onSelect: {
                                 Task {
-                                    await selectLanguage(language.code)
+                                    await selectLanguage(language)
                                 }
                             }
                         )
@@ -59,6 +61,16 @@ struct LanguageSettingsView: View {
         .task {
             await loadLanguages()
         }
+        .alert("Restart Required", isPresented: $showRestartAlert) {
+            Button("Restart Now") {
+                localization.forceLanguageRestart()
+            }
+            Button("Later", role: .cancel) {
+                dismiss()
+            }
+        } message: {
+            Text("To fully apply \(selectedLanguageName), the app needs to restart. Restart now?")
+        }
     }
 
     private func loadLanguages() async {
@@ -71,17 +83,30 @@ struct LanguageSettingsView: View {
         }
     }
 
-    private func selectLanguage(_ code: String) async {
-        guard code != localization.currentLanguage else { return }
+    private func selectLanguage(_ language: SupportedLanguage) async {
+        guard language.code != localization.currentLanguage else { return }
 
+        // Store the name before async call
+        let languageName = language.nativeName
+        
         isSaving = true
         do {
-            try await localization.setLanguage(code)
-            // Language changed successfully, dismiss
-            dismiss()
+            let languageChanged = try await localization.setLanguage(language.code)
+            
+            await MainActor.run {
+                isSaving = false
+                
+                if languageChanged {
+                    // Show restart prompt
+                    selectedLanguageName = languageName
+                    showRestartAlert = true
+                }
+            }
         } catch {
-            errorMessage = "Unable to change language. Please try again."
-            isSaving = false
+            await MainActor.run {
+                errorMessage = "Unable to change language. Please try again."
+                isSaving = false
+            }
         }
     }
 }

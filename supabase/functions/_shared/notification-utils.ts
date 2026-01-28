@@ -20,7 +20,9 @@ export type NotificationType =
   | "proactive_streak_risk"
   | "proactive_milestone"
   | "proactive_reengagement"
-  | "proactive_pattern_insight";
+  | "proactive_pattern_insight"
+  // Assessment reminders
+  | "assessment_reminder";
 
 // Map notification types to user settings columns
 export const TYPE_TO_SETTING: Record<NotificationType, string> = {
@@ -42,6 +44,8 @@ export const TYPE_TO_SETTING: Record<NotificationType, string> = {
   proactive_milestone: "proactive_enabled",
   proactive_reengagement: "proactive_enabled",
   proactive_pattern_insight: "proactive_enabled",
+  // Assessment reminders - uses general reminders setting
+  assessment_reminder: "reminders_enabled",
 };
 
 export interface NotificationContent {
@@ -80,6 +84,10 @@ export interface NotificationData {
   daysInactive?: number;
   patternType?: string;
   patternInsight?: string;
+  // Assessment reminder fields
+  assessmentCode?: string;
+  assessmentName?: string;
+  daysSinceLastAssessment?: number;
 }
 
 // Build notification content based on type
@@ -259,6 +267,21 @@ export function buildNotificationContent(
         title: "New Insight 💡",
         body: insight,
         deepLink: "mindfriend://insights",
+      };
+    }
+
+    case "assessment_reminder": {
+      const assessmentName = data.assessmentName || "wellness check-in";
+      const code = data.assessmentCode || "";
+      const days = data.daysSinceLastAssessment;
+      let body = `Time for your ${assessmentName} to track your progress.`;
+      if (days && days > 14) {
+        body = `It's been ${days} days since your last ${assessmentName}. Take a few minutes to check in.`;
+      }
+      return {
+        title: "Wellness Check-In 📊",
+        body,
+        deepLink: `mindfriend://assessment/${code}`,
       };
     }
 

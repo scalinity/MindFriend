@@ -8,27 +8,110 @@
 
 import Foundation
 import Supabase
+import SwiftUI
+
+// MARK: - Bundle Extension for Runtime Language Switching
+
+private var bundleKey: UInt8 = 0
+
+/// Custom bundle class that loads resources from a specific language bundle
+final class LocalizedBundle: Bundle, @unchecked Sendable {
+    override func localizedString(forKey key: String, value: String?, table tableName: String?) -> String {
+        guard let bundle = objc_getAssociatedObject(self, &bundleKey) as? Bundle else {
+            return super.localizedString(forKey: key, value: value, table: tableName)
+        }
+        return bundle.localizedString(forKey: key, value: value, table: tableName)
+    }
+}
+
+extension Bundle {
+    /// The currently selected language bundle for localization
+    private(set) static var languageBundle: Bundle?
+    
+    /// Set the app's language bundle for runtime language switching
+    static func setLanguage(_ languageCode: String) {
+        // Set AppleLanguages preference (iOS respects this for localization)
+        UserDefaults.standard.set([languageCode], forKey: "AppleLanguages")
+        UserDefaults.standard.synchronize()
+        
+        // Map language code to bundle path
+        let bundlePath: String?
+        switch languageCode {
+        case "pt-BR":
+            // Try Portuguese (Brazil) first, then generic Portuguese
+            bundlePath = Bundle.main.path(forResource: "pt-BR", ofType: "lproj")
+                ?? Bundle.main.path(forResource: "pt", ofType: "lproj")
+        case "zh-CN":
+            bundlePath = Bundle.main.path(forResource: "zh-Hans", ofType: "lproj")
+        case "zh-TW":
+            bundlePath = Bundle.main.path(forResource: "zh-Hant", ofType: "lproj")
+        default:
+            bundlePath = Bundle.main.path(forResource: languageCode, ofType: "lproj")
+        }
+        
+        // Fall back to Base or English if language bundle not found
+        let finalPath = bundlePath
+            ?? Bundle.main.path(forResource: "Base", ofType: "lproj")
+            ?? Bundle.main.path(forResource: "en", ofType: "lproj")
+        
+        if let path = finalPath, let bundle = Bundle(path: path) {
+            // Store the language bundle for direct access
+            languageBundle = bundle
+            
+            // Swap the main bundle class to our custom one
+            object_setClass(Bundle.main, LocalizedBundle.self)
+            objc_setAssociatedObject(Bundle.main, &bundleKey, bundle, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+            print("ℹ️ Language bundle set to: \(path)")
+        } else {
+            print("⚠️ Could not find bundle for language: \(languageCode)")
+        }
+    }
+    
+    /// Reset to system language
+    static func resetLanguage() {
+        UserDefaults.standard.removeObject(forKey: "AppleLanguages")
+        UserDefaults.standard.synchronize()
+        languageBundle = nil
+        objc_setAssociatedObject(Bundle.main, &bundleKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+    }
+}
+
+// MARK: - Notification Names
+
+extension Notification.Name {
+    static let languageDidChange = Notification.Name("languageDidChange")
+}
+
+// MARK: - Localization Service
 
 @MainActor
 class LocalizationService: ObservableObject {
-    static let shared = LocalizationService(supabase: nil)
+    static let shared = LocalizationService()
 
     // MARK: - Published Properties
 
     @Published var currentLanguage: String = "en"
     @Published var isRTL: Bool = false
+    
+    /// Increment this to force SwiftUI views to refresh when language changes
+    @Published var refreshTrigger: Int = 0
 
     // MARK: - Private Properties
 
     private var cachedTranslations: [String: String] = [:]
     private var contentTranslationsCache: [String: ContentTranslation] = [:]
-    private let supabase: SupabaseClient?
+    private var supabase: SupabaseClient?
 
     // MARK: - Initialization
 
     init(supabase: SupabaseClient? = nil) {
         self.supabase = supabase
         loadSavedLanguage()
+    }
+    
+    /// Configure the service with a Supabase client (called from DependencyContainer)
+    func configure(supabase: SupabaseClient) {
+        self.supabase = supabase
     }
 
     // MARK: - Language Selection
@@ -47,26 +130,38 @@ class LocalizationService: ObservableObject {
                 currentLanguage = "en"
             }
         }
+        // Apply the saved language to the bundle
+        Bundle.setLanguage(currentLanguage)
         updateDirection()
     }
 
-    /// Set user's preferred language
-    func setLanguage(_ languageCode: String) async throws {
+    /// Set user's preferred language (saves preference, doesn't trigger UI refresh)
+    /// - Returns: Whether a restart is needed for the language change
+    @discardableResult
+    func setLanguage(_ languageCode: String) async throws -> Bool {
+        let previousLanguage = currentLanguage
         currentLanguage = languageCode
         UserDefaults.standard.set(languageCode, forKey: "preferred_language")
+        
+        // Apply language to bundle immediately
+        Bundle.setLanguage(languageCode)
         updateDirection()
+        
+        // Note: We don't increment refreshTrigger here because that would destroy
+        // the settings view before the restart alert can be shown.
+        // The refresh will happen when the app restarts.
 
         // Update server preference (if authenticated)
         do {
-            let session = try await supabase?.auth.session
-            guard let session = session else { return }
-            let userId = session.user.id
-
-            try await supabase?
-                .from("profiles")
-                .update(["preferred_language": languageCode])
-                .eq("id", value: userId.uuidString)
-                .execute()
+            if let client = supabase {
+                let session = try await client.auth.session
+                let userId = session.user.id
+                try await client
+                    .from("profiles")
+                    .update(["preferred_language": languageCode])
+                    .eq("id", value: userId.uuidString)
+                    .execute()
+            }
         } catch {
             // If not authenticated or server update fails, continue with local update
             print("⚠️ Could not update server language preference: \(error)")
@@ -74,6 +169,24 @@ class LocalizationService: ObservableObject {
 
         // Reload translations for new language
         try await loadTranslations()
+        
+        // Post notification for any observers that need to know about language change
+        NotificationCenter.default.post(name: .languageDidChange, object: nil, userInfo: ["language": languageCode])
+        
+        // Return whether language actually changed (restart is needed)
+        return previousLanguage != languageCode
+    }
+    
+    /// Force the app to restart with new language (call from UI after language change)
+    func forceLanguageRestart() {
+        // The most reliable way to apply language changes is to restart the app
+        // This exits the app - user will need to relaunch
+        exit(0)
+    }
+    
+    /// Trigger a UI refresh (use sparingly - causes full view recreation)
+    func triggerRefresh() {
+        refreshTrigger += 1
     }
 
     /// Update RTL flag based on current language

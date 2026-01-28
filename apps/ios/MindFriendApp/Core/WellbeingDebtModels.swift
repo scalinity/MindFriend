@@ -330,6 +330,13 @@ struct WellbeingAnyCodable: Codable, Equatable {
     }
 }
 
+// MARK: - Response Types
+
+struct CalculateResponse: Codable {
+    let success: Bool
+    let score: DebtScore?
+}
+
 // MARK: - Error Types
 
 enum WellbeingDebtError: LocalizedError {

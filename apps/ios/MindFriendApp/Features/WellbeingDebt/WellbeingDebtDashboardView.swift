@@ -18,6 +18,8 @@ struct WellbeingDebtDashboardView: View {
     @State private var errorMessage: String?
     @State private var showingBreakdown = false
     @State private var showingRecoveryProgram = false
+    @State private var isCalculating = false
+    @State private var calculationProgress: String?
 
     var body: some View {
         NavigationStack {
@@ -70,6 +72,17 @@ struct WellbeingDebtDashboardView: View {
                         } label: {
                             Label("Refresh", systemImage: "arrow.clockwise")
                         }
+
+                        Divider()
+
+                        Button {
+                            Task {
+                                await recalculateFromHistory()
+                            }
+                        } label: {
+                            Label("Recalculate from History", systemImage: "arrow.counterclockwise.circle")
+                        }
+                        .disabled(isCalculating)
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }
@@ -290,9 +303,9 @@ struct WellbeingDebtDashboardView: View {
                 .font(.headline)
 
             HStack(spacing: 16) {
-                statPill("7-Day", value: score.rollingDebt7Day)
-                statPill("14-Day", value: score.rollingDebt14Day)
-                statPill("30-Day", value: score.rollingDebt30Day)
+                statPill(String(localized: "7-Day"), value: score.rollingDebt7Day)
+                statPill(String(localized: "14-Day"), value: score.rollingDebt14Day)
+                statPill(String(localized: "30-Day"), value: score.rollingDebt30Day)
             }
         }
     }
@@ -385,13 +398,88 @@ struct WellbeingDebtDashboardView: View {
             Text("No Debt Data Yet")
                 .font(.title2.bold())
 
-            Text("Check back tomorrow after the daily calculation runs.")
+            Text("Analyze your mood history to calculate your wellbeing debt score.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
+
+            if let progress = calculationProgress {
+                Text(progress)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 4)
+            }
+
+            Button {
+                Task {
+                    await calculateNow()
+                }
+            } label: {
+                if isCalculating {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .frame(width: 16, height: 16)
+                        Text("Analyzing...")
+                    }
+                } else {
+                    Label("Analyze History", systemImage: "sparkles")
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(isCalculating)
+            .padding(.top, 8)
         }
         .padding(.top, 100)
+    }
+
+    private func calculateNow() async {
+        isCalculating = true
+        errorMessage = nil
+        calculationProgress = nil
+
+        do {
+            // Step 1: Backfill transactions from historical data
+            calculationProgress = "Detecting transactions from mood history..."
+            let transactionCount = try await container.wellbeingDebtService.backfillTransactions(days: 30)
+
+            // Step 2: Calculate debt score
+            calculationProgress = "Found \(transactionCount) transactions. Calculating score..."
+            let score = try await container.wellbeingDebtService.calculateDebtScore()
+            latestScore = score
+
+            // Step 3: Fetch profile
+            profile = try await container.wellbeingDebtService.fetchProfile()
+            calculationProgress = nil
+        } catch {
+            errorMessage = error.localizedDescription
+            calculationProgress = nil
+        }
+
+        isCalculating = false
+    }
+
+    private func recalculateFromHistory() async {
+        isCalculating = true
+        isLoading = true
+        errorMessage = nil
+
+        do {
+            // Step 1: Backfill transactions from historical data (past 30 days)
+            _ = try await container.wellbeingDebtService.backfillTransactions(days: 30)
+
+            // Step 2: Calculate debt score
+            let score = try await container.wellbeingDebtService.calculateDebtScore()
+            latestScore = score
+
+            // Step 3: Fetch profile
+            profile = try await container.wellbeingDebtService.fetchProfile()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+
+        isLoading = false
+        isCalculating = false
     }
 
     @ViewBuilder

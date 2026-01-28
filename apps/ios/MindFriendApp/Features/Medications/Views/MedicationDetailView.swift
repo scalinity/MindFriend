@@ -121,6 +121,8 @@ struct MedicationDetailView: View {
                 struct DBMedicationStats: Decodable {
                     let medication_id: String
                     let taken_count: Int
+                    let missed_count: Int
+                    let late_count: Int
                     let total_scheduled: Int
                     let streak_days: Int
                 }
@@ -133,8 +135,14 @@ struct MedicationDetailView: View {
                     .value
 
                 if let stat = stats.first {
+                    let percentage = stat.total_scheduled > 0
+                        ? Double(stat.taken_count) / Double(stat.total_scheduled)
+                        : 0.0
                     adherenceStats = MedicationAdherenceStats(
+                        percentage: percentage,
                         takenCount: stat.taken_count,
+                        missedCount: stat.missed_count,
+                        lateCount: stat.late_count,
                         totalScheduled: stat.total_scheduled,
                         streakDays: stat.streak_days
                     )
@@ -143,11 +151,16 @@ struct MedicationDetailView: View {
                 // Load recent logs
                 struct DBMedicationLog: Decodable {
                     let id: String
+                    let user_id: String
                     let medication_id: String
                     let scheduled_at: Date
                     let status: String
-                    let taken_at: Date?
+                    let logged_at: Date?
+                    let skip_reason: String?
                     let notes: String?
+                    let side_effects: [String]?
+                    let mood_at_time: Int?
+                    let created_at: Date
                 }
 
                 let dbLogs: [DBMedicationLog] = try await container.supabase
@@ -162,16 +175,22 @@ struct MedicationDetailView: View {
                 logs = dbLogs.compactMap { log in
                     guard let status = MedicationStatus(rawValue: log.status),
                           let id = UUID(uuidString: log.id),
+                          let userId = UUID(uuidString: log.user_id),
                           let medicationId = UUID(uuidString: log.medication_id) else {
                         return nil
                     }
                     return MedicationLog(
                         id: id,
+                        userId: userId,
                         medicationId: medicationId,
                         scheduledAt: log.scheduled_at,
                         status: status,
-                        takenAt: log.taken_at,
-                        notes: log.notes
+                        loggedAt: log.logged_at,
+                        skipReason: log.skip_reason,
+                        notes: log.notes,
+                        sideEffects: log.side_effects,
+                        moodAtTime: log.mood_at_time,
+                        createdAt: log.created_at
                     )
                 }
             } catch {

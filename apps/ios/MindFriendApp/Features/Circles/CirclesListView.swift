@@ -186,6 +186,7 @@ struct CreateCircleView: View {
             }
             .navigationTitle("Create Circle")
             .navigationBarTitleDisplayMode(.inline)
+            .keyboardDoneButton()
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") { dismiss() }
@@ -268,6 +269,7 @@ struct JoinCircleView: View {
             .padding()
             .navigationTitle("Join Circle")
             .navigationBarTitleDisplayMode(.inline)
+            .keyboardDoneButton()
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") { dismiss() }
@@ -666,6 +668,7 @@ struct CircleHeaderView: View {
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+                    .padding(.vertical, 12)
             }
 
             HStack {

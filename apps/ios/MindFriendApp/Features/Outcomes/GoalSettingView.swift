@@ -16,6 +16,7 @@ struct GoalSettingView: View {
     @State private var showingConfirmation = false
     
     var baselineScore: Int { response.totalScore }
+    var maxScore: Int { AssessmentType(rawValue: template.code)?.maxScore ?? 27 }
     var recommendedTargetScore: Int {
         let reduction = max(1, Int(Double(baselineScore) * 0.25)) // 25% reduction target
         return max(0, baselineScore - reduction)
@@ -92,14 +93,14 @@ struct GoalSettingView: View {
                                         .font(.system(size: 18, weight: .bold, design: .default))
                                         .foregroundColor(Color(red: 0.2, green: 0.6, blue: 0.4))
                                     
-                                    Text("/ 100")
+                                    Text("/ \(maxScore)")
                                         .font(.system(size: 13, weight: .regular, design: .default))
                                         .foregroundColor(.gray)
                                 }
                             }
-                            
+
                             Divider()
-                            
+
                             Text(response.severityLevel)
                                 .font(.system(size: 13, weight: .semibold, design: .default))
                                 .foregroundColor(.gray)
@@ -138,11 +139,11 @@ struct GoalSettingView: View {
                                                 .font(.system(size: 20, weight: .bold, design: .default))
                                                 .foregroundColor(Color(red: 0.2, green: 0.6, blue: 0.4))
                                             
-                                            Text("/ 100")
+                                            Text("/ \(maxScore)")
                                                 .font(.system(size: 14, weight: .regular, design: .default))
                                                 .foregroundColor(.gray)
                                         }
-                                        
+
                                         Text("\(scoreImprovement) point reduction (~\(Int(scoreImprovementPercentage))%)")
                                             .font(.system(size: 12, weight: .regular, design: .default))
                                             .foregroundColor(.gray)
@@ -181,16 +182,16 @@ struct GoalSettingView: View {
                                 
                                 HStack(spacing: 12) {
                                     TextField(
-                                        "Enter score 0-100",
+                                        "Enter score 0-\(maxScore)",
                                         text: $customTargetScore
                                     )
                                     .keyboardType(.numberPad)
                                     .font(.system(size: 15, weight: .semibold, design: .default))
                                     .textFieldStyle(RoundedBorderTextFieldStyle())
-                                    
+
                                     if !customTargetScore.isEmpty,
                                        let score = Int(customTargetScore),
-                                       score >= 0, score <= 100 {
+                                       score >= 0, score <= maxScore {
                                         Text("–\(baselineScore - score) pts")
                                             .font(.system(size: 12, weight: .semibold, design: .default))
                                             .foregroundColor(.gray)

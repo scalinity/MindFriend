@@ -271,9 +271,20 @@ class GenerateExerciseViewModel: ObservableObject {
                 let customPrompt: String?
             }
             
+            // Response matches Edge Function generate-content response
             struct GenerateContentResponse: Decodable {
                 let contentId: String
-                let quotaRemaining: Int
+                let status: String
+                let title: String
+                let quotaUsed: Int
+                let quotaLimit: Int
+                let disclaimer: String
+                // Optional fields
+                let textContent: String?
+                let audioUrl: String?
+                let duration: Int?
+                let qualityScore: Int?
+                let triggerWarnings: [String]?
             }
             
             let request = GenerateContentRequest(
@@ -293,8 +304,9 @@ class GenerateExerciseViewModel: ObservableObject {
             // Fetch the generated content
             if let content = try await dataService.getGeneratedContent(id: response.contentId) {
                 generatedContent = content
-                // Update quota
-                quotaStatus?.remaining = response.quotaRemaining
+                // Update quota from response
+                let remaining = max(0, response.quotaLimit - response.quotaUsed)
+                quotaStatus?.remaining = remaining
             }
         } catch {
             errorMessage = error.localizedDescription

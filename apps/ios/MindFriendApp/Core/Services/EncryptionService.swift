@@ -32,7 +32,8 @@ final class EncryptionService {
             kSecAttrService as String: keychainService,
             kSecAttrAccount as String: "integration_encryption_key",
             kSecValueData as String: keyData,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            // SEC-HIGH-001: Use WhenUnlockedThisDeviceOnly for better security
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         ]
 
         // Delete any existing key first

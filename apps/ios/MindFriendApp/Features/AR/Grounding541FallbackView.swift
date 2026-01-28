@@ -77,17 +77,6 @@ public struct Grounding541FallbackView: View {
                     }
                 }
 
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        if exerciseService.isSpeaking {
-                            exerciseService.stopGuidance()
-                        } else {
-                            exerciseService.speakGuidance(currentStep.instruction)
-                        }
-                    } label: {
-                        Image(systemName: exerciseService.isSpeaking ? "speaker.wave.2.fill" : "speaker.slash.fill")
-                    }
-                }
             }
             .onAppear {
                 startExercise()
@@ -352,7 +341,6 @@ public struct Grounding541FallbackView: View {
             do {
                 let newSessionId = try await exerciseService.startSession(exercise: exercise)
                 sessionId = newSessionId
-                exerciseService.speakGuidance(currentStep.instruction)
             } catch {
                 // Log error without PHI exposure
                 #if DEBUG
@@ -392,10 +380,6 @@ public struct Grounding541FallbackView: View {
         itemsIdentified += 1
         totalItemsIdentified += 1
         currentInput = ""
-
-        if itemsIdentified >= currentStep.count {
-            exerciseService.speakGuidance("Step complete!")
-        }
     }
 
     private func removeItem(at index: Int) {
@@ -410,7 +394,6 @@ public struct Grounding541FallbackView: View {
             currentStep = next
             itemsIdentified = 0
             identifiedItems = []
-            exerciseService.speakGuidance(currentStep.instruction)
         } else {
             endExercise(completed: true)
         }

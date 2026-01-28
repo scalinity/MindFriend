@@ -197,6 +197,75 @@ actor WellbeingDebtService {
         return userId
     }
 
+    /// Manually trigger debt score calculation for the current user
+    /// - Parameter date: Optional date (defaults to yesterday)
+    /// - Returns: Calculated debt score
+    func calculateDebtScore(for date: String? = nil) async throws -> DebtScore {
+        struct CalculateRequest: Encodable {
+            let date: String?
+        }
+
+        let response: CalculateResponse = try await supabase.functions
+            .invoke(
+                "calculate-debt-score",
+                options: FunctionInvokeOptions(body: CalculateRequest(date: date))
+            )
+
+        guard response.success, let score = response.score else {
+            throw WellbeingDebtError.generationFailed("Failed to calculate debt score")
+        }
+
+        return score
+    }
+
+    /// Trigger transaction detection for a specific date
+    /// - Parameter date: Date in YYYY-MM-DD format (defaults to yesterday)
+    /// - Returns: Number of transactions detected
+    @discardableResult
+    func triggerTransactionDetection(for date: String? = nil) async throws -> Int {
+        struct DetectRequest: Encodable {
+            let date: String?
+        }
+
+        struct DetectResponse: Decodable {
+            let success: Bool
+            let transactionsCount: Int?
+
+            enum CodingKeys: String, CodingKey {
+                case success
+                case transactionsCount = "transactions_count"
+            }
+        }
+
+        let response: DetectResponse = try await supabase.functions
+            .invoke(
+                "detect-transactions",
+                options: FunctionInvokeOptions(body: DetectRequest(date: date))
+            )
+
+        guard response.success else {
+            throw WellbeingDebtError.generationFailed("Failed to detect transactions")
+        }
+
+        return response.transactionsCount ?? 0
+    }
+
+    /// Backfill transactions for the past N days
+    /// - Parameter days: Number of days to backfill (default 30)
+    /// - Returns: Total number of transactions detected across all days
+    func backfillTransactions(days: Int = 30) async throws -> Int {
+        var totalTransactions = 0
+
+        for i in 1...days {
+            let date = Calendar.current.date(byAdding: .day, value: -i, to: Date())!
+            let dateString = formatDate(date)
+            let count = try await triggerTransactionDetection(for: dateString)
+            totalTransactions += count
+        }
+
+        return totalTransactions
+    }
+
     /// Format a Date to YYYY-MM-DD string
     /// - Parameter date: Date to format
     /// - Returns: ISO date string

@@ -455,10 +455,7 @@ struct EmailAuthView: View {
                     .font(.subheadline)
                 }
             }
-            .dismissKeyboardOnSwipe()
-            .onTapGesture {
-                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-            }
+            .scrollDismissesKeyboard(.interactively)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -479,6 +476,7 @@ struct EmailAuthView: View {
             } message: {
                 Text("Enter your email to receive a password reset link.")
             }
+            .keyboardDoneButton()
         }
     }
 

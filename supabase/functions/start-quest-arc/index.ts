@@ -4,8 +4,15 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import { getCorsHeaders, validateContentType, parseJsonBody } from "../_shared/cors.ts";
-import { enforceHTTPS, getSecurityHeaders } from "../_shared/https-enforcement.ts";
+import {
+  getCorsHeaders,
+  validateContentType,
+  parseJsonBody,
+} from "../_shared/cors.ts";
+import {
+  enforceHTTPS,
+  getSecurityHeaders,
+} from "../_shared/https-enforcement.ts";
 import { checkRateLimit } from "../_shared/rate-limit.ts";
 import { validateUuid } from "../_shared/uuid-validation.ts";
 
@@ -36,10 +43,13 @@ serve(async (req) => {
     // SECURITY: Validate Authorization header exists
     const authHeader = req.headers.get("Authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Missing or invalid Authorization header" }), {
-        status: 401,
-        headers,
-      });
+      return new Response(
+        JSON.stringify({ error: "Missing or invalid Authorization header" }),
+        {
+          status: 401,
+          headers,
+        },
+      );
     }
 
     const token = authHeader.replace("Bearer ", "");
@@ -67,7 +77,9 @@ serve(async (req) => {
           status: 429,
           headers: {
             ...headers,
-            "Retry-After": String(Math.ceil((rateLimit.resetAt.getTime() - Date.now()) / 1000)),
+            "Retry-After": String(
+              Math.ceil((rateLimit.resetAt.getTime() - Date.now()) / 1000),
+            ),
             "X-RateLimit-Remaining": "0",
             "X-RateLimit-Reset": rateLimit.resetAt.toISOString(),
           },
@@ -82,10 +94,13 @@ serve(async (req) => {
     // SECURITY: Safe JSON parsing
     const body = await parseJsonBody<{ arcId?: string }>(req);
     if (!body || !body.arcId) {
-      return new Response(JSON.stringify({ error: "Invalid request body or missing arcId" }), {
-        status: 400,
-        headers,
-      });
+      return new Response(
+        JSON.stringify({ error: "Invalid request body or missing arcId" }),
+        {
+          status: 400,
+          headers,
+        },
+      );
     }
 
     const { arcId } = body;
@@ -109,6 +124,8 @@ serve(async (req) => {
       .single();
 
     if (activeArc) {
+      // Return 200 with success: false so Swift SDK can parse the response
+      // (SDK throws on non-2xx before parsing body)
       return new Response(
         JSON.stringify({
           success: false,
@@ -120,14 +137,16 @@ serve(async (req) => {
             currentDay: activeArc.current_day,
           },
         }),
-        { status: 409, headers },
+        { status: 200, headers },
       );
     }
 
     // Get arc details - SECURITY: Explicit column selection instead of SELECT *
     const { data: arc, error: arcError } = await supabase
       .from("quest_arcs")
-      .select("id, title, description, category, duration_days, difficulty_level, is_premium, milestone_days, icon_name")
+      .select(
+        "id, title, description, category, duration_days, difficulty_level, is_premium, milestone_days, icon_name",
+      )
       .eq("id", validatedArcId)
       .eq("is_active", true)
       .single();
@@ -217,9 +236,17 @@ serve(async (req) => {
     // Get first quest template - SECURITY: Explicit column selection
     const { data: firstQuestTemplate } = await supabase
       .from("quest_templates")
-      .select("id, title, description, category, difficulty, xp_reward, time_estimate_minutes")
+      .select(
+        "id, title, description, category, difficulty, xp_reward, time_estimate_minutes",
+      )
       .eq("id", firstStep.quest_template_id)
       .single();
+
+    // Get step count for this arc
+    const { count: arcStepCount } = await supabase
+      .from("quest_arc_steps")
+      .select("*", { count: "exact", head: true })
+      .eq("arc_id", validatedArcId);
 
     return new Response(
       JSON.stringify({
@@ -230,18 +257,24 @@ serve(async (req) => {
           title: arc.title,
           description: arc.description,
           category: arc.category,
-          durationDays: arc.duration_days,
-          difficultyLevel: arc.difficulty_level,
-          isPremium: arc.is_premium,
-          milestoneDays: arc.milestone_days || [],
-          iconName: arc.icon_name,
+          duration_days: arc.duration_days,
+          difficulty_level: arc.difficulty_level,
+          is_premium: arc.is_premium,
+          milestone_days: arc.milestone_days || [],
+          icon_name: arc.icon_name,
+          step_count: arcStepCount || 0,
+          user_enrolled: true, // User just enrolled
+          user_completed: false,
+          user_progress: 0,
         },
-        firstQuestTemplate,
+        // Note: firstQuestTemplate omitted as it requires complex mapping to Swift model
       }),
       { status: 200, headers },
     );
   } catch (error) {
-    console.error("start-quest-arc error:", { message: (error as Error).message });
+    console.error("start-quest-arc error:", {
+      message: (error as Error).message,
+    });
     return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500,
       headers,

@@ -121,11 +121,11 @@ struct SleepHomeView: View {
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
         if hour >= 18 || hour < 4 {
-            return "Good evening"
+            return String(localized: "Good evening")
         } else if hour >= 4 && hour < 12 {
-            return "Good morning"
+            return String(localized: "Good morning")
         } else {
-            return "Good afternoon"
+            return String(localized: "Good afternoon")
         }
     }
 

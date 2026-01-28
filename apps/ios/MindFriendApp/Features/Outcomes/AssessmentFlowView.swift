@@ -119,12 +119,12 @@ struct AssessmentFlowView: View {
                                     .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
                             )
                             
-                            // Response options (4 buttons)
+                            // Response options (dynamic count based on question)
                             VStack(spacing: 12) {
-                                ForEach(0..<4, id: \.self) { index in
-                                    let optionLabel = getOptionLabel(for: index, assessmentType: template.code)
+                                ForEach(0..<question.responseOptions.count, id: \.self) { index in
+                                    let optionLabel = question.responseOptions[index]
                                     let isSelected = answers[question.id] == index
-                                    
+
                                     Button(action: {
                                         answers[question.id] = index
                                         // Check for crisis after selection
@@ -134,23 +134,16 @@ struct AssessmentFlowView: View {
                                         }
                                     }) {
                                         HStack(spacing: 12) {
-                                            VStack(alignment: .leading, spacing: 4) {
-                                                Text(optionLabel)
-                                                    .font(.system(size: 15, weight: .medium, design: .default))
-                                                    .foregroundColor(
-                                                        isSelected ?
-                                                        Color(red: 0.2, green: 0.6, blue: 0.4) :
-                                                        Color(red: 0.1, green: 0.3, blue: 0.5)
-                                                    )
-                                                
-                                                Text("Response \(index)")
-                                                    .font(.system(size: 12, weight: .regular, design: .default))
-                                                    .foregroundColor(.gray)
-                                                    .opacity(0.7)
-                                            }
-                                            
+                                            Text(optionLabel)
+                                                .font(.system(size: 15, weight: .medium, design: .default))
+                                                .foregroundColor(
+                                                    isSelected ?
+                                                    Color(red: 0.2, green: 0.6, blue: 0.4) :
+                                                    Color(red: 0.1, green: 0.3, blue: 0.5)
+                                                )
+
                                             Spacer()
-                                            
+
                                             if isSelected {
                                                 Image(systemName: "checkmark.circle.fill")
                                                     .font(.system(size: 20))
@@ -300,7 +293,11 @@ struct AssessmentFlowView: View {
                             .lineLimit(nil)
                         
                         VStack(spacing: 10) {
-                            Button(action: {}) {
+                            Button(action: {
+                                if let url = URL(string: "tel:988") {
+                                    UIApplication.shared.open(url)
+                                }
+                            }) {
                                 Text("988 Suicide & Crisis Lifeline")
                                     .font(.system(size: 14, weight: .semibold, design: .default))
                                     .foregroundColor(.white)
@@ -309,8 +306,12 @@ struct AssessmentFlowView: View {
                                     .background(Color(red: 1.0, green: 0.2, blue: 0.2))
                                     .cornerRadius(8)
                             }
-                            
-                            Button(action: {}) {
+
+                            Button(action: {
+                                if let url = URL(string: "sms:741741&body=HOME") {
+                                    UIApplication.shared.open(url)
+                                }
+                            }) {
                                 Text("Crisis Text Line (text HOME to 741741)")
                                     .font(.system(size: 14, weight: .semibold, design: .default))
                                     .foregroundColor(.white)
@@ -341,19 +342,6 @@ struct AssessmentFlowView: View {
             }
         }
         .navigationBarBackButtonHidden(true)
-    }
-    
-    private func getOptionLabel(for index: Int, assessmentType: String) -> String {
-        switch assessmentType {
-        case "PHQ9", "GAD7":
-            let options = ["Not at all", "Several days", "More than half the days", "Nearly every day"]
-            return options[safe: index] ?? ""
-        case "WHO5":
-            let options = ["At no time", "Some of the time", "Less than half the time", "More than half the time", "All of the time"]
-            return options[safe: index] ?? ""
-        default:
-            return "Option \(index + 1)"
-        }
     }
     
     private func submitAssessment() async {

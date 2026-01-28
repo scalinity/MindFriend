@@ -103,7 +103,11 @@ async function detectMoodTrend(
   const xySum = moods.reduce((sum, m, i) => sum + i * m.score, 0);
   const x2Sum = moods.reduce((sum, _, i) => sum + i * i, 0);
 
-  const slope = (n * xySum - xSum * ySum) / (n * x2Sum - xSum * xSum);
+  // Prevent division by zero
+  const denominator = n * x2Sum - xSum * xSum;
+  if (denominator === 0) return null;
+
+  const slope = (n * xySum - xSum * ySum) / denominator;
 
   // Detect significant decline (slope < -0.3 points per entry)
   if (slope < -0.3) {

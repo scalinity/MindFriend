@@ -191,15 +191,15 @@ enum MainTab: String, CaseIterable {
 
     var title: String {
         switch self {
-        case .home: return "Home"
-        case .programs: return "Programs"
-        case .chat: return "Chat"
-        case .outcomes: return "Progress"
-        case .circles: return "Circles"
-        case .mentorship: return "Mentorship"
-        case .sleep: return "Sleep"
-        case .personalization: return "For You"
-        case .profile: return "Profile"
+        case .home: return String(localized: "Home")
+        case .programs: return String(localized: "Programs")
+        case .chat: return String(localized: "Chat")
+        case .outcomes: return String(localized: "Progress")
+        case .circles: return String(localized: "Circles")
+        case .mentorship: return String(localized: "Mentorship")
+        case .sleep: return String(localized: "Sleep")
+        case .personalization: return String(localized: "For You")
+        case .profile: return String(localized: "Profile")
         }
     }
 

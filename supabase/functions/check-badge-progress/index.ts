@@ -60,6 +60,12 @@ interface UserMetrics {
   currentLevel: number;
   breathingExercises: number;
   groundingExercises: number;
+  // Manual badge triggers
+  circlesCreated: number;
+  profileComplete: boolean;
+  daysSinceLastActivity: number;
+  userCreatedAt: Date | null;
+  userTimezone: string;
 }
 
 serve(async (req) => {
@@ -103,12 +109,12 @@ serve(async (req) => {
     // Fetch user's current metrics
     const metrics = await fetchUserMetrics(supabase, user.id);
 
-    // Fetch all active badges
+    // Fetch all active badges (including manual badges for trigger checking)
     const { data: badges, error: badgesError } = await supabase
       .from("badges_v2")
       .select("*")
       .eq("is_active", true)
-      .in("requirement_type", ["count", "streak", "time"]); // Only check auto-trackable badges
+      .in("requirement_type", ["count", "streak", "time", "manual"]);
 
     if (badgesError) {
       console.error("Error fetching badges:", badgesError);
@@ -278,6 +284,10 @@ async function fetchUserMetrics(
     streakResult,
     levelResult,
     playbackResult,
+    // Manual badge metrics
+    circlesCreatedResult,
+    profileResult,
+    lastActivityResult,
   ] = await Promise.all([
     // Quests completed
     supabase
@@ -332,6 +342,29 @@ async function fetchUserMetrics(
       .select("id, duration_played_seconds, track:audio_tracks(category)")
       .eq("user_id", userId)
       .eq("completed", true),
+
+    // Circles created (for circle_creator badge)
+    supabase
+      .from("circles")
+      .select("id", { count: "exact" })
+      .eq("created_by", userId),
+
+    // Profile data (for profile_complete badge and timezone)
+    supabase
+      .from("profiles")
+      .select("display_name, avatar_url, created_at, timezone")
+      .eq("id", userId)
+      .single(),
+
+    // Last activity date (for comeback_kid badge)
+    supabase
+      .from("quests")
+      .select("completed_at")
+      .eq("user_id", userId)
+      .eq("completed", true)
+      .order("completed_at", { ascending: false })
+      .limit(1)
+      .single(),
   ]);
 
   // Calculate exercise counts by type
@@ -365,6 +398,30 @@ async function fetchUserMetrics(
   const streakData = streakResult.data as any;
   // deno-lint-ignore no-explicit-any
   const levelData = levelResult.data as any;
+  // deno-lint-ignore no-explicit-any
+  const profileData = profileResult.data as any;
+  // deno-lint-ignore no-explicit-any
+  const lastActivityData = lastActivityResult.data as any;
+
+  // Calculate profile completeness (has display_name and avatar_url)
+  const profileComplete = Boolean(
+    profileData?.display_name && profileData?.avatar_url,
+  );
+
+  // Calculate days since last activity
+  let daysSinceLastActivity = 0;
+  if (lastActivityData?.completed_at) {
+    const lastActivity = new Date(lastActivityData.completed_at);
+    const now = new Date();
+    daysSinceLastActivity = Math.floor(
+      (now.getTime() - lastActivity.getTime()) / (1000 * 60 * 60 * 24),
+    );
+  }
+
+  // User created_at for founding_member badge
+  const userCreatedAt = profileData?.created_at
+    ? new Date(profileData.created_at)
+    : null;
 
   return {
     questsCompleted: questsResult.count || 0,
@@ -378,6 +435,12 @@ async function fetchUserMetrics(
     currentLevel: levelData?.current_level || 1,
     breathingExercises,
     groundingExercises,
+    // Manual badge metrics
+    circlesCreated: circlesCreatedResult.count || 0,
+    profileComplete,
+    daysSinceLastActivity,
+    userCreatedAt,
+    userTimezone: profileData?.timezone || "UTC",
   };
 }
 
@@ -456,7 +519,82 @@ function calculateProgress(
     return { progress, target };
   }
 
-  // Manual badges return 0 progress
+  // Manual badges - check specific triggers
+  if (badge.requirement_type === "manual") {
+    const trigger = config.trigger;
+
+    switch (trigger) {
+      case "profile_complete":
+        // Profile is complete when user has display_name and avatar_url
+        return {
+          progress: metrics.profileComplete ? 1 : 0,
+          target: 1,
+        };
+
+      case "circle_created":
+        // User has created at least one circle
+        return {
+          progress: metrics.circlesCreated,
+          target: 1,
+        };
+
+      case "returned_after_7_days":
+        // User returned after being away for 7+ days
+        // This is tracked separately - only award if daysSinceLastActivity was >= 7
+        // and they're now active again (which is why they're calling this endpoint)
+        return {
+          progress: metrics.daysSinceLastActivity >= 7 ? 1 : 0,
+          target: 1,
+        };
+
+      case "founding_member":
+        // User joined during beta period (Jan 27 - Mar 15, 2026)
+        if (metrics.userCreatedAt) {
+          const launchStart = new Date("2026-01-27T00:00:00Z");
+          const launchEnd = new Date("2026-03-16T00:00:00Z");
+          const isFoundingMember =
+            metrics.userCreatedAt >= launchStart &&
+            metrics.userCreatedAt < launchEnd;
+          return {
+            progress: isFoundingMember ? 1 : 0,
+            target: 1,
+          };
+        }
+        return { progress: 0, target: 1 };
+
+      case "activity_after_midnight": {
+        // Night Owl: Check if current activity is between midnight and 5am LOCAL time
+        const localHour = getLocalHour(metrics.userTimezone);
+        const isNightOwl = localHour >= 0 && localHour < 5;
+        return {
+          progress: isNightOwl ? 1 : 0,
+          target: 1,
+        };
+      }
+
+      case "activity_before_6am": {
+        // Early Bird: Check if current activity is between 5am and 6am LOCAL time
+        const localHour = getLocalHour(metrics.userTimezone);
+        const isEarlyBird = localHour >= 5 && localHour < 6;
+        return {
+          progress: isEarlyBird ? 1 : 0,
+          target: 1,
+        };
+      }
+
+      case "perfect_week":
+        // Perfect Week: 7 consecutive quests completed (uses existing streak)
+        return {
+          progress: metrics.currentQuestStreak >= 7 ? 1 : 0,
+          target: 1,
+        };
+
+      default:
+        return { progress: 0, target: null };
+    }
+  }
+
+  // Unknown badge type
   return { progress: 0, target: null };
 }
 
@@ -467,4 +605,21 @@ function calculateLevel(totalXp: number): number {
 
 function totalXpForLevel(level: number): number {
   return 50 * (level - 1) * (level - 1);
+}
+
+// Get current hour in user's local timezone
+function getLocalHour(timezone: string): number {
+  try {
+    const now = new Date();
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      hour: "numeric",
+      hour12: false,
+    });
+    const hourStr = formatter.format(now);
+    return parseInt(hourStr, 10);
+  } catch {
+    // Fallback to UTC if timezone is invalid
+    return new Date().getUTCHours();
+  }
 }

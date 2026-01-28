@@ -269,9 +269,15 @@ struct ExerciseCard: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
 
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     Label("\(durationMinutes) min", systemImage: "clock")
-                    Label(exercise.type.rawValue.capitalized, systemImage: exercise.type.icon)
+                        .lineLimit(1)
+                        .fixedSize()
+
+                    Text("•")
+
+                    Text(exercise.type.rawValue.capitalized)
+                        .lineLimit(1)
 
                     if let basis = exercise.evidenceBasis {
                         EvidenceBadge(
@@ -279,6 +285,7 @@ struct ExerciseCard: View {
                             isReviewed: exercise.isTherapistReviewed,
                             showInfo: false
                         )
+                        .fixedSize()
                     }
 
                     if isRecommended {
@@ -289,7 +296,10 @@ struct ExerciseCard: View {
                             .background(Color.orange.opacity(0.1))
                             .foregroundColor(.orange)
                             .cornerRadius(4)
+                            .fixedSize()
                     }
+
+                    Spacer(minLength: 0)
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -610,8 +620,11 @@ struct ExercisePlayerView: View {
                     newLevel: xpResult.leveledUp ? xpResult.newLevel : nil
                 )
 
-                // Check badge progress after exercise completion
-                _ = try? await container.achievementService.checkBadgeProgress()
+                // Fire-and-forget: badge check runs in background (slow operation)
+                let achievementService = container.achievementService
+                Task.detached(priority: .utility) {
+                    _ = try? await achievementService.checkBadgeProgress()
+                }
 
                 await MainActor.run {
                     // Show level-up celebration if leveled up

@@ -7,7 +7,9 @@ struct ProgressStoryPreviewCard: View {
 
     @State private var story: WeeklyStory?
     @State private var isLoading = false
+    @State private var isGenerating = false
     @State private var showDetailView = false
+    @State private var errorMessage: String?
 
     var body: some View {
         Button {
@@ -130,14 +132,36 @@ struct ProgressStoryPreviewCard: View {
     @ViewBuilder
     private var noStoryView: some View {
         VStack(spacing: 8) {
-            Image(systemName: "sparkles")
-                .font(.title2)
-                .foregroundStyle(.secondary)
-
-            Text("Your weekly story will appear here")
+            if isGenerating {
+                ProgressView()
+                    .scaleEffect(0.8)
+                Text("Generating your story...")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            } else if let error = errorMessage {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.title2)
+                    .foregroundStyle(.orange)
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Button("Try Again") {
+                    Task { await loadStory() }
+                }
                 .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+                .buttonStyle(.bordered)
+            } else {
+                Image(systemName: "sparkles")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+
+                Text("Your weekly story will appear here")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)
@@ -147,9 +171,27 @@ struct ProgressStoryPreviewCard: View {
 
     private func loadStory() async {
         isLoading = true
+        errorMessage = nil
         defer { isLoading = false }
 
         do {
+            // Calculate the Monday of the current week using UTC calendar
+            var utcCalendar = Calendar(identifier: .gregorian)
+            utcCalendar.timeZone = TimeZone(identifier: "UTC")!
+
+            let today = Date()
+            let weekday = utcCalendar.component(.weekday, from: today)
+            let daysFromMonday = weekday == 1 ? 6 : weekday - 2
+            guard let currentMonday = utcCalendar.date(byAdding: .day, value: -daysFromMonday, to: today) else {
+                return
+            }
+
+            // Format as YYYY-MM-DD in UTC for comparison
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd"
+            formatter.timeZone = TimeZone(identifier: "UTC")
+            let currentWeekStart = formatter.string(from: currentMonday)
+            
             // Fetch the most recent story (limit 1)
             let stories = try await container.supabaseDataService.fetchWeeklyStories(
                 limit: 1,
@@ -157,11 +199,23 @@ struct ProgressStoryPreviewCard: View {
                 favoritesOnly: false
             )
 
-            // Get the first story if available
-            story = stories.first
+            // Check if we have a story for the current week
+            if let existingStory = stories.first, existingStory.weekStart == currentWeekStart {
+                story = existingStory
+                return
+            }
+            
+            // No story for current week - trigger generation
+            isGenerating = true
+            defer { isGenerating = false }
+            
+            let generatedStory = try await container.supabaseDataService.generateWeeklyStory(weekStart: today)
+            story = generatedStory
+            
         } catch {
             // Silently fail - card will show "no story" state
-            print("Failed to load weekly story: \(error.localizedDescription)")
+            print("Failed to load/generate weekly story: \(error.localizedDescription)")
+            errorMessage = "Unable to generate story"
         }
     }
 }

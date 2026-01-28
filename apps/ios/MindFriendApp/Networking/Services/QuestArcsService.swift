@@ -165,18 +165,19 @@ final class QuestArcsService {
 
     // MARK: - Get Active Arc
 
-    /// Fetches the user's currently active arc enrollment, if any
-    /// - Returns: The active UserQuestArc or nil if no active arc
+    /// Fetches the user's currently active or paused arc enrollment, if any
+    /// - Returns: The active/paused UserQuestArc or nil if no current arc
     /// - Throws: QuestArcError if database query fails
     func getActiveArc() async throws -> UserQuestArc? {
         do {
             let userId = try await supabase.auth.session.user.id
 
+            // Include both active and paused arcs so UI can show paused state
             let response: [UserQuestArc] = try await supabase
                 .from("user_quest_arcs")
                 .select("*, quest_arcs(*)")
                 .eq("user_id", value: userId)
-                .eq("status", value: "active")
+                .in("status", values: ["active", "paused"])
                 .execute()
                 .value
 

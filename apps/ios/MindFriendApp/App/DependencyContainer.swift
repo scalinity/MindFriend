@@ -72,7 +72,10 @@ final class DependencyContainer: ObservableObject {
     }()
 
     lazy var localizationService: LocalizationService = {
-        LocalizationService(supabase: self.supabaseClient)
+        // Use the shared instance and configure it with Supabase
+        let service = LocalizationService.shared
+        service.configure(supabase: self.supabaseClient)
+        return service
     }()
 
     lazy var actionPlanService: ActionPlanService = {

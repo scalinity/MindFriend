@@ -297,19 +297,18 @@ public struct ARExerciseListView: View {
     }
 
     private func capabilityBadge(for exercise: ARExercise) -> some View {
-        let result = capabilityService.canRun(exercise: exercise)
         let useFallback = capabilityService.shouldUseFallback(for: exercise)
 
         return HStack(spacing: 4) {
-            Image(systemName: result.canRun ? "arkit" : "rectangle.on.rectangle")
+            Image(systemName: useFallback ? "rectangle.on.rectangle" : "arkit")
                 .font(.caption2)
             Text(useFallback ? "Non-AR" : "AR Ready")
                 .font(.caption)
         }
-        .foregroundStyle(result.canRun ? .green : .orange)
+        .foregroundStyle(useFallback ? .orange : .green)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background((result.canRun ? Color.green : Color.orange).opacity(0.1))
+        .background((useFallback ? Color.orange : Color.green).opacity(0.1))
         .cornerRadius(8)
     }
 
@@ -413,9 +412,12 @@ public struct ARExerciseListView: View {
             Grounding541FallbackView(exercise: exercise)
                 .environmentObject(exerciseService)
 
-        case .safeSpace, .natureImmersion:
-            // Safe space and nature immersion don't have fallbacks, use grounding as default
-            Grounding541FallbackView(exercise: exercise)
+        case .safeSpace:
+            SafeSpaceFallbackView(exercise: exercise)
+                .environmentObject(exerciseService)
+
+        case .natureImmersion:
+            NatureImmersionFallbackView(exercise: exercise)
                 .environmentObject(exerciseService)
         }
     }

@@ -32,10 +32,18 @@ serve(async (req) => {
     });
   }
 
+  // Create Supabase client with service role for database operations
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  );
+
+  // Validate user's JWT token
+  const token = authHeader.replace("Bearer ", "");
   const {
     data: { user },
     error: authError,
-  } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
+  } = await supabase.auth.getUser(token);
 
   if (authError || !user) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {

@@ -108,9 +108,9 @@ struct WellbeingDebtCard: View {
 
         // Quick stats row
         HStack(spacing: 16) {
-            quickStat(label: "7-Day", value: score.rollingDebt7Day)
-            quickStat(label: "14-Day", value: score.rollingDebt14Day)
-            quickStat(label: "30-Day", value: score.rollingDebt30Day)
+            quickStat(label: String(localized: "7-Day"), value: score.rollingDebt7Day)
+            quickStat(label: String(localized: "14-Day"), value: score.rollingDebt14Day)
+            quickStat(label: String(localized: "30-Day"), value: score.rollingDebt30Day)
         }
 
         // View details hint
@@ -221,9 +221,9 @@ struct WellbeingDebtCard: View {
 
     private func trendLabel(_ direction: DebtTrendDirection) -> String {
         switch direction {
-        case .improving: return "Improving"
-        case .worsening: return "Declining"
-        case .stable: return "Stable"
+        case .improving: return String(localized: "Improving")
+        case .worsening: return String(localized: "Declining")
+        case .stable: return String(localized: "Stable")
         }
     }
 

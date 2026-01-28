@@ -107,6 +107,7 @@ struct JournalEntryView: View {
                 }
                 .padding()
             }
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle(isEditing ? "Edit Entry" : "New Entry")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -154,6 +155,7 @@ struct JournalEntryView: View {
             .onDisappear {
                 autoSaveTimer?.invalidate()
             }
+            .keyboardDoneButton()
         }
     }
 
