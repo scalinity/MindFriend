@@ -277,8 +277,8 @@ struct AIProfileGeneratorView: View {
                 // Validate generated image before upload
                 try generatedImage.validateForAvatar()
                 
-                // Use shared upload pipeline
-                let publicUrl = try await container.supabaseDataService.uploadAndSetAvatar(generatedImage, userId: userId)
+                // Use shared upload pipeline with AI source tag
+                let publicUrl = try await container.supabaseDataService.uploadAndSetAvatar(generatedImage, userId: userId, source: "ai_generated")
 
                 // Update AppState with new UserProfile instance
                 await MainActor.run {

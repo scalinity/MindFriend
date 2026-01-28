@@ -71,7 +71,7 @@ struct AgentSettingsView: View {
                             )) {
                                 HStack {
                                     Image(systemName: signalType.iconName)
-                                        .foregroundStyle(Color(signalType.colorName))
+                                        .foregroundStyle(signalType.color)
                                         .frame(width: 24)
 
                                     Text(signalType.displayName)

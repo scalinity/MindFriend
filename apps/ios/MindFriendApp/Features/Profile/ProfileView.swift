@@ -10,6 +10,7 @@ struct ProfileView: View {
     @State private var showSubscription = false
     @State private var showVacationMode = false
     @State private var showShieldHistory = false
+    @State private var badgeCount = 0
 
     var body: some View {
         NavigationStack {
@@ -88,7 +89,7 @@ struct ProfileView: View {
                         Divider()
                         ProfileStatItem(value: "\(appState.currentUser?.stats?.totalQuestsCompleted ?? 0)", label: "Quests")
                         Divider()
-                        ProfileStatItem(value: "\(appState.currentUser?.badges?.count ?? 0)", label: "Badges")
+                        ProfileStatItem(value: "\(badgeCount)", label: "Badges")
                     }
                     .padding(.vertical, 8)
                 }
@@ -425,6 +426,25 @@ struct ProfileView: View {
                         .environmentObject(container)
                 }
             }
+            .task {
+                await loadBadgeCount()
+            }
+        }
+    }
+
+    private func loadBadgeCount() async {
+        do {
+            // Check badge progress first to ensure badges are up-to-date
+            _ = try? await container.achievementService.checkBadgeProgress()
+            // Then load the updated badge progress
+            try await container.achievementService.loadUserBadgeProgress()
+            let earned = container.achievementService.earnedBadges
+            await MainActor.run {
+                badgeCount = earned.count
+            }
+            Log.profile.debug("ProfileView loaded \(earned.count) earned badges")
+        } catch {
+            Log.profile.error("Failed to load badge count: \(error.localizedDescription)")
         }
     }
 
@@ -501,6 +521,7 @@ struct NotificationSettingsView: View {
     // State
     @State private var isLoading = true
     @State private var isSaving = false
+    @State private var badgeCount = 0
     @State private var systemNotificationsEnabled = true
     @State private var saveTask: Task<Void, Never>?
 
@@ -605,6 +626,11 @@ struct NotificationSettingsView: View {
         .task {
             await loadSettings()
             await checkSystemNotifications()
+            await loadBadgeCount()
+        }
+        .onAppear {
+            // Refresh badge count each time the view appears (for TabView navigation)
+            Task { await loadBadgeCount() }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
             Task { await checkSystemNotifications() }
@@ -629,6 +655,21 @@ struct NotificationSettingsView: View {
         let settings = await center.notificationSettings()
         await MainActor.run {
             systemNotificationsEnabled = settings.authorizationStatus == .authorized
+        }
+    }
+
+    private func loadBadgeCount() async {
+        do {
+            // Check badge progress first to ensure badges are up-to-date
+            _ = try? await container.achievementService.checkBadgeProgress()
+            // Then load the updated badge progress
+            try await container.achievementService.loadUserBadgeProgress()
+            let earned = container.achievementService.earnedBadges
+            badgeCount = earned.count
+            Log.profile.debug("Loaded \(earned.count) earned badges out of \(container.achievementService.userBadgeProgress.count) total user badges")
+        } catch {
+            Log.profile.error("Failed to load badge count: \(error.localizedDescription)")
+            badgeCount = 0
         }
     }
 

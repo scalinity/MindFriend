@@ -43,26 +43,25 @@ export async function authenticateRequest(
 
   const token = authHeader.replace("Bearer ", "");
 
-  const supabaseUser = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: `Bearer ${token}` } } },
-  );
-
+  // Use service role client to validate JWT tokens - this has permission to validate any token
   const supabaseAdmin = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
-  // Pass token explicitly to getUser() - calling without token requires an active session
-  // which a freshly created client doesn't have
+  // Validate the user's JWT token using the admin client
   const {
     data: { user },
     error: authError,
-  } = await supabaseUser.auth.getUser(token);
+  } = await supabaseAdmin.auth.getUser(token);
 
   if (authError || !user) {
-    console.error("Auth error:", authError?.message || "No user returned");
+    console.error(
+      "Auth error:",
+      authError?.message || "No user returned",
+      "Token prefix:",
+      token.substring(0, 20) + "...",
+    );
     return {
       response: new Response(
         JSON.stringify({
@@ -77,6 +76,13 @@ export async function authenticateRequest(
     };
   }
 
+  // Create a user-scoped client with the validated token for RLS queries
+  const supabaseUser = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
+    { global: { headers: { Authorization: `Bearer ${token}` } } },
+  );
+
   return { user, supabaseUser, supabaseAdmin };
 }
 
@@ -90,8 +96,30 @@ export function isAuthError(
 }
 
 /**
+ * Constant-time string comparison to prevent timing attacks
+ */
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) {
+    // Still compare to maintain constant time even on length mismatch
+    let result = 0;
+    const minLen = Math.max(a.length, b.length);
+    for (let i = 0; i < minLen; i++) {
+      result |=
+        (a.charCodeAt(i % a.length) || 0) ^ (b.charCodeAt(i % b.length) || 0);
+    }
+    return false;
+  }
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
+
+/**
  * Check if request is authorized as a cron job or service role
  * Used by scheduled functions that also support manual triggers
+ * Uses constant-time comparison to prevent timing attacks
  */
 export function isAuthorizedCronRequest(
   headers: Headers,
@@ -100,7 +128,7 @@ export function isAuthorizedCronRequest(
 ): boolean {
   // Check for cron secret in custom header
   const cronHeader = headers.get("x-cron-secret");
-  if (cronHeader && cronSecret && cronHeader === cronSecret) {
+  if (cronHeader && cronSecret && timingSafeEqual(cronHeader, cronSecret)) {
     return true;
   }
 
@@ -108,7 +136,7 @@ export function isAuthorizedCronRequest(
   const authHeader = headers.get("Authorization");
   if (authHeader?.startsWith("Bearer ") && serviceRoleKey) {
     const token = authHeader.replace("Bearer ", "");
-    if (token === serviceRoleKey) {
+    if (timingSafeEqual(token, serviceRoleKey)) {
       return true;
     }
   }

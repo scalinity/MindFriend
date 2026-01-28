@@ -17,11 +17,16 @@ struct ProfilePictureEditorView: View {
     @State private var loadPhotoTask: Task<Void, Never>?
     @State private var uploadTask: Task<Void, Never>?
     @State private var removeTask: Task<Void, Never>?
+    
+    // History
+    @State private var pictureHistory: [SupabaseDataService.ProfilePictureHistoryEntry] = []
+    @State private var isLoadingHistory = false
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
-                // Current avatar or placeholder
+            ScrollView {
+                VStack(spacing: 24) {
+                    // Current avatar or placeholder
                 if let avatarUrl = appState.currentUser?.avatarUrl, !avatarUrl.isEmpty {
                     AsyncImage(url: URL(string: avatarUrl)) { phase in
                         switch phase {
@@ -96,9 +101,36 @@ struct ProfilePictureEditorView: View {
                         .padding(.horizontal)
                 }
 
-                Spacer()
+                // Picture History Section
+                if !pictureHistory.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Previous Pictures")
+                            .font(.headline)
+                            .padding(.horizontal)
+                        
+                        LazyVGrid(columns: [
+                            GridItem(.flexible(), spacing: 12),
+                            GridItem(.flexible(), spacing: 12),
+                            GridItem(.flexible(), spacing: 12)
+                        ], spacing: 12) {
+                            ForEach(pictureHistory) { entry in
+                                HistoryPictureCell(
+                                    entry: entry,
+                                    isCurrentAvatar: appState.currentUser?.avatarUrl == entry.publicUrl,
+                                    onSelect: { selectFromHistory(entry) }
+                                )
+                            }
+                        }
+                        .padding(.horizontal)
+                    }
+                    .padding(.top, 8)
+                } else if isLoadingHistory {
+                    ProgressView("Loading history...")
+                        .padding()
+                }
             }
             .padding()
+            }
             .navigationTitle("Profile Picture")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -143,7 +175,10 @@ struct ProfilePictureEditorView: View {
                     userId: appState.currentUser?.id ?? UUID(),
                     onAvatarUpdated: {
                         // Avatar already updated in AppState by AIProfileGeneratorView
-                        dismiss()
+                        // Reload history to show new picture
+                        Task {
+                            await loadHistory()
+                        }
                     }
                 )
                 .environmentObject(appState)
@@ -156,6 +191,80 @@ struct ProfilePictureEditorView: View {
                 Button("Cancel", role: .cancel) { }
             } message: {
                 Text("This will remove your profile picture and show the default placeholder.")
+            }
+            .task {
+                await loadHistory()
+            }
+        }
+    }
+    
+    private func loadHistory() async {
+        isLoadingHistory = true
+        do {
+            var history = try await container.supabaseDataService.getProfilePictureHistory()
+            
+            // Backfill: If current avatar exists but isn't in history, add it
+            if let avatarUrl = appState.currentUser?.avatarUrl,
+               !avatarUrl.isEmpty,
+               !history.contains(where: { $0.publicUrl == avatarUrl }),
+               let url = URL(string: avatarUrl),
+               let storagePath = extractStoragePath(from: url) {
+                // Add current avatar to history
+                do {
+                    try await container.supabaseDataService.saveProfilePictureToHistory(
+                        storagePath: storagePath,
+                        publicUrl: avatarUrl,
+                        source: "upload"  // Default to upload for backfilled pictures
+                    )
+                    // Reload to get the new entry with proper ID
+                    history = try await container.supabaseDataService.getProfilePictureHistory()
+                } catch {
+                    print("[ProfilePicture] Failed to backfill current avatar: \(error.localizedDescription)")
+                }
+            }
+            
+            pictureHistory = history
+        } catch {
+            // Silently fail - history is a nice-to-have feature
+            print("[ProfilePicture] Failed to load history: \(error.localizedDescription)")
+        }
+        isLoadingHistory = false
+    }
+    
+    private func selectFromHistory(_ entry: SupabaseDataService.ProfilePictureHistoryEntry) {
+        guard !isUploading else { return }
+        
+        isUploading = true
+        errorMessage = nil
+        
+        Task {
+            do {
+                try await container.supabaseDataService.setAvatarFromHistory(historyEntry: entry)
+                
+                await MainActor.run {
+                    if let user = appState.currentUser {
+                        appState.currentUser = UserProfile(
+                            id: user.id,
+                            handle: user.handle,
+                            displayName: user.displayName,
+                            email: user.email,
+                            avatarUrl: entry.publicUrl,
+                            timezone: user.timezone,
+                            createdAt: user.createdAt,
+                            onboardingCompletedAt: user.onboardingCompletedAt,
+                            stats: user.stats,
+                            settings: user.settings,
+                            entitlements: user.entitlements,
+                            badges: user.badges
+                        )
+                    }
+                    isUploading = false
+                }
+            } catch {
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                    isUploading = false
+                }
             }
         }
     }
@@ -233,8 +342,11 @@ struct ProfilePictureEditorView: View {
                             badges: user.badges
                         )
                     }
-                    dismiss()
+                    isUploading = false
                 }
+                
+                // Reload history to show new picture
+                await loadHistory()
             } catch {
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
@@ -313,6 +425,66 @@ struct ProfilePictureEditorView: View {
             return components[(index + 1)...].joined(separator: "/")
         }
         return nil
+    }
+}
+
+// MARK: - History Picture Cell
+
+private struct HistoryPictureCell: View {
+    let entry: SupabaseDataService.ProfilePictureHistoryEntry
+    let isCurrentAvatar: Bool
+    let onSelect: () -> Void
+    
+    var body: some View {
+        Button(action: onSelect) {
+            ZStack {
+                AsyncImage(url: URL(string: entry.publicUrl)) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    case .failure:
+                        Image(systemName: "photo")
+                            .font(.title2)
+                            .foregroundStyle(.gray)
+                    case .empty:
+                        ProgressView()
+                    @unknown default:
+                        Color.gray.opacity(0.2)
+                    }
+                }
+                .frame(width: 90, height: 90)
+                .clipShape(Circle())
+                
+                // Current avatar indicator
+                if isCurrentAvatar {
+                    Circle()
+                        .stroke(Color.accentColor, lineWidth: 3)
+                        .frame(width: 94, height: 94)
+                }
+                
+                // AI badge for generated pictures
+                if entry.source == "ai_generated" {
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            Image(systemName: "sparkles")
+                                .font(.caption2)
+                                .foregroundStyle(.white)
+                                .padding(4)
+                                .background(Circle().fill(Color.purple))
+                        }
+                    }
+                    .frame(width: 90, height: 90)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isCurrentAvatar ? "Current profile picture" : "Previous profile picture")
+        .accessibilityHint("Double tap to use this picture")
+        .accessibilityAddTraits(isCurrentAvatar ? .isSelected : [])
     }
 }
 

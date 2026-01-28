@@ -20,6 +20,12 @@ struct WellbeingDebtDashboardView: View {
     @State private var showingRecoveryProgram = false
     @State private var isCalculating = false
     @State private var calculationProgress: String?
+    @State private var isRecalculating = false
+    @State private var recalculationProgress: String?
+
+    // Tutorial state
+    @AppStorage("wellbeing_debt_tutorial_completed") private var tutorialCompleted = false
+    @State private var showingTutorial = false
 
     var body: some View {
         NavigationStack {
@@ -82,7 +88,15 @@ struct WellbeingDebtDashboardView: View {
                         } label: {
                             Label("Recalculate from History", systemImage: "arrow.counterclockwise.circle")
                         }
-                        .disabled(isCalculating)
+                        .disabled(isRecalculating)
+
+                        Divider()
+
+                        Button {
+                            showingTutorial = true
+                        } label: {
+                            Label("View Tutorial", systemImage: "questionmark.circle")
+                        }
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }
@@ -118,6 +132,53 @@ struct WellbeingDebtDashboardView: View {
             .task {
                 await loadData()
             }
+            .overlay {
+                if isRecalculating {
+                    recalculatingOverlay
+                }
+            }
+            .onAppear {
+                // Show tutorial on first access
+                if !tutorialCompleted {
+                    showingTutorial = true
+                }
+            }
+            .fullScreenCover(isPresented: $showingTutorial) {
+                WellbeingDebtTutorialFlow(onComplete: {
+                    tutorialCompleted = true
+                    showingTutorial = false
+                })
+                .environmentObject(container)
+            }
+        }
+    }
+
+    // MARK: - Recalculating Overlay
+
+    @ViewBuilder
+    private var recalculatingOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.4)
+                .ignoresSafeArea()
+
+            VStack(spacing: 20) {
+                ProgressView()
+                    .scaleEffect(1.5)
+                    .tint(.white)
+
+                Text("Recalculating")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+
+                if let progress = recalculationProgress {
+                    Text(progress)
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.8))
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .padding(32)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
         }
     }
 
@@ -460,26 +521,28 @@ struct WellbeingDebtDashboardView: View {
     }
 
     private func recalculateFromHistory() async {
-        isCalculating = true
-        isLoading = true
+        isRecalculating = true
+        recalculationProgress = "Scanning mood history..."
         errorMessage = nil
 
         do {
             // Step 1: Backfill transactions from historical data (past 30 days)
-            _ = try await container.wellbeingDebtService.backfillTransactions(days: 30)
+            let transactionCount = try await container.wellbeingDebtService.backfillTransactions(days: 30)
 
             // Step 2: Calculate debt score
+            recalculationProgress = "Found \(transactionCount) transactions.\nCalculating debt score..."
             let score = try await container.wellbeingDebtService.calculateDebtScore()
             latestScore = score
 
             // Step 3: Fetch profile
+            recalculationProgress = "Updating profile..."
             profile = try await container.wellbeingDebtService.fetchProfile()
         } catch {
             errorMessage = error.localizedDescription
         }
 
-        isLoading = false
-        isCalculating = false
+        isRecalculating = false
+        recalculationProgress = nil
     }
 
     @ViewBuilder

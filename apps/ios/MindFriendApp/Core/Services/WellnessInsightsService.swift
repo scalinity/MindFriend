@@ -151,10 +151,12 @@ final class WellnessInsightsService: ObservableObject {
 
 /// A single day's mood data point for the sparkline
 struct WellnessMoodDataPoint: Identifiable {
-    let id = UUID()
     let date: Date
     let averageMood: Double?
     let entryCount: Int
+
+    /// Stable ID based on date (not random UUID)
+    var id: Date { date }
 
     var dayLabel: String {
         let formatter = DateFormatter()
@@ -167,11 +169,13 @@ struct WellnessMoodDataPoint: Identifiable {
 
 /// An activity type that correlates with improved mood
 struct HelpfulActivity: Identifiable {
-    let id = UUID()
     let exerciseType: ExerciseType
     let sampleExerciseName: String
     let averageRating: Double
     let completionCount: Int
+
+    /// Stable ID based on exercise type (not random UUID)
+    var id: String { exerciseType.rawValue }
 
     var icon: String { exerciseType.icon }
     var color: Color { exerciseType.themeColor }

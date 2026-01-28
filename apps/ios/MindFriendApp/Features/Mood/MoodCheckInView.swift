@@ -19,6 +19,10 @@ struct MoodCheckInView: View {
     @State private var actionPlanItems: [ActionPlanItem] = []
     @State private var planSize: ActionPlanSize = .quick
 
+    // Mood tutorial state
+    @AppStorage("mood_tutorial_completed") private var moodTutorialCompleted = false
+    @State private var showMoodTutorial = false
+
     private let moodEmojis = ["😔", "😕", "😐", "🙂", "😄"]
     private let anxietyLabels = ["Very Low", "Low", "Moderate", "High", "Very High"]
     private let energyLabels = ["Exhausted", "Tired", "Okay", "Energetic", "Very High"]
@@ -131,6 +135,11 @@ struct MoodCheckInView: View {
             .navigationTitle("Mood Check-In")
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
+                // Show tutorial on first mood check-in
+                if !moodTutorialCompleted {
+                    showMoodTutorial = true
+                }
+
                 if let mood = existingMood {
                     // Clamp scores to valid range [1, 5] to prevent array index out of bounds
                     moodScore = Double(max(1, min(5, Int(mood.moodScore))))
@@ -147,6 +156,13 @@ struct MoodCheckInView: View {
                         showAdvanced = true
                     }
                 }
+            }
+            .fullScreenCover(isPresented: $showMoodTutorial) {
+                MoodTutorialFlow(onComplete: {
+                    moodTutorialCompleted = true
+                    showMoodTutorial = false
+                })
+                .environmentObject(container)
             }
         }
     }

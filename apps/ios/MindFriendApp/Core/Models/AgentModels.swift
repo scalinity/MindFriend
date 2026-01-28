@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 // MARK: - Agent Settings
 
@@ -145,15 +146,15 @@ enum SignalType: String, Codable, CaseIterable, Identifiable {
         }
     }
 
-    var colorName: String {
+    var color: Color {
         switch self {
-        case .moodDecline: return "orange"
-        case .moodImprovement: return "green"
-        case .activityDrop: return "yellow"
-        case .streakRisk: return "red"
-        case .inactivity: return "gray"
-        case .stressSpike: return "purple"
-        case .positiveMomentum: return "blue"
+        case .moodDecline: return .orange
+        case .moodImprovement: return .green
+        case .activityDrop: return .yellow
+        case .streakRisk: return .red
+        case .inactivity: return .gray
+        case .stressSpike: return .purple
+        case .positiveMomentum: return .blue
         }
     }
 
@@ -182,12 +183,12 @@ enum Severity: String, Codable, CaseIterable {
         rawValue.capitalized
     }
 
-    var colorName: String {
+    var color: Color {
         switch self {
-        case .low: return "green"
-        case .medium: return "yellow"
-        case .high: return "orange"
-        case .critical: return "red"
+        case .low: return .green
+        case .medium: return .yellow
+        case .high: return .orange
+        case .critical: return .red
         }
     }
 

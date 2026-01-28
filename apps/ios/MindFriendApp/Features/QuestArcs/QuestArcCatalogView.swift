@@ -16,6 +16,10 @@ struct QuestArcCatalogView: View {
     @State private var selectedArc: QuestArc?
     @State private var activeArc: UserQuestArc?
 
+    // Tutorial state
+    @AppStorage("quest_journeys_tutorial_completed") private var tutorialCompleted = false
+    @State private var showingTutorial = false
+
     private let categories = ["stress", "sleep", "confidence", "focus", "resilience"]
 
     var body: some View {
@@ -55,15 +59,39 @@ struct QuestArcCatalogView: View {
             }
             .navigationTitle("Quest Journeys")
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button {
+                            showingTutorial = true
+                        } label: {
+                            Label("View Tutorial", systemImage: "questionmark.circle")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                }
+            }
             .refreshable {
                 await loadArcs()
             }
             .task {
                 await loadArcs()
             }
+            .onAppear {
+                if !tutorialCompleted {
+                    showingTutorial = true
+                }
+            }
             .sheet(item: $selectedArc) { arc in
                 QuestArcDetailView(arc: arc, activeArc: activeArc) {
                     await loadArcs()
+                }
+            }
+            .fullScreenCover(isPresented: $showingTutorial) {
+                QuestJourneysTutorialFlow {
+                    tutorialCompleted = true
+                    showingTutorial = false
                 }
             }
         }
@@ -151,7 +179,31 @@ struct QuestArcCatalogView: View {
                 activeArc = fetchedActive
                 isLoading = false
             }
+        } catch is CancellationError {
+            // Task was cancelled (e.g., by a new refresh) - silently ignore
+            await MainActor.run {
+                isLoading = false
+            }
         } catch {
+            // Check if this is a URLSession cancellation error
+            let nsError = error as NSError
+            if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled {
+                // Network request was cancelled - silently ignore
+                await MainActor.run {
+                    isLoading = false
+                }
+                return
+            }
+
+            // Also check for "cancelled" in error message (Supabase wraps cancellation errors)
+            if error.localizedDescription.lowercased().contains("cancelled") ||
+               error.localizedDescription.lowercased().contains("canceled") {
+                await MainActor.run {
+                    isLoading = false
+                }
+                return
+            }
+
             await MainActor.run {
                 errorMessage = error.localizedDescription
                 isLoading = false
