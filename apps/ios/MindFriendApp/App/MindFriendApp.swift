@@ -10,6 +10,7 @@ struct MindFriendApp: App {
     @StateObject private var container = DependencyContainer()
     @StateObject private var notificationManager = NotificationManager.shared
     @StateObject private var deepLinkRouter = DeepLinkRouter.shared
+    @StateObject private var localizationService = LocalizationService.shared
 
     /// Selected app theme (persisted to UserDefaults)
     @AppStorage(AppTheme.storageKey) private var selectedTheme: AppTheme = .system
@@ -27,8 +28,15 @@ struct MindFriendApp: App {
                 .environmentObject(notificationManager)
                 .environmentObject(deepLinkRouter)
                 .environmentObject(container.ambientThemeService)
+                .environmentObject(localizationService)
                 .preferredColorScheme(selectedTheme.colorScheme)
+                // Force view refresh when language changes
+                .id(localizationService.refreshTrigger)
+                .environment(\.layoutDirection, localizationService.isRTL ? .rightToLeft : .leftToRight)
                 .task {
+                    // Configure localization service with Supabase access
+                    _ = container.localizationService
+                    
                     // Configure notification manager with container for device registration
                     notificationManager.configure(container: container)
 

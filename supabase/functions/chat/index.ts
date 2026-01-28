@@ -11,12 +11,14 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type UntypedSupabaseClient = SupabaseClient<any, "public", any>;
 import { getCorsHeaders } from "../_shared/cors.ts";
+// SEC-CRIT-007: Use multi-language crisis detection instead of legacy crisis.ts
 import {
-  CRISIS_RESPONSE,
-  detectCrisis,
-  getMatchedCrisisKeyword,
-} from "../_shared/crisis.ts";
+  detectCrisis as detectCrisisMultiLang,
+  getMatchedKeyword as getMatchedCrisisKeyword,
+} from "../_shared/crisis-detection.ts";
+import { CRISIS_RESPONSE } from "../_shared/crisis.ts"; // Keep response template
 import { checkRateLimit, getRateLimitHeaders } from "../_shared/ratelimit.ts";
+import { sanitizeErrorMessage } from "../_shared/security.ts";
 // Cognitive Bias Coach imports
 import {
   detectDistortion,
@@ -169,6 +171,7 @@ serve(async (req) => {
     }
 
     if (userAuthError || !user) {
+      // SEC-CRIT-006: Log details server-side only, don't expose to client
       console.error(
         "Auth validation failed:",
         userAuthError?.message || "No user returned",
@@ -178,10 +181,9 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({
           error: "Invalid token",
-          details:
-            userAuthError?.message ||
+          message:
             "Session validation failed. Please sign out and sign back in.",
-          code: userAuthError?.code,
+          // Don't expose internal error details or codes to clients
         }),
         {
           status: 401,
@@ -400,9 +402,21 @@ serve(async (req) => {
     const quotaLimit = quotaData.quota_limit;
 
     // Crisis detection - SAFETY CRITICAL
-    if (detectCrisis(trimmedContent)) {
+    // SEC-CRIT-007: Use multi-language crisis detection with English fallback
+    // Get user's language preference (default to 'en' for safety redundancy)
+    const { data: userSettings } = await supabaseAdmin
+      .from("user_settings")
+      .select("language")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const userLanguage = userSettings?.language || "en";
+
+    if (detectCrisisMultiLang(trimmedContent, userLanguage)) {
       // Log crisis event WITHOUT storing user's actual content (PII protection)
-      const matchedKeyword = getMatchedCrisisKeyword(trimmedContent);
+      const matchedKeyword = getMatchedCrisisKeyword(
+        trimmedContent,
+        userLanguage,
+      );
       await supabaseAdmin.from("crisis_events").insert({
         user_id: user.id,
         conversation_id: conversationId,

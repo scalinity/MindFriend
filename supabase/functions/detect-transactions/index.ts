@@ -399,28 +399,31 @@ async function detectMoodWithdrawals(
   date: string,
 ): Promise<Transaction[]> {
   try {
+    // Query by local_date (DATE type) instead of created_at timestamp
+    // This matches the user's local date when they logged the mood
     const { data: moods, error } = await supabase
       .from("moods")
-      .select("mood_score, created_at")
+      .select("mood_score, local_date")
       .eq("user_id", userId)
-      .gte("created_at", `${date}T00:00:00Z`)
-      .lt("created_at", `${date}T23:59:59Z`);
+      .eq("local_date", date);
 
     if (error || !moods || moods.length === 0) {
       return [];
     }
 
-    // Assumption #8: Create separate withdrawal for each mood <4
-    const negativeMoods = moods.filter((m) => m.mood_score < 4);
+    // Create withdrawal for each mood <4 (scale is 1-5)
+    const negativeMoods = moods.filter(
+      (m: { mood_score: number }) => m.mood_score < 4,
+    );
 
-    return negativeMoods.map((mood, idx) => ({
+    return negativeMoods.map((mood: { mood_score: number }, idx: number) => ({
       user_id: userId,
       date,
       type: "withdrawal",
       category: "negative_mood",
       amount: 3, // Fixed -3 per negative mood
       source: "mood_log",
-      description: `Mood score: ${mood.mood_score}/10`,
+      description: `Mood score: ${mood.mood_score}/5`,
       metadata: { mood_score: mood.mood_score, entry_index: idx },
     }));
   } catch (error) {

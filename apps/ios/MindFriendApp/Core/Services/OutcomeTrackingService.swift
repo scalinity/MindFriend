@@ -218,10 +218,12 @@ final class OutcomeTrackingService: ObservableObject {
             completed_at: response.completedAt
         )
 
+        logger.info("Inserting assessment response for user \(uid.uuidString), score: \(totalScore)")
         try await supabase
             .from("assessment_responses")
             .insert(insert)
             .execute()
+        logger.info("Successfully inserted assessment response with id: \(response.id.uuidString)")
 
         // Update schedule
         try await updateScheduleAfterCompletion(for: template.id)
@@ -288,7 +290,7 @@ final class OutcomeTrackingService: ObservableObject {
         switch type {
         case .phq9:
             // PHQ-9 Question 9 (suicide/self-harm) - any non-zero answer is a crisis indicator
-            if let q9Answer = answers["phq9_q9"], q9Answer > 0 {
+            if let q9Answer = answers["9"], q9Answer > 0 {
                 return true
             }
             // Also flag for severe depression scores
@@ -513,12 +515,14 @@ final class OutcomeTrackingService: ObservableObject {
 
     /// Load recent assessment responses for the current user
     /// Used by the Progress tab to show recent results.
-    func loadRecentResponses(limit: Int = 3) async throws {
+    func loadRecentResponses(limit: Int = 10) async throws {
         isLoading = true
         defer { isLoading = false }
 
         do {
             let uid = try userId
+            logger.info("Loading assessment responses for user: \(uid.uuidString)")
+
             let responses: [AssessmentResponse] = try await supabase
                 .from("assessment_responses")
                 .select()
@@ -529,10 +533,10 @@ final class OutcomeTrackingService: ObservableObject {
                 .value
 
             self.recentResponses = responses
-            logger.info("Loaded \\(responses.count) recent assessment responses")
+            logger.info("Loaded \(responses.count) recent assessment responses for user \(uid.uuidString)")
         } catch {
             self.error = error
-            logger.error("Failed to load recent assessment responses: \\(error.localizedDescription)")
+            logger.error("Failed to load recent assessment responses: \(error.localizedDescription)")
             throw error
         }
     }

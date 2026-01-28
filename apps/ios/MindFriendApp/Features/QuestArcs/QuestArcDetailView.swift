@@ -69,18 +69,18 @@ struct QuestArcDetailView: View {
                     Button("Done") { dismiss() }
                 }
             }
-            .confirmationDialog(
-                "Exit Journey?",
-                isPresented: $showExitConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("Exit Journey", role: .destructive) {
-                    Task { await exitArc() }
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Your progress will be lost. You can start this journey again later.")
+        }
+        .confirmationDialog(
+            "Exit Journey?",
+            isPresented: $showExitConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Exit Journey", role: .destructive) {
+                Task { await exitArc() }
             }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Your progress will be lost. You can start this journey again later.")
         }
     }
 
@@ -360,18 +360,44 @@ struct QuestArcDetailView: View {
     }
 
     private var otherArcActiveMessage: some View {
-        VStack(spacing: 8) {
-            Text("You have an active journey")
-                .font(.subheadline.weight(.medium))
-            Text("Complete or exit your current journey to start this one.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+        VStack(spacing: 12) {
+            VStack(spacing: 8) {
+                Text("You have an active journey")
+                    .font(.subheadline.weight(.medium))
+                if let currentTitle = activeArc?.arc?.title ?? activeArc?.questArc?.title {
+                    Text("Currently enrolled in \"\(currentTitle)\"")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Text("Complete or exit your current journey to start this one.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding()
+            .frame(maxWidth: .infinity)
+            .background(Color(.secondarySystemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+
+            Button {
+                showExitConfirmation = true
+            } label: {
+                HStack {
+                    if isExiting {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "xmark.circle")
+                    }
+                    Text("Exit Current Journey")
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .foregroundStyle(.red)
+                .background(Color.red.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+            .disabled(isExiting)
         }
-        .padding()
-        .frame(maxWidth: .infinity)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     private var startButton: some View {
@@ -481,8 +507,8 @@ private struct MilestonePreviewSheet: View {
                         milestoneNumber: 1,
                         totalMilestones: arc.milestoneDays.count,
                         dayNumber: arc.milestoneDays.first ?? 7,
-                        onDismiss: {},
-                        onShare: {}
+                        onDismiss: { dismiss() },
+                        onShare: { dismiss() }
                     )
                 }
                 .padding()

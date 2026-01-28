@@ -81,17 +81,17 @@ struct HomeView: View {
     /// Get level title for a given level number
     private func levelTitle(for level: Int) -> String {
         switch level {
-        case 1...5: return "Beginner"
-        case 6...10: return "Learner"
-        case 11...15: return "Explorer"
-        case 16...20: return "Practitioner"
-        case 21...25: return "Achiever"
-        case 26...30: return "Expert"
-        case 31...35: return "Master"
-        case 36...40: return "Champion"
-        case 41...45: return "Legend"
-        case 46...50: return "Transcendent"
-        default: return "Beginner"
+        case 1...5: return String(localized: "Beginner")
+        case 6...10: return String(localized: "Learner")
+        case 11...15: return String(localized: "Explorer")
+        case 16...20: return String(localized: "Practitioner")
+        case 21...25: return String(localized: "Achiever")
+        case 26...30: return String(localized: "Expert")
+        case 31...35: return String(localized: "Master")
+        case 36...40: return String(localized: "Champion")
+        case 41...45: return String(localized: "Legend")
+        case 46...50: return String(localized: "Transcendent")
+        default: return String(localized: "Beginner")
         }
     }
 
@@ -401,7 +401,7 @@ struct HomeView: View {
                 }
             }
             .sheet(isPresented: $showPathwaySelection) {
-                NavigationView {
+                NavigationStack {
                     PathwaySelectionView()
                         .environmentObject(container)
                 }
@@ -410,7 +410,7 @@ struct HomeView: View {
                 get: { selectedPathwayId.flatMap { id in activePathways.first { $0.id.uuidString == id } } },
                 set: { selectedPathwayId = $0?.id.uuidString }
             )) { pathway in
-                NavigationView {
+                NavigationStack {
                     PathwayDashboardView(userPathway: pathway)
                         .environmentObject(container)
                 }
@@ -418,9 +418,19 @@ struct HomeView: View {
             } // End of else block for standard home
             } // End of Group
         } // End of NavigationStack
-        // Load data on appear
+        // Load data on initial appear
         .task {
             await loadData()
+        }
+        // Refresh data every time view appears (e.g., returning from mood log, exiting journey)
+        .onAppear {
+            Task {
+                // Only refresh if we've loaded before (task already ran)
+                // and it's been at least 1 second since last load
+                if let lastLoad = lastLoadTime, Date().timeIntervalSince(lastLoad) > 1 {
+                    await loadData()
+                }
+            }
         }
     } // End of body
 
@@ -594,6 +604,7 @@ struct HomeView: View {
             async let participationTask = try? await container.supabaseDataService.getEventParticipation()
             async let insightTask = try? await container.supabaseDataService.getWeeklySummary()
             async let homeContextTask = try? await container.supabaseDataService.getHomeContext()
+            async let todayMoodTask = try? await container.supabaseDataService.getTodayMood()
             async let buddyTask = try? await container.supabaseDataService.getBuddyWidgetData()
             async let celebrationsTask = try? await container.supabaseDataService.getPendingCelebrations()
             async let recoveryModeTask = try? await container.supabaseDataService.fetchRecoveryModeState()
@@ -616,6 +627,7 @@ struct HomeView: View {
             let participation = await participationTask ?? []
             let insightResult = (await insightTask) ?? nil
             let contextResult = await homeContextTask
+            let todayMoodResult = await todayMoodTask
             let buddyResult = (await buddyTask) ?? nil
             let pendingCelebrations = await celebrationsTask ?? []
             let recoveryModeResult = await recoveryModeTask ?? .inactive
@@ -696,6 +708,9 @@ struct HomeView: View {
 
                 // Set mood-adaptive home context
                 homeContext = contextResult
+
+                // Set today's mood (for check-in prompt logic)
+                appState.todayMood = todayMoodResult
 
                 // Set buddy widget data
                 buddyWidgetData = buddyResult
@@ -817,16 +832,16 @@ struct GreetingHeader: View {
     var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
         switch hour {
-        case 5..<12: return "Good morning"
-        case 12..<17: return "Good afternoon"
-        case 17..<21: return "Good evening"
-        default: return "Goodnight"
+        case 5..<12: return String(localized: "Good morning,")
+        case 12..<17: return String(localized: "Good afternoon,")
+        case 17..<21: return String(localized: "Good evening,")
+        default: return String(localized: "Goodnight,")
         }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(greeting + ",")
+            Text(greeting)
                 .font(.title2)
                 .foregroundStyle(.secondary)
 
@@ -873,11 +888,11 @@ struct TodayMoodCard: View {
 
     var moodEmoji: String {
         switch mood.moodScore {
-        case 1: return "😢"
-        case 2: return "😔"
+        case 1: return "😔"
+        case 2: return "😕"
         case 3: return "😐"
         case 4: return "🙂"
-        case 5: return "😊"
+        case 5: return "😄"
         default: return "😐"
         }
     }
@@ -922,12 +937,74 @@ struct QuestCard: View {
     @State private var showQuestChoice = false
     @State private var showQuestDetail = false
 
+    /// Color for the journey category
+    private var journeyColor: Color {
+        guard let arc = quest.arcContext else { return .orange }
+        switch arc.arcCategory.lowercased() {
+        case "stress": return .blue
+        case "sleep": return .indigo
+        case "confidence": return .purple
+        case "focus": return .teal
+        case "resilience": return .green
+        default: return .orange
+        }
+    }
+
     private var questCardContent: some View {
         VStack(alignment: .leading, spacing: 12) {
+            // Journey context header (if part of a journey)
+            if let arc = quest.arcContext {
+                VStack(alignment: .leading, spacing: 8) {
+                    // Journey title and day
+                    HStack {
+                        Image(systemName: "map.fill")
+                            .foregroundStyle(journeyColor)
+                        Text(arc.arcTitle)
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(journeyColor)
+                        Spacer()
+                        Text("Day \(arc.currentDay + 1) of \(arc.durationDays)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    // Progress bar
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(Color(.systemGray5))
+                                .frame(height: 6)
+
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(journeyColor)
+                                .frame(width: geometry.size.width * arc.progressPercentage, height: 6)
+                        }
+                    }
+                    .frame(height: 6)
+
+                    // Milestone indicator
+                    if arc.isMilestoneDay {
+                        HStack(spacing: 4) {
+                            Image(systemName: "flag.fill")
+                                .foregroundStyle(.yellow)
+                            Text("Milestone day!")
+                                .font(.caption2)
+                                .fontWeight(.medium)
+                                .foregroundStyle(.yellow)
+                        }
+                    }
+                }
+                .padding(.bottom, 4)
+
+                Divider()
+            }
+
+            // Quest header
             HStack {
-                Label("Today's Quest", systemImage: "star.fill")
+                Label(quest.isPartOfJourney ? "Journey Quest" : "Today's Quest", systemImage: "star.fill")
                     .font(.subheadline)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(quest.isPartOfJourney ? journeyColor : .orange)
 
                 Spacer()
 
@@ -939,7 +1016,7 @@ struct QuestCard: View {
                     // Show "Choose" hint for quest choice
                     Label("Choose", systemImage: "arrow.right.circle")
                         .font(.caption)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(quest.isPartOfJourney ? journeyColor : .orange)
                 }
             }
 
@@ -952,6 +1029,23 @@ struct QuestCard: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
 
+            // Coaching message for journey quests
+            if let arc = quest.arcContext, let coaching = arc.coachingMessage {
+                HStack(spacing: 6) {
+                    Image(systemName: "lightbulb.fill")
+                        .font(.caption2)
+                        .foregroundStyle(journeyColor)
+                    Text(coaching)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .italic()
+                }
+                .padding(.vertical, 6)
+                .padding(.horizontal, 10)
+                .background(journeyColor.opacity(0.1))
+                .cornerRadius(8)
+            }
+
             HStack {
                 Label("\(quest.template.estimatedMinutes) min", systemImage: "clock")
                 Spacer()
@@ -963,7 +1057,9 @@ struct QuestCard: View {
         .padding()
         .background(
             LinearGradient(
-                colors: [.orange.opacity(0.1), .yellow.opacity(0.1)],
+                colors: quest.isPartOfJourney
+                    ? [journeyColor.opacity(0.1), journeyColor.opacity(0.05)]
+                    : [.orange.opacity(0.1), .yellow.opacity(0.1)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
@@ -971,7 +1067,7 @@ struct QuestCard: View {
         .cornerRadius(16)
         .overlay(
             RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+                .stroke((quest.isPartOfJourney ? journeyColor : .orange).opacity(0.3), lineWidth: 1)
         )
     }
 

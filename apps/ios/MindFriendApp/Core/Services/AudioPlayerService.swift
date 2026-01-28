@@ -32,6 +32,32 @@ final class AudioPlayerService: NSObject, ObservableObject {
         setupRemoteCommands()
         loadFavorites()
     }
+    
+    // PERF-CRIT-002: Clean up resources
+    // Note: Since this is @MainActor, cleanup happens via stop() method
+    // which is called when view disappears. The nonisolated deinit
+    // cannot safely access MainActor properties.
+    
+    /// Call this method to clean up all resources when the service is no longer needed
+    func cleanup() {
+        // Cancel sleep timer
+        sleepTimer?.invalidate()
+        sleepTimer = nil
+        
+        // Remove time observer
+        if let observer = timeObserver, let player = player {
+            player.removeTimeObserver(observer)
+        }
+        timeObserver = nil
+        
+        // Cancel Combine subscriptions
+        cancellables.removeAll()
+        
+        // Stop playback
+        player?.pause()
+        player = nil
+        playerItem = nil
+    }
 
     // MARK: - Audio Session Setup
 

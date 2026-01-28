@@ -1292,8 +1292,58 @@ struct Quest: Codable, Identifiable, Equatable, Hashable {
     var isQuickVariant: Bool = false
     var xpMultiplier: Double = 1.0
 
+    // Journey context (if this quest is part of an active arc)
+    var arcContext: QuestArcContext?
+
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
+    }
+
+    /// Whether this quest is part of an active journey
+    var isPartOfJourney: Bool {
+        arcContext != nil
+    }
+}
+
+/// Context about the journey this quest belongs to
+struct QuestArcContext: Codable, Equatable, Hashable {
+    let arcId: String
+    let arcTitle: String
+    let arcCategory: String
+    let currentDay: Int
+    let durationDays: Int
+    let coachingMessage: String?
+    let milestoneDays: [Int]
+
+    /// Whether today is a milestone day
+    var isMilestoneDay: Bool {
+        milestoneDays.contains(currentDay + 1) // +1 because currentDay is 0-indexed
+    }
+
+    /// Days remaining in the journey
+    var daysRemaining: Int {
+        max(0, durationDays - currentDay)
+    }
+
+    /// Progress percentage (0.0 to 1.0)
+    var progressPercentage: Double {
+        guard durationDays > 0 else { return 0 }
+        return Double(currentDay) / Double(durationDays)
+    }
+
+    /// Next milestone day number, if any
+    var nextMilestone: Int? {
+        milestoneDays.first { $0 > currentDay }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case arcId = "arc_id"
+        case arcTitle = "arc_title"
+        case arcCategory = "arc_category"
+        case currentDay = "current_day"
+        case durationDays = "duration_days"
+        case coachingMessage = "coaching_message"
+        case milestoneDays = "milestone_days"
     }
 }
 
@@ -2885,20 +2935,20 @@ enum TimeOfDay: String, Codable, CaseIterable {
     /// Greeting text for this time of day
     var greeting: String {
         switch self {
-        case .morning: return "Good morning"
-        case .afternoon: return "Good afternoon"
-        case .evening: return "Good evening"
-        case .night: return "Hello"
+        case .morning: return String(localized: "Good morning")
+        case .afternoon: return String(localized: "Good afternoon")
+        case .evening: return String(localized: "Good evening")
+        case .night: return String(localized: "Hello")
         }
     }
 
     /// Subtitle text encouraging engagement
     var subtitle: String {
         switch self {
-        case .morning: return "Ready to start your day?"
-        case .afternoon: return "How's your day going?"
-        case .evening: return "Time to wind down"
-        case .night: return "Rest well tonight"
+        case .morning: return String(localized: "Ready to start your day?")
+        case .afternoon: return String(localized: "How's your day going?")
+        case .evening: return String(localized: "Time to wind down")
+        case .night: return String(localized: "Rest well tonight")
         }
     }
 
@@ -4396,10 +4446,44 @@ struct QuestArc: Codable, Identifiable, Equatable {
     let isPremium: Bool
     let milestoneDays: [Int]
     let iconName: String?
-    let stepCount: Int
+    var stepCount: Int
     var userEnrolled: Bool
     var userCompleted: Bool
     var userProgress: Int?
+
+    init(id: UUID, title: String, description: String, category: String, durationDays: Int, difficultyLevel: String, isPremium: Bool, milestoneDays: [Int], iconName: String?, stepCount: Int = 0, userEnrolled: Bool = false, userCompleted: Bool = false, userProgress: Int? = nil) {
+        self.id = id
+        self.title = title
+        self.description = description
+        self.category = category
+        self.durationDays = durationDays
+        self.difficultyLevel = difficultyLevel
+        self.isPremium = isPremium
+        self.milestoneDays = milestoneDays
+        self.iconName = iconName
+        self.stepCount = stepCount
+        self.userEnrolled = userEnrolled
+        self.userCompleted = userCompleted
+        self.userProgress = userProgress
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        description = try container.decode(String.self, forKey: .description)
+        category = try container.decode(String.self, forKey: .category)
+        durationDays = try container.decode(Int.self, forKey: .durationDays)
+        difficultyLevel = try container.decode(String.self, forKey: .difficultyLevel)
+        isPremium = try container.decode(Bool.self, forKey: .isPremium)
+        milestoneDays = try container.decodeIfPresent([Int].self, forKey: .milestoneDays) ?? []
+        iconName = try container.decodeIfPresent(String.self, forKey: .iconName)
+        // These fields are optional - they're computed by edge functions, not stored in DB
+        stepCount = try container.decodeIfPresent(Int.self, forKey: .stepCount) ?? 0
+        userEnrolled = try container.decodeIfPresent(Bool.self, forKey: .userEnrolled) ?? false
+        userCompleted = try container.decodeIfPresent(Bool.self, forKey: .userCompleted) ?? false
+        userProgress = try container.decodeIfPresent(Int.self, forKey: .userProgress)
+    }
 
     enum CodingKeys: String, CodingKey {
         case id

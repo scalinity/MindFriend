@@ -5,6 +5,7 @@ import UIKit
 #endif
 import OSLog
 import CommonCrypto
+import CryptoKit
 import Supabase
 
 // MARK: - Configuration
@@ -405,7 +406,8 @@ final class OAuthEncryptionService: EncryptionServiceProtocol {
             kSecAttrService as String: keychainService,
             kSecAttrAccount as String: account,
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            // SEC-HIGH-001: Use WhenUnlockedThisDeviceOnly for better security
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         ]
         SecItemDelete(query as CFDictionary)
         return SecItemAdd(query as CFDictionary, nil) == errSecSuccess
@@ -434,24 +436,84 @@ final class OAuthEncryptionService: EncryptionServiceProtocol {
         return SecItemDelete(query as CFDictionary) == errSecSuccess
     }
 
-    // MARK: - Simple XOR Encryption (for demo - use AES in production)
-
-    private let encryptionKey: Data = {
-        guard let data = "MindFriendOAuthKey2024!".data(using: .utf8) else {
-            fatalError("Invalid encryption key encoding - programming error")
+    // MARK: - AES-256-GCM Encryption (Production-grade)
+    
+    private let keychainKeyAccount = "oauth_encryption_key"
+    
+    /// Generates or retrieves the encryption key from Keychain
+    private func getOrCreateKey() -> SymmetricKey? {
+        // Try to retrieve existing key
+        if let existingKeyData = retrieveEncryptionKeyFromKeychain() {
+            return SymmetricKey(data: existingKeyData)
         }
+        
+        // Generate new key
+        let newKey = SymmetricKey(size: .bits256)
+        
+        // Store in Keychain
+        let keyData = Data(newKey.withUnsafeBytes { Data($0) })
+        
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: keychainKeyAccount,
+            kSecValueData as String: keyData,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        ]
+        
+        // Delete any existing key first
+        SecItemDelete(query as CFDictionary)
+        
+        let status = SecItemAdd(query as CFDictionary, nil)
+        guard status == errSecSuccess else {
+            return nil
+        }
+        
+        return newKey
+    }
+    
+    private func retrieveEncryptionKeyFromKeychain() -> Data? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: keychainKeyAccount,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        
+        guard status == errSecSuccess, let data = result as? Data else {
+            return nil
+        }
+        
         return data
-    }()
+    }
 
     private func encrypt(_ data: Data) -> Data? {
-        var result = Data(count: data.count)
-        for i in 0..<data.count {
-            result[i] = data[i] ^ encryptionKey[i % encryptionKey.count]
+        guard let key = getOrCreateKey() else {
+            return nil
         }
-        return result
+        
+        do {
+            let sealedBox = try AES.GCM.seal(data, using: key)
+            return sealedBox.combined
+        } catch {
+            return nil
+        }
     }
 
     private func decrypt(_ data: Data) -> Data? {
-        return encrypt(data)
+        guard let key = getOrCreateKey() else {
+            return nil
+        }
+        
+        do {
+            let sealedBox = try AES.GCM.SealedBox(combined: data)
+            return try AES.GCM.open(sealedBox, using: key)
+        } catch {
+            return nil
+        }
     }
 }

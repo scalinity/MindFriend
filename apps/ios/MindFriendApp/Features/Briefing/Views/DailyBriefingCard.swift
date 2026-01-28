@@ -15,8 +15,8 @@ struct DailyBriefingCard: View {
 
     /// Dynamic greeting using current user name (not cached briefing name)
     private var currentGreeting: String {
-        let name = appState.currentUser?.displayName ?? "Friend"
-        return "Hello, \(name)!"
+        let name = appState.currentUser?.displayName ?? String(localized: "Friend")
+        return String(format: String(localized: "Hello, %@!"), name)
     }
 
     var body: some View {

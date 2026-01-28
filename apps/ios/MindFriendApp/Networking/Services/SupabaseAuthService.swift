@@ -191,24 +191,14 @@ final class SupabaseAuthService: ObservableObject {
 
     /// Check if token is expiring within the threshold
     private func isTokenExpiringSoon(_ session: Session) -> Bool {
-        let expiresAt: Date
-        if let expiryTimestamp = session.expiresAt {
-            expiresAt = Date(timeIntervalSince1970: TimeInterval(expiryTimestamp))
-        } else {
-            expiresAt = Date.distantPast  // Treat missing expiry as expired
-        }
+        let expiresAt = Date(timeIntervalSince1970: TimeInterval(session.expiresAt))
         let timeUntilExpiry = expiresAt.timeIntervalSinceNow
         return timeUntilExpiry < tokenRefreshThreshold
     }
 
     /// Check if token has actually expired
     private func isTokenExpired(_ session: Session) -> Bool {
-        let expiresAt: Date
-        if let expiryTimestamp = session.expiresAt {
-            expiresAt = Date(timeIntervalSince1970: TimeInterval(expiryTimestamp))
-        } else {
-            expiresAt = Date.distantPast  // Treat missing expiry as expired
-        }
+        let expiresAt = Date(timeIntervalSince1970: TimeInterval(session.expiresAt))
         return expiresAt < Date()
     }
 
@@ -426,6 +416,9 @@ final class SupabaseAuthService: ObservableObject {
     func signOut() async throws {
         isLoading = true
         defer { isLoading = false }
+        
+        // Store userId before clearing session for offline cleanup
+        let userIdForCleanup = session?.user.id.uuidString
 
         do {
             try await supabase.auth.signOut()
@@ -445,29 +438,32 @@ final class SupabaseAuthService: ObservableObject {
             } catch {
                 Log.auth.warning("Failed to clear secure storage on logout: \(error.localizedDescription)")
             }
+            
+            // TD-HIGH-005: Clear offline data on logout
+            await clearOfflineDataOnLogout(userId: userIdForCleanup)
         } catch {
             throw AuthError.signOutFailed(error.localizedDescription)
         }
     }
 
-    // TODO: Enable when offline services are added to project
-    // /// Clear all offline data when user logs out
-    // private func clearOfflineDataOnLogout(userId: String?) async {
-    //     // Clear download manager state (cancel downloads, clear tasks)
-    //     await DownloadManager.shared.clearOnLogout()
-    //
-    //     // Clear sync queue manager state (pending sync items)
-    //     await SyncQueueManager.shared.clearOnLogout()
-    //
-    //     // Clear offline cache (user-specific cached data)
-    //     await OfflineCacheService.shared.clearOnLogout()
-    //
-    //     // Clear offline storage manager and delete user files
-    //     if let userId = userId {
-    //         try? await OfflineStorageManager.shared.deleteUserData(userId: userId)
-    //     }
-    //     await OfflineStorageManager.shared.clearCurrentUser()
-    // }
+    // TD-HIGH-005: Enabled offline data cleanup on logout
+    /// Clear all offline data when user logs out
+    private func clearOfflineDataOnLogout(userId: String?) async {
+        // Clear download manager state (cancel downloads, clear tasks)
+        await DownloadManager.shared.clearOnLogout()
+        
+        // Clear sync queue manager state (pending sync items)
+        await SyncQueueManager.shared.clearOnLogout()
+        
+        // Clear offline cache (user-specific cached data)
+        await OfflineCacheService.shared.clearOnLogout()
+        
+        // Clear offline storage manager and delete user files
+        if let userId = userId {
+            try? await OfflineStorageManager.shared.deleteUserData(userId: userId)
+        }
+        await OfflineStorageManager.shared.clearCurrentUser()
+    }
 
     // MARK: - Auth State Caching
 

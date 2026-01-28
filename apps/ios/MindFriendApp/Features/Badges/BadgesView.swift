@@ -4,7 +4,7 @@ import SwiftUI
 struct BadgesView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
-    @State private var earnedBadges: [Badge] = []
+    @State private var earnedBadges: [UserBadgeProgress] = []
     @State private var isLoading = true
 
     var body: some View {
@@ -36,12 +36,12 @@ struct BadgesView: View {
         isLoading = true
         defer { isLoading = false }
 
-        await container.achievementService.loadBadges()
-        await container.achievementService.loadUserBadgeProgress()
-
-        // Map earned badge progress to Badge models
-        earnedBadges = container.achievementService.earnedBadges.compactMap { progress in
-            container.achievementService.badges.first { $0.id == progress.badgeId }
+        do {
+            try await container.achievementService.loadBadges()
+            try await container.achievementService.loadUserBadgeProgress()
+            earnedBadges = container.achievementService.earnedBadges
+        } catch {
+            // Silently fail - show empty state
         }
     }
 }
@@ -78,7 +78,7 @@ struct BadgeStatsCard: View {
 // MARK: - Badges Grid
 
 struct BadgesGrid: View {
-    let badges: [Badge]
+    let badges: [UserBadgeProgress]
 
     private let columns = [
         GridItem(.flexible()),
@@ -92,8 +92,8 @@ struct BadgesGrid: View {
                 .font(.headline)
 
             LazyVGrid(columns: columns, spacing: 16) {
-                ForEach(badges) { badge in
-                    BadgeCard(badge: badge)
+                ForEach(badges) { badgeProgress in
+                    BadgeCard(badgeProgress: badgeProgress)
                 }
             }
         }
@@ -103,7 +103,7 @@ struct BadgesGrid: View {
 // MARK: - Badge Card
 
 struct BadgeCard: View {
-    let badge: Badge
+    let badgeProgress: UserBadgeProgress
 
     var body: some View {
         VStack(spacing: 8) {
@@ -112,23 +112,41 @@ struct BadgeCard: View {
                     .fill(Color.yellow.opacity(0.2))
                     .frame(width: 60, height: 60)
 
-                Image(systemName: badge.icon)
+                // Use SF Symbol based on badge category
+                Image(systemName: iconForBadge(badgeProgress.badge))
                     .font(.system(size: 26))
                     .foregroundStyle(.yellow)
             }
 
-            Text(badge.title)
+            Text(badgeProgress.badge.name)
                 .font(.caption)
                 .fontWeight(.medium)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
 
-            Text(badge.earnedAt, style: .date)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            if let earnedAt = badgeProgress.earnedAt {
+                Text(earnedAt, style: .date)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)
+    }
+
+    private func iconForBadge(_ badge: AchievementBadge) -> String {
+        switch badge.category {
+        case .gettingStarted: return "star.fill"
+        case .streaks: return "flame.fill"
+        case .quests: return "checkmark.seal.fill"
+        case .exercises: return "figure.mind.and.body"
+        case .meditation: return "brain.head.profile"
+        case .mood: return "heart.fill"
+        case .circles: return "person.2.fill"
+        case .sensory: return "hand.tap.fill"
+        case .seasonal: return "leaf.fill"
+        case .special: return "medal.fill"
+        }
     }
 }
 

@@ -111,6 +111,7 @@ struct MoodChart: View {
         }
         .chartYAxis {
             AxisMarks(values: [1, 2, 3, 4, 5]) { value in
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [4]))
                 AxisValueLabel {
                     if let score = value.as(Int.self) {
                         Text(moodEmoji(for: score))
@@ -131,12 +132,12 @@ struct MoodChart: View {
 
     private func moodEmoji(for score: Int) -> String {
         switch score {
-        case 1: return "😢"
-        case 2: return "😔"
+        case 1: return "😔"
+        case 2: return "😕"
         case 3: return "😐"
         case 4: return "🙂"
-        case 5: return "😊"
-        default: return ""
+        case 5: return "😄"
+        default: return "😐"
         }
     }
 }
@@ -215,11 +216,11 @@ struct MoodHistoryRow: View {
 
     var moodEmoji: String {
         switch mood.moodScore {
-        case 1: return "😢"
-        case 2: return "😔"
+        case 1: return "😔"
+        case 2: return "😕"
         case 3: return "😐"
         case 4: return "🙂"
-        case 5: return "😊"
+        case 5: return "😄"
         default: return "😐"
         }
     }

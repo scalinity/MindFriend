@@ -303,11 +303,11 @@ struct GenerationContext: Codable {
     }
     
     struct Preferences: Codable {
-        let imagery: [String]
-        let guidanceLevel: String // "minimal", "moderate", "detailed"
-        let avoidThemes: [String]
-        let voicePreference: String
-        
+        let imagery: [String]?
+        let guidanceLevel: String?
+        let avoidThemes: [String]?
+        let voicePreference: String?
+
         enum CodingKeys: String, CodingKey {
             case imagery
             case guidanceLevel
@@ -317,9 +317,9 @@ struct GenerationContext: Codable {
     }
     
     let mood: Mood?
-    let recentExercises: [RecentExercise]
-    let timeOfDay: String // "morning", "afternoon", "evening", "night"
-    let preferences: Preferences
+    let recentExercises: [RecentExercise]?
+    let timeOfDay: String?
+    let preferences: Preferences?
 }
 
 // NEW: Exercise-specific content structures
@@ -458,7 +458,7 @@ struct GeneratedContent: Codable, Identifiable {
         case textContent = "text_content"
         case audioUrl = "audio_url"
         case voiceId = "voice_id"
-        case duration
+        case duration = "duration_seconds"
         case qualityScore = "quality_score"
         case status
         case generationPrompt = "generation_prompt"
@@ -468,7 +468,7 @@ struct GeneratedContent: Codable, Identifiable {
         case averageRating = "average_rating"
         case ratingCount = "rating_count"
         case seriesId = "series_id"
-        case seriesOrder = "series_order"
+        case seriesOrder = "series_position"
         case isFavorite = "is_favorite"
         case playCount = "play_count"
         case lastPlayedAt = "last_played_at"

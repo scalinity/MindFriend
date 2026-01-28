@@ -120,6 +120,7 @@ struct VaultEntryEditorView: View {
             } message: {
                 Text("This entry will be permanently deleted. This action cannot be undone.")
             }
+            .keyboardDoneButton()
         }
     }
 

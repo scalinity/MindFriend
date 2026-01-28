@@ -181,6 +181,17 @@ final class SupabaseDataService: ObservableObject {
         return try await getMoods(from: from, to: to, limit: limit, offset: offset)
     }
 
+    /// Fetches today's mood entry if one exists
+    /// Used by HomeView to determine whether to show mood check-in prompt
+    func getTodayMood() async throws -> MoodEntry? {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        let today = formatter.string(from: Date())
+
+        let moods = try await getMoods(from: today, to: today, limit: 1)
+        return moods.first
+    }
+
     // MARK: - Home Context (Mood-Adaptive Home)
 
     /// Get personalized home context for the adaptive home screen
@@ -324,10 +335,10 @@ final class SupabaseDataService: ObservableObject {
 
         guard let result = results.first else { return nil }
 
-        // Fetch the full quest with template data
+        // Fetch the full quest with template data and journey context (if part of an arc)
         let quests: [DBQuestWithTemplate] = try await supabase
             .from(Tables.quests)
-            .select("*, quest_templates(*)")
+            .select("*, quest_templates(*), user_quest_arcs(id, arc_id, current_day, status, snapshot_duration_days, snapshot_milestone_days, quest_arcs(id, title, category, duration_days, milestone_days))")
             .eq("id", value: result.id)
             .execute()
             .value
@@ -633,15 +644,20 @@ final class SupabaseDataService: ObservableObject {
             .value
 
         return exercises.map { exercise in
-            Exercise(
+            // Fall back to duration_minutes * 60 if duration_seconds is 0
+            let duration = exercise.durationSeconds > 0
+                ? exercise.durationSeconds
+                : (exercise.durationMinutes ?? 0) * 60
+
+            return Exercise(
                 id: exercise.id.uuidString,
                 type: ExerciseType(rawValue: exercise.type) ?? .breathing,
                 title: exercise.title,
                 description: exercise.description,
-                durationSeconds: exercise.durationSeconds,  // Now directly from schema
-                contentKind: ContentKind(rawValue: exercise.contentKind) ?? .text,
-                contentText: exercise.contentText,
-                audioUrl: exercise.audioUrl,
+                durationSeconds: duration,
+                contentKind: .text,  // Default since DB doesn't have this column
+                contentText: nil,
+                audioUrl: nil,
                 evidenceBasis: exercise.evidenceBasis.flatMap { EvidenceBasis(rawValue: $0) },
                 therapistReviewed: exercise.therapistReviewed,
                 reviewDate: exercise.reviewDate,
@@ -685,10 +701,12 @@ final class SupabaseDataService: ObservableObject {
     }
 
     /// Fetches all methodology info for display (populates cache)
+    /// PERF-HIGH-001: Added limit to prevent unbounded data fetching
     func getAllMethodologies() async throws -> [MethodologyInfo] {
         let results: [DBMethodologyInfo] = try await supabase
             .from(Tables.methodologyInfo)
             .select()
+            .limit(100) // Reasonable limit for methodology list
             .execute()
             .value
 
@@ -726,10 +744,12 @@ final class SupabaseDataService: ObservableObject {
             }
         }
 
+        // PERF-HIGH-001: Added limit to prevent unbounded data fetching
         let results: [DBTestimonial] = try await supabase
             .from(Tables.testimonials)
             .select()
             .eq("approved", value: true)
+            .limit(50) // Limit testimonials for carousel
             .execute()
             .value
 
@@ -808,11 +828,13 @@ final class SupabaseDataService: ObservableObject {
         let uid = try userId
         Log.data.debug("[Data] getConversations: Got userId=\(uid)")
 
+        // PERF-HIGH-001: Added limit to prevent unbounded data fetching
         let conversations: [DBConversation] = try await supabase
             .from(Tables.conversations)
             .select()
             .eq("user_id", value: uid)
             .order("updated_at", ascending: false)
+            .limit(100) // Limit conversations, implement pagination for more
             .execute()
             .value
 
@@ -1095,9 +1117,12 @@ final class SupabaseDataService: ObservableObject {
                     .value
 
                 // Add creator as member
+                guard let circleId = result.id else {
+                    throw DataError.operationFailed("Circle created but no ID returned")
+                }
                 let membership = DBCircleMember(
                     id: nil,
-                    circleId: result.id!,
+                    circleId: circleId,
                     userId: try userId,
                     joinedAt: nil
                 )
@@ -1217,9 +1242,10 @@ final class SupabaseDataService: ObservableObject {
         }
 
         // Fetch circle with members (include role for owner detection)
+        // Note: Use explicit FK reference for profiles join via circle_members_user_id_fkey
         let circle: DBCircleWithMembers = try await supabase
             .from(Tables.circles)
-            .select("*, circle_members(user_id, role, joined_at, profiles(display_name, avatar_url))")
+            .select("*, circle_members(id, circle_id, user_id, role, joined_at, profiles:profiles!circle_members_user_id_fkey(display_name, avatar_url, premium_badge))")
             .eq("id", value: circleId)
             .single()
             .execute()
@@ -1489,7 +1515,7 @@ final class SupabaseDataService: ObservableObject {
         let result: DBCircleChallenge = try await supabase
             .from("circle_challenges")
             .insert(insertData)
-            .select()
+            .select("*")
             .single()
             .execute()
             .value
@@ -1769,6 +1795,14 @@ final class SupabaseDataService: ObservableObject {
 
     // MARK: - Circle Invites
 
+    private struct CircleInviteRequest: Encodable {
+        let inviteId: String
+        let circleId: String
+        let inviteeEmail: String?
+        let inviteePhone: String?
+        let inviteCode: String
+    }
+
     /// Create an invite for a circle
     func createCircleInvite(circleId: String, email: String?, phone: String?) async throws -> CircleInvite {
         guard let circleUUID = UUID(uuidString: circleId) else {
@@ -1818,13 +1852,13 @@ final class SupabaseDataService: ObservableObject {
             do {
                 let _ = try await supabase.functions.invoke(
                     "send-circle-invite",
-                    options: .init(body: [
-                        "inviteId": result.id?.uuidString ?? "",
-                        "circleId": circleId,
-                        "inviteeEmail": email,
-                        "inviteePhone": phone as Any,
-                        "inviteCode": result.inviteCode
-                    ])
+                    options: .init(body: CircleInviteRequest(
+                        inviteId: result.id?.uuidString ?? "",
+                        circleId: circleId,
+                        inviteeEmail: email,
+                        inviteePhone: phone,
+                        inviteCode: result.inviteCode
+                    ))
                 )
             } catch {
                 // Log but don't fail the invite creation
@@ -2185,7 +2219,9 @@ final class SupabaseDataService: ObservableObject {
         }
 
         // Get moods from past 7 days
-        let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date())!
+        guard let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) else {
+            throw DataError.operationFailed("Failed to calculate date range")
+        }
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
 
@@ -2315,7 +2351,11 @@ final class SupabaseDataService: ObservableObject {
 
         if exercise.requiresPremium {
             // Check if either user has an active premium subscription
-            let subscriptions: [DBSubscription] = try await supabase
+            struct SubscriptionCheck: Decodable {
+                let user_id: String
+                let status: String
+            }
+            let subscriptions: [SubscriptionCheck] = try await supabase
                 .from("subscriptions")
                 .select("user_id, status")
                 .in("user_id", values: [currentUserId.uuidString, partnerId.uuidString])
@@ -2730,35 +2770,55 @@ final class SupabaseDataService: ObservableObject {
     /// Calls the generate-weekly-summary Edge Function which will calculate
     /// stats, detect patterns, and generate AI insights
     func generateWeeklyInsight() async throws -> WeeklySummary? {
-        // Validate and refresh session if needed
+        // Ensure we have a valid session before calling Edge Function
+        guard authService.session?.accessToken != nil else {
+            Log.data.warning("[generateWeeklyInsight] No access token available")
+            throw DataError.notAuthenticated
+        }
+
+        // Refresh token to ensure it's valid
         do {
             try await authService.ensureValidSession()
         } catch {
-            Log.data.warning("[WeeklyInsight] Session validation failed: \(error)")
-            throw APIError.badRequest("Session expired. Please sign in again.")
+            Log.data.error("[generateWeeklyInsight] Session refresh failed: \(error)")
+            throw error
         }
 
         // Get the refreshed access token
         guard let accessToken = authService.session?.accessToken else {
-            Log.data.warning("[WeeklyInsight] No access token after refresh")
-            throw APIError.badRequest("Session expired. Please sign in again.")
+            Log.data.warning("[generateWeeklyInsight] No access token after refresh")
+            throw DataError.notAuthenticated
         }
 
-        Log.data.info("Calling generate-weekly-summary edge function...")
+        Log.data.info("[generateWeeklyInsight] Calling generate-weekly-summary edge function...")
 
-        // Invoke the Edge Function with explicit auth header (SDK doesn't auto-include it)
-        try await supabase.functions.invoke(
-            "generate-weekly-summary",
-            options: .init(
-                headers: ["Authorization": "Bearer \(accessToken)"]
+        // Invoke the Edge Function with explicit auth header
+        do {
+            try await supabase.functions.invoke(
+                "generate-weekly-summary",
+                options: .init(
+                    headers: ["Authorization": "Bearer \(accessToken)"]
+                )
             )
-        )
-
-        Log.data.info("Edge function completed successfully")
+            Log.data.info("[generateWeeklyInsight] Edge function completed successfully")
+        } catch let error as FunctionsError {
+            switch error {
+            case .httpError(let code, let data):
+                let responseBody = String(data: data, encoding: .utf8) ?? "unknown"
+                Log.data.error("[generateWeeklyInsight] HTTP error \(code): \(responseBody)")
+                throw DataError.operationFailed("Edge Function error (\(code)): \(responseBody)")
+            case .relayError:
+                Log.data.error("[generateWeeklyInsight] Relay error - unable to reach server")
+                throw DataError.operationFailed("Unable to reach server")
+            }
+        } catch {
+            Log.data.error("[generateWeeklyInsight] Unexpected error: \(error)")
+            throw error
+        }
 
         // After successful generation, fetch the newly created summary
         let summary = try await getWeeklySummary()
-        Log.data.info("Fetched summary after generation: \(summary != nil ? "found" : "nil")")
+        Log.data.info("[generateWeeklyInsight] Fetched summary after generation: \(summary != nil ? "found" : "nil")")
         return summary
     }
 
@@ -3911,7 +3971,7 @@ final class SupabaseDataService: ObservableObject {
             .value
 
         guard let enrollment = enrollmentResponse.first else {
-            throw DataError.notFound
+            throw DataError.custom("Enrollment not found")
         }
 
         let currentDay = enrollment.currentDay
@@ -3962,13 +4022,18 @@ final class SupabaseDataService: ObservableObject {
     /// Skip the current day (uses a skip allowance)
     func skipProgramDay(enrollmentId: String, dayNumber: Int) async throws {
         // Mark day as skipped
+        struct DayProgressSkip: Encodable {
+            let enrollment_id: String
+            let day_number: Int
+            let status: String
+        }
         try await supabase
             .from("program_day_progress")
-            .upsert([
-                "enrollment_id": enrollmentId,
-                "day_number": dayNumber,
-                "status": "skipped"
-            ])
+            .upsert(DayProgressSkip(
+                enrollment_id: enrollmentId,
+                day_number: dayNumber,
+                status: "skipped"
+            ))
             .execute()
 
         // Get current enrollment to update counters
@@ -4117,10 +4182,81 @@ final class SupabaseDataService: ObservableObject {
         return nil
     }
 
-    /// Generate a new weekly progress story
-    func generateWeeklyStory(weekStart: Date) async throws -> [String: Any] {
-        // Post-MVP feature - stub implementation
-        throw DataError.notImplemented("Weekly story generation not yet implemented")
+    /// Generate a new weekly progress story by calling the generate-weekly-story edge function
+    /// - Parameter weekStart: Start date of the week (will be adjusted to Monday if needed)
+    /// - Returns: Generated WeeklyStory with cards
+    func generateWeeklyStory(weekStart: Date) async throws -> WeeklyStory {
+        print("[WeeklyStory] Starting generation...")
+
+        // Get access token directly from Supabase client (source of truth)
+        let session = try await supabase.auth.session
+        let accessToken = session.accessToken
+
+        print("[WeeklyStory] Got access token from Supabase (length: \(accessToken.count))")
+
+        // Calculate the Monday for this week using UTC calendar
+        var utcCalendar = Calendar(identifier: .gregorian)
+        utcCalendar.timeZone = TimeZone(identifier: "UTC")!
+
+        let weekday = utcCalendar.component(.weekday, from: weekStart)
+        // weekday: 1 = Sunday, 2 = Monday, ..., 7 = Saturday
+        // Calculate days to subtract to get to Monday
+        let daysFromMonday = weekday == 1 ? 6 : weekday - 2
+        guard let monday = utcCalendar.date(byAdding: .day, value: -daysFromMonday, to: weekStart) else {
+            throw DataError.operationFailed("Could not calculate week start")
+        }
+
+        // Format as YYYY-MM-DD in UTC
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        let weekStartStr = formatter.string(from: monday)
+
+        print("[WeeklyStory] Today weekday (UTC): \(weekday), daysFromMonday: \(daysFromMonday)")
+
+        print("[WeeklyStory] Calling edge function with weekStart: \(weekStartStr)")
+
+        // Call the edge function with explicit auth header
+        let result: GenerateWeeklyStoryResponse
+        do {
+            result = try await supabase.functions.invoke(
+                "generate-weekly-story",
+                options: .init(
+                    headers: ["Authorization": "Bearer \(accessToken)"],
+                    body: ["weekStart": weekStartStr]
+                )
+            )
+            print("[WeeklyStory] Edge function returned success: \(result.success)")
+        } catch {
+            print("[WeeklyStory] Edge function error: \(error)")
+            throw error
+        }
+
+        guard result.success else {
+            print("[WeeklyStory] Edge function returned success=false")
+            throw DataError.operationFailed("Story generation failed")
+        }
+
+        // Fetch the persisted story from the database (it was upserted by the edge function)
+        let stories = try await fetchWeeklyStories(limit: 1, offset: 0, favoritesOnly: false)
+
+        guard let story = stories.first(where: { $0.weekStart == weekStartStr }) else {
+            // If not found in DB, create a temporary story from response
+            print("[WeeklyStory] Story not found in DB, creating from response")
+            return WeeklyStory(
+                id: UUID(),
+                userId: result.userId,
+                weekStart: result.weekStart,
+                cards: result.cards,
+                createdAt: result.generatedAt,
+                updatedAt: result.generatedAt,
+                userRating: nil,
+                isFavorite: false
+            )
+        }
+
+        print("[WeeklyStory] Returning story from DB")
+        return story
     }
 
     /// Upload a story card image

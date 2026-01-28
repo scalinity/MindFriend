@@ -16,15 +16,15 @@ interface QuestArc {
   title: string;
   description: string;
   category: string;
-  durationDays: number;
-  difficultyLevel: string;
-  isPremium: boolean;
-  milestoneDays: number[];
-  iconName: string | null;
-  stepCount: number;
-  userEnrolled: boolean;
-  userCompleted: boolean;
-  userProgress?: number;
+  duration_days: number;
+  difficulty_level: string;
+  is_premium: boolean;
+  milestone_days: number[];
+  icon_name: string | null;
+  step_count: number;
+  user_enrolled: boolean;
+  user_completed: boolean;
+  user_progress?: number;
 }
 
 serve(async (req) => {
@@ -173,22 +173,22 @@ serve(async (req) => {
         title: arc.title,
         description: arc.description,
         category: arc.category,
-        durationDays: arc.duration_days,
-        difficultyLevel: arc.difficulty_level,
-        isPremium: arc.is_premium,
-        milestoneDays: arc.milestone_days || [],
-        iconName: arc.icon_name,
-        stepCount: stepCountMap.get(arc.id) || 0,
-        userEnrolled,
-        userCompleted,
-        userProgress: userEnrolled ? enrollment?.current_day : undefined,
+        duration_days: arc.duration_days,
+        difficulty_level: arc.difficulty_level,
+        is_premium: arc.is_premium,
+        milestone_days: arc.milestone_days || [],
+        icon_name: arc.icon_name,
+        step_count: stepCountMap.get(arc.id) || 0,
+        user_enrolled: userEnrolled,
+        user_completed: userCompleted,
+        user_progress: userEnrolled ? enrollment?.current_day : undefined,
       };
     });
 
     // Filter out completed arcs if not requested
     const filteredArcs = includeCompleted
       ? enrichedArcs
-      : enrichedArcs.filter((a) => !a.userCompleted);
+      : enrichedArcs.filter((a) => !a.user_completed);
 
     // Sort by difficulty: easy, medium, hard
     const difficultyOrder: Record<string, number> = {
@@ -200,8 +200,8 @@ serve(async (req) => {
       const categoryCompare = a.category.localeCompare(b.category);
       if (categoryCompare !== 0) return categoryCompare;
       return (
-        (difficultyOrder[a.difficultyLevel] || 0) -
-        (difficultyOrder[b.difficultyLevel] || 0)
+        (difficultyOrder[a.difficulty_level] || 0) -
+        (difficultyOrder[b.difficulty_level] || 0)
       );
     });
 

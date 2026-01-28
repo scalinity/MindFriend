@@ -47,6 +47,21 @@ struct KeyboardDismissAllModifier: ViewModifier {
     }
 }
 
+/// View modifier that adds a Done button toolbar to dismiss keyboard
+struct KeyboardToolbarModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        hideKeyboard()
+                    }
+                }
+            }
+    }
+}
+
 // MARK: - View Extension
 
 extension View {
@@ -63,6 +78,11 @@ extension View {
     /// Dismiss keyboard on both swipe down and tap gestures
     func dismissKeyboardInteractively() -> some View {
         modifier(KeyboardDismissAllModifier())
+    }
+
+    /// Add Done button to keyboard toolbar
+    func keyboardDoneButton() -> some View {
+        modifier(KeyboardToolbarModifier())
     }
 }
 

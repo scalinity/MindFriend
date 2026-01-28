@@ -107,20 +107,69 @@ final class AudioPlayerViewModel: ObservableObject {
         isLoading = true
         error = nil
 
-        // Create player item and player
-        let asset = AVURLAsset(url: audioURL)
-        let playerItem = AVPlayerItem(asset: asset)
+        print("[AudioPlayerViewModel] Loading audio from URL: \(audioURL)")
+
+        // Create asset with options for better error reporting
+        let asset = AVURLAsset(url: audioURL, options: [
+            AVURLAssetPreferPreciseDurationAndTimingKey: true
+        ])
+
+        // First check if the asset is playable
+        do {
+            let isPlayable = try await asset.load(.isPlayable)
+            print("[AudioPlayerViewModel] Asset isPlayable: \(isPlayable)")
+
+            if !isPlayable {
+                print("[AudioPlayerViewModel] ERROR: Asset is not playable")
+                self.error = "Audio format not supported"
+                isLoading = false
+                return
+            }
+        } catch {
+            print("[AudioPlayerViewModel] ERROR checking playability: \(error)")
+            self.error = "Failed to load audio: \(error.localizedDescription)"
+            isLoading = false
+            return
+        }
 
         // Wait for duration to be available
         do {
             let duration = try await asset.load(.duration)
-            self.duration = CMTimeGetSeconds(duration)
+            let durationSeconds = CMTimeGetSeconds(duration)
+            print("[AudioPlayerViewModel] Duration loaded: \(durationSeconds) seconds")
+            self.duration = durationSeconds
         } catch {
+            print("[AudioPlayerViewModel] ERROR loading duration: \(error)")
             self.duration = 0
         }
 
+        // Create player item and player
+        let playerItem = AVPlayerItem(asset: asset)
+
+        // Observe player item status for errors
+        playerItem.publisher(for: \.status)
+            .sink { [weak self] status in
+                Task { @MainActor in
+                    switch status {
+                    case .failed:
+                        let errorMsg = playerItem.error?.localizedDescription ?? "Unknown error"
+                        print("[AudioPlayerViewModel] PlayerItem failed: \(errorMsg)")
+                        self?.error = "Playback error: \(errorMsg)"
+                    case .readyToPlay:
+                        print("[AudioPlayerViewModel] PlayerItem ready to play")
+                    case .unknown:
+                        print("[AudioPlayerViewModel] PlayerItem status unknown")
+                    @unknown default:
+                        break
+                    }
+                }
+            }
+            .store(in: &cancellables)
+
         player = AVPlayer(playerItem: playerItem)
         player?.actionAtItemEnd = .pause
+
+        print("[AudioPlayerViewModel] Player created successfully")
 
         // Observe playback end
         NotificationCenter.default.publisher(for: .AVPlayerItemDidPlayToEndTime, object: playerItem)

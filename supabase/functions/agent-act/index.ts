@@ -41,6 +41,59 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
+    // Authenticate request - require service role or valid cron token
+    const authHeader = req.headers.get("Authorization");
+    const cronSecret = Deno.env.get("CRON_SECRET");
+
+    // Allow cron jobs with secret, or admin service calls
+    const isCronRequest =
+      cronSecret && req.headers.get("X-Cron-Secret") === cronSecret;
+    const isServiceRequest = authHeader?.includes(
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    );
+
+    if (!isCronRequest && !isServiceRequest) {
+      // Validate user token for manual triggers
+      if (!authHeader) {
+        return new Response(
+          JSON.stringify({ error: "Missing authorization" }),
+          {
+            status: 401,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
+
+      if (authError || !user) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Check if user has admin role for manual triggering
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+
+      if (profile?.role !== "admin") {
+        return new Response(
+          JSON.stringify({ error: "Admin access required" }),
+          {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+    }
+
     const now = new Date();
 
     // Get scheduled actions that are due

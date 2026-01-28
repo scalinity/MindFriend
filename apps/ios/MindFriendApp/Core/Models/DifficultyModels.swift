@@ -41,9 +41,9 @@ enum CapacityLevel: String, Codable, CaseIterable {
     /// Display name for UI
     var displayName: String {
         switch self {
-        case .low: return "Low Energy"
-        case .moderate: return "Moderate Energy"
-        case .high: return "High Energy"
+        case .low: return String(localized: "Low Energy")
+        case .moderate: return String(localized: "Moderate Energy")
+        case .high: return String(localized: "High Energy")
         }
     }
     

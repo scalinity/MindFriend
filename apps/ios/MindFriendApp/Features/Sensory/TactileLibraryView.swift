@@ -11,7 +11,6 @@ import SwiftUI
 struct TactileLibraryView: View {
     @EnvironmentObject private var dependencies: DependencyContainer
     @State private var selectedPattern: TactilePattern?
-    @State private var showSession: Bool = false
 
     let columns = [
         GridItem(.flexible()),
@@ -45,7 +44,6 @@ struct TactileLibraryView: View {
                             color: categoryColor(pattern.category)
                         ) {
                             selectedPattern = pattern
-                            showSession = true
                         }
                     }
                 }
@@ -54,18 +52,16 @@ struct TactileLibraryView: View {
             .padding(.vertical)
         }
         .navigationTitle("Tactile")
-        .fullScreenCover(isPresented: $showSession) {
-            if let pattern = selectedPattern {
-                SessionView(
-                    modality: .tactile,
-                    patternId: pattern.id,
-                    patternName: pattern.name,
-                    sensoryService: dependencies.sensoryRegulationService,
-                    tactileService: dependencies.tactilePatternService,
-                    visualService: dependencies.visualAnimationService,
-                    audioService: dependencies.audioSoundscapeService
-                )
-            }
+        .fullScreenCover(item: $selectedPattern) { pattern in
+            SessionView(
+                modality: .tactile,
+                patternId: pattern.id,
+                patternName: pattern.name,
+                sensoryService: dependencies.sensoryRegulationService,
+                tactileService: dependencies.tactilePatternService,
+                visualService: dependencies.visualAnimationService,
+                audioService: dependencies.audioSoundscapeService
+            )
         }
     }
 

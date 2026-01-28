@@ -328,7 +328,7 @@ struct AssessmentSchedule: Identifiable, Codable, Equatable {
 // MARK: - Outcome Goal
 
 /// User's goal to improve a specific assessment score
-struct OutcomeGoal: Identifiable, Codable, Equatable {
+struct OutcomeGoal: Identifiable, Equatable {
     let id: UUID
     let userId: UUID
     let assessmentTemplateId: UUID
@@ -359,9 +359,62 @@ struct OutcomeGoal: Identifiable, Codable, Equatable {
     var progressPercent: Double {
         let totalReduction = baselineScore - targetScore
         guard totalReduction > 0 else { return 0.0 }
-        
+
         let currentReduction = baselineScore - targetScore  // Placeholder
         return min(1.0, Double(currentReduction) / Double(totalReduction))
+    }
+}
+
+extension OutcomeGoal: Codable {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        id = try container.decode(UUID.self, forKey: .id)
+        userId = try container.decode(UUID.self, forKey: .userId)
+        assessmentTemplateId = try container.decode(UUID.self, forKey: .assessmentTemplateId)
+        targetScore = try container.decode(Int.self, forKey: .targetScore)
+        baselineScore = try container.decode(Int.self, forKey: .baselineScore)
+        achieved = try container.decode(Bool.self, forKey: .achieved)
+
+        // Handle date-only strings (YYYY-MM-DD) or full ISO8601
+        targetDate = try Self.decodeFlexibleDate(from: container, forKey: .targetDate)
+        baselineDate = try Self.decodeFlexibleDate(from: container, forKey: .baselineDate) ?? Date()
+        achievedAt = try Self.decodeFlexibleDate(from: container, forKey: .achievedAt)
+        createdAt = try Self.decodeFlexibleDate(from: container, forKey: .createdAt)
+        updatedAt = try Self.decodeFlexibleDate(from: container, forKey: .updatedAt)
+    }
+
+    private static func decodeFlexibleDate(from container: KeyedDecodingContainer<CodingKeys>, forKey key: CodingKeys) throws -> Date? {
+        // Try decoding as Date first (handles ISO8601 with time)
+        if let date = try? container.decode(Date.self, forKey: key) {
+            return date
+        }
+
+        // Try decoding as String (handles YYYY-MM-DD format)
+        if let dateString = try? container.decode(String.self, forKey: key) {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd"
+            formatter.timeZone = TimeZone(identifier: "UTC")
+            if let date = formatter.date(from: dateString) {
+                return date
+            }
+
+            // Try ISO8601 with fractional seconds
+            let isoFormatter = ISO8601DateFormatter()
+            isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = isoFormatter.date(from: dateString) {
+                return date
+            }
+
+            // Try ISO8601 without fractional seconds
+            isoFormatter.formatOptions = [.withInternetDateTime]
+            if let date = isoFormatter.date(from: dateString) {
+                return date
+            }
+        }
+
+        // Return nil if key doesn't exist or value is null
+        return nil
     }
 }
 
