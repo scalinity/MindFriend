@@ -54,17 +54,26 @@ export async function authenticateRequest(
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
+  // Pass token explicitly to getUser() - calling without token requires an active session
+  // which a freshly created client doesn't have
   const {
     data: { user },
     error: authError,
-  } = await supabaseUser.auth.getUser();
+  } = await supabaseUser.auth.getUser(token);
 
   if (authError || !user) {
+    console.error("Auth error:", authError?.message || "No user returned");
     return {
-      response: new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
-      }),
+      response: new Response(
+        JSON.stringify({
+          code: 401,
+          message: authError?.message || "Invalid JWT",
+        }),
+        {
+          status: 401,
+          headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
+        },
+      ),
     };
   }
 

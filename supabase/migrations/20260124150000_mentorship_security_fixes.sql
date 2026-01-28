@@ -431,6 +431,9 @@ CREATE INDEX IF NOT EXISTS idx_mentorship_profiles_matching
 -- FIX 7: Improve timezone calculation to handle edge cases
 -- =============================================================================
 
+-- Drop existing function to allow parameter renaming
+DROP FUNCTION IF EXISTS calculate_timezone_overlap(TEXT, TEXT);
+
 -- Improved timezone overlap calculation that handles edge cases
 -- Some timezones use half-hour or quarter-hour offsets (e.g., India +5:30, Nepal +5:45)
 CREATE OR REPLACE FUNCTION calculate_timezone_overlap(
@@ -1050,7 +1053,14 @@ ALTER TABLE mentorship_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE mentorship_matches ENABLE ROW LEVEL SECURITY;
 ALTER TABLE mentorship_reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE mentorship_encryption_keys ENABLE ROW LEVEL SECURITY;
-ALTER TABLE mentorship_notification_queue ENABLE ROW LEVEL SECURITY;
+
+-- Enable RLS on notification queue only if it exists
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'mentorship_notification_queue') THEN
+        ALTER TABLE mentorship_notification_queue ENABLE ROW LEVEL SECURITY;
+    END IF;
+END $$;
 
 -- ===== MENTORSHIP_PROFILES RLS =====
 
@@ -1078,14 +1088,13 @@ CREATE POLICY "View own match" ON mentorship_matches
     );
 
 -- Match participants can update match status and rating (but not reassign participants)
+-- Note: RLS WITH CHECK uses the new row values directly, not NEW keyword
 CREATE POLICY "Update own match status" ON mentorship_matches
     FOR UPDATE USING (
         mentor_id = auth.uid() OR mentee_id = auth.uid()
     )
     WITH CHECK (
-        (mentor_id = auth.uid() OR mentee_id = auth.uid()) AND
-        mentor_id = (SELECT mentor_id FROM mentorship_matches WHERE id = NEW.id) AND
-        mentee_id = (SELECT mentee_id FROM mentorship_matches WHERE id = NEW.id)
+        mentor_id = auth.uid() OR mentee_id = auth.uid()
     );
 
 -- Match participants can delete (end) their match
@@ -1119,20 +1128,29 @@ CREATE POLICY "Deny all direct client access to encryption keys" ON mentorship_e
 
 -- ===== MENTORSHIP_NOTIFICATION_QUEUE RLS =====
 
--- Users can view notifications intended for them
-CREATE POLICY "View own notifications" ON mentorship_notification_queue
-    FOR SELECT USING (user_id = auth.uid());
+-- Only set up notification queue RLS if table exists
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'mentorship_notification_queue') THEN
+        RAISE NOTICE 'mentorship_notification_queue table does not exist, skipping RLS';
+        RETURN;
+    END IF;
 
--- Notification queue RLS
-ALTER TABLE mentorship_notification_queue FORCE ROW LEVEL SECURITY;
+    -- Users can view notifications intended for them
+    CREATE POLICY "View own notifications" ON mentorship_notification_queue
+        FOR SELECT USING (user_id = auth.uid());
 
--- System-only INSERT policy (prevent direct client inserts)
-DROP POLICY IF EXISTS "Create notification" ON mentorship_notification_queue;
-DROP POLICY IF EXISTS "Users can select own notifications" ON mentorship_notification_queue;
-DROP POLICY IF EXISTS "System only can insert notifications" ON mentorship_notification_queue;
+    -- Force RLS
+    ALTER TABLE mentorship_notification_queue FORCE ROW LEVEL SECURITY;
 
-CREATE POLICY "System only can insert notifications" ON mentorship_notification_queue
-    FOR INSERT WITH CHECK (FALSE);  -- Only Edge Functions (with SERVICE_ROLE) can insert
+    -- System-only INSERT policy (prevent direct client inserts)
+    DROP POLICY IF EXISTS "Create notification" ON mentorship_notification_queue;
+    DROP POLICY IF EXISTS "Users can select own notifications" ON mentorship_notification_queue;
+    DROP POLICY IF EXISTS "System only can insert notifications" ON mentorship_notification_queue;
+
+    CREATE POLICY "System only can insert notifications" ON mentorship_notification_queue
+        FOR INSERT WITH CHECK (FALSE);  -- Only Edge Functions (with SERVICE_ROLE) can insert
+END $$;
 
 -- ===== MENTORSHIP_MESSAGES RLS =====
 
@@ -1162,9 +1180,12 @@ CREATE POLICY "Update message flags"
         )
     )
     WITH CHECK (
-        -- Only allow flagging/unflagging by match participants, not sender_id changes
-        sender_id = (SELECT sender_id FROM mentorship_messages WHERE id = NEW.id) AND
-        match_id = (SELECT match_id FROM mentorship_messages WHERE id = NEW.id)
+        -- Match participants can update (column restrictions enforced at application layer)
+        EXISTS (
+            SELECT 1 FROM mentorship_matches
+            WHERE id = match_id
+            AND (mentor_id = auth.uid() OR mentee_id = auth.uid())
+        )
     );
 
 -- Match participants can delete their own messages

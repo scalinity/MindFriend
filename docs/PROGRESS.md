@@ -1,5 +1,163 @@
 # MindFriend Development Progress Log
 
+## [2026-01-28] Fix Missing Predictive Tables and RPC Bug
+
+**Type:** Bugfix
+**Status:** Complete
+
+### Summary
+
+Fixed missing database tables (`mood_predictions`, `preemptive_interventions`) and corrected `get_home_context` RPC function which was referencing non-existent column `posted_at`.
+
+### Root Cause
+
+- Migration `20260123001600_predictive_mood_intelligence.sql` showed as "applied" but tables weren't actually created (likely partial failure)
+- `get_home_context(p_user_id uuid)` function used `MAX(posted_at)` for `circle_posts` but correct column is `created_at`
+
+### Changes
+
+| File                                                                   | Change                                                                                                                                            |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `supabase/migrations/20260128110000_fix_predictive_tables_and_rpc.sql` | Created idempotent migration: `CREATE TABLE IF NOT EXISTS` for both tables with indexes/RLS, `CREATE OR REPLACE FUNCTION` fixing column reference |
+
+### Testing
+
+- [x] Migration applied successfully (`supabase db push --include-all`)
+- [x] Migration confirmed in remote migration list
+- [ ] Manual verification: Weekly Insights loads without 401 error
+- [ ] Manual verification: Home screen loads without RPC errors
+
+### Notes
+
+Error codes observed:
+
+- REST API 404 on `mood_predictions` and `preemptive_interventions` tables
+- RPC error 42703 (undefined column) on `get_home_context`
+
+---
+
+## [2026-01-28] Wellness Tracking Tab Enhancement
+
+**Type:** Feature
+**Status:** Complete
+
+### Summary
+
+Completed the Wellness Tracking tab with 4 major enhancements: additional assessments, reminder notifications, post-assessment exercise recommendations, and mood correlation insights.
+
+### Changes
+
+#### Phase 1: Seed Additional Assessments
+
+| File                                                     | Change                                                                                                                                                                           |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `supabase/migrations/20260128100000_seed_who5_pss10.sql` | Created WHO-5 (5 questions, 0-25 scale, higher = better) and PSS-10 (10 questions, 0-40 scale, higher = more stress) assessment templates with all questions and severity levels |
+
+#### Phase 2: Assessment Reminder Push Notifications
+
+| File                                                              | Change                                                                           |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `supabase/functions/_shared/notification-utils.ts`                | Added `assessment_reminder` type with deep link `mindfriend://assessment/{code}` |
+| `apps/ios/.../DeepLinkRouter.swift`                               | Added `assessment(code:)` route for opening assessments from notifications       |
+| `supabase/functions/send-assessment-reminders/index.ts`           | Created cron Edge Function that queries due assessments and sends reminders      |
+| `supabase/migrations/20260128100001_assessment_reminder_cron.sql` | Scheduled daily cron job at 9 AM UTC                                             |
+
+#### Phase 3: Post-Assessment Exercise Recommendations
+
+| File                                                 | Change                                                                                                    |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `apps/ios/.../AssessmentRecommendationService.swift` | Created service that maps assessment type + severity to recommended ExerciseTypes with clinical rationale |
+| `apps/ios/.../ResultsView.swift`                     | Added "Recommended for You" section showing personalized exercises based on assessment results            |
+
+#### Phase 4: Wellness Insights Card
+
+| File                                         | Change                                                                                                    |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `apps/ios/.../WellnessInsightsService.swift` | Created service that loads 7-day mood trend and finds helpful activities correlated with mood improvement |
+| `apps/ios/.../WellnessInsightsCard.swift`    | Created card with mood sparkline and "What's Helping" activity chips                                      |
+| `apps/ios/.../OutcomeHomeView.swift`         | Integrated WellnessInsightsCard after "Assessments Due" section                                           |
+
+### Testing
+
+- [x] Build passes without errors
+- [ ] Manual verification: WHO-5 and PSS-10 appear in assessment list
+- [ ] Manual verification: Assessment reminders sent at scheduled time
+- [ ] Manual verification: Exercise recommendations appear after completing assessment
+- [ ] Manual verification: Mood sparkline renders with 7 days of data
+
+### Notes
+
+- WHO-5 uses positive scoring (higher = better well-being), PSS-10 uses negative scoring (higher = more stress)
+- Assessment reminder respects quiet hours and `reminders_enabled` user setting
+- Exercise recommendations vary by severity level (e.g., severe depression → only grounding exercises)
+- Wellness insights require mood check-ins and completed exercises to display meaningful data
+
+---
+
+## [2026-01-27] Codebase Audit Implementation
+
+**Type:** Security, Performance, Technical Debt
+**Status:** Complete
+
+### Summary
+
+Implemented comprehensive security fixes, performance optimizations, and technical debt resolution based on the January 27, 2026 codebase audit specification.
+
+### Changes
+
+#### Phase 1: Security Fixes (Critical)
+
+| File                                           | Change                                                                                      |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `apps/ios/.../OAuthHandler.swift`              | Replaced insecure XOR encryption with AES-256-GCM using CryptoKit and Keychain-derived keys |
+| `apps/ios/.../GeneratedContentService.swift`   | Removed token logging (was exposing 30 chars of access token)                               |
+| `apps/ios/.../DeepLinkRouter.swift`            | Added auth checks and UUID validation for all deep link routes                              |
+| `apps/ios/.../SupabaseDataService.swift:1100`  | Fixed force unwrap on circle ID with proper guard                                           |
+| `apps/ios/.../EncryptionService.swift`         | Updated Keychain accessibility to WhenUnlockedThisDeviceOnly                                |
+| `supabase/functions/public-api/index.ts`       | Added security imports, sanitized error responses                                           |
+| `supabase/functions/chat/index.ts`             | Updated to multi-language crisis detection, sanitized auth errors                           |
+| `supabase/functions/assign-quest/index.ts`     | Added timing-safe comparison for cron secret                                                |
+| `supabase/functions/log-crisis-event/index.ts` | Added Zod schema validation for all inputs                                                  |
+
+#### Phase 2: Performance Fixes
+
+| File                                        | Change                                                                         |
+| ------------------------------------------- | ------------------------------------------------------------------------------ |
+| `apps/ios/.../RitualService.swift`          | Added deinit for realtime channel cleanup                                      |
+| `apps/ios/.../AudioPlayerService.swift`     | Added cleanup() method for timer/observer cleanup                              |
+| `apps/ios/.../PartnerModeViewModel.swift`   | Added deinit to invalidate poll timer                                          |
+| `apps/ios/.../SupabaseDataService.swift`    | Added .limit() to getAllMethodologies(), getTestimonials(), getConversations() |
+| `supabase/functions/therapist-api/index.ts` | Implemented rate limiting (request count check in last hour)                   |
+
+#### Phase 3: Technical Debt
+
+| File                                       | Change                                                            |
+| ------------------------------------------ | ----------------------------------------------------------------- |
+| `apps/ios/.../MentorshipDataService.swift` | Updated comment - service is now complete, not a stub             |
+| `apps/ios/.../SupabaseAuthService.swift`   | Enabled offline data cleanup on logout (clearOfflineDataOnLogout) |
+
+#### Phase 4: Force Unwrap Fixes
+
+| File                                           | Change                                                  |
+| ---------------------------------------------- | ------------------------------------------------------- |
+| `apps/ios/.../SupabaseDataService.swift:2205`  | Calendar date calculation with guard                    |
+| `apps/ios/.../PartnerModeViewModel.swift:375`  | TaskGroup.next() with guard                             |
+| `apps/ios/.../CreativeExpressionService.swift` | Fixed 6 UUID force unwraps with proper guard statements |
+
+### Testing
+
+- [x] iOS project builds successfully
+- [x] All edited files pass linter checks
+- [ ] Manual verification pending
+
+### Notes
+
+- Protocol-based DI for testing (TD-CRIT-002) requires larger refactor - deferred
+- 7,476 force unwraps identified; fixed critical ones in auth/data paths
+- All Edge Functions verified using pinned @supabase/supabase-js@2.49.1
+
+---
+
 ## [2026-01-26] Audio Story Generation System
 
 **Type:** Feature

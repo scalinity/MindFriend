@@ -561,7 +561,7 @@ struct SupportSessionView: View {
     }
 }
 
-struct FindMentorView: View {
+struct PeerFindMentorView: View {
     let service: PeerSupportService
 
     var body: some View {

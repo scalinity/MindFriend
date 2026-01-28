@@ -133,8 +133,10 @@ struct AgentSettingsView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
                         Task {
-                            await viewModel.saveSettings(service: dependencies.agentService)
-                            dismiss()
+                            let success = await viewModel.saveSettings(service: dependencies.agentService)
+                            if success {
+                                dismiss()
+                            }
                         }
                     }
                     .disabled(viewModel.isSaving)
@@ -182,6 +184,7 @@ final class AgentSettingsViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
+            // fetchSettings creates default settings if none exist
             let settings = try await service.fetchSettings()
             originalSettings = settings
 
@@ -199,18 +202,18 @@ final class AgentSettingsViewModel: ObservableObject {
                 quietHoursEnd = end
             }
         } catch {
-            // Use defaults if settings don't exist
-            errorMessage = nil
+            errorMessage = "Failed to load settings: \(error.localizedDescription)"
         }
     }
 
-    func saveSettings(service: AgentService) async {
+    @discardableResult
+    func saveSettings(service: AgentService) async -> Bool {
         isSaving = true
         defer { isSaving = false }
 
         guard var settings = originalSettings else {
-            errorMessage = "No settings to update"
-            return
+            errorMessage = "Settings not loaded. Please try again."
+            return false
         }
 
         settings.isEnabled = isEnabled
@@ -224,8 +227,10 @@ final class AgentSettingsViewModel: ObservableObject {
 
         do {
             try await service.updateSettings(settings)
+            return true
         } catch {
             errorMessage = error.localizedDescription
+            return false
         }
     }
 

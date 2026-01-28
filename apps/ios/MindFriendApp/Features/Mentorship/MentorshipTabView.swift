@@ -68,7 +68,7 @@ struct MentorshipTabView: View {
                     )
 
                 case .profile:
-                    MentorshipProfileView(profileService: profileService)
+                    MentorshipProfileView()
                 }
             }
             .navigationDestination(for: MentorshipNavigationDestination.self) { destination in
@@ -86,13 +86,7 @@ struct MentorshipTabView: View {
     private func navigationDestinationView(for destination: MentorshipNavigationDestination) -> some View {
         switch destination {
         case .chat(let matchId):
-            MentorshipChatView(
-                matchId: matchId,
-                navigationPath: $navigationPath,
-                messagingService: messagingService,
-                safetyService: safetyService,
-                encryptionService: encryptionService
-            )
+            MentorshipChatView(matchId: matchId)
 
         case .matchDetails(let matchId):
             MentorshipMatchDetailsView(
@@ -122,144 +116,170 @@ struct MentorshipHomeView: View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 20) {
-                    // Status Card
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text("Your Mentorship Status")
-                                    .font(.headline)
-                                if profileService.isMentorAvailable {
-                                    Label("Available as mentor", systemImage: "checkmark.circle.fill")
-                                        .foregroundColor(.green)
-                                        .font(.subheadline)
-                                } else {
-                                    Label("Seeking a mentor", systemImage: "magnifyingglass.circle")
-                                        .foregroundColor(.blue)
-                                        .font(.subheadline)
-                                }
-                            }
-                            Spacer()
-                            VStack(alignment: .trailing) {
-                                Text("\(matchingService.activeMatches.count)")
-                                    .font(.title2)
-                                    .fontWeight(.bold)
-                                Text("Active")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                        .padding()
-                        .background(Color(.systemBackground))
-                        .cornerRadius(12)
-                    }
-                    .padding(.horizontal)
-
-                    // Quick Actions
-                    VStack(spacing: 10) {
-                        Button(action: {
-                            selectedSection = .findMentor
-                        }) {
-                            HStack {
-                                Image(systemName: "magnifyingglass")
-                                Text("Find a Mentor")
-                                    .fontWeight(.semibold)
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                            }
-                            .padding()
-                            .frame(maxWidth: .infinity)
-                            .background(Color.accentColor)
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
-                        }
-
-                        Button(action: {
-                            selectedSection = .myMatches
-                        }) {
-                            HStack {
-                                Image(systemName: "person.2.fill")
-                                Text("View My Matches (\(matchingService.activeMatches.count))")
-                                    .fontWeight(.semibold)
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                            }
-                            .padding()
-                            .frame(maxWidth: .infinity)
-                            .background(Color(.systemGray6))
-                            .foregroundColor(.primary)
-                            .cornerRadius(10)
-                        }
-
-                        if matchingService.pendingRequests.count > 0 {
-                            Button(action: {
-                                selectedSection = .myMatches
-                            }) {
-                                HStack {
-                                    Image(systemName: "bell.badge.fill")
-                                    Text("Pending Requests (\(matchingService.pendingRequests.count))")
-                                        .fontWeight(.semibold)
-                                    Spacer()
-                                    Image(systemName: "chevron.right")
-                                }
-                                .padding()
-                                .frame(maxWidth: .infinity)
-                                .background(Color.orange.opacity(0.2))
-                                .foregroundColor(.orange)
-                                .cornerRadius(10)
-                            }
-                        }
-                    }
-                    .padding(.horizontal)
-
-                    // Recent Matches
-                    if !matchingService.activeMatches.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Recent Conversations")
-                                .font(.headline)
-                                .padding(.horizontal)
-
-                            ForEach(matchingService.activeMatches.prefix(3)) { match in
-                                Button(action: {
-                                    navigationPath.append(.chat(matchId: match.id))
-                                }) {
-                                    HStack(spacing: 12) {
-                                        Circle()
-                                            .fill(Color.accentColor.opacity(0.3))
-                                            .frame(width: 40, height: 40)
-                                            .overlay(
-                                                Image(systemName: "person.fill")
-                                                    .foregroundColor(.accentColor)
-                                            )
-
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            Text("Match \(match.id.uuidString.prefix(8).uppercased())")
-                                                .font(.subheadline)
-                                                .fontWeight(.semibold)
-                                                .foregroundColor(.primary)
-                                            Text("Compatibility: \(Int(match.compatibilityScore * 100))%")
-                                                .font(.caption)
-                                                .foregroundColor(.secondary)
-                                        }
-
-                                        Spacer()
-                                        Image(systemName: "chevron.right")
-                                            .foregroundColor(.secondary)
-                                    }
-                                    .padding()
-                                    .background(Color(.systemGray6))
-                                    .cornerRadius(10)
-                                }
-                            }
-                        }
-                        .padding(.horizontal)
-                    }
-
+                    statusCard
+                    quickActions
+                    recentMatchesSection
                     Spacer()
                 }
                 .padding(.vertical)
             }
             .navigationTitle("Mentorship")
             .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    // MARK: - Extracted Views
+
+    private var statusCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                statusInfo
+                Spacer()
+                activeCount
+            }
+            .padding()
+            .background(Color(.systemBackground))
+            .cornerRadius(12)
+        }
+        .padding(.horizontal)
+    }
+
+    private var statusInfo: some View {
+        VStack(alignment: .leading) {
+            Text("Your Mentorship Status")
+                .font(.headline)
+            if profileService.isMentorAvailable {
+                Label("Available as mentor", systemImage: "checkmark.circle.fill")
+                    .foregroundColor(.green)
+                    .font(.subheadline)
+            } else {
+                Label("Seeking a mentor", systemImage: "magnifyingglass.circle")
+                    .foregroundColor(.blue)
+                    .font(.subheadline)
+            }
+        }
+    }
+
+    private var activeCount: some View {
+        VStack(alignment: .trailing) {
+            Text("\(matchingService.activeMatches.count)")
+                .font(.title2)
+                .fontWeight(.bold)
+            Text("Active")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
+
+    private var quickActions: some View {
+        VStack(spacing: 10) {
+            findMentorButton
+            viewMatchesButton
+            pendingRequestsButton
+        }
+        .padding(.horizontal)
+    }
+
+    private var findMentorButton: some View {
+        Button(action: { selectedSection = .findMentor }) {
+            HStack {
+                Image(systemName: "magnifyingglass")
+                Text("Find a Mentor")
+                    .fontWeight(.semibold)
+                Spacer()
+                Image(systemName: "chevron.right")
+            }
+            .padding()
+            .frame(maxWidth: .infinity)
+            .background(Color.accentColor)
+            .foregroundColor(.white)
+            .cornerRadius(10)
+        }
+    }
+
+    private var viewMatchesButton: some View {
+        Button(action: { selectedSection = .myMatches }) {
+            HStack {
+                Image(systemName: "person.2.fill")
+                Text("View My Matches (\(matchingService.activeMatches.count))")
+                    .fontWeight(.semibold)
+                Spacer()
+                Image(systemName: "chevron.right")
+            }
+            .padding()
+            .frame(maxWidth: .infinity)
+            .background(Color(.systemGray6))
+            .foregroundColor(.primary)
+            .cornerRadius(10)
+        }
+    }
+
+    @ViewBuilder
+    private var pendingRequestsButton: some View {
+        if matchingService.pendingRequests.count > 0 {
+            Button(action: { selectedSection = .myMatches }) {
+                HStack {
+                    Image(systemName: "bell.badge.fill")
+                    Text("Pending Requests (\(matchingService.pendingRequests.count))")
+                        .fontWeight(.semibold)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                }
+                .padding()
+                .frame(maxWidth: .infinity)
+                .background(Color.orange.opacity(0.2))
+                .foregroundColor(.orange)
+                .cornerRadius(10)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var recentMatchesSection: some View {
+        if !matchingService.activeMatches.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Recent Conversations")
+                    .font(.headline)
+                    .padding(.horizontal)
+
+                ForEach(matchingService.activeMatches.prefix(3)) { match in
+                    recentMatchRow(match)
+                }
+            }
+            .padding(.horizontal)
+        }
+    }
+
+    private func recentMatchRow(_ match: MentorshipMatch) -> some View {
+        Button(action: { navigationPath.append(.chat(matchId: match.id)) }) {
+            HStack(spacing: 12) {
+                Circle()
+                    .fill(Color.accentColor.opacity(0.3))
+                    .frame(width: 40, height: 40)
+                    .overlay(
+                        Image(systemName: "person.fill")
+                            .foregroundColor(.accentColor)
+                    )
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Match \(match.id.uuidString.prefix(8).uppercased())")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                    if let score = match.compatibilityScore {
+                        Text("Compatibility: \(Int(score * 100))%")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .foregroundColor(.secondary)
+            }
+            .padding()
+            .background(Color(.systemGray6))
+            .cornerRadius(10)
         }
     }
 }
@@ -304,27 +324,29 @@ struct MentorshipMatchDetailsView: View {
                     .padding(.horizontal)
 
                     // Compatibility Score
-                    VStack(spacing: 8) {
-                        Text("Compatibility Score")
-                            .font(.headline)
-                        HStack(spacing: 12) {
-                            ProgressView(value: match.compatibilityScore)
-                                .tint(Color.green)
-                            Text("\(Int(match.compatibilityScore * 100))%")
+                    if let score = match.compatibilityScore {
+                        VStack(spacing: 8) {
+                            Text("Compatibility Score")
                                 .font(.headline)
-                                .fontWeight(.bold)
+                            HStack(spacing: 12) {
+                                ProgressView(value: score)
+                                    .tint(Color.green)
+                                Text("\(Int(score * 100))%")
+                                    .font(.headline)
+                                    .fontWeight(.bold)
+                            }
+                            if let reason = match.matchReason, !reason.isEmpty {
+                                Text(reason)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(3)
+                            }
                         }
-                        if !match.matchReason.isEmpty {
-                            Text(match.matchReason)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .lineLimit(3)
-                        }
+                        .padding()
+                        .background(Color(.systemGray6))
+                        .cornerRadius(12)
+                        .padding(.horizontal)
                     }
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(12)
-                    .padding(.horizontal)
 
                     // Match Information
                     VStack(alignment: .leading, spacing: 12) {
@@ -379,6 +401,8 @@ struct MentorshipMatchDetailsView: View {
         switch status {
         case .pending: return .orange
         case .active: return .green
+        case .completed: return .blue
+        case .cancelled: return .gray
         case .ended: return .gray
         case .expired: return .red
         }

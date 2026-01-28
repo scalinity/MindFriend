@@ -38,21 +38,14 @@ struct MainTabView: View {
 
             // Progress/Outcomes - requires activation
             if outcomesUnlocked {
-                OutcomeHomeView(outcomeService: container.outcomeService)
+                OutcomeHomeView(outcomeService: container.outcomeService, authService: container.supabaseAuthService)
                     .tabItem {
                         Label(MainTab.outcomes.title, systemImage: MainTab.outcomes.icon)
                     }
                     .tag(MainTab.outcomes)
             }
 
-            // Mentorship tab
-            MentorshipTabView()
-                .tabItem {
-                    Label(MainTab.mentorship.title, systemImage: MainTab.mentorship.icon)
-                }
-                .tag(MainTab.mentorship)
-
-            // Profile - always visible
+            // Profile/More - always visible (includes Mentorship)
             ProfileView()
                 .tabItem {
                     Label("More", systemImage: "ellipsis")

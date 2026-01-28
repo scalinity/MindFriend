@@ -147,6 +147,10 @@ struct MatchCard: View {
             return .orange
         case .active:
             return .green
+        case .completed:
+            return .blue
+        case .cancelled:
+            return .gray
         case .ended:
             return .gray
         case .expired:
@@ -224,6 +228,10 @@ struct MatchCard: View {
             return "clock"
         case .active:
             return "checkmark.circle.fill"
+        case .completed:
+            return "star.circle.fill"
+        case .cancelled:
+            return "minus.circle.fill"
         case .ended:
             return "xmark.circle.fill"
         case .expired:

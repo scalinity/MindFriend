@@ -16,6 +16,15 @@ final class RitualService: ObservableObject {
     init(supabase: SupabaseClient) {
         self.supabase = supabase
     }
+    
+    // PERF-CRIT-001: Clean up realtime channel on deallocation
+    deinit {
+        // Store channel reference before self is deallocated
+        let channel = realtimeChannel
+        Task { [channel] in
+            await channel?.unsubscribe()
+        }
+    }
 
     // MARK: - Request Structs
 
@@ -147,15 +156,59 @@ final class RitualService: ObservableObject {
         )
     }
 
+    // MARK: - DB Model for decoding
+
+    /// Database model for circle_rituals table
+    private struct DBCircleRitual: Codable {
+        let id: UUID
+        let circleId: UUID
+        let createdBy: UUID
+        let title: String
+        let ritualType: String
+        let scheduledFor: Date
+        let durationSeconds: Int
+        let status: String
+        let createdAt: Date
+        let completedAt: Date?
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case circleId = "circle_id"
+            case createdBy = "created_by"
+            case title
+            case ritualType = "ritual_type"
+            case scheduledFor = "scheduled_for"
+            case durationSeconds = "duration_seconds"
+            case status
+            case createdAt = "created_at"
+            case completedAt = "completed_at"
+        }
+
+        func toCircleRitual() -> CircleRitual {
+            CircleRitual(
+                id: id,
+                circleId: circleId,
+                createdBy: createdBy,
+                title: title,
+                ritualType: RitualType(rawValue: ritualType) ?? .gratitude,
+                scheduledFor: scheduledFor,
+                durationSeconds: durationSeconds,
+                status: RitualStatus(rawValue: status) ?? .scheduled,
+                createdAt: createdAt,
+                completedAt: completedAt
+            )
+        }
+    }
+
     // MARK: - Fetch Operations
 
     /// Fetch upcoming rituals for a circle
     func fetchUpcomingRituals(circleId: UUID) async throws -> [CircleRitual] {
         let now = Date()
 
-        let response: [CircleRitual] = try await supabase
+        let response: [DBCircleRitual] = try await supabase
             .from("circle_rituals")
-            .select()
+            .select("*")
             .eq("circle_id", value: circleId.uuidString)
             .in("status", values: ["scheduled", "active"])
             .gte("scheduled_for", value: now.addingTimeInterval(-2 * 60).ISO8601Format()) // Include grace period
@@ -163,20 +216,20 @@ final class RitualService: ObservableObject {
             .execute()
             .value
 
-        return response
+        return response.map { $0.toCircleRitual() }
     }
 
     /// Fetch ritual details
     func fetchRitual(ritualId: UUID) async throws -> CircleRitual {
-        let response: CircleRitual = try await supabase
+        let response: DBCircleRitual = try await supabase
             .from("circle_rituals")
-            .select()
+            .select("*")
             .eq("id", value: ritualId.uuidString)
             .single()
             .execute()
             .value
 
-        return response
+        return response.toCircleRitual()
     }
 
     /// Fetch attendees for a ritual

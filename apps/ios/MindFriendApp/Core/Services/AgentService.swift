@@ -303,14 +303,22 @@ final class AgentService: ObservableObject, AgentServiceProtocol {
     func subscribeToActions() async {
         guard let userId = supabase.auth.currentUser?.id else { return }
 
-        let channel = supabase.channel("agent_actions_\(userId)")
+        // Validate UUID format for filter safety with strict segment validation
+        // UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (8-4-4-4-12 hex chars)
+        let userIdString = userId.uuidString
+        let strictUUIDPattern = "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        guard userIdString.range(of: strictUUIDPattern, options: .regularExpression) != nil else {
+            return
+        }
+
+        let channel = supabase.channel("agent_actions_\(userIdString)")
 
         // Listen for new actions
         _ = channel
             .onPostgresChange(
                 InsertAction.self,
                 table: "agent_actions",
-                filter: "user_id=eq.\(userId.uuidString)"
+                filter: "user_id=eq.\(userIdString)"
             ) { [weak self] _ in
                 Task { @MainActor in
                     _ = try? await self?.fetchRecentActions()
@@ -322,7 +330,7 @@ final class AgentService: ObservableObject, AgentServiceProtocol {
             .onPostgresChange(
                 UpdateAction.self,
                 table: "agent_actions",
-                filter: "user_id=eq.\(userId.uuidString)"
+                filter: "user_id=eq.\(userIdString)"
             ) { [weak self] _ in
                 Task { @MainActor in
                     _ = try? await self?.fetchRecentActions()

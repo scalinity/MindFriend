@@ -34,14 +34,13 @@ final class GeneratedContentService: ObservableObject {
         let session: Session
         do {
             session = try await supabase.auth.session
-            print("[GeneratedContentService] Session loaded successfully")
-            print("[GeneratedContentService] User ID: \(session.user.id)")
-            print("[GeneratedContentService] User email: \(session.user.email ?? "none")")
-            print("[GeneratedContentService] Token expires at: \(session.expiresAt)")
-            print("[GeneratedContentService] Token length: \(session.accessToken.count)")
-            print("[GeneratedContentService] Token prefix: \(String(session.accessToken.prefix(30)))...")
+            #if DEBUG
+            print("[GeneratedContentService] Session loaded successfully for user: \(session.user.id)")
+            #endif
         } catch {
+            #if DEBUG
             print("[GeneratedContentService] ERROR: Failed to get session: \(error)")
+            #endif
             self.error = .notAuthenticated
             throw GeneratedContentError.notAuthenticated
         }
@@ -81,6 +80,21 @@ final class GeneratedContentService: ObservableObject {
             let contentError = mapFunctionsError(functionError)
             error = contentError
             throw contentError
+        } catch let decodingError as DecodingError {
+            print("[GeneratedContentService] ERROR: DecodingError occurred")
+            switch decodingError {
+            case .keyNotFound(let key, let context):
+                print("[GeneratedContentService] Missing key: '\(key.stringValue)' in \(context.codingPath.map(\.stringValue))")
+            case .typeMismatch(let type, let context):
+                print("[GeneratedContentService] Type mismatch: expected \(type) at \(context.codingPath.map(\.stringValue))")
+            case .valueNotFound(let type, let context):
+                print("[GeneratedContentService] Value not found: \(type) at \(context.codingPath.map(\.stringValue))")
+            case .dataCorrupted(let context):
+                print("[GeneratedContentService] Data corrupted at \(context.codingPath.map(\.stringValue))")
+            @unknown default:
+                print("[GeneratedContentService] Unknown decoding error: \(decodingError)")
+            }
+            throw decodingError
         } catch {
             print("[GeneratedContentService] ERROR: Unknown error: \(error)")
             throw error
@@ -112,6 +126,7 @@ final class GeneratedContentService: ObservableObject {
 
     /// Fetch a single content item by ID
     func fetchContent(id: UUID) async throws -> GeneratedContent {
+        print("[GeneratedContentService] fetchContent called for id: \(id)")
         let content: GeneratedContent = try await supabase
             .from("generated_content")
             .select()
@@ -120,6 +135,11 @@ final class GeneratedContentService: ObservableObject {
             .execute()
             .value
 
+        print("[GeneratedContentService] fetchContent result:")
+        print("[GeneratedContentService]   - title: \(content.title)")
+        print("[GeneratedContentService]   - audioUrl: \(content.audioUrl ?? "nil")")
+        print("[GeneratedContentService]   - status: \(content.status)")
+        print("[GeneratedContentService]   - duration: \(content.duration ?? -1)")
         return content
     }
 
@@ -138,8 +158,16 @@ final class GeneratedContentService: ObservableObject {
 
     /// Toggle favorite status for content
     func toggleFavorite(contentId: UUID) async throws -> Bool {
-        // First get current state
-        let current: GeneratedContent = try await supabase
+        // First get current state with minimal struct
+        struct FavoriteStatus: Codable {
+            let isFavorite: Bool
+
+            enum CodingKeys: String, CodingKey {
+                case isFavorite = "is_favorite"
+            }
+        }
+
+        let current: FavoriteStatus = try await supabase
             .from("generated_content")
             .select("is_favorite")
             .eq("id", value: contentId.uuidString)
@@ -311,6 +339,9 @@ final class GeneratedContentService: ObservableObject {
         helpful: Bool? = nil,
         feedback: String? = nil
     ) async throws -> RateContentResponse {
+        // Ensure session is loaded before making function call
+        _ = try await supabase.auth.session
+
         let request = RateContentRequest(
             contentId: contentId.uuidString,
             rating: rating,
@@ -369,22 +400,29 @@ final class GeneratedContentService: ObservableObject {
 
         let used = result.first?.count ?? 0
 
-        // Check premium status
-        struct SubscriptionStatus: Codable {
-            let tier: String
+        // Check premium status from profiles table (subscription_tier column)
+        struct ProfileSubscription: Codable {
+            let subscriptionTier: String
+
+            enum CodingKeys: String, CodingKey {
+                case subscriptionTier = "subscription_tier"
+            }
         }
 
-        let subscription: SubscriptionStatus? = try? await supabase
-            .from("subscriptions")
-            .select("tier")
-            .eq("user_id", value: userId.uuidString)
-            .eq("status", value: "active")
+        let profile: ProfileSubscription? = try? await supabase
+            .from("profiles")
+            .select("subscription_tier")
+            .eq("id", value: userId.uuidString)
             .single()
             .execute()
             .value
 
-        let isPremium = subscription?.tier == "premium"
+        // Check for premium tier
+        let tier = profile?.subscriptionTier ?? "free"
+        let isPremium = tier == "premium"
         let limit = isPremium ? 999 : 3
+
+        print("[GeneratedContentService] fetchQuotaStatus - subscription_tier: '\(tier)', isPremium: \(isPremium), used: \(used)")
 
         let status = ContentQuotaStatus(
             used: used,

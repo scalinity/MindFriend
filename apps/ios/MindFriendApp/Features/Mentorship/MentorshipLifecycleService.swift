@@ -62,9 +62,8 @@ final class MentorshipLifecycleService: ObservableObject {
 
     /// Calculate duration of a mentorship in days
     func mentorshipDuration(_ match: MentorshipMatch) -> Int? {
-        guard let startedAt = match.createdAt else { return nil }
         let endDate = match.endedAt ?? Date()
-        return Calendar.current.dateComponents([.day], from: startedAt, to: endDate).day
+        return Calendar.current.dateComponents([.day], from: match.createdAt, to: endDate).day
     }
 
     /// Calculate duration in weeks

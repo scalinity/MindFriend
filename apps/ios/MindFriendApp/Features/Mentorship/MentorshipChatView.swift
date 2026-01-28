@@ -1,47 +1,16 @@
 import SwiftUI
-import Supabase
 
 /// View for mentorship messaging/chat
 struct MentorshipChatView: View {
     let matchId: UUID
-    @Binding var navigationPath: [MentorshipNavigationDestination]
-    @ObservedObject var messagingService: MentorshipMessagingService
-    @ObservedObject var safetyService: MentorshipSafetyService
-    @ObservedObject var encryptionService: MentorshipEncryptionService
-    
+    @EnvironmentObject var container: DependencyContainer
+
     @State private var messageText = ""
     @State private var showingReportSheet = false
     @State private var showingEndSheet = false
 
-    /// Convenience initializer for simple usage (creates services internally)
-    init(match: MentorshipMatch, supabase: SupabaseClient) {
-        self.matchId = match.id
-        
-        // Create a dummy navigation path binding (not used in this simplified init)
-        var tempPath: [MentorshipNavigationDestination] = []
-        self._navigationPath = .constant(tempPath)
-        
-        // Create services with the match ID
-        let dataService = MentorshipDataService(supabase: supabase, userId: UUID())
-        self._messagingService = ObservedObject(wrappedValue: MentorshipMessagingService(dataService: dataService))
-        self._safetyService = ObservedObject(wrappedValue: MentorshipSafetyService(dataService: dataService))
-        self._encryptionService = ObservedObject(wrappedValue: MentorshipEncryptionService())
-    }
-    
-    /// Full initializer for complex navigation scenarios
-    init(
-        matchId: UUID,
-        navigationPath: Binding<[MentorshipNavigationDestination]>,
-        messagingService: MentorshipMessagingService,
-        safetyService: MentorshipSafetyService,
-        encryptionService: MentorshipEncryptionService
-    ) {
-        self.matchId = matchId
-        self._navigationPath = navigationPath
-        self._messagingService = ObservedObject(wrappedValue: messagingService)
-        self._safetyService = ObservedObject(wrappedValue: safetyService)
-        self._encryptionService = ObservedObject(wrappedValue: encryptionService)
-    }
+    private var messagingService: MentorshipMessagingService { container.mentorshipService.messagingService }
+    private var safetyService: MentorshipSafetyService { container.mentorshipService.safetyService }
 
     var body: some View {
         ZStack {
@@ -59,6 +28,7 @@ struct MentorshipChatView: View {
                         }
                         .padding()
                     }
+                    .scrollDismissesKeyboard(.interactively)
                     .onChange(of: messagingService.messages.count) { _ in
                         if let lastId = messagingService.messages.last?.id {
                             withAnimation {
@@ -80,11 +50,15 @@ struct MentorshipChatView: View {
                         Button(action: {
                             if !messageText.trimmingCharacters(in: .whitespaces).isEmpty {
                                 Task {
-                                    await messagingService.sendMessage(
-                                        matchId: matchId,
-                                        content: messageText
-                                    )
-                                    messageText = ""
+                                    do {
+                                        try await messagingService.sendMessage(
+                                            matchId: matchId,
+                                            content: messageText
+                                        )
+                                        messageText = ""
+                                    } catch {
+                                        // Error handled by messagingService.error
+                                    }
                                 }
                             }
                         }) {

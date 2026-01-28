@@ -125,11 +125,14 @@ struct QuestDetailView: View {
                     badgeId: nil
                 )
 
-                // Check badge progress after quest completion
-                _ = try? await container.achievementService.checkBadgeProgress()
-
-                // Record first quest completion for progressive disclosure activation
-                try? await container.activationService.recordQuestCompletion()
+                // Fire-and-forget: badge check and activation record run in background
+                // These are slow operations that shouldn't block the UI
+                let achievementService = container.achievementService
+                let activationService = container.activationService
+                Task.detached(priority: .utility) {
+                    _ = try? await achievementService.checkBadgeProgress()
+                    try? await activationService.recordQuestCompletion()
+                }
 
                 await MainActor.run {
                     appState.currentStreak = profile.stats?.currentStreakDays ?? 0
@@ -275,11 +278,136 @@ struct QuestDetailView: View {
 struct QuestHeader: View {
     let quest: Quest
 
+    /// Color for the journey category
+    private var journeyColor: Color {
+        guard let arc = quest.arcContext else { return .accentColor }
+        switch arc.arcCategory.lowercased() {
+        case "stress": return .blue
+        case "sleep": return .indigo
+        case "confidence": return .purple
+        case "focus": return .teal
+        case "resilience": return .green
+        default: return .accentColor
+        }
+    }
+
     var body: some View {
         VStack(spacing: 16) {
+            // Journey context banner (if part of a journey)
+            if let arc = quest.arcContext {
+                VStack(spacing: 12) {
+                    // Journey header
+                    HStack {
+                        Image(systemName: "map.fill")
+                            .foregroundStyle(journeyColor)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(arc.arcTitle)
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(journeyColor)
+                            Text("Day \(arc.currentDay + 1) of \(arc.durationDays)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+
+                        // Next milestone indicator
+                        if let nextMilestone = arc.nextMilestone {
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text("Next Milestone")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                HStack(spacing: 4) {
+                                    Image(systemName: "flag.fill")
+                                        .font(.caption)
+                                    Text("Day \(nextMilestone)")
+                                        .font(.caption)
+                                        .fontWeight(.medium)
+                                }
+                                .foregroundStyle(.orange)
+                            }
+                        }
+                    }
+
+                    // Progress bar
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(Color(.systemGray5))
+                                .frame(height: 8)
+
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(journeyColor)
+                                .frame(width: geometry.size.width * arc.progressPercentage, height: 8)
+
+                            // Milestone markers
+                            ForEach(arc.milestoneDays, id: \.self) { milestone in
+                                let position = Double(milestone) / Double(arc.durationDays)
+                                Circle()
+                                    .fill(milestone <= arc.currentDay ? journeyColor : Color(.systemGray4))
+                                    .frame(width: 12, height: 12)
+                                    .overlay(
+                                        Image(systemName: "flag.fill")
+                                            .font(.system(size: 6))
+                                            .foregroundStyle(.white)
+                                    )
+                                    .offset(x: (geometry.size.width * position) - 6)
+                            }
+                        }
+                    }
+                    .frame(height: 12)
+
+                    // Coaching message
+                    if let coaching = arc.coachingMessage {
+                        HStack(spacing: 6) {
+                            Image(systemName: "lightbulb.fill")
+                                .font(.caption)
+                                .foregroundStyle(journeyColor)
+                            Text(coaching)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .italic()
+                        }
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(journeyColor.opacity(0.1))
+                        .cornerRadius(8)
+                    }
+
+                    // Milestone day banner
+                    if arc.isMilestoneDay {
+                        HStack(spacing: 8) {
+                            Image(systemName: "flag.fill")
+                                .foregroundStyle(.yellow)
+                            Text("Milestone Day!")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                            Text("Complete to celebrate your progress")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            LinearGradient(
+                                colors: [.yellow.opacity(0.2), .orange.opacity(0.1)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .cornerRadius(8)
+                    }
+                }
+                .padding()
+                .background(journeyColor.opacity(0.05))
+                .cornerRadius(12)
+            }
+
+            // Quest icon
             Image(systemName: quest.template.type.icon)
                 .font(.system(size: 50))
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(quest.isPartOfJourney ? journeyColor : Color.accentColor)
 
             Text(quest.template.title)
                 .font(.title2)
@@ -464,6 +592,7 @@ struct QuestReflectionSheet: View {
                 }
                 .padding()
             }
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Reflection")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -471,6 +600,7 @@ struct QuestReflectionSheet: View {
                     Button("Cancel") { dismiss() }
                 }
             }
+            .keyboardDoneButton()
         }
     }
 }

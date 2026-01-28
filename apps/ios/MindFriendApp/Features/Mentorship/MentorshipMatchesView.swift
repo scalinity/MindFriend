@@ -1,19 +1,12 @@
 import SwiftUI
-import Supabase
 
 /// View displaying the user's mentorship matches (as mentor or mentee)
 struct MentorshipMatchesView: View {
-    @StateObject private var service: MentorshipService
+    @EnvironmentObject var container: DependencyContainer
     @Environment(\.dismiss) private var dismiss
 
-    private let supabase: SupabaseClient
-    private let currentUserId: UUID?
-
-    init(supabase: SupabaseClient) {
-        self.supabase = supabase
-        _service = StateObject(wrappedValue: MentorshipService(supabase: supabase))
-        self.currentUserId = supabase.auth.currentUser?.id
-    }
+    private var service: MentorshipService { container.mentorshipService }
+    private var currentUserId: UUID? { container.supabaseAuthService.currentUser?.id }
 
     var body: some View {
         NavigationStack {
@@ -64,7 +57,6 @@ struct MentorshipMatchesView: View {
                         MatchRow(
                             match: match,
                             isMentor: currentUserId == match.mentorId,
-                            supabase: supabase,
                             service: service
                         )
                     }
@@ -77,12 +69,11 @@ struct MentorshipMatchesView: View {
                 Section("Active Mentorships") {
                     ForEach(activeMatches) { match in
                         NavigationLink {
-                            MentorshipChatView(match: match, supabase: supabase)
+                            MentorshipChatView(matchId: match.id)
                         } label: {
                             MatchRow(
                                 match: match,
                                 isMentor: currentUserId == match.mentorId,
-                                supabase: supabase,
                                 service: service,
                                 showNavArrow: false
                             )
@@ -93,7 +84,7 @@ struct MentorshipMatchesView: View {
 
             // Completed/ended
             let pastMatches = service.matches.filter {
-                $0.status == .completed || $0.status == .ended || $0.status == .declined
+                $0.status == .completed || $0.status == .ended || $0.status == .cancelled || $0.status == .expired
             }
             if !pastMatches.isEmpty {
                 Section("Past Mentorships") {
@@ -101,7 +92,6 @@ struct MentorshipMatchesView: View {
                         MatchRow(
                             match: match,
                             isMentor: currentUserId == match.mentorId,
-                            supabase: supabase,
                             service: service
                         )
                     }
@@ -114,9 +104,8 @@ struct MentorshipMatchesView: View {
 // MARK: - Match Row
 
 private struct MatchRow: View {
-    let match: DBMentorshipMatch
+    let match: MentorshipMatch
     let isMentor: Bool
-    let supabase: SupabaseClient
     let service: MentorshipService
     var showNavArrow: Bool = true
 
@@ -124,8 +113,10 @@ private struct MatchRow: View {
     @State private var showDeclineSheet = false
     @State private var isProcessing = false
 
-    private var otherAlias: String {
-        isMentor ? match.menteeAlias : match.mentorAlias
+    private var displayName: String {
+        // Use truncated UUID as display name since aliases aren't stored on match
+        let otherId = isMentor ? match.menteeId : match.mentorId
+        return String(otherId.uuidString.prefix(8)).uppercased()
     }
 
     private var roleLabel: String {
@@ -145,7 +136,7 @@ private struct MatchRow: View {
                     }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(otherAlias)
+                    Text(displayName)
                         .font(.headline)
                     Text(roleLabel)
                         .font(.caption)
@@ -216,7 +207,7 @@ private struct MatchRow: View {
     }
 
     private var statusBadge: some View {
-        Text(match.status.displayName)
+        Text(match.status.rawValue.capitalized)
             .font(.caption2)
             .fontWeight(.medium)
             .padding(.horizontal, 8)
@@ -229,12 +220,11 @@ private struct MatchRow: View {
     private var statusColor: Color {
         switch match.status {
         case .pending: return .orange
-        case .accepted: return .blue
         case .active: return .green
         case .completed: return .purple
-        case .declined: return .red
+        case .cancelled: return .gray
         case .ended: return .gray
-        case .suspended: return .red
+        case .expired: return .red
         }
     }
 
@@ -267,14 +257,17 @@ private struct MatchRow: View {
 // MARK: - Respond Sheet
 
 private struct RespondToMatchSheet: View {
-    let match: DBMentorshipMatch
+    let match: MentorshipMatch
     let service: MentorshipService
     let isAccepting: Bool
 
-    @State private var responseMessage = ""
     @State private var isSubmitting = false
     @State private var errorMessage: String?
     @Environment(\.dismiss) private var dismiss
+
+    private var displayName: String {
+        String(match.menteeId.uuidString.prefix(8)).uppercased()
+    }
 
     var body: some View {
         NavigationStack {
@@ -290,7 +283,7 @@ private struct RespondToMatchSheet: View {
                             }
 
                         VStack(alignment: .leading) {
-                            Text(match.menteeAlias)
+                            Text(displayName)
                                 .font(.headline)
                             if let reason = match.matchReason {
                                 Text(reason)
@@ -308,18 +301,6 @@ private struct RespondToMatchSheet: View {
                         Text(intro)
                             .font(.subheadline)
                     }
-                }
-
-                Section {
-                    TextEditor(text: $responseMessage)
-                        .frame(minHeight: 80)
-                } header: {
-                    Text("Your Response (Optional)")
-                } footer: {
-                    Text(isAccepting
-                        ? "Share a welcome message or set expectations."
-                        : "Let them know why this isn't a good fit right now."
-                    )
                 }
 
                 Section {
@@ -364,24 +345,18 @@ private struct RespondToMatchSheet: View {
 
         do {
             if isAccepting {
-                try await service.acceptMatch(
-                    match.id,
-                    responseMessage: responseMessage.isEmpty ? nil : responseMessage
-                )
+                try await service.acceptMatch(match.id)
             } else {
-                try await service.declineMatch(
-                    match.id,
-                    responseMessage: responseMessage.isEmpty ? nil : responseMessage
-                )
+                try await service.declineMatch(match.id)
             }
             dismiss()
         } catch {
             errorMessage = error.localizedDescription
-            Log.social.error("Failed to respond to match", error: error)
         }
     }
 }
 
 #Preview {
-    MentorshipMatchesView(supabase: DependencyContainer.preview.supabase)
+    MentorshipMatchesView()
+        .environmentObject(DependencyContainer())
 }

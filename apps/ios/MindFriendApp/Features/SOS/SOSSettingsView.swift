@@ -335,6 +335,7 @@ struct EmergencyContactSheet: View {
                 editPhone = phone ?? ""
                 focusedField = .name
             }
+            .keyboardDoneButton()
         }
     }
 }

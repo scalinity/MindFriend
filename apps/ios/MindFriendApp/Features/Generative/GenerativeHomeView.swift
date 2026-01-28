@@ -31,8 +31,8 @@ struct GenerativeHomeView: View {
                 // Favorites Section
                 favoritesSection
 
-                // Quota Status
-                if let quota = quotaStatus {
+                // Quota Status - only show for free tier users
+                if let quota = quotaStatus, !quota.isPremium {
                     quotaStatusView(quota)
                 }
             }
@@ -53,7 +53,12 @@ struct GenerativeHomeView: View {
                 VoicePreferencesView(service: service)
             }
         }
-        .sheet(item: $selectedContent) { content in
+        .sheet(item: $selectedContent, onDismiss: {
+            // Refresh content lists to pick up favorite changes
+            Task {
+                await refreshContent()
+            }
+        }) { content in
             NavigationStack {
                 if content.contentType == .sleepStory {
                     GeneratedStoryView(content: content)
@@ -276,6 +281,20 @@ struct GenerativeHomeView: View {
         }
     }
 
+    /// Refresh content lists (called when sheet is dismissed to pick up changes)
+    private func refreshContent() async {
+        do {
+            async let recentTask = service.fetchContentLibrary(limit: 5)
+            async let favoritesTask = service.fetchFavorites()
+
+            let (recent, favs) = try await (recentTask, favoritesTask)
+            recentContent = recent
+            favorites = favs
+        } catch {
+            print("Failed to refresh content: \(error)")
+        }
+    }
+
     private func generateContent(type: GeneratedContentType) async {
         isGenerating = true
         generatingType = type
@@ -290,10 +309,12 @@ struct GenerativeHomeView: View {
             let response = try await service.generateContent(type: type, params: params)
 
             // Update quota status from response
+            // Premium users have quotaLimit of 999 (or -1 from legacy), free tier has 3
+            let isPremiumQuota = response.quotaLimit > 3 || response.quotaLimit == -1
             quotaStatus = ContentQuotaStatus(
                 used: response.quotaUsed,
-                limit: response.quotaLimit,
-                isPremium: response.quotaLimit > 3,
+                limit: isPremiumQuota ? 999 : response.quotaLimit,
+                isPremium: isPremiumQuota,
                 resetsAt: nil
             )
 
@@ -304,7 +325,40 @@ struct GenerativeHomeView: View {
                 generatingType = nil
                 return
             }
-            let content = try await service.fetchContent(id: contentUUID)
+            var content = try await service.fetchContent(id: contentUUID)
+
+            // If DB fetch doesn't have audio URL but response does, use response's URL
+            // This handles potential timing issues where the fetch happens before DB update is visible
+            if content.audioUrl == nil, let responseAudioUrl = response.audioUrl {
+                print("[GenerativeHomeView] DB fetch missing audioUrl, using response audioUrl: \(responseAudioUrl)")
+                content = GeneratedContent(
+                    id: content.id,
+                    userId: content.userId,
+                    contentType: content.contentType,
+                    title: content.title,
+                    textContent: content.textContent,
+                    audioUrl: responseAudioUrl,
+                    voiceId: content.voiceId,
+                    duration: content.duration ?? response.duration,
+                    qualityScore: content.qualityScore ?? response.qualityScore,
+                    status: content.status,
+                    generationPrompt: content.generationPrompt,
+                    aiModel: content.aiModel,
+                    processingTimeMs: content.processingTimeMs,
+                    triggerWarnings: content.triggerWarnings,
+                    averageRating: content.averageRating,
+                    ratingCount: content.ratingCount,
+                    seriesId: content.seriesId,
+                    seriesOrder: content.seriesOrder,
+                    isFavorite: content.isFavorite,
+                    playCount: content.playCount,
+                    lastPlayedAt: content.lastPlayedAt,
+                    generationContext: content.generationContext,
+                    userRating: content.userRating,
+                    createdAt: content.createdAt,
+                    updatedAt: content.updatedAt
+                )
+            }
             selectedContent = content
 
             // Refresh recent list
@@ -409,7 +463,9 @@ private struct ContentHistoryListView: View {
             .buttonStyle(.plain)
         }
         .navigationTitle("History")
-        .sheet(item: $selectedContent) { content in
+        .sheet(item: $selectedContent, onDismiss: {
+            Task { await refreshContent() }
+        }) { content in
             NavigationStack {
                 if content.contentType == .sleepStory {
                     GeneratedStoryView(content: content)
@@ -419,11 +475,15 @@ private struct ContentHistoryListView: View {
             }
         }
         .task {
-            do {
-                content = try await service.fetchContentLibrary(limit: 50)
-            } catch {
-                print("Failed to load history: \(error)")
-            }
+            await refreshContent()
+        }
+    }
+
+    private func refreshContent() async {
+        do {
+            content = try await service.fetchContentLibrary(limit: 50)
+        } catch {
+            print("Failed to load history: \(error)")
         }
     }
 }
@@ -445,7 +505,9 @@ private struct FavoritesListView: View {
             .buttonStyle(.plain)
         }
         .navigationTitle("Favorites")
-        .sheet(item: $selectedContent) { content in
+        .sheet(item: $selectedContent, onDismiss: {
+            Task { await refreshFavorites() }
+        }) { content in
             NavigationStack {
                 if content.contentType == .sleepStory {
                     GeneratedStoryView(content: content)
@@ -455,11 +517,15 @@ private struct FavoritesListView: View {
             }
         }
         .task {
-            do {
-                favorites = try await service.fetchFavorites()
-            } catch {
-                print("Failed to load favorites: \(error)")
-            }
+            await refreshFavorites()
+        }
+    }
+
+    private func refreshFavorites() async {
+        do {
+            favorites = try await service.fetchFavorites()
+        } catch {
+            print("Failed to load favorites: \(error)")
         }
     }
 }

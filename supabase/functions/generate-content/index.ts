@@ -266,7 +266,11 @@ serve(async (req) => {
     );
 
     // Rate limiting
-    const rateLimitResult = await checkRateLimit(user.id, "content_generation");
+    const rateLimitResult = await checkRateLimit(
+      supabaseAdmin,
+      user.id,
+      "content_generation",
+    );
     if (!rateLimitResult.allowed) {
       return new Response(
         JSON.stringify({
@@ -389,6 +393,11 @@ serve(async (req) => {
       quota_limit: 3,
     };
 
+    console.log(
+      `[generate-content] Quota check result:`,
+      JSON.stringify(quota),
+    );
+
     if (!quota.allowed) {
       return new Response(
         JSON.stringify({
@@ -500,9 +509,12 @@ serve(async (req) => {
         );
       }
 
+      // Extract readable text from JSON response for display/TTS
+      const displayText = extractDisplayText(textContent, request.contentType);
+
       // Update record with generated content and context
       const updateData: any = {
-        text_content: textContent,
+        text_content: displayText,
         safety_flags: contentValidation.flags,
         status: "completed",
       };
@@ -523,34 +535,51 @@ serve(async (req) => {
       let actualDuration: number | undefined;
       let generationCost = 0;
 
+      console.log(`[generate-content] isPremium: ${isPremium}`);
       if (isPremium) {
         // Check monthly TTS character budget ($5/month cap)
-        const charCount = textContent.length;
+        // Use displayText (extracted readable content) not raw JSON
+        const charCount = displayText.length;
+        console.log(
+          `[generate-content] Premium user - checking TTS budget for ${charCount} characters`,
+        );
         const { data: budgetResult, error: budgetError } =
           await supabaseAdmin.rpc("check_tts_monthly_budget", {
             p_user_id: user.id,
             p_character_count: charCount,
           });
 
+        console.log(
+          `[generate-content] TTS budget check - error: ${budgetError?.message || "none"}, result:`,
+          JSON.stringify(budgetResult),
+        );
         const budget = budgetResult?.[0];
         if (budgetError || !budget?.allowed) {
           // Monthly budget exceeded — fall back to text-only like free tier
           console.log(
             `Premium user ${user.id}: monthly TTS budget exceeded (${budget?.chars_used || "?"}/${budget?.chars_limit || "?"} chars), returning text-only`,
           );
-          actualDuration = estimateDuration(textContent);
+          actualDuration = estimateDuration(displayText);
         }
 
         if (budget?.allowed) {
+          console.log(
+            `[generate-content] TTS budget allowed, synthesizing audio...`,
+          );
           try {
             const googleTTS = createGoogleTTSClient();
             const voiceId = request.params.voiceId || DEFAULT_VOICE_ID;
+            console.log(`[generate-content] Using voiceId: ${voiceId}`);
 
             // Synthesize voice with Google Cloud TTS (premium feature)
+            // Use displayText (extracted readable content) not raw JSON
             const ttsResult = await googleTTS.textToSpeech({
-              text: textContent,
+              text: displayText,
               voiceId,
             });
+            console.log(
+              `[generate-content] TTS synthesis successful, ${ttsResult.audioData?.length || 0} bytes, ${ttsResult.characterCount} chars`,
+            );
 
             // Upload to Supabase Storage
             const fileName = `${user.id}/${contentId}.mp3`;
@@ -562,16 +591,23 @@ serve(async (req) => {
               });
 
             if (!uploadError) {
+              console.log(
+                `[generate-content] Audio uploaded successfully to: ${fileName}`,
+              );
               // Get public URL
               const { data: urlData } = supabaseAdmin.storage
                 .from("generated-audio")
                 .getPublicUrl(fileName);
 
               audioUrl = urlData?.publicUrl;
+              console.log(`[generate-content] Audio URL: ${audioUrl}`);
               actualDuration = estimateDuration(textContent);
               generationCost = estimateTTSCost(ttsResult.characterCount);
             } else {
-              console.error("Audio upload error:", uploadError);
+              console.error(
+                "[generate-content] Audio upload error:",
+                uploadError,
+              );
             }
           } catch (ttsError) {
             // Log TTS error but don't fail the request
@@ -589,8 +625,8 @@ serve(async (req) => {
           });
         } // end budget?.allowed
       } else {
-        // Free tier: estimate duration from text for UI display
-        actualDuration = estimateDuration(textContent);
+        // Free tier: estimate duration from displayText for UI display
+        actualDuration = estimateDuration(displayText);
         console.log(
           `Free tier user ${user.id}: skipping TTS, text-only content`,
         );
@@ -607,7 +643,10 @@ serve(async (req) => {
 
       // Update final record
       const processingTime = Date.now() - startTime;
-      await supabaseAdmin
+      console.log(
+        `[generate-content] Updating DB record ${contentId} with audio_url: ${audioUrl ? "present" : "null"}`,
+      );
+      const { error: finalUpdateError } = await supabaseAdmin
         .from("generated_content")
         .update({
           audio_url: audioUrl,
@@ -617,6 +656,16 @@ serve(async (req) => {
           status: "completed",
         })
         .eq("id", contentId);
+
+      if (finalUpdateError) {
+        console.error(
+          `[generate-content] CRITICAL: Failed to update DB record: ${finalUpdateError.message}`,
+        );
+      } else {
+        console.log(
+          `[generate-content] DB record updated successfully with audio_url`,
+        );
+      }
 
       // Also create request record for analytics
       await supabaseAdmin.from("gen_content_requests").insert({
@@ -630,6 +679,14 @@ serve(async (req) => {
       });
 
       // Return success response
+      // Ensure quota values are valid numbers (fallback to defaults if undefined)
+      const quotaUsedValue =
+        typeof quota.quota_used === "number" ? quota.quota_used + 1 : 1;
+      // For premium users, quota_limit is -1 (unlimited). Convert to 999 for iOS display.
+      const rawQuotaLimit =
+        typeof quota.quota_limit === "number" ? quota.quota_limit : 3;
+      const quotaLimitValue = rawQuotaLimit === -1 ? 999 : rawQuotaLimit;
+
       const response: GenerateContentResponse = {
         contentId,
         status: "completed",
@@ -638,12 +695,17 @@ serve(async (req) => {
         title,
         duration: actualDuration,
         qualityScore,
-        quotaUsed: quota.quota_used + 1,
-        quotaLimit: quota.quota_limit,
+        quotaUsed: quotaUsedValue,
+        quotaLimit: quotaLimitValue,
         disclaimer: getContentDisclaimer(),
         triggerWarnings:
           triggerWarnings.length > 0 ? triggerWarnings : undefined,
       };
+
+      console.log(
+        `[generate-content] SUCCESS - Returning response:`,
+        JSON.stringify(response, null, 2),
+      );
 
       return new Response(JSON.stringify(response), {
         status: 200,
@@ -750,6 +812,9 @@ async function generateTextContent(
       "You are a professional wellness content creator specializing in mental health and relaxation content. Create calming, therapeutic content that promotes wellbeing.";
   }
 
+  console.log(
+    `[generate-content] Calling xAI API with model: grok-4-1-fast-reasoning`,
+  );
   const response = await fetch(XAI_API_URL, {
     method: "POST",
     headers: {
@@ -757,7 +822,7 @@ async function generateTextContent(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "grok-2-latest",
+      model: "grok-4-1-fast-reasoning",
       messages: [
         {
           role: "system",
@@ -775,8 +840,13 @@ async function generateTextContent(
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error("xAI API error:", errorText);
-    throw new Error(`Content generation failed: ${response.status}`);
+    console.error(
+      `[generate-content] xAI API error - Status: ${response.status}`,
+    );
+    console.error(`[generate-content] xAI API error - Response: ${errorText}`);
+    throw new Error(
+      `xAI API error (${response.status}): ${errorText.substring(0, 200)}`,
+    );
   }
 
   const data = await response.json();
@@ -860,4 +930,109 @@ function calculateQualityScore(
   }
 
   return Math.min(10, score);
+}
+
+/**
+ * Extract readable display text from JSON response
+ * Converts structured JSON content to plain text suitable for display and TTS
+ */
+function extractDisplayText(
+  jsonContent: string,
+  contentType: ContentType,
+): string {
+  try {
+    // Try to parse as JSON
+    const parsed = JSON.parse(jsonContent);
+
+    // Extract based on content type
+    switch (contentType) {
+      case "meditation":
+      case "mindfulness": {
+        // Extract script segments and join them
+        const script = parsed.content?.script || [];
+        if (Array.isArray(script) && script.length > 0) {
+          return script
+            .map((segment: { text: string }) => segment.text)
+            .join("\n\n");
+        }
+        // Fallback to description if no script
+        return parsed.description || jsonContent;
+      }
+
+      case "breathing": {
+        // Extract intro, breathing guidance, and outro
+        const intro = parsed.content?.introText || "";
+        const outro = parsed.content?.outroText || "";
+        const pattern = parsed.content?.pattern;
+        const cycles = parsed.content?.cycles || 4;
+
+        let text = intro;
+        if (pattern) {
+          text += `\n\n[Breathing Pattern: ${pattern.patternName || "Guided Breathing"}]`;
+          text += `\nInhale for ${pattern.inhaleSeconds} seconds`;
+          if (pattern.holdInSeconds > 0)
+            text += `\nHold for ${pattern.holdInSeconds} seconds`;
+          text += `\nExhale for ${pattern.exhaleSeconds} seconds`;
+          if (pattern.holdOutSeconds > 0)
+            text += `\nHold for ${pattern.holdOutSeconds} seconds`;
+          text += `\n\nRepeat for ${cycles} cycles.`;
+        }
+        if (outro) text += `\n\n${outro}`;
+        return text.trim() || jsonContent;
+      }
+
+      case "grounding": {
+        // Extract prompts and join them
+        const prompts = parsed.content?.prompts || [];
+        if (Array.isArray(prompts) && prompts.length > 0) {
+          return prompts.map((p: { text: string }) => p.text).join("\n\n");
+        }
+        return parsed.description || jsonContent;
+      }
+
+      case "journaling": {
+        // Extract journaling prompts
+        const prompts = parsed.content?.prompts || [];
+        const questions = parsed.content?.reflectionQuestions || [];
+        let text = "";
+
+        if (Array.isArray(prompts) && prompts.length > 0) {
+          text = prompts
+            .map((p: { text: string }, i: number) => `${i + 1}. ${p.text}`)
+            .join("\n\n");
+        }
+
+        if (Array.isArray(questions) && questions.length > 0) {
+          text += "\n\nReflection Questions:\n";
+          text += questions.map((q: string) => `• ${q}`).join("\n");
+        }
+
+        return text.trim() || parsed.description || jsonContent;
+      }
+
+      case "affirmation": {
+        // Handle affirmations (may be array or text)
+        if (Array.isArray(parsed.affirmations)) {
+          return parsed.affirmations.map((a: string) => `• ${a}`).join("\n");
+        }
+        return parsed.description || jsonContent;
+      }
+
+      case "sleep_story":
+      case "cbt":
+      default: {
+        // For sleep stories and CBT, return the main text content
+        return (
+          parsed.content?.script ||
+          parsed.content?.text ||
+          parsed.description ||
+          jsonContent
+        );
+      }
+    }
+  } catch {
+    // Not valid JSON, return as-is (it's already plain text)
+    console.log("[generate-content] Content is not JSON, using as plain text");
+    return jsonContent;
+  }
 }

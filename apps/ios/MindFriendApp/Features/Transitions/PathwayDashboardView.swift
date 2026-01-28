@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PathwayDashboardView: View {
     @EnvironmentObject var container: DependencyContainer
+    @Environment(\.dismiss) private var dismiss
     let userPathway: UserPathway
 
     @State private var dailyContent: DailyPathwayContent?
@@ -12,113 +13,126 @@ struct PathwayDashboardView: View {
     @State private var showCompletion = false
 
     var body: some View {
-        // Show completion view if pathway is completed
-        if userPathway.status == .completed {
-            PathwayCompletionView(userPathway: userPathway)
-        } else {
-            ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                // Header
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(userPathway.pathway?.name ?? "Transition Pathway")
-                        .font(.title2.weight(.bold))
-                    Text("Day \(userPathway.currentDay) of \(userPathway.totalDays)")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                }
-
-                // Progress bar
-                ProgressView(value: userPathway.progressPercentage)
-                    .tint(Color.blue)
-
-                // Current phase
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Text("Current Phase: \(userPathway.currentPhaseName)")
-                            .font(.headline)
-
-                        Spacer()
-
-                        NavigationLink(destination: PhaseProgressView(userPathway: userPathway, transitionService: container.transitionService)) {
-                            HStack(spacing: 4) {
-                                Text("Details")
-                                    .font(.subheadline)
-                                Image(systemName: "chevron.right")
-                                    .font(.caption)
-                            }
-                            .foregroundColor(.blue)
-                        }
-                    }
-
-                    if let phases = userPathway.pathway?.phases {
-                        HStack(spacing: 12) {
-                            ForEach(phases) { phase in
-                                PhaseIndicator(
-                                    phase: phase,
-                                    isActive: phase.number == userPathway.currentPhase,
-                                    isCompleted: phase.number < userPathway.currentPhase
-                                )
-                            }
-                        }
-                    }
-                }
-                .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(12)
-
-                // Today's Content
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Today's Content")
-                        .font(.headline)
-
-                    if isLoading {
-                        HStack {
-                            ProgressView()
-                            Text("Loading...")
+        Group {
+            // Show completion view if pathway is completed
+            if userPathway.status == .completed {
+                PathwayCompletionView(userPathway: userPathway)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        // Header
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(userPathway.pathway?.name ?? "Transition Pathway")
+                                .font(.title2.weight(.bold))
+                            Text("Day \(userPathway.currentDay) of \(userPathway.totalDays)")
+                                .font(.subheadline)
                                 .foregroundColor(.secondary)
                         }
-                    } else if let error = errorMessage {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(error)
-                                .foregroundColor(.red)
-                                .font(.caption)
-                            Button("Retry") {
-                                Task { await loadDailyContent() }
-                            }
-                            .font(.caption)
-                        }
-                    } else {
-                        Button(action: { showDailyView = true }) {
+
+                        // Progress bar
+                        ProgressView(value: userPathway.progressPercentage)
+                            .tint(Color.blue)
+
+                        // Current phase
+                        VStack(alignment: .leading, spacing: 12) {
                             HStack {
-                                VStack(alignment: .leading) {
-                                    Text("Day \(dailyContent?.dayNumber ?? userPathway.currentDay)")
-                                        .font(.subheadline.weight(.semibold))
-                                    Text(dailyContent?.theme.title ?? "Daily Check-In")
-                                        .font(.caption)
+                                Text("Current Phase: \(userPathway.currentPhaseName)")
+                                    .font(.headline)
+
+                                Spacer()
+
+                                NavigationLink(destination: PhaseProgressView(userPathway: userPathway, transitionService: container.transitionService)) {
+                                    HStack(spacing: 4) {
+                                        Text("Details")
+                                            .font(.subheadline)
+                                        Image(systemName: "chevron.right")
+                                            .font(.caption)
+                                    }
+                                    .foregroundColor(.blue)
+                                }
+                            }
+
+                            if let phases = userPathway.pathway?.phases {
+                                HStack(spacing: 12) {
+                                    ForEach(phases) { phase in
+                                        PhaseIndicator(
+                                            phase: phase,
+                                            isActive: phase.number == userPathway.currentPhase,
+                                            isCompleted: phase.number < userPathway.currentPhase
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        .padding()
+                        .background(Color(.systemGray6))
+                        .cornerRadius(12)
+
+                        // Today's Content
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Today's Content")
+                                .font(.headline)
+
+                            if isLoading {
+                                HStack {
+                                    ProgressView()
+                                    Text("Loading...")
                                         .foregroundColor(.secondary)
                                 }
-                                Spacer()
-                                Image(systemName: "chevron.right")
+                            } else if let error = errorMessage {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text(error)
+                                        .foregroundColor(.red)
+                                        .font(.caption)
+                                    Button("Retry") {
+                                        Task { await loadDailyContent() }
+                                    }
+                                    .font(.caption)
+                                }
+                            } else {
+                                Button(action: { showDailyView = true }) {
+                                    HStack {
+                                        VStack(alignment: .leading) {
+                                            Text("Day \(dailyContent?.dayNumber ?? userPathway.currentDay)")
+                                                .font(.subheadline.weight(.semibold))
+                                            Text(dailyContent?.theme.title ?? "Daily Check-In")
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
+                                        Spacer()
+                                        Image(systemName: "chevron.right")
+                                    }
+                                    .padding()
+                                    .background(Color(.systemGray6))
+                                    .cornerRadius(12)
+                                }
+                                .disabled(dailyContent == nil)
                             }
-                            .padding()
-                            .background(Color(.systemGray6))
-                            .cornerRadius(12)
                         }
-                        .disabled(dailyContent == nil)
                     }
+                    .padding()
                 }
             }
-            .padding()
+        }
+        .navigationTitle(userPathway.pathway?.name ?? "Pathway")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Close") {
+                    dismiss()
+                }
+            }
         }
         .sheet(isPresented: $showDailyView) {
             if let content = dailyContent {
-                DailyTransitionView(userPathway: userPathway, content: content)
-                    .environmentObject(container)
+                NavigationStack {
+                    DailyTransitionView(userPathway: userPathway, content: content)
+                        .environmentObject(container)
+                }
             }
         }
         .task {
             await loadDailyContent()
-        }
         }
     }
 

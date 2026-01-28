@@ -243,9 +243,10 @@ final class CreativeExpressionService: ObservableObject {
         isLoading = true
         defer { isLoading = false }
 
-        guard let userId = supabase.auth.currentUser?.id.uuidString else {
+        guard let userUUID = supabase.auth.currentUser?.id else {
             throw CreativeError.notAuthenticated
         }
+        let userId = userUUID.uuidString
 
         // Create creative work record first
         let workId = UUID()
@@ -263,7 +264,7 @@ final class CreativeExpressionService: ObservableObject {
         // Insert creative work record
         let workRow = DBCreativeWorkInsert(
             id: workId,
-            userId: UUID(uuidString: userId)!,
+            userId: userUUID,
             workType: "voice_journal",
             storagePath: storagePath,
             durationSeconds: durationSeconds,
@@ -347,9 +348,10 @@ final class CreativeExpressionService: ObservableObject {
         isLoading = true
         defer { isLoading = false }
 
-        guard let userId = supabase.auth.currentUser?.id.uuidString else {
+        guard let userUUID = supabase.auth.currentUser?.id else {
             throw CreativeError.notAuthenticated
         }
+        let userId = userUUID.uuidString
 
         let workId = UUID()
         let storagePath = "\(userId)/drawings/\(workId.uuidString).png"
@@ -367,7 +369,7 @@ final class CreativeExpressionService: ObservableObject {
         let strokesData = try JSONEncoder().encode(strokes)
 
         let sessionRow = DBDrawingSessionInsert(
-            userId: UUID(uuidString: userId)!,
+            userId: userUUID,
             creativeWorkId: workId,
             canvasWidth: Int(canvasSize.width),
             canvasHeight: Int(canvasSize.height),
@@ -383,7 +385,7 @@ final class CreativeExpressionService: ObservableObject {
         // Create creative work record
         let workRow = DBCreativeWorkInsert(
             id: workId,
-            userId: UUID(uuidString: userId)!,
+            userId: userUUID,
             workType: "drawing",
             title: title,
             storagePath: storagePath,
@@ -529,15 +531,18 @@ final class CreativeExpressionService: ObservableObject {
 
     /// Start a creative exercise
     func startExercise(exerciseId: String) async throws -> String {
-        guard let userId = supabase.auth.currentUser?.id.uuidString else {
+        guard let userUUID = supabase.auth.currentUser?.id else {
             throw CreativeError.notAuthenticated
+        }
+        guard let exerciseUUID = UUID(uuidString: exerciseId) else {
+            throw CreativeError.workNotFound
         }
 
         let completionId = UUID()
         let row = DBExerciseCompletionInsert(
             id: completionId,
-            userId: UUID(uuidString: userId)!,
-            exerciseId: UUID(uuidString: exerciseId)!,
+            userId: userUUID,
+            exerciseId: exerciseUUID,
             startedAt: Date()
         )
 
@@ -557,9 +562,12 @@ final class CreativeExpressionService: ObservableObject {
         moodBefore: Int?,
         moodAfter: Int?
     ) async throws {
+        // Safely convert optional creativeWorkId to UUID
+        let creativeWorkUUID: UUID? = creativeWorkId.flatMap { UUID(uuidString: $0) }
+        
         let updates = DBExerciseCompletionUpdate(
             completedAt: Date(),
-            creativeWorkId: creativeWorkId != nil ? UUID(uuidString: creativeWorkId!) : nil,
+            creativeWorkId: creativeWorkUUID,
             userReflection: reflection,
             moodBefore: moodBefore,
             moodAfter: moodAfter

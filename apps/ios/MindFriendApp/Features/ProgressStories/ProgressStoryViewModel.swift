@@ -135,12 +135,41 @@ final class ProgressStoryViewModel {
         defer { isLoading = false }
 
         do {
-            // Stub: actual methods return [String: Any] - for now just handle error
-            try await withTimeout(timeoutSeconds: 30) {
+            // Calculate the Monday of the requested week
+            let calendar = Calendar.current
+            let weekday = calendar.component(.weekday, from: weekStart)
+            let daysFromMonday = weekday == 1 ? 6 : weekday - 2
+            guard let monday = calendar.date(byAdding: .day, value: -daysFromMonday, to: weekStart) else {
+                throw DataError.operationFailed("Could not calculate week start")
+            }
+            
+            // Format as YYYY-MM-DD for comparison
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd"
+            formatter.timeZone = TimeZone(identifier: "UTC")
+            let weekStartStr = formatter.string(from: monday)
+            
+            // Fetch stories from the database
+            let fetchedStory: WeeklyStory? = try await withTimeout(timeoutSeconds: 30) {
                 try await self.retryWithBackoff {
-                    _ = try await self.dataService.getWeeklyStory(weekStart: self.weekStart)
-                    throw DataError.notImplemented("Weekly story loading not yet implemented")
+                    let stories = try await self.dataService.fetchWeeklyStories(
+                        limit: 10,
+                        offset: 0,
+                        favoritesOnly: false
+                    )
+                    // Find the story matching this week
+                    return stories.first { $0.weekStart == weekStartStr }
                 }
+            }
+            
+            if let existingStory = fetchedStory {
+                self.story = existingStory
+                cacheStory(existingStory)
+                logger.info("[ProgressStory] Loaded existing story for \(weekStartStr)")
+            } else {
+                // No story exists for this week - try to generate one
+                logger.info("[ProgressStory] No story found for \(weekStartStr), attempting to generate")
+                await generateStory()
             }
         } catch {
             // Network error - try cache
@@ -161,13 +190,15 @@ final class ProgressStoryViewModel {
         defer { isLoading = false }
 
         do {
-            // Stub: generateWeeklyStory throws notImplemented error
-            try await withTimeout(timeoutSeconds: 30) {
+            let generatedStory: WeeklyStory = try await withTimeout(timeoutSeconds: 30) {
                 try await self.retryWithBackoff {
-                    _ = try await self.dataService.generateWeeklyStory(weekStart: self.weekStart)
-                    throw DataError.notImplemented("Weekly story generation not yet implemented")
+                    try await self.dataService.generateWeeklyStory(weekStart: self.weekStart)
                 }
             }
+            
+            self.story = generatedStory
+            cacheStory(generatedStory)
+            logger.info("[ProgressStory] Successfully generated story with \(generatedStory.cards.count) cards")
         } catch {
             logger.error("[ProgressStory] Failed to generate story: \(error)")
             self.error = .generationFailed(error.localizedDescription)

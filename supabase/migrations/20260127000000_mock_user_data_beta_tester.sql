@@ -148,15 +148,15 @@ BEGIN
     v_day_of_week := EXTRACT(DOW FROM v_day)::INT;  -- 0=Sunday, 1=Monday, etc.
     v_week_num := (i / 7) + 1;  -- Week 1-5
 
-    -- Base mood improves over time (simulating user progress on 1-10 scale)
-    -- Week 1: 3.5, Week 2: 4.5, Week 3: 5.5, Week 4: 6.2, Week 5+: 6.8
-    v_base_mood := 3.5 + (v_week_num - 1) * 0.85;
+    -- Base mood improves over time (simulating user progress on 1-5 scale)
+    -- Week 1: 2.0, Week 2: 2.5, Week 3: 3.0, Week 4: 3.5, Week 5+: 4.0
+    v_base_mood := 2.0 + (v_week_num - 1) * 0.5;
 
-    -- Day of week adjustment (Monday blues, Friday high)
+    -- Day of week adjustment (Monday blues, Friday high) - scaled for 1-5
     CASE v_day_of_week
-      WHEN 1 THEN v_base_mood := v_base_mood - 0.8;  -- Monday: lower
-      WHEN 5 THEN v_base_mood := v_base_mood + 0.6;  -- Friday: higher
-      WHEN 0, 6 THEN v_base_mood := v_base_mood + 0.4;  -- Weekend: slightly higher
+      WHEN 1 THEN v_base_mood := v_base_mood - 0.4;  -- Monday: lower
+      WHEN 5 THEN v_base_mood := v_base_mood + 0.3;  -- Friday: higher
+      WHEN 0, 6 THEN v_base_mood := v_base_mood + 0.2;  -- Weekend: slightly higher
       ELSE NULL;
     END CASE;
 
@@ -165,7 +165,7 @@ BEGIN
 
     -- If exercise, boost mood and record session
     IF v_did_exercise AND v_exercises IS NOT NULL AND array_length(v_exercises, 1) > 0 THEN
-      v_base_mood := v_base_mood + 0.5;
+      v_base_mood := v_base_mood + 0.3;
       v_exercise_hour := 7 + floor(random() * 4)::INT;  -- 7-10 AM
       v_exercise_idx := 1 + floor(random() * array_length(v_exercises, 1))::INT;
 
@@ -187,10 +187,10 @@ BEGIN
       );
     END IF;
 
-    -- Clamp mood to valid range (1-10) and add randomness
-    v_mood_score := LEAST(10, GREATEST(1, round(v_base_mood + (random() * 2 - 1))::INT));
-    v_anxiety_score := LEAST(10, GREATEST(1, round(10 - v_base_mood + (random() * 2 - 1))::INT));  -- Inverse of mood
-    v_energy_score := LEAST(10, GREATEST(1, round(v_base_mood - 1 + (random() * 2))::INT));
+    -- Clamp mood to valid range (1-5) and add randomness
+    v_mood_score := LEAST(5, GREATEST(1, round(v_base_mood + (random() * 1 - 0.5))::INT));
+    v_anxiety_score := LEAST(5, GREATEST(1, round(6 - v_base_mood + (random() * 1 - 0.5))::INT));  -- Inverse of mood
+    v_energy_score := LEAST(5, GREATEST(1, round(v_base_mood + (random() * 1 - 0.5))::INT));
 
     -- Insert daily mood
     INSERT INTO moods (user_id, local_date, mood_score, anxiety_score, energy_score, note, created_at)

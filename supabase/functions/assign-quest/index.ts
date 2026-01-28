@@ -9,6 +9,7 @@ import {
   SupabaseClient,
 } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { timingSafeEqual } from "../_shared/security.ts";
 
 // Streak milestones that trigger circle posts
 const STREAK_MILESTONES = [7, 14, 30, 60, 100, 365];
@@ -568,7 +569,12 @@ serve(async (req) => {
     const expectedSecret = Deno.env.get("CRON_SECRET");
 
     // If cron request, process all users
-    if (cronSecret && cronSecret === expectedSecret) {
+    // SEC-MED-003: Use timing-safe comparison to prevent timing attacks
+    const isCronRequest =
+      cronSecret &&
+      expectedSecret &&
+      timingSafeEqual(cronSecret, expectedSecret);
+    if (isCronRequest) {
       console.log("Processing daily quest assignment (cron)");
 
       // Get all users with their timezones - with timeout

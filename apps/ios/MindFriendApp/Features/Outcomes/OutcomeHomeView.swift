@@ -4,7 +4,15 @@ import SwiftUI
 @MainActor
 struct OutcomeHomeView: View {
     @ObservedObject var outcomeService: OutcomeTrackingService
+    @ObservedObject var authService: SupabaseAuthService
+    @StateObject private var insightsService: WellnessInsightsService
     @State private var selectedAssessmentType: AssessmentType?
+
+    init(outcomeService: OutcomeTrackingService, authService: SupabaseAuthService) {
+        self.outcomeService = outcomeService
+        self.authService = authService
+        self._insightsService = StateObject(wrappedValue: WellnessInsightsService(authService: authService))
+    }
     @State private var showingAssessmentFlow = false
     @State private var showingResults = false
     @State private var selectedResult: AssessmentResponse?
@@ -104,7 +112,13 @@ struct OutcomeHomeView: View {
                                 }
                             }
                         }
-                        
+
+                        // Wellness Insights (mood trend + helpful activities)
+                        if hasAnyData {
+                            WellnessInsightsCard(insightsService: insightsService)
+                                .padding(.horizontal, 20)
+                        }
+
                         // Recent Results
                         if !outcomeService.recentResponses.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
@@ -200,13 +214,43 @@ struct OutcomeHomeView: View {
             }
         }
         .task {
+            // Wait for authentication to be ready
+            guard authService.userId != nil else {
+                print("[OutcomeHomeView] Not authenticated yet, skipping data load")
+                return
+            }
+
             do {
+                print("[OutcomeHomeView] Loading assessment templates...")
                 try await outcomeService.loadAssessmentTemplates()
+                print("[OutcomeHomeView] Loaded \(outcomeService.assessmentTemplates.count) templates")
+
+                print("[OutcomeHomeView] Loading assessment schedules...")
                 try await outcomeService.loadAssessmentSchedules()
+                print("[OutcomeHomeView] Loaded \(outcomeService.assessmentSchedules.count) schedules")
+
+                print("[OutcomeHomeView] Loading outcome goals...")
                 try await outcomeService.loadOutcomeGoals()
+                print("[OutcomeHomeView] Loaded \(outcomeService.outcomeGoals.count) goals")
+
+                print("[OutcomeHomeView] Loading recent responses...")
                 try await outcomeService.loadRecentResponses()
+                print("[OutcomeHomeView] Loaded \(outcomeService.recentResponses.count) responses")
             } catch {
-                print("Error: \\(error)")
+                print("[OutcomeHomeView] ERROR: \(error)")
+            }
+        }
+        .onChange(of: authService.userId) { _, newValue in
+            guard newValue != nil else { return }
+            Task {
+                do {
+                    try await outcomeService.loadAssessmentTemplates()
+                    try await outcomeService.loadAssessmentSchedules()
+                    try await outcomeService.loadOutcomeGoals()
+                    try await outcomeService.loadRecentResponses()
+                } catch {
+                    print("[OutcomeHomeView] ERROR reloading on auth change: \(error)")
+                }
             }
         }
     }
@@ -355,5 +399,9 @@ extension Double {
 }
 
 #Preview {
-    OutcomeHomeView(outcomeService: OutcomeTrackingService(supabase: .mock, authService: SupabaseAuthService()))
+    let authService = SupabaseAuthService()
+    return OutcomeHomeView(
+        outcomeService: OutcomeTrackingService(supabase: .mock, authService: authService),
+        authService: authService
+    )
 }

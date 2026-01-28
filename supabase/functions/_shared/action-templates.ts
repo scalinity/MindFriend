@@ -332,6 +332,10 @@ async function generateAIMessage(
 
   const prompt = buildAIPrompt(actionType, context);
 
+  // Create abort controller for timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
   try {
     const response = await fetch("https://api.x.ai/v1/chat/completions", {
       method: "POST",
@@ -345,7 +349,10 @@ async function generateAIMessage(
         max_tokens: 150,
         temperature: 0.7,
       }),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       throw new Error(`AI API error: ${response.status}`);
@@ -358,15 +365,42 @@ async function generateAIMessage(
       throw new Error("Empty AI response");
     }
 
-    // Parse JSON response
-    const parsed = JSON.parse(generatedContent);
+    // Parse JSON response with safe parsing
+    let parsed: { title?: string; body?: string };
+    try {
+      parsed = JSON.parse(generatedContent);
+    } catch {
+      // AI returned non-JSON, try to extract from text
+      const titleMatch = generatedContent.match(/"title"\s*:\s*"([^"]+)"/);
+      const bodyMatch = generatedContent.match(/"body"\s*:\s*"([^"]+)"/);
+      parsed = {
+        title: titleMatch?.[1],
+        body: bodyMatch?.[1],
+      };
+    }
+
+    // Validate and sanitize
+    const title =
+      typeof parsed.title === "string" &&
+      parsed.title.length > 0 &&
+      parsed.title.length <= 100
+        ? parsed.title
+        : fallbackTemplate.titlePatterns[0];
+    const body =
+      typeof parsed.body === "string" &&
+      parsed.body.length > 0 &&
+      parsed.body.length <= 500
+        ? parsed.body
+        : fallbackTemplate.bodyPatterns[0];
+
     return {
-      title: parsed.title || fallbackTemplate.titlePatterns[0],
-      body: parsed.body || fallbackTemplate.bodyPatterns[0],
+      title: interpolate(title, context),
+      body: interpolate(body, context),
       quickActions: fallbackTemplate.quickActions,
       deepLink: fallbackTemplate.deepLink,
     };
   } catch {
+    clearTimeout(timeoutId);
     return generateTemplateMessage(fallbackTemplate, context);
   }
 }

@@ -68,8 +68,9 @@ final class SensoryRegulationService: ObservableObject {
             throw SensoryError.sessionInProgress
         }
 
-        // Convert patternId from String to UUID
-        guard let patternUUID = UUID(uuidString: patternId) else {
+        // Validate pattern exists in library
+        let patternExists = await validatePatternExists(modality: modality, patternId: patternId)
+        guard patternExists else {
             throw SensoryError.patternNotFound
         }
 
@@ -80,11 +81,17 @@ final class SensoryRegulationService: ObservableObject {
             // For now, allow all users - premium gating handled server-side
         }
 
-        // Call create-session Edge Function
-        let session = try await createSessionOnServer(modality: modality, patternId: patternUUID)
-        currentSession = session
+        // Try to create session on server, but allow local-only sessions on network failure
+        do {
+            let session = try await createSessionOnServer(modality: modality, patternId: patternId)
+            currentSession = session
+        } catch {
+            // Network failed - create a local-only session (will be synced later if possible)
+            print("Network error creating session, using local-only mode: \(error.localizedDescription)")
+            currentSession = createLocalSession(modality: modality, patternId: patternId)
+        }
 
-        // Start modality service
+        // Start modality service (works offline - haptics, visuals, and audio are local)
         try await startModalityService(modality: modality, patternId: patternId, speed: speed, loop: loop)
 
         // Start session timer
@@ -256,9 +263,41 @@ final class SensoryRegulationService: ObservableObject {
 
     // MARK: - Private Methods - Server Communication
 
+    private func validatePatternExists(modality: SensoryModality, patternId: String) async -> Bool {
+        switch modality {
+        case .tactile:
+            return TactilePattern.library.contains(where: { $0.id == patternId })
+        case .visual:
+            return VisualAnimation.library.contains(where: { $0.id == patternId })
+        case .audio:
+            return AudioSoundscape.library.contains(where: { $0.id == patternId })
+        }
+    }
+
+    /// Create a local-only session when network is unavailable
+    private func createLocalSession(modality: SensoryModality, patternId: String) -> SensorySession {
+        // Use a placeholder user ID for offline sessions
+        // This will be synced when connectivity returns
+        let offlineUserId = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+        
+        return SensorySession(
+            id: UUID(),
+            userId: offlineUserId,
+            modality: modality,
+            patternId: patternId,
+            startedAt: Date(),
+            completedAt: nil,
+            durationSeconds: nil,
+            interrupted: false,
+            status: .active,
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+    }
+
     private func createSessionOnServer(
         modality: SensoryModality,
-        patternId: UUID
+        patternId: String
     ) async throws -> SensorySession {
         // Call create-sensory-session Edge Function
         struct CreateSessionRequest: Codable {
@@ -273,7 +312,7 @@ final class SensoryRegulationService: ObservableObject {
 
         let request = CreateSessionRequest(
             modality: modality.rawValue,
-            patternId: patternId.uuidString
+            patternId: patternId
         )
 
         do {
@@ -298,7 +337,7 @@ final class SensoryRegulationService: ObservableObject {
                 id: sessionId,
                 userId: userId,
                 modality: modality,
-                patternId: patternId.uuidString,
+                patternId: patternId,
                 startedAt: Date(),
                 completedAt: nil,
                 durationSeconds: nil,

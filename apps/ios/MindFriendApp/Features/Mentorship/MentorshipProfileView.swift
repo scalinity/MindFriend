@@ -2,7 +2,8 @@ import SwiftUI
 
 /// View for editing user's mentorship profile
 struct MentorshipProfileView: View {
-    @StateObject private var profileService: MentorshipProfileService
+    @EnvironmentObject var container: DependencyContainer
+
     @State private var isEditingProfile = false
     @State private var selectedExpertiseAreas: Set<String> = []
     @State private var selectedSeekingAreas: Set<String> = []
@@ -10,7 +11,8 @@ struct MentorshipProfileView: View {
     @State private var availabilityHours = 5
     @State private var selectedLanguages: Set<String> = ["en"]
 
-    private let dataService: MentorshipDataService
+    private var profileService: MentorshipProfileService { container.mentorshipService.profileService }
+
     private let allTopics = [
         "anxiety",
         "depression",
@@ -28,13 +30,6 @@ struct MentorshipProfileView: View {
         "trauma-recovery",
         "wellness",
     ]
-
-    nonisolated init(dataService: MentorshipDataService) {
-        self.dataService = dataService
-        _profileService = StateObject(
-            wrappedValue: MentorshipProfileService(dataService: dataService)
-        )
-    }
 
     var body: some View {
         ZStack {
@@ -289,51 +284,16 @@ struct TopicPill: View {
 
 // MARK: - Flow Layout
 
-struct MentorshipFlowLayout<Item: Hashable>: View {
+struct MentorshipFlowLayout<Item: Hashable, Content: View>: View {
     let items: [Item]
     @Binding var selectedItems: Set<Item>
-    let content: (Item, Bool) -> AnyView
+    @ViewBuilder let content: (Item, Bool) -> Content
 
     var body: some View {
-        var currentRow: [Item] = []
-        let rows = items.reduce([[(Item, CGFloat)]]()) { result, item in
-            var rows = result
-            if currentRow.isEmpty {
-                currentRow.append(item)
-            } else {
-                let rowWidth = currentRow.reduce(0) { $0 + estimateWidth(for: $1) + 8 }
-                if rowWidth + estimateWidth(for: item) + 8 < 300 {
-                    currentRow.append(item)
-                } else {
-                    rows.append([(currentRow, 0)])
-                    currentRow = [item]
-                }
-            }
-            return rows
-        }
-
-        return VStack(alignment: .leading, spacing: 8) {
-            ForEach(items.indices, id: \.self) { index in
-                HStack(spacing: 8) {
-                    ForEach(items.indices, id: \.self) { itemIndex in
-                        if itemIndex < items.count {
-                            content(items[itemIndex], selectedItems.contains(items[itemIndex]))
-                                .any
-                        }
-                    }
-                    Spacer()
-                }
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: 8) {
+            ForEach(items, id: \.self) { item in
+                content(item, selectedItems.contains(item))
             }
         }
-    }
-
-    private func estimateWidth(for item: Item) -> CGFloat {
-        100
-    }
-}
-
-extension View {
-    var any: AnyView {
-        AnyView(self)
     }
 }

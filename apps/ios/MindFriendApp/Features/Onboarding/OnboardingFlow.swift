@@ -285,10 +285,7 @@ struct OnboardingAIGreetingView: View {
                     }
                     .padding()
                 }
-                .dismissKeyboardOnSwipe()
-                .onTapGesture {
-                    hideKeyboard()
-                }
+                .scrollDismissesKeyboard(.interactively)
                 .onChange(of: messages.count) { _, _ in
                     withAnimation {
                         if isTyping {

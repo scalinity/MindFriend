@@ -344,6 +344,9 @@ struct DBQuestWithTemplate: Codable {
     var assignedAt: Date?
     var completedAt: Date?
     let questTemplates: DBQuestTemplate?
+    // Journey context - set when quest is part of an active arc
+    let arcUserId: UUID?
+    let userQuestArcs: DBArcContext?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -356,6 +359,8 @@ struct DBQuestWithTemplate: Codable {
         case assignedAt = "assigned_at"
         case completedAt = "completed_at"
         case questTemplates = "quest_templates"
+        case arcUserId = "arc_user_id"
+        case userQuestArcs = "user_quest_arcs"
     }
 
     func toQuest() -> Quest? {
@@ -370,7 +375,27 @@ struct DBQuestWithTemplate: Codable {
             tags: [],
             instructions: dbTemplate.defaultInstructions()
         )
-        return Quest(
+
+        // Build arc context if quest is part of a journey
+        var arcContext: QuestArcContext?
+        if let arcData = userQuestArcs, let arc = arcData.questArcs {
+            arcContext = QuestArcContext(
+                arcId: arc.id.uuidString,
+                arcTitle: arc.title,
+                arcCategory: arc.category,
+                currentDay: arcData.currentDay,
+                durationDays: arcData.snapshotDurationDays,
+                coachingMessage: generateCoachingMessage(
+                    category: arc.category,
+                    currentDay: arcData.currentDay,
+                    durationDays: arcData.snapshotDurationDays,
+                    milestoneDays: arcData.snapshotMilestoneDays ?? []
+                ),
+                milestoneDays: arcData.snapshotMilestoneDays ?? []
+            )
+        }
+
+        var quest = Quest(
             id: id.uuidString,
             localDate: localDate,
             status: QuestStatus(rawValue: status) ?? .assigned,
@@ -378,6 +403,82 @@ struct DBQuestWithTemplate: Codable {
             completedAt: completedAt,
             template: questTemplate
         )
+        quest.arcContext = arcContext
+        return quest
+    }
+
+    /// Generate a coaching message based on journey progress
+    private func generateCoachingMessage(category: String, currentDay: Int, durationDays: Int, milestoneDays: [Int]) -> String {
+        let nextDay = currentDay + 1
+        let isMilestone = milestoneDays.contains(nextDay)
+        let isFirstDay = currentDay == 0
+        let isHalfway = nextDay == durationDays / 2
+        let isNearEnd = durationDays - nextDay <= 3 && durationDays - nextDay > 0
+        let isFinalDay = nextDay == durationDays
+
+        if isFirstDay {
+            return "Welcome to your journey! Today's quest helps build the foundation."
+        } else if isMilestone {
+            return "Milestone ahead! Complete today's quest to celebrate your progress."
+        } else if isHalfway {
+            return "You're halfway through! Keep up the great momentum."
+        } else if isFinalDay {
+            return "Final day! Complete this to finish your journey."
+        } else if isNearEnd {
+            return "Almost there! Just \(durationDays - nextDay + 1) days left."
+        } else {
+            // Category-specific encouragement
+            switch category.lowercased() {
+            case "stress":
+                return "Each day of practice builds your stress resilience."
+            case "sleep":
+                return "Consistent practice improves your sleep quality over time."
+            case "confidence":
+                return "You're building inner strength with each step."
+            case "focus":
+                return "Your ability to focus grows stronger each day."
+            case "resilience":
+                return "Every challenge you face makes you more resilient."
+            default:
+                return "Day \(nextDay) of your journey - keep going!"
+            }
+        }
+    }
+}
+
+/// Arc context for joined queries (from user_quest_arcs)
+struct DBArcContext: Codable {
+    let id: UUID
+    let arcId: UUID
+    let currentDay: Int
+    let status: String
+    let snapshotDurationDays: Int
+    let snapshotMilestoneDays: [Int]?
+    let questArcs: DBArcDetails?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case arcId = "arc_id"
+        case currentDay = "current_day"
+        case status
+        case snapshotDurationDays = "snapshot_duration_days"
+        case snapshotMilestoneDays = "snapshot_milestone_days"
+        case questArcs = "quest_arcs"
+    }
+}
+
+/// Arc details for joined queries (from quest_arcs)
+struct DBArcDetails: Codable {
+    let id: UUID
+    let title: String
+    let category: String
+    let durationDays: Int
+    let milestoneDays: [Int]?
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, category
+        case durationDays = "duration_days"
+        case milestoneDays = "milestone_days"
     }
 }
 
@@ -787,20 +888,18 @@ struct DBExerciseInstruction: Codable {
     let text: String
 }
 
-/// Exercise row matching actual schema (duration_seconds, premium_only)
+/// Exercise row matching actual schema
 struct DBExercise: Codable {
     let id: UUID
     let title: String
     let description: String
     let type: String
-    let durationSeconds: Int  // Schema uses duration_seconds, not duration_minutes
-    let contentKind: String
-    let contentText: String?
-    let audioUrl: String?
-    let premiumOnly: Bool  // Schema uses premium_only, not is_premium
+    let durationSeconds: Int
+    let durationMinutes: Int?  // Legacy column, may exist in some rows
+    let isPremium: Bool?
     let instructions: [DBExerciseInstruction]?
 
-    // Credibility fields (from later migration)
+    // Credibility fields
     let evidenceBasis: String?
     let therapistReviewed: Bool?
     let reviewDate: String?
@@ -809,19 +908,12 @@ struct DBExercise: Codable {
     enum CodingKeys: String, CodingKey {
         case id, title, description, type, instructions
         case durationSeconds = "duration_seconds"
-        case contentKind = "content_kind"
-        case contentText = "content_text"
-        case audioUrl = "audio_url"
-        case premiumOnly = "premium_only"
+        case durationMinutes = "duration_minutes"
+        case isPremium = "is_premium"
         case evidenceBasis = "evidence_basis"
         case therapistReviewed = "therapist_reviewed"
         case reviewDate = "review_date"
         case methodologyNote = "methodology_note"
-    }
-
-    /// Convenience computed property for duration in minutes (for UI display)
-    var durationMinutes: Int {
-        durationSeconds / 60
     }
 }
 
@@ -1608,7 +1700,7 @@ struct DBCircleWithMembers: Codable {
     let id: UUID
     let name: String
     let description: String?
-    let maxMembers: Int
+    let maxMembers: Int?  // Optional - column may not exist in DB
     let inviteCode: String
     let ownerId: UUID
     let createdAt: Date?
@@ -1643,7 +1735,7 @@ struct DBCircleWithMembers: Codable {
             name: name,
             description: description,
             inviteCode: inviteCode,
-            maxMembers: maxMembers,
+            maxMembers: maxMembers ?? 8,  // Default to 8 if not in DB
             memberCount: circleMembers?.count ?? 0,
             role: role,
             joinedAt: joinedAt
@@ -1696,14 +1788,11 @@ struct DBCircleHug: Codable {
 struct DBCircleChallenge: Codable {
     let id: UUID?
     let circleId: UUID
-    let creatorId: UUID
+    let createdBy: UUID
     let title: String
     let description: String?
     let challengeType: String
     let targetExerciseId: UUID?
-    let durationDays: Int
-    let startDate: String?
-    let endDate: String?
     let startsAt: Date?
     let endsAt: Date?
     let createdAt: Date?
@@ -1711,33 +1800,25 @@ struct DBCircleChallenge: Codable {
     enum CodingKeys: String, CodingKey {
         case id
         case circleId = "circle_id"
-        case creatorId = "creator_id"
+        case createdBy = "created_by"
         case title, description
         case challengeType = "challenge_type"
         case targetExerciseId = "target_exercise_id"
-        case durationDays = "duration_days"
-        case startDate = "start_date"
-        case endDate = "end_date"
         case startsAt = "starts_at"
         case endsAt = "ends_at"
         case createdAt = "created_at"
     }
-
-    var createdBy: UUID { creatorId }
 }
 
 /// Circle challenge with completion data
 struct DBCircleChallengeWithCompletions: Codable {
     let id: UUID?
     let circleId: UUID
-    let creatorId: UUID
+    let createdBy: UUID
     let title: String
     let description: String?
     let challengeType: String
     let targetExerciseId: UUID?
-    let durationDays: Int
-    let startDate: String?
-    let endDate: String?
     let startsAt: Date?
     let endsAt: Date?
     let createdAt: Date?
@@ -1746,20 +1827,15 @@ struct DBCircleChallengeWithCompletions: Codable {
     enum CodingKeys: String, CodingKey {
         case id
         case circleId = "circle_id"
-        case creatorId = "creator_id"
+        case createdBy = "created_by"
         case title, description
         case challengeType = "challenge_type"
         case targetExerciseId = "target_exercise_id"
-        case durationDays = "duration_days"
-        case startDate = "start_date"
-        case endDate = "end_date"
         case startsAt = "starts_at"
         case endsAt = "ends_at"
         case createdAt = "created_at"
-        case completions = "challenge_completions"
+        case completions
     }
-
-    var createdBy: UUID { creatorId }
 }
 
 /// Challenge completion record
@@ -1784,18 +1860,16 @@ struct DBCircleReaction: Codable {
     let id: UUID?
     let postId: UUID
     let userId: UUID
-    let reactionType: String
+    let emoji: String  // Column is 'emoji' in DB, not 'reaction_type'
     let createdAt: Date?
 
     enum CodingKeys: String, CodingKey {
         case id
         case postId = "post_id"
         case userId = "user_id"
-        case reactionType = "reaction_type"
+        case emoji  // Matches DB column name
         case createdAt = "created_at"
     }
-
-    var emoji: String { reactionType }
 }
 
 /// Circle invite record
