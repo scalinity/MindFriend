@@ -67,6 +67,113 @@ struct SleepEntry: Codable, Identifiable, Equatable {
         case updatedAt = "updated_at"
     }
 
+    // MARK: - Date Format Helpers
+
+    /// Formatter for PostgreSQL DATE type (YYYY-MM-DD)
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        return formatter
+    }()
+
+    // MARK: - Custom Decoding for DATE column
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        id = try container.decode(UUID.self, forKey: .id)
+        userId = try container.decode(UUID.self, forKey: .userId)
+        source = try container.decode(SleepSource.self, forKey: .source)
+
+        // Decode DATE column as string and convert to Date
+        let dateString = try container.decode(String.self, forKey: .date)
+        guard let parsedDate = Self.dateFormatter.date(from: dateString) else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .date,
+                in: container,
+                debugDescription: "Date string '\(dateString)' does not match expected format yyyy-MM-dd"
+            )
+        }
+        date = parsedDate
+
+        // TIMESTAMPTZ fields decode normally as Date
+        bedtime = try container.decode(Date.self, forKey: .bedtime)
+        wakeTime = try container.decode(Date.self, forKey: .wakeTime)
+        timeInBedMinutes = try container.decode(Int.self, forKey: .timeInBedMinutes)
+        timeAsleepMinutes = try container.decodeIfPresent(Int.self, forKey: .timeAsleepMinutes)
+        deepSleepMinutes = try container.decodeIfPresent(Int.self, forKey: .deepSleepMinutes)
+        remSleepMinutes = try container.decodeIfPresent(Int.self, forKey: .remSleepMinutes)
+        lightSleepMinutes = try container.decodeIfPresent(Int.self, forKey: .lightSleepMinutes)
+        awakeMinutes = try container.decodeIfPresent(Int.self, forKey: .awakeMinutes)
+        sleepEfficiency = try container.decodeIfPresent(Double.self, forKey: .sleepEfficiency)
+        heartRateAvg = try container.decodeIfPresent(Int.self, forKey: .heartRateAvg)
+        heartRateMin = try container.decodeIfPresent(Int.self, forKey: .heartRateMin)
+        hrvAvg = try container.decodeIfPresent(Double.self, forKey: .hrvAvg)
+        respiratoryRate = try container.decodeIfPresent(Double.self, forKey: .respiratoryRate)
+        userRating = try container.decodeIfPresent(Int.self, forKey: .userRating)
+        dreamNotes = try container.decodeIfPresent(String.self, forKey: .dreamNotes)
+        notes = try container.decodeIfPresent(String.self, forKey: .notes)
+        sleepScore = try container.decodeIfPresent(Int.self, forKey: .sleepScore)
+        scoreBreakdown = try container.decodeIfPresent(SleepScoreBreakdown.self, forKey: .scoreBreakdown)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+    }
+
+    // MARK: - Memberwise Initializer
+
+    init(
+        id: UUID,
+        userId: UUID,
+        date: Date,
+        source: SleepSource,
+        bedtime: Date,
+        wakeTime: Date,
+        timeInBedMinutes: Int,
+        timeAsleepMinutes: Int?,
+        deepSleepMinutes: Int?,
+        remSleepMinutes: Int?,
+        lightSleepMinutes: Int?,
+        awakeMinutes: Int?,
+        sleepEfficiency: Double?,
+        heartRateAvg: Int?,
+        heartRateMin: Int?,
+        hrvAvg: Double?,
+        respiratoryRate: Double?,
+        userRating: Int?,
+        dreamNotes: String?,
+        notes: String?,
+        sleepScore: Int?,
+        scoreBreakdown: SleepScoreBreakdown?,
+        createdAt: Date,
+        updatedAt: Date
+    ) {
+        self.id = id
+        self.userId = userId
+        self.date = date
+        self.source = source
+        self.bedtime = bedtime
+        self.wakeTime = wakeTime
+        self.timeInBedMinutes = timeInBedMinutes
+        self.timeAsleepMinutes = timeAsleepMinutes
+        self.deepSleepMinutes = deepSleepMinutes
+        self.remSleepMinutes = remSleepMinutes
+        self.lightSleepMinutes = lightSleepMinutes
+        self.awakeMinutes = awakeMinutes
+        self.sleepEfficiency = sleepEfficiency
+        self.heartRateAvg = heartRateAvg
+        self.heartRateMin = heartRateMin
+        self.hrvAvg = hrvAvg
+        self.respiratoryRate = respiratoryRate
+        self.userRating = userRating
+        self.dreamNotes = dreamNotes
+        self.notes = notes
+        self.sleepScore = sleepScore
+        self.scoreBreakdown = scoreBreakdown
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
     // MARK: - Computed Properties
 
     var durationFormatted: String {
@@ -180,6 +287,104 @@ struct SleepGoals: Codable, Identifiable, Equatable {
         case sleepEnvironmentPrefs = "sleep_environment_prefs"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+    }
+    
+    // MARK: - Time Format Helpers
+    
+    /// Formatter for PostgreSQL TIME type (HH:mm:ss)
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        return formatter
+    }()
+    
+    // MARK: - Custom Encoding/Decoding for TIME columns
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        id = try container.decode(UUID.self, forKey: .id)
+        userId = try container.decode(UUID.self, forKey: .userId)
+        targetDurationMinutes = try container.decode(Int.self, forKey: .targetDurationMinutes)
+        windDownDurationMinutes = try container.decode(Int.self, forKey: .windDownDurationMinutes)
+        bedtimeReminderEnabled = try container.decode(Bool.self, forKey: .bedtimeReminderEnabled)
+        bedtimeReminderOffsetMinutes = try container.decode(Int.self, forKey: .bedtimeReminderOffsetMinutes)
+        preferredWindDownTypes = try container.decode([String].self, forKey: .preferredWindDownTypes)
+        sleepEnvironmentPrefs = try container.decode(SleepEnvironmentPrefs.self, forKey: .sleepEnvironmentPrefs)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        
+        // Decode TIME columns as strings and convert to Date
+        if let timeString = try container.decodeIfPresent(String.self, forKey: .targetBedtime) {
+            targetBedtime = Self.timeFormatter.date(from: timeString)
+        } else {
+            targetBedtime = nil
+        }
+        
+        if let timeString = try container.decodeIfPresent(String.self, forKey: .targetWakeTime) {
+            targetWakeTime = Self.timeFormatter.date(from: timeString)
+        } else {
+            targetWakeTime = nil
+        }
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        
+        try container.encode(id, forKey: .id)
+        try container.encode(userId, forKey: .userId)
+        try container.encode(targetDurationMinutes, forKey: .targetDurationMinutes)
+        try container.encode(windDownDurationMinutes, forKey: .windDownDurationMinutes)
+        try container.encode(bedtimeReminderEnabled, forKey: .bedtimeReminderEnabled)
+        try container.encode(bedtimeReminderOffsetMinutes, forKey: .bedtimeReminderOffsetMinutes)
+        try container.encode(preferredWindDownTypes, forKey: .preferredWindDownTypes)
+        try container.encode(sleepEnvironmentPrefs, forKey: .sleepEnvironmentPrefs)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(updatedAt, forKey: .updatedAt)
+        
+        // Encode Date as TIME string (HH:mm:ss) for PostgreSQL TIME columns
+        if let bedtime = targetBedtime {
+            try container.encode(Self.timeFormatter.string(from: bedtime), forKey: .targetBedtime)
+        } else {
+            try container.encodeNil(forKey: .targetBedtime)
+        }
+        
+        if let wakeTime = targetWakeTime {
+            try container.encode(Self.timeFormatter.string(from: wakeTime), forKey: .targetWakeTime)
+        } else {
+            try container.encodeNil(forKey: .targetWakeTime)
+        }
+    }
+    
+    // MARK: - Memberwise Initializer
+    
+    init(
+        id: UUID,
+        userId: UUID,
+        targetBedtime: Date?,
+        targetWakeTime: Date?,
+        targetDurationMinutes: Int,
+        windDownDurationMinutes: Int,
+        bedtimeReminderEnabled: Bool,
+        bedtimeReminderOffsetMinutes: Int,
+        preferredWindDownTypes: [String],
+        sleepEnvironmentPrefs: SleepEnvironmentPrefs,
+        createdAt: Date,
+        updatedAt: Date
+    ) {
+        self.id = id
+        self.userId = userId
+        self.targetBedtime = targetBedtime
+        self.targetWakeTime = targetWakeTime
+        self.targetDurationMinutes = targetDurationMinutes
+        self.windDownDurationMinutes = windDownDurationMinutes
+        self.bedtimeReminderEnabled = bedtimeReminderEnabled
+        self.bedtimeReminderOffsetMinutes = bedtimeReminderOffsetMinutes
+        self.preferredWindDownTypes = preferredWindDownTypes
+        self.sleepEnvironmentPrefs = sleepEnvironmentPrefs
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
     }
 
     // MARK: - Computed Properties
@@ -456,6 +661,7 @@ struct SleepWeeklyStats: Codable, Equatable {
 // MARK: - Create/Update DTOs
 
 struct CreateSleepEntryDTO: Encodable {
+    let userId: UUID
     let date: String // YYYY-MM-DD
     let source: String
     let bedtime: String // ISO 8601
@@ -478,6 +684,7 @@ struct CreateSleepEntryDTO: Encodable {
     let scoreBreakdown: SleepScoreBreakdown?
 
     enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
         case date, source, bedtime
         case wakeTime = "wake_time"
         case timeInBedMinutes = "time_in_bed_minutes"

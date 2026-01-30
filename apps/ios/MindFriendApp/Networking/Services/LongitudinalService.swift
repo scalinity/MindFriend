@@ -339,7 +339,13 @@ final class LongitudinalService: ObservableObject {
     func generateReport(type: ReportType, timePeriod: TimePeriod? = nil) async throws -> LongitudinalReport {
         let request = LongitudinalReportRequest(reportType: type, timePeriod: timePeriod)
 
-        // Response structure from edge function
+        // Error response structure
+        struct ErrorResponse: Codable {
+            let success: Bool
+            let error: String?
+        }
+
+        // Success response structure from edge function
         struct GenerateReportResponse: Codable {
             let success: Bool
             let reportId: UUID
@@ -360,24 +366,53 @@ final class LongitudinalService: ObservableObject {
             }
         }
 
-        let reportResponse: GenerateReportResponse = try await supabase.functions.invoke(
-            "generate-longitudinal-report",
-            options: .init(body: request)
-        )
+        do {
+            // Configure decoder for ISO8601 dates from the Edge Function
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            
+            // Include auth headers - Edge Functions require explicit Authorization header
+            let headers = authService.authHeaders
+            logger.info("[generateReport] Auth headers count: \(headers.count)")
+            logger.info("[generateReport] Has Authorization header: \(headers["Authorization"] != nil)")
+            if let authHeader = headers["Authorization"] {
+                logger.info("[generateReport] Auth header prefix: \(String(authHeader.prefix(30)))...")
+                logger.info("[generateReport] Auth header length: \(authHeader.count)")
+            } else {
+                logger.warning("[generateReport] NO Authorization header - this will fail!")
+            }
+            
+            let reportResponse: GenerateReportResponse = try await supabase.functions.invoke(
+                "generate-longitudinal-report",
+                options: .init(
+                    headers: headers,
+                    body: request
+                ),
+                decoder: decoder
+            )
 
-        // Construct the report object
-        let report = LongitudinalReport(
-            id: reportResponse.reportId,
-            userId: try userId,
-            reportType: type,
-            timePeriod: reportResponse.timePeriod,
-            contentJson: reportResponse.contentJson,
-            generatedAt: reportResponse.generatedAt,
-            expiresAt: reportResponse.expiresAt
-        )
+            // Construct the report object
+            let report = LongitudinalReport(
+                id: reportResponse.reportId,
+                userId: try userId,
+                reportType: type,
+                timePeriod: reportResponse.timePeriod,
+                contentJson: reportResponse.contentJson,
+                generatedAt: reportResponse.generatedAt,
+                expiresAt: reportResponse.expiresAt
+            )
 
-        logger.info("Generated \(type.rawValue) report: \(report.id)")
-        return report
+            logger.info("Generated \(type.rawValue) report: \(report.id)")
+            return report
+        } catch let error as FunctionsError {
+            // Try to extract error message from the response
+            logger.error("Edge Function error: \(error.localizedDescription)")
+            throw LongitudinalError.reportGenerationFailed(error.localizedDescription)
+        } catch let error as DecodingError {
+            // Decoding failed - likely an error response from the Edge Function
+            logger.error("Response decoding error: \(error.localizedDescription)")
+            throw LongitudinalError.reportGenerationFailed("Invalid response from server")
+        }
     }
 
     // MARK: - FHIR Export

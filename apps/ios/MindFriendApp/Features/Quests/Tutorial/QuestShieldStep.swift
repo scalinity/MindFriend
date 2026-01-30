@@ -23,19 +23,19 @@ struct QuestShieldStep: View {
             primaryLabel: "Start Your Journey",
             primaryAction: onComplete
         ) {
-            VStack(spacing: 20) {
+            VStack(spacing: 16) {
                 // Shield animation
                 ZStack {
                     // Background glow
                     Circle()
                         .fill(Color.blue.opacity(0.1))
-                        .frame(width: 120, height: 120)
+                        .frame(width: 100, height: 100)
                         .scaleEffect(shieldActive ? 1.2 : 1.0)
                         .opacity(shieldActive ? 0.5 : 0)
 
                     // Shield icon
                     Image(systemName: "shield.fill")
-                        .font(.system(size: 64))
+                        .font(.system(size: 48))
                         .foregroundStyle(
                             LinearGradient(
                                 colors: [.blue, .cyan],
@@ -57,13 +57,13 @@ struct QuestShieldStep: View {
                 }
 
                 // Shield info
-                VStack(spacing: 12) {
-                    HStack(spacing: 16) {
+                VStack(spacing: 8) {
+                    HStack(spacing: 12) {
                         shieldFeature(icon: "calendar.badge.clock", text: "Skip a day without losing your streak")
                         shieldFeature(icon: "crown.fill", text: "Premium members get shields monthly")
                     }
                 }
-                .padding()
+                .padding(12)
                 .background(Color(.secondarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .padding(.horizontal, 16)
@@ -74,7 +74,8 @@ struct QuestShieldStep: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 24)
                     .opacity(shieldActive ? 1 : 0)
             }
             .onAppear {
@@ -98,6 +99,7 @@ struct QuestShieldStep: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity)
     }

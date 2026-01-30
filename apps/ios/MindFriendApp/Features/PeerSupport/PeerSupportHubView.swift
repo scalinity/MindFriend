@@ -15,57 +15,55 @@ struct PeerSupportHubView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    if service.isLoading {
-                        loadingView
+        ScrollView {
+            VStack(spacing: 24) {
+                if service.isLoading {
+                    loadingView
+                } else {
+                    // Request Support Card
+                    requestSupportCard
+
+                    // Active Sessions
+                    if !service.activeSessions.isEmpty {
+                        activeSessionsSection
+                    }
+
+                    // Mentorship Section
+                    mentorshipSection
+
+                    // Give Back Section
+                    giveBackSection
+
+                    // Listener Section
+                    if service.listenerProfile == nil {
+                        becomeListenerCard
                     } else {
-                        // Request Support Card
-                        requestSupportCard
+                        listenerDashboardCard
+                    }
 
-                        // Active Sessions
-                        if !service.activeSessions.isEmpty {
-                            activeSessionsSection
-                        }
-
-                        // Mentorship Section
-                        mentorshipSection
-
-                        // Give Back Section
-                        giveBackSection
-
-                        // Listener Section
-                        if service.listenerProfile == nil {
-                            becomeListenerCard
-                        } else {
-                            listenerDashboardCard
-                        }
-
-                        // Community Wisdom Preview
-                        if !service.communityWisdom.isEmpty {
-                            communityWisdomSection
-                        }
+                    // Community Wisdom Preview
+                    if !service.communityWisdom.isEmpty {
+                        communityWisdomSection
                     }
                 }
-                .padding()
             }
-            .navigationTitle("Peer Support")
-            .refreshable {
-                await service.loadData()
-            }
-            .sheet(isPresented: $showRequestSupport) {
-                RequestSupportSheet(service: service)
-            }
-            .sheet(isPresented: $showBecomeListener) {
-                BecomeListenerView(service: service)
-            }
-            .sheet(isPresented: $showShareWisdom) {
-                ShareWisdomSheet(service: service)
-            }
-            .task {
-                await service.loadData()
-            }
+            .padding()
+        }
+        .navigationTitle("Peer Support")
+        .refreshable {
+            await service.loadData()
+        }
+        .sheet(isPresented: $showRequestSupport) {
+            RequestSupportSheet(service: service)
+        }
+        .sheet(isPresented: $showBecomeListener) {
+            BecomeListenerView(service: service)
+        }
+        .sheet(isPresented: $showShareWisdom) {
+            ShareWisdomSheet(service: service)
+        }
+        .task {
+            await service.loadData()
         }
     }
 

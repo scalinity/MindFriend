@@ -109,6 +109,7 @@ enum AnalyticsEvent: String {
 
     // Memory
     case memoryDeleted = "memory_deleted"
+    case memoryUpdated = "memory_updated"
     case allMemoriesDeleted = "all_memories_deleted"
     case memoriesDeletedByType = "memories_deleted_by_type"
     case memorySettingsViewed = "memory_settings_viewed"

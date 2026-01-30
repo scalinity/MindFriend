@@ -94,6 +94,10 @@ struct PrivacyLockOverlay: ViewModifier {
             }
         }
         .animation(.easeInOut(duration: 0.3), value: lockManager.isLocked)
+        .task {
+            // Load privacy lock settings on app launch
+            await lockManager.loadSettings()
+        }
     }
 }
 

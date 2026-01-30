@@ -23,7 +23,7 @@ struct QuestConceptStep: View {
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 16) {
+            VStack(spacing: 8) {
                 // Quest characteristics
                 ForEach(Array(characteristics.enumerated()), id: \.element.title) { index, item in
                     HStack(spacing: 12) {
@@ -38,6 +38,7 @@ struct QuestConceptStep: View {
                             Text(item.description)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
 
                         Spacer()
@@ -50,7 +51,7 @@ struct QuestConceptStep: View {
                     )
                 }
             }
-            .padding(.horizontal, 24)
+            .padding(.horizontal, 20)
             .onAppear {
                 showElements = true
             }

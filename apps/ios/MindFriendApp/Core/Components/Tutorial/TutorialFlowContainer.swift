@@ -46,7 +46,7 @@ struct TutorialFlowContainer<Step: TutorialStepProtocol, Content: View>: View {
                 .progressViewStyle(.linear)
                 .tint(accentColor)
                 .padding(.horizontal)
-                .padding(.top, 16)
+                .padding(.top, 60)
                 .accessibilityLabel("Tutorial progress: \(Int(currentStep.progress * 100)) percent")
 
             // Step content with transitions

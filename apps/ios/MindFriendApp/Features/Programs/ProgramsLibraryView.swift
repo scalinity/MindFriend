@@ -237,24 +237,31 @@ struct ProgramCard: View {
             .frame(height: 100)
 
             VStack(alignment: .leading, spacing: 4) {
+                // Title - fixed height for 2 lines
                 Text(program.title)
                     .font(.headline)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
-                    .frame(minHeight: 44, alignment: .top)
+                    .frame(height: 48, alignment: .topLeading)
 
-                HStack {
-                    Text(program.formattedDuration)
-                    Text("•")
-                    Text("\(program.estimatedDailyMinutes) min/day")
+                // Duration - single line, no wrapping
+                Text("\(program.formattedDuration)  •  \(program.estimatedDailyMinutes) min/day")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+
+                // Premium badge - fixed height to reserve space
+                Group {
+                    if program.premiumOnly {
+                        Label("Premium", systemImage: "crown.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                    } else {
+                        Color.clear
+                    }
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-                Label("Premium", systemImage: "crown.fill")
-                    .font(.caption2)
-                    .foregroundStyle(.orange)
-                    .opacity(program.premiumOnly ? 1 : 0)
+                .frame(height: 16)
             }
         }
     }

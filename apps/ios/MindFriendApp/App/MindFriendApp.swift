@@ -1,6 +1,7 @@
 import SwiftUI
 import GoogleSignIn
 import Sentry
+import EventKit
 
 @main
 struct MindFriendApp: App {
@@ -29,14 +30,56 @@ struct MindFriendApp: App {
                 .environmentObject(deepLinkRouter)
                 .environmentObject(container.ambientThemeService)
                 .environmentObject(localizationService)
+                .environmentObject(container.achievementService)
                 .preferredColorScheme(selectedTheme.colorScheme)
                 // Force view refresh when language changes
                 .id(localizationService.refreshTrigger)
                 .environment(\.layoutDirection, localizationService.isRTL ? .rightToLeft : .leftToRight)
                 .task {
+                    // DEBUG: Log calendar permission status and Info.plist keys at app launch
+                    #if DEBUG
+                    // Check if calendar Info.plist keys exist in bundle
+                    let bundle = Bundle.main
+                    let hasFullAccessKey = bundle.object(forInfoDictionaryKey: "NSCalendarsFullAccessUsageDescription") != nil
+                    let hasWriteOnlyKey = bundle.object(forInfoDictionaryKey: "NSCalendarsWriteOnlyAccessUsageDescription") != nil
+                    let hasLegacyKey = bundle.object(forInfoDictionaryKey: "NSCalendarsUsageDescription") != nil
+
+                    print("🗓️ [APP LAUNCH] Info.plist calendar keys:")
+                    print("   - NSCalendarsFullAccessUsageDescription: \(hasFullAccessKey ? "✅ PRESENT" : "❌ MISSING")")
+                    print("   - NSCalendarsWriteOnlyAccessUsageDescription: \(hasWriteOnlyKey ? "✅ PRESENT" : "❌ MISSING")")
+                    print("   - NSCalendarsUsageDescription (legacy): \(hasLegacyKey ? "✅ PRESENT" : "❌ MISSING")")
+
+                    if !hasFullAccessKey {
+                        print("⚠️ CRITICAL: NSCalendarsFullAccessUsageDescription is MISSING from bundle!")
+                        print("   iOS will auto-deny calendar access without this key.")
+                    }
+
+                    let calendarStatus = EKEventStore.authorizationStatus(for: .event)
+                    var statusName: String
+                    if #available(iOS 17.0, *) {
+                        switch calendarStatus {
+                        case .notDetermined: statusName = "notDetermined (0)"
+                        case .restricted: statusName = "restricted (1)"
+                        case .denied: statusName = "denied (2)"
+                        case .fullAccess: statusName = "fullAccess (3)"
+                        case .writeOnly: statusName = "writeOnly (4)"
+                        @unknown default: statusName = "unknown (\(calendarStatus.rawValue))"
+                        }
+                    } else {
+                        switch calendarStatus {
+                        case .notDetermined: statusName = "notDetermined (0)"
+                        case .restricted: statusName = "restricted (1)"
+                        case .denied: statusName = "denied (2)"
+                        case .authorized: statusName = "authorized (3)"
+                        @unknown default: statusName = "unknown (\(calendarStatus.rawValue))"
+                        }
+                    }
+                    print("🗓️ [APP LAUNCH] Calendar authorization status: \(statusName)")
+                    #endif
+
                     // Configure localization service with Supabase access
                     _ = container.localizationService
-                    
+
                     // Configure notification manager with container for device registration
                     notificationManager.configure(container: container)
 
@@ -268,6 +311,7 @@ struct RootView: View {
             case .authenticated:
                 MainTabView()
                     .ambientBackground(service: ambientService)
+                    .privacyLockOverlay(onUnlock: {})
             }
         }
         .animation(.easeInOut(duration: 0.3), value: appState.authState)
@@ -298,7 +342,10 @@ struct SplashView: View {
 }
 
 #Preview {
-    RootView()
+    let container = DependencyContainer()
+    return RootView()
         .environmentObject(AppState())
-        .environmentObject(DependencyContainer())
+        .environmentObject(container)
+        .environmentObject(container.achievementService)
+        .environmentObject(container.ambientThemeService)
 }

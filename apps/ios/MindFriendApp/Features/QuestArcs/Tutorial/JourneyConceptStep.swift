@@ -31,15 +31,15 @@ struct JourneyConceptStep: View {
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 20) {
+            VStack(spacing: 16) {
                 // Journey categories
-                HStack(spacing: 16) {
+                HStack(spacing: 12) {
                     ForEach(Array(categories.enumerated()), id: \.offset) { index, category in
                         VStack(spacing: 8) {
                             Image(systemName: category.0)
                                 .font(.title2)
                                 .foregroundStyle(category.2)
-                                .frame(width: 44, height: 44)
+                                .frame(width: 38, height: 38)
                                 .background(category.2.opacity(0.15))
                                 .clipShape(Circle())
                                 .scaleEffect(showCategories ? 1.0 : 0.5)
@@ -60,7 +60,7 @@ struct JourneyConceptStep: View {
                     .font(.subheadline)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, 20)
             }
             .onAppear {
                 withAnimation {

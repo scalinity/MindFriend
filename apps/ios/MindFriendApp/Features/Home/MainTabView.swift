@@ -113,7 +113,9 @@ struct MainTabView: View {
 }
 
 #Preview {
-    MainTabView()
+    let container = DependencyContainer()
+    return MainTabView()
         .environmentObject(AppState())
-        .environmentObject(DependencyContainer())
+        .environmentObject(container)
+        .environmentObject(container.achievementService)
 }

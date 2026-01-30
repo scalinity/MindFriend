@@ -15,6 +15,8 @@ import type {
 } from "../_shared/wellbeing-debt-types.ts";
 import {
   getYesterdayISO,
+  getDateNDaysAgo,
+  getDaysSince,
   calculateSleepQuality,
   calculateSleepDeposit,
   calculatePoorSleepWithdrawal,
@@ -151,19 +153,41 @@ async function detectUserTransactions(
 ): Promise<Transaction[]> {
   const transactions: Transaction[] = [];
 
-  // DEPOSITS
+  // Fetch profile once for grace period calculation
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("created_at")
+    .eq("id", userId)
+    .single();
+
+  const daysSinceCreation = profile?.created_at
+    ? getDaysSince(profile.created_at, date)
+    : 999; // Default to no grace period if profile not found
+
+  // DEPOSITS - Always allowed (no grace period)
   transactions.push(...(await detectSleepDeposits(supabase, userId, date)));
   transactions.push(...(await detectExerciseDeposits(supabase, userId, date)));
   transactions.push(...(await detectSocialDeposits(supabase, userId, date)));
   transactions.push(...(await detectQuestDeposits(supabase, userId, date)));
 
-  // WITHDRAWALS
-  transactions.push(...(await detectSleepWithdrawals(supabase, userId, date)));
-  transactions.push(...(await detectMoodWithdrawals(supabase, userId, date)));
-  transactions.push(...(await detectSocialWithdrawals(supabase, userId, date)));
-  transactions.push(
-    ...(await detectCircadianWithdrawals(supabase, userId, date)),
-  );
+  // WITHDRAWALS - Apply grace periods for new users
+  // 3-day grace period for sleep/mood withdrawals
+  if (daysSinceCreation >= 3) {
+    transactions.push(
+      ...(await detectSleepWithdrawals(supabase, userId, date)),
+    );
+    transactions.push(...(await detectMoodWithdrawals(supabase, userId, date)));
+  }
+
+  // 7-day grace period for social isolation and circadian disruption
+  if (daysSinceCreation >= 7) {
+    transactions.push(
+      ...(await detectSocialWithdrawals(supabase, userId, date)),
+    );
+    transactions.push(
+      ...(await detectCircadianWithdrawals(supabase, userId, date)),
+    );
+  }
 
   return transactions;
 }
@@ -244,7 +268,7 @@ async function detectExerciseDeposits(
     }
 
     const sessionCount = sessions.length;
-    const amount = sessionCount * 5; // +5 per exercise
+    const amount = sessionCount * 8; // +8 per exercise (increased from +5)
 
     return [
       {
@@ -286,7 +310,7 @@ async function detectSocialDeposits(
     }
 
     const postCount = posts.length;
-    const amount = Math.min(10, postCount * 2); // +2 per post, max +10
+    const amount = Math.min(12, postCount * 3); // +3 per post, max +12 (increased from +2/+10)
 
     return [
       {
@@ -324,7 +348,7 @@ async function detectQuestDeposits(
     }
 
     const questCount = quests.length;
-    const amount = questCount * 5; // +5 per quest
+    const amount = questCount * 8; // +8 per quest (increased from +5)
 
     return [
       {
@@ -416,15 +440,27 @@ async function detectMoodWithdrawals(
       (m: { mood_score: number }) => m.mood_score < 4,
     );
 
-    return negativeMoods.map((mood: { mood_score: number }, idx: number) => ({
+    if (negativeMoods.length === 0) {
+      return [];
+    }
+
+    // CAP at 2 per day (max -4 total) to not punish honest self-reporting
+    const cappedMoods = negativeMoods.slice(0, 2);
+
+    return cappedMoods.map((mood: { mood_score: number }, idx: number) => ({
       user_id: userId,
       date,
       type: "withdrawal",
       category: "negative_mood",
-      amount: 3, // Fixed -3 per negative mood
+      amount: 2, // Reduced from -3, max -4/day with cap
       source: "mood_log",
       description: `Mood score: ${mood.mood_score}/5`,
-      metadata: { mood_score: mood.mood_score, entry_index: idx },
+      metadata: {
+        mood_score: mood.mood_score,
+        entry_index: idx,
+        total_negative_moods: negativeMoods.length,
+        capped: negativeMoods.length > 2,
+      },
     }));
   } catch (error) {
     console.error(
@@ -441,43 +477,89 @@ async function detectSocialWithdrawals(
   date: string,
 ): Promise<Transaction[]> {
   try {
-    // Assumption #7: Isolation = 3+ consecutive days of zero circle activity
-    const threeDaysAgo = new Date(date);
-    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
-    const startDate = threeDaysAgo.toISOString().split("T")[0];
-
-    const { data: recentPosts, error } = await supabase
-      .from("circle_posts")
+    // STEP 1: Check if user has EVER joined a circle
+    // Users who haven't joined circles should NOT be penalized for "isolation"
+    const { data: memberships, error: membershipError } = await supabase
+      .from("circle_members")
       .select("id")
       .eq("user_id", userId)
-      .gte("created_at", `${startDate}T00:00:00Z`)
-      .lt("created_at", `${date}T23:59:59Z`);
+      .limit(1);
 
-    if (error) {
+    if (membershipError) {
       console.error(
-        `Error checking social activity for user ${userId}:`,
-        error,
+        `Error checking circle membership for user ${userId}:`,
+        membershipError,
       );
       return [];
     }
 
-    // If no posts in last 3 days, create isolation withdrawal
-    if (!recentPosts || recentPosts.length === 0) {
-      return [
-        {
-          user_id: userId,
-          date,
-          type: "withdrawal",
-          category: "social_isolation",
-          amount: 5,
-          source: "inferred",
-          description: "3+ days without circle activity",
-          metadata: { days_isolated: 3 },
-        },
-      ];
+    // No circle membership = no isolation penalty
+    if (!memberships || memberships.length === 0) {
+      return [];
     }
 
-    return [];
+    // STEP 2: Check if we already recorded isolation recently (one-time event)
+    // This prevents daily stacking - isolation is recorded ONCE when it starts
+    const threeDaysAgo = getDateNDaysAgo(date, 3);
+    const { data: existingIsolation, error: isolationError } = await supabase
+      .from("wellbeing_transactions")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("category", "social_isolation")
+      .gte("date", threeDaysAgo)
+      .limit(1);
+
+    if (isolationError) {
+      console.error(
+        `Error checking existing isolation for user ${userId}:`,
+        isolationError,
+      );
+      return [];
+    }
+
+    // Already recorded isolation in last 3 days - don't stack
+    if (existingIsolation && existingIsolation.length > 0) {
+      return [];
+    }
+
+    // STEP 3: Check for 3+ days without circle activity
+    const { data: recentPosts, error: postsError } = await supabase
+      .from("circle_posts")
+      .select("id")
+      .eq("user_id", userId)
+      .gte("created_at", `${threeDaysAgo}T00:00:00Z`)
+      .lt("created_at", `${date}T23:59:59Z`);
+
+    if (postsError) {
+      console.error(
+        `Error checking social activity for user ${userId}:`,
+        postsError,
+      );
+      return [];
+    }
+
+    // Has activity in last 3 days - no isolation
+    if (recentPosts && recentPosts.length > 0) {
+      return [];
+    }
+
+    // STEP 4: Record ONE-TIME isolation event
+    return [
+      {
+        user_id: userId,
+        date,
+        type: "withdrawal",
+        category: "social_isolation",
+        amount: 4, // Reduced from 5, and now one-time not daily
+        source: "inferred",
+        description:
+          "Social isolation started (3+ days without circle activity)",
+        metadata: {
+          days_isolated: 3,
+          isolation_type: "onset", // Marks this as start of isolation, not ongoing
+        },
+      },
+    ];
   } catch (error) {
     console.error(
       `Error detecting social withdrawals for user ${userId}:`,
@@ -515,7 +597,7 @@ async function detectCircadianWithdrawals(
           date,
           type: "withdrawal",
           category: "circadian_disruption",
-          amount: 5,
+          amount: 3, // Reduced from 5 for rebalanced economy
           source: "circadian_shield",
           description: `Social jetlag: ${socialJetlagHours.toFixed(1)}h`,
           metadata: { social_jetlag_hours: socialJetlagHours.toFixed(1) },

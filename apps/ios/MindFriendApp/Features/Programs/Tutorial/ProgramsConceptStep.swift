@@ -23,9 +23,9 @@ struct ProgramsConceptStep: View {
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 16) {
+            VStack(spacing: 8) {
                 // Comparison: Quest vs Program
-                HStack(spacing: 16) {
+                HStack(spacing: 12) {
                     // Quest card
                     VStack(spacing: 8) {
                         Image(systemName: "star.fill")
@@ -39,8 +39,9 @@ struct ProgramsConceptStep: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    .padding()
+                    .padding(12)
                     .frame(maxWidth: .infinity)
                     .background(Color(.secondarySystemBackground))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -65,15 +66,16 @@ struct ProgramsConceptStep: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    .padding()
+                    .padding(12)
                     .frame(maxWidth: .infinity)
                     .background(Color.cyan.opacity(0.1))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .opacity(showElements ? 1 : 0.3)
                     .offset(y: showElements ? 0 : 10)
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
 
                 // Program features
                 VStack(alignment: .leading, spacing: 10) {
@@ -87,6 +89,7 @@ struct ProgramsConceptStep: View {
                             Text(feature.text)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                         .opacity(showElements ? 1 : 0)
                         .animation(
@@ -95,7 +98,7 @@ struct ProgramsConceptStep: View {
                         )
                     }
                 }
-                .padding(.horizontal, 32)
+                .padding(.horizontal, 24)
             }
             .onAppear {
                 withAnimation(.easeOut(duration: 0.5).delay(0.3)) {

@@ -23,9 +23,9 @@ struct ExerciseCustomStep: View {
             primaryLabel: "Start Exploring",
             primaryAction: onComplete
         ) {
-            VStack(spacing: 20) {
+            VStack(spacing: 16) {
                 // Generation animation
-                VStack(spacing: 16) {
+                VStack(spacing: 8) {
                     if !showExercise {
                         // Generating state
                         HStack(spacing: 12) {
@@ -40,11 +40,12 @@ struct ExerciseCustomStep: View {
                                 Text("Based on: \"Help me calm down before sleep\"")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
 
                             Spacer()
                         }
-                        .padding()
+                        .padding(12)
                         .background(Color.orange.opacity(0.1))
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         .transition(.opacity)
@@ -71,6 +72,7 @@ struct ExerciseCustomStep: View {
                             Text("A gentle 5-minute breathing exercise designed to help you transition to restful sleep.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
 
                             HStack(spacing: 12) {
                                 Label("5 min", systemImage: "clock")
@@ -79,13 +81,13 @@ struct ExerciseCustomStep: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         }
-                        .padding()
+                        .padding(12)
                         .background(Color(.secondarySystemBackground))
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         .transition(.scale.combined(with: .opacity))
                     }
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
 
                 // Premium note
                 HStack(spacing: 6) {

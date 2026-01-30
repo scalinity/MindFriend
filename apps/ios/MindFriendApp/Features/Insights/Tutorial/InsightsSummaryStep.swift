@@ -23,9 +23,9 @@ struct InsightsSummaryStep: View {
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 16) {
+            VStack(spacing: 8) {
                 // Example metrics
-                HStack(spacing: 16) {
+                HStack(spacing: 12) {
                     InsightMetricCard(
                         icon: "face.smiling",
                         value: "3.8",
@@ -48,7 +48,7 @@ struct InsightsSummaryStep: View {
                         isVisible: showMetrics
                     )
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
 
                 // What's included
                 VStack(alignment: .leading, spacing: 8) {
@@ -63,13 +63,14 @@ struct InsightsSummaryStep: View {
                             Text(item)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                 }
-                .padding()
+                .padding(12)
                 .background(Color(.secondarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
                 .opacity(showMetrics ? 1 : 0)
             }
             .onAppear {
@@ -109,7 +110,7 @@ private struct InsightMetricCard: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
+        .padding(.vertical, 12)
         .background(Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .scaleEffect(isVisible ? 1 : 0.8)

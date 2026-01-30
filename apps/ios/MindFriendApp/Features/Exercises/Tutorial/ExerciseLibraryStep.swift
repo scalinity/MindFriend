@@ -31,13 +31,13 @@ struct ExerciseLibraryStep: View {
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 12) {
+            VStack(spacing: 8) {
                 ForEach(Array(categories.enumerated()), id: \.element.name) { index, category in
                     HStack(spacing: 12) {
                         ZStack {
                             Circle()
                                 .fill(category.color.opacity(0.15))
-                                .frame(width: 40, height: 40)
+                                .frame(width: 36, height: 36)
                             Image(systemName: category.icon)
                                 .foregroundStyle(category.color)
                         }
@@ -50,6 +50,7 @@ struct ExerciseLibraryStep: View {
                         Text("\(category.count) exercises")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .fixedSize()
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
@@ -63,7 +64,7 @@ struct ExerciseLibraryStep: View {
                     )
                 }
             }
-            .padding(.horizontal, 24)
+            .padding(.horizontal, 20)
             .onAppear { showCategories = true }
         }
     }

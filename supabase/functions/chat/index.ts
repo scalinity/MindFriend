@@ -348,10 +348,10 @@ serve(async (req) => {
       );
     }
 
-    // Fetch user settings for privacy_mode and ai_tone
+    // Fetch user settings for privacy_mode, ai_tone, and language
     const { data: userSettings } = await supabaseAdmin
       .from("user_settings")
-      .select("privacy_mode, ai_tone")
+      .select("privacy_mode, ai_tone, language")
       .eq("user_id", user.id)
       .maybeSingle();
 
@@ -419,12 +419,7 @@ serve(async (req) => {
 
     // Crisis detection - SAFETY CRITICAL
     // SEC-CRIT-007: Use multi-language crisis detection with English fallback
-    // Get user's language preference (default to 'en' for safety redundancy)
-    const { data: userSettings } = await supabaseAdmin
-      .from("user_settings")
-      .select("language")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    // Language preference already fetched above in userSettings query
     const userLanguage = userSettings?.language || "en";
 
     if (detectCrisisMultiLang(trimmedContent, userLanguage)) {
@@ -582,7 +577,7 @@ serve(async (req) => {
     if (!privacyModeEnabled) {
       const { data: memories } = await supabaseAdmin
         .from("memory_fragments")
-        .select("fragment_type, key, value, confidence")
+        .select("fragment_type, key, value, confidence, scheduled_time")
         .eq("user_id", user.id)
         .or(`expires_at.is.null,expires_at.gt.${now.toISOString()}`)
         .order("confidence", { ascending: false })
@@ -590,34 +585,85 @@ serve(async (req) => {
 
       // Build memory context string for system prompt (format: key: value)
       if (memories && memories.length > 0) {
-        const grouped: Record<string, string[]> = {};
+        const grouped: Record<string, string[]> = {
+          person: [],
+          fact: [],
+          preference: [],
+        };
+        const upcomingEvents: string[] = [];
+        const pastEvents: string[] = [];
+
         for (const mem of memories) {
-          if (!grouped[mem.fragment_type]) grouped[mem.fragment_type] = [];
-          // Format as "key: value" for cleaner display
-          grouped[mem.fragment_type].push(`${mem.key}: ${mem.value}`);
+          if (mem.fragment_type === "event") {
+            // For events, check scheduled_time to determine if past or upcoming
+            if (mem.scheduled_time) {
+              const eventTime = new Date(mem.scheduled_time);
+              const timeDiff = eventTime.getTime() - now.getTime();
+              const hoursDiff = timeDiff / (1000 * 60 * 60);
+
+              if (timeDiff > 0) {
+                // Upcoming event - format relative to now
+                let timeDesc: string;
+                if (hoursDiff < 1) {
+                  const mins = Math.round(timeDiff / (1000 * 60));
+                  timeDesc = `in ${mins} minute${mins !== 1 ? "s" : ""}`;
+                } else if (hoursDiff < 24) {
+                  const hrs = Math.round(hoursDiff * 10) / 10;
+                  timeDesc = `in ${hrs} hour${hrs !== 1 ? "s" : ""}`;
+                } else {
+                  const days = Math.round(hoursDiff / 24);
+                  timeDesc = `in ${days} day${days !== 1 ? "s" : ""}`;
+                }
+                upcomingEvents.push(`${mem.value} (${timeDesc})`);
+              } else {
+                // Past event - format for follow-up
+                const hoursAgo = Math.abs(hoursDiff);
+                let timeDesc: string;
+                if (hoursAgo < 1) {
+                  const minsAgo = Math.round(Math.abs(timeDiff) / (1000 * 60));
+                  timeDesc = `${minsAgo} minute${minsAgo !== 1 ? "s" : ""} ago`;
+                } else if (hoursAgo < 24) {
+                  const hrs = Math.round(hoursAgo * 10) / 10;
+                  timeDesc = `${hrs} hour${hrs !== 1 ? "s" : ""} ago`;
+                } else {
+                  const days = Math.round(hoursAgo / 24);
+                  timeDesc = `${days} day${days !== 1 ? "s" : ""} ago`;
+                }
+                pastEvents.push(`${mem.value} (${timeDesc})`);
+              }
+            } else {
+              // No scheduled_time (legacy data), show as-is
+              upcomingEvents.push(`${mem.key}: ${mem.value}`);
+            }
+          } else {
+            // Non-event memories
+            if (!grouped[mem.fragment_type]) grouped[mem.fragment_type] = [];
+            grouped[mem.fragment_type].push(`${mem.key}: ${mem.value}`);
+          }
         }
 
         memoryContext = "\n\n## What you know about this user:\n";
-        if (grouped.person) {
+        if (grouped.person && grouped.person.length > 0) {
           memoryContext += `- People in their life: ${grouped.person.join(
             ", ",
           )}\n`;
         }
-        if (grouped.fact) {
+        if (grouped.fact && grouped.fact.length > 0) {
           memoryContext += `- Facts about them: ${grouped.fact.join(", ")}\n`;
         }
-        if (grouped.preference) {
+        if (grouped.preference && grouped.preference.length > 0) {
           memoryContext += `- Their preferences: ${grouped.preference.join(
             ", ",
           )}\n`;
         }
-        if (grouped.event) {
-          memoryContext += `- Upcoming/recent events: ${grouped.event.join(
-            ", ",
-          )}\n`;
+        if (upcomingEvents.length > 0) {
+          memoryContext += `- Upcoming events: ${upcomingEvents.join(", ")}\n`;
+        }
+        if (pastEvents.length > 0) {
+          memoryContext += `- Recent events to ask about (follow up warmly): ${pastEvents.join(", ")}\n`;
         }
         memoryContext +=
-          "\nUse this context naturally in conversation when relevant. Reference past events or details to show you remember and care.";
+          "\nUse this context naturally in conversation when relevant. For past events, warmly ask how they went. Reference details to show you remember and care.";
       }
     }
 
@@ -1222,6 +1268,118 @@ Examples: "Anxiety About Work Presentation", "Morning Meditation Practice", "Dea
   }
 }
 
+// Parse relative time expressions to absolute timestamps
+// Handles: "in X hours", "in X minutes", "tomorrow at X", "next Monday", etc.
+function parseRelativeTime(
+  timeExpression: string,
+  referenceTime: Date,
+): Date | null {
+  if (!timeExpression) return null;
+
+  const expr = timeExpression.toLowerCase().trim();
+
+  // Pattern: "in X hours" or "in X.X hours"
+  const inHoursMatch = expr.match(/in\s+(\d+(?:\.\d+)?)\s*hours?/);
+  if (inHoursMatch) {
+    const hours = parseFloat(inHoursMatch[1]);
+    return new Date(referenceTime.getTime() + hours * 60 * 60 * 1000);
+  }
+
+  // Pattern: "in X minutes"
+  const inMinutesMatch = expr.match(/in\s+(\d+)\s*min(?:utes?)?/);
+  if (inMinutesMatch) {
+    const minutes = parseInt(inMinutesMatch[1]);
+    return new Date(referenceTime.getTime() + minutes * 60 * 1000);
+  }
+
+  // Pattern: "in X days"
+  const inDaysMatch = expr.match(/in\s+(\d+)\s*days?/);
+  if (inDaysMatch) {
+    const days = parseInt(inDaysMatch[1]);
+    return new Date(referenceTime.getTime() + days * 24 * 60 * 60 * 1000);
+  }
+
+  // Pattern: "tomorrow" (optionally with time)
+  if (expr.includes("tomorrow")) {
+    const tomorrow = new Date(referenceTime);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // Try to extract time like "tomorrow at 2pm" or "tomorrow at 14:00"
+    const timeMatch = expr.match(/at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+    if (timeMatch) {
+      let hour = parseInt(timeMatch[1]);
+      const minutes = timeMatch[2] ? parseInt(timeMatch[2]) : 0;
+      const ampm = timeMatch[3]?.toLowerCase();
+      if (ampm === "pm" && hour < 12) hour += 12;
+      if (ampm === "am" && hour === 12) hour = 0;
+      tomorrow.setHours(hour, minutes, 0, 0);
+    } else {
+      // Default to 9am if no time specified
+      tomorrow.setHours(9, 0, 0, 0);
+    }
+    return tomorrow;
+  }
+
+  // Pattern: weekday names (next Monday, this Friday, etc.)
+  const weekdays = [
+    "sunday",
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+  ];
+  for (let i = 0; i < weekdays.length; i++) {
+    if (expr.includes(weekdays[i])) {
+      const targetDay = i;
+      const currentDay = referenceTime.getDay();
+      let daysToAdd = targetDay - currentDay;
+      if (daysToAdd <= 0) daysToAdd += 7; // Next occurrence
+      if (expr.includes("next")) daysToAdd += 7; // "next Monday" means following week
+
+      const targetDate = new Date(referenceTime);
+      targetDate.setDate(targetDate.getDate() + daysToAdd);
+
+      // Try to extract time
+      const timeMatch = expr.match(/at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+      if (timeMatch) {
+        let hour = parseInt(timeMatch[1]);
+        const minutes = timeMatch[2] ? parseInt(timeMatch[2]) : 0;
+        const ampm = timeMatch[3]?.toLowerCase();
+        if (ampm === "pm" && hour < 12) hour += 12;
+        if (ampm === "am" && hour === 12) hour = 0;
+        targetDate.setHours(hour, minutes, 0, 0);
+      } else {
+        targetDate.setHours(9, 0, 0, 0);
+      }
+      return targetDate;
+    }
+  }
+
+  // Pattern: specific time like "at 2pm" or "at 14:00" (assume today)
+  const justTimeMatch = expr.match(
+    /^(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i,
+  );
+  if (justTimeMatch) {
+    const result = new Date(referenceTime);
+    let hour = parseInt(justTimeMatch[1]);
+    const minutes = justTimeMatch[2] ? parseInt(justTimeMatch[2]) : 0;
+    const ampm = justTimeMatch[3]?.toLowerCase();
+    if (ampm === "pm" && hour < 12) hour += 12;
+    if (ampm === "am" && hour === 12) hour = 0;
+    result.setHours(hour, minutes, 0, 0);
+    // If time has passed today, assume tomorrow
+    if (result <= referenceTime) {
+      result.setDate(result.getDate() + 1);
+    }
+    return result;
+  }
+
+  // Could not parse - return null
+  return null;
+}
+
 // Memory extraction function - runs in background, non-blocking
 async function extractMemories(
   supabaseAdmin: UntypedSupabaseClient,
@@ -1235,7 +1393,7 @@ async function extractMemories(
   const sanitizedMessage = sanitizeForPrompt(userMessage);
 
   const extractionPrompt = `Analyze this user message and extract any facts they revealed about themselves.
-Return a JSON array of objects with "type", "key", and "value" fields.
+Return a JSON array of objects with "type", "key", "value", and optionally "time_expression" fields.
 
 Types:
 - "person": Names of family members, friends, pets, coworkers
@@ -1245,11 +1403,13 @@ Types:
 
 Format:
 - key: short snake_case identifier (e.g., "dog_name", "partner_name", "work_presentation", "favorite_exercise")
-- value: the actual information (e.g., "Max", "Sarah", "Friday at 2pm", "breathing")
+- value: a clean description of the event/item (e.g., "Max", "Sarah", "Job Interview", "Therapy Appointment")
+- time_expression: (ONLY for events) the exact time phrase the user used (e.g., "in 1.5 hours", "tomorrow at 2pm", "next Monday", "Friday at 10am")
 
 Rules:
 - Only extract clear, explicit information - don't infer or guess
 - Keep key short (under 30 chars) and value concise (under 100 chars)
+- For events, ALWAYS include "time_expression" with the exact time phrase from the message
 - If nothing new is shared, return empty array []
 - Don't extract emotional states or temporary feelings
 
@@ -1257,7 +1417,7 @@ Rules:
 ${sanitizedMessage}
 </user_message>
 
-Return ONLY valid JSON array, no explanation. Example: [{"type": "person", "key": "sister_name", "value": "Emma"}, {"type": "event", "key": "job_interview", "value": "Next Monday at 10am"}]`;
+Return ONLY valid JSON array, no explanation. Example: [{"type": "person", "key": "sister_name", "value": "Emma"}, {"type": "event", "key": "job_interview", "value": "Job Interview", "time_expression": "next Monday at 10am"}]`;
 
   try {
     const response = await fetch(XAI_API_URL, {
@@ -1291,7 +1451,12 @@ Return ONLY valid JSON array, no explanation. Example: [{"type": "person", "key"
     if (!extracted) return;
 
     // Parse JSON response
-    let memories: Array<{ type: string; key: string; value: string }>;
+    let memories: Array<{
+      type: string;
+      key: string;
+      value: string;
+      time_expression?: string;
+    }>;
     try {
       // Clean up response - sometimes models add markdown formatting
       const cleaned = extracted.replace(/```json\n?|\n?```/g, "").trim();
@@ -1328,6 +1493,9 @@ Return ONLY valid JSON array, no explanation. Example: [{"type": "person", "key"
         type: m.type,
         key: sanitize(m.key.toLowerCase().replace(/\s+/g, "_"), 50),
         value: sanitize(m.value, 500),
+        time_expression: m.time_expression
+          ? sanitize(m.time_expression, 100)
+          : undefined,
       }))
       .filter((m) => m.key.length > 0 && m.value.length > 0);
 
@@ -1335,21 +1503,47 @@ Return ONLY valid JSON array, no explanation. Example: [{"type": "person", "key"
 
     // Use upsert with the UNIQUE constraint (user_id, fragment_type, key)
     // This will update existing memories with same key instead of duplicating
-    const upserts = candidates.map((m) => ({
-      user_id: userId,
-      fragment_type: m.type,
-      key: m.key,
-      value: m.value,
-      confidence: 0.8, // Default confidence
-      source_conversation_id: conversationId,
-      extracted_at: now.toISOString(),
-      updated_at: now.toISOString(),
-      // Events expire in 7 days, others are permanent
-      expires_at:
-        m.type === "event"
-          ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-          : null,
-    }));
+    const upserts = candidates.map((m) => {
+      // For events with time expressions, parse to absolute timestamp
+      let scheduledTime: string | null = null;
+      let expiresAt: string | null = null;
+
+      if (m.type === "event") {
+        if (m.time_expression) {
+          const parsed = parseRelativeTime(m.time_expression, now);
+          if (parsed) {
+            scheduledTime = parsed.toISOString();
+            // Expire 24 hours after the event for follow-up conversations
+            expiresAt = new Date(
+              parsed.getTime() + 24 * 60 * 60 * 1000,
+            ).toISOString();
+          } else {
+            // Couldn't parse time, use 7-day default expiry
+            expiresAt = new Date(
+              Date.now() + 7 * 24 * 60 * 60 * 1000,
+            ).toISOString();
+          }
+        } else {
+          // No time expression, use 7-day default expiry
+          expiresAt = new Date(
+            Date.now() + 7 * 24 * 60 * 60 * 1000,
+          ).toISOString();
+        }
+      }
+
+      return {
+        user_id: userId,
+        fragment_type: m.type,
+        key: m.key,
+        value: m.value,
+        confidence: 0.8,
+        source_conversation_id: conversationId,
+        extracted_at: now.toISOString(),
+        updated_at: now.toISOString(),
+        scheduled_time: scheduledTime,
+        expires_at: expiresAt,
+      };
+    });
 
     const { error } = await supabaseAdmin
       .from("memory_fragments")

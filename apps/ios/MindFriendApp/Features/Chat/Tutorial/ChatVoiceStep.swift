@@ -24,7 +24,7 @@ struct ChatVoiceStep: View {
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 24) {
+            VStack(spacing: 16) {
                 // Voice visualization
                 ZStack {
                     // Animated rings
@@ -48,7 +48,7 @@ struct ChatVoiceStep: View {
                 }
 
                 // Voice features
-                VStack(spacing: 12) {
+                VStack(spacing: 8) {
                     ForEach(Array(voiceFeatures.enumerated()), id: \.element.text) { index, feature in
                         HStack(spacing: 12) {
                             Image(systemName: feature.icon)
@@ -59,6 +59,7 @@ struct ChatVoiceStep: View {
                             Text(feature.text)
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
 
                             Spacer()
                         }
@@ -70,10 +71,10 @@ struct ChatVoiceStep: View {
                         )
                     }
                 }
-                .padding()
+                .padding(12)
                 .background(Color(.secondarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
 
                 // Premium note
                 HStack(spacing: 6) {

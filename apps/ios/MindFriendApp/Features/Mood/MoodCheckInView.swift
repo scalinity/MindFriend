@@ -9,7 +9,7 @@ struct MoodCheckInView: View {
     var existingMood: MoodEntry?
 
     @State private var moodScore: Double = 3
-    @State private var anxietyScore: Double = 3
+    @State private var anxietyScore: Double = 1
     @State private var energyScore: Double = 3
     @State private var note: String = ""
     @State private var showAdvanced = false
@@ -23,7 +23,7 @@ struct MoodCheckInView: View {
     @AppStorage("mood_tutorial_completed") private var moodTutorialCompleted = false
     @State private var showMoodTutorial = false
 
-    private let moodEmojis = ["😔", "😕", "😐", "🙂", "😄"]
+    private let moodEmojis = ["😔", "😕", "😐", "🙂", "😁"]
     private let anxietyLabels = ["Very Low", "Low", "Moderate", "High", "Very High"]
     private let energyLabels = ["Exhausted", "Tired", "Okay", "Energetic", "Very High"]
 
@@ -194,13 +194,25 @@ struct MoodCheckInView: View {
                 if existingMood == nil {
                     xpResult = try await container.supabaseDataService.awardXP(activity: .moodCheckin)
 
+                    // Trigger XP gain toast IMMEDIATELY for instant gratification
+                    await MainActor.run {
+                        container.achievementService.triggerXPGainAnimation(
+                            amount: xpResult?.amount ?? 10,
+                            activity: .moodCheckin
+                        )
+                    }
+
                     // Fire-and-forget: badge check and activation record run in background
                     // These are slow operations that shouldn't block the UI
                     let achievementService = container.achievementService
                     let activationService = container.activationService
                     Task.detached(priority: .utility) {
-                        _ = try? await achievementService.checkBadgeProgress()
-                        try? await activationService.recordMoodLog()
+                        do {
+                            _ = try await achievementService.checkBadgeProgress()
+                            try await activationService.recordMoodLog()
+                        } catch {
+                            Log.data.warning("[MoodCheckIn] Background badge/activation check failed: \(error.localizedDescription)")
+                        }
                     }
                 }
 

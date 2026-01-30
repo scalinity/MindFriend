@@ -30,7 +30,7 @@ struct QuestTutorialFlow: View {
                 .progressViewStyle(.linear)
                 .tint(.orange)
                 .padding(.horizontal)
-                .padding(.top, 16)
+                .padding(.top, 60)
 
             // Step content
             Group {

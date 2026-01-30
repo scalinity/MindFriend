@@ -24,7 +24,7 @@ struct CirclesCheckInStep: View {
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 16) {
+            VStack(spacing: 8) {
                 // Example check-in
                 VStack(alignment: .leading, spacing: 12) {
                     // Header
@@ -51,6 +51,7 @@ struct CirclesCheckInStep: View {
                     Text("Feeling good today! Started with a morning walk and ready to tackle the day.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     // Reactions
                     if showReactions {
@@ -62,12 +63,12 @@ struct CirclesCheckInStep: View {
                         .transition(.scale.combined(with: .opacity))
                     }
                 }
-                .padding()
+                .padding(12)
                 .background(Color(.secondarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 .scaleEffect(showCheckIn ? 1 : 0.95)
                 .opacity(showCheckIn ? 1 : 0)
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
 
                 // Info
                 VStack(spacing: 6) {
@@ -77,8 +78,9 @@ struct CirclesCheckInStep: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(.horizontal, 32)
+                .padding(.horizontal, 24)
                 .opacity(showReactions ? 1 : 0)
             }
             .onAppear {

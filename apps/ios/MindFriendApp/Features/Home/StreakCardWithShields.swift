@@ -114,8 +114,12 @@ struct StreakCardWithShields: View {
             return "Recovery available"
         } else if shieldsRemaining == 0 {
             return "No protection"
-        } else {
+        } else if currentStreak > 0 {
+            // Only say "Protected" when there's an active streak to protect
             return "Protected"
+        } else {
+            // No streak yet - show shield availability
+            return shieldsRemaining == 1 ? "1 Shield ready" : "\(shieldsRemaining) Shields ready"
         }
     }
 
@@ -124,8 +128,12 @@ struct StreakCardWithShields: View {
             return .orange
         } else if shieldsRemaining == 0 {
             return .orange
-        } else {
+        } else if currentStreak > 0 {
+            // Green when actively protecting a streak
             return .green
+        } else {
+            // Blue when shields are available but no streak yet
+            return .blue
         }
     }
 }

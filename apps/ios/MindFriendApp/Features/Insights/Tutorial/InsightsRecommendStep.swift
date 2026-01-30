@@ -22,7 +22,7 @@ struct InsightsRecommendStep: View {
             primaryLabel: "View Your Insights",
             primaryAction: onComplete
         ) {
-            VStack(spacing: 16) {
+            VStack(spacing: 8) {
                 // Example recommendations
                 ForEach(Array(recommendations.enumerated()), id: \.element.title) { index, rec in
                     HStack(alignment: .top, spacing: 12) {
@@ -37,11 +37,12 @@ struct InsightsRecommendStep: View {
                             Text(rec.description)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
 
                         Spacer()
                     }
-                    .padding()
+                    .padding(12)
                     .background(rec.color.opacity(0.1))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .opacity(showRecommendations ? 1 : 0)
@@ -57,10 +58,11 @@ struct InsightsRecommendStep: View {
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 20)
                     .opacity(showRecommendations ? 1 : 0)
             }
-            .padding(.horizontal, 24)
+            .padding(.horizontal, 20)
             .onAppear { showRecommendations = true }
         }
     }

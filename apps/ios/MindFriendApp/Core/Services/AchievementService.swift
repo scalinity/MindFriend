@@ -48,9 +48,11 @@ final class AchievementService: ObservableObject {
     @Published private(set) var newlyEarnedBadges: [AchievementBadge] = []
     @Published private(set) var lastLoadTime: Date?
     
-    // Celebration state (NEW)
+    // Celebration state
     @Published var pendingCelebration: LevelUpEvent?
     @Published var pendingMilestone: MilestoneCelebration?
+    @Published var pendingSkillLevelUp: SkillLevelUpEvent?
+    @Published var pendingXPGain: XPGainEvent?
 
     @Published private(set) var isLoading = false
     @Published private(set) var error: Error?
@@ -59,6 +61,10 @@ final class AchievementService: ObservableObject {
 
     private let supabase: SupabaseClient
     private let authService: SupabaseAuthService
+
+    // XP event queue for handling rapid XP gains
+    private var xpEventQueue: [XPGainEvent] = []
+    private var isProcessingXPQueue = false
 
     // MARK: - Init
 
@@ -165,16 +171,24 @@ final class AchievementService: ObservableObject {
         let response: AwardXPResponse = try await supabase.functions
             .invoke("award-xp", options: .init(body: request))
 
-        // Reload user experience after awarding XP
-        try await loadUserExperience()
-        
-        // Trigger level-up celebration if level increased (NEW)
+        // Trigger XP gain toast IMMEDIATELY for instant gratification
+        triggerXPGainAnimation(amount: response.xpAwarded, source: source)
+
+        // Trigger level-up celebration if level increased (after XP toast)
         if response.leveledUp, let levelUp = response.levelUp {
-            triggerLevelUpCelebration(
-                oldLevel: levelUp.oldLevel,
-                newLevel: levelUp.newLevel,
-                xpEarned: response.xpAwarded
-            )
+            // Delay level-up celebration slightly so XP toast shows first
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { [weak self] in
+                self?.triggerLevelUpCelebration(
+                    oldLevel: levelUp.oldLevel,
+                    newLevel: levelUp.newLevel,
+                    xpEarned: response.xpAwarded
+                )
+            }
+        }
+
+        // Reload user experience in background (don't block the return)
+        Task {
+            try? await loadUserExperience()
         }
 
         return response
@@ -542,7 +556,73 @@ final class AchievementService: ObservableObject {
             }
         }
     }
-    
+
+    // MARK: - Skill Level Up Celebration
+
+    /// Trigger skill level-up celebration
+    func triggerSkillLevelUpCelebration(
+        skillType: ExerciseType,
+        oldLevel: Int,
+        newLevel: Int,
+        xpEarned: Int
+    ) {
+        pendingSkillLevelUp = SkillLevelUpEvent(
+            skillType: skillType,
+            oldLevel: oldLevel,
+            newLevel: newLevel,
+            xpEarned: xpEarned
+        )
+    }
+
+    /// Clear pending skill level-up celebration
+    func clearPendingSkillLevelUp() {
+        pendingSkillLevelUp = nil
+    }
+
+    /// Trigger XP gain toast animation and refresh XP data
+    /// Uses a queue to prevent rapid XP gains from being lost
+    func triggerXPGainAnimation(amount: Int, source: XPSource) {
+        let event = XPGainEvent(amount: amount, source: source)
+        xpEventQueue.append(event)
+
+        // Refresh XP data in background so the XP bar updates
+        Task {
+            try? await loadUserExperience()
+        }
+
+        // Process queue if not already processing
+        processXPQueue()
+    }
+
+    /// Trigger XP gain toast for XPActivity (convenience for views using SupabaseDataService)
+    func triggerXPGainAnimation(amount: Int, activity: XPActivity) {
+        let source: XPSource = switch activity {
+        case .questComplete: .quest
+        case .exerciseComplete: .exercise
+        case .moodCheckin: .mood
+        case .circleCheckin: .checkin
+        }
+        triggerXPGainAnimation(amount: amount, source: source)
+    }
+
+    /// Clear pending XP gain toast and show next queued event
+    func clearXPGain() {
+        pendingXPGain = nil
+        isProcessingXPQueue = false
+
+        // Show next event if queue has more
+        processXPQueue()
+    }
+
+    /// Process the XP event queue
+    private func processXPQueue() {
+        guard !isProcessingXPQueue, !xpEventQueue.isEmpty else { return }
+
+        isProcessingXPQueue = true
+        let event = xpEventQueue.removeFirst()
+        pendingXPGain = event
+    }
+
     func fetchMilestoneNarrative(level: Int) async throws -> MilestoneCelebration {
         struct MilestoneRequest: Encodable {
             let level: Int

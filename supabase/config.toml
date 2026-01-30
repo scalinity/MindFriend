@@ -121,3 +121,6 @@ verify_jwt = false  # Verified internally in function code
 [functions.exit-quest-arc]
 verify_jwt = false  # Verified internally in function code
 
+[functions.privacy-lock-settings]
+verify_jwt = false  # Verified internally in function code
+

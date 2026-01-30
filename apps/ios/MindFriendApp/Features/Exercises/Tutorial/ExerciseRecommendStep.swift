@@ -24,7 +24,7 @@ struct ExerciseRecommendStep: View {
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 20) {
+            VStack(spacing: 16) {
                 // Capacity indicator
                 VStack(spacing: 8) {
                     Text("Your Current Capacity")
@@ -43,10 +43,10 @@ struct ExerciseRecommendStep: View {
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(capacityColor)
                 }
-                .padding()
+                .padding(12)
                 .background(Color(.secondarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
 
                 // Explanation
                 VStack(alignment: .leading, spacing: 8) {
@@ -59,10 +59,10 @@ struct ExerciseRecommendStep: View {
                         InfoPoint(text: "Updates based on your mood check-ins")
                     }
                 }
-                .padding()
+                .padding(12)
                 .background(Color(.tertiarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
                 .opacity(showExplanation ? 1 : 0)
             }
             .onAppear {
@@ -119,6 +119,7 @@ private struct InfoPoint: View {
             Text(text)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

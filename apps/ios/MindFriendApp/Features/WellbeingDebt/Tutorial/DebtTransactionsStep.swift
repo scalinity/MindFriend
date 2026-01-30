@@ -39,12 +39,13 @@ struct DebtTransactionsStep: View {
         ) {
             HStack(alignment: .top, spacing: 16) {
                 // Deposits column
-                VStack(spacing: 12) {
-                    HStack {
+                VStack(spacing: 6) {
+                    HStack(spacing: 4) {
                         Image(systemName: "plus.circle.fill")
+                            .font(.caption)
                             .foregroundStyle(.green)
                         Text("Deposits")
-                            .font(.headline)
+                            .font(.subheadline.bold())
                             .foregroundStyle(.green)
                     }
 
@@ -66,12 +67,13 @@ struct DebtTransactionsStep: View {
                     .padding(.vertical, 8)
 
                 // Withdrawals column
-                VStack(spacing: 12) {
-                    HStack {
+                VStack(spacing: 6) {
+                    HStack(spacing: 4) {
                         Image(systemName: "minus.circle.fill")
+                            .font(.caption)
                             .foregroundStyle(.orange)
                         Text("Withdrawals")
-                            .font(.headline)
+                            .font(.subheadline.bold())
                             .foregroundStyle(.orange)
                     }
 
@@ -95,21 +97,23 @@ struct DebtTransactionsStep: View {
 
     @ViewBuilder
     private func transactionRow(icon: String, label: String, color: Color, isVisible: Bool) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Image(systemName: icon)
-                .font(.body)
+                .font(.caption)
                 .foregroundStyle(color)
-                .frame(width: 24)
+                .frame(width: 20)
 
             Text(label)
-                .font(.caption)
+                .font(.caption2)
                 .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(2)
 
-            Spacer()
+            Spacer(minLength: 0)
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 8)
-        .background(color.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+        .padding(.vertical, 4)
+        .padding(.horizontal, 6)
+        .background(color.opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
         .opacity(isVisible ? 1 : 0)
         .offset(y: isVisible ? 0 : 10)
     }

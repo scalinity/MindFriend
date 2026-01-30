@@ -1,5 +1,5 @@
 // MindFriend Badge Earned Celebration View
-// Displays a celebratory overlay when a badge is earned
+// Displays a celebratory overlay when a badge is earned with hexagonal stamp and shimmer particles
 
 import SwiftUI
 
@@ -7,59 +7,61 @@ struct BadgeEarnedView: View {
     let badge: AchievementBadge
     let onDismiss: () -> Void
 
-    @State private var showContent = false
+    @State private var showBadge = false
+    @State private var showShimmer = false
+    @State private var showTitle = false
+    @State private var showDetails = false
+    @State private var showXP = false
+    @State private var showButton = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
             // Background
-            Color.black.opacity(0.7)
+            Color.black.opacity(0.75)
                 .ignoresSafeArea()
                 .onTapGesture {
-                    onDismiss()
+                    dismiss()
                 }
+
+            // Shimmer particles (behind badge)
+            if showShimmer {
+                BadgeShimmerParticles(tierColor: tierColor)
+                    .frame(width: 350, height: 350)
+            }
 
             // Content
-            VStack(spacing: 24) {
+            VStack(spacing: 20) {
                 Spacer()
 
-                // Badge Icon with Animation
-                ZStack {
-                    // Glow Effect
-                    Circle()
-                        .fill(
-                            RadialGradient(
-                                colors: [
-                                    tierColor.opacity(0.6),
-                                    tierColor.opacity(0.0)
-                                ],
-                                center: .center,
-                                startRadius: 50,
-                                endRadius: 150
-                            )
-                        )
-                        .frame(width: 300, height: 300)
-                        .scaleEffect(showContent ? 1.0 : 0.5)
-                        .opacity(showContent ? 1.0 : 0.0)
-
-                    // Badge Icon (using SF Symbols)
-                    Image(systemName: badge.sfSymbolName)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .foregroundStyle(tierColor)
-                        .frame(width: 120, height: 120)
-                        .scaleEffect(showContent ? 1.0 : 0.3)
-                        .rotationEffect(.degrees(showContent ? 0 : -30))
+                // Hexagonal Badge Stamp Effect
+                if showBadge {
+                    BadgeStampEffect(
+                        tierColor: tierColor,
+                        sfSymbol: badge.sfSymbolName,
+                        onImpact: {
+                            // Trigger shimmer after stamp impact
+                            withAnimation {
+                                showShimmer = true
+                            }
+                        }
+                    )
+                    .frame(height: 180)
                 }
 
-                // Text
-                VStack(spacing: 12) {
-                    Text("Badge Earned!")
-                        .font(.title)
-                        .fontWeight(.bold)
-                        .foregroundStyle(.white)
+                // "BADGE EARNED!" Title
+                Text("BADGE EARNED!")
+                    .font(.title2)
+                    .fontWeight(.black)
+                    .foregroundStyle(.white)
+                    .tracking(2)
+                    .opacity(showTitle ? 1 : 0)
+                    .offset(y: showTitle ? 0 : 20)
 
+                // Badge details
+                VStack(spacing: 10) {
                     Text(badge.name)
-                        .font(.title2)
+                        .font(.title3)
                         .fontWeight(.semibold)
                         .foregroundStyle(tierColor)
 
@@ -75,45 +77,104 @@ struct BadgeEarnedView: View {
 
                     Text(badge.description)
                         .font(.body)
-                        .foregroundStyle(.white.opacity(0.8))
+                        .foregroundStyle(.white.opacity(0.7))
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 32)
-
-                    // XP Reward
-                    HStack(spacing: 4) {
-                        Image(systemName: "sparkles")
-                        Text("+\(badge.xpReward) XP")
-                    }
-                    .font(.headline)
-                    .foregroundStyle(.yellow)
-                    .padding(.top, 8)
                 }
-                .opacity(showContent ? 1.0 : 0.0)
-                .offset(y: showContent ? 0 : 30)
+                .opacity(showDetails ? 1 : 0)
+                .offset(y: showDetails ? 0 : 20)
+
+                // XP Reward
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkles")
+                    Text("+\(badge.xpReward) XP")
+                }
+                .font(.headline)
+                .foregroundStyle(.yellow)
+                .opacity(showXP ? 1 : 0)
+                .scaleEffect(showXP ? 1 : 0.8)
+                .padding(.top, 8)
 
                 Spacer()
 
-                // Dismiss Button
+                // Continue Button
                 Button {
-                    onDismiss()
+                    dismiss()
                 } label: {
                     Text("Continue")
                         .font(.headline)
                         .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(.white)
-                        .foregroundStyle(.black)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .padding(.vertical, 14)
+                        .background(tierColor)
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
                 }
                 .padding(.horizontal, 32)
                 .padding(.bottom, 32)
-                .opacity(showContent ? 1.0 : 0.0)
+                .opacity(showButton ? 1 : 0)
+                .offset(y: showButton ? 0 : 30)
             }
         }
         .onAppear {
-            withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {
-                showContent = true
+            if reduceMotion {
+                // Instant display for reduced motion
+                showBadge = true
+                showShimmer = true
+                showTitle = true
+                showDetails = true
+                showXP = true
+                showButton = true
+                HapticManager.celebrationSuccess()
+            } else {
+                startAnimation()
             }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Badge earned: \(badge.name), \(badge.tier?.displayName ?? "") tier. Plus \(badge.xpReward) XP")
+        .accessibilityAddTraits(.isModal)
+    }
+
+    private func dismiss() {
+        withAnimation(.easeIn(duration: 0.2)) {
+            showButton = false
+            showBadge = false
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            onDismiss()
+        }
+    }
+
+    private func startAnimation() {
+        // Badge stamps down immediately
+        showBadge = true
+
+        // Title after stamp impact (0.4s)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            withAnimation(.easeOut(duration: 0.3)) {
+                showTitle = true
+            }
+        }
+
+        // Details after title (0.5s)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            withAnimation(.easeOut(duration: 0.3)) {
+                showDetails = true
+            }
+        }
+
+        // XP reward (0.7s)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) {
+                showXP = true
+            }
+        }
+
+        // Button (0.9s)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+            withAnimation(.easeOut(duration: 0.3)) {
+                showButton = true
+            }
+            HapticManager.celebrationSuccess()
         }
     }
 

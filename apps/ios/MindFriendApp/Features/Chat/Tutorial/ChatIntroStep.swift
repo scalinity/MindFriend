@@ -30,7 +30,7 @@ struct ChatIntroStep: View {
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 12) {
+            VStack(spacing: 8) {
                 // Chat preview
                 ForEach(0..<messages.count, id: \.self) { index in
                     if index <= currentMessage {
@@ -56,7 +56,7 @@ struct ChatIntroStep: View {
                 }
                 .opacity(currentMessage >= 2 ? 1 : 0)
             }
-            .padding(.horizontal, 24)
+            .padding(.horizontal, 20)
             .onAppear {
                 animateMessages()
             }
@@ -83,17 +83,18 @@ private struct ChatBubble: View {
 
     var body: some View {
         HStack {
-            if isUser { Spacer() }
+            if isUser { Spacer(minLength: 40) }
 
             Text(text)
                 .font(.subheadline)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 .background(isUser ? Color.blue : Color(.secondarySystemBackground))
                 .foregroundStyle(isUser ? .white : .primary)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
 
-            if !isUser { Spacer() }
+            if !isUser { Spacer(minLength: 40) }
         }
     }
 }
@@ -110,6 +111,7 @@ private struct FeatureBadge: View {
                 .font(.caption2)
             Text(text)
                 .font(.caption)
+                .fixedSize()
         }
         .foregroundStyle(.secondary)
         .padding(.horizontal, 10)

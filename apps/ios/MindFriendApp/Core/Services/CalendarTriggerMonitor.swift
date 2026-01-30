@@ -13,6 +13,7 @@ import Supabase
 protocol CalendarTriggerMonitoring {
     func requestCalendarPermission() async -> Bool
     func hasCalendarPermission() -> Bool
+    func refreshEventStore()
     func scanUpcomingEvents(window: TimeInterval) async throws -> [ClassifiedEvent]
     func classifyEvent(_ event: EKEvent) -> ClassifiedEvent
     func updateTriggerConfig(_ config: CalendarTriggerConfig) async throws
@@ -38,7 +39,8 @@ private enum CalendarConstants {
 final class CalendarTriggerMonitor: CalendarTriggerMonitoring {
     // MARK: - Properties
 
-    private let eventStore: EKEventStore
+    /// Event store - recreated after permission changes to ensure fresh state
+    private var eventStore: EKEventStore
     private let supabase: SupabaseClient
     private var scanTimer: Timer?
     private var cachedConfig: CalendarTriggerConfig?
@@ -51,6 +53,12 @@ final class CalendarTriggerMonitor: CalendarTriggerMonitoring {
         self.supabase = supabase
     }
 
+    /// Refresh the event store instance after permission changes
+    /// On iOS 17+, the EKEventStore instance may need recreation after permission state changes
+    func refreshEventStore() {
+        eventStore = EKEventStore()
+    }
+
     deinit {
         scanTimer?.invalidate()
         scanTimer = nil
@@ -58,20 +66,37 @@ final class CalendarTriggerMonitor: CalendarTriggerMonitoring {
 
     // MARK: - Public Methods
 
+    /// Last error from permission request (for debugging)
+    var lastPermissionError: String?
+
     func requestCalendarPermission() async -> Bool {
+        lastPermissionError = nil
         do {
             if #available(iOS 17.0, *) {
                 let granted = try await eventStore.requestFullAccessToEvents()
+                if granted {
+                    // Refresh event store after permission granted to ensure fresh state
+                    refreshEventStore()
+                }
                 return granted
             } else {
                 return await withCheckedContinuation { continuation in
                     eventStore.requestAccess(to: .event) { granted, error in
+                        if let error = error {
+                            self.lastPermissionError = error.localizedDescription
+                        }
+                        if granted {
+                            // Refresh event store on main thread
+                            Task { @MainActor in
+                                self.refreshEventStore()
+                            }
+                        }
                         continuation.resume(returning: granted)
                     }
                 }
             }
         } catch {
-            print("Calendar permission request failed: \(error.localizedDescription)")
+            lastPermissionError = error.localizedDescription
             return false
         }
     }

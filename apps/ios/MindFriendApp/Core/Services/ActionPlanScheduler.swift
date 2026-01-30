@@ -8,7 +8,11 @@ final class ActionPlanScheduler {
     private let notificationCenter = UNUserNotificationCenter.current()
 
     func requestCalendarAccess() async throws -> Bool {
-        try await eventStore.requestAccess(to: .event)
+        if #available(iOS 17.0, *) {
+            return try await eventStore.requestFullAccessToEvents()
+        } else {
+            return try await eventStore.requestAccess(to: .event)
+        }
     }
 
     func schedulePlan(
