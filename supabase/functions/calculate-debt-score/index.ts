@@ -289,7 +289,7 @@ function calculateThresholdStatus(
   trend: TrendData,
   profile: UserProfile,
 ): ThresholdStatus {
-  const threshold = profile.personal_threshold || -50; // Default -50
+  const threshold = profile.personal_threshold || -75; // Default -75 (increased from -50 for more forgiving economy)
 
   // Guard: Prevent division by zero
   const absThreshold = Math.abs(threshold);
@@ -307,14 +307,14 @@ function calculateThresholdStatus(
   // Calculate how close to threshold (as ratio)
   const debtRatio = currentDebt / absThreshold;
 
-  // Determine severity
+  // Determine severity (adjusted zones for rebalanced economy)
   let severity: "safe" | "warning" | "danger";
-  if (debtRatio < 0.7) {
-    severity = "safe";
-  } else if (debtRatio < 0.9) {
-    severity = "warning";
+  if (debtRatio < 0.6) {
+    severity = "safe"; // <60% of threshold (was 70%)
+  } else if (debtRatio < 0.85) {
+    severity = "warning"; // 60-85% of threshold (was 70-90%)
   } else {
-    severity = "danger"; // ≥90% of threshold
+    severity = "danger"; // ≥85% of threshold (was 90%)
   }
 
   // Project days until crash based on trend
@@ -356,10 +356,10 @@ async function getUserProfile(
     .single();
 
   if (error || !profile) {
-    // Create default profile
+    // Create default profile with rebalanced threshold
     const defaultProfile: UserProfile = {
       user_id: userId,
-      personal_threshold: -50,
+      personal_threshold: -75, // Increased from -50 for more forgiving economy
       crash_history: { crashes: [], last_updated: null },
       top_drains: { categories: [], last_updated: null },
       top_deposits: { categories: [], last_updated: null },
@@ -454,7 +454,7 @@ async function handleCrashDetection(
   const updatedCrashes = [...profile.crash_history.crashes, newCrash];
 
   // Recalculate threshold if ≥3 crashes (Assumption #3)
-  let newThreshold = profile.personal_threshold || -50;
+  let newThreshold = profile.personal_threshold || -75;
   if (updatedCrashes.length >= 3) {
     const crashDebts = updatedCrashes.map((c) => c.debt_at_crash);
     newThreshold = calculatePercentile10(crashDebts);

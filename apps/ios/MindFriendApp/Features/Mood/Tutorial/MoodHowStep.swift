@@ -15,11 +15,11 @@ struct MoodHowStep: View {
     @State private var showDetails = false
 
     private let moods: [(emoji: String, label: String, color: Color)] = [
-        ("face.frowning.fill", "Awful", .red),
-        ("face.diagonalmouth.fill", "Bad", .orange),
-        ("face.expressionless.fill", "Okay", .yellow),
-        ("face.smilingface.fill", "Good", .green),
-        ("face.grinningface.wide.fill", "Great", .blue)
+        ("😔", "Awful", .red),
+        ("😕", "Bad", .orange),
+        ("😐", "Okay", .yellow),
+        ("🙂", "Good", .green),
+        ("😁", "Great", .blue)
     ]
 
     var body: some View {
@@ -31,9 +31,9 @@ struct MoodHowStep: View {
             primaryLabel: "Start Logging",
             primaryAction: onComplete
         ) {
-            VStack(spacing: 24) {
+            VStack(spacing: 16) {
                 // Mood selector preview
-                VStack(spacing: 12) {
+                VStack(spacing: 8) {
                     Text("How are you feeling?")
                         .font(.subheadline.weight(.medium))
 
@@ -48,9 +48,10 @@ struct MoodHowStep: View {
                                 }
                             } label: {
                                 VStack(spacing: 6) {
-                                    Image(systemName: mood.emoji)
+                                    Text(mood.emoji)
                                         .font(.title)
-                                        .foregroundStyle(selectedMood == index ? mood.color : .secondary)
+                                        .grayscale(selectedMood == index ? 0 : 0.8)
+                                        .opacity(selectedMood == index ? 1 : 0.6)
 
                                     Text(mood.label)
                                         .font(.caption2)
@@ -61,10 +62,10 @@ struct MoodHowStep: View {
                         }
                     }
                 }
-                .padding()
+                .padding(12)
                 .background(Color(.secondarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 16))
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
 
                 // Optional details
                 if showDetails {
@@ -79,10 +80,10 @@ struct MoodHowStep: View {
                             TagPill(text: "Social")
                         }
                     }
-                    .padding()
+                    .padding(12)
                     .background(Color(.tertiarySystemBackground))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, 20)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
 

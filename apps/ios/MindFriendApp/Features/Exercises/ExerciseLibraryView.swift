@@ -33,19 +33,24 @@ struct ExerciseLibraryView: View {
     }
 
     /// Check if exercise is recommended for current capacity level
+    /// Uses rounded duration to avoid integer truncation issues (e.g., 90s = 2min not 1min)
     private func isRecommended(_ exercise: Exercise) -> Bool {
         let level = container.difficultyService.getEffectiveLevel()
-        let duration = exercise.durationSeconds / 60
+        // Round up to nearest minute to avoid truncation
+        let duration = (exercise.durationSeconds + 30) / 60
 
         switch level {
         case .low:
-            // Recommend short, calming exercises
-            return duration <= 5 && (exercise.type == .breathing || exercise.type == .grounding)
+            // Rest Mode: Short calming exercises (any type ≤5 min, or breathing/grounding up to 8 min)
+            if duration <= 5 {
+                return true // Any short exercise is good for rest
+            }
+            return duration <= 8 && (exercise.type == .breathing || exercise.type == .grounding)
         case .moderate:
-            // Recommend moderate-length exercises
-            return duration <= 15
+            // Normal Mode: Medium duration (5-15 min), all types welcome
+            return duration >= 5 && duration <= 15
         case .high:
-            // Recommend longer exercises for high energy
+            // Challenge Mode: Longer exercises (10+ min), all types
             return duration >= 10
         }
     }
@@ -205,6 +210,7 @@ struct ExerciseLibraryView: View {
             })
             .environmentObject(container)
         }
+        .skillLevelUpCelebration()
     }
 
     private func loadExercises() async {
@@ -623,6 +629,14 @@ struct ExercisePlayerView: View {
 
                 // Award XP for exercise completion
                 let xpResult = try await container.supabaseDataService.awardXP(activity: .exerciseComplete(exercise.type))
+
+                // Trigger XP gain toast IMMEDIATELY for instant gratification
+                await MainActor.run {
+                    container.achievementService.triggerXPGainAnimation(
+                        amount: xpResult.amount,
+                        activity: .exerciseComplete(exercise.type)
+                    )
+                }
 
                 // Update event progress for this exercise type
                 _ = try? await container.supabaseDataService.incrementEventProgress(activityType: exercise.type.rawValue)

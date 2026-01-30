@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 // MARK: - Content Types
 
@@ -265,6 +266,19 @@ enum BackgroundSoundType: String, Codable, CaseIterable, Identifiable {
         }
     }
 
+    var themeColor: Color {
+        switch self {
+        case .rain: return .blue
+        case .ocean: return .cyan
+        case .forest: return .green
+        case .fireplace: return .orange
+        case .whiteNoise: return .gray
+        case .brownNoise: return .brown
+        case .pinkNoise: return .pink
+        case .silence: return .secondary
+        }
+    }
+
     /// Remote URL for sounds stored in Supabase storage
     var remoteUrl: URL? {
         let baseUrl = "https://zfaucivtzfwnrijsbfug.supabase.co/storage/v1/object/public/soundscapes"
@@ -304,9 +318,29 @@ enum BackgroundSoundType: String, Codable, CaseIterable, Identifiable {
         return audioUrl != nil
     }
 
+    /// Whether this sound requires premium subscription
+    var isPremium: Bool {
+        switch self {
+        case .rain, .silence:
+            return false
+        case .ocean, .forest, .fireplace, .whiteNoise, .brownNoise, .pinkNoise:
+            return true
+        }
+    }
+
     /// Returns only sounds that have audio available
     static var availableSounds: [BackgroundSoundType] {
         allCases.filter { $0.isAvailable }
+    }
+
+    /// Returns free sounds only
+    static var freeSounds: [BackgroundSoundType] {
+        allCases.filter { $0.isAvailable && !$0.isPremium }
+    }
+
+    /// Returns premium sounds only
+    static var premiumSounds: [BackgroundSoundType] {
+        allCases.filter { $0.isAvailable && $0.isPremium }
     }
 }
 

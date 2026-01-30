@@ -250,20 +250,70 @@ actor WellbeingDebtService {
         return response.transactionsCount ?? 0
     }
 
-    /// Backfill transactions for the past N days
-    /// - Parameter days: Number of days to backfill (default 30)
+    /// Backfill transactions from account creation date (max N days)
+    /// - Parameter days: Maximum number of days to backfill (default 30)
     /// - Returns: Total number of transactions detected across all days
     func backfillTransactions(days: Int = 30) async throws -> Int {
+        // Get account creation date to avoid backfilling before user existed
+        let accountCreatedAt = try await fetchAccountCreationDate()
+        let today = Date()
+
+        // Calculate days since account creation
+        let daysSinceCreation = Calendar.current.dateComponents(
+            [.day],
+            from: accountCreatedAt,
+            to: today
+        ).day ?? 0
+
+        // Only backfill from account creation, capped at max days
+        let daysToBackfill = min(days, max(0, daysSinceCreation))
+
+        if daysToBackfill == 0 {
+            return 0 // Account created today, nothing to backfill
+        }
+
         var totalTransactions = 0
 
-        for i in 1...days {
-            let date = Calendar.current.date(byAdding: .day, value: -i, to: Date())!
+        for i in 1...daysToBackfill {
+            let date = Calendar.current.date(byAdding: .day, value: -i, to: today)!
+
+            // Skip if date is before account creation
+            if date < accountCreatedAt {
+                continue
+            }
+
             let dateString = formatDate(date)
             let count = try await triggerTransactionDetection(for: dateString)
             totalTransactions += count
         }
 
         return totalTransactions
+    }
+
+    /// Fetch the user's account creation date from profiles table
+    /// - Returns: Account creation date
+    private func fetchAccountCreationDate() async throws -> Date {
+        struct ProfileCreatedAt: Decodable {
+            let createdAt: Date
+
+            enum CodingKeys: String, CodingKey {
+                case createdAt = "created_at"
+            }
+        }
+
+        let response: [ProfileCreatedAt] = try await supabase
+            .from("profiles")
+            .select("created_at")
+            .limit(1)
+            .execute()
+            .value
+
+        guard let profile = response.first else {
+            // Fallback to today if profile not found (shouldn't happen)
+            return Date()
+        }
+
+        return profile.createdAt
     }
 
     /// Format a Date to YYYY-MM-DD string

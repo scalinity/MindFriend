@@ -24,7 +24,7 @@ struct ProgramsEnrollStep: View {
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 20) {
+            VStack(spacing: 16) {
                 // Example program card
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
@@ -67,12 +67,12 @@ struct ProgramsEnrollStep: View {
                     }
                     .disabled(true)
                 }
-                .padding()
+                .padding(12)
                 .background(Color(.secondarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 .scaleEffect(showCard ? 1 : 0.9)
                 .opacity(showCard ? 1 : 0)
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
 
                 // Enrollment info
                 VStack(spacing: 8) {
@@ -80,7 +80,7 @@ struct ProgramsEnrollStep: View {
                     ProgramEnrollInfoRow(icon: "calendar.badge.plus", text: "Start immediately or schedule for later")
                     ProgramEnrollInfoRow(icon: "arrow.clockwise", text: "Pause anytime if life gets busy")
                 }
-                .padding(.horizontal, 32)
+                .padding(.horizontal, 24)
                 .opacity(showEnroll ? 1 : 0)
             }
             .onAppear {
@@ -111,6 +111,7 @@ private struct ProgramEnrollInfoRow: View {
             Text(text)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             Spacer()
         }

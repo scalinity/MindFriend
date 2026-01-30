@@ -131,6 +131,7 @@ struct ModalityCard: View {
                     .font(.title2)
                     .foregroundColor(color)
             }
+            .fixedSize()
 
             // Info
             VStack(alignment: .leading, spacing: 4) {
@@ -138,17 +139,19 @@ struct ModalityCard: View {
                     .font(.title3)
                     .fontWeight(.semibold)
                     .foregroundColor(.primary)
+                    .multilineTextAlignment(.leading)
 
                 Text(subtitle)
                     .font(.subheadline)
                     .foregroundColor(.secondary)
+                    .multilineTextAlignment(.leading)
 
                 Text("\(patternCount) patterns available")
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .multilineTextAlignment(.leading)
             }
-
-            Spacer()
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             Image(systemName: "chevron.right")
                 .font(.caption)
@@ -216,12 +219,16 @@ struct SensoryTipCard: View {
                 Text(title)
                     .font(.subheadline)
                     .fontWeight(.semibold)
+                    .multilineTextAlignment(.leading)
 
                 Text(message)
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .multilineTextAlignment(.leading)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
         .background(
             RoundedRectangle(cornerRadius: 12)

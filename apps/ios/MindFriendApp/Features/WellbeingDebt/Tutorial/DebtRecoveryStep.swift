@@ -23,9 +23,9 @@ struct DebtRecoveryStep: View {
             primaryAction: onComplete,
             skipAction: nil
         ) {
-            VStack(spacing: 20) {
+            VStack(spacing: 16) {
                 // Recovery program preview card
-                VStack(spacing: 12) {
+                VStack(spacing: 8) {
                     HStack {
                         Image(systemName: "sparkles")
                             .foregroundStyle(.yellow)
@@ -38,9 +38,10 @@ struct DebtRecoveryStep: View {
                     }
 
                     Text("A personalized 7-day action plan with specific activities to rebuild your reserves.")
-                        .font(.subheadline)
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     // Sample recovery items
                     VStack(alignment: .leading, spacing: 8) {
@@ -49,14 +50,15 @@ struct DebtRecoveryStep: View {
                         recoveryItem(day: "Day 3", activity: "Social connection")
                     }
                 }
-                .padding()
+                .padding(12)
                 .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
 
                 // Reassurance text
                 Text("We'll alert you before things get critical and guide you back to balance.")
-                    .font(.caption)
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal)
             }
             .padding(.horizontal)
@@ -70,23 +72,24 @@ struct DebtRecoveryStep: View {
 
     @ViewBuilder
     private func recoveryItem(day: String, activity: String) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Text(day)
-                .font(.caption.bold())
+                .font(.caption2.bold())
                 .foregroundStyle(.blue)
-                .frame(width: 44, alignment: .leading)
+                .frame(width: 36, alignment: .leading)
 
             Text(activity)
-                .font(.caption)
+                .font(.caption2)
                 .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
 
-            Spacer()
+            Spacer(minLength: 0)
 
             Image(systemName: "chevron.right")
-                .font(.caption2)
+                .font(.system(size: 8))
                 .foregroundStyle(.tertiary)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 3)
     }
 }
 

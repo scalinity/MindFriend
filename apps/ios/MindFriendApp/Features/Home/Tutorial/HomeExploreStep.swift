@@ -47,40 +47,41 @@ struct HomeExploreStep: View {
             primaryLabel: "Get Started",
             primaryAction: onComplete
         ) {
-            VStack(spacing: 12) {
+            VStack(spacing: 6) {
                 ForEach(Array(features.enumerated()), id: \.element.title) { index, feature in
                     Button {
                         onNavigate?(feature.destination)
                         onComplete()
                     } label: {
-                        HStack(spacing: 12) {
+                        HStack(spacing: 10) {
                             ZStack {
                                 Circle()
                                     .fill(feature.color.opacity(0.15))
-                                    .frame(width: 40, height: 40)
+                                    .frame(width: 32, height: 32)
 
                                 Image(systemName: feature.icon)
-                                    .font(.body)
+                                    .font(.callout)
                                     .foregroundStyle(feature.color)
                             }
 
-                            VStack(alignment: .leading, spacing: 2) {
+                            VStack(alignment: .leading, spacing: 1) {
                                 Text(feature.title)
-                                    .font(.subheadline.weight(.medium))
+                                    .font(.caption.weight(.semibold))
                                     .foregroundStyle(.primary)
                                 Text(feature.description)
-                                    .font(.caption)
+                                    .font(.caption2)
                                     .foregroundStyle(.secondary)
+                                    .lineLimit(1)
                             }
 
                             Spacer()
 
                             Image(systemName: "chevron.right")
-                                .font(.caption)
+                                .font(.caption2)
                                 .foregroundStyle(.tertiary)
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
                         .background(Color(.secondarySystemBackground).opacity(0.5))
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
@@ -89,7 +90,7 @@ struct HomeExploreStep: View {
                     .offset(x: visibleFeatures.contains(feature.title) ? 0 : 20)
                 }
             }
-            .padding(.horizontal, 24)
+            .padding(.horizontal, 20)
             .onAppear {
                 animateFeatures()
             }

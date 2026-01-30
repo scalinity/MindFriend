@@ -10,12 +10,17 @@ import SwiftUI
 
 struct VisualLibraryView: View {
     @EnvironmentObject private var dependencies: DependencyContainer
+    @EnvironmentObject private var appState: AppState
     @State private var selectedAnimation: VisualAnimation?
 
     let columns = [
         GridItem(.flexible()),
         GridItem(.flexible())
     ]
+    
+    private var isPremiumUser: Bool {
+        appState.entitlements.tier == .premium
+    }
 
     var body: some View {
         ScrollView {
@@ -36,9 +41,10 @@ struct VisualLibraryView: View {
                 LazyVGrid(columns: columns, spacing: 16) {
                     ForEach(VisualAnimation.library) { animation in
                         AnimationCard(
-                            animation: animation
+                            animation: animation,
+                            isLocked: animation.isPremium && !isPremiumUser
                         ) {
-                            selectedAnimation = animation
+                            handleAnimationTap(animation)
                         }
                     }
                 }
@@ -59,12 +65,22 @@ struct VisualLibraryView: View {
             )
         }
     }
+    
+    private func handleAnimationTap(_ animation: VisualAnimation) {
+        // Check if this is a premium animation and user is not premium
+        if animation.isPremium && !isPremiumUser {
+            appState.showPaywall = true
+        } else {
+            selectedAnimation = animation
+        }
+    }
 }
 
 // MARK: - Animation Card Component
 
 struct AnimationCard: View {
     let animation: VisualAnimation
+    let isLocked: Bool
     let action: () -> Void
 
     var body: some View {
@@ -79,42 +95,70 @@ struct AnimationCard: View {
                     )
                     .frame(height: 100)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .opacity(isLocked ? 0.5 : 1.0)
 
                     if animation.isPremium {
                         VStack {
                             HStack {
                                 Spacer()
-                                Image(systemName: "crown.fill")
+                                Image(systemName: isLocked ? "lock.fill" : "crown.fill")
                                     .font(.caption)
-                                    .foregroundColor(.yellow)
-                                    .padding(8)
+                                    .foregroundColor(isLocked ? .white : .yellow)
+                                    .padding(6)
+                                    .background(
+                                        isLocked ? Color.black.opacity(0.5) : Color.clear
+                                    )
+                                    .clipShape(Circle())
+                                    .padding(4)
                             }
                             Spacer()
                         }
                     }
 
-                    // Animation type icon
-                    Image(systemName: animationIcon(animation.type))
-                        .font(.largeTitle)
-                        .foregroundColor(.white.opacity(0.8))
+                    // Animation type icon or lock
+                    if isLocked {
+                        VStack(spacing: 4) {
+                            Image(systemName: "lock.fill")
+                                .font(.title)
+                                .foregroundColor(.white)
+                            Text("Premium")
+                                .font(.caption2)
+                                .fontWeight(.medium)
+                                .foregroundColor(.white)
+                        }
+                    } else {
+                        Image(systemName: animationIcon(animation.type))
+                            .font(.largeTitle)
+                            .foregroundColor(.white.opacity(0.8))
+                    }
                 }
 
                 // Animation info
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(animation.name)
-                        .font(.headline)
-                        .foregroundColor(.primary)
+                    HStack(alignment: .top, spacing: 4) {
+                        Text(animation.name)
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(isLocked ? .secondary : .primary)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                        
+                        if isLocked {
+                            Image(systemName: "crown.fill")
+                                .font(.caption2)
+                                .foregroundColor(.yellow)
+                        }
+                    }
 
                     Text(animation.description)
-                        .font(.caption)
+                        .font(.caption2)
                         .foregroundColor(.secondary)
                         .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-
-                Spacer()
             }
-            .padding()
-            .frame(height: 200)
+            .padding(12)
+            .frame(minHeight: 180)
             .background(
                 RoundedRectangle(cornerRadius: 16)
                     .fill(Color(.systemBackground))

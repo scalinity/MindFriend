@@ -25,9 +25,9 @@ struct ProgramsProgressStep: View {
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 24) {
+            VStack(spacing: 16) {
                 // Progress visualization
-                VStack(spacing: 12) {
+                VStack(spacing: 8) {
                     // Day indicator
                     HStack {
                         Text("Day \(currentDay) of 21")
@@ -86,10 +86,10 @@ struct ProgramsProgressStep: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .padding()
+                .padding(12)
                 .background(Color(.secondarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 16))
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
 
                 // Features
                 VStack(spacing: 8) {
@@ -97,7 +97,7 @@ struct ProgramsProgressStep: View {
                     ProgressFeature(icon: "arrow.uturn.backward", text: "Review past days anytime")
                     ProgressFeature(icon: "pause.circle.fill", text: "Pause without losing progress")
                 }
-                .padding(.horizontal, 32)
+                .padding(.horizontal, 24)
                 .opacity(showFeatures ? 1 : 0)
             }
             .onAppear {
@@ -140,6 +140,7 @@ private struct ProgressFeature: View {
             Text(text)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             Spacer()
         }

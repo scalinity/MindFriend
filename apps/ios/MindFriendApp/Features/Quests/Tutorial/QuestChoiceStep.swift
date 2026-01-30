@@ -24,7 +24,7 @@ struct QuestChoiceStep: View {
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 12) {
+            VStack(spacing: 8) {
                 ForEach(Array(questOptions.enumerated()), id: \.element.title) { index, quest in
                     Button {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
@@ -35,7 +35,7 @@ struct QuestChoiceStep: View {
                             Image(systemName: quest.icon)
                                 .font(.title3)
                                 .foregroundStyle(quest.color)
-                                .frame(width: 32)
+                                .frame(width: 28)
 
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(quest.title)
@@ -58,7 +58,7 @@ struct QuestChoiceStep: View {
                                     .transition(.scale.combined(with: .opacity))
                             }
                         }
-                        .padding()
+                        .padding(12)
                         .background(
                             RoundedRectangle(cornerRadius: 12)
                                 .fill(Color(.secondarySystemBackground))
@@ -84,10 +84,11 @@ struct QuestChoiceStep: View {
                 Text("Tap a quest above to see how selection works")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
-                    .padding(.top, 8)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 6)
                     .opacity(selectedQuest == nil ? 1 : 0)
             }
-            .padding(.horizontal, 24)
+            .padding(.horizontal, 20)
             .onAppear {
                 showQuests = true
             }

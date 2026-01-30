@@ -54,12 +54,9 @@ struct HomeView: View {
         homeContext?.moodContext.backgroundColor ?? Color(uiColor: .systemBackground)
     }
 
-    /// Level to display - uses loaded userLevel, falls back to AchievementService, then default
+    /// Level to display - prefers AchievementService (real-time updates), falls back to loaded userLevel
     private var displayLevel: UserLevel {
-        if let level = userLevel {
-            return level
-        }
-        // Fallback to AchievementService data if available
+        // Prefer AchievementService data (updates in real-time when XP is earned)
         if let exp = container.achievementService.userExperience {
             // Calculate threshold for next level (not remaining XP)
             let nextLevelThreshold = UserLevel.xpThresholds[min(exp.currentLevel, 49)]
@@ -70,6 +67,10 @@ struct HomeView: View {
                 nextLevelXP: nextLevelThreshold,
                 xpThisWeek: exp.weeklyXp
             )
+        }
+        // Fallback to loaded userLevel if AchievementService hasn't loaded yet
+        if let level = userLevel {
+            return level
         }
         // Default level while loading
         return UserLevel(
@@ -441,10 +442,13 @@ struct HomeView: View {
             }
 
             Task {
-                // Only refresh if we've loaded before (task already ran)
-                // and it's been at least 1 second since last load
-                if let lastLoad = lastLoadTime, Date().timeIntervalSince(lastLoad) > 1 {
-                    await loadData()
+                // Refresh when returning to HomeView after initial load
+                // Debounce: only refresh if >0.5s since last load to prevent rapid-fire requests
+                if let lastLoad = lastLoadTime {
+                    let timeSinceLastLoad = Date().timeIntervalSince(lastLoad)
+                    if timeSinceLastLoad > 0.5 {
+                        await loadData()
+                    }
                 }
             }
         }
@@ -454,6 +458,14 @@ struct HomeView: View {
                 await loadData()
             }
         }
+        // Sync questState when todayQuest changes (e.g., after quest completion in QuestDetailView)
+        .onChange(of: appState.todayQuest) { _, newQuest in
+            if let quest = newQuest {
+                questState = .loaded(quest)
+            }
+        }
+        // XP gain toast overlay
+        .xpGainToast()
     } // End of body
 
     // MARK: - Recovery Mode Exit
@@ -928,6 +940,7 @@ struct TodayMoodCard: View {
                 Text("Today's mood")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: true, vertical: false)
 
                 HStack(spacing: 4) {
                     ForEach(1...5, id: \.self) { index in
@@ -1871,7 +1884,9 @@ struct LevelProgressLoadingView: View {
 }
 
 #Preview {
-    HomeView()
+    let container = DependencyContainer()
+    return HomeView()
         .environmentObject(AppState())
-        .environmentObject(DependencyContainer())
+        .environmentObject(container)
+        .environmentObject(container.achievementService)
 }

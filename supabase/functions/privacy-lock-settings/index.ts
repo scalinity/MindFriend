@@ -16,11 +16,11 @@ interface UpdateRequest {
 }
 
 serve(async (req) => {
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-  );
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
+  // Get auth header
   const authHeader = req.headers.get("Authorization");
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -30,23 +30,41 @@ serve(async (req) => {
   }
 
   const token = authHeader.replace("Bearer ", "");
+
+  // Create user-scoped client with the JWT token (same pattern as chat function)
+  const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
+    global: {
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  });
+
+  // Create service role client for database operations
+  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
+  // Validate user with user-scoped client
   const {
     data: { user },
     error: authError,
-  } = await supabase.auth.getUser(token);
+  } = await supabaseUser.auth.getUser();
 
   if (authError || !user) {
-    return new Response(JSON.stringify({ error: "Invalid token" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({
+        error: "Invalid token",
+        detail: authError?.message,
+      }),
+      {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
   }
 
   const method = req.method;
 
   if (method === "GET") {
     // Fetch user's privacy lock settings
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("privacy_lock_settings")
       .select("*")
       .eq("user_id", user.id)
@@ -116,7 +134,7 @@ serve(async (req) => {
     }
 
     // Upsert settings
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("privacy_lock_settings")
       .upsert({
         user_id: user.id,

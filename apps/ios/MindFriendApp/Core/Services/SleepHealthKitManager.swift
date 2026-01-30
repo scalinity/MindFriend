@@ -34,20 +34,43 @@ final class SleepHealthKitManager: ObservableObject {
 
         try await healthStore.requestAuthorization(toShare: [], read: sleepDataTypes)
 
-        checkAuthorizationStatus()
+        // After requestAuthorization completes without throwing, the user has seen
+        // the authorization prompt. For read-only access, we set isAuthorized = true
+        // and rely on empty query results to detect denied permissions.
+        // Note: authorizationStatus(for:) only tracks WRITE permissions, not read.
+        isAuthorized = true
     }
 
     /// Check if we have authorization for sleep data
-    private func checkAuthorizationStatus() {
+    /// Note: HealthKit does NOT provide a way to check read authorization status.
+    /// We use statusForAuthorizationRequest to check if the auth dialog was already shown.
+    func checkAuthorizationStatus() {
         guard HKHealthStore.isHealthDataAvailable() else {
             isAuthorized = false
             return
         }
 
-        let sleepAnalysisType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!
-
-        let status = healthStore.authorizationStatus(for: sleepAnalysisType)
-        isAuthorized = (status == .sharingAuthorized)
+        // Check async on a Task since this is called from init
+        Task {
+            await updateAuthorizationStatus()
+        }
+    }
+    
+    /// Async method to check authorization status using the proper API
+    private func updateAuthorizationStatus() async {
+        do {
+            let status = try await healthStore.statusForAuthorizationRequest(
+                toShare: [],
+                read: getSleepDataTypes()
+            )
+            
+            // .unnecessary means the auth dialog was already shown to the user
+            // (regardless of whether they granted or denied permission)
+            isAuthorized = (status == .unnecessary)
+        } catch {
+            print("Failed to check HealthKit authorization status: \(error)")
+            isAuthorized = false
+        }
     }
 
     /// Get all sleep-related data types we need to read
@@ -81,8 +104,9 @@ final class SleepHealthKitManager: ObservableObject {
 
     /// Sync recent sleep data (last 24 hours)
     func syncRecentSleep() async throws -> SleepEntry? {
-        guard isAuthorized else {
-            throw SleepHealthKitError.notAuthorized
+        // If not authorized yet, request authorization first
+        if !isAuthorized {
+            try await requestAuthorization()
         }
 
         isSyncing = true
@@ -98,29 +122,47 @@ final class SleepHealthKitManager: ObservableObject {
 
     /// Sync sleep data from a specific start date
     func syncSleepData(from startDate: Date) async throws -> [SleepEntry] {
-        guard isAuthorized else {
-            throw SleepHealthKitError.notAuthorized
+        print("[SleepHealthKit] syncSleepData starting from: \(startDate)")
+        
+        // If not authorized yet, request authorization first
+        if !isAuthorized {
+            print("[SleepHealthKit] Not authorized, requesting authorization...")
+            try await requestAuthorization()
         }
 
         isSyncing = true
         defer { isSyncing = false }
 
         // Query sleep analysis data
+        print("[SleepHealthKit] Querying HealthKit for sleep samples...")
         let sleepSamples = try await querySleepAnalysis(from: startDate)
+        print("[SleepHealthKit] Found \(sleepSamples.count) sleep samples from HealthKit")
+
+        if sleepSamples.isEmpty {
+            print("[SleepHealthKit] No sleep data found in HealthKit. This could mean:")
+            print("  - No sleep data recorded in Health app")
+            print("  - User denied HealthKit read access")
+            print("  - Running on simulator without mock data")
+            return []
+        }
 
         // Group by date (each night is a separate entry)
         let groupedSamples = Dictionary(grouping: sleepSamples) { sample in
             Calendar.current.startOfDay(for: sample.startDate)
         }
+        print("[SleepHealthKit] Grouped into \(groupedSamples.count) nights")
 
         var entries: [SleepEntry] = []
 
         // Fetch user's sleep goals for score calculation
+        print("[SleepHealthKit] Fetching sleep goals...")
         let goals = try await sleepTrackingService.fetchGoals()
+        print("[SleepHealthKit] Got goals, processing sleep entries...")
 
         // Process each night's sleep
         for (date, samples) in groupedSamples {
             guard let entry = try await processSleepSamples(samples, for: date, goals: goals) else {
+                print("[SleepHealthKit] Failed to process samples for \(date)")
                 continue
             }
 
@@ -129,12 +171,16 @@ final class SleepHealthKitManager: ObservableObject {
                 let existing = try await sleepTrackingService.fetchEntries(from: date, to: date)
                 if existing.isEmpty {
                     // Create new entry
+                    print("[SleepHealthKit] Creating new entry for \(date)...")
                     let created = try await sleepTrackingService.createEntry(entry, goals: goals)
                     entries.append(created)
+                    print("[SleepHealthKit] Entry created successfully")
+                } else {
+                    print("[SleepHealthKit] Entry already exists for \(date), skipping")
                 }
             } catch {
                 // Failed to check/create, skip this entry
-                print("Failed to create sleep entry for \(date): \(error)")
+                print("[SleepHealthKit] Failed to create sleep entry for \(date): \(error)")
             }
         }
 

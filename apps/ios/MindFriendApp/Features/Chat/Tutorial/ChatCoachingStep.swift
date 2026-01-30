@@ -24,7 +24,7 @@ struct ChatCoachingStep: View {
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 16) {
+            VStack(spacing: 8) {
                 // Example thought
                 VStack(alignment: .leading, spacing: 8) {
                     Text("You said:")
@@ -34,12 +34,13 @@ struct ChatCoachingStep: View {
                     Text("\"I always mess everything up.\"")
                         .font(.subheadline)
                         .italic()
-                        .padding()
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(12)
                         .background(Color(.secondarySystemBackground))
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
 
                 // Distortion detection
                 if showDistortion {
@@ -58,10 +59,10 @@ struct ChatCoachingStep: View {
 
                         Spacer()
                     }
-                    .padding()
+                    .padding(12)
                     .background(Color.yellow.opacity(0.1))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, 20)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
 
@@ -78,14 +79,15 @@ struct ChatCoachingStep: View {
                             Text("\"I made a mistake this time, but I can learn from it.\"")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
 
                         Spacer()
                     }
-                    .padding()
+                    .padding(12)
                     .background(Color.green.opacity(0.1))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, 20)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }

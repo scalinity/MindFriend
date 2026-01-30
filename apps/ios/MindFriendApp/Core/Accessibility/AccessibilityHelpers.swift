@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Dynamic Type Support
 
@@ -288,7 +289,7 @@ enum HapticType {
     case selection
 }
 
-struct HapticManager {
+struct AccessibilityHaptics {
     static func trigger(_ type: HapticType) {
         switch type {
         case .success:
@@ -320,7 +321,7 @@ extension View {
     /// Add haptic feedback on tap
     func hapticOnTap(_ type: HapticType) -> some View {
         self.onTapGesture {
-            HapticManager.trigger(type)
+            AccessibilityHaptics.trigger(type)
         }
     }
 }

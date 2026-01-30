@@ -23,7 +23,7 @@ struct LongitudinalYearStep: View {
             primaryLabel: "View Dashboard",
             primaryAction: onComplete
         ) {
-            VStack(spacing: 20) {
+            VStack(spacing: 16) {
                 // Year heatmap preview
                 VStack(spacing: 4) {
                     Text("2026")
@@ -51,13 +51,13 @@ struct LongitudinalYearStep: View {
                         }
                     }
                 }
-                .padding()
+                .padding(12)
                 .background(Color(.secondarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
 
                 // Legend
-                HStack(spacing: 16) {
+                HStack(spacing: 12) {
                     YearStepLegendItem(color: .green, label: "Great")
                     YearStepLegendItem(color: .yellow, label: "Okay")
                     YearStepLegendItem(color: .orange, label: "Low")

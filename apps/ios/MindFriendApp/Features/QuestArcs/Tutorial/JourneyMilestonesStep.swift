@@ -30,7 +30,7 @@ struct JourneyMilestonesStep: View {
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 16) {
+            VStack(spacing: 8) {
                 // Milestone timeline
                 HStack(spacing: 0) {
                     ForEach(Array(milestones.enumerated()), id: \.offset) { index, milestone in
@@ -47,7 +47,7 @@ struct JourneyMilestonesStep: View {
                         }
                     }
                 }
-                .padding(.horizontal, 32)
+                .padding(.horizontal, 24)
 
                 // Rewards preview
                 VStack(spacing: 10) {
@@ -65,7 +65,7 @@ struct JourneyMilestonesStep: View {
                 .padding(.horizontal, 16)
                 .background(Color(.secondarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
                 .opacity(showMilestones ? 1 : 0)
                 .offset(y: showMilestones ? 0 : 20)
 
@@ -75,7 +75,7 @@ struct JourneyMilestonesStep: View {
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, 20)
             }
             .onAppear {
                 withAnimation(.easeOut(duration: 0.5).delay(0.3)) {

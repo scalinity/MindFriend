@@ -24,7 +24,7 @@ struct JourneyProgressStep: View {
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 24) {
+            VStack(spacing: 16) {
                 // Animated day progression
                 HStack(spacing: 12) {
                     ForEach(1...5, id: \.self) { day in
@@ -34,7 +34,7 @@ struct JourneyProgressStep: View {
                 .padding(.horizontal)
 
                 // Progress explanation
-                VStack(spacing: 12) {
+                VStack(spacing: 8) {
                     progressRow(
                         icon: "checkmark.circle.fill",
                         color: .green,
@@ -61,14 +61,14 @@ struct JourneyProgressStep: View {
                         text: "Skills build over time"
                     )
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
 
                 // Note
                 Text("**No pressure** - your journey waits for you. Complete at your own pace.")
                     .font(.caption)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, 20)
             }
             .onAppear {
                 withAnimation {
@@ -90,7 +90,7 @@ struct JourneyProgressStep: View {
             ZStack {
                 Circle()
                     .fill(isCompleted ? Color.green : isCurrent ? Color.blue : Color(.systemGray5))
-                    .frame(width: 40, height: 40)
+                    .frame(width: 36, height: 36)
 
                 if isCompleted {
                     Image(systemName: "checkmark")

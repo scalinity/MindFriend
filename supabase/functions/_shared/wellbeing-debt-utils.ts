@@ -22,10 +22,10 @@ export function calculateSlope(values: number[]): number {
   }
 
   const denominator = n * sumXX - sumX * sumX;
-  
+
   // Prevent division by zero (constant values case)
   if (Math.abs(denominator) < 1e-10) return 0;
-  
+
   const slope = (n * sumXY - sumX * sumY) / denominator;
   return isNaN(slope) || !isFinite(slope) ? 0 : slope;
 }
@@ -92,15 +92,15 @@ export function calculateSleepQuality(
   if (deepSleepSeconds !== null && remSleepSeconds !== null) {
     // iOS 16+: Use sleep stages
     const qualitySleepSeconds = Math.max(0, deepSleepSeconds + remSleepSeconds);
-    
+
     // Data integrity check: quality sleep cannot exceed total sleep
     if (qualitySleepSeconds > totalSleepSeconds) {
       console.warn(
-        `Sleep data integrity issue: quality=${qualitySleepSeconds}s > total=${totalSleepSeconds}s. Clamping.`
+        `Sleep data integrity issue: quality=${qualitySleepSeconds}s > total=${totalSleepSeconds}s. Clamping.`,
       );
       return 1.0;
     }
-    
+
     return Math.min(1.0, qualitySleepSeconds / totalSleepSeconds);
   } else {
     // iOS <16: Duration-based fallback
@@ -112,19 +112,35 @@ export function calculateSleepQuality(
 /**
  * Calculate sleep deposit amount based on quality
  * @param quality Sleep quality (0-1 scale)
- * @returns Deposit points (0-10)
+ * @returns Deposit points (0-15) - increased from 10 for rebalanced economy
  */
 export function calculateSleepDeposit(quality: number): number {
-  return Math.round(quality * 10);
+  return Math.round(quality * 15);
 }
 
 /**
  * Calculate poor sleep withdrawal based on duration
  * @param hoursSlept Hours of sleep
- * @returns Withdrawal points (0 if ≥6h, 5 if <6h)
+ * @returns Withdrawal points (0 if ≥6h, 3 if <6h) - reduced from 5 for rebalanced economy
  */
 export function calculatePoorSleepWithdrawal(hoursSlept: number): number {
-  return hoursSlept < 6 ? 5 : 0;
+  return hoursSlept < 6 ? 3 : 0;
+}
+
+/**
+ * Calculate number of days between two dates
+ * @param startDate ISO date string or Date object (earlier date)
+ * @param endDate ISO date string (later date)
+ * @returns Number of days since startDate
+ */
+export function getDaysSince(
+  startDate: string | Date,
+  endDate: string,
+): number {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const diffMs = end.getTime() - start.getTime();
+  return Math.floor(diffMs / (1000 * 60 * 60 * 24));
 }
 
 /**
@@ -137,10 +153,10 @@ export function calculatePoorSleepWithdrawal(hoursSlept: number): number {
  */
 export function calculatePercentile10(values: number[]): number {
   if (values.length === 0) return 0;
-  
+
   // Filter out NaN and infinite values
-  const validValues = values.filter(v => !isNaN(v) && isFinite(v));
-  
+  const validValues = values.filter((v) => !isNaN(v) && isFinite(v));
+
   if (validValues.length === 0) return 0;
   if (validValues.length === 1) return validValues[0];
 
@@ -148,11 +164,11 @@ export function calculatePercentile10(values: number[]): number {
   const position = (sorted.length - 1) * 0.1;
   const lowerIndex = Math.floor(position);
   const upperIndex = Math.ceil(position);
-  
+
   if (lowerIndex === upperIndex) {
     return sorted[lowerIndex];
   }
-  
+
   const weight = position - lowerIndex;
   return sorted[lowerIndex] * (1 - weight) + sorted[upperIndex] * weight;
 }

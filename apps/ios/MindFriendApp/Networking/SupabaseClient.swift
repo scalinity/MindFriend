@@ -1061,6 +1061,7 @@ struct DBMemoryFragment: Codable {
     let sourceMessageId: UUID?
     let extractedAt: Date
     let expiresAt: Date?
+    let scheduledTime: Date?
     let createdAt: Date
     let updatedAt: Date
 
@@ -1073,6 +1074,7 @@ struct DBMemoryFragment: Codable {
         case sourceMessageId = "source_message_id"
         case extractedAt = "extracted_at"
         case expiresAt = "expires_at"
+        case scheduledTime = "scheduled_time"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
@@ -1085,7 +1087,8 @@ struct DBMemoryFragment: Codable {
             value: value,
             confidence: confidence,
             extractedAt: extractedAt,
-            expiresAt: expiresAt
+            expiresAt: expiresAt,
+            scheduledTime: scheduledTime
         )
     }
 }
@@ -1906,10 +1909,10 @@ struct DBCircleInvite: Codable {
 /// Buddy relationship from database
 struct DBBuddyRelationship: Codable {
     let id: UUID?
-    let userId: UUID
-    let buddyId: UUID
+    let inviterId: UUID
+    let inviteeId: UUID?
     let status: String
-    let createdAt: Date?
+    let invitedAt: Date?
     let acceptedAt: Date?
     let expiresAt: Date?
     let inviteCode: String?
@@ -1918,10 +1921,10 @@ struct DBBuddyRelationship: Codable {
 
     enum CodingKeys: String, CodingKey {
         case id
-        case userId = "user_id"
-        case buddyId = "buddy_id"
+        case inviterId = "inviter_id"
+        case inviteeId = "invitee_id"
         case status
-        case createdAt = "created_at"
+        case invitedAt = "invited_at"
         case acceptedAt = "accepted_at"
         case expiresAt = "expires_at"
         case inviteCode = "invite_code"
@@ -1930,18 +1933,15 @@ struct DBBuddyRelationship: Codable {
     }
 
     func toBuddyRelationship(currentUserId: UUID) -> BuddyRelationship {
-        // Determine who is the inviter and who is the invitee based on current user
-        let isCurrentUserInviter = userId == currentUserId
-
         return BuddyRelationship(
             id: id?.uuidString ?? UUID().uuidString,
-            inviterId: userId.uuidString,
-            inviteeId: buddyId.uuidString,
+            inviterId: inviterId.uuidString,
+            inviteeId: inviteeId?.uuidString ?? "",
             inviteCode: inviteCode ?? "",
             inviteMethod: inviteMethod.flatMap { BuddyRelationship.InviteMethod(rawValue: $0) },
             inviteeContact: inviteeContact,
             status: BuddyRelationship.BuddyStatus(rawValue: status) ?? .pending,
-            invitedAt: createdAt ?? Date(),
+            invitedAt: invitedAt ?? Date(),
             acceptedAt: acceptedAt,
             buddyCircleId: nil,
             expiresAt: expiresAt ?? Date().addingTimeInterval(30 * 24 * 60 * 60),
@@ -1954,10 +1954,10 @@ struct DBBuddyRelationship: Codable {
 /// Buddy relationship with profile details
 struct DBBuddyRelationshipWithProfiles: Codable {
     let id: UUID?
-    let userId: UUID
-    let buddyId: UUID
+    let inviterId: UUID
+    let inviteeId: UUID?
     let status: String
-    let createdAt: Date?
+    let invitedAt: Date?
     let acceptedAt: Date?
     let expiresAt: Date?
     let inviteCode: String?
@@ -1967,10 +1967,10 @@ struct DBBuddyRelationshipWithProfiles: Codable {
 
     enum CodingKeys: String, CodingKey {
         case id
-        case userId = "user_id"
-        case buddyId = "buddy_id"
+        case inviterId = "inviter_id"
+        case inviteeId = "invitee_id"
         case status
-        case createdAt = "created_at"
+        case invitedAt = "invited_at"
         case acceptedAt = "accepted_at"
         case expiresAt = "expires_at"
         case inviteCode = "invite_code"
@@ -1990,18 +1990,18 @@ struct DBBuddyRelationshipWithProfiles: Codable {
 
         return BuddyRelationship(
             id: id?.uuidString ?? UUID().uuidString,
-            inviterId: userId.uuidString,
-            inviteeId: buddyId.uuidString,
+            inviterId: inviterId.uuidString,
+            inviteeId: inviteeId?.uuidString ?? "",
             inviteCode: inviteCode ?? "",
             inviteMethod: inviteMethod.flatMap { BuddyRelationship.InviteMethod(rawValue: $0) },
             inviteeContact: inviteeContact,
             status: BuddyRelationship.BuddyStatus(rawValue: status) ?? .pending,
-            invitedAt: createdAt ?? Date(),
+            invitedAt: invitedAt ?? Date(),
             acceptedAt: acceptedAt,
             buddyCircleId: nil,
             expiresAt: expiresAt ?? Date().addingTimeInterval(30 * 24 * 60 * 60),
-            inviter: userId == currentUserId ? nil : buddyProfileData,
-            invitee: userId == currentUserId ? buddyProfileData : nil
+            inviter: inviterId == currentUserId ? nil : buddyProfileData,
+            invitee: inviterId == currentUserId ? buddyProfileData : nil
         )
     }
 }

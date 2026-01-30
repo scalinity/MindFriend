@@ -23,7 +23,7 @@ struct CirclesConceptStep: View {
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 20) {
+            VStack(spacing: 16) {
                 // Circle visualization
                 ZStack {
                     // Background circle
@@ -62,10 +62,10 @@ struct CirclesConceptStep: View {
                     CircleBenefitRow(icon: "hands.sparkles.fill", color: .purple, text: "Give and receive encouragement")
                     CircleBenefitRow(icon: "checkmark.circle.fill", color: .green, text: "Stay accountable together")
                 }
-                .padding()
+                .padding(12)
                 .background(Color(.secondarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
             }
             .onAppear { showMembers = true }
         }
@@ -87,6 +87,7 @@ private struct CircleBenefitRow: View {
             Text(text)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

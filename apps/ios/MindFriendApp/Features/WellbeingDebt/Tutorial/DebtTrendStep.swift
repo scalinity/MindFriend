@@ -21,7 +21,7 @@ struct DebtTrendStep: View {
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 16) {
+            VStack(spacing: 8) {
                 // Metric cards
                 metricCard(
                     icon: "calendar",
@@ -45,12 +45,12 @@ struct DebtTrendStep: View {
                 )
 
                 // Severity legend
-                HStack(spacing: 16) {
+                HStack(spacing: 12) {
                     severityBadge(color: .green, label: "Safe")
                     severityBadge(color: .orange, label: "Warning")
                     severityBadge(color: .red, label: "Danger")
                 }
-                .padding(.top, 8)
+                .padding(.top, 6)
             }
             .padding(.horizontal)
         }
@@ -58,25 +58,26 @@ struct DebtTrendStep: View {
 
     @ViewBuilder
     private func metricCard(icon: String, title: String, description: String, color: Color) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Image(systemName: icon)
-                .font(.title2)
+                .font(.body)
                 .foregroundStyle(color)
-                .frame(width: 32)
+                .frame(width: 24)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.subheadline.bold())
+                    .font(.caption.bold())
 
                 Text(description)
-                    .font(.caption)
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            Spacer()
+            Spacer(minLength: 0)
         }
-        .padding(12)
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+        .padding(10)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
     }
 
     @ViewBuilder

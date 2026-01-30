@@ -30,7 +30,7 @@ struct ProgramsTutorialFlow: View {
                 .progressViewStyle(.linear)
                 .tint(.cyan)
                 .padding(.horizontal)
-                .padding(.top, 16)
+                .padding(.top, 60)
 
             // Step content
             Group {

@@ -829,6 +829,14 @@ struct CircleCheckinView: View {
                 // Award XP for circle check-in
                 let xpResult = try await container.supabaseDataService.awardXP(activity: .circleCheckin)
 
+                // Trigger XP gain toast IMMEDIATELY for instant gratification
+                await MainActor.run {
+                    container.achievementService.triggerXPGainAnimation(
+                        amount: xpResult.amount,
+                        activity: .circleCheckin
+                    )
+                }
+
                 await MainActor.run {
                     // Show level-up celebration if leveled up
                     if xpResult.leveledUp {

@@ -200,27 +200,27 @@ async function handleOverride(
   const overrideScore = getOverrideScore(override.override_level);
   const level = scoreToLevel(overrideScore);
 
-  // Use neutral component scores for overrides
+  // Use override score for all components so math is consistent
   const components: CalculateCapacityResponse["components"] = {
     sleep: {
-      score: 50,
+      score: overrideScore,
       weight: WEIGHTS.sleep,
-      contribution: 50 * WEIGHTS.sleep,
+      contribution: overrideScore * WEIGHTS.sleep,
     },
     mood: {
-      score: 50,
+      score: overrideScore,
       weight: WEIGHTS.mood,
-      contribution: 50 * WEIGHTS.mood,
+      contribution: overrideScore * WEIGHTS.mood,
     },
     streak: {
-      score: 50,
+      score: overrideScore,
       weight: WEIGHTS.streak,
-      contribution: 50 * WEIGHTS.streak,
+      contribution: overrideScore * WEIGHTS.streak,
     },
     completion: {
-      score: 50,
+      score: overrideScore,
       weight: WEIGHTS.completion,
-      contribution: 50 * WEIGHTS.completion,
+      contribution: overrideScore * WEIGHTS.completion,
     },
   };
 
@@ -1015,11 +1015,10 @@ async function checkRateLimit(
     }
 
     // RPC returns {allowed: boolean, resetAt: timestamp, remaining: int}
-    // Add defensive null check
+    // Add defensive null check - FAIL CLOSED for security
     if (!result) {
       console.error("Rate limit RPC returned null result");
-      // Fail open - allow request if rate limit check fails
-      return;
+      throw new Error("Rate limit check failed - request denied for safety");
     }
 
     console.log("Rate limit check result:", {

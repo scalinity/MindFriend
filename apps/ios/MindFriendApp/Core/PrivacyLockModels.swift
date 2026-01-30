@@ -11,7 +11,7 @@ struct PrivacyLockSettings: Codable, Equatable {
 
     enum QuickLockMethod: String, Codable, CaseIterable {
         case menu
-        case tripleTap
+        case tripleTap = "triple_tap"
 
         var displayName: String {
             switch self {
@@ -46,6 +46,75 @@ struct PrivacyLockSettings: Codable, Equatable {
         case userId = "user_id"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+    }
+
+    // Custom decoder to handle date parsing more gracefully
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        appLockEnabled = try container.decodeIfPresent(Bool.self, forKey: .appLockEnabled) ?? false
+        autoLockSeconds = try container.decodeIfPresent(Int.self, forKey: .autoLockSeconds) ?? 300
+        quickLockMethod = try container.decodeIfPresent(QuickLockMethod.self, forKey: .quickLockMethod) ?? .menu
+        tripleTapEnabled = try container.decodeIfPresent(Bool.self, forKey: .tripleTapEnabled) ?? false
+        userId = try container.decodeIfPresent(String.self, forKey: .userId)
+
+        // Parse dates - try ISO8601 format, fall back to nil on failure
+        createdAt = Self.parseDate(from: container, forKey: .createdAt)
+        updatedAt = Self.parseDate(from: container, forKey: .updatedAt)
+    }
+
+    private static func parseDate(from container: KeyedDecodingContainer<CodingKeys>, forKey key: CodingKeys) -> Date? {
+        // First try decoding as Date (in case SDK handles it)
+        if let date = try? container.decodeIfPresent(Date.self, forKey: key) {
+            return date
+        }
+        // Fall back to string parsing
+        if let dateString = try? container.decodeIfPresent(String.self, forKey: key) {
+            return parseISO8601Date(dateString)
+        }
+        return nil
+    }
+
+    private static func parseISO8601Date(_ string: String) -> Date? {
+        // Try various ISO8601 formats
+        let formatters: [ISO8601DateFormatter] = [
+            {
+                let f = ISO8601DateFormatter()
+                f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                return f
+            }(),
+            {
+                let f = ISO8601DateFormatter()
+                f.formatOptions = [.withInternetDateTime]
+                return f
+            }()
+        ]
+
+        for formatter in formatters {
+            if let date = formatter.date(from: string) {
+                return date
+            }
+        }
+        return nil
+    }
+
+    // Standard memberwise initializer
+    init(
+        appLockEnabled: Bool,
+        autoLockSeconds: Int,
+        quickLockMethod: QuickLockMethod,
+        tripleTapEnabled: Bool,
+        userId: String?,
+        createdAt: Date?,
+        updatedAt: Date?
+    ) {
+        self.appLockEnabled = appLockEnabled
+        self.autoLockSeconds = autoLockSeconds
+        self.quickLockMethod = quickLockMethod
+        self.tripleTapEnabled = tripleTapEnabled
+        self.userId = userId
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
     }
 }
 

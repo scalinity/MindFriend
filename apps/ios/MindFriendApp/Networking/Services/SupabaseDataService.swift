@@ -1917,23 +1917,22 @@ final class SupabaseDataService: ObservableObject {
 
     /// Create a buddy invite during onboarding or from home screen
     func createBuddyInvite(contact: String, method: BuddyRelationship.InviteMethod) async throws -> BuddyRelationship {
-        // Generate unique invite code via RPC
-        let codeResults: [String] = try await supabase
+        // Generate unique invite code via RPC (returns single text value)
+        let inviteCode: String = try await supabase
             .rpc("generate_buddy_code")
             .execute()
             .value
 
-        guard let inviteCode = codeResults.first else {
-            throw DataError.custom("Failed to generate invite code")
-        }
-
+        let expiresAt = Date().addingTimeInterval(30 * 24 * 60 * 60) // 30 days
+        let currentUserId = try userId
+        
         let insertData: [String: AnyEncodable] = [
-            "inviter_id": AnyEncodable(try userId),
+            "inviter_id": AnyEncodable(currentUserId.uuidString),
             "invite_code": AnyEncodable(inviteCode),
             "invite_method": AnyEncodable(method.rawValue),
             "invitee_contact": AnyEncodable(contact),
             "status": AnyEncodable("pending"),
-            "expires_at": AnyEncodable(Date().addingTimeInterval(30 * 24 * 60 * 60)) // 30 days
+            "expires_at": AnyEncodable(expiresAt.ISO8601Format())
         ]
 
         let result: DBBuddyRelationship = try await supabase
@@ -2132,24 +2131,20 @@ final class SupabaseDataService: ObservableObject {
             return (inviteCode, expiresAt)
         }
 
-        // Generate new code via RPC
-        let codeResults: [String] = try await supabase
+        // Generate new code via RPC (returns single text value)
+        let code: String = try await supabase
             .rpc("generate_buddy_code")
             .execute()
             .value
 
-        guard let code = codeResults.first else {
-            throw DataError.custom("Failed to generate invite code")
-        }
-
         // Create buddy relationship row
         let expiresAt = Date().addingTimeInterval(30 * 24 * 60 * 60) // 30 days
         let insertData: [String: AnyEncodable] = [
-            "inviter_id": AnyEncodable(currentUserId),
+            "inviter_id": AnyEncodable(currentUserId.uuidString),
             "invite_code": AnyEncodable(code),
             "invite_method": AnyEncodable("link"),
             "status": AnyEncodable("pending"),
-            "expires_at": AnyEncodable(expiresAt)
+            "expires_at": AnyEncodable(expiresAt.ISO8601Format())
         ]
 
         try await supabase
@@ -3058,6 +3053,25 @@ final class SupabaseDataService: ObservableObject {
             .execute()
 
         Analytics.shared.track(.memoriesDeletedByType, properties: ["type": type.rawValue])
+    }
+
+    func updateMemory(id: String, key: String, value: String) async throws {
+        guard let memoryId = UUID(uuidString: id) else {
+            throw DataError.invalidId
+        }
+
+        try await supabase
+            .from(Tables.memoryFragments)
+            .update([
+                "key": key,
+                "value": value,
+                "updated_at": ISO8601DateFormatter().string(from: Date())
+            ])
+            .eq("id", value: memoryId)
+            .eq("user_id", value: try userId)
+            .execute()
+
+        Analytics.shared.track(.memoryUpdated, properties: ["memory_id": id])
     }
 
     // MARK: - Onboarding

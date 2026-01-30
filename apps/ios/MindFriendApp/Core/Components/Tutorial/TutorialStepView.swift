@@ -40,43 +40,47 @@ struct TutorialStepView<Content: View>: View {
     }
 
     var body: some View {
-        VStack(spacing: 24) {
-            Spacer()
+        VStack(spacing: 16) {
+            Spacer(minLength: 8)
 
             // Icon
             Image(systemName: icon)
-                .font(.system(size: 64))
+                .font(.system(size: 48))
                 .foregroundStyle(iconColor)
                 .symbolRenderingMode(.hierarchical)
                 .accessibilityHidden(true)
 
             // Headlines
-            VStack(spacing: 8) {
+            VStack(spacing: 6) {
                 Text(headline)
-                    .font(.title.bold())
+                    .font(.title2.bold())
                     .multilineTextAlignment(.center)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
                     .accessibilityAddTraits(.isHeader)
 
                 Text(subheadline)
-                    .font(.body)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal)
             }
 
             // Custom content
             content
-                .padding(.vertical)
+                .padding(.vertical, 8)
 
-            Spacer()
+            Spacer(minLength: 8)
 
             // Actions
-            VStack(spacing: 12) {
+            VStack(spacing: 10) {
                 Button(action: primaryAction) {
                     Text(primaryLabel)
                         .font(.headline)
                         .frame(maxWidth: .infinity)
-                        .padding()
+                        .padding(.vertical, 14)
                         .background(Color.accentColor)
                         .foregroundStyle(.white)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -93,7 +97,7 @@ struct TutorialStepView<Content: View>: View {
                 }
             }
             .padding(.horizontal, 24)
-            .padding(.bottom, 32)
+            .padding(.bottom, 24)
         }
         .padding(.horizontal)
     }

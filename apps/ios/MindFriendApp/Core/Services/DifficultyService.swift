@@ -251,10 +251,19 @@ final class DifficultyService: ObservableObject {
         )
 
         do {
-            // Upsert override (will replace existing active override due to unique constraint)
+            // First, deactivate any existing active overrides for this user
+            // This prevents unique constraint violation on idx_capacity_overrides_active_user
             try await supabase
                 .from("capacity_overrides")
-                .upsert(override)
+                .update(["is_active": false])
+                .eq("user_id", value: userId.uuidString)
+                .eq("is_active", value: true)
+                .execute()
+
+            // Now insert the new override
+            try await supabase
+                .from("capacity_overrides")
+                .insert(override)
                 .execute()
 
             // Refresh capacity to apply override
