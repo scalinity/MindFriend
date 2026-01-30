@@ -24,7 +24,7 @@ struct HomeQuestStep: View {
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 20) {
+            VStack(spacing: 16) {
                 // Example quest card
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
@@ -43,20 +43,22 @@ struct HomeQuestStep: View {
 
                     Text("Take a 5-minute mindful walk")
                         .font(.headline)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
 
-                    HStack(spacing: 16) {
+                    HStack(spacing: 12) {
                         Label("5 min", systemImage: "clock")
                         Label("Easy", systemImage: "leaf")
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 }
-                .padding()
+                .padding(12)
                 .background(Color(.secondarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 .scaleEffect(showQuest ? 1 : 0.9)
                 .opacity(showQuest ? 1 : 0)
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
 
                 // Explanation
                 Text("Quests are matched to your current energy level and take just a few minutes to complete.")
@@ -64,7 +66,7 @@ struct HomeQuestStep: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 32)
+                    .padding(.horizontal, 24)
                     .opacity(showQuest ? 1 : 0)
             }
             .onAppear {

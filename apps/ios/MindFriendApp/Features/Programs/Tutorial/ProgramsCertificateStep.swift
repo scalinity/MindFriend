@@ -23,7 +23,7 @@ struct ProgramsCertificateStep: View {
             primaryLabel: "Explore Programs",
             primaryAction: onComplete
         ) {
-            VStack(spacing: 20) {
+            VStack(spacing: 16) {
                 // Certificate preview
                 ZStack {
                     // Background sparkles
@@ -41,7 +41,7 @@ struct ProgramsCertificateStep: View {
                     }
 
                     // Certificate card
-                    VStack(spacing: 16) {
+                    VStack(spacing: 8) {
                         // Seal
                         ZStack {
                             Circle()
@@ -103,14 +103,15 @@ struct ProgramsCertificateStep: View {
                     .scaleEffect(showCertificate ? 1 : 0.8)
                     .opacity(showCertificate ? 1 : 0)
                 }
-                .padding(.horizontal, 32)
+                .padding(.horizontal, 24)
 
                 // Benefits
                 Text("Share your achievements and track your growth journey!")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 24)
                     .opacity(showCertificate ? 1 : 0)
             }
             .onAppear {

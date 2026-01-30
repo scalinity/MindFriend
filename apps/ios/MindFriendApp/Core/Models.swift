@@ -2309,17 +2309,73 @@ struct MemoryFragment: Codable, Identifiable, Equatable {
     let confidence: Double    // 0.0-1.0 extraction confidence
     let extractedAt: Date
     let expiresAt: Date?
+    let scheduledTime: Date?  // For events: when the event is scheduled to occur
 
+    /// For events, checks if the scheduled time has passed. For others, checks generic expiry.
     var isExpired: Bool {
+        // For events with scheduled time, check if the event has passed
+        if fragmentType == .event, let scheduled = scheduledTime {
+            return scheduled < Date()
+        }
+        // For non-events or events without scheduled time, check generic expiry
         guard let expiresAt = expiresAt else { return false }
         return expiresAt < Date()
     }
 
-    /// Display string combining key and value
+    /// Whether this event is upcoming (scheduled in the future)
+    var isUpcoming: Bool {
+        guard fragmentType == .event, let scheduled = scheduledTime else { return false }
+        return scheduled > Date()
+    }
+
+    /// Display string combining key and value, with time-aware formatting for events
     var displayContent: String {
-        // Format key nicely: dog_name -> Dog name
         let formattedKey = key.replacingOccurrences(of: "_", with: " ").capitalized
+
+        // For events with scheduled time, show relative time
+        if fragmentType == .event, let scheduled = scheduledTime {
+            let relativeTime = formatRelativeTime(scheduled)
+            return "\(formattedKey): \(relativeTime)"
+        }
+
         return "\(formattedKey): \(value)"
+    }
+
+    /// Formats the scheduled time relative to now
+    private func formatRelativeTime(_ date: Date) -> String {
+        let now = Date()
+        let diff = date.timeIntervalSince(now)
+        let absDiff = abs(diff)
+
+        let hours = absDiff / 3600
+        let minutes = absDiff / 60
+        let days = hours / 24
+
+        if diff > 0 {
+            // Future event
+            if minutes < 60 {
+                let mins = Int(minutes)
+                return "in \(mins) minute\(mins == 1 ? "" : "s")"
+            } else if hours < 24 {
+                let hrs = Int(hours)
+                return "in \(hrs) hour\(hrs == 1 ? "" : "s")"
+            } else {
+                let d = Int(days)
+                return "in \(d) day\(d == 1 ? "" : "s")"
+            }
+        } else {
+            // Past event
+            if minutes < 60 {
+                let mins = Int(minutes)
+                return "\(mins) minute\(mins == 1 ? "" : "s") ago"
+            } else if hours < 24 {
+                let hrs = Int(hours)
+                return "\(hrs) hour\(hrs == 1 ? "" : "s") ago"
+            } else {
+                let d = Int(days)
+                return "\(d) day\(d == 1 ? "" : "s") ago"
+            }
+        }
     }
 }
 

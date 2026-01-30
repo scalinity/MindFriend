@@ -22,6 +22,10 @@ final class SleepTrackingService: ObservableObject {
 
     /// Create a new sleep entry with calculated score
     func createEntry(_ entry: SleepEntry, goals: SleepGoals) async throws -> SleepEntry {
+        // Get the authenticated user's ID
+        let session = try await supabase.auth.session
+        let userId = session.user.id
+        
         // Calculate sleep score
         var mutableEntry = entry
         let scoreBreakdown = calculator.calculateScore(entry: entry, goals: goals)
@@ -30,6 +34,7 @@ final class SleepTrackingService: ObservableObject {
 
         // Prepare DTO
         let dto = CreateSleepEntryDTO(
+            userId: userId,
             date: formatDate(mutableEntry.date),
             source: mutableEntry.source.rawValue,
             bedtime: mutableEntry.bedtime.ISO8601Format(),
@@ -170,6 +175,10 @@ final class SleepTrackingService: ObservableObject {
 
     /// Create default sleep goals for a new user
     private func createDefaultGoals() async throws -> SleepGoals {
+        // Get the authenticated user's ID
+        let session = try await supabase.auth.session
+        let userId = session.user.id
+        
         let calendar = Calendar.current
         let now = Date()
 
@@ -179,7 +188,7 @@ final class SleepTrackingService: ObservableObject {
 
         let goals = SleepGoals(
             id: UUID(),
-            userId: UUID(), // Will be set by RLS
+            userId: userId,
             targetBedtime: bedtime,
             targetWakeTime: wakeTime,
             targetDurationMinutes: 480, // 8 hours

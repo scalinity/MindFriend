@@ -23,15 +23,15 @@ struct HomeWelcomeStep: View {
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 16) {
+            VStack(spacing: 8) {
                 // Animated card previews
-                VStack(spacing: 12) {
+                VStack(spacing: 8) {
                     ForEach(Array(homeFeatures.enumerated()), id: \.element.title) { index, feature in
                         HStack(spacing: 12) {
                             Image(systemName: feature.icon)
                                 .font(.title3)
                                 .foregroundStyle(feature.color)
-                                .frame(width: 32)
+                                .frame(width: 28)
 
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(feature.title)
@@ -39,12 +39,14 @@ struct HomeWelcomeStep: View {
                                 Text(feature.description)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                    .lineLimit(nil)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
 
                             Spacer()
                         }
                         .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
+                        .padding(.vertical, 8)
                         .background(Color(.secondarySystemBackground))
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                         .opacity(showCards ? 1 : 0)
@@ -55,7 +57,7 @@ struct HomeWelcomeStep: View {
                         )
                     }
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
             }
             .onAppear {
                 showCards = true

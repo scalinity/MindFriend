@@ -283,28 +283,47 @@ final class InterventionService: ObservableObject {
     func updatePreferences(_ preferences: InterventionPreferences) async throws {
         // Cancel any pending save
         preferencesSaveTask?.cancel()
-        
+
+        // Get the authenticated user ID to ensure it matches
+        let session = try await supabase.auth.session
+        let userId = session.user.id
+
         // Debounce: wait 500ms before saving
         let saveTask = Task { @MainActor in
             try await Task.sleep(nanoseconds: InterventionConstants.preferencesSaveDebounceNanoseconds)
-            
+
             guard !Task.isCancelled else { return }
-            
+
+            // Ensure the preferences have the correct user ID
+            var prefsToSave = preferences
+            if prefsToSave.userId != userId {
+                prefsToSave = InterventionPreferences(
+                    id: prefsToSave.id,
+                    userId: userId,
+                    enabled: prefsToSave.enabled,
+                    maxDaily: prefsToSave.maxDaily,
+                    quietHoursStart: prefsToSave.quietHoursStart,
+                    quietHoursEnd: prefsToSave.quietHoursEnd,
+                    createdAt: prefsToSave.createdAt,
+                    updatedAt: Date()
+                )
+            }
+
             try await supabase
                 .from("intervention_preferences")
-                .upsert(preferences)
+                .upsert(prefsToSave)
                 .execute()
 
-            self.preferences = preferences
-            
+            self.preferences = prefsToSave
+
             // Invalidate cache on update
-            self.cachedPreferences = preferences
+            self.cachedPreferences = prefsToSave
             self.preferencesCacheTimestamp = Date()
 
             // Restart monitoring if enabled changed
-            if preferences.enabled && !isMonitoring {
+            if prefsToSave.enabled && !isMonitoring {
                 try await startMonitoring()
-            } else if !preferences.enabled && isMonitoring {
+            } else if !prefsToSave.enabled && isMonitoring {
                 stopMonitoring()
             }
         }

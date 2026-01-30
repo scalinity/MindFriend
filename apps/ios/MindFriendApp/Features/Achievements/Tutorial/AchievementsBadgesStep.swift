@@ -32,7 +32,7 @@ struct AchievementsBadgesStep: View {
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 20) {
+            VStack(spacing: 16) {
                 // Badge grid
                 LazyVGrid(columns: [
                     GridItem(.flexible()),
@@ -46,7 +46,7 @@ struct AchievementsBadgesStep: View {
                                     .fill(unlockedBadges.contains(index)
                                           ? badge.color.opacity(0.15)
                                           : Color(.systemGray5))
-                                    .frame(width: 56, height: 56)
+                                    .frame(width: 48, height: 48)
 
                                 Image(systemName: badge.icon)
                                     .font(.title2)
@@ -60,13 +60,14 @@ struct AchievementsBadgesStep: View {
                                 .font(.caption2)
                                 .foregroundStyle(unlockedBadges.contains(index) ? .primary : .secondary)
                                 .multilineTextAlignment(.center)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
 
                 // Stats
-                HStack(spacing: 24) {
+                HStack(spacing: 16) {
                     VStack {
                         Text("50+")
                             .font(.title2.bold())
@@ -84,10 +85,10 @@ struct AchievementsBadgesStep: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .padding()
+                .padding(12)
                 .background(Color(.secondarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
             }
             .onAppear {
                 animateBadges()

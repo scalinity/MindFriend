@@ -258,8 +258,9 @@ struct SleepDashboardView: View {
                 Text(title)
                     .font(.caption)
                     .foregroundColor(.primary)
+                    .multilineTextAlignment(.center)
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, minHeight: 70)
             .padding()
             .background(Color(.systemGray6))
             .cornerRadius(12)
@@ -333,32 +334,81 @@ struct SleepDashboardView: View {
                 .font(.system(size: 60))
                 .foregroundColor(.secondary)
 
-            Text("Start Tracking Your Sleep")
-                .font(.title3)
-                .fontWeight(.semibold)
-
-            Text("Connect HealthKit or manually log your sleep to get personalized insights")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-
-            Button {
-                Task {
-                    await viewModel.requestHealthKitAuth(
-                        healthKitManager: dependencies.sleepHealthKitManager
-                    )
-                }
-            } label: {
-                Text("Connect HealthKit")
+            if dependencies.sleepHealthKitManager.isAuthorized {
+                // HealthKit is connected but no sleep data found
+                Text("No Sleep Data Yet")
+                    .font(.title3)
                     .fontWeight(.semibold)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.accentColor)
-                    .cornerRadius(12)
+
+                Text("We couldn't find any sleep data in HealthKit. Make sure you have sleep data recorded in the Health app, or add a manual entry.")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+
+                Button {
+                    showManualEntry = true
+                } label: {
+                    Text("Log Sleep Manually")
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.accentColor)
+                        .cornerRadius(12)
+                }
+                .padding(.horizontal)
+                
+                Button {
+                    Task {
+                        await viewModel.refresh(
+                            trackingService: dependencies.sleepTrackingService,
+                            healthKitManager: dependencies.sleepHealthKitManager
+                        )
+                    }
+                } label: {
+                    Text("Sync from HealthKit Again")
+                        .font(.subheadline)
+                        .foregroundColor(.accentColor)
+                }
+            } else {
+                // HealthKit not connected yet
+                Text("Start Tracking Your Sleep")
+                    .font(.title3)
+                    .fontWeight(.semibold)
+
+                Text("Connect HealthKit or manually log your sleep to get personalized insights")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+
+                Button {
+                    Task {
+                        await viewModel.requestHealthKitAuth(
+                            healthKitManager: dependencies.sleepHealthKitManager,
+                            trackingService: dependencies.sleepTrackingService
+                        )
+                    }
+                } label: {
+                    Text("Connect HealthKit")
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.accentColor)
+                        .cornerRadius(12)
+                }
+                .padding(.horizontal)
+                
+                Button {
+                    showManualEntry = true
+                } label: {
+                    Text("Or Log Manually")
+                        .font(.subheadline)
+                        .foregroundColor(.accentColor)
+                }
             }
-            .padding(.horizontal)
         }
         .padding(.vertical, 40)
     }
@@ -421,13 +471,22 @@ final class SleepDashboardViewModel: ObservableObject {
         await loadData(trackingService: trackingService, healthKitManager: healthKitManager)
     }
 
-    func requestHealthKitAuth(healthKitManager: SleepHealthKitManager) async {
+    func requestHealthKitAuth(healthKitManager: SleepHealthKitManager, trackingService: SleepTrackingService) async {
+        print("[SleepDashboard] Starting HealthKit authorization...")
+        
         do {
             try await healthKitManager.requestAuthorization()
+            print("[SleepDashboard] Authorization complete, syncing sleep data...")
+            
             // Sync after authorization
-            _ = try await healthKitManager.syncRecentSleep()
+            let entry = try await healthKitManager.syncRecentSleep()
+            print("[SleepDashboard] Sync complete. Entry: \(entry != nil ? "found" : "none")")
+            
+            // Reload data to update the UI
+            await loadData(trackingService: trackingService, healthKitManager: healthKitManager)
+            print("[SleepDashboard] Data reloaded. Entries: \(weekEntries.count)")
         } catch {
-            print("HealthKit authorization failed: \(error)")
+            print("[SleepDashboard] HealthKit authorization/sync failed: \(error)")
         }
     }
 

@@ -30,7 +30,7 @@ struct MoodWhyStep: View {
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 12) {
+            VStack(spacing: 8) {
                 ForEach(Array(benefits.enumerated()), id: \.element.title) { index, benefit in
                     HStack(spacing: 12) {
                         Image(systemName: benefit.icon)
@@ -44,11 +44,12 @@ struct MoodWhyStep: View {
                             Text(benefit.description)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
 
                         Spacer()
                     }
-                    .padding()
+                    .padding(12)
                     .background(Color(.secondarySystemBackground))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .opacity(showBenefits ? 1 : 0)
@@ -59,7 +60,7 @@ struct MoodWhyStep: View {
                     )
                 }
             }
-            .padding(.horizontal, 24)
+            .padding(.horizontal, 20)
             .onAppear { showBenefits = true }
         }
     }

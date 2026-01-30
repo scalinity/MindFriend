@@ -23,9 +23,9 @@ struct OutcomesIntroStep: View {
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 20) {
+            VStack(spacing: 16) {
                 // Feature highlights
-                VStack(spacing: 12) {
+                VStack(spacing: 8) {
                     WellnessFeatureRow(
                         icon: "checkmark.seal.fill",
                         color: .green,
@@ -47,10 +47,10 @@ struct OutcomesIntroStep: View {
                         description: "Work toward meaningful outcomes"
                     )
                 }
-                .padding()
+                .padding(12)
                 .background(Color(.secondarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 16))
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
                 .opacity(showContent ? 1 : 0)
                 .offset(y: showContent ? 0 : 20)
 
@@ -59,7 +59,8 @@ struct OutcomesIntroStep: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 24)
                     .opacity(showContent ? 1 : 0)
             }
             .onAppear {
@@ -92,6 +93,7 @@ private struct WellnessFeatureRow: View {
                 Text(description)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Spacer()

@@ -4,28 +4,23 @@ import SwiftUI
 /// Routes to onboarding or dashboard based on partner state
 struct PartnerModeView: View {
     @EnvironmentObject var container: DependencyContainer
-    @State private var viewModel: PartnerModeViewModel?
+
+    var body: some View {
+        PartnerModeContentView(dataService: container.supabaseDataService)
+            .navigationTitle("Partner Mode")
+    }
+}
+
+/// Inner view that owns the StateObject for proper observation
+private struct PartnerModeContentView: View {
+    @StateObject private var viewModel: PartnerModeViewModel
+
+    init(dataService: SupabaseDataService) {
+        _viewModel = StateObject(wrappedValue: PartnerModeViewModel(dataService: dataService))
+    }
 
     var body: some View {
         Group {
-            if let viewModel = viewModel {
-                contentView(viewModel: viewModel)
-            } else {
-                loadingView
-            }
-        }
-        .navigationTitle("Partner Mode")
-        .task {
-            if viewModel == nil {
-                viewModel = PartnerModeViewModel(dataService: container.supabaseDataService)
-            }
-            await viewModel?.loadPartnerData()
-        }
-    }
-
-    @ViewBuilder
-    private func contentView(viewModel: PartnerModeViewModel) -> some View {
-        ZStack {
             switch viewModel.partnerState {
             case .loading:
                 loadingView
@@ -39,18 +34,11 @@ struct PartnerModeView: View {
             case .hasPartner(let partnerInfo):
                 PartnerDashboardView(viewModel: viewModel, partnerInfo: partnerInfo)
             }
-
-            // Show loading overlay when isLoading is true (initial data fetch)
-            if viewModel.isLoading && viewModel.partnerState == .noPartner {
-                Color.black.opacity(0.3)
-                    .ignoresSafeArea()
-                loadingView
-            }
         }
-        .alert("Error", isPresented: Binding(
-            get: { viewModel.showError },
-            set: { viewModel.showError = $0 }
-        )) {
+        .task {
+            await viewModel.loadPartnerData()
+        }
+        .alert("Error", isPresented: $viewModel.showError) {
             Button("OK", role: .cancel) { }
         } message: {
             Text(viewModel.errorMessage)

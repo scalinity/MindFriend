@@ -43,37 +43,35 @@ struct MentorshipTabView: View {
     }
 
     var body: some View {
-        NavigationStack(path: $navigationPath) {
-            Group {
-                switch selectedSection {
-                case .home:
-                    MentorshipHomeView(
-                        navigationPath: $navigationPath,
-                        selectedSection: $selectedSection,
-                        matchingService: matchingService,
-                        profileService: profileService
-                    )
+        Group {
+            switch selectedSection {
+            case .home:
+                MentorshipHomeView(
+                    navigationPath: $navigationPath,
+                    selectedSection: $selectedSection,
+                    matchingService: matchingService,
+                    profileService: profileService
+                )
 
-                case .findMentor:
-                    FindMentorView(
-                        navigationPath: $navigationPath,
-                        matchingService: matchingService
-                    )
+            case .findMentor:
+                FindMentorView(
+                    navigationPath: $navigationPath,
+                    matchingService: matchingService
+                )
 
-                case .myMatches:
-                    MentorshipListView(
-                        navigationPath: $navigationPath,
-                        matchingService: matchingService,
-                        messagingService: messagingService
-                    )
+            case .myMatches:
+                MentorshipListView(
+                    navigationPath: $navigationPath,
+                    matchingService: matchingService,
+                    messagingService: messagingService
+                )
 
-                case .profile:
-                    MentorshipProfileView()
-                }
+            case .profile:
+                MentorshipProfileView()
             }
-            .navigationDestination(for: MentorshipNavigationDestination.self) { destination in
-                navigationDestinationView(for: destination)
-            }
+        }
+        .navigationDestination(for: MentorshipNavigationDestination.self) { destination in
+            navigationDestinationView(for: destination)
         }
         .environmentObject(profileService)
         .environmentObject(matchingService)
@@ -113,19 +111,17 @@ struct MentorshipHomeView: View {
     @ObservedObject var profileService: MentorshipProfileService
 
     var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(spacing: 20) {
-                    statusCard
-                    quickActions
-                    recentMatchesSection
-                    Spacer()
-                }
-                .padding(.vertical)
+        ScrollView {
+            VStack(spacing: 20) {
+                statusCard
+                quickActions
+                recentMatchesSection
+                Spacer()
             }
-            .navigationTitle("Mentorship")
-            .navigationBarTitleDisplayMode(.inline)
+            .padding(.vertical)
         }
+        .navigationTitle("Mentorship")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     // MARK: - Extracted Views

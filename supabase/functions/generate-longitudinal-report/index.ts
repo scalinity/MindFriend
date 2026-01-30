@@ -6,12 +6,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
-
 interface ReportRequest {
   report_type: "quarterly" | "annual" | "custom";
   time_period?: {
@@ -31,44 +25,127 @@ interface ReportContent {
   recommendations: string[];
 }
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 serve(async (req) => {
+  console.log("=== [generate-longitudinal-report] START ===");
+  console.log("[1] Method:", req.method);
+  console.log("[2] URL:", req.url);
+
+  // Handle CORS preflight
   if (req.method === "OPTIONS") {
+    console.log("[3] Returning CORS preflight response");
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
+    // Get environment variables
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-    if (!supabaseUrl || !serviceRoleKey) {
-      throw new Error("Missing environment variables");
-    }
+    console.log("[4] SUPABASE_URL present:", !!supabaseUrl);
+    console.log("[5] SUPABASE_SERVICE_ROLE_KEY present:", !!serviceRoleKey);
 
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    if (!supabaseUrl || !serviceRoleKey) {
+      console.error("[ERROR] Missing environment variables");
       return new Response(
-        JSON.stringify({ success: false, error: "Missing authorization header" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ success: false, error: "Server configuration error" }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
 
-    const supabaseClient = createClient(supabaseUrl, serviceRoleKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
+    // Check Authorization header
+    const authHeader = req.headers.get("Authorization");
+    console.log("[6] Authorization header present:", !!authHeader);
+
+    if (!authHeader) {
+      console.error("[ERROR] No Authorization header");
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Missing authorization header",
+        }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    console.log(
+      "[7] Auth header starts with Bearer:",
+      authHeader.startsWith("Bearer "),
+    );
+    console.log("[8] Auth header length:", authHeader.length);
+
+    if (!authHeader.startsWith("Bearer ")) {
+      console.error("[ERROR] Authorization header doesn't start with Bearer");
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Invalid authorization format",
+        }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
 
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
+    console.log("[9] Token extracted, length:", token.length);
 
-    if (userError || !user) {
+    // Create admin client to validate token
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+    console.log("[10] Admin client created");
+
+    // Validate the token
+    console.log("[11] Calling auth.getUser with token...");
+    const {
+      data: { user },
+      error: authError,
+    } = await supabaseAdmin.auth.getUser(token);
+
+    console.log(
+      "[12] auth.getUser returned, error:",
+      authError?.message || "none",
+    );
+    console.log("[13] User returned:", !!user);
+
+    if (authError || !user) {
+      console.error(
+        "[ERROR] Token validation failed:",
+        authError?.message || "No user returned",
+      );
       return new Response(
-        JSON.stringify({ success: false, error: "Invalid or expired token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({
+          success: false,
+          error: authError?.message || "Invalid token",
+        }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
 
     const userId = user.id;
+    console.log("[14] Auth successful, userId:", userId);
+
+    // Use the admin client for database operations (bypasses RLS)
+    const supabase = supabaseAdmin;
+
     const body: ReportRequest = await req.json();
     const reportType = body.report_type || "quarterly";
+    console.log("[15] Report type:", reportType);
 
     const now = new Date();
     let startDate: Date;
@@ -85,8 +162,12 @@ serve(async (req) => {
         startDate.setMonth(startDate.getMonth() - 3);
       }
     }
-
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
+    console.log(
+      "[16] Date range:",
+      startDate.toISOString(),
+      "to",
+      endDate.toISOString(),
+    );
 
     const { data: moods } = await supabase
       .from("moods")
@@ -115,17 +196,29 @@ serve(async (req) => {
     const moodData = moods || [];
     const sessionData = sessions || [];
     const patternData = patterns || [];
+    console.log(
+      "[17] Data fetched - moods:",
+      moodData.length,
+      "sessions:",
+      sessionData.length,
+      "patterns:",
+      patternData.length,
+    );
 
     const moodScores = moodData.map((m) => m.mood_score);
-    const avgMood = moodScores.length > 0
-      ? moodScores.reduce((a, b) => a + b, 0) / moodScores.length
-      : 0;
+    const avgMood =
+      moodScores.length > 0
+        ? moodScores.reduce((a, b) => a + b, 0) / moodScores.length
+        : 0;
 
     let moodTrend = "stable";
     if (moodScores.length >= 10) {
       const mid = Math.floor(moodScores.length / 2);
-      const firstAvg = moodScores.slice(0, mid).reduce((a, b) => a + b, 0) / mid;
-      const secondAvg = moodScores.slice(mid).reduce((a, b) => a + b, 0) / (moodScores.length - mid);
+      const firstAvg =
+        moodScores.slice(0, mid).reduce((a, b) => a + b, 0) / mid;
+      const secondAvg =
+        moodScores.slice(mid).reduce((a, b) => a + b, 0) /
+        (moodScores.length - mid);
       if (secondAvg - firstAvg > 0.3) moodTrend = "improving";
       else if (secondAvg - firstAvg < -0.3) moodTrend = "declining";
     }
@@ -146,24 +239,38 @@ serve(async (req) => {
       if (!activityByWeek[weekStart]) activityByWeek[weekStart] = new Set();
       activityByWeek[weekStart].add(dayKey);
     }
-    const activityHeatmap = Object.entries(activityByWeek).map(([week, days]) => ({
-      week,
-      days: days.size,
-    }));
+    const activityHeatmap = Object.entries(activityByWeek).map(
+      ([week, days]) => ({
+        week,
+        days: days.size,
+      }),
+    );
 
     const keyInsights: string[] = [];
     if (moodScores.length > 0) {
-      keyInsights.push("Your average mood score was " + avgMood.toFixed(1) + " out of 5 during this period.");
+      keyInsights.push(
+        "Your average mood score was " +
+          avgMood.toFixed(1) +
+          " out of 5 during this period.",
+      );
     }
     if (moodTrend === "improving") {
       keyInsights.push("Your mood has been trending upward - great progress!");
     } else if (moodTrend === "declining") {
-      keyInsights.push("Your mood has been declining. Consider reaching out for support if needed.");
+      keyInsights.push(
+        "Your mood has been declining. Consider reaching out for support if needed.",
+      );
     } else if (moodScores.length >= 10) {
-      keyInsights.push("Your mood has been relatively stable during this period.");
+      keyInsights.push(
+        "Your mood has been relatively stable during this period.",
+      );
     }
     if (sessionData.length > 0) {
-      keyInsights.push("You completed " + sessionData.length + " wellness exercises during this period.");
+      keyInsights.push(
+        "You completed " +
+          sessionData.length +
+          " wellness exercises during this period.",
+      );
     }
     for (const pattern of patternData.slice(0, 2)) {
       keyInsights.push(pattern.pattern_description);
@@ -171,20 +278,36 @@ serve(async (req) => {
 
     const recommendations: string[] = [];
     if (avgMood < 3) {
-      recommendations.push("Try incorporating more self-care activities into your daily routine.");
-      recommendations.push("Consider speaking with a mental health professional for additional support.");
+      recommendations.push(
+        "Try incorporating more self-care activities into your daily routine.",
+      );
+      recommendations.push(
+        "Consider speaking with a mental health professional for additional support.",
+      );
     } else {
-      recommendations.push("Keep up your current wellness habits - they seem to be working!");
+      recommendations.push(
+        "Keep up your current wellness habits - they seem to be working!",
+      );
     }
     if (sessionData.length < 5) {
-      recommendations.push("Try to complete more wellness exercises to build healthy habits.");
+      recommendations.push(
+        "Try to complete more wellness exercises to build healthy habits.",
+      );
     }
-    recommendations.push("Continue tracking your mood regularly to build a clearer picture of your wellness journey.");
+    recommendations.push(
+      "Continue tracking your mood regularly to build a clearer picture of your wellness journey.",
+    );
 
     const periodLabel = reportType === "annual" ? "year" : "quarter";
-    let summary = "Over the past " + periodLabel + ", you logged " + moodData.length + " mood entries";
+    let summary =
+      "Over the past " +
+      periodLabel +
+      ", you logged " +
+      moodData.length +
+      " mood entries";
     if (sessionData.length > 0) {
-      summary += " and completed " + sessionData.length + " wellness exercises.";
+      summary +=
+        " and completed " + sessionData.length + " wellness exercises.";
     } else {
       summary += ".";
     }
@@ -204,6 +327,7 @@ serve(async (req) => {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 90);
 
+    console.log("[18] Inserting report into database...");
     const { data: reportData, error: insertError } = await supabase
       .from("longitudinal_reports")
       .insert({
@@ -220,9 +344,12 @@ serve(async (req) => {
       .single();
 
     if (insertError) {
-      console.error("Error inserting report:", insertError);
+      console.error("[ERROR] Error inserting report:", insertError);
       throw new Error("Failed to save report: " + insertError.message);
     }
+
+    console.log("[19] Report saved successfully, id:", reportData.id);
+    console.log("=== [generate-longitudinal-report] SUCCESS ===");
 
     return new Response(
       JSON.stringify({
@@ -237,16 +364,20 @@ serve(async (req) => {
         generated_at: reportData.generated_at,
         expires_at: reportData.expires_at,
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
+    console.error("=== [generate-longitudinal-report] ERROR ===");
     console.error("Report generation error:", error);
     return new Response(
       JSON.stringify({
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
       }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   }
 });

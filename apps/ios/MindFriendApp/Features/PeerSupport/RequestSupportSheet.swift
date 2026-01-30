@@ -20,15 +20,8 @@ struct RequestSupportSheet: View {
             Form {
                 Section("Type of Support") {
                     Picker("Session Type", selection: $selectedType) {
-                        ForEach([DBSupportSession.SessionType.quick, .deep], id: \.self) { type in
-                            VStack(alignment: .leading) {
-                                Text(type.displayName)
-                                Text("\(type.estimatedMinutes) minutes")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .tag(type)
-                        }
+                        Text("Quick Support").tag(DBSupportSession.SessionType.quick)
+                        Text("Deep Conversation").tag(DBSupportSession.SessionType.deep)
                     }
                     .pickerStyle(.segmented)
 
@@ -36,9 +29,10 @@ struct RequestSupportSheet: View {
                         Image(systemName: selectedType.icon)
                             .foregroundStyle(.blue)
                         Text("Estimated duration: \(selectedType.estimatedMinutes) minutes")
-                            .font(.caption)
+                            .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
+                    .padding(.top, 4)
                 }
 
                 Section("What would you like to talk about?") {
@@ -129,7 +123,7 @@ struct RequestSupportSheet: View {
                     Button("Request") {
                         requestSupport()
                     }
-                    .disabled(isRequesting)
+                    .disabled(isRequesting || selectedTopics.isEmpty)
                     .fontWeight(.semibold)
                 }
             }

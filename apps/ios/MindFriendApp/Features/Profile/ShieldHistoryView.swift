@@ -37,18 +37,32 @@ struct ShieldHistoryView: View {
 
     private var emptyState: some View {
         VStack(spacing: 16) {
-            Image(systemName: "shield.slash")
+            Image(systemName: "shield.fill")
                 .font(.system(size: 60))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.blue.opacity(0.6))
 
             Text("No Shield Events Yet")
                 .font(.headline)
 
-            Text("Shields are earned every 7 days of consistent questing")
+            VStack(spacing: 8) {
+                Text("You have shields ready to protect your streak!")
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+
+                Text("Events appear here when:")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("A shield protects your streak after missing a day", systemImage: "checkmark.shield.fill")
+                    Label("You earn new shields at 7-day streak milestones", systemImage: "gift.fill")
+                    Label("Shields are reset weekly", systemImage: "arrow.clockwise")
+                }
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
+            }
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 24)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

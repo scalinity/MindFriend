@@ -24,7 +24,7 @@ struct HomeStreakStep: View {
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 24) {
+            VStack(spacing: 16) {
                 // Animated streak counter
                 HStack(spacing: 8) {
                     Image(systemName: "flame.fill")
@@ -54,15 +54,17 @@ struct HomeStreakStep: View {
                         Text("Premium users get shields to protect their streak when life gets busy.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .lineLimit(nil)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     .opacity(showShield ? 1 : 0)
 
                     Spacer()
                 }
-                .padding()
+                .padding(12)
                 .background(Color(.secondarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
             }
             .onAppear {
                 // Animate streak count

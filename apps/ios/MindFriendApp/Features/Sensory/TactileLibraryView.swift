@@ -10,12 +10,17 @@ import SwiftUI
 
 struct TactileLibraryView: View {
     @EnvironmentObject private var dependencies: DependencyContainer
+    @EnvironmentObject private var appState: AppState
     @State private var selectedPattern: TactilePattern?
 
     let columns = [
         GridItem(.flexible()),
         GridItem(.flexible())
     ]
+    
+    private var isPremiumUser: Bool {
+        appState.entitlements.tier == .premium
+    }
 
     var body: some View {
         ScrollView {
@@ -40,10 +45,11 @@ struct TactileLibraryView: View {
                             description: pattern.description,
                             category: pattern.category.displayName,
                             isPremium: pattern.isPremium,
+                            isLocked: pattern.isPremium && !isPremiumUser,
                             icon: "hand.tap.fill",
                             color: categoryColor(pattern.category)
                         ) {
-                            selectedPattern = pattern
+                            handlePatternTap(pattern)
                         }
                     }
                 }
@@ -64,6 +70,14 @@ struct TactileLibraryView: View {
             )
         }
     }
+    
+    private func handlePatternTap(_ pattern: TactilePattern) {
+        if pattern.isPremium && !isPremiumUser {
+            appState.showPaywall = true
+        } else {
+            selectedPattern = pattern
+        }
+    }
 
     private func categoryColor(_ category: TactilePattern.PatternCategory) -> Color {
         switch category {
@@ -82,6 +96,7 @@ struct TactilePatternCard: View {
     let description: String
     let category: String
     let isPremium: Bool
+    let isLocked: Bool
     let icon: String
     let color: Color
     let action: () -> Void
@@ -93,28 +108,47 @@ struct TactilePatternCard: View {
                 HStack {
                     ZStack {
                         Circle()
-                            .fill(color.opacity(0.2))
+                            .fill(color.opacity(isLocked ? 0.1 : 0.2))
                             .frame(width: 50, height: 50)
 
-                        Image(systemName: icon)
-                            .font(.title2)
-                            .foregroundColor(color)
+                        if isLocked {
+                            Image(systemName: "lock.fill")
+                                .font(.title2)
+                                .foregroundColor(.gray)
+                        } else {
+                            Image(systemName: icon)
+                                .font(.title2)
+                                .foregroundColor(color)
+                        }
                     }
 
                     Spacer()
 
                     if isPremium {
-                        Image(systemName: "crown.fill")
+                        Image(systemName: isLocked ? "lock.fill" : "crown.fill")
                             .font(.caption)
-                            .foregroundColor(.yellow)
+                            .foregroundColor(isLocked ? .gray : .yellow)
+                            .padding(4)
+                            .background(
+                                isLocked ? Color.gray.opacity(0.2) : Color.clear
+                            )
+                            .clipShape(Circle())
                     }
                 }
 
                 // Pattern info
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(name)
-                        .font(.headline)
-                        .foregroundColor(.primary)
+                    HStack {
+                        Text(name)
+                            .font(.headline)
+                            .foregroundColor(isLocked ? .secondary : .primary)
+                        
+                        if isLocked {
+                            Image(systemName: "crown.fill")
+                                .font(.caption2)
+                                .foregroundColor(.yellow)
+                        }
+                    }
 
                     Text(category)
                         .font(.caption)
@@ -127,6 +161,17 @@ struct TactilePatternCard: View {
                 }
 
                 Spacer()
+                
+                if isLocked {
+                    Text("Premium")
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.gray.opacity(0.6))
+                        .clipShape(Capsule())
+                }
             }
             .padding()
             .frame(height: 180)
@@ -135,6 +180,7 @@ struct TactilePatternCard: View {
                     .fill(Color(.systemBackground))
                     .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 2)
             )
+            .opacity(isLocked ? 0.8 : 1.0)
         }
         .buttonStyle(.plain)
     }

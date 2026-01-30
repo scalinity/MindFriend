@@ -19,6 +19,9 @@ struct ProgramDayView: View {
     @State private var isCompleting = false
     @State private var showSkipConfirm = false
     @State private var showPauseMenu = false
+    @State private var showCertificateCelebration = false
+    @State private var certificateNumber: String?
+    @State private var completionStats: ProgramCertificateCelebrationView.CompletionStats?
 
     var canComplete: Bool {
         guard let day = currentDay else { return false }
@@ -147,6 +150,22 @@ struct ProgramDayView: View {
         } message: {
             Text("Your progress will be saved but you'll need to start over if you return.")
         }
+        .fullScreenCover(isPresented: $showCertificateCelebration) {
+            if let certNumber = certificateNumber,
+               let stats = completionStats {
+                ProgramCertificateCelebrationView(
+                    programName: enrollment.program?.title ?? "Program",
+                    certificateNumber: certNumber,
+                    completionStats: stats,
+                    onDismiss: {
+                        showCertificateCelebration = false
+                        dismiss()
+                    },
+                    onShareToCircle: nil, // TODO: Implement circle sharing
+                    onShareExternally: nil // TODO: Implement external sharing
+                )
+            }
+        }
     }
 
     private func loadDay() async {
@@ -221,13 +240,17 @@ struct ProgramDayView: View {
             )
 
             if result.programComplete {
-                // Show celebration
+                // Show certificate celebration
                 if let certNumber = result.certificateNumber {
-                    appState.showCelebration(
-                        title: "Program Complete!",
-                        subtitle: "Certificate: \(certNumber)",
-                        icon: "checkmark.seal.fill"
+                    certificateNumber = certNumber
+                    completionStats = ProgramCertificateCelebrationView.CompletionStats(
+                        daysCompleted: enrollment.currentDay,
+                        longestStreak: enrollment.longestStreak,
+                        skipsUsed: enrollment.skipsUsed,
+                        totalDays: enrollment.program?.durationDays ?? enrollment.currentDay
                     )
+                    showCertificateCelebration = true
+                    return // Don't dismiss yet - dismiss after celebration
                 }
             }
 
@@ -523,7 +546,7 @@ struct CheckInContentView: View {
                     } label: {
                         Text(moodEmoji(for: score))
                             .font(.title)
-                            .opacity(selectedMood == score || isCompleted ? 1 : 0.5)
+                            .opacity(selectedMood == score ? 1 : 0.5)
                     }
                     .accessibilityLabel(moodLabel(for: score))
                     .accessibilityAddTraits(selectedMood == score ? .isSelected : [])

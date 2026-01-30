@@ -14,6 +14,7 @@ struct GenerativeHomeView: View {
     @State private var showVoicePreferences = false
     @State private var selectedContent: GeneratedContent?
     @State private var quotaStatus: ContentQuotaStatus?
+    @State private var selectedSoundscape: BackgroundSoundType?
 
     init(service: GeneratedContentService? = nil) {
         _service = StateObject(wrappedValue: service ?? GeneratedContentService(supabase: supabase))
@@ -24,6 +25,9 @@ struct GenerativeHomeView: View {
             VStack(spacing: 24) {
                 // Quick Generate Section
                 quickGenerateSection
+
+                // Soundscapes Section
+                soundscapesSection
 
                 // Recent Section
                 recentSection
@@ -65,6 +69,11 @@ struct GenerativeHomeView: View {
                 } else {
                     GeneratedMeditationView(content: content)
                 }
+            }
+        }
+        .sheet(item: $selectedSoundscape) { soundscape in
+            NavigationStack {
+                SoundscapePlayerView(soundscape: soundscape)
             }
         }
         .alert("Error", isPresented: .constant(error != nil)) {
@@ -128,6 +137,70 @@ struct GenerativeHomeView: View {
         }
         .disabled(isGenerating || (quotaStatus?.isExhausted ?? false))
         .opacity((quotaStatus?.isExhausted ?? false) ? 0.5 : 1)
+    }
+
+    // MARK: - Soundscapes Section
+
+    private var soundscapesSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Ambient Soundscapes")
+                .font(.headline)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    // Free sounds
+                    ForEach(BackgroundSoundType.freeSounds, id: \.self) { sound in
+                        soundscapeCard(for: sound, isPremium: false)
+                    }
+
+                    // Premium sounds with badge
+                    ForEach(BackgroundSoundType.premiumSounds, id: \.self) { sound in
+                        soundscapeCard(for: sound, isPremium: true)
+                    }
+                }
+            }
+        }
+    }
+
+    private func soundscapeCard(for sound: BackgroundSoundType, isPremium: Bool) -> some View {
+        Button {
+            if isPremium && appState.entitlements.tier != .premium {
+                appState.showPaywall = true
+            } else {
+                selectedSoundscape = sound
+            }
+        } label: {
+            VStack(spacing: 8) {
+                ZStack(alignment: .topTrailing) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(sound.themeColor.opacity(0.2))
+
+                        Image(systemName: sound.icon)
+                            .font(.title)
+                            .foregroundStyle(sound.themeColor)
+                    }
+                    .frame(width: 80, height: 60)
+
+                    if isPremium {
+                        Image(systemName: "crown.fill")
+                            .font(.caption)
+                            .foregroundStyle(.yellow)
+                            .padding(4)
+                            .background(Color.black.opacity(0.6))
+                            .clipShape(Circle())
+                            .offset(x: 4, y: -4)
+                    }
+                }
+
+                Text(sound.displayName)
+                    .font(.caption)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .frame(width: 80)
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Recent Section

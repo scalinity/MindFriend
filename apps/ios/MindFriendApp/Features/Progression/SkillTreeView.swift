@@ -33,6 +33,7 @@ struct SkillTreeView: View {
         .refreshable {
             await loadSkills()
         }
+        .skillLevelUpCelebration()
     }
 
     // MARK: - Sections

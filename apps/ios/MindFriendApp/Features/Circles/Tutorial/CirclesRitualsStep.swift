@@ -28,13 +28,13 @@ struct CirclesRitualsStep: View {
             primaryLabel: "Explore Circles",
             primaryAction: onComplete
         ) {
-            VStack(spacing: 12) {
+            VStack(spacing: 8) {
                 ForEach(Array(rituals.enumerated()), id: \.element.name) { index, ritual in
                     HStack(spacing: 12) {
                         ZStack {
                             Circle()
                                 .fill(ritual.color.opacity(0.15))
-                                .frame(width: 44, height: 44)
+                                .frame(width: 38, height: 38)
                             Image(systemName: ritual.icon)
                                 .foregroundStyle(ritual.color)
                         }
@@ -45,11 +45,12 @@ struct CirclesRitualsStep: View {
                             Text(ritual.description)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
 
                         Spacer()
                     }
-                    .padding()
+                    .padding(12)
                     .background(Color(.secondarySystemBackground))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .opacity(showRituals ? 1 : 0)
@@ -67,14 +68,15 @@ struct CirclesRitualsStep: View {
                     Text("Invite friends to create your first circle")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding()
+                .padding(12)
                 .background(Color.pink.opacity(0.1))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.top, 8)
+                .padding(.top, 6)
                 .opacity(showRituals ? 1 : 0)
             }
-            .padding(.horizontal, 24)
+            .padding(.horizontal, 20)
             .onAppear { showRituals = true }
         }
     }

@@ -123,6 +123,60 @@ function getLocalDate(timezone: string = "UTC"): string {
   }
 }
 
+// Get user's capacity level (checks override first, then cached capacity)
+async function getUserCapacityLevel(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<"low" | "moderate" | "high"> {
+  // Check for active override first
+  const { data: override } = await supabase
+    .from("capacity_overrides")
+    .select("override_level")
+    .eq("user_id", userId)
+    .eq("is_active", true)
+    .gt("expires_at", new Date().toISOString())
+    .maybeSingle();
+
+  if (override) {
+    // Map override level to capacity level
+    switch (override.override_level) {
+      case "rest":
+        return "low";
+      case "normal":
+        return "moderate";
+      case "challenge":
+        return "high";
+    }
+  }
+
+  // Check cached capacity
+  const today = new Date().toISOString().split("T")[0];
+  const { data: capacity } = await supabase
+    .from("user_capacity")
+    .select("level")
+    .eq("user_id", userId)
+    .eq("local_date", today)
+    .maybeSingle();
+
+  return (capacity?.level as "low" | "moderate" | "high") || "moderate";
+}
+
+// Get quest duration filter based on capacity level
+// Ranges are designed to be non-overlapping for clear differentiation
+function getQuestDurationFilter(level: "low" | "moderate" | "high"): {
+  min: number;
+  max: number;
+} {
+  switch (level) {
+    case "low":
+      return { min: 0, max: 8 }; // Short quests (0-8 min) for rest mode
+    case "moderate":
+      return { min: 5, max: 20 }; // Medium quests (5-20 min) for normal mode
+    case "high":
+      return { min: 15, max: 45 }; // Longer quests (15-45 min) for challenge mode
+  }
+}
+
 // Check if streak should continue
 function shouldContinueStreak(
   lastQuestDate: string | null,
@@ -328,40 +382,111 @@ async function assignQuestToUser(
     );
   }
 
-  // Try preference-weighted quest selection first (Quest Choice feature)
+  // Get user's capacity level FIRST - this determines duration filtering
+  const capacityLevel = await getUserCapacityLevel(supabase, userId);
+  const durationFilter = getQuestDurationFilter(capacityLevel);
+
+  console.log(
+    `Quest selection for user ${userId}: capacity=${capacityLevel}, duration=${durationFilter.min}-${durationFilter.max}min`,
+  );
+
+  // Try preference-weighted quest selection with capacity filtering
   let templateId: string | null = null;
 
   try {
-    const { data: weightedResult } = await supabase.rpc(
-      "get_weighted_quest_for_user",
-      {
-        p_user_id: userId,
-        p_exclude_category: null,
-      },
-    );
+    // First, get capacity-appropriate templates
+    const { data: capacityTemplates } = await supabase
+      .from("quest_templates")
+      .select("id, category")
+      .eq("is_active", true)
+      .gte("estimated_minutes", durationFilter.min)
+      .lte("estimated_minutes", durationFilter.max);
 
-    if (weightedResult) {
-      templateId = weightedResult;
+    if (capacityTemplates?.length) {
+      // Get user preferences to weight the selection
+      const { data: preferences } = await supabase
+        .from("user_quest_preferences")
+        .select(
+          "quest_category, completion_count, total_rating_sum, rating_count",
+        )
+        .eq("user_id", userId);
+
+      // Create preference map
+      const prefMap = new Map(
+        (preferences || []).map((p) => [p.quest_category, p]),
+      );
+
+      // Score and sort templates by preference weight
+      const scoredTemplates = capacityTemplates.map((t) => {
+        const pref = prefMap.get(t.category);
+        let score = 0.5; // default weight
+        if (pref) {
+          const completionRate = pref.completion_count > 0 ? 1 : 0.5;
+          const avgRating =
+            pref.rating_count > 0
+              ? pref.total_rating_sum / pref.rating_count / 5
+              : 0.6;
+          score = completionRate * 0.4 + avgRating * 0.6;
+        }
+        // Add small random factor for variety
+        score += Math.random() * 0.2;
+        return { id: t.id, score };
+      });
+
+      // Sort by score descending and pick from top 3
+      scoredTemplates.sort((a, b) => b.score - a.score);
+      const topTemplates = scoredTemplates.slice(
+        0,
+        Math.min(3, scoredTemplates.length),
+      );
+      templateId =
+        topTemplates[Math.floor(Math.random() * topTemplates.length)].id;
+
+      console.log(
+        `Selected capacity-weighted quest from ${capacityTemplates.length} matching templates`,
+      );
     }
   } catch (err) {
     console.log(
-      `Weighted selection not available for user ${userId}, falling back to random`,
+      `Weighted selection failed for user ${userId}, falling back to random: ${err}`,
     );
   }
 
-  // Fallback to random selection if weighted selection fails or returns null
+  // Fallback to simple capacity-filtered random selection
   if (!templateId) {
+    console.log(
+      `Fallback: random capacity-filtered selection for user ${userId}`,
+    );
+
+    // Try to find quests matching capacity level
     const { data: templates } = await supabase
       .from("quest_templates")
       .select("id")
       .eq("is_active", true)
+      .gte("estimated_minutes", durationFilter.min)
+      .lte("estimated_minutes", durationFilter.max)
       .limit(10);
 
-    if (!templates?.length) {
-      return { assigned: false, reason: "no_templates" };
-    }
+    if (templates?.length) {
+      templateId = templates[Math.floor(Math.random() * templates.length)].id;
+    } else {
+      // Fallback: if no quests match capacity filter, use any active quest
+      console.log(
+        `No quests match capacity filter for ${capacityLevel}, falling back to any active quest`,
+      );
+      const { data: anyTemplates } = await supabase
+        .from("quest_templates")
+        .select("id")
+        .eq("is_active", true)
+        .limit(10);
 
-    templateId = templates[Math.floor(Math.random() * templates.length)].id;
+      if (!anyTemplates?.length) {
+        return { assigned: false, reason: "no_templates" };
+      }
+
+      templateId =
+        anyTemplates[Math.floor(Math.random() * anyTemplates.length)].id;
+    }
   }
 
   // Assign the quest

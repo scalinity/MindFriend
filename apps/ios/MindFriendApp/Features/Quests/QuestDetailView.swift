@@ -108,6 +108,14 @@ struct QuestDetailView: View {
                 // Award XP for quest completion
                 let xpResult = try await container.supabaseDataService.awardXP(activity: .questComplete)
 
+                // Trigger XP gain toast IMMEDIATELY for instant gratification
+                await MainActor.run {
+                    container.achievementService.triggerXPGainAnimation(
+                        amount: xpResult.amount,
+                        activity: .questComplete
+                    )
+                }
+
                 // Update event progress for quest-related activities
                 if let activityType = quest.template.type.eventActivityType {
                     _ = try? await container.supabaseDataService.incrementEventProgress(activityType: activityType)
@@ -138,6 +146,11 @@ struct QuestDetailView: View {
                     appState.currentStreak = profile.stats?.currentStreakDays ?? 0
                     appState.currentUser = profile
                     showReflection = false
+
+                    // Update todayQuest with completed status so HomeView reflects it immediately
+                    var completedQuest = quest
+                    completedQuest.status = .completed
+                    appState.todayQuest = completedQuest
 
                     // Show level-up celebration if leveled up (legacy celebration for immediate feedback)
                     if xpResult.leveledUp {

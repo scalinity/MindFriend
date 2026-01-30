@@ -1,5 +1,6 @@
 import SwiftUI
 import Charts
+import Supabase
 
 // MARK: - Longitudinal Dashboard View
 
@@ -19,6 +20,11 @@ struct LongitudinalDashboardView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
+                    // Show report generation success banner
+                    if viewModel.reportSuccess {
+                        reportSuccessBanner
+                    }
+                    
                     // Show report generation error as a dismissible banner if we have data
                     if let reportError = viewModel.reportError {
                         reportErrorBanner(reportError)
@@ -40,17 +46,21 @@ struct LongitudinalDashboardView: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Menu {
-                        NavigationLink(destination: ReportsView()) {
-                            Label("View Reports", systemImage: "doc.text")
-                        }
-                        Button {
-                            viewModel.generateQuarterlyReport()
+                    if viewModel.isGeneratingReport {
+                        ProgressView()
+                    } else {
+                        Menu {
+                            NavigationLink(destination: ReportsView()) {
+                                Label("View Reports", systemImage: "doc.text")
+                            }
+                            Button {
+                                viewModel.generateQuarterlyReport()
+                            } label: {
+                                Label("Generate Report", systemImage: "doc.badge.plus")
+                            }
                         } label: {
-                            Label("Generate Report", systemImage: "doc.badge.plus")
+                            Image(systemName: "ellipsis.circle")
                         }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
                     }
                 }
             }
@@ -408,21 +418,47 @@ struct LongitudinalDashboardView: View {
     // MARK: - Helpers
 
     private func reportErrorBanner(_ error: String) -> some View {
-        HStack {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
-            Text("Report generation failed")
-                .font(.subheadline)
-            Spacer()
-            Button {
-                viewModel.reportError = nil
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                Text("Report generation failed")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                Spacer()
+                Button {
+                    viewModel.reportError = nil
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
             }
+            Text(error)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(3)
         }
         .padding()
         .background(Color.orange.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var reportSuccessBanner: some View {
+        HStack {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+            Text("Report generated successfully!")
+                .font(.subheadline)
+                .fontWeight(.medium)
+            Spacer()
+            NavigationLink(destination: ReportsView()) {
+                Text("View")
+                    .font(.subheadline)
+                    .foregroundStyle(.blue)
+            }
+        }
+        .padding()
+        .background(Color.green.opacity(0.1))
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
@@ -460,8 +496,10 @@ final class LongitudinalDashboardViewModel: ObservableObject {
     @Published var dashboardData: LongitudinalDashboardData?
     @Published var isLoading = false
     @Published var isExporting = false
+    @Published var isGeneratingReport = false
     @Published var loadError: String?
     @Published var reportError: String?
+    @Published var reportSuccess = false
     @Published var moodsByDate: [String: Int] = [:]
 
     private var service: LongitudinalService?
@@ -537,15 +575,29 @@ final class LongitudinalDashboardViewModel: ObservableObject {
     }
 
     func generateQuarterlyReport() {
-        guard let service else { return }
+        guard let service else {
+            self.reportError = "Service not initialized"
+            return
+        }
+
+        isGeneratingReport = true
+        reportError = nil
+        reportSuccess = false
 
         Task {
             do {
                 _ = try await service.generateReport(type: .quarterly)
-                // Could show success notification
+                self.reportSuccess = true
+                // Auto-dismiss success after 3 seconds
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                self.reportSuccess = false
+            } catch let error as FunctionsError {
+                // Extract more details from Supabase Functions error
+                self.reportError = "Edge Function error: \(error.localizedDescription)"
             } catch {
                 self.reportError = error.localizedDescription
             }
+            isGeneratingReport = false
         }
     }
 

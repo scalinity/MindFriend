@@ -22,11 +22,11 @@ struct ChatQuotaStep: View {
             primaryLabel: "Start Chatting",
             primaryAction: onComplete
         ) {
-            VStack(spacing: 20) {
+            VStack(spacing: 16) {
                 // Free vs Premium comparison
-                HStack(spacing: 16) {
+                HStack(spacing: 12) {
                     // Free tier
-                    VStack(spacing: 12) {
+                    VStack(spacing: 8) {
                         Text("Free")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
@@ -37,6 +37,7 @@ struct ChatQuotaStep: View {
                             Text("messages/day")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                                .fixedSize()
                         }
 
                         VStack(spacing: 4) {
@@ -45,7 +46,7 @@ struct ChatQuotaStep: View {
                             FeatureCheck(text: "Coaching", included: true)
                         }
                     }
-                    .padding()
+                    .padding(12)
                     .frame(maxWidth: .infinity)
                     .background(Color(.secondarySystemBackground))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -53,7 +54,7 @@ struct ChatQuotaStep: View {
                     .offset(x: showComparison ? 0 : -20)
 
                     // Premium tier
-                    VStack(spacing: 12) {
+                    VStack(spacing: 8) {
                         HStack(spacing: 4) {
                             Image(systemName: "crown.fill")
                                 .font(.caption)
@@ -78,7 +79,7 @@ struct ChatQuotaStep: View {
                             FeatureCheck(text: "Coaching", included: true)
                         }
                     }
-                    .padding()
+                    .padding(12)
                     .frame(maxWidth: .infinity)
                     .background(Color.orange.opacity(0.1))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -89,14 +90,14 @@ struct ChatQuotaStep: View {
                     .opacity(showComparison ? 1 : 0)
                     .offset(x: showComparison ? 0 : 20)
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
 
                 // Reassurance
                 Text("Your free messages refresh daily. That's plenty to get started!")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+                    .padding(.horizontal, 24)
                     .opacity(showComparison ? 1 : 0)
             }
             .onAppear {
@@ -123,6 +124,7 @@ private struct FeatureCheck: View {
             Text(text)
                 .font(.caption)
                 .foregroundStyle(included ? .primary : .secondary)
+                .fixedSize()
         }
     }
 }

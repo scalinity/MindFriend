@@ -48,6 +48,10 @@
 	</dict>
 	<key>NSCalendarsUsageDescription</key>
 	<string>MindFriend can add wellness reminders and quest schedules to your calendar.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>MindFriend monitors your calendar to proactively offer calming interventions before stressful events like meetings and deadlines.</string>
+	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
+	<string>MindFriend can add wellness reminders and quest schedules to your calendar.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>MindFriend uses the camera to let you add photos to your journal entries and profile.</string>
 	<key>NSFaceIDUsageDescription</key>

@@ -30,7 +30,7 @@ struct ChatTutorialFlow: View {
                 .progressViewStyle(.linear)
                 .tint(.blue)
                 .padding(.horizontal)
-                .padding(.top, 16)
+                .padding(.top, 60)
 
             // Step content
             Group {

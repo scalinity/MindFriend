@@ -11,6 +11,7 @@ struct MemorySettingsView: View {
     @State private var selectedType: MemoryType?
     @State private var showDeleteTypeConfirm = false
     @State private var loadTask: Task<Void, Never>?
+    @State private var memoryToEdit: MemoryFragment?
 
     private var groupedMemories: [MemoryType: [MemoryFragment]] {
         Dictionary(grouping: memories, by: { $0.fragmentType })
@@ -68,6 +69,11 @@ struct MemorySettingsView: View {
             loadTask?.cancel()
         }
         .trackScreen("memory_settings")
+        .sheet(item: $memoryToEdit) { memory in
+            EditMemoryFragmentSheet(memory: memory) { newKey, newValue in
+                updateMemory(memory, key: newKey, value: newValue)
+            }
+        }
     }
 
     private var emptyStateView: some View {
@@ -110,9 +116,11 @@ struct MemorySettingsView: View {
                 if let typeMemories = groupedMemories[type], !typeMemories.isEmpty {
                     Section {
                         ForEach(typeMemories) { memory in
-                            MemoryRow(memory: memory) {
+                            MemoryRow(memory: memory, onEdit: {
+                                memoryToEdit = memory
+                            }, onDelete: {
                                 deleteMemory(memory)
-                            }
+                            })
                         }
                     } header: {
                         HStack {
@@ -207,10 +215,37 @@ struct MemorySettingsView: View {
             isDeleting = false
         }
     }
+
+    private func updateMemory(_ memory: MemoryFragment, key: String, value: String) {
+        Task { @MainActor in
+            do {
+                try await container.supabaseDataService.updateMemory(id: memory.id, key: key, value: value)
+                // Update local state with the new values
+                if let index = memories.firstIndex(where: { $0.id == memory.id }) {
+                    withAnimation {
+                        memories[index] = MemoryFragment(
+                            id: memory.id,
+                            fragmentType: memory.fragmentType,
+                            key: key,
+                            value: value,
+                            confidence: memory.confidence,
+                            extractedAt: memory.extractedAt,
+                            expiresAt: memory.expiresAt,
+                            scheduledTime: memory.scheduledTime
+                        )
+                    }
+                }
+                memoryToEdit = nil
+            } catch {
+                appState.showError(.apiError(error.localizedDescription))
+            }
+        }
+    }
 }
 
 struct MemoryRow: View {
     let memory: MemoryFragment
+    let onEdit: () -> Void
     let onDelete: () -> Void
 
     private var accessibilityDescription: String {
@@ -251,6 +286,17 @@ struct MemoryRow: View {
 
             Spacer()
 
+            Button {
+                onEdit()
+            } label: {
+                Image(systemName: "pencil")
+                    .font(.caption)
+            }
+            .buttonStyle(.borderless)
+            .tint(.blue)
+            .accessibilityLabel("Edit memory")
+            .accessibilityHint("Double tap to edit this memory")
+
             Button(role: .destructive) {
                 onDelete()
             } label: {
@@ -264,6 +310,9 @@ struct MemoryRow: View {
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)
+        .accessibilityAction(named: "Edit") {
+            onEdit()
+        }
         .accessibilityAction(named: "Delete") {
             onDelete()
         }

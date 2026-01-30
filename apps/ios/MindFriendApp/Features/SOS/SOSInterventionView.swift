@@ -34,7 +34,7 @@ struct SOSInterventionView: View {
             // Phase-based content
             phaseContent
         }
-        .onChange(of: container.sosCoordinator.phase) { _, newPhase in
+        .onReceive(container.sosCoordinator.$phase) { newPhase in
             currentPhase = newPhase
             handlePhaseChange(newPhase)
         }

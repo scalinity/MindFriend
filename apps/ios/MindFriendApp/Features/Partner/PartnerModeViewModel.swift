@@ -11,7 +11,7 @@ final class PartnerModeViewModel: ObservableObject {
 
     // MARK: - Published State
 
-    @Published var partnerState: PartnerState = .noPartner
+    @Published var partnerState: PartnerState = .loading
     @Published var inviteCode: String?
     @Published var inviteExpiresAt: Date?
     @Published var codeInput: String = ""
@@ -304,13 +304,20 @@ final class PartnerModeViewModel: ObservableObject {
     // MARK: - Error Handling
 
     private func handleError(_ error: Error) {
+        let message: String
         if let couplesModeError = error as? CouplesModeError {
-            showError(message: couplesModeError.localizedDescription)
+            message = couplesModeError.localizedDescription
         } else if let dataError = error as? DataError {
-            showError(message: dataError.localizedDescription)
+            message = dataError.localizedDescription
         } else {
-            showError(message: "Something went wrong. Please try again.")
+            // Show more details in debug builds
+            #if DEBUG
+            message = "Error: \(error.localizedDescription)"
+            #else
+            message = "Something went wrong. Please try again."
+            #endif
         }
+        showError(message: message)
         error.report(context: ["feature": "partner_mode"])
     }
 

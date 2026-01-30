@@ -25,7 +25,7 @@ struct DebtConceptStep: View {
             skipAction: onSkip
         ) {
             // Animated balance illustration
-            VStack(spacing: 20) {
+            VStack(spacing: 16) {
                 HStack(spacing: 40) {
                     // Deposit indicator
                     VStack(spacing: 8) {
@@ -56,10 +56,11 @@ struct DebtConceptStep: View {
 
                 // Explanation text
                 Text("When withdrawals exceed deposits, you accumulate **debt** that can lead to burnout.")
-                    .font(.subheadline)
+                    .font(.caption)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 24)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 16)
             }
             .onAppear {
                 withAnimation(.easeOut(duration: 0.5).delay(0.3)) {

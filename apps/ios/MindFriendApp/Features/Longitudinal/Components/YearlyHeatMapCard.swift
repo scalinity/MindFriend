@@ -96,7 +96,7 @@ private struct MonthMiniHeatMap: View {
         VStack(spacing: 4) {
             // Mini grid for month (simplified - just show ~5 weeks)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 1), count: 7), spacing: 1) {
-                ForEach(daysInMonth, id: \.self) { day in
+                ForEach(Array(daysInMonth.enumerated()), id: \.offset) { _, day in
                     Rectangle()
                         .fill(colorForDay(day))
                         .frame(height: 4)
@@ -183,7 +183,7 @@ private struct MonthDetailView: View {
 
             // Day grid
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 7), spacing: 4) {
-                ForEach(daysInMonth, id: \.self) { day in
+                ForEach(Array(daysInMonth.enumerated()), id: \.offset) { _, day in
                     if day > 0 {
                         DayCell(day: day, mood: moodForDay(day))
                     } else {

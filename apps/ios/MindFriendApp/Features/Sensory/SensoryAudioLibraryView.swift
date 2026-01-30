@@ -10,10 +10,15 @@ import SwiftUI
 
 struct SensoryAudioLibraryView: View {
     @EnvironmentObject private var dependencies: DependencyContainer
+    @EnvironmentObject private var appState: AppState
     @State private var soundscapes: [SleepContent] = []
     @State private var selectedSoundscape: SleepContent?
     @State private var isLoading = true
     @State private var error: String?
+    
+    private var isPremiumUser: Bool {
+        appState.entitlements.tier == .premium
+    }
 
     var body: some View {
         ScrollView {
@@ -79,8 +84,11 @@ struct SensoryAudioLibraryView: View {
                 } else {
                     VStack(spacing: 12) {
                         ForEach(soundscapes) { soundscape in
-                            SleepSoundscapeRow(soundscape: soundscape) {
-                                selectedSoundscape = soundscape
+                            SleepSoundscapeRow(
+                                soundscape: soundscape,
+                                isLocked: soundscape.isPremium && !isPremiumUser
+                            ) {
+                                handleSoundscapeTap(soundscape)
                             }
                         }
                     }
@@ -98,6 +106,14 @@ struct SensoryAudioLibraryView: View {
                 soundscape: soundscape,
                 audioPlayerService: dependencies.audioPlayerService
             )
+        }
+    }
+    
+    private func handleSoundscapeTap(_ soundscape: SleepContent) {
+        if soundscape.isPremium && !isPremiumUser {
+            appState.showPaywall = true
+        } else {
+            selectedSoundscape = soundscape
         }
     }
 
@@ -121,6 +137,7 @@ struct SensoryAudioLibraryView: View {
 
 struct SleepSoundscapeRow: View {
     let soundscape: SleepContent
+    var isLocked: Bool = false
     let action: () -> Void
 
     var body: some View {
@@ -129,12 +146,18 @@ struct SleepSoundscapeRow: View {
                 // Icon
                 ZStack {
                     Circle()
-                        .fill(Color.teal.opacity(0.2))
+                        .fill(Color.teal.opacity(isLocked ? 0.1 : 0.2))
                         .frame(width: 60, height: 60)
 
-                    Image(systemName: categoryIcon(soundscape.category))
-                        .font(.title2)
-                        .foregroundColor(.teal)
+                    if isLocked {
+                        Image(systemName: "lock.fill")
+                            .font(.title2)
+                            .foregroundColor(.gray)
+                    } else {
+                        Image(systemName: categoryIcon(soundscape.category))
+                            .font(.title2)
+                            .foregroundColor(.teal)
+                    }
                 }
 
                 // Soundscape info
@@ -142,12 +165,12 @@ struct SleepSoundscapeRow: View {
                     HStack {
                         Text(soundscape.title)
                             .font(.headline)
-                            .foregroundColor(.primary)
+                            .foregroundColor(isLocked ? .secondary : .primary)
 
                         if soundscape.isPremium {
-                            Image(systemName: "crown.fill")
+                            Image(systemName: isLocked ? "lock.fill" : "crown.fill")
                                 .font(.caption)
-                                .foregroundColor(.yellow)
+                                .foregroundColor(isLocked ? .gray : .yellow)
                         }
                     }
 
@@ -159,23 +182,34 @@ struct SleepSoundscapeRow: View {
                     }
 
                     HStack(spacing: 8) {
-                        Label(soundscape.formattedDuration, systemImage: "clock")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
-                            .fixedSize()
-
-                        if soundscape.isLoopable {
-                            Image(systemName: "repeat")
+                        if isLocked {
+                            Text("Premium")
+                                .font(.caption2)
+                                .fontWeight(.medium)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.gray.opacity(0.6))
+                                .clipShape(Capsule())
+                        } else {
+                            Label(soundscape.formattedDuration, systemImage: "clock")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
+                                .lineLimit(1)
+                                .fixedSize()
+
+                            if soundscape.isLoopable {
+                                Image(systemName: "repeat")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
                         }
                     }
                 }
 
                 Spacer()
 
-                Image(systemName: "chevron.right")
+                Image(systemName: isLocked ? "lock.fill" : "chevron.right")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -185,6 +219,7 @@ struct SleepSoundscapeRow: View {
                     .fill(Color(.systemBackground))
                     .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 2)
             )
+            .opacity(isLocked ? 0.8 : 1.0)
         }
         .buttonStyle(.plain)
     }

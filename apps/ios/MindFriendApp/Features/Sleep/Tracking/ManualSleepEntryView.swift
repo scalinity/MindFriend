@@ -142,35 +142,43 @@ struct ManualSleepEntryView: View {
                 return
             }
 
-            struct SleepLogInsert: Encodable {
-                let id: String
-                let user_id: String
-                let sleep_start: String
-                let sleep_end: String
-                let duration_minutes: Int
-                let quality_rating: Int
-                let notes: String?
-                let source: String
-            }
-
+            // Fetch goals for score calculation
+            let goals = try await container.sleepTrackingService.fetchGoals()
+            
+            // Calculate duration
             let durationMinutes = Int(sleepEnd.timeIntervalSince(sleepStart) / 60)
-            let formatter = ISO8601DateFormatter()
+            let date = Calendar.current.startOfDay(for: sleepEnd)
 
-            let insert = SleepLogInsert(
-                id: UUID().uuidString,
-                user_id: userId.uuidString,
-                sleep_start: formatter.string(from: sleepStart),
-                sleep_end: formatter.string(from: sleepEnd),
-                duration_minutes: durationMinutes,
-                quality_rating: quality,
+            // Create a SleepEntry for manual entry
+            let entry = SleepEntry(
+                id: UUID(),
+                userId: userId,
+                date: date,
+                source: .manual,
+                bedtime: sleepStart,
+                wakeTime: sleepEnd,
+                timeInBedMinutes: durationMinutes,
+                timeAsleepMinutes: durationMinutes, // For manual, assume all time was asleep
+                deepSleepMinutes: nil,
+                remSleepMinutes: nil,
+                lightSleepMinutes: nil,
+                awakeMinutes: nil,
+                sleepEfficiency: 100.0, // Manual entries don't have this data
+                heartRateAvg: nil,
+                heartRateMin: nil,
+                hrvAvg: nil,
+                respiratoryRate: nil,
+                userRating: quality,
+                dreamNotes: nil,
                 notes: notes.isEmpty ? nil : notes,
-                source: "manual"
+                sleepScore: nil, // Will be calculated by service
+                scoreBreakdown: nil,
+                createdAt: Date(),
+                updatedAt: Date()
             )
 
-            try await container.supabase
-                .from("sleep_logs")
-                .insert(insert)
-                .execute()
+            // Use the tracking service to create the entry (handles score calculation)
+            _ = try await container.sleepTrackingService.createEntry(entry, goals: goals)
 
             isPresented = false
         } catch {

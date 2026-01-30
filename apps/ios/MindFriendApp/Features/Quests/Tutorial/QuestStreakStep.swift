@@ -24,7 +24,7 @@ struct QuestStreakStep: View {
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 24) {
+            VStack(spacing: 16) {
                 // Week visualization
                 HStack(spacing: 8) {
                     ForEach(0..<7, id: \.self) { day in
@@ -63,6 +63,7 @@ struct QuestStreakStep: View {
                             Text(benefit.text)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                         .opacity(showExplanation ? 1 : 0)
                         .offset(x: showExplanation ? 0 : -10)
@@ -72,10 +73,10 @@ struct QuestStreakStep: View {
                         )
                     }
                 }
-                .padding()
+                .padding(12)
                 .background(Color(.secondarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
             }
             .onAppear {
                 animateWeek()

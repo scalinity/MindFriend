@@ -27,7 +27,7 @@ struct OutcomesProgressStep: View {
             primaryLabel: "Get Started",
             primaryAction: onComplete
         ) {
-            VStack(spacing: 20) {
+            VStack(spacing: 16) {
                 // Progress chart preview
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
@@ -98,7 +98,7 @@ struct OutcomesProgressStep: View {
                             }
                         }
                     }
-                    .frame(height: 100)
+                    .frame(height: 80)
 
                     // Month labels
                     HStack {
@@ -110,10 +110,10 @@ struct OutcomesProgressStep: View {
                         }
                     }
                 }
-                .padding()
+                .padding(12)
                 .background(Color(.secondarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
                 .opacity(showChart ? 1 : 0)
 
                 // Goal indicator
@@ -128,14 +128,15 @@ struct OutcomesProgressStep: View {
                         Text("Choose a target score to work toward")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
                     Spacer()
                 }
-                .padding()
+                .padding(12)
                 .background(Color.orange.opacity(0.1))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
                 .opacity(showChart ? 1 : 0)
             }
             .onAppear {

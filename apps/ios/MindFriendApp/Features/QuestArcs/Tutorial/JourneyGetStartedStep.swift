@@ -30,9 +30,9 @@ struct JourneyGetStartedStep: View {
             primaryAction: onComplete,
             skipAction: nil
         ) {
-            VStack(spacing: 20) {
+            VStack(spacing: 16) {
                 // Sample journey cards
-                VStack(spacing: 12) {
+                VStack(spacing: 8) {
                     ForEach(Array(sampleJourneys.enumerated()), id: \.offset) { index, journey in
                         journeyPreviewCard(
                             title: journey.0,
@@ -43,14 +43,14 @@ struct JourneyGetStartedStep: View {
                         )
                     }
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
 
                 // Tips
-                HStack(spacing: 16) {
+                HStack(spacing: 12) {
                     tipItem(icon: "heart.fill", text: "Pick what resonates")
                     tipItem(icon: "clock.fill", text: "Start when ready")
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
 
                 // Encouragement
                 HStack(spacing: 8) {
@@ -62,7 +62,7 @@ struct JourneyGetStartedStep: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
             }
             .onAppear {
                 withAnimation {
@@ -81,7 +81,7 @@ struct JourneyGetStartedStep: View {
             Image(systemName: icon)
                 .font(.title3)
                 .foregroundStyle(color)
-                .frame(width: 40, height: 40)
+                .frame(width: 36, height: 36)
                 .background(color.opacity(0.15))
                 .clipShape(Circle())
 

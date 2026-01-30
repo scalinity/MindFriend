@@ -29,7 +29,7 @@ struct LongitudinalPatternsStep: View {
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 12) {
+            VStack(spacing: 8) {
                 ForEach(Array(patterns.enumerated()), id: \.element.title) { index, pattern in
                     HStack(alignment: .top, spacing: 12) {
                         Image(systemName: pattern.icon)
@@ -43,11 +43,12 @@ struct LongitudinalPatternsStep: View {
                             Text(pattern.insight)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
 
                         Spacer()
                     }
-                    .padding()
+                    .padding(12)
                     .background(pattern.color.opacity(0.1))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .opacity(showPatterns ? 1 : 0)
@@ -63,11 +64,12 @@ struct LongitudinalPatternsStep: View {
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
-                    .padding(.top, 8)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 6)
                     .opacity(showPatterns ? 1 : 0)
             }
-            .padding(.horizontal, 24)
+            .padding(.horizontal, 20)
             .onAppear { showPatterns = true }
         }
     }

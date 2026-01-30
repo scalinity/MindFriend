@@ -14,6 +14,7 @@ struct PrivacyLockSettingsView: View {
     @State private var showError = false
     @State private var errorMessage = ""
     @State private var showBiometricPrompt = false
+    @State private var isUpdatingToggle = false  // Prevent onChange loop
 
     var body: some View {
         Form {
@@ -46,6 +47,8 @@ struct PrivacyLockSettingsView: View {
                 }
                 .disabled(isSaving)
                 .onChange(of: appLockEnabled) { _, newValue in
+                    // Prevent onChange loop when we programmatically update the toggle
+                    guard !isUpdatingToggle else { return }
                     if newValue {
                         enableLock()
                     } else {
@@ -135,7 +138,10 @@ struct PrivacyLockSettingsView: View {
     private func loadSettings() async {
         await lockManager.loadSettings()
         await MainActor.run {
+            // Set flag to prevent onChange from triggering during initial load
+            isUpdatingToggle = true
             appLockEnabled = lockManager.settings.appLockEnabled
+            isUpdatingToggle = false
             selectedTimeout = AutoLockTimeout(seconds: lockManager.settings.autoLockSeconds) ?? .fiveMinutes
             quickLockMethod = lockManager.settings.quickLockMethod
             tripleTapEnabled = lockManager.settings.tripleTapEnabled
@@ -149,11 +155,13 @@ struct PrivacyLockSettingsView: View {
 
             let authenticated = await lockManager.unlockApp()
             if authenticated {
-                appLockEnabled = true
                 Analytics.shared.track(.privacyLockEnabled)
                 await saveSettings()
             } else {
+                // Revert toggle without triggering onChange
+                isUpdatingToggle = true
                 appLockEnabled = false
+                isUpdatingToggle = false
                 showError = true
                 errorMessage = "Authentication failed. Please try again."
             }
@@ -167,11 +175,13 @@ struct PrivacyLockSettingsView: View {
 
             let authenticated = await lockManager.unlockApp()
             if authenticated {
-                appLockEnabled = false
                 Analytics.shared.track(.privacyLockDisabled)
                 await saveSettings()
             } else {
+                // Revert toggle without triggering onChange
+                isUpdatingToggle = true
                 appLockEnabled = true
+                isUpdatingToggle = false
                 showError = true
                 errorMessage = "Authentication failed. Please try again."
             }

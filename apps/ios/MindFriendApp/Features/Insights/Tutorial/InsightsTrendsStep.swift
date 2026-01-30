@@ -23,7 +23,7 @@ struct InsightsTrendsStep: View {
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 16) {
+            VStack(spacing: 8) {
                 // Trend explanations
                 ForEach(Array(trendTypes.enumerated()), id: \.element.label) { index, trend in
                     HStack(spacing: 12) {
@@ -31,7 +31,7 @@ struct InsightsTrendsStep: View {
                         Image(systemName: trend.icon)
                             .font(.title3)
                             .foregroundStyle(trend.color)
-                            .frame(width: 32)
+                            .frame(width: 28)
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text(trend.label)
@@ -39,11 +39,12 @@ struct InsightsTrendsStep: View {
                             Text(trend.description)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
 
                         Spacer()
                     }
-                    .padding()
+                    .padding(12)
                     .background(Color(.secondarySystemBackground))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .opacity(showTrends ? 1 : 0)
@@ -54,7 +55,7 @@ struct InsightsTrendsStep: View {
                     )
                 }
             }
-            .padding(.horizontal, 24)
+            .padding(.horizontal, 20)
             .onAppear { showTrends = true }
         }
     }

@@ -30,10 +30,10 @@ struct OutcomesAssessmentsStep: View {
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 16) {
+            VStack(spacing: 8) {
                 // Assessment cards
                 ForEach(Array(assessments.enumerated()), id: \.element.code) { index, assessment in
-                    HStack(spacing: 16) {
+                    HStack(spacing: 12) {
                         // Code badge
                         Text(assessment.code)
                             .font(.caption.weight(.bold))
@@ -49,6 +49,7 @@ struct OutcomesAssessmentsStep: View {
                             Text(assessment.description)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
 
                         Spacer()
@@ -57,13 +58,13 @@ struct OutcomesAssessmentsStep: View {
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                     }
-                    .padding()
+                    .padding(12)
                     .background(Color(.secondarySystemBackground))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .opacity(animatedIndex >= index ? 1 : 0)
                     .offset(x: animatedIndex >= index ? 0 : 30)
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
 
                 // Frequency note
                 HStack(spacing: 8) {
@@ -72,8 +73,9 @@ struct OutcomesAssessmentsStep: View {
                     Text("We'll remind you when assessments are due")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(.top, 8)
+                .padding(.top, 6)
                 .opacity(showAssessments ? 1 : 0)
             }
             .onAppear {

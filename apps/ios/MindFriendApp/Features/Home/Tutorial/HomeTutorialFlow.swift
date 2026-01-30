@@ -31,7 +31,7 @@ struct HomeTutorialFlow: View {
                 .progressViewStyle(.linear)
                 .tint(.indigo)
                 .padding(.horizontal)
-                .padding(.top, 16)
+                .padding(.top, 60)
 
             // Step content
             Group {

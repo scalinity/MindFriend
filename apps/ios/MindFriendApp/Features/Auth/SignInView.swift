@@ -101,14 +101,6 @@ struct SignInView: View {
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
 
-                    #if DEBUG
-                    Button("Skip Sign In (Dev Only)") {
-                        skipSignIn()
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-                    .padding(.top, 8)
-                    #endif
                 }
                 .padding(.horizontal, 24)
                 .padding(.bottom, 32)
@@ -291,45 +283,6 @@ struct SignInView: View {
             isLoading = false
         }
     }
-
-    #if DEBUG
-    private func skipSignIn() {
-        // Create mock user for development
-        let mockUser = UserProfile(
-            id: UUID(),
-            handle: "devuser",
-            displayName: "Dev User",
-            email: "dev@test.com",
-            avatarUrl: nil,
-            timezone: TimeZone.current.identifier,
-            createdAt: Date(),
-            onboardingCompletedAt: Date(),
-            stats: UserStats(
-                currentStreakDays: 5,
-                longestStreakDays: 10,
-                totalQuestsCompleted: 25,
-                totalExercisesCompleted: 12
-            ),
-            settings: UserSettings(
-                dailyQuestTimeLocal: "09:00",
-                quietHoursStartLocal: nil,
-                quietHoursEndLocal: nil,
-                remindersEnabled: true,
-                nudgeAfterDaysInactive: 3,
-                shareMoodInCircles: true,
-                aiTone: .friendly,
-                privacyMode: .standard
-            ),
-            entitlements: UserEntitlements(
-                subscriptionTier: "free",
-                premiumExpiresAt: nil,
-                features: [:]
-            ),
-            badges: []
-        )
-        appState.setAuthenticated(user: mockUser)
-    }
-    #endif
 }
 
 // MARK: - Email Auth View

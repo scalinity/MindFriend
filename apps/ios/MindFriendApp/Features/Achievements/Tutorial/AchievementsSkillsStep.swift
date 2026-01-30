@@ -29,14 +29,14 @@ struct AchievementsSkillsStep: View {
             primaryLabel: "View Achievements",
             primaryAction: onComplete
         ) {
-            VStack(spacing: 12) {
+            VStack(spacing: 8) {
                 ForEach(Array(skills.enumerated()), id: \.element.name) { index, skill in
                     HStack(spacing: 12) {
                         // Icon
                         ZStack {
                             Circle()
                                 .fill(skill.color.opacity(0.15))
-                                .frame(width: 44, height: 44)
+                                .frame(width: 38, height: 38)
                             Image(systemName: skill.icon)
                                 .foregroundStyle(skill.color)
                         }
@@ -62,7 +62,7 @@ struct AchievementsSkillsStep: View {
                             }
                         }
                     }
-                    .padding()
+                    .padding(12)
                     .background(Color(.secondarySystemBackground))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .opacity(showSkills ? 1 : 0)
@@ -78,11 +78,12 @@ struct AchievementsSkillsStep: View {
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
-                    .padding(.top, 8)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 6)
                     .opacity(showSkills ? 1 : 0)
             }
-            .padding(.horizontal, 24)
+            .padding(.horizontal, 20)
             .onAppear { showSkills = true }
         }
     }

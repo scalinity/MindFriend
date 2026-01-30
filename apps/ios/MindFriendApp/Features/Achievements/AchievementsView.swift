@@ -896,9 +896,9 @@ struct SimpleStreakCard: View {
                                 .font(.caption)
                         }
                     }
-                    Text("Protected")
+                    Text(shieldStatusText)
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(shieldStatusColor)
                 }
             }
 
@@ -915,6 +915,26 @@ struct SimpleStreakCard: View {
         .padding()
         .background(Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var shieldStatusText: String {
+        if shieldsRemaining == 0 {
+            return "No protection"
+        } else if currentStreak > 0 {
+            return "Protected"
+        } else {
+            return shieldsRemaining == 1 ? "1 Shield ready" : "\(shieldsRemaining) Shields ready"
+        }
+    }
+
+    private var shieldStatusColor: Color {
+        if shieldsRemaining == 0 {
+            return .orange
+        } else if currentStreak > 0 {
+            return .green
+        } else {
+            return .blue
+        }
     }
 }
 

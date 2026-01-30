@@ -23,15 +23,15 @@ struct LongitudinalJourneyStep: View {
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 20) {
+            VStack(spacing: 12) {
                 // Timeline visualization
-                HStack(spacing: 12) {
+                HStack(spacing: 4) {
                     ForEach(0..<6, id: \.self) { month in
-                        VStack(spacing: 8) {
+                        VStack(spacing: 4) {
                             Spacer(minLength: 0)
 
                             // Bar
-                            RoundedRectangle(cornerRadius: 4)
+                            RoundedRectangle(cornerRadius: 3)
                                 .fill(
                                     LinearGradient(
                                         colors: [.teal.opacity(0.3), .teal],
@@ -39,23 +39,22 @@ struct LongitudinalJourneyStep: View {
                                         endPoint: .top
                                     )
                                 )
-                                .frame(width: 28, height: showTimeline ? heights[month] : 0)
+                                .frame(width: 24, height: showTimeline ? heights[month] : 0)
 
                             // Month label
                             Text(monthLabels[month])
-                                .font(.caption2)
+                                .font(.system(size: 9))
                                 .foregroundStyle(.secondary)
-                                .frame(width: 32)
                         }
+                        .frame(maxWidth: .infinity)
                     }
                 }
-                .frame(height: 120)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .padding(.horizontal, 20)
+                .frame(height: 70)
+                .padding(.vertical, 10)
+                .padding(.horizontal, 16)
                 .background(Color(.secondarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
 
                 // Benefits
                 VStack(alignment: .leading, spacing: 10) {
@@ -63,10 +62,10 @@ struct LongitudinalJourneyStep: View {
                     TimelineFeature(icon: "chart.xyaxis.line", text: "Trend analysis over time")
                     TimelineFeature(icon: "arrow.up.forward", text: "Track long-term growth")
                 }
-                .padding()
+                .padding(12)
                 .background(Color(.tertiarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
                 .opacity(showTimeline ? 1 : 0)
             }
             .onAppear {
@@ -77,7 +76,7 @@ struct LongitudinalJourneyStep: View {
         }
     }
 
-    private let heights: [CGFloat] = [40, 55, 50, 65, 70, 80]
+    private let heights: [CGFloat] = [30, 42, 38, 50, 54, 62]
     private let monthLabels = ["Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 }
 
@@ -93,6 +92,7 @@ private struct TimelineFeature: View {
             Text(text)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

@@ -25,7 +25,7 @@ struct AchievementsXPStep: View {
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 20) {
+            VStack(spacing: 16) {
                 // Level display
                 VStack(spacing: 8) {
                     HStack {
@@ -49,19 +49,19 @@ struct AchievementsXPStep: View {
 
                             RoundedRectangle(cornerRadius: 6)
                                 .fill(Color.yellow.gradient)
-                                .frame(width: geo.size.width * min(Double(xpAmount) / 500.0, 1.0))
+                                .frame(width: geo.size.width * min(Double(xpAmount) / 100.0, 1.0))
                         }
                     }
                     .frame(height: 10)
 
-                    Text("500 XP to next level")
+                    Text("100 XP to next level")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
-                .padding()
+                .padding(12)
                 .background(Color(.secondarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
 
                 // XP sources
                 VStack(alignment: .leading, spacing: 10) {
@@ -75,6 +75,7 @@ struct AchievementsXPStep: View {
                                 .frame(width: 24)
                             Text(source.activity)
                                 .font(.caption)
+                                .fixedSize(horizontal: false, vertical: true)
                             Spacer()
                             Text("+\(source.xp) XP")
                                 .font(.caption.weight(.semibold))
@@ -87,10 +88,10 @@ struct AchievementsXPStep: View {
                         )
                     }
                 }
-                .padding()
+                .padding(12)
                 .background(Color(.tertiarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
             }
             .onAppear {
                 animateXP()
@@ -110,9 +111,9 @@ struct AchievementsXPStep: View {
     private func animateXP() {
         Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { timer in
             withAnimation(.easeOut(duration: 0.1)) {
-                xpAmount += 10
+                xpAmount += 5
             }
-            if xpAmount >= 350 {
+            if xpAmount >= 70 {
                 timer.invalidate()
                 showActivities = true
             }

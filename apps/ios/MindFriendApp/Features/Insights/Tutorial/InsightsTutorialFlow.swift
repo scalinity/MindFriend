@@ -28,7 +28,7 @@ struct InsightsTutorialFlow: View {
                 .progressViewStyle(.linear)
                 .tint(.purple)
                 .padding(.horizontal)
-                .padding(.top, 16)
+                .padding(.top, 60)
 
             Group {
                 switch currentStep {
