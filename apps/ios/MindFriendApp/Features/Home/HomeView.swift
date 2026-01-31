@@ -8,9 +8,18 @@ enum QuestLoadingState {
     case error(String)
 }
 
+// MARK: - Timing Constants
+private enum RefreshTiming {
+    /// Minimum interval before allowing scene phase refresh (seconds)
+    static let scenePhaseRefreshInterval: TimeInterval = 30
+    /// Debounce interval for onAppear refresh (seconds)
+    static let onAppearDebounceInterval: TimeInterval = 0.5
+}
+
 struct HomeView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
+    @EnvironmentObject var achievementService: AchievementService
     @Environment(\.scenePhase) private var scenePhase
     @State private var questState: QuestLoadingState = .loading
     @State private var isRefreshing = false
@@ -22,10 +31,12 @@ struct HomeView: View {
     @State private var shieldStatus: StreakShieldStatus?
     @State private var showRecoveryQuest = false
     @State private var recoveryQuestData: (attemptId: String, quest: StartRecoveryResult.RecoveryQuestInfo)?
+    @State private var isStartingRecovery = false
     @State private var lastLoadTime: Date?
     @State private var hasCheckedReengagement = false
-    // Mood-adaptive home context
+    // Mood-adaptive home context - loaded separately to avoid blocking UI
     @State private var homeContext: HomeContext?
+    @State private var isLoadingHomeContext = false
     // Buddy widget data
     @State private var buddyWidgetData: BuddyWidgetData?
     @State private var showInviteBuddySheet = false
@@ -57,9 +68,16 @@ struct HomeView: View {
     /// Level to display - prefers AchievementService (real-time updates), falls back to loaded userLevel
     private var displayLevel: UserLevel {
         // Prefer AchievementService data (updates in real-time when XP is earned)
-        if let exp = container.achievementService.userExperience {
-            // Calculate threshold for next level (not remaining XP)
-            let nextLevelThreshold = UserLevel.xpThresholds[min(exp.currentLevel, 49)]
+        // Using directly-observed achievementService for reactive updates
+        if let exp = achievementService.userExperience {
+            // Calculate threshold for next level
+            // At max level (50+), show current XP as threshold (progress bar full)
+            let nextLevelThreshold: Int
+            if exp.currentLevel >= 50 {
+                nextLevelThreshold = exp.totalXp  // Max level reached
+            } else {
+                nextLevelThreshold = UserLevel.xpThresholds[min(exp.currentLevel, 49)]
+            }
             return UserLevel(
                 level: exp.currentLevel,
                 title: levelTitle(for: exp.currentLevel),
@@ -85,6 +103,7 @@ struct HomeView: View {
     /// Get level title for a given level number
     private func levelTitle(for level: Int) -> String {
         switch level {
+        case ..<1: return String(localized: "Beginner")
         case 1...5: return String(localized: "Beginner")
         case 6...10: return String(localized: "Learner")
         case 11...15: return String(localized: "Explorer")
@@ -94,8 +113,7 @@ struct HomeView: View {
         case 31...35: return String(localized: "Master")
         case 36...40: return String(localized: "Champion")
         case 41...45: return String(localized: "Legend")
-        case 46...50: return String(localized: "Transcendent")
-        default: return String(localized: "Beginner")
+        default: return String(localized: "Transcendent")  // 46+ (includes max level)
         }
     }
 
@@ -175,6 +193,10 @@ struct HomeView: View {
                         recoveryExpiresAt: shieldStatus?.recoveryQuestExpiresAt,
                         onStartRecovery: startRecoveryQuest
                     )
+
+                    // Today's Habits Card (habit tracking)
+                    TodaysHabitsHomeCard()
+                        .environmentObject(container)
 
                     // Grace period banner (48-hour window to complete missed quest)
                     if let shieldStatus = shieldStatus,
@@ -360,9 +382,9 @@ struct HomeView: View {
             .onChange(of: scenePhase) { _, newPhase in
                 // Refresh data when app returns to foreground to prevent stale state
                 if newPhase == .active {
-                    // Only refresh if it's been more than 30 seconds since last load
+                    // Only refresh if it's been more than configured interval since last load
                     let shouldRefresh = lastLoadTime == nil ||
-                        Date().timeIntervalSince(lastLoadTime!) > 30
+                        Date().timeIntervalSince(lastLoadTime!) > RefreshTiming.scenePhaseRefreshInterval
                     if shouldRefresh {
                         Task { await loadData() }
                     }
@@ -434,6 +456,11 @@ struct HomeView: View {
         .task {
             await loadData()
         }
+        // Clean up background tasks when view disappears
+        .onDisappear {
+            homeContextTask?.cancel()
+            homeContextTask = nil
+        }
         // Refresh data every time view appears (e.g., returning from mood log, exiting journey)
         .onAppear {
             // Show tutorial on first visit
@@ -443,10 +470,10 @@ struct HomeView: View {
 
             Task {
                 // Refresh when returning to HomeView after initial load
-                // Debounce: only refresh if >0.5s since last load to prevent rapid-fire requests
+                // Debounce: only refresh if enough time since last load to prevent rapid-fire requests
                 if let lastLoad = lastLoadTime {
                     let timeSinceLastLoad = Date().timeIntervalSince(lastLoad)
-                    if timeSinceLastLoad > 0.5 {
+                    if timeSinceLastLoad > RefreshTiming.onAppearDebounceInterval {
                         await loadData()
                     }
                 }
@@ -459,9 +486,18 @@ struct HomeView: View {
             }
         }
         // Sync questState when todayQuest changes (e.g., after quest completion in QuestDetailView)
+        // Priority: completed > assigned (prevents loadData race condition from reverting completion)
         .onChange(of: appState.todayQuest) { _, newQuest in
             if let quest = newQuest {
-                questState = .loaded(quest)
+                switch questState {
+                case .loaded(let current):
+                    // Only update if new quest is completed OR current is not completed
+                    if quest.status == .completed || current.status != .completed {
+                        questState = .loaded(quest)
+                    }
+                default:
+                    questState = .loaded(quest)
+                }
             }
         }
         // XP gain toast overlay
@@ -519,7 +555,15 @@ struct HomeView: View {
     // MARK: - Recovery Quest
 
     private func startRecoveryQuest() {
+        // Prevent double-tap race condition
+        guard !isStartingRecovery else { return }
+        isStartingRecovery = true
+
         Task {
+            defer {
+                Task { @MainActor in isStartingRecovery = false }
+            }
+
             do {
                 let result = try await container.supabaseDataService.startRecoveryQuest()
 
@@ -558,6 +602,9 @@ struct HomeView: View {
         }
     }
 
+    // Task handle for cancellation support
+    @State private var homeContextTask: Task<Void, Never>?
+
     private func loadData() async {
         // Only show loading state if we don't have a loaded quest
         // This preserves existing data during refresh and prevents flickering if cancelled
@@ -593,38 +640,80 @@ struct HomeView: View {
             }
 
             // Check streak protection status first (handles shield usage/recovery availability)
-            let protectionResult = try? await container.supabaseDataService.checkStreakProtection()
+            // CRITICAL: This determines if shields are used or recovery is offered
+            var protectionResult: StreakProtectionResult?
+            do {
+                protectionResult = try await container.supabaseDataService.checkStreakProtection()
+            } catch is CancellationError {
+                // Task cancelled - don't log or report, just bail
+                Log.general.debug("[HomeView] Streak protection check cancelled")
+                return
+            } catch {
+                // Log and report the primary error
+                Log.general.error("[HomeView] Streak protection check failed: \(error.localizedDescription)")
+                error.report(context: [
+                    "action": "streak_protection_check",
+                    "location": "HomeView.loadData"
+                ])
+
+                // Track failure for monitoring
+                Analytics.shared.track(.errorOccurred, properties: [
+                    "action": "streak_protection_check_failed",
+                    "error_type": String(describing: type(of: error))
+                ])
+
+                // Fallback: attempt to fetch shield status directly
+                do {
+                    shieldStatus = try await container.supabaseDataService.getShieldStatus()
+                    Log.general.info("[HomeView] Recovered shield status via fallback after protection check failed")
+                } catch {
+                    Log.general.error("[HomeView] Fallback shield status fetch also failed: \(error.localizedDescription)")
+                    error.report(context: [
+                        "action": "shield_status_fallback",
+                        "location": "HomeView.loadData"
+                    ])
+                    // Both primary and fallback failed - user will see stale data from appState/stats as last resort
+                    // Note: We don't show an error here to avoid alarming users; stale data is acceptable
+                }
+            }
 
             // Handle streak protection events
             if let protection = protectionResult {
+                // Validate server response (protect against malicious/corrupted data)
+                let validatedShieldsRemaining = max(0, min(protection.shieldsRemaining, protection.shieldsMax))
+                let validatedShieldsMax = max(0, protection.shieldsMax)
+                let validatedStreak = max(0, protection.newStreak)
+                let validatedStreakBeforeBreak = protection.streakBeforeBreak.map { max(0, $0) }
+                // Validate recovery expiry is in the future (ignore past dates)
+                let validatedRecoveryExpiry = protection.recoveryExpiresAt.flatMap { $0 > Date() ? $0 : nil }
+
                 if protection.streakProtected {
                     // Shield was just used - track analytics
-                    // Note: shieldsRemaining and newStreak are non-optional Int
                     Analytics.shared.track(.streakShieldUsed, properties: [
-                        "shields_remaining": protection.shieldsRemaining,
-                        "streak_protected": protection.newStreak
+                        "shields_remaining": validatedShieldsRemaining,
+                        "streak_protected": validatedStreak
                     ])
                 }
                 if protection.recoveryAvailable {
                     // Recovery became available - track analytics
                     Analytics.shared.track(.recoveryQuestOffered, properties: [
-                        "streak_to_recover": protection.streakBeforeBreak ?? 0
+                        "streak_to_recover": validatedStreakBeforeBreak ?? 0
                     ])
                 }
 
                 // Use protection result to build shield status, avoiding duplicate API call
                 // Use defaults for fields not returned by protection check
                 shieldStatus = StreakShieldStatus(
-                    shieldsRemaining: protection.shieldsRemaining,
-                    shieldsMax: protection.shieldsMax,
+                    shieldsRemaining: validatedShieldsRemaining,
+                    shieldsMax: validatedShieldsMax,
                     shieldsResetAt: nil,  // Not returned from protection check
                     lastShieldUsedAt: nil,  // Not returned from protection check
-                    recoveryQuestAvailable: protection.recoveryAvailable,
-                    recoveryQuestExpiresAt: protection.recoveryExpiresAt,
-                    streakBeforeBreak: protection.streakBeforeBreak,
-                    recoveryAttemptsRemaining: protection.recoveryAvailable ? 1 : 0,  // Assume 1 if available
+                    recoveryQuestAvailable: protection.recoveryAvailable && validatedRecoveryExpiry != nil,
+                    recoveryQuestExpiresAt: validatedRecoveryExpiry,
+                    streakBeforeBreak: validatedStreakBeforeBreak,
+                    recoveryAttemptsRemaining: (protection.recoveryAvailable && validatedRecoveryExpiry != nil) ? 1 : 0,
                     recoveryAttemptsMax: 1,  // Default to 1, premium upgrade handled elsewhere
-                    currentStreak: protection.newStreak
+                    currentStreak: validatedStreak
                 )
             }
 
@@ -633,11 +722,11 @@ struct HomeView: View {
             async let questTask = container.supabaseDataService.getTodayQuest()
             async let profileTask = container.supabaseAuthService.fetchProfile()
 
-            // Optional data (fail gracefully)
+            // Optional data (fail gracefully) - EXCLUDING homeContext which loads separately
             async let eventsTask = try? await container.supabaseDataService.getActiveEvents()
             async let participationTask = try? await container.supabaseDataService.getEventParticipation()
             async let insightTask = try? await container.supabaseDataService.getWeeklySummary()
-            async let homeContextTask = try? await container.supabaseDataService.getHomeContext()
+            // REMOVED: homeContextTask - now loads separately to avoid blocking UI
             async let todayMoodTask = try? await container.supabaseDataService.getTodayMood()
             async let buddyTask = try? await container.supabaseDataService.getBuddyWidgetData()
             async let celebrationsTask = try? await container.supabaseDataService.getPendingCelebrations()
@@ -647,7 +736,7 @@ struct HomeView: View {
             async let predictionTask: Void? = try? await container.predictiveService.fetchTodayPrediction()
             async let interventionTask: Void? = try? await container.predictiveService.fetchPendingMoodIntervention()
             // Load user experience (XP/level from user_experience table)
-            async let experienceTask: Void? = try? await container.achievementService.loadUserExperience()
+            async let experienceTask: Void? = try? await achievementService.loadUserExperience()
             // Load active pathways
             async let pathwaysTask = try? await container.transitionService.fetchActivePathways()
 
@@ -660,7 +749,7 @@ struct HomeView: View {
             let events = await eventsTask ?? []
             let participation = await participationTask ?? []
             let insightResult = (await insightTask) ?? nil
-            let contextResult = await homeContextTask
+            // REMOVED: contextResult - homeContext loads separately
             let todayMoodResult = await todayMoodTask
             let buddyResult = (await buddyTask) ?? nil
             let pendingCelebrations = await celebrationsTask ?? []
@@ -675,7 +764,7 @@ struct HomeView: View {
 
             // Compute level info from user_stats (via achievementService)
             let levelResult: UserLevel
-            if let exp = await MainActor.run(body: { container.achievementService.userExperience }) {
+            if let exp = await MainActor.run(body: { achievementService.userExperience }) {
                 // Calculate threshold for next level (not remaining XP)
                 let nextLevelThreshold = UserLevel.xpThresholds[min(exp.currentLevel, 49)]
                 levelResult = UserLevel(
@@ -700,10 +789,22 @@ struct HomeView: View {
                 // Track load time for stale state prevention
                 lastLoadTime = Date()
 
-                // Update quest state
+                // Update quest state (protect completed status from race condition)
                 if let quest = questResult {
-                    questState = .loaded(quest)
-                    appState.todayQuest = quest
+                    // Don't overwrite completed status with assigned status
+                    let shouldUpdate: Bool
+                    switch questState {
+                    case .loaded(let current):
+                        shouldUpdate = quest.status == .completed || current.status != .completed
+                    default:
+                        shouldUpdate = true
+                    }
+                    if shouldUpdate {
+                        questState = .loaded(quest)
+                        appState.todayQuest = quest
+                    }
+                } else if case .loaded = questState {
+                    // Keep existing loaded state if we have one
                 } else {
                     questState = .noQuest
                 }
@@ -740,8 +841,7 @@ struct HomeView: View {
                 // Set weekly insight
                 weeklyInsight = insightResult
 
-                // Set mood-adaptive home context
-                homeContext = contextResult
+                // REMOVED: homeContext = contextResult - now loads separately
 
                 // Set today's mood (for check-in prompt logic)
                 appState.todayMood = todayMoodResult
@@ -769,6 +869,10 @@ struct HomeView: View {
 
                 // Shield status is set from protection check above
             }
+
+            // Load home context in background without blocking main content
+            /// Uses Task cancellation pattern to prevent race conditions
+            loadHomeContextInBackground()
         } catch is CancellationError {
             // Task was cancelled (e.g., user navigated away or pulled to refresh again)
             // Don't show error state - just return and keep previous state
@@ -777,6 +881,45 @@ struct HomeView: View {
         } catch {
             Log.ui.error("HomeView loadData error", error: error)
             questState = .error(error.localizedDescription)
+        }
+    }
+
+    // MARK: - Home Context Loading (Non-Blocking)
+
+    /// Loads home context separately from main data to avoid blocking UI
+    /// The home context RPC can be slow, so we load it after critical UI data
+    private func loadHomeContextInBackground() {
+        // Cancel any existing task to prevent duplicates
+        homeContextTask?.cancel()
+        
+        homeContextTask = Task { @MainActor in
+            // Check if already loading or cancelled
+            guard !isLoadingHomeContext else { return }
+            isLoadingHomeContext = true
+            
+            defer { 
+                if !Task.isCancelled {
+                    isLoadingHomeContext = false 
+                }
+            }
+            
+            do {
+                try Task.checkCancellation()
+                let context = try await container.supabaseDataService.getHomeContext()
+                
+                // Only update if not cancelled
+                if !Task.isCancelled {
+                    self.homeContext = context
+                }
+            } catch is CancellationError {
+                // Task was cancelled, ignore
+            } catch {
+                Log.ui.error("Home context load failed: \(error.localizedDescription)")
+                // Provide fallback context on error
+                if !Task.isCancelled {
+                    self.homeContext = HomeContext.default
+                }
+            }
         }
     }
 
