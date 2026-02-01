@@ -460,6 +460,7 @@ struct HomeView: View {
         .onDisappear {
             homeContextTask?.cancel()
             homeContextTask = nil
+            isLoadingHomeContext = false  // Reset loading state to prevent lockout
         }
         // Refresh data every time view appears (e.g., returning from mood log, exiting journey)
         .onAppear {
@@ -889,18 +890,16 @@ struct HomeView: View {
     /// Loads home context separately from main data to avoid blocking UI
     /// The home context RPC can be slow, so we load it after critical UI data
     private func loadHomeContextInBackground() {
-        // Cancel any existing task to prevent duplicates
         homeContextTask?.cancel()
         
         homeContextTask = Task { @MainActor in
-            // Check if already loading or cancelled
             guard !isLoadingHomeContext else { return }
             isLoadingHomeContext = true
             
             defer { 
-                if !Task.isCancelled {
-                    isLoadingHomeContext = false 
-                }
+                // Always reset loading flag, even on cancellation
+                // This prevents permanent lockout if task is cancelled
+                isLoadingHomeContext = false 
             }
             
             do {
