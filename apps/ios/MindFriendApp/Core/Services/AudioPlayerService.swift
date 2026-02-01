@@ -20,6 +20,7 @@ final class AudioPlayerService: NSObject, ObservableObject {
     @Published var sleepTimer: Timer?
     @Published var sleepTimerRemaining: TimeInterval = 0
     @Published var isOfflineCached: Bool = false
+    @Published var isLoopingEnabled: Bool = false
 
     private var sleepTimerDuration: SleepTimerDuration?
     private var currentSessionId: String?
@@ -354,7 +355,9 @@ final class AudioPlayerService: NSObject, ObservableObject {
     // MARK: - Playback Recording
 
     private func recordPlaybackStart(_ track: AudioTrack, context: String) async {
-        guard let userId = supabase.auth.currentUser?.id else { return }
+        // Ensure we have a valid session before making authenticated API calls
+        guard let _ = try? await supabase.auth.session,
+              let userId = supabase.auth.currentUser?.id else { return }
 
         let body: [String: AudioPlayerServiceAnyEncodable] = [
             "trackId": AudioPlayerServiceAnyEncodable(track.id),
@@ -374,6 +377,9 @@ final class AudioPlayerService: NSObject, ObservableObject {
 
     private func recordPlaybackComplete() async {
         guard let track = state.currentTrack else { return }
+        
+        // Ensure we have a valid session before making authenticated API calls
+        guard let _ = try? await supabase.auth.session else { return }
 
         let body: [String: AudioPlayerServiceAnyEncodable] = [
             "trackId": AudioPlayerServiceAnyEncodable(track.id),
@@ -393,8 +399,13 @@ final class AudioPlayerService: NSObject, ObservableObject {
     private func handlePlaybackEnd() async {
         await recordPlaybackComplete()
         
-        // Don't loop - play to completion and stop
-        stop()
+        // Loop if enabled, otherwise stop
+        if isLoopingEnabled {
+            seek(to: 0)
+            play()
+        } else {
+            stop()
+        }
     }
 
     // MARK: - Favorites

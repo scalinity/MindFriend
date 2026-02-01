@@ -627,6 +627,7 @@ private extension Bundle {
     }
 }
 
+#if DEBUG
 #Preview {
     ResultsView(
         response: AssessmentResponse(
@@ -657,3 +658,4 @@ private extension Bundle {
         isPresented: .constant(true)
     )
 }
+#endif

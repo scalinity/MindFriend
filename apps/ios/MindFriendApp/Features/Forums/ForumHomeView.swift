@@ -176,6 +176,8 @@ final class ForumHomeViewModel: ObservableObject {
 
 // MARK: - Previews
 
+#if DEBUG
 #Preview("Forum Home") {
     ForumHomeView(forumService: ForumService(supabase: .mock))
 }
+#endif

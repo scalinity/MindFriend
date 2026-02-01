@@ -16,7 +16,7 @@ final class VoiceAudioCapture {
     // Audio processing configuration
     private let sampleRate: Double = 24000.0
     private let channelCount: AVAudioChannelCount = 1
-    private let audioGain: Float = 3.0  // Boost mic input for better VAD
+    private let audioGain: Float = 1.8  // Reduced from 3.0 to minimize echo amplification
 
     // Audio level tracking
     private var previousMicLevel: Float = 0
@@ -28,8 +28,17 @@ final class VoiceAudioCapture {
     // MARK: - Emotion Analysis Support
 
     /// Rolling buffer of recent audio samples for emotion analysis
-    /// Stores Float samples at capture sample rate (24kHz)
+    /// Uses circular buffer pattern to avoid O(n) array shifts
     private var rollingAudioBuffer: [Float] = []
+    private var bufferWriteIndex: Int = 0
+    private var bufferIsFull: Bool = false
+
+    /// Whether emotion analysis buffer accumulation is enabled
+    /// When false, skips buffer work entirely for better performance
+    /// TEMPORARILY HARDCODED TO FALSE - emotion analysis disabled
+    var emotionBufferEnabled: Bool = false {
+        didSet { /* Ignored - emotion analysis disabled */ }
+    }
 
     /// Maximum buffer duration in seconds (keep last 5 seconds)
     private let maxBufferDuration: Double = 5.0
@@ -137,6 +146,21 @@ final class VoiceAudioCapture {
         }
 
         isCapturing = false
+
+        // Deactivate audio session to release hardware resources
+        // This allows other apps to use the microphone and reduces battery usage
+        #if os(iOS)
+        do {
+            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            #if DEBUG
+            Log.voice.debug("[AudioCapture] Audio session deactivated")
+            #endif
+        } catch {
+            #if DEBUG
+            Log.voice.debug("[AudioCapture] Failed to deactivate audio session: \(error)")
+            #endif
+        }
+        #endif
     }
 
     // MARK: - Audio Processing
@@ -215,9 +239,9 @@ final class VoiceAudioCapture {
         var sumSquares: Float = 0
         var maxSample: Int16 = 0
 
-        // Also accumulate float samples for emotion analysis buffer
-        var floatSamples: [Float] = []
-        floatSamples.reserveCapacity(frameCount)
+        // Only accumulate float samples if emotion buffer is enabled
+        var floatSamples: [Float]? = emotionBufferEnabled ? [] : nil
+        floatSamples?.reserveCapacity(frameCount)
 
         for i in 0..<frameCount {
             let originalSample = samples[i]
@@ -233,12 +257,16 @@ final class VoiceAudioCapture {
             var sample = clippedSample
             amplifiedData.append(Data(bytes: &sample, count: 2))
 
-            // Normalize to [-1, 1] for emotion analysis buffer
-            floatSamples.append(Float(clippedSample) / 32768.0)
+            // Normalize to [-1, 1] for emotion analysis buffer (only if enabled)
+            if emotionBufferEnabled {
+                floatSamples?.append(Float(clippedSample) / 32768.0)
+            }
         }
 
-        // Add to rolling buffer for emotion analysis
-        appendToRollingBuffer(floatSamples)
+        // Add to rolling buffer for emotion analysis (only if enabled)
+        if let samples = floatSamples {
+            appendToRollingBuffer(samples)
+        }
 
         let rms = sqrt(sumSquares / Float(frameCount))
         let rmsDb = 20 * log10(max(rms, 1) / 32768.0)
@@ -251,16 +279,26 @@ final class VoiceAudioCapture {
         onAudioData?(amplifiedData)
     }
 
-    // MARK: - Rolling Buffer Management
+    // MARK: - Rolling Buffer Management (Circular Buffer)
 
-    /// Append audio samples to the rolling buffer, maintaining maximum size
+    /// Append audio samples using circular buffer pattern (O(1) instead of O(n))
     private func appendToRollingBuffer(_ samples: [Float]) {
-        rollingAudioBuffer.append(contentsOf: samples)
+        // Initialize buffer to full size on first use (pre-allocate)
+        if rollingAudioBuffer.isEmpty {
+            rollingAudioBuffer = [Float](repeating: 0, count: maxBufferSamples)
+            bufferWriteIndex = 0
+            bufferIsFull = false
+        }
 
-        // Trim buffer if it exceeds maximum size
-        if rollingAudioBuffer.count > maxBufferSamples {
-            let excess = rollingAudioBuffer.count - maxBufferSamples
-            rollingAudioBuffer.removeFirst(excess)
+        // Write samples to circular buffer
+        for sample in samples {
+            rollingAudioBuffer[bufferWriteIndex] = sample
+            bufferWriteIndex += 1
+
+            if bufferWriteIndex >= maxBufferSamples {
+                bufferWriteIndex = 0
+                bufferIsFull = true
+            }
         }
     }
 
@@ -270,26 +308,45 @@ final class VoiceAudioCapture {
     func getRecentAudioBuffer(duration: Double = 3.0) -> [Float]? {
         let requiredSamples = Int(sampleRate * duration)
 
-        guard rollingAudioBuffer.count >= requiredSamples else {
+        // Calculate available samples
+        let availableSamples = bufferIsFull ? maxBufferSamples : bufferWriteIndex
+
+        guard availableSamples >= requiredSamples else {
             #if DEBUG
-            Log.voice.debug("[AudioCapture] Insufficient buffer: \(self.rollingAudioBuffer.count) samples, need \(requiredSamples)")
+            Log.voice.debug("[AudioCapture] Insufficient buffer: \(availableSamples) samples, need \(requiredSamples)")
             #endif
             return nil
         }
 
-        // Return the most recent samples
-        let startIndex = rollingAudioBuffer.count - requiredSamples
-        return Array(rollingAudioBuffer[startIndex...])
+        // Read from circular buffer - get most recent samples
+        var result = [Float](repeating: 0, count: requiredSamples)
+        var readIndex = bufferWriteIndex - requiredSamples
+        if readIndex < 0 {
+            readIndex += maxBufferSamples
+        }
+
+        for i in 0..<requiredSamples {
+            result[i] = rollingAudioBuffer[readIndex]
+            readIndex += 1
+            if readIndex >= maxBufferSamples {
+                readIndex = 0
+            }
+        }
+
+        return result
     }
 
     /// Get the current buffer duration in seconds
     var currentBufferDuration: Double {
-        Double(rollingAudioBuffer.count) / sampleRate
+        let availableSamples = bufferIsFull ? maxBufferSamples : bufferWriteIndex
+        return Double(availableSamples) / sampleRate
     }
 
     /// Clear the rolling audio buffer
     func clearRollingBuffer() {
-        rollingAudioBuffer.removeAll(keepingCapacity: true)
+        bufferWriteIndex = 0
+        bufferIsFull = false
+        // Keep the pre-allocated buffer, just reset indices
     }
 
     /// Resample audio buffer from capture rate (24kHz) to emotion analysis rate (16kHz)

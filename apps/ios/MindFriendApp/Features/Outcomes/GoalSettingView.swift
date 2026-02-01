@@ -385,6 +385,7 @@ struct GoalSummaryRow: View {
     }
 }
 
+#if DEBUG
 #Preview {
     GoalSettingView(
         response: AssessmentResponse(
@@ -415,3 +416,4 @@ struct GoalSummaryRow: View {
         isPresented: .constant(true)
     )
 }
+#endif

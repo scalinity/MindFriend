@@ -32,11 +32,96 @@ final class PersonalizationService: ObservableObject {
     // MARK: - Private Properties
 
     private let supabase: SupabaseClient
+    private let authService: SupabaseAuthService
 
     // MARK: - Initialization
 
-    init(supabase: SupabaseClient) {
+    init(supabase: SupabaseClient, authService: SupabaseAuthService) {
         self.supabase = supabase
+        self.authService = authService
+    }
+
+    // MARK: - Auth Helpers
+
+    private func authHeadersForFunctions() async throws -> [String: String] {
+        // Refresh session and get fresh token directly from the refresh call
+        // This is more reliable than calling ensureValidSession() then reading from a different accessor
+        let session: Session
+        do {
+            session = try await supabase.auth.refreshSession()
+            print("🔐 PersonalizationService: Session refreshed, token length: \(session.accessToken.count)")
+        } catch {
+            print("❌ PersonalizationService: Session refresh failed: \(error)")
+            throw AuthError.sessionExpired
+        }
+
+        return ["Authorization": "Bearer \(session.accessToken)"]
+    }
+
+    /// Ensures valid session and returns user ID, or throws if not authenticated
+    private func ensureValidSessionAndUserId() async throws -> UUID {
+        // Refresh session directly - this is more reliable than using authService
+        let session: Session
+        do {
+            session = try await supabase.auth.refreshSession()
+        } catch {
+            throw AuthError.sessionExpired
+        }
+
+        return session.user.id
+    }
+
+    private func logFunctionsError(_ error: FunctionsError, context: String) {
+        switch error {
+        case .relayError:
+            print("❌ PersonalizationService[\(context)]: Relay error invoking Edge Function")
+        case .httpError(let code, let data):
+            print("❌ PersonalizationService[\(context)]: HTTP \(code)")
+            if let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                print("❌ PersonalizationService[\(context)]: Error JSON: \(errorJson)")
+            } else if let errorString = String(data: data, encoding: .utf8) {
+                print("❌ PersonalizationService[\(context)]: Error raw: \(errorString)")
+            }
+        }
+    }
+
+    private func invokeFunction<T: Decodable>(
+        _ name: String
+    ) async throws -> T {
+        let headers = try await authHeadersForFunctions()
+
+        do {
+            return try await supabase.functions.invoke(
+                name,
+                options: .init(headers: headers)
+            )
+        } catch let error as FunctionsError {
+            logFunctionsError(error, context: name)
+            if case .httpError(let code, _) = error, code == 401 {
+                throw AuthError.sessionExpired
+            }
+            throw error
+        }
+    }
+
+    private func invokeFunction<T: Decodable, Body: Encodable>(
+        _ name: String,
+        body: Body
+    ) async throws -> T {
+        let headers = try await authHeadersForFunctions()
+
+        do {
+            return try await supabase.functions.invoke(
+                name,
+                options: .init(headers: headers, body: body)
+            )
+        } catch let error as FunctionsError {
+            logFunctionsError(error, context: name)
+            if case .httpError(let code, _) = error, code == 401 {
+                throw AuthError.sessionExpired
+            }
+            throw error
+        }
     }
 
     // MARK: - Load All Data
@@ -66,8 +151,11 @@ final class PersonalizationService: ObservableObject {
 
     /// Load user's preference profile, creating default if needed
     func loadPreferenceProfile() async {
-        guard let userId = supabase.auth.currentUser?.id else {
-            self.error = "User not authenticated"
+        let userId: UUID
+        do {
+            userId = try await ensureValidSessionAndUserId()
+        } catch {
+            self.error = "Session expired"
             return
         }
 
@@ -153,7 +241,13 @@ final class PersonalizationService: ObservableObject {
 
     /// Load user's learned preferences
     func loadLearnedPreferences() async {
-        guard let userId = supabase.auth.currentUser?.id else { return }
+        let userId: UUID
+        do {
+            userId = try await ensureValidSessionAndUserId()
+        } catch {
+            self.error = "Session expired"
+            return
+        }
 
         do {
             let preferences: [DBLearnedPreference] = try await supabase
@@ -183,7 +277,13 @@ final class PersonalizationService: ObservableObject {
 
     /// Load user's usage patterns
     func loadUsagePatterns() async {
-        guard let userId = supabase.auth.currentUser?.id else { return }
+        let userId: UUID
+        do {
+            userId = try await ensureValidSessionAndUserId()
+        } catch {
+            self.error = "Session expired"
+            return
+        }
 
         do {
             let patterns: [DBUsagePattern] = try await supabase
@@ -229,23 +329,30 @@ final class PersonalizationService: ObservableObject {
         skipReason: String? = nil,
         contentAttributes: [String: String] = [:]
     ) async throws {
-        var payload: [String: Any] = [
-            "contentType": contentType,
-            "contentId": contentId,
-            "eventType": eventType.rawValue,
-            "contentAttributes": contentAttributes
-        ]
+        struct EngagementPayload: Encodable {
+            let contentType: String
+            let contentId: String
+            let eventType: String
+            let durationSeconds: Int?
+            let completionPercentage: Double?
+            let rating: Int?
+            let skipReason: String?
+            let contentAttributes: [String: String]
+        }
 
-        if let durationSeconds { payload["durationSeconds"] = durationSeconds }
-        if let completionPercentage { payload["completionPercentage"] = completionPercentage }
-        if let rating { payload["rating"] = rating }
-        if let skipReason { payload["skipReason"] = skipReason }
-
-        let data = try JSONSerialization.data(withJSONObject: payload)
-        _ = try await supabase.functions.invoke(
-            "update-preferences",
-            options: .init(body: data)
+        let payload = EngagementPayload(
+            contentType: contentType,
+            contentId: contentId,
+            eventType: eventType.rawValue,
+            durationSeconds: durationSeconds,
+            completionPercentage: completionPercentage,
+            rating: rating,
+            skipReason: skipReason,
+            contentAttributes: contentAttributes
         )
+
+        struct EmptyResponse: Decodable {}
+        let _: EmptyResponse = try await invokeFunction("update-preferences", body: payload)
     }
 
     enum EngagementEventType: String {
@@ -264,70 +371,49 @@ final class PersonalizationService: ObservableObject {
         limit: Int = 10
     ) async throws -> [ContentRecommendation] {
         // Ensure user is authenticated
-        guard let userId = supabase.auth.currentUser?.id else {
-            throw NSError(
-                domain: "PersonalizationService",
-                code: 401,
-                userInfo: [NSLocalizedDescriptionKey: "User not authenticated. Please sign in again."]
-            )
+        guard let userId = authService.userId else {
+            throw AuthError.sessionExpired
         }
-        
-        // Get the current access token
-        guard let session = try? await supabase.auth.session else {
-            throw NSError(
-                domain: "PersonalizationService",
-                code: 401,
-                userInfo: [NSLocalizedDescriptionKey: "Session expired. Please sign in again."]
-            )
-        }
-        
-        let accessToken = session.accessToken
+
         print("🔍 PersonalizationService: Getting recommendations for user \(userId)")
-        
-        var contextDict: [String: Any] = [:]
-        if let mood = context?.currentMood { contextDict["currentMood"] = mood }
-        if let time = context?.timeOfDay { contextDict["timeOfDay"] = time }
-        if let activity = context?.recentActivity { contextDict["recentActivity"] = activity }
 
-        let payload: [String: Any] = [
-            "contentType": contentType,
-            "context": contextDict,
-            "limit": limit
-        ]
-
-        let data = try JSONSerialization.data(withJSONObject: payload)
-        
-        do {
-            // CRITICAL: Explicitly include Authorization header (Supabase Swift SDK doesn't auto-add it)
-            let result: RecommendationResponse = try await supabase.functions.invoke(
-                "get-recommendations",
-                options: .init(
-                    headers: ["Authorization": "Bearer \(accessToken)"],
-                    body: data
-                )
-            )
-            print("✅ PersonalizationService: Got \(result.recommendations.count) recommendations")
-            return result.recommendations
-        } catch {
-            // Log the detailed error for debugging
-            print("❌ PersonalizationService: Failed to get recommendations - \(error)")
-            
-            // Check if it's an auth error
-            if let urlError = error as? URLError, urlError.code == .userAuthenticationRequired {
-                throw NSError(
-                    domain: "PersonalizationService",
-                    code: 401,
-                    userInfo: [NSLocalizedDescriptionKey: "Authentication required. Please sign in again."]
-                )
-            }
-            
-            throw error
+        struct RecommendationContextPayload: Encodable {
+            let currentMood: String?
+            let timeOfDay: String?
+            let recentActivity: String?
+            let anxietyLevel: AnxietyLevel?
+            let energyLevel: EnergyLevel?
         }
+
+        struct RecommendationRequestPayload: Encodable {
+            let contentType: String
+            let context: RecommendationContextPayload
+            let limit: Int
+        }
+
+        let payload = RecommendationRequestPayload(
+            contentType: contentType,
+            context: RecommendationContextPayload(
+                currentMood: context?.currentMood,
+                timeOfDay: context?.timeOfDay,
+                recentActivity: context?.recentActivity,
+                anxietyLevel: context?.anxietyLevel,
+                energyLevel: context?.energyLevel
+            ),
+            limit: limit
+        )
+
+        let result: RecommendationResponse = try await invokeFunction(
+            "get-recommendations",
+            body: payload
+        )
+        print("✅ PersonalizationService: Got \(result.recommendations.count) recommendations")
+        return result.recommendations
     }
 
     /// Log when user clicks a recommendation
     func logRecommendationClick(contentId: String) async throws {
-        guard let userId = supabase.auth.currentUser?.id else { return }
+        let userId = try await ensureValidSessionAndUserId()
 
         try await supabase
             .from("recommendation_logs")
@@ -343,7 +429,13 @@ final class PersonalizationService: ObservableObject {
 
     /// Load user's personalized insights
     func loadInsights() async {
-        guard let userId = supabase.auth.currentUser?.id else { return }
+        let userId: UUID
+        do {
+            userId = try await ensureValidSessionAndUserId()
+        } catch {
+            self.error = "Session expired"
+            return
+        }
 
         let now = ISO8601DateFormatter().string(from: Date())
 
@@ -369,7 +461,8 @@ final class PersonalizationService: ObservableObject {
 
     /// Generate new insights via edge function
     func generateInsights() async throws {
-        _ = try await supabase.functions.invoke("generate-insights")
+        struct EmptyResponse: Decodable {}
+        let _: EmptyResponse = try await invokeFunction("generate-insights")
         await loadInsights()
     }
 
@@ -414,7 +507,13 @@ final class PersonalizationService: ObservableObject {
 
     /// Load schedule suggestions
     func loadScheduleSuggestions() async {
-        guard let userId = supabase.auth.currentUser?.id else { return }
+        let userId: UUID
+        do {
+            userId = try await ensureValidSessionAndUserId()
+        } catch {
+            self.error = "Session expired"
+            return
+        }
 
         do {
             let suggestions: [DBScheduleSuggestion] = try await supabase

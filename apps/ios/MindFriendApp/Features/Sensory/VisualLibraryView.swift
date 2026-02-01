@@ -97,17 +97,15 @@ struct AnimationCard: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .opacity(isLocked ? 0.5 : 1.0)
 
-                    if animation.isPremium {
+                    if isLocked {
                         VStack {
                             HStack {
                                 Spacer()
-                                Image(systemName: isLocked ? "lock.fill" : "crown.fill")
+                                Image(systemName: "lock.fill")
                                     .font(.caption)
-                                    .foregroundColor(isLocked ? .white : .yellow)
+                                    .foregroundColor(.white)
                                     .padding(6)
-                                    .background(
-                                        isLocked ? Color.black.opacity(0.5) : Color.clear
-                                    )
+                                    .background(Color.black.opacity(0.5))
                                     .clipShape(Circle())
                                     .padding(4)
                             }
@@ -135,30 +133,21 @@ struct AnimationCard: View {
 
                 // Animation info
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack(alignment: .top, spacing: 4) {
-                        Text(animation.name)
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(isLocked ? .secondary : .primary)
-                            .lineLimit(2)
-                            .fixedSize(horizontal: false, vertical: true)
-                        
-                        if isLocked {
-                            Image(systemName: "crown.fill")
-                                .font(.caption2)
-                                .foregroundColor(.yellow)
-                        }
-                    }
+                    Text(animation.name)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(isLocked ? .secondary : .primary)
+                        .lineLimit(2)
 
                     Text(animation.description)
                         .font(.caption2)
                         .foregroundColor(.secondary)
                         .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
+                .frame(height: 60, alignment: .top)
             }
             .padding(12)
-            .frame(minHeight: 180)
+            .frame(height: 190)
             .background(
                 RoundedRectangle(cornerRadius: 16)
                     .fill(Color(.systemBackground))

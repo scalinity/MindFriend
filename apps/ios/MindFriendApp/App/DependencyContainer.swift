@@ -64,7 +64,10 @@ final class DependencyContainer: ObservableObject {
     }()
 
     lazy var personalizationService: PersonalizationService = {
-        PersonalizationService(supabase: self.supabaseClient)
+        PersonalizationService(
+            supabase: self.supabaseClient,
+            authService: self.supabaseAuthService
+        )
     }()
 
     lazy var accessibilityService: AccessibilityService = {
@@ -147,6 +150,10 @@ final class DependencyContainer: ObservableObject {
 
     lazy var bedtimeNotificationService: BedtimeNotificationServicing = {
         BedtimeNotificationService(permissionManager: self.notificationPermissionManager)
+    }()
+
+    lazy var questNotificationService: QuestNotificationServicing = {
+        QuestNotificationService(permissionManager: self.notificationPermissionManager)
     }()
 
     lazy var difficultyService: DifficultyService = {
@@ -296,6 +303,16 @@ final class DependencyContainer: ObservableObject {
             notificationManager: NotificationManager.shared,
             supabaseDataService: supabaseDataService
         )
+    }()
+
+    /// Habit notification service for habit reminders and streak milestones
+    lazy var habitNotificationService: HabitNotificationService = {
+        HabitNotificationService()
+    }()
+
+    /// Habit service for habit tracking and completion
+    lazy var habitService: HabitService = {
+        HabitService(supabase: supabaseClient)
     }()
 
     // MARK: - Vault Services (Local-only, encrypted journal)

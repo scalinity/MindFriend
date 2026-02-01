@@ -1,9 +1,14 @@
 // Google Cloud Text-to-Speech API Integration
-// Standard voices: $4 per 1M characters ($0.004 per 1K chars)
-// Docs: https://cloud.google.com/text-to-speech/docs/reference/rest/v1/text/synthesize
+// Standard voices: $4 per 1M characters
+// Chirp 3 HD voices: $30 per 1M characters (higher quality, more natural)
+// Docs: https://cloud.google.com/text-to-speech/docs/chirp3-hd
 
 const GOOGLE_TTS_API_URL =
   "https://texttospeech.googleapis.com/v1/text:synthesize";
+
+// Chirp 3 HD uses v1beta1 endpoint for some features
+const GOOGLE_TTS_V1BETA1_URL =
+  "https://texttospeech.googleapis.com/v1beta1/text:synthesize";
 
 // Max input size: 5000 bytes UTF-8
 const MAX_TEXT_BYTES = 5000;
@@ -25,6 +30,7 @@ export interface Voice {
 export interface TTSRequest {
   text: string;
   voiceId: string;
+  useChirp3HD?: boolean; // Use premium Chirp 3 HD voices
   voiceSettings?: {
     stability?: number;
     similarityBoost?: number;
@@ -49,6 +55,64 @@ interface GoogleVoiceConfig {
   speakingRate: number;
   pitch: number;
 }
+
+// ─── Chirp 3 HD Voice Presets (Premium) ─────────────────────
+// Available voices: Aoede, Kore, Leda, Zephyr (female), Puck, Charon, Fenrir, Orus (male)
+// Format: en-US-Chirp3-HD-<VoiceName>
+
+export const CHIRP3_HD_PRESETS: Record<string, GoogleVoiceConfig> = {
+  meditation: {
+    voiceName: "en-US-Chirp3-HD-Leda",
+    languageCode: "en-US",
+    ssmlGender: "FEMALE",
+    speakingRate: 0.85,
+    pitch: 0.0, // Chirp 3 HD handles pitch naturally
+  },
+  meditation_male: {
+    voiceName: "en-US-Chirp3-HD-Orus",
+    languageCode: "en-US",
+    ssmlGender: "MALE",
+    speakingRate: 0.85,
+    pitch: 0.0,
+  },
+  sleep_story: {
+    voiceName: "en-US-Chirp3-HD-Aoede",
+    languageCode: "en-US",
+    ssmlGender: "FEMALE",
+    speakingRate: 0.8,
+    pitch: 0.0,
+  },
+  breathing: {
+    voiceName: "en-US-Chirp3-HD-Kore",
+    languageCode: "en-US",
+    ssmlGender: "FEMALE",
+    speakingRate: 0.75,
+    pitch: 0.0,
+  },
+  grounding: {
+    voiceName: "en-US-Chirp3-HD-Zephyr",
+    languageCode: "en-US",
+    ssmlGender: "FEMALE",
+    speakingRate: 0.9,
+    pitch: 0.0,
+  },
+  affirmation: {
+    voiceName: "en-US-Chirp3-HD-Charon",
+    languageCode: "en-US",
+    ssmlGender: "MALE",
+    speakingRate: 0.95,
+    pitch: 0.0,
+  },
+  default: {
+    voiceName: "en-US-Chirp3-HD-Leda",
+    languageCode: "en-US",
+    ssmlGender: "FEMALE",
+    speakingRate: 0.9,
+    pitch: 0.0,
+  },
+};
+
+// ─── Standard Voice Presets (Budget) ────────────────────────
 
 export const GOOGLE_VOICE_PRESETS: Record<string, GoogleVoiceConfig> = {
   meditation: {
@@ -142,7 +206,7 @@ export class GoogleTTSClient {
   }
 
   async textToSpeech(request: TTSRequest): Promise<TTSResponse> {
-    const { text, voiceId } = request;
+    const { text, voiceId, useChirp3HD = false } = request;
 
     // Validate text is non-empty before computing byte length
     if (!text || text.trim().length === 0) {
@@ -163,9 +227,9 @@ export class GoogleTTSClient {
       );
     }
 
-    // Resolve voice preset
-    const preset =
-      GOOGLE_VOICE_PRESETS[voiceId] || GOOGLE_VOICE_PRESETS.default;
+    // Resolve voice preset - use Chirp 3 HD if requested
+    const presets = useChirp3HD ? CHIRP3_HD_PRESETS : GOOGLE_VOICE_PRESETS;
+    const preset = presets[voiceId] || presets.default;
 
     // Build Google API request body
     const body = {
@@ -183,7 +247,10 @@ export class GoogleTTSClient {
       },
     };
 
-    const response = await fetch(GOOGLE_TTS_API_URL, {
+    // Use v1beta1 for Chirp 3 HD voices
+    const apiUrl = useChirp3HD ? GOOGLE_TTS_V1BETA1_URL : GOOGLE_TTS_API_URL;
+
+    const response = await fetch(apiUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

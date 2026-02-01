@@ -74,8 +74,23 @@ struct SleepEntry: Codable, Identifiable, Equatable {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0) // UTC for date-only values
         return formatter
     }()
+
+    // MARK: - Validation Constants
+
+    private enum ValidationLimits {
+        static let maxMinutesPerDay = 1440 // 24 hours
+        static let maxHeartRate = 300 // Physiological maximum
+        static let minHeartRate = 20 // Physiological minimum
+        static let maxHRV = 500.0 // Physiological maximum ms
+        static let maxRespiratoryRate = 60.0 // Physiological maximum breaths/min
+        static let maxTextLength = 10000 // Characters
+        static let ratingRange = 1...5
+        static let scoreRange = 0...100
+        static let efficiencyRange = 0.0...100.0
+    }
 
     // MARK: - Custom Decoding for DATE column
 
@@ -92,7 +107,7 @@ struct SleepEntry: Codable, Identifiable, Equatable {
             throw DecodingError.dataCorruptedError(
                 forKey: .date,
                 in: container,
-                debugDescription: "Date string '\(dateString)' does not match expected format yyyy-MM-dd"
+                debugDescription: "Invalid date format"
             )
         }
         date = parsedDate
@@ -100,24 +115,237 @@ struct SleepEntry: Codable, Identifiable, Equatable {
         // TIMESTAMPTZ fields decode normally as Date
         bedtime = try container.decode(Date.self, forKey: .bedtime)
         wakeTime = try container.decode(Date.self, forKey: .wakeTime)
-        timeInBedMinutes = try container.decode(Int.self, forKey: .timeInBedMinutes)
-        timeAsleepMinutes = try container.decodeIfPresent(Int.self, forKey: .timeAsleepMinutes)
-        deepSleepMinutes = try container.decodeIfPresent(Int.self, forKey: .deepSleepMinutes)
-        remSleepMinutes = try container.decodeIfPresent(Int.self, forKey: .remSleepMinutes)
-        lightSleepMinutes = try container.decodeIfPresent(Int.self, forKey: .lightSleepMinutes)
-        awakeMinutes = try container.decodeIfPresent(Int.self, forKey: .awakeMinutes)
-        sleepEfficiency = try container.decodeIfPresent(Double.self, forKey: .sleepEfficiency)
-        heartRateAvg = try container.decodeIfPresent(Int.self, forKey: .heartRateAvg)
-        heartRateMin = try container.decodeIfPresent(Int.self, forKey: .heartRateMin)
-        hrvAvg = try container.decodeIfPresent(Double.self, forKey: .hrvAvg)
-        respiratoryRate = try container.decodeIfPresent(Double.self, forKey: .respiratoryRate)
-        userRating = try container.decodeIfPresent(Int.self, forKey: .userRating)
-        dreamNotes = try container.decodeIfPresent(String.self, forKey: .dreamNotes)
-        notes = try container.decodeIfPresent(String.self, forKey: .notes)
-        sleepScore = try container.decodeIfPresent(Int.self, forKey: .sleepScore)
+
+        // Validate time duration fields (must be non-negative and reasonable)
+        let decodedTimeInBed = try container.decode(Int.self, forKey: .timeInBedMinutes)
+        guard decodedTimeInBed >= 0 && decodedTimeInBed <= ValidationLimits.maxMinutesPerDay else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .timeInBedMinutes,
+                in: container,
+                debugDescription: "Invalid duration range"
+            )
+        }
+        timeInBedMinutes = decodedTimeInBed
+
+        timeAsleepMinutes = try Self.decodeValidatedMinutes(from: container, forKey: .timeAsleepMinutes)
+        deepSleepMinutes = try Self.decodeValidatedMinutes(from: container, forKey: .deepSleepMinutes)
+        remSleepMinutes = try Self.decodeValidatedMinutes(from: container, forKey: .remSleepMinutes)
+        lightSleepMinutes = try Self.decodeValidatedMinutes(from: container, forKey: .lightSleepMinutes)
+        awakeMinutes = try Self.decodeValidatedMinutes(from: container, forKey: .awakeMinutes)
+
+        // Validate sleep efficiency (0-100%)
+        if let efficiency = try container.decodeIfPresent(Double.self, forKey: .sleepEfficiency) {
+            guard ValidationLimits.efficiencyRange.contains(efficiency) else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: .sleepEfficiency,
+                    in: container,
+                    debugDescription: "Invalid percentage"
+                )
+            }
+            sleepEfficiency = efficiency
+        } else {
+            sleepEfficiency = nil
+        }
+
+        // Validate heart rate fields
+        heartRateAvg = try Self.decodeValidatedHeartRate(from: container, forKey: .heartRateAvg)
+        heartRateMin = try Self.decodeValidatedHeartRate(from: container, forKey: .heartRateMin)
+
+        // Validate HRV
+        if let hrv = try container.decodeIfPresent(Double.self, forKey: .hrvAvg) {
+            guard hrv >= 0 && hrv <= ValidationLimits.maxHRV else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: .hrvAvg,
+                    in: container,
+                    debugDescription: "Invalid HRV range"
+                )
+            }
+            hrvAvg = hrv
+        } else {
+            hrvAvg = nil
+        }
+
+        // Validate respiratory rate
+        if let rate = try container.decodeIfPresent(Double.self, forKey: .respiratoryRate) {
+            guard rate >= 0 && rate <= ValidationLimits.maxRespiratoryRate else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: .respiratoryRate,
+                    in: container,
+                    debugDescription: "Invalid respiratory rate"
+                )
+            }
+            respiratoryRate = rate
+        } else {
+            respiratoryRate = nil
+        }
+
+        // Validate user rating (1-5)
+        if let rating = try container.decodeIfPresent(Int.self, forKey: .userRating) {
+            guard ValidationLimits.ratingRange.contains(rating) else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: .userRating,
+                    in: container,
+                    debugDescription: "Invalid rating range"
+                )
+            }
+            userRating = rating
+        } else {
+            userRating = nil
+        }
+
+        // Validate text fields (length limit, strip control characters)
+        dreamNotes = try Self.decodeValidatedText(from: container, forKey: .dreamNotes)
+        notes = try Self.decodeValidatedText(from: container, forKey: .notes)
+
+        // Validate sleep score (0-100)
+        if let score = try container.decodeIfPresent(Int.self, forKey: .sleepScore) {
+            guard ValidationLimits.scoreRange.contains(score) else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: .sleepScore,
+                    in: container,
+                    debugDescription: "Invalid score range"
+                )
+            }
+            sleepScore = score
+        } else {
+            sleepScore = nil
+        }
+
         scoreBreakdown = try container.decodeIfPresent(SleepScoreBreakdown.self, forKey: .scoreBreakdown)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+
+        // Validate cross-field constraints
+        try validateCrossFieldConstraints()
+    }
+
+    // MARK: - Validation Helpers
+
+    private static func decodeValidatedMinutes(
+        from container: KeyedDecodingContainer<CodingKeys>,
+        forKey key: CodingKeys
+    ) throws -> Int? {
+        guard let minutes = try container.decodeIfPresent(Int.self, forKey: key) else {
+            return nil
+        }
+        guard minutes >= 0 && minutes <= ValidationLimits.maxMinutesPerDay else {
+            throw DecodingError.dataCorruptedError(
+                forKey: key,
+                in: container,
+                debugDescription: "Invalid duration range"
+            )
+        }
+        return minutes
+    }
+
+    private static func decodeValidatedHeartRate(
+        from container: KeyedDecodingContainer<CodingKeys>,
+        forKey key: CodingKeys
+    ) throws -> Int? {
+        guard let rate = try container.decodeIfPresent(Int.self, forKey: key) else {
+            return nil
+        }
+        guard rate >= ValidationLimits.minHeartRate && rate <= ValidationLimits.maxHeartRate else {
+            throw DecodingError.dataCorruptedError(
+                forKey: key,
+                in: container,
+                debugDescription: "Invalid heart rate"
+            )
+        }
+        return rate
+    }
+
+    private static func decodeValidatedText(
+        from container: KeyedDecodingContainer<CodingKeys>,
+        forKey key: CodingKeys
+    ) throws -> String? {
+        guard let text = try container.decodeIfPresent(String.self, forKey: key) else {
+            return nil
+        }
+        guard text.count <= ValidationLimits.maxTextLength else {
+            throw DecodingError.dataCorruptedError(
+                forKey: key,
+                in: container,
+                debugDescription: "Text exceeds maximum length"
+            )
+        }
+        // Strip control characters except newline and tab (safe whitespace)
+        return text.filter { char in
+            char == "\n" || char == "\t" || !char.isASCII || (char.isASCII && char.asciiValue! >= 32)
+        }
+    }
+
+    // MARK: - Cross-Field Validation
+
+    private func validateCrossFieldConstraints() throws {
+        // Rule 1: timeAsleepMinutes <= timeInBedMinutes
+        if let asleep = timeAsleepMinutes {
+            guard asleep <= timeInBedMinutes else {
+                throw ValidationError.invalidCrossFieldConstraint(
+                    "Sleep time (\(asleep)m) cannot exceed time in bed (\(timeInBedMinutes)m)"
+                )
+            }
+        }
+
+        // Rule 2: Sleep stages sum <= timeAsleepMinutes (or timeInBedMinutes if asleep is nil)
+        let maxStageTime = timeAsleepMinutes ?? timeInBedMinutes
+        let stageSum = [deepSleepMinutes, remSleepMinutes, lightSleepMinutes, awakeMinutes]
+            .compactMap { $0 }
+            .reduce(0, +)
+
+        if stageSum > 0 {
+            guard stageSum <= maxStageTime else {
+                throw ValidationError.invalidCrossFieldConstraint(
+                    "Sleep stages (\(stageSum)m) cannot exceed total time (\(maxStageTime)m)"
+                )
+            }
+        }
+    }
+
+    enum ValidationError: Error, LocalizedError {
+        case invalidCrossFieldConstraint(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidCrossFieldConstraint(let message):
+                return message
+            }
+        }
+    }
+
+    // MARK: - Custom Encoding for DATE column
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+
+        try container.encode(id, forKey: .id)
+        try container.encode(userId, forKey: .userId)
+
+        // Encode Date as DATE string (YYYY-MM-DD) for PostgreSQL DATE column
+        let dateString = Self.dateFormatter.string(from: date)
+        try container.encode(dateString, forKey: .date)
+
+        try container.encode(source, forKey: .source)
+        try container.encode(bedtime, forKey: .bedtime)
+        try container.encode(wakeTime, forKey: .wakeTime)
+        try container.encode(timeInBedMinutes, forKey: .timeInBedMinutes)
+        try container.encodeIfPresent(timeAsleepMinutes, forKey: .timeAsleepMinutes)
+        try container.encodeIfPresent(deepSleepMinutes, forKey: .deepSleepMinutes)
+        try container.encodeIfPresent(remSleepMinutes, forKey: .remSleepMinutes)
+        try container.encodeIfPresent(lightSleepMinutes, forKey: .lightSleepMinutes)
+        try container.encodeIfPresent(awakeMinutes, forKey: .awakeMinutes)
+        try container.encodeIfPresent(sleepEfficiency, forKey: .sleepEfficiency)
+        try container.encodeIfPresent(heartRateAvg, forKey: .heartRateAvg)
+        try container.encodeIfPresent(heartRateMin, forKey: .heartRateMin)
+        try container.encodeIfPresent(hrvAvg, forKey: .hrvAvg)
+        try container.encodeIfPresent(respiratoryRate, forKey: .respiratoryRate)
+        try container.encodeIfPresent(userRating, forKey: .userRating)
+        try container.encodeIfPresent(dreamNotes, forKey: .dreamNotes)
+        try container.encodeIfPresent(notes, forKey: .notes)
+        try container.encodeIfPresent(sleepScore, forKey: .sleepScore)
+        try container.encodeIfPresent(scoreBreakdown, forKey: .scoreBreakdown)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(updatedAt, forKey: .updatedAt)
     }
 
     // MARK: - Memberwise Initializer
@@ -148,6 +376,40 @@ struct SleepEntry: Codable, Identifiable, Equatable {
         createdAt: Date,
         updatedAt: Date
     ) {
+        // Validate ranges (runtime safety)
+        precondition(
+            timeInBedMinutes >= 0 && timeInBedMinutes <= ValidationLimits.maxMinutesPerDay,
+            "Invalid timeInBedMinutes: \(timeInBedMinutes)"
+        )
+        if let asleep = timeAsleepMinutes {
+            precondition(
+                asleep >= 0 && asleep <= ValidationLimits.maxMinutesPerDay,
+                "Invalid timeAsleepMinutes: \(asleep)"
+            )
+            precondition(asleep <= timeInBedMinutes, "timeAsleepMinutes cannot exceed timeInBedMinutes")
+        }
+        if let rating = userRating {
+            precondition(ValidationLimits.ratingRange.contains(rating), "Invalid userRating: \(rating)")
+        }
+        if let score = sleepScore {
+            precondition(ValidationLimits.scoreRange.contains(score), "Invalid sleepScore: \(score)")
+        }
+        if let efficiency = sleepEfficiency {
+            precondition(ValidationLimits.efficiencyRange.contains(efficiency), "Invalid sleepEfficiency")
+        }
+        if let hr = heartRateAvg {
+            precondition(
+                hr >= ValidationLimits.minHeartRate && hr <= ValidationLimits.maxHeartRate,
+                "Invalid heartRateAvg"
+            )
+        }
+        if let hr = heartRateMin {
+            precondition(
+                hr >= ValidationLimits.minHeartRate && hr <= ValidationLimits.maxHeartRate,
+                "Invalid heartRateMin"
+            )
+        }
+
         self.id = id
         self.userId = userId
         self.date = date
@@ -290,40 +552,106 @@ struct SleepGoals: Codable, Identifiable, Equatable {
     }
     
     // MARK: - Time Format Helpers
-    
+
     /// Formatter for PostgreSQL TIME type (HH:mm:ss)
     private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm:ss"
         formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0) // UTC for time-only values
         return formatter
     }()
-    
+
+    /// Formatter for displaying time to user (thread-safe, reusable)
+    private static let displayTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    // MARK: - Validation Constants
+
+    private enum ValidationLimits {
+        static let maxMinutesPerDay = 1440 // 24 hours
+        static let maxReminderOffsetMinutes = 480 // 8 hours
+        static let validWindDownTypes: Set<String> = [
+            "breathing", "meditation", "grounding", "journaling", "movement", "stretching"
+        ]
+    }
+
     // MARK: - Custom Encoding/Decoding for TIME columns
-    
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        
+
         id = try container.decode(UUID.self, forKey: .id)
         userId = try container.decode(UUID.self, forKey: .userId)
-        targetDurationMinutes = try container.decode(Int.self, forKey: .targetDurationMinutes)
-        windDownDurationMinutes = try container.decode(Int.self, forKey: .windDownDurationMinutes)
+
+        // Validate duration fields
+        let decodedDuration = try container.decode(Int.self, forKey: .targetDurationMinutes)
+        guard decodedDuration >= 0 && decodedDuration <= ValidationLimits.maxMinutesPerDay else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .targetDurationMinutes,
+                in: container,
+                debugDescription: "Invalid duration range"
+            )
+        }
+        targetDurationMinutes = decodedDuration
+
+        let decodedWindDown = try container.decode(Int.self, forKey: .windDownDurationMinutes)
+        guard decodedWindDown >= 0 && decodedWindDown <= ValidationLimits.maxMinutesPerDay else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .windDownDurationMinutes,
+                in: container,
+                debugDescription: "Invalid duration range"
+            )
+        }
+        windDownDurationMinutes = decodedWindDown
+
         bedtimeReminderEnabled = try container.decode(Bool.self, forKey: .bedtimeReminderEnabled)
-        bedtimeReminderOffsetMinutes = try container.decode(Int.self, forKey: .bedtimeReminderOffsetMinutes)
-        preferredWindDownTypes = try container.decode([String].self, forKey: .preferredWindDownTypes)
+
+        let decodedOffset = try container.decode(Int.self, forKey: .bedtimeReminderOffsetMinutes)
+        guard decodedOffset >= 0 && decodedOffset <= ValidationLimits.maxReminderOffsetMinutes else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .bedtimeReminderOffsetMinutes,
+                in: container,
+                debugDescription: "Invalid offset range"
+            )
+        }
+        bedtimeReminderOffsetMinutes = decodedOffset
+
+        // Validate and filter wind-down types (allow only valid types)
+        let decodedTypes = try container.decode([String].self, forKey: .preferredWindDownTypes)
+        let filteredTypes = decodedTypes.filter { ValidationLimits.validWindDownTypes.contains($0) }
+        preferredWindDownTypes = filteredTypes
+
         sleepEnvironmentPrefs = try container.decode(SleepEnvironmentPrefs.self, forKey: .sleepEnvironmentPrefs)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
-        
-        // Decode TIME columns as strings and convert to Date
+
+        // Decode TIME columns as strings and convert to Date (with validation)
         if let timeString = try container.decodeIfPresent(String.self, forKey: .targetBedtime) {
-            targetBedtime = Self.timeFormatter.date(from: timeString)
+            guard let parsedTime = Self.timeFormatter.date(from: timeString) else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: .targetBedtime,
+                    in: container,
+                    debugDescription: "Invalid time format"
+                )
+            }
+            targetBedtime = parsedTime
         } else {
             targetBedtime = nil
         }
-        
+
         if let timeString = try container.decodeIfPresent(String.self, forKey: .targetWakeTime) {
-            targetWakeTime = Self.timeFormatter.date(from: timeString)
+            guard let parsedTime = Self.timeFormatter.date(from: timeString) else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: .targetWakeTime,
+                    in: container,
+                    debugDescription: "Invalid time format"
+                )
+            }
+            targetWakeTime = parsedTime
         } else {
             targetWakeTime = nil
         }
@@ -396,17 +724,11 @@ struct SleepGoals: Codable, Identifiable, Equatable {
     }
 
     var bedtimeFormatted: String? {
-        guard let bedtime = targetBedtime else { return nil }
-        let formatter = DateFormatter()
-        formatter.timeStyle = .short
-        return formatter.string(from: bedtime)
+        targetBedtime.map { Self.displayTimeFormatter.string(from: $0) }
     }
 
     var wakeTimeFormatted: String? {
-        guard let wakeTime = targetWakeTime else { return nil }
-        let formatter = DateFormatter()
-        formatter.timeStyle = .short
-        return formatter.string(from: wakeTime)
+        targetWakeTime.map { Self.displayTimeFormatter.string(from: $0) }
     }
 }
 

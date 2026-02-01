@@ -423,28 +423,34 @@ struct ContentRecommendation: Codable, Identifiable {
     let id: String
     let contentId: String
     let contentType: String
+    let contentName: String
+    let durationMinutes: Int
     let score: Double
     let reasons: [String]
 
-    init(id: String = UUID().uuidString, contentId: String, contentType: String = "exercise", score: Double, reasons: [String]) {
+    init(id: String = UUID().uuidString, contentId: String, contentType: String = "exercise", contentName: String = "Exercise", durationMinutes: Int = 5, score: Double, reasons: [String]) {
         self.id = id
         self.contentId = contentId
         self.contentType = contentType
+        self.contentName = contentName
+        self.durationMinutes = durationMinutes
         self.score = score
         self.reasons = reasons
     }
 
     enum CodingKeys: String, CodingKey {
-        case contentId, score, reasons
+        case contentId, contentType, contentName, durationMinutes, score, reasons
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.contentId = try container.decode(String.self, forKey: .contentId)
+        self.contentType = try container.decodeIfPresent(String.self, forKey: .contentType) ?? "exercise"
+        self.contentName = try container.decodeIfPresent(String.self, forKey: .contentName) ?? "Exercise"
+        self.durationMinutes = try container.decodeIfPresent(Int.self, forKey: .durationMinutes) ?? 5
         self.score = try container.decode(Double.self, forKey: .score)
         self.reasons = try container.decode([String].self, forKey: .reasons)
         self.id = contentId
-        self.contentType = "exercise"
     }
 }
 

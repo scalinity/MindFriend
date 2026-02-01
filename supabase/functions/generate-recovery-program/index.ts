@@ -4,6 +4,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { getCorsHeaders } from "../_shared/cors.ts";
 import type {
   DebtScore,
   UserProfile,
@@ -19,6 +20,11 @@ const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 serve(async (req) => {
+  // Handle CORS preflight
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: getCorsHeaders(req) });
+  }
+
   try {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -27,7 +33,7 @@ serve(async (req) => {
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Missing authorization" }), {
         status: 401,
-        headers: { "Content-Type": "application/json" },
+        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
       });
     }
 
@@ -39,7 +45,7 @@ serve(async (req) => {
     if (authError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: { "Content-Type": "application/json" },
+        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
       });
     }
 
@@ -49,34 +55,92 @@ serve(async (req) => {
       startDate || new Date().toISOString().split("T")[0];
 
     // Generate recovery program
-    const program = await generateRecoveryProgram(
+    const result = await generateRecoveryProgram(
       supabase,
       user.id,
       programStartDate,
       intensity,
     );
 
-    return new Response(JSON.stringify({ success: true, program }), {
-      headers: { "Content-Type": "application/json" },
+    // Handle case where not enough data exists
+    if ("needsMoreData" in result) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: result.message,
+          needsMoreData: true,
+        }),
+        {
+          status: 200, // Not a server error, just missing data
+          headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    return new Response(JSON.stringify({ success: true, program: result }), {
+      headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
     });
   } catch (error) {
     console.error("Error in generate-recovery-program:", error); // Log full error server-side
     return new Response(
-      JSON.stringify({ error: "An unexpected error occurred" }),
+      JSON.stringify({ 
+        success: false, 
+        error: "An unexpected error occurred",
+        needsMoreData: false 
+      }),
       {
         status: 500,
-        headers: { "Content-Type": "application/json" },
+        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
       },
     );
   }
 });
+
+// =============================================================================
+// USER PROFILE MANAGEMENT (matches calculate-debt-score logic)
+// =============================================================================
+
+async function getOrCreateUserProfile(
+  supabase: any,
+  userId: string,
+): Promise<UserProfile> {
+  const { data: profile, error } = await supabase
+    .from("wellbeing_debt_profiles")
+    .select("*")
+    .eq("user_id", userId)
+    .single();
+
+  if (error || !profile) {
+    // Create default profile with rebalanced threshold
+    const defaultProfile: UserProfile = {
+      user_id: userId,
+      personal_threshold: -75,
+      crash_history: { crashes: [], last_updated: null },
+      top_drains: { categories: [], last_updated: null },
+      top_deposits: { categories: [], last_updated: null },
+    };
+
+    await supabase
+      .from("wellbeing_debt_profiles")
+      .insert(defaultProfile)
+      .single();
+
+    return defaultProfile;
+  }
+
+  return profile;
+}
+
+// =============================================================================
+// RECOVERY PROGRAM GENERATION
+// =============================================================================
 
 async function generateRecoveryProgram(
   supabase: any,
   userId: string,
   startDate: string,
   intensity: string,
-): Promise<RecoveryProgram> {
+): Promise<RecoveryProgram | { needsMoreData: true; message: string }> {
   // 1. Get current debt score
   const { data: currentScore, error: scoreError } = await supabase
     .from("wellbeing_debt_scores")
@@ -87,27 +151,27 @@ async function generateRecoveryProgram(
     .single();
 
   if (scoreError || !currentScore) {
-    throw new Error("No debt score found. Cannot generate recovery program.");
+    // No debt data yet - user needs to track for a few days
+    return {
+      needsMoreData: true,
+      message:
+        "Not enough wellbeing data yet. Please track your mood and activities for a few days to generate a personalized recovery program.",
+    };
   }
 
-  // 2. Get user profile (top drains, top deposits)
-  const { data: profile, error: profileError } = await supabase
-    .from("wellbeing_debt_profiles")
-    .select("*")
-    .eq("user_id", userId)
-    .single();
-
-  if (profileError || !profile) {
-    throw new Error("User profile not found.");
-  }
+  // 2. Get or create user profile
+  const profile = await getOrCreateUserProfile(supabase, userId);
 
   // 3. Get available exercises
   const { data: exercises, error: exercisesError } = await supabase
     .from("exercises")
-    .select("id, name, type, category, duration_minutes, difficulty");
+    .select("id, title, type, duration_minutes, difficulty_level");
 
-  if (exercisesError || !exercises) {
-    throw new Error("Failed to fetch exercises.");
+  if (exercisesError || !exercises || exercises.length === 0) {
+    return {
+      needsMoreData: true,
+      message: "Exercise library not available. Please try again later.",
+    };
   }
 
   // 4. Calculate target debt reduction
@@ -226,7 +290,7 @@ function generateActionsForDay(
   if (coreExercise) {
     actions.push({
       category: getCategoryForExercise(coreExercise.type),
-      action: `Complete: ${coreExercise.name} (${coreExercise.duration_minutes}min)`,
+      action: `Complete: ${coreExercise.title} (${coreExercise.duration_minutes}min)`,
       target_points: 10,
       source: "exercise_sessions",
     });
@@ -279,7 +343,7 @@ function generateActionsForDay(
     if (breathingExercise) {
       actions.push({
         category: "meditation",
-        action: `Optional: ${breathingExercise.name} (${breathingExercise.duration_minutes}min)`,
+        action: `Optional: ${breathingExercise.title} (${breathingExercise.duration_minutes}min)`,
         target_points: Math.min(5, dailyTarget - currentTotal),
         source: "exercise_sessions",
       });
@@ -316,7 +380,7 @@ function selectExerciseForFocusArea(
   const candidates = exercises.filter(
     (ex) =>
       preferredTypes.includes(ex.type) &&
-      (difficulty === "gentle" ? ex.difficulty === "beginner" : true),
+      (difficulty === "gentle" ? ex.difficulty_level === "beginner" : true),
   );
 
   // Return random selection (simple algorithm)

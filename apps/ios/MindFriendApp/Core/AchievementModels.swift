@@ -910,6 +910,13 @@ struct CheckBadgeProgressResponse: Codable {
     let newlyEarned: [EarnedBadge]
     let progressUpdated: [String]
 
+    // Explicit initializer for creating fallback responses
+    init(checked: Int, newlyEarned: [EarnedBadge], progressUpdated: [String]) {
+        self.checked = checked
+        self.newlyEarned = newlyEarned
+        self.progressUpdated = progressUpdated
+    }
+
     struct EarnedBadge: Codable {
         let id: UUID
         let slug: String

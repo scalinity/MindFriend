@@ -16,12 +16,11 @@ struct SignInView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 32) {
+            VStack(spacing: 0) {
                 Spacer()
-                    .frame(minHeight: 40)
 
                 // Logo and tagline
-                VStack(spacing: 16) {
+                VStack(spacing: 12) {
                     Image("AppLogo")
                         .resizable()
                         .scaledToFit()
@@ -50,14 +49,14 @@ struct SignInView: View {
                 Spacer()
 
                 // Sign in buttons
-                VStack(spacing: 16) {
+                VStack(spacing: 12) {
                     SignInWithAppleButton { request in
                         request.requestedScopes = [.email, .fullName]
                     } onCompletion: { result in
                         handleSignIn(result)
                     }
                     .signInWithAppleButtonStyle(.black)
-                    .frame(height: 54)
+                    .frame(height: 50)
                     .cornerRadius(12)
                     .accessibilityLabel("Sign in with Apple")
 
@@ -73,7 +72,7 @@ struct SignInView: View {
                                 .fontWeight(.medium)
                         }
                         .frame(maxWidth: .infinity)
-                        .frame(height: 54)
+                        .frame(height: 50)
                         .background(Color(.systemGray5))
                         .foregroundStyle(.primary)
                         .cornerRadius(12)
@@ -89,21 +88,22 @@ struct SignInView: View {
                             Text("Continue with Email")
                         }
                         .frame(maxWidth: .infinity)
-                        .frame(height: 54)
+                        .frame(height: 50)
                         .background(Color(.systemGray5))
                         .foregroundStyle(.primary)
                         .cornerRadius(12)
                     }
                     .accessibilityLabel("Continue with Email")
-
-                    Text("By signing in, you agree to our Terms of Service and Privacy Policy")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-
                 }
                 .padding(.horizontal, 24)
-                .padding(.bottom, 32)
+
+                Text("By signing in, you agree to our Terms of Service and Privacy Policy")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 16)
+                    .padding(.bottom, 8)
             }
             .overlay {
                 if isLoading {

@@ -130,36 +130,38 @@ struct SleepHomeView: View {
     }
 
     private var contentTypeTabs: some View {
-        HStack(spacing: 12) {
-            ForEach(SleepContentType.allCases) { type in
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        selectedTab = type
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 12) {
+                ForEach(SleepContentType.allCases) { type in
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            selectedTab = type
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: type.icon)
+                            Text(type.displayName)
+                        }
+                        .font(.subheadline)
+                        .fontWeight(selectedTab == type ? .semibold : .regular)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(
+                            selectedTab == type
+                                ? Color.indigo
+                                : Color.white.opacity(0.1)
+                        )
+                        .foregroundStyle(
+                            selectedTab == type
+                                ? .white
+                                : .white.opacity(0.8)
+                        )
+                        .cornerRadius(20)
                     }
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: type.icon)
-                        Text(type.displayName)
-                    }
-                    .font(.subheadline)
-                    .fontWeight(selectedTab == type ? .semibold : .regular)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(
-                        selectedTab == type
-                            ? Color.indigo
-                            : Color.white.opacity(0.1)
-                    )
-                    .foregroundStyle(
-                        selectedTab == type
-                            ? .white
-                            : .white.opacity(0.8)
-                    )
-                    .cornerRadius(20)
                 }
             }
+            .padding(.horizontal)
         }
-        .padding(.horizontal)
     }
 
     private var featuredSection: some View {
@@ -170,15 +172,18 @@ struct SleepHomeView: View {
                 .padding(.horizontal)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 16) {
+                HStack(alignment: .top, spacing: 16) {
                     ForEach(viewModel.featuredContent) { content in
-                        SleepContentCard(content: content) {
+                        SleepContentCard(
+                            content: content,
+                            isPremiumUser: appState.entitlements.tier == .premium
+                        ) {
                             selectedContent = content
                             Task {
                                 await viewModel.play(content)
                             }
                         }
-                        .frame(width: 160)
+                        .frame(width: 160, height: 180)
                     }
                 }
                 .padding(.horizontal)
@@ -198,7 +203,10 @@ struct SleepHomeView: View {
             } else {
                 LazyVStack(spacing: 8) {
                     ForEach(viewModel.stories) { content in
-                        SleepContentListItem(content: content) {
+                        SleepContentListItem(
+                            content: content,
+                            isPremiumUser: appState.entitlements.tier == .premium
+                        ) {
                             selectedContent = content
                             Task {
                                 await viewModel.play(content)
@@ -224,18 +232,22 @@ struct SleepHomeView: View {
                 // Grid layout for soundscapes
                 LazyVGrid(
                     columns: [
-                        GridItem(.flexible()),
-                        GridItem(.flexible())
+                        GridItem(.flexible(), alignment: .top),
+                        GridItem(.flexible(), alignment: .top)
                     ],
                     spacing: 16
                 ) {
                     ForEach(viewModel.soundscapes) { content in
-                        SleepContentCard(content: content) {
+                        SleepContentCard(
+                            content: content,
+                            isPremiumUser: appState.entitlements.tier == .premium
+                        ) {
                             selectedContent = content
                             Task {
                                 await viewModel.play(content)
                             }
                         }
+                        .frame(height: 180)
                     }
                 }
                 .padding(.horizontal)

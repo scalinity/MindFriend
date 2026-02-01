@@ -269,10 +269,13 @@ final class NotificationManager: NSObject, ObservableObject {
             }
             
         case .remindLater:
-            // Reschedule for 30 minutes later
-            // This requires fetching the intervention template
-            Log.notifications.debug("[Notifications] Intervention remind later requested")
-            // TODO: Implement reschedule logic
+            // Reschedule for 30 minutes later using the notification response content
+            do {
+                try await notificationManager.rescheduleFromResponse(response)
+                Log.notifications.debug("[Notifications] Intervention rescheduled for 30 minutes later")
+            } catch {
+                Log.notifications.error("[Notifications] Failed to reschedule intervention: \(error)")
+            }
             
         case .open:
             // Navigate to intervention

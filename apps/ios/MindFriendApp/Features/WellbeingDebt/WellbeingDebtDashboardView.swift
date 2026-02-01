@@ -18,6 +18,7 @@ struct WellbeingDebtDashboardView: View {
     @State private var errorMessage: String?
     @State private var showingBreakdown = false
     @State private var showingRecoveryProgram = false
+    @State private var hasActiveRecoveryProgram = false
     @State private var isCalculating = false
     @State private var calculationProgress: String?
     @State private var isRecalculating = false
@@ -333,7 +334,7 @@ struct WellbeingDebtDashboardView: View {
             }
 
             if let days = status.daysUntilCrash, days > 0 {
-                Text("At current pace, you may experience a crash in \(days) days.")
+                Text("At current pace, you may experience a crash in \(days) \(days == 1 ? "day" : "days").")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -341,11 +342,11 @@ struct WellbeingDebtDashboardView: View {
             Button {
                 showingRecoveryProgram = true
             } label: {
-                Text("Start Recovery Program")
+                Text(hasActiveRecoveryProgram ? "View Recovery Program" : "Start Recovery Program")
                     .font(.subheadline.bold())
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(Color.orange)
+                    .background(hasActiveRecoveryProgram ? Color.green : Color.orange)
                     .foregroundStyle(.white)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
             }
@@ -512,6 +513,9 @@ struct WellbeingDebtDashboardView: View {
             // Step 3: Fetch profile
             profile = try await container.wellbeingDebtService.fetchProfile()
             calculationProgress = nil
+
+            // Notify WellbeingDebtCard to refresh
+            NotificationCenter.default.post(name: .wellbeingDebtDidRecalculate, object: nil)
         } catch {
             errorMessage = error.localizedDescription
             calculationProgress = nil
@@ -537,6 +541,9 @@ struct WellbeingDebtDashboardView: View {
             // Step 3: Fetch profile
             recalculationProgress = "Updating profile..."
             profile = try await container.wellbeingDebtService.fetchProfile()
+
+            // Notify WellbeingDebtCard to refresh
+            NotificationCenter.default.post(name: .wellbeingDebtDidRecalculate, object: nil)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -588,9 +595,11 @@ struct WellbeingDebtDashboardView: View {
         do {
             async let scoreTask = container.wellbeingDebtService.fetchLatestDebtScore()
             async let profileTask = container.wellbeingDebtService.fetchProfile()
+            async let recoveryTask = container.wellbeingDebtService.fetchActiveRecoveryProgram()
 
             latestScore = try await scoreTask
             profile = try await profileTask
+            hasActiveRecoveryProgram = try await recoveryTask != nil
 
             isLoading = false
         } catch {

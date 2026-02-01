@@ -15,7 +15,9 @@ struct RecoveryProgramView: View {
     @State private var recoveryProgram: RecoveryProgram?
     @State private var isLoading = false
     @State private var isGenerating = false
+    @State private var isSaving = false
     @State private var errorMessage: String?
+    @State private var needsMoreData = false
     @State private var selectedIntensity: Intensity = .moderate
     @State private var expandedDays: Set<Int> = []
 
@@ -37,8 +39,14 @@ struct RecoveryProgramView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
-                    if isGenerating {
+                    if isLoading {
+                        ProgressView("Loading...")
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .padding(.top, 100)
+                    } else if isGenerating {
                         generatingView
+                    } else if needsMoreData, let message = errorMessage {
+                        needsMoreDataView(message)
                     } else if let error = errorMessage {
                         errorView(error)
                     } else if let program = recoveryProgram {
@@ -54,8 +62,11 @@ struct RecoveryProgramView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") {
-                        dismiss()
+                        Task {
+                            await saveAndDismiss()
+                        }
                     }
+                    .disabled(isSaving)
                 }
 
                 if recoveryProgram != nil {
@@ -65,8 +76,12 @@ struct RecoveryProgramView: View {
                                 await generateProgram()
                             }
                         }
+                        .disabled(isSaving)
                     }
                 }
+            }
+            .task {
+                await loadExistingProgram()
             }
         }
     }
@@ -271,14 +286,8 @@ struct RecoveryProgramView: View {
             Image(systemName: "circle")
                 .foregroundStyle(.blue)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(action.action)
-                    .font(.subheadline)
-
-                Text("\(action.source.rawValue)")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
+            Text(action.action)
+                .font(.subheadline)
 
             Spacer()
 
@@ -306,6 +315,59 @@ struct RecoveryProgramView: View {
                 .multilineTextAlignment(.center)
         }
         .padding(.top, 100)
+    }
+
+    // MARK: - Needs More Data View
+
+    @ViewBuilder
+    private func needsMoreDataView(_ message: String) -> some View {
+        VStack(spacing: 20) {
+            Image(systemName: "chart.line.uptrend.xyaxis")
+                .font(.system(size: 60))
+                .foregroundStyle(.blue)
+
+            Text("Track More Data First")
+                .font(.title2.bold())
+
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+
+            // Tips for generating data
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Here's how to get started:")
+                    .font(.caption.bold())
+                    .foregroundStyle(.secondary)
+
+                dataActionRow(icon: "face.smiling", text: "Log your mood daily")
+                dataActionRow(icon: "moon.zzz", text: "Track your sleep patterns")
+                dataActionRow(icon: "figure.mind.and.body", text: "Complete exercises")
+                dataActionRow(icon: "checkmark.circle", text: "Finish your daily quests")
+            }
+            .padding()
+            .background(Color(.systemGray6))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+
+            Button("Close") {
+                dismiss()
+            }
+            .buttonStyle(.bordered)
+        }
+        .padding(.top, 40)
+    }
+
+    @ViewBuilder
+    private func dataActionRow(icon: String, text: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .foregroundStyle(.blue)
+                .frame(width: 24)
+
+            Text(text)
+                .font(.subheadline)
+        }
     }
 
     // MARK: - Error View
@@ -341,6 +403,7 @@ struct RecoveryProgramView: View {
     private func generateProgram() async {
         isGenerating = true
         errorMessage = nil
+        needsMoreData = false
 
         do {
             recoveryProgram = try await container.wellbeingDebtService.generateRecoveryProgram(
@@ -351,10 +414,55 @@ struct RecoveryProgramView: View {
             expandedDays = [1]
 
             isGenerating = false
+        } catch let error as WellbeingDebtError {
+            switch error {
+            case .needsMoreData(let message):
+                needsMoreData = true
+                errorMessage = message
+            default:
+                errorMessage = error.localizedDescription
+            }
+            isGenerating = false
         } catch {
             errorMessage = error.localizedDescription
             isGenerating = false
         }
+    }
+    
+    private func saveAndDismiss() async {
+        // Only save if we have a generated program
+        guard let program = recoveryProgram else {
+            dismiss()
+            return
+        }
+        
+        isSaving = true
+        
+        do {
+            _ = try await container.wellbeingDebtService.saveRecoveryProgram(program)
+            isSaving = false
+            dismiss()
+        } catch {
+            // If save fails, still dismiss but log error
+            print("Failed to save recovery program: \(error)")
+            isSaving = false
+            dismiss()
+        }
+    }
+    
+    private func loadExistingProgram() async {
+        isLoading = true
+        
+        do {
+            if let existingProgram = try await container.wellbeingDebtService.fetchActiveRecoveryProgram() {
+                recoveryProgram = existingProgram
+                expandedDays = [1]
+            }
+        } catch {
+            // No existing program or error - user can generate a new one
+        }
+        
+        isLoading = false
     }
 
     private func formatFocusArea(_ area: String) -> String {

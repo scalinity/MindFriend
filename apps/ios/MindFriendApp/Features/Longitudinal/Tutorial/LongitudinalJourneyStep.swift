@@ -46,7 +46,7 @@ struct LongitudinalJourneyStep: View {
                                 .font(.system(size: 9))
                                 .foregroundStyle(.secondary)
                         }
-                        .frame(maxWidth: .infinity)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                 }
                 .frame(height: 70)

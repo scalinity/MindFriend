@@ -17,10 +17,12 @@ struct CreativeHubView: View {
                 // Quota display
                 if let quota = quota {
                     QuotaCard(quota: quota)
+                        .padding(.horizontal)
                 }
 
                 // Quick Create Section
                 quickCreateSection
+                    .padding(.horizontal)
 
                 // Recent Creations
                 if !recentWorks.isEmpty {
@@ -29,10 +31,13 @@ struct CreativeHubView: View {
 
                 // Creative Exercises
                 exercisesSection
+                    .padding(.horizontal)
             }
-            .padding()
+            .padding(.vertical)
         }
         .navigationTitle("Create")
+        .navigationBarTitleDisplayMode(.large)
+        .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 NavigationLink {
@@ -117,6 +122,7 @@ struct CreativeHubView: View {
                 }
                 .font(.subheadline)
             }
+            .padding(.horizontal)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
@@ -129,6 +135,7 @@ struct CreativeHubView: View {
                         .buttonStyle(.plain)
                     }
                 }
+                .padding(.horizontal)
             }
         }
     }

@@ -11,6 +11,8 @@ struct ForYouView: View {
     @State private var currentMood: String?
     @State private var anxietyLevel: AnxietyLevel = .calm
     @State private var energyLevel: EnergyLevel = .moderate
+    @State private var exercises: [String: Exercise] = [:]
+    @State private var allExercises: [Exercise] = []
 
     private var personalizationService: PersonalizationService {
         container.personalizationService
@@ -191,10 +193,21 @@ struct ForYouView: View {
             }
 
             ForEach(recommendations) { rec in
-                ContentRecommendationCard(recommendation: rec) {
-                    Task {
-                        try? await personalizationService.logRecommendationClick(contentId: rec.contentId)
+                if let exercise = findExercise(for: rec.contentId) {
+                    NavigationLink {
+                        LibraryExercisePlayerView(exercise: exercise, container: container)
+                    } label: {
+                        ContentRecommendationCardContent(recommendation: rec)
                     }
+                    .buttonStyle(.plain)
+                    .simultaneousGesture(TapGesture().onEnded {
+                        Task {
+                            try? await personalizationService.logRecommendationClick(contentId: rec.contentId)
+                        }
+                    })
+                } else {
+                    ContentRecommendationCardContent(recommendation: rec)
+                        .opacity(0.6)
                 }
             }
         }
@@ -288,8 +301,57 @@ struct ForYouView: View {
                 contentType: "exercise",
                 context: context
             )
+
+            // Fetch exercises for navigation
+            let fetchedExercises = try await container.supabaseDataService.getExercises()
+            self.allExercises = fetchedExercises
+            print("DEBUG ForYouView: Fetched \(fetchedExercises.count) exercises")
+            if let firstEx = fetchedExercises.first {
+                print("DEBUG ForYouView: Sample exercise ID: '\(firstEx.id)'")
+                print("DEBUG ForYouView: Normalized UUID: '\(normalizeUUID(firstEx.id))'")
+            }
+
+            // Build map with normalized UUIDs as keys
+            var exerciseMap: [String: Exercise] = [:]
+            for exercise in fetchedExercises {
+                let normalizedId = normalizeUUID(exercise.id)
+                exerciseMap[normalizedId] = exercise
+            }
+            exercises = exerciseMap
+
+            // Debug: check if recommendations match
+            print("DEBUG ForYouView: Exercise map has \(exerciseMap.count) entries")
+            print("DEBUG ForYouView: Recommendations count: \(recommendations.count)")
+            if let firstRec = recommendations.first {
+                let normalizedContentId = normalizeUUID(firstRec.contentId)
+                print("DEBUG ForYouView: Sample contentId: '\(firstRec.contentId)'")
+                print("DEBUG ForYouView: Normalized contentId: '\(normalizedContentId)'")
+                let found = exerciseMap[normalizedContentId] != nil
+                print("DEBUG ForYouView: Lookup result: \(found ? "FOUND" : "NOT FOUND")")
+
+                if !found {
+                    // Print all exercise IDs to help debug
+                    print("DEBUG ForYouView: All exercise normalized IDs:")
+                    for (idx, ex) in fetchedExercises.prefix(5).enumerated() {
+                        print("  [\(idx)] '\(normalizeUUID(ex.id))'")
+                    }
+                }
+            }
+        } catch is CancellationError {
+            // Task was cancelled (e.g., view disappeared or new refresh started)
+            // Don't show this as an error to the user
+            print("DEBUG ForYouView: Task cancelled")
+            return // Don't update loading state, another task may be in progress
+        } catch let urlError as URLError where urlError.code == .cancelled {
+            // Network request was cancelled
+            print("DEBUG ForYouView: Network request cancelled")
+            return // Don't update loading state
         } catch {
-            self.error = error.localizedDescription
+            // Don't show "cancelled" errors from other sources
+            let errorMessage = error.localizedDescription
+            if !errorMessage.lowercased().contains("cancelled") && !errorMessage.lowercased().contains("canceled") {
+                self.error = errorMessage
+            }
         }
 
         isLoading = false
@@ -305,71 +367,102 @@ struct ForYouView: View {
         default: return "🙂"
         }
     }
+
+    /// Normalize a UUID string to lowercase without hyphens for consistent comparison
+    private func normalizeUUID(_ uuidString: String) -> String {
+        // Remove hyphens and lowercase for consistent comparison
+        return uuidString.lowercased().replacingOccurrences(of: "-", with: "")
+    }
+
+    /// Find an exercise by contentId using normalized UUID comparison
+    private func findExercise(for contentId: String) -> Exercise? {
+        let normalizedContentId = normalizeUUID(contentId)
+        return exercises[normalizedContentId]
+    }
 }
 
-// MARK: - Recommendation Card
+// MARK: - Recommendation Card Content
 
-struct ContentRecommendationCard: View {
+struct ContentRecommendationCardContent: View {
     let recommendation: ContentRecommendation
-    let onTap: () -> Void
 
     var body: some View {
-        Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 12) {
-                // Content preview placeholder
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.blue.opacity(0.1))
-                    .frame(height: 100)
-                    .overlay {
-                        VStack(spacing: 8) {
-                            Image(systemName: contentTypeIcon)
-                                .font(.title)
-                            Text(recommendation.contentType.capitalized)
-                                .font(.caption)
-                        }
+        HStack(spacing: 16) {
+            // Icon
+            Image(systemName: contentTypeIcon)
+                .font(.title)
+                .foregroundStyle(.blue)
+                .frame(width: 50, height: 50)
+                .background(Color.blue.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+
+            // Content
+            VStack(alignment: .leading, spacing: 6) {
+                Text(recommendation.contentName)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+
+                HStack(spacing: 12) {
+                    Label("\(recommendation.durationMinutes) min", systemImage: "clock")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Text(recommendation.contentType.capitalized)
+                        .font(.caption)
                         .foregroundStyle(.blue)
-                    }
-
-                // Recommendation reasons
-                if !recommendation.reasons.isEmpty {
-                    HStack(spacing: 6) {
-                        Image(systemName: "wand.and.stars")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                        Text(recommendation.reasons.first ?? "")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(Color.blue.opacity(0.1))
+                        .clipShape(Capsule())
                 }
 
-                // Match score
-                HStack {
-                    ProgressView(value: recommendation.score)
-                        .tint(scoreColor)
+                // Recommendation reason
+                if let reason = recommendation.reasons.first {
+                    HStack(spacing: 4) {
+                        Image(systemName: "sparkles")
+                            .font(.caption2)
+                        Text(reason)
+                            .font(.caption)
+                    }
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                }
+            }
 
-                    Text("\(Int(recommendation.score * 100))% match")
+            Spacer()
+
+            // Match score and chevron
+            HStack(spacing: 8) {
+                VStack(spacing: 4) {
+                    Text("\(Int(recommendation.score * 100))%")
+                        .font(.headline)
+                        .foregroundStyle(scoreColor)
+                    Text("match")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
+
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             }
-            .padding()
-            .background(Color(.secondarySystemGroupedBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
         }
-        .buttonStyle(.plain)
+        .padding()
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(recommendation.contentType.capitalized) recommendation, \(Int(recommendation.score * 100))% match")
+        .accessibilityLabel("\(recommendation.contentName), \(recommendation.durationMinutes) minutes, \(Int(recommendation.score * 100))% match")
     }
 
     private var contentTypeIcon: String {
         switch recommendation.contentType {
-        case "audio": return "speaker.wave.2"
-        case "visual": return "eye"
-        case "exercise": return "figure.mind.and.body"
-        case "micro_moment": return "sparkle"
-        default: return "sparkles"
+        case "breathing": return "wind"
+        case "meditation": return "brain.head.profile"
+        case "grounding": return "leaf.fill"
+        case "journaling": return "pencil.line"
+        case "movement": return "figure.walk"
+        default: return "figure.mind.and.body"
         }
     }
 

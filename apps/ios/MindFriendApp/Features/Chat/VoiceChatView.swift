@@ -39,11 +39,6 @@ struct VoiceChatView: View {
                     topBar
                         .padding(.top, geometry.safeAreaInsets.top > 0 ? 0 : 16)
 
-                    if !voiceService.isPremium {
-                        usageBar
-                            .padding(.top, 8)
-                    }
-
                     Spacer()
 
                     if stateMachine.captionsEnabled {
@@ -102,6 +97,9 @@ struct VoiceChatView: View {
 
             voiceCoordinator.onTranscriptUpdate = { text in
                 if voiceService.isSpeaking {
+                    // Don't overwrite in-progress transcript when text is empty
+                    // This happens when the 3-second clear timer fires while audio is still playing
+                    guard !text.isEmpty else { return }
                     assistantTranscriptInProgress = trimmedTranscript(
                         from: text,
                         baseline: assistantTranscriptBaseline
@@ -189,69 +187,7 @@ struct VoiceChatView: View {
             .accessibilityLabel("Voice: \(voiceService.currentVoice.displayName). Tap to change.")
         }
         .padding(.horizontal, 20)
-        .padding(.top, 12)
-    }
-
-    // MARK: - Usage Bar
-
-    private var usageBar: some View {
-        VStack(spacing: 6) {
-            HStack {
-                Image(systemName: "clock")
-                    .font(.caption)
-                Text("Voice Minutes")
-                    .font(.caption.weight(.medium))
-                Spacer()
-                Text("\(String(format: "%.1f", voiceService.minutesRemaining)) / 3 min")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .foregroundStyle(.white.opacity(0.7))
-
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(Color.white.opacity(0.15))
-                        .frame(height: 4)
-
-                    Capsule()
-                        .fill(usageBarColor)
-                        .frame(width: geometry.size.width * usagePercentage, height: 4)
-                }
-            }
-            .frame(height: 4)
-
-            if usagePercentage >= 0.8 {
-                Button {
-                    showUpgradeSheet = true
-                } label: {
-                    Text(usagePercentage >= 0.95 ? "Upgrade for Unlimited" : "Running low - Upgrade")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 4)
-                        .background(Color.orange)
-                        .cornerRadius(12)
-                }
-            }
-        }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 12)
-        .background(Color.white.opacity(0.05))
-        .cornerRadius(12)
-        .padding(.horizontal, 20)
-    }
-
-    private var usagePercentage: Double {
-        let total = 3.0
-        let used = total - voiceService.minutesRemaining
-        return min(1.0, max(0, used / total))
-    }
-
-    private var usageBarColor: Color {
-        if usagePercentage >= 0.95 { return .red }
-        if usagePercentage >= 0.8 { return .orange }
-        return .blue
+        .padding(.top, 24)
     }
 
     // MARK: - Captions
@@ -503,6 +439,8 @@ struct VoiceChatView: View {
 
     private func handleTranscriptUpdate(_ newText: String) {
         guard voiceService.isSpeaking else { return }
+        // Don't overwrite in-progress transcript when text is empty
+        guard !newText.isEmpty else { return }
         assistantTranscriptInProgress = trimmedTranscript(from: newText, baseline: assistantTranscriptBaseline)
     }
 

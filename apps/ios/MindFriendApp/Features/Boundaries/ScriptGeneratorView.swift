@@ -289,9 +289,11 @@ final class ScriptGeneratorViewModel: ObservableObject {
 
 // MARK: - Previews
 
+#if DEBUG
 #Preview {
     ScriptGeneratorView(
         service: BoundaryPlannerService(supabase: .mock),
         boundaryId: UUID()
     )
 }
+#endif

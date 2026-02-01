@@ -96,6 +96,9 @@ struct ChatListView: View {
             })
             .fullScreenCover(isPresented: $showVoiceChat, onDismiss: {
                 Task {
+                    // Delay to allow title generation API call to complete
+                    // Title generation can take 3-5 seconds with AI reasoning
+                    try? await Task.sleep(for: .seconds(4))
                     await loadConversations()
                 }
             }) {

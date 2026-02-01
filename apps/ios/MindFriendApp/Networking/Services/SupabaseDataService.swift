@@ -649,15 +649,21 @@ final class SupabaseDataService: ObservableObject {
                 ? exercise.durationSeconds
                 : (exercise.durationMinutes ?? 0) * 60
 
+            let exerciseType = ExerciseType(rawValue: exercise.type) ?? .breathing
+
+            // Parse structured instructions if available
+            let instructions = exercise.instructionsRaw?.parse(for: exerciseType)
+
             return Exercise(
                 id: exercise.id.uuidString,
-                type: ExerciseType(rawValue: exercise.type) ?? .breathing,
+                type: exerciseType,
                 title: exercise.title,
                 description: exercise.description,
                 durationSeconds: duration,
                 contentKind: .text,  // Default since DB doesn't have this column
                 contentText: nil,
                 audioUrl: nil,
+                instructions: instructions,
                 evidenceBasis: exercise.evidenceBasis.flatMap { EvidenceBasis(rawValue: $0) },
                 therapistReviewed: exercise.therapistReviewed,
                 reviewDate: exercise.reviewDate,
@@ -914,12 +920,18 @@ final class SupabaseDataService: ObservableObject {
         Log.data.debug("[Data] Generating title for conversation \(conversationId) with content: '\(content.prefix(50))...'")
 
         do {
+            // Refresh session to ensure we have a valid token
+            let session = try await supabase.auth.refreshSession()
+
             let response: TitleResponse = try await supabase.functions.invoke(
                 "generate-conversation-title",
-                options: .init(body: [
-                    "conversationId": conversationId,
-                    "content": content
-                ])
+                options: .init(
+                    headers: ["Authorization": "Bearer \(session.accessToken)"],
+                    body: [
+                        "conversationId": conversationId,
+                        "content": content
+                    ]
+                )
             )
 
             Log.data.debug("[Data] Generated title: '\(response.title)'")
@@ -1984,17 +1996,25 @@ final class SupabaseDataService: ObservableObject {
 
     /// Get all buddy relationships for current user (active only)
     func getBuddyRelationships() async throws -> [BuddyRelationship] {
-        let currentUserId = try userId
+        do {
+            let currentUserId = try userId
+            
+            // Fetch relationships with BOTH inviter and invitee profiles
+            // This ensures we always have the correct buddy profile regardless of relationship direction
+            let relationships: [DBBuddyRelationshipWithBothProfiles] = try await supabase
+                .from("buddy_relationships")
+                .select("*, inviter_profile:profiles!inviter_id(id, display_name, current_streak_days, last_active_at), invitee_profile:profiles!invitee_id(id, display_name, current_streak_days, last_active_at)")
+                .or("inviter_id.eq.\(currentUserId),invitee_id.eq.\(currentUserId)")
+                .eq("status", value: "accepted")
+                .execute()
+                .value
 
-        let relationships: [DBBuddyRelationshipWithProfiles] = try await supabase
-            .from("buddy_relationships")
-            .select("*, buddy_profile:profiles!buddy_id(id, display_name, current_streak_days, last_active_at)")
-            .or("user_id.eq.\(currentUserId),buddy_id.eq.\(currentUserId)")
-            .eq("status", value: "accepted")
-            .execute()
-            .value
-
-        return relationships.map { $0.toBuddyRelationship(currentUserId: currentUserId) }
+            return relationships.map { $0.toBuddyRelationship(currentUserId: currentUserId) }
+        } catch {
+            // Log the error but return empty array to prevent crashes
+            Log.data.error("[Data] Failed to load buddy relationships: \(error)")
+            return []
+        }
     }
 
     /// Get buddy widget data for home screen
@@ -2073,22 +2093,28 @@ final class SupabaseDataService: ObservableObject {
 
     /// Get pending (unaccepted) buddy invites sent by current user
     func getPendingBuddyInvites() async throws -> [BuddyRelationship] {
-        let currentUserId = try userId
+        do {
+            let currentUserId = try userId
+            
+            let relationships: [DBBuddyRelationship] = try await supabase
+                .from("buddy_relationships")
+                .select()
+                .eq("inviter_id", value: currentUserId)
+                .eq("status", value: "pending")
+                .execute()
+                .value
 
-        let relationships: [DBBuddyRelationship] = try await supabase
-            .from("buddy_relationships")
-            .select()
-            .eq("user_id", value: currentUserId)
-            .eq("status", value: "pending")
-            .execute()
-            .value
-
-        return relationships
-            .filter { rel in
-                guard let expiresAt = rel.expiresAt else { return true }
-                return expiresAt > Date()
-            }
-            .map { $0.toBuddyRelationship(currentUserId: currentUserId) }
+            return relationships
+                .filter { rel in
+                    guard let expiresAt = rel.expiresAt else { return true }
+                    return expiresAt > Date()
+                }
+                .map { $0.toBuddyRelationship(currentUserId: currentUserId) }
+        } catch {
+            // Log the error but return empty array to prevent crashes
+            Log.data.error("[Data] Failed to load pending buddy invites: \(error)")
+            return []
+        }
     }
 
     // MARK: - Partner Mode (Couples)
@@ -4190,7 +4216,7 @@ final class SupabaseDataService: ObservableObject {
         let session = try await supabase.auth.session
         let accessToken = session.accessToken
 
-        print("[WeeklyStory] Got access token from Supabase (length: \(accessToken.count))")
+        Log.data.debug("[WeeklyStory] Session acquired")
 
         // Calculate the Monday for this week using UTC calendar
         var utcCalendar = Calendar(identifier: .gregorian)
@@ -5118,26 +5144,18 @@ final class SupabaseDataService: ObservableObject {
     /// - Returns: Response containing base64 image and quota info
     /// - Throws: GenerateProfilePictureError for various failure modes
     func generateProfilePicture(prompt: String) async throws -> GenerateProfilePictureResponse {
-        print("[Debug] generateProfilePicture: Starting request")
-        print("[Debug] generateProfilePicture: Prompt length = \(prompt.count)")
+        Log.data.debug("[ProfilePicture] Starting request, prompt length: \(prompt.count)")
 
         // Get current session token
         guard let session = try? await supabase.auth.session else {
-            #if DEBUG
-            print("[Debug] generateProfilePicture: No active session")
-            #endif
+            Log.data.debug("[ProfilePicture] No active session")
             throw GenerateProfilePictureError.networkError
         }
 
-        #if DEBUG
-        print("[Debug] generateProfilePicture: Session found")
-        print("[Debug] generateProfilePicture: Access token prefix = \(session.accessToken.prefix(20))...")
-        print("[Debug] generateProfilePicture: Token expires at = \(session.expiresAt)")
-        #endif
+        Log.data.debug("[ProfilePicture] Session acquired")
 
         do {
             let requestBody = ["prompt": prompt]
-            print("[Debug] generateProfilePicture: Request body = \(requestBody)")
 
             let result: GenerateProfilePictureResponse = try await supabase.functions.invoke(
                 "generate-profile-picture",

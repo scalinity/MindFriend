@@ -124,3 +124,24 @@ verify_jwt = false  # Verified internally in function code
 [functions.privacy-lock-settings]
 verify_jwt = false  # Verified internally in function code
 
+# Personalization Functions
+[functions.get-recommendations]
+verify_jwt = false  # Verified internally in function code
+
+# Longitudinal Functions
+[functions.generate-longitudinal-report]
+verify_jwt = false  # Verified internally in function code
+
+# Voice Functions
+[functions.voice-session-end]
+verify_jwt = false  # Verified internally in function code
+
+[functions.generate-conversation-title]
+verify_jwt = false  # Verified internally in function code
+
+[functions.check-streak-protection]
+verify_jwt = false  # Cron job, uses service role key internally
+
+[functions.check-streak-risk]
+verify_jwt = false  # Cron job, uses service role key internally
+

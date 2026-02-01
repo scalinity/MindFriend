@@ -46,12 +46,14 @@ serve(async (req) => {
   try {
     // Get environment variables
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
     console.log("[4] SUPABASE_URL present:", !!supabaseUrl);
+    console.log("[4b] SUPABASE_ANON_KEY present:", !!supabaseAnonKey);
     console.log("[5] SUPABASE_SERVICE_ROLE_KEY present:", !!serviceRoleKey);
 
-    if (!supabaseUrl || !serviceRoleKey) {
+    if (!supabaseUrl || !supabaseAnonKey || !serviceRoleKey) {
       console.error("[ERROR] Missing environment variables");
       return new Response(
         JSON.stringify({ success: false, error: "Server configuration error" }),
@@ -103,16 +105,24 @@ serve(async (req) => {
     const token = authHeader.replace("Bearer ", "");
     console.log("[9] Token extracted, length:", token.length);
 
-    // Create admin client to validate token
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
-    console.log("[10] Admin client created");
+    // Create user-scoped client with the JWT token (same pattern as privacy-lock-settings)
+    const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    });
+    console.log("[10] User-scoped client created");
 
-    // Validate the token
-    console.log("[11] Calling auth.getUser with token...");
+    // Create admin client for database operations (bypasses RLS)
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+    console.log("[10b] Admin client created");
+
+    // Validate user with user-scoped client
+    console.log("[11] Calling auth.getUser...");
     const {
       data: { user },
       error: authError,
-    } = await supabaseAdmin.auth.getUser(token);
+    } = await supabaseUser.auth.getUser();
 
     console.log(
       "[12] auth.getUser returned, error:",

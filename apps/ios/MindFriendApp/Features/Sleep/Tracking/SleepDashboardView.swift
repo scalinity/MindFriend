@@ -60,7 +60,15 @@ struct SleepDashboardView: View {
                 WindDownRoutineView()
             }
             .sheet(isPresented: $showManualEntry) {
-                ManualSleepEntryView(isPresented: $showManualEntry)
+                ManualSleepEntryView(isPresented: $showManualEntry) {
+                    // Refresh data after save
+                    Task {
+                        await viewModel.loadData(
+                            trackingService: dependencies.sleepTrackingService,
+                            healthKitManager: dependencies.sleepHealthKitManager
+                        )
+                    }
+                }
             }
             .task {
                 await viewModel.loadData(

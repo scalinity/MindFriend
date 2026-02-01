@@ -61,7 +61,11 @@ struct JournalPromptsView: View {
                 .foregroundStyle(.secondary)
 
             ForEach(suggestedPrompts) { prompt in
-                PromptCard(prompt: prompt, isHighlighted: true) {
+                PromptCard(
+                    prompt: prompt,
+                    isHighlighted: true,
+                    isPremiumUser: appState.entitlements.tier == .premium
+                ) {
                     onPromptSelected(prompt)
                     dismiss()
                 }
@@ -112,7 +116,11 @@ struct JournalPromptsView: View {
                 }
             } else {
                 ForEach(filtered) { prompt in
-                    PromptCard(prompt: prompt, isHighlighted: false) {
+                    PromptCard(
+                        prompt: prompt,
+                        isHighlighted: false,
+                        isPremiumUser: appState.entitlements.tier == .premium
+                    ) {
                         onPromptSelected(prompt)
                         dismiss()
                     }
@@ -170,6 +178,7 @@ private struct CategoryChip: View {
 struct PromptCard: View {
     let prompt: JournalPrompt
     let isHighlighted: Bool
+    var isPremiumUser: Bool = false
     let onSelect: () -> Void
 
     var body: some View {
@@ -182,7 +191,7 @@ struct PromptCard: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
-                    if prompt.isPremium {
+                    if prompt.isPremium && !isPremiumUser {
                         Image(systemName: "crown.fill")
                             .font(.caption)
                             .foregroundStyle(.yellow)

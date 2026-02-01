@@ -123,15 +123,15 @@ final class SSEStreamingHelper {
         AsyncThrowingStream { continuation in
             Task {
                 do {
-                    print("[SSE] Starting stream for function: \(functionName)")
+                    Log.network.debug("[SSE] Starting stream for function: \(functionName)")
 
                     // Get auth session
                     guard let session = try? await supabase.auth.session else {
-                        print("[SSE] ERROR: No auth session")
+                        Log.network.error("[SSE] No auth session")
                         continuation.finish(throwing: SSEStreamError.noSession)
                         return
                     }
-                    print("[SSE] Auth session obtained")
+                    Log.network.debug("[SSE] Session acquired")
 
                     // Build URL
                     let url = SupabaseConfig.projectURL
@@ -220,11 +220,11 @@ final class SSEStreamingHelper {
 
                     // Get auth session
                     guard let session = try? await supabase.auth.session else {
-                        print("[SSE-Bytes] ERROR: No auth session")
+                        Log.network.error("[SSE-Bytes] No auth session")
                         continuation.finish(throwing: SSEStreamError.noSession)
                         return
                     }
-                    print("[SSE-Bytes] Auth session obtained, token length: \(session.accessToken.count)")
+                    Log.network.debug("[SSE-Bytes] Session acquired")
 
                     // Build URL
                     let url = SupabaseConfig.projectURL

@@ -339,21 +339,16 @@ final class LongitudinalService: ObservableObject {
     func generateReport(type: ReportType, timePeriod: TimePeriod? = nil) async throws -> LongitudinalReport {
         let request = LongitudinalReportRequest(reportType: type, timePeriod: timePeriod)
 
-        // Error response structure
-        struct ErrorResponse: Codable {
-            let success: Bool
-            let error: String?
-        }
-
         // Success response structure from edge function
+        // Note: Dates come as ISO8601 strings from the Edge Function
         struct GenerateReportResponse: Codable {
             let success: Bool
             let reportId: UUID
             let reportType: String
             let timePeriod: TimePeriod
             let contentJson: ReportContent
-            let generatedAt: Date
-            let expiresAt: Date
+            let generatedAtString: String
+            let expiresAtString: String
 
             enum CodingKeys: String, CodingKey {
                 case success
@@ -361,35 +356,44 @@ final class LongitudinalService: ObservableObject {
                 case reportType = "report_type"
                 case timePeriod = "time_period"
                 case contentJson = "content_json"
-                case generatedAt = "generated_at"
-                case expiresAt = "expires_at"
+                case generatedAtString = "generated_at"
+                case expiresAtString = "expires_at"
+            }
+
+            var generatedAt: Date {
+                ISO8601DateFormatter().date(from: generatedAtString) ?? Date()
+            }
+
+            var expiresAt: Date {
+                ISO8601DateFormatter().date(from: expiresAtString) ?? Date()
             }
         }
 
+        // Refresh the session to ensure we have a valid token (same pattern as PrivacyLockManager)
+        let session: Session
         do {
-            // Configure decoder for ISO8601 dates from the Edge Function
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            
-            // Include auth headers - Edge Functions require explicit Authorization header
-            let headers = authService.authHeaders
-            logger.info("[generateReport] Auth headers count: \(headers.count)")
-            logger.info("[generateReport] Has Authorization header: \(headers["Authorization"] != nil)")
-            if let authHeader = headers["Authorization"] {
-                logger.info("[generateReport] Auth header prefix: \(String(authHeader.prefix(30)))...")
-                logger.info("[generateReport] Auth header length: \(authHeader.count)")
-            } else {
-                logger.warning("[generateReport] NO Authorization header - this will fail!")
-            }
-            
+            session = try await supabase.auth.refreshSession()
+            logger.info("[generateReport] Session refreshed successfully")
+            logger.debug("[generateReport] Token length: \(session.accessToken.count)")
+        } catch {
+            logger.error("[generateReport] Failed to refresh session: \(error)")
+            throw LongitudinalError.notAuthenticated
+        }
+
+        logger.info("[generateReport] Calling generate-longitudinal-report via SDK")
+
+        do {
+            // Use Supabase SDK's functions.invoke() - same pattern as PrivacyLockManager
             let reportResponse: GenerateReportResponse = try await supabase.functions.invoke(
                 "generate-longitudinal-report",
                 options: .init(
-                    headers: headers,
+                    method: .post,
+                    headers: ["Authorization": "Bearer \(session.accessToken)"],
                     body: request
-                ),
-                decoder: decoder
+                )
             )
+
+            logger.info("[generateReport] Response received, success: \(reportResponse.success)")
 
             // Construct the report object
             let report = LongitudinalReport(
@@ -405,13 +409,14 @@ final class LongitudinalService: ObservableObject {
             logger.info("Generated \(type.rawValue) report: \(report.id)")
             return report
         } catch let error as FunctionsError {
-            // Try to extract error message from the response
-            logger.error("Edge Function error: \(error.localizedDescription)")
+            logger.error("[generateReport] Edge Function error: \(error)")
             throw LongitudinalError.reportGenerationFailed(error.localizedDescription)
         } catch let error as DecodingError {
-            // Decoding failed - likely an error response from the Edge Function
-            logger.error("Response decoding error: \(error.localizedDescription)")
+            logger.error("[generateReport] Response decoding error: \(error)")
             throw LongitudinalError.reportGenerationFailed("Invalid response from server")
+        } catch {
+            logger.error("[generateReport] Unexpected error: \(error)")
+            throw LongitudinalError.reportGenerationFailed(error.localizedDescription)
         }
     }
 

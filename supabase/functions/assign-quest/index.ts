@@ -18,6 +18,19 @@ const STREAK_MILESTONES = [7, 14, 30, 60, 100, 365];
 const CRON_BATCH_SIZE = 50; // Process users in parallel batches
 const OPERATION_TIMEOUT_MS = 25000; // 25s timeout per operation
 
+// Valid action values (allowlist for input validation)
+const VALID_ACTIONS = new Set([
+  "assign",
+  "complete",
+  "check_protection",
+  "start_recovery",
+  "complete_recovery",
+]);
+
+// Rate limiting constants
+const RATE_LIMIT_WINDOW_MS = 60000; // 60 seconds in milliseconds
+const RATE_LIMIT_MAX_REQUESTS = 100; // Increased for testing
+
 /**
  * Creates a promise that rejects after the specified timeout
  * Properly handles Supabase PostgrestBuilder which implements PromiseLike
@@ -124,18 +137,27 @@ function getLocalDate(timezone: string = "UTC"): string {
 }
 
 // Get user's capacity level (checks override first, then cached capacity)
+// Returns "moderate" as safe default if data unavailable
 async function getUserCapacityLevel(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<"low" | "moderate" | "high"> {
   // Check for active override first
-  const { data: override } = await supabase
+  const { data: override, error: overrideError } = await supabase
     .from("capacity_overrides")
     .select("override_level")
     .eq("user_id", userId)
     .eq("is_active", true)
     .gt("expires_at", new Date().toISOString())
     .maybeSingle();
+
+  // Log database errors but don't fail - use safe default
+  if (overrideError) {
+    console.error(
+      `Error fetching capacity override for user: ${overrideError.code}`,
+    );
+    // Continue to check cached capacity
+  }
 
   if (override) {
     // Map override level to capacity level
@@ -151,12 +173,20 @@ async function getUserCapacityLevel(
 
   // Check cached capacity
   const today = new Date().toISOString().split("T")[0];
-  const { data: capacity } = await supabase
+  const { data: capacity, error: capacityError } = await supabase
     .from("user_capacity")
     .select("level")
     .eq("user_id", userId)
     .eq("local_date", today)
     .maybeSingle();
+
+  // Log database errors but don't fail - use safe default
+  if (capacityError) {
+    console.error(
+      `Error fetching cached capacity for user: ${capacityError.code}`,
+    );
+    return "moderate"; // Safe default on error
+  }
 
   return (capacity?.level as "low" | "moderate" | "high") || "moderate";
 }
@@ -498,6 +528,14 @@ async function assignQuestToUser(
   });
 
   if (error) {
+    // Handle unique constraint violation (race condition: quest already assigned)
+    // PostgreSQL error code 23505 = unique_violation
+    if (error.code === "23505") {
+      console.log(
+        `Quest already assigned for user (unique constraint): concurrent request handled`,
+      );
+      return { assigned: false, reason: "already_assigned" };
+    }
     console.error("Failed to assign quest:", error.code);
     return { assigned: false, reason: "insert_failed" };
   }
@@ -796,9 +834,51 @@ serve(async (req) => {
       });
     }
 
+    // Rate limiting for authenticated requests
+    const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MS).toISOString();
+    const { data: rateLimitResult, error: rateLimitError } =
+      await supabaseAdmin.rpc("check_rate_limit", {
+        p_user_id: user.id,
+        p_endpoint: "assign_quest",
+        p_window_start: windowStart,
+        p_max_requests: RATE_LIMIT_MAX_REQUESTS,
+        p_window_ms: RATE_LIMIT_WINDOW_MS,
+      });
+
+    // Fail closed on rate limit errors
+    if (rateLimitError || !rateLimitResult) {
+      console.error("Rate limit check failed:", rateLimitError?.message);
+      return new Response(
+        JSON.stringify({ error: "Service temporarily unavailable" }),
+        { status: 503, headers },
+      );
+    }
+
+    if (!rateLimitResult.allowed) {
+      console.warn(`Rate limit exceeded for user ${user.id.substring(0, 8)}...`);
+      return new Response(
+        JSON.stringify({ error: "Too many requests, please try again later" }),
+        {
+          status: 429,
+          headers: {
+            ...headers,
+            "Retry-After": String(rateLimitResult.retry_after_seconds || 60),
+          },
+        },
+      );
+    }
+
     // Parse request body
     const body = await req.json().catch(() => ({}));
     const action = body.action || "assign";
+
+    // Input validation: only allow known actions (allowlist)
+    if (!VALID_ACTIONS.has(action)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid action" }),
+        { status: 400, headers },
+      );
+    }
 
     // Get user's timezone
     const { data: profile } = await supabaseAdmin
@@ -901,6 +981,48 @@ serve(async (req) => {
           status: 400,
           headers,
         });
+      }
+
+      // Validate attemptId format (must be valid UUID)
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(attemptId)) {
+        return new Response(JSON.stringify({ error: "Invalid attemptId format" }), {
+          status: 400,
+          headers,
+        });
+      }
+
+      // Verify ownership: ensure the recovery attempt belongs to this user
+      const { data: attempt, error: attemptError } = await supabaseAdmin
+        .from("recovery_quest_attempts")
+        .select("id, user_id, status")
+        .eq("id", attemptId)
+        .single();
+
+      if (attemptError || !attempt) {
+        return new Response(JSON.stringify({ error: "Recovery attempt not found" }), {
+          status: 404,
+          headers,
+        });
+      }
+
+      // Ownership check: user must own this recovery attempt
+      if (attempt.user_id !== user.id) {
+        console.warn(
+          `Ownership violation: user ${user.id.substring(0, 8)}... attempted to complete recovery ${attemptId} owned by another user`,
+        );
+        return new Response(JSON.stringify({ error: "Recovery attempt not found" }), {
+          status: 404,
+          headers, // Return 404 to avoid leaking existence information
+        });
+      }
+
+      // Check if already completed
+      if (attempt.status === "completed") {
+        return new Response(
+          JSON.stringify({ success: true, alreadyCompleted: true }),
+          { status: 200, headers },
+        );
       }
 
       const result = await completeRecoveryQuest(

@@ -309,8 +309,10 @@ final class BillingService: ObservableObject {
     func loadFamilyGroup() async {
         guard let userId = authService.userId else { return }
 
+        // First check if user is admin - wrap in separate try to isolate failure
+        var group: FamilyGroup?
+        
         do {
-            // First check if user is admin
             let adminGroups: [FamilyGroup] = try await supabase
                 .from("family_groups")
                 .select()
@@ -318,11 +320,15 @@ final class BillingService: ObservableObject {
                 .limit(1)
                 .execute()
                 .value
+            group = adminGroups.first
+        } catch {
+            // Log but don't fail - user might still be a member
+            Log.billing.warning("Failed to check admin family groups: \(error)")
+        }
 
-            var group: FamilyGroup? = adminGroups.first
-
-            // If not admin, check if member
-            if group == nil {
+        // If not admin, check if member
+        if group == nil {
+            do {
                 // Check family_members for this user's family
                 struct MembershipResult: Codable {
                     let familyId: String
@@ -350,16 +356,17 @@ final class BillingService: ObservableObject {
                         .execute()
                         .value
                 }
+            } catch {
+                // Log but don't fail - user might not have a family
+                Log.billing.warning("Failed to check family membership: \(error)")
             }
+        }
 
-            familyGroup = group
+        familyGroup = group
 
-            // Load members if we have a group
-            if group != nil {
-                await loadFamilyMembers()
-            }
-        } catch {
-            Log.billing.error("Failed to load family group: \(error)")
+        // Load members if we have a group
+        if group != nil {
+            await loadFamilyMembers()
         }
     }
 
@@ -430,6 +437,8 @@ final class BillingService: ObservableObject {
             }
         } catch {
             Log.billing.error("Failed to load family members: \(error)")
+            // Don't crash - just leave members empty
+            familyMembers = []
         }
     }
 

@@ -76,7 +76,7 @@ struct DebtRecoveryStep: View {
             Text(day)
                 .font(.caption2.bold())
                 .foregroundStyle(.blue)
-                .frame(width: 36, alignment: .leading)
+                .fixedSize(horizontal: true, vertical: false)
 
             Text(activity)
                 .font(.caption2)

@@ -641,6 +641,8 @@ extension BoundaryAssessmentType {
 
 // MARK: - Previews
 
+#if DEBUG
 #Preview {
     NeedsAssessmentView(service: BoundaryPlannerService(supabase: .mock))
 }
+#endif
