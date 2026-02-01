@@ -236,19 +236,27 @@ final class AchievementService: ObservableObject {
 
     func checkBadgeProgress() async throws -> CheckBadgeProgressResponse {
         // Empty request body for this endpoint
-        let response: CheckBadgeProgressResponse = try await supabase.functions
-            .invoke("check-badge-progress", options: FunctionInvokeOptions())
+        do {
+            let response: CheckBadgeProgressResponse = try await supabase.functions
+                .invoke("check-badge-progress", options: FunctionInvokeOptions())
 
-        // Track newly earned badges for UI celebration
-        if !response.newlyEarned.isEmpty {
-            let earnedIds = Set(response.newlyEarned.map { $0.id })
-            self.newlyEarnedBadges = badges.filter { earnedIds.contains($0.id) }
+            // Reload badge progress FIRST, before updating newlyEarnedBadges
+            // This ensures consistency - if reload fails, we don't show stale celebrations
+            try await loadUserBadgeProgress()
+            
+            // Only update celebration state after successful reload
+            if !response.newlyEarned.isEmpty {
+                let earnedIds = Set(response.newlyEarned.map { $0.id })
+                self.newlyEarnedBadges = badges.filter { earnedIds.contains($0.id) }
+            }
+
+            return response
+        } catch {
+            // Edge Function may not exist or may fail - don't crash the app
+            Log.data.warning("[Achievements] checkBadgeProgress failed: \(error.localizedDescription)")
+            // Return empty response to allow caller to continue
+            return CheckBadgeProgressResponse(checked: 0, newlyEarned: [], progressUpdated: [])
         }
-
-        // Reload badge progress
-        try await loadUserBadgeProgress()
-
-        return response
     }
 
     func markBadgeAsSeen(badgeId: UUID) async throws {

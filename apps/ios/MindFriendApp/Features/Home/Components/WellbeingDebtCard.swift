@@ -8,6 +8,12 @@
 
 import SwiftUI
 
+// MARK: - Notification Names
+
+extension Notification.Name {
+    static let wellbeingDebtDidRecalculate = Notification.Name("wellbeingDebtDidRecalculate")
+}
+
 /// Home card displaying wellbeing debt status
 /// Taps navigate to WellbeingDebtDashboardView
 struct WellbeingDebtCard: View {
@@ -27,6 +33,11 @@ struct WellbeingDebtCard: View {
         .buttonStyle(PlainButtonStyle())
         .task {
             await loadDebtScore()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .wellbeingDebtDidRecalculate)) { _ in
+            Task {
+                await loadDebtScore()
+            }
         }
     }
 
@@ -64,6 +75,7 @@ struct WellbeingDebtCard: View {
                     Text("Wellbeing Balance")
                         .font(.headline)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
 
                 // Trend indicator

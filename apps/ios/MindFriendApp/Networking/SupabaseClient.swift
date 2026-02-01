@@ -888,6 +888,58 @@ struct DBExerciseInstruction: Codable {
     let text: String
 }
 
+/// Wrapper for flexible JSONB instructions parsing
+/// Handles both legacy [{step, text}] and new {type, data} formats
+struct DBExerciseInstructionsRaw: Codable {
+    let rawValue: Any
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        // Store as raw Data for later parsing
+        if let data = try? container.decode([DBExerciseInstruction].self) {
+            rawValue = data
+        } else if let jsonDict = try? container.decode([String: AnyCodableValue].self) {
+            rawValue = jsonDict
+        } else {
+            rawValue = NSNull()
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        if let steps = rawValue as? [DBExerciseInstruction] {
+            try container.encode(steps)
+        } else {
+            try container.encodeNil()
+        }
+    }
+
+    /// Parse into PlayerInstructions based on exercise type
+    func parse(for exerciseType: ExerciseType) -> PlayerInstructions? {
+        // Handle legacy format: [{step, text}]
+        if let steps = rawValue as? [DBExerciseInstruction] {
+            return .generic(steps.map { GenericStep(step: $0.step, text: $0.text) })
+        }
+
+        // Handle new format: {type, data}
+        guard let dict = rawValue as? [String: AnyCodableValue] else {
+            return nil
+        }
+
+        // Encode dict back to JSON for type-specific parsing
+        guard let jsonData = try? JSONEncoder().encode(dict) else {
+            return nil
+        }
+
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+
+        return try? decoder.decode(PlayerInstructions.self, from: jsonData)
+    }
+}
+
+// Note: AnyCodableValue is defined in Models.swift
+
 /// Exercise row matching actual schema
 struct DBExercise: Codable {
     let id: UUID
@@ -897,7 +949,7 @@ struct DBExercise: Codable {
     let durationSeconds: Int
     let durationMinutes: Int?  // Legacy column, may exist in some rows
     let isPremium: Bool?
-    let instructions: [DBExerciseInstruction]?
+    let instructionsRaw: DBExerciseInstructionsRaw?
 
     // Credibility fields
     let evidenceBasis: String?
@@ -906,7 +958,8 @@ struct DBExercise: Codable {
     let methodologyNote: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, title, description, type, instructions
+        case id, title, description, type
+        case instructionsRaw = "instructions"
         case durationSeconds = "duration_seconds"
         case durationMinutes = "duration_minutes"
         case isPremium = "is_premium"
@@ -1963,7 +2016,8 @@ struct DBBuddyRelationshipWithProfiles: Codable {
     let inviteCode: String?
     let inviteMethod: String?
     let inviteeContact: String?
-    let buddyProfile: DBProfile?
+    let inviterProfile: DBProfile?
+    let inviteeProfile: DBProfile?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -1976,10 +2030,48 @@ struct DBBuddyRelationshipWithProfiles: Codable {
         case inviteCode = "invite_code"
         case inviteMethod = "invite_method"
         case inviteeContact = "invitee_contact"
-        case buddyProfile = "buddy_profile"
+        case inviterProfile = "inviter_profile"
+        case inviteeProfile = "invitee_profile"
+    }
+}
+
+/// Buddy relationship with BOTH inviter and invitee profiles
+/// Used for getBuddyRelationships to correctly resolve buddy regardless of relationship direction
+struct DBBuddyRelationshipWithBothProfiles: Codable {
+    let id: UUID?
+    let inviterId: UUID
+    let inviteeId: UUID?
+    let status: String
+    let invitedAt: Date?
+    let acceptedAt: Date?
+    let expiresAt: Date?
+    let inviteCode: String?
+    let inviteMethod: String?
+    let inviteeContact: String?
+    let inviterProfile: DBProfile?
+    let inviteeProfile: DBProfile?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case inviterId = "inviter_id"
+        case inviteeId = "invitee_id"
+        case status
+        case invitedAt = "invited_at"
+        case acceptedAt = "accepted_at"
+        case expiresAt = "expires_at"
+        case inviteCode = "invite_code"
+        case inviteMethod = "invite_method"
+        case inviteeContact = "invitee_contact"
+        case inviterProfile = "inviter_profile"
+        case inviteeProfile = "invitee_profile"
     }
 
     func toBuddyRelationship(currentUserId: UUID) -> BuddyRelationship {
+        // Select the correct buddy profile based on relationship direction
+        // If current user is the inviter, buddy is the invitee (and vice versa)
+        let isCurrentUserInviter = inviterId == currentUserId
+        let buddyProfile = isCurrentUserInviter ? inviteeProfile : inviterProfile
+        
         let buddyProfileData = buddyProfile.map { profile in
             BuddyProfile(
                 id: profile.id.uuidString,
@@ -2000,8 +2092,8 @@ struct DBBuddyRelationshipWithProfiles: Codable {
             acceptedAt: acceptedAt,
             buddyCircleId: nil,
             expiresAt: expiresAt ?? Date().addingTimeInterval(30 * 24 * 60 * 60),
-            inviter: inviterId == currentUserId ? nil : buddyProfileData,
-            invitee: inviterId == currentUserId ? buddyProfileData : nil
+            inviter: isCurrentUserInviter ? nil : buddyProfileData,
+            invitee: isCurrentUserInviter ? buddyProfileData : nil
         )
     }
 }

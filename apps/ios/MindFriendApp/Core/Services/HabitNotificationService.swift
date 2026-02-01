@@ -69,7 +69,8 @@ final class HabitNotificationService {
     }
 
     init() {
-        setupNotificationDelegate()
+        // Note: NotificationManager.shared handles the UNUserNotificationCenterDelegate
+        // so we don't set up a separate delegate here to avoid conflicts
     }
 
     // MARK: - Permission Management
@@ -331,57 +332,4 @@ final class HabitNotificationService {
         return content
     }
 
-    private func setupNotificationDelegate() {
-        userNotificationCenter.delegate = NotificationDelegate.shared
-    }
-}
-
-// MARK: - Notification Delegate
-
-class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
-    static let shared = NotificationDelegate()
-
-    // Handle notification when app is in foreground
-    func userNotificationCenter(
-        _ center: UNUserNotificationCenter,
-        willPresent notification: UNNotification,
-        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
-    ) {
-        // Display notification even when app is in foreground
-        completionHandler([.banner, .sound, .badge])
-    }
-
-    // Handle notification tap
-    func userNotificationCenter(
-        _ center: UNUserNotificationCenter,
-        didReceive response: UNNotificationResponse,
-        withCompletionHandler completionHandler: @escaping () -> Void
-    ) {
-        let userInfo = response.notification.request.content.userInfo
-
-        // Extract habit ID and notification type
-        if let habitIdString = userInfo["habitId"] as? String,
-           let habitId = UUID(uuidString: habitIdString),
-           let notificationTypeRaw = userInfo["notificationType"] as? String,
-           let notificationType = HabitNotificationType(rawValue: notificationTypeRaw) {
-
-            // Handle notification interaction based on type
-            handleNotificationTap(habitId: habitId, type: notificationType)
-        }
-
-        completionHandler()
-    }
-
-    private func handleNotificationTap(habitId: UUID, type: HabitNotificationType) {
-        // In production, would send analytics event or navigate to specific view
-        // For now, log the interaction
-        switch type {
-        case .habitReminder:
-            break // Navigate to habit completion view
-        case .streakMilestone:
-            break // Show celebration/badge view
-        case .habitGraduation:
-            break // Show habit upgrade confirmation
-        }
-    }
 }

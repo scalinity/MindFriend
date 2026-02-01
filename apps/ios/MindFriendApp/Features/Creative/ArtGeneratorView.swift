@@ -6,7 +6,7 @@ struct ArtGeneratorView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var prompt = ""
-    @State private var selectedStyle: ArtStyle = .watercolor
+    @State private var selectedStyle: ArtStyle = .none
     @State private var moodScore: Int = 5
     @State private var selectedMoodTags: Set<String> = []
     @State private var isGenerating = false

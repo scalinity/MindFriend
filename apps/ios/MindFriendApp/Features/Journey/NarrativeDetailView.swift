@@ -125,27 +125,37 @@ struct NarrativeDetailView: View {
             Divider()
 
             // Favorite & Share
-            HStack(spacing: 20) {
-                Button {
-                    Task {
-                        await viewModel.toggleFavorite()
+            HStack(alignment: .top, spacing: 40) {
+                VStack(spacing: 8) {
+                    Button {
+                        Task {
+                            await viewModel.toggleFavorite()
+                        }
+                    } label: {
+                        Image(systemName: viewModel.story.isFavorite ? "star.fill" : "star")
+                            .font(.title2)
+                            .foregroundStyle(viewModel.story.isFavorite ? .yellow : .gray)
                     }
-                } label: {
-                    Label(
-                        viewModel.story.isFavorite ? "Favorited" : "Add to Favorites",
-                        systemImage: viewModel.story.isFavorite ? "star.fill" : "star"
-                    )
-                    .foregroundStyle(viewModel.story.isFavorite ? .yellow : .blue)
-                }
-                .buttonStyle(.bordered)
-                .disabled(viewModel.isUpdating)
+                    .disabled(viewModel.isUpdating)
 
-                Button {
-                    showShareSheet = true
-                } label: {
-                    Label("Share", systemImage: "square.and.arrow.up")
+                    Text(viewModel.story.isFavorite ? "Favorited" : "Favorite")
+                        .font(.caption)
+                        .foregroundStyle(.gray)
                 }
-                .buttonStyle(.bordered)
+
+                VStack(spacing: 8) {
+                    Button {
+                        showShareSheet = true
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.title2)
+                            .foregroundStyle(.gray)
+                    }
+
+                    Text("Share")
+                        .font(.caption)
+                        .foregroundStyle(.gray)
+                }
             }
         }
         .padding()

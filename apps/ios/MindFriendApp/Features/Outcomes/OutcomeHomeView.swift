@@ -417,10 +417,11 @@ extension Double {
     }
 }
 
+#if DEBUG
 #Preview {
-    let authService = SupabaseAuthService()
-    return OutcomeHomeView(
-        outcomeService: OutcomeTrackingService(supabase: .mock, authService: authService),
-        authService: authService
+    OutcomeHomeView(
+        outcomeService: OutcomeTrackingService(supabase: .mock, authService: SupabaseAuthService()),
+        authService: SupabaseAuthService()
     )
 }
+#endif

@@ -333,9 +333,10 @@ final class SmartNotificationService: ObservableObject {
         scheduleBackgroundTask()
 
         // Create a task to process the queue
-        let processingTask = Task {
-            // Note: In a real implementation, would get the shared service instance
-            // and call processQueue()
+        let processingTask = Task { @MainActor in
+            // Access the shared container's smart notification service
+            let service = DependencyContainer.shared.smartNotificationService
+            await service.processQueue()
             Log.notifications.debug("[SmartNotifications] Background task executed")
         }
 

@@ -131,6 +131,24 @@ struct MindFriendApp: App {
                                 // Start ambient theme service
                                 await container.ambientThemeService.start()
 
+                                // Schedule daily quest reminder if enabled
+                                Task {
+                                    do {
+                                        try await container.questNotificationService.scheduleIfEnabled()
+                                    } catch {
+                                        error.report(context: ["action": "schedule_quest_reminder"])
+                                    }
+                                }
+
+                                // Start intervention monitoring for wellness checks
+                                Task {
+                                    do {
+                                        try await container.interventionService.startMonitoring()
+                                    } catch {
+                                        error.report(context: ["action": "start_intervention_monitoring"])
+                                    }
+                                }
+
                                 // Sync any widget actions made while app was inactive
                                 await appState.processPendingWidgetSyncs(container: container)
                             }
@@ -312,6 +330,7 @@ struct RootView: View {
                 MainTabView()
                     .ambientBackground(service: ambientService)
                     .privacyLockOverlay(onUnlock: {})
+                    .badgeEarnedCelebration()
             }
         }
         .animation(.easeInOut(duration: 0.3), value: appState.authState)

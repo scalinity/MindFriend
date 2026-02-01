@@ -8,6 +8,8 @@
 
 import Foundation
 import CoreHaptics
+import AVFoundation
+import UIKit
 import Combine
 
 @MainActor
@@ -25,11 +27,18 @@ final class TactilePatternService: ObservableObject {
     private var isEngineRunning: Bool = false
     private var loopingTask: Task<Void, Never>?
     private var currentPatternId: String?
+    private var currentSpeed: SpeedPreset = .medium
+    private var needsEngineRestart: Bool = false
 
     // MARK: - Initialization
 
     init() {
-        setupHapticEngine()
+        setupNotifications()
+        createHapticEngine()
+    }
+    
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 
     // MARK: - Public Methods
@@ -46,7 +55,7 @@ final class TactilePatternService: ObservableObject {
         }
 
         // Validate AHAP file exists
-        guard pattern.loadAHAPPattern() != nil else {
+        guard pattern.ahapURL() != nil else {
             throw SensoryError.ahapFileNotFound(pattern.ahapFilename)
         }
 
@@ -55,56 +64,88 @@ final class TactilePatternService: ObservableObject {
 
     /// Start playing a tactile pattern
     func playPattern(id: String, speed: SpeedPreset, loop: Bool) async throws {
+        print("[Haptics] playPattern called: id=\(id), speed=\(speed), loop=\(loop)")
+        
         guard isHapticsSupported() else {
+            print("[Haptics] Device does not support haptics")
             throw SensoryError.hapticsNotSupported
         }
 
-        // Load pattern
+        // Load pattern metadata
         let pattern = try await loadPattern(id: id)
+        print("[Haptics] Pattern loaded: \(pattern.name), loopDuration=\(pattern.loopDurationSeconds)s")
 
         // Stop any currently playing pattern
         await stopPattern()
 
+        // Ensure engine exists
+        if hapticEngine == nil {
+            print("[Haptics] Engine is nil, creating new engine")
+            createHapticEngine()
+        }
+        
         // Start engine if needed
         try await startEngine()
 
-        // Load AHAP dictionary
-        guard var ahapDict = pattern.loadAHAPPattern() else {
+        // Get AHAP file URL
+        guard let ahapURL = pattern.ahapURL() else {
+            print("[Haptics] AHAP file not found: \(pattern.ahapFilename)")
             throw SensoryError.ahapFileNotFound(pattern.ahapFilename)
         }
+        print("[Haptics] AHAP URL: \(ahapURL.lastPathComponent)")
 
-        // Apply speed multiplier to pattern timing
-        ahapDict = applySpeedMultiplier(ahapDict, multiplier: speed.speedMultiplier)
-
-        // Apply intensity multiplier
-        ahapDict = applyIntensityMultiplier(ahapDict, intensity: intensity)
-
-        // Create CHHapticPattern
-        guard let hapticPattern = try? CHHapticPattern(dictionary: ahapDict) else {
+        // Create CHHapticPattern directly from AHAP file (Apple's recommended approach)
+        let hapticPattern: CHHapticPattern
+        do {
+            hapticPattern = try CHHapticPattern(contentsOf: ahapURL)
+            print("[Haptics] CHHapticPattern created successfully")
+        } catch {
+            print("[Haptics] Failed to load AHAP pattern: \(error.localizedDescription)")
             throw SensoryError.engineFailure
         }
 
         // Create CHHapticPatternPlayer
         do {
-            let player = try hapticEngine?.makePlayer(with: hapticPattern)
+            guard let engine = hapticEngine else {
+                print("[Haptics] Engine is nil after start")
+                throw SensoryError.engineFailure
+            }
+            
+            let player = try engine.makePlayer(with: hapticPattern)
             currentPlayer = player
             currentPatternId = id
+            currentSpeed = speed
+            print("[Haptics] Player created successfully")
+
+            // Apply initial intensity via dynamic parameter
+            if intensity < 1.0 {
+                let intensityParam = CHHapticDynamicParameter(
+                    parameterID: .hapticIntensityControl,
+                    value: intensity,
+                    relativeTime: 0
+                )
+                try player.sendParameters([intensityParam], atTime: CHHapticTimeImmediate)
+                print("[Haptics] Intensity set to \(intensity)")
+            }
 
             // Start playback
-            try await Task.detached { [player] in
-                try player?.start(atTime: CHHapticTimeImmediate)
-            }.value
+            try player.start(atTime: CHHapticTimeImmediate)
+            print("[Haptics] Pattern playback started!")
 
             isPlaying = true
+            needsEngineRestart = false
 
-            // Handle looping
+            // Handle looping - use the actual AHAP pattern duration, adjusted for speed
             if loop {
+                let adjustedDuration = TimeInterval(pattern.loopDurationSeconds) / speed.speedMultiplier
+                print("[Haptics] Starting loop with duration \(adjustedDuration)s")
                 loopingTask = Task { [weak self] in
-                    await self?.handlePatternLoop(duration: TimeInterval(pattern.durationSeconds))
+                    await self?.handlePatternLoop(duration: adjustedDuration)
                 }
             }
 
         } catch {
+            print("[Haptics] Failed to create/start haptic player: \(error.localizedDescription)")
             throw SensoryError.engineFailure
         }
     }
@@ -117,11 +158,9 @@ final class TactilePatternService: ObservableObject {
         loopingTask?.cancel()
         loopingTask = nil
 
-        // Stop current player
+        // Stop current player on main thread for thread safety
         do {
-            try await Task.detached { [currentPlayer] in
-                try currentPlayer?.stop(atTime: CHHapticTimeImmediate)
-            }.value
+            try currentPlayer?.stop(atTime: CHHapticTimeImmediate)
         } catch {
             print("Error stopping pattern: \(error.localizedDescription)")
         }
@@ -147,38 +186,111 @@ final class TactilePatternService: ObservableObject {
             relativeTime: 0
         )
 
-        // Send to current player using sendParameters(_:atTime:)
+        // Send to current player on main thread for thread safety
         do {
-            try await Task.detached {
-                try player.sendParameters([intensityParam], atTime: CHHapticTimeImmediate)
-            }.value
+            try player.sendParameters([intensityParam], atTime: CHHapticTimeImmediate)
         } catch {
             print("Error adjusting intensity: \(error.localizedDescription)")
         }
     }
 
-    // MARK: - Private Methods
+    // MARK: - Private Methods - Engine Setup
 
-    private func setupHapticEngine() {
-        guard isHapticsSupported() else { return }
+    private func setupNotifications() {
+        // Listen for audio session interruptions
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAudioSessionInterruption),
+            name: AVAudioSession.interruptionNotification,
+            object: nil
+        )
+        
+        // Listen for app becoming active (to restart engine if needed)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAppDidBecomeActive),
+            name: UIApplication.didBecomeActiveNotification,
+            object: nil
+        )
+    }
+    
+    @objc private func handleAudioSessionInterruption(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: typeValue) else {
+            return
+        }
+        
+        Task { @MainActor in
+            switch type {
+            case .began:
+                print("[Haptics] Audio session interruption began")
+                needsEngineRestart = isPlaying
+                
+            case .ended:
+                print("[Haptics] Audio session interruption ended")
+                if needsEngineRestart, let patternId = currentPatternId {
+                    print("[Haptics] Restarting pattern after interruption")
+                    // Small delay to let audio session settle
+                    try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
+                    do {
+                        try await restartEngineAndPattern(patternId: patternId)
+                    } catch {
+                        print("[Haptics] Failed to restart after interruption: \(error)")
+                    }
+                }
+                needsEngineRestart = false
+                
+            @unknown default:
+                break
+            }
+        }
+    }
+    
+    @objc private func handleAppDidBecomeActive() {
+        Task { @MainActor in
+            if needsEngineRestart, let patternId = currentPatternId {
+                print("[Haptics] Restarting pattern after app became active")
+                do {
+                    try await restartEngineAndPattern(patternId: patternId)
+                } catch {
+                    print("[Haptics] Failed to restart after becoming active: \(error)")
+                }
+                needsEngineRestart = false
+            }
+        }
+    }
+
+    private func createHapticEngine() {
+        guard isHapticsSupported() else {
+            print("[Haptics] Device does not support haptics")
+            return
+        }
 
         do {
             hapticEngine = try CHHapticEngine()
+            
+            // CRITICAL: Disable auto-shutdown to keep engine alive during session
+            hapticEngine?.isAutoShutdownEnabled = false
+            
+            // Use haptics-only mode (no audio component needed)
+            hapticEngine?.playsHapticsOnly = true
 
-            // Configure engine reset handler
+            // Configure engine reset handler - engine needs restart after reset
             hapticEngine?.resetHandler = { [weak self] in
                 Task { @MainActor [weak self] in
                     guard let self = self else { return }
-                    print("Haptic engine reset")
-                    do {
-                        try await self.startEngine()
-                        // Restart pattern if was playing
-                        if self.isPlaying, let patternId = self.currentPatternId {
-                            // Simple restart without looping
-                            try await self.playPattern(id: patternId, speed: .medium, loop: false)
+                    print("[Haptics] Engine reset triggered")
+                    self.isEngineRunning = false
+                    
+                    // Restart engine and pattern if we were playing
+                    if let patternId = self.currentPatternId {
+                        do {
+                            try await self.restartEngineAndPattern(patternId: patternId)
+                        } catch {
+                            print("[Haptics] Failed to restart after reset: \(error)")
+                            self.error = .engineFailure
                         }
-                    } catch {
-                        self.error = .engineFailure
                     }
                 }
             }
@@ -187,147 +299,168 @@ final class TactilePatternService: ObservableObject {
             hapticEngine?.stoppedHandler = { [weak self] reason in
                 Task { @MainActor [weak self] in
                     guard let self = self else { return }
-                    print("Haptic engine stopped: \(reason.rawValue)")
+                    print("[Haptics] Engine stopped with reason: \(reason.rawValue)")
                     self.isEngineRunning = false
-                    if reason == .audioSessionInterrupt || reason == .applicationSuspended {
-                        // Engine will auto-restart when app returns
-                    } else if reason == .systemError {
+                    
+                    switch reason {
+                    case .audioSessionInterrupt:
+                        // Mark for restart when interrupt ends
+                        self.needsEngineRestart = self.isPlaying
+                        print("[Haptics] Will restart after audio session interrupt")
+                        
+                    case .applicationSuspended:
+                        // Mark for restart when app becomes active
+                        self.needsEngineRestart = self.isPlaying
+                        print("[Haptics] Will restart after app resumes")
+                        
+                    case .idleTimeout:
+                        // Engine timed out, restart if we need it
+                        if self.isPlaying {
+                            print("[Haptics] Engine idle timeout, restarting...")
+                            if let patternId = self.currentPatternId {
+                                do {
+                                    try await self.restartEngineAndPattern(patternId: patternId)
+                                } catch {
+                                    print("[Haptics] Failed to restart after idle: \(error)")
+                                }
+                            }
+                        }
+                        
+                    case .notifyWhenFinished:
+                        // Pattern completed naturally
+                        print("[Haptics] Pattern finished")
+                        
+                    case .systemError:
+                        print("[Haptics] System error, recreating engine")
                         self.error = .engineFailure
+                        // Try to recreate the engine
+                        self.hapticEngine = nil
+                        self.createHapticEngine()
+                        
+                    case .engineDestroyed:
+                        print("[Haptics] Engine destroyed, recreating")
+                        self.hapticEngine = nil
+                        self.createHapticEngine()
+                        
+                    case .gameControllerDisconnect:
+                        // Not applicable
+                        break
+                        
+                    @unknown default:
+                        print("[Haptics] Unknown stop reason: \(reason.rawValue)")
                     }
                 }
             }
 
             isEngineRunning = false
+            print("[Haptics] Engine created successfully")
+            
         } catch {
-            print("Haptic engine creation failed: \(error.localizedDescription)")
+            print("[Haptics] Engine creation failed: \(error.localizedDescription)")
             self.error = .engineFailure
         }
     }
+    
+    private func restartEngineAndPattern(patternId: String) async throws {
+        // Recreate engine if needed
+        if hapticEngine == nil {
+            createHapticEngine()
+        }
+        
+        // Start the engine
+        try await startEngine()
+        
+        // Reload and play the pattern
+        guard let pattern = TactilePattern.library.first(where: { $0.id == patternId }),
+              let ahapURL = pattern.ahapURL() else {
+            return
+        }
+        
+        let hapticPattern = try CHHapticPattern(contentsOf: ahapURL)
+        let player = try hapticEngine?.makePlayer(with: hapticPattern)
+        currentPlayer = player
+        
+        try player?.start(atTime: CHHapticTimeImmediate)
+        print("[Haptics] Pattern restarted successfully")
+    }
 
     private func startEngine() async throws {
-        guard let engine = hapticEngine, !isEngineRunning else { return }
+        guard let engine = hapticEngine else {
+            throw SensoryError.engineFailure
+        }
 
-        try await Task.detached {
-            try engine.start()
-        }.value
-        isEngineRunning = true
+        guard !isEngineRunning else {
+            print("[Haptics] Engine already running")
+            return
+        }
+
+        do {
+            // IMPORTANT: Start the engine and await completion
+            // This ensures the engine is ready before we try to play patterns
+            try await engine.start()
+            isEngineRunning = true
+            print("[Haptics] Engine started successfully")
+        } catch {
+            print("[Haptics] Failed to start engine: \(error.localizedDescription)")
+            throw SensoryError.engineFailure
+        }
     }
 
     private func stopEngine() async {
         guard let engine = hapticEngine, isEngineRunning else { return }
 
-        await Task.detached {
-            engine.stop()
-        }.value
+        // Stop the engine and await completion
+        try? await engine.stop()
         isEngineRunning = false
+        print("[Haptics] Engine stopped")
     }
 
     private func handlePatternLoop(duration: TimeInterval) async {
+        print("[Haptics] Loop started, duration: \(duration)s")
+        
         while !Task.isCancelled {
             try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
             
-            guard !Task.isCancelled, isPlaying, let player = currentPlayer else {
+            guard !Task.isCancelled, isPlaying else {
+                print("[Haptics] Loop cancelled or stopped")
+                break
+            }
+            
+            // Check if engine needs restart
+            if !isEngineRunning {
+                print("[Haptics] Engine not running in loop, attempting restart")
+                do {
+                    try await startEngine()
+                } catch {
+                    print("[Haptics] Failed to restart engine in loop: \(error)")
+                    break
+                }
+            }
+            
+            guard let player = currentPlayer else {
+                print("[Haptics] No player in loop")
                 break
             }
 
-            // Restart pattern
+            // Restart pattern on main thread for thread safety
             do {
-                try await Task.detached {
-                    try player.start(atTime: CHHapticTimeImmediate)
-                }.value
+                try player.start(atTime: CHHapticTimeImmediate)
+                print("[Haptics] Loop iteration completed")
             } catch {
-                print("Error restarting pattern: \(error.localizedDescription)")
-                break
+                print("[Haptics] Error restarting pattern in loop: \(error.localizedDescription)")
+                // Try to recreate player
+                if let patternId = currentPatternId {
+                    do {
+                        try await restartEngineAndPattern(patternId: patternId)
+                    } catch {
+                        print("[Haptics] Failed to recover in loop: \(error)")
+                        break
+                    }
+                } else {
+                    break
+                }
             }
         }
     }
 }
 
-// MARK: - AHAP Pattern Utilities
-
-extension TactilePatternService {
-    /// Apply speed multiplier to AHAP pattern dictionary
-    private func applySpeedMultiplier(_ pattern: [CHHapticPattern.Key: Any], multiplier: Double) -> [CHHapticPattern.Key: Any] {
-        var modifiedPattern = pattern
-        
-        // Multiply all "Time" and "EventDuration" values by (1 / multiplier)
-        // Example: 2x speed = 0.5 time multiplier
-        let timeScale = 1.0 / multiplier
-        
-        if var events = modifiedPattern[.pattern] as? [[String: Any]] {
-            events = events.map { event in
-                var modifiedEvent = event
-                
-                // Scale event time
-                if let time = event["Time"] as? Double {
-                    modifiedEvent["Time"] = time * timeScale
-                }
-                
-                // Scale event duration
-                if let duration = event["EventDuration"] as? Double {
-                    modifiedEvent["EventDuration"] = duration * timeScale
-                }
-                
-                // Scale parameter curve control points
-                if var parameters = event["ParameterCurve"] as? [[String: Any]] {
-                    parameters = parameters.map { param in
-                        var modifiedParam = param
-                        if let paramTime = param["Time"] as? Double {
-                            modifiedParam["Time"] = paramTime * timeScale
-                        }
-                        return modifiedParam
-                    }
-                    modifiedEvent["ParameterCurve"] = parameters
-                }
-                
-                return modifiedEvent
-            }
-            modifiedPattern[.pattern] = events
-        }
-        
-        return modifiedPattern
-    }
-
-    /// Apply intensity multiplier to AHAP pattern dictionary
-    private func applyIntensityMultiplier(_ pattern: [CHHapticPattern.Key: Any], intensity: Float) -> [CHHapticPattern.Key: Any] {
-        var modifiedPattern = pattern
-        
-        // Multiply all "HapticIntensity" parameter values by intensity
-        if var events = modifiedPattern[.pattern] as? [[String: Any]] {
-            events = events.map { event in
-                var modifiedEvent = event
-                
-                // Scale event parameters
-                if var parameters = event["EventParameters"] as? [[String: Any]] {
-                    parameters = parameters.map { param in
-                        var modifiedParam = param
-                        if let parameterID = param["ParameterID"] as? String,
-                           parameterID == "HapticIntensity",
-                           let value = param["ParameterValue"] as? Double {
-                            modifiedParam["ParameterValue"] = value * Double(intensity)
-                        }
-                        return modifiedParam
-                    }
-                    modifiedEvent["EventParameters"] = parameters
-                }
-                
-                // Scale parameter curve values
-                if var curve = event["ParameterCurve"] as? [[String: Any]] {
-                    curve = curve.map { point in
-                        var modifiedPoint = point
-                        if let value = point["ParameterValue"] as? Double {
-                            modifiedPoint["ParameterValue"] = value * Double(intensity)
-                        }
-                        return modifiedPoint
-                    }
-                    modifiedEvent["ParameterCurve"] = curve
-                }
-                
-                return modifiedEvent
-            }
-            modifiedPattern[.pattern] = events
-        }
-        
-        return modifiedPattern
-    }
-}

@@ -262,6 +262,7 @@ final class BoardViewModel: ObservableObject {
 
 // MARK: - Previews
 
+#if DEBUG
 #Preview("Board View") {
     NavigationStack {
         BoardView(
@@ -278,3 +279,4 @@ final class BoardViewModel: ObservableObject {
         )
     }
 }
+#endif

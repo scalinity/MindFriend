@@ -1204,7 +1204,8 @@ enum WellnessFocus: String, Codable, CaseIterable {
     }
 }
 
-struct Badge: Codable, Identifiable, Equatable {
+/// Represents a badge earned by the user (renamed from Badge to avoid SwiftUI.Badge conflict)
+struct EarnedBadge: Codable, Identifiable, Equatable {
     let id: String
     let code: String
     let title: String
@@ -1451,7 +1452,7 @@ struct QuestCompletion: Codable {
     let status: QuestStatus
     let completedAt: Date?
     let streakDays: Int
-    let badgesEarned: [Badge]
+    let badgesEarned: [EarnedBadge]
 }
 
 // MARK: - Quest Alternatives (Quest Choice Feature)
@@ -2141,6 +2142,220 @@ struct BuddyWidgetData: Codable, Equatable {
 
 // MARK: - Exercise
 
+// MARK: Exercise Instructions
+
+/// A single step in a generic exercise
+struct GenericStep: Codable, Equatable, Hashable, Identifiable {
+    let step: Int
+    let text: String
+
+    var id: Int { step }
+}
+
+/// Breathing pattern configuration for immersive players
+struct PlayerBreathPattern: Codable, Equatable, Hashable {
+    let inhaleSeconds: Double
+    let holdInSeconds: Double
+    let exhaleSeconds: Double
+    let holdOutSeconds: Double
+    let name: String?
+
+    var cycleDuration: Double {
+        inhaleSeconds + holdInSeconds + exhaleSeconds + holdOutSeconds
+    }
+
+    /// Default 4-4-4-4 box breathing
+    static let boxBreathing = PlayerBreathPattern(
+        inhaleSeconds: 4, holdInSeconds: 4, exhaleSeconds: 4, holdOutSeconds: 4, name: "Box Breathing"
+    )
+
+    /// 4-7-8 relaxation breathing
+    static let relaxation478 = PlayerBreathPattern(
+        inhaleSeconds: 4, holdInSeconds: 7, exhaleSeconds: 8, holdOutSeconds: 0, name: "4-7-8 Breathing"
+    )
+}
+
+/// Instructions for breathing exercises
+struct BreathingInstructions: Codable, Equatable, Hashable {
+    let pattern: PlayerBreathPattern
+    let cycles: Int
+    let introText: String?
+    let outroText: String?
+}
+
+/// A single segment in a meditation script
+struct MeditationSegment: Codable, Equatable, Hashable, Identifiable {
+    let timestampSeconds: Int
+    let text: String
+    let segmentType: String?
+
+    var id: Int { timestampSeconds }
+
+    enum CodingKeys: String, CodingKey {
+        case timestampSeconds = "timestamp_seconds"
+        case text
+        case segmentType = "segment_type"
+    }
+}
+
+/// Instructions for meditation exercises
+struct MeditationInstructions: Codable, Equatable, Hashable {
+    let segments: [MeditationSegment]
+}
+
+/// A single prompt in a grounding exercise
+struct GroundingPrompt: Codable, Equatable, Hashable, Identifiable {
+    let sense: String?
+    let text: String
+    let count: Int?
+
+    var id: String { "\(sense ?? "general")-\(text.prefix(20))" }
+
+    var senseIcon: String {
+        switch sense?.lowercased() {
+        case "sight": return "eye.fill"
+        case "touch": return "hand.raised.fill"
+        case "hearing": return "ear.fill"
+        case "smell": return "nose.fill"
+        case "taste": return "mouth.fill"
+        default: return "sparkles"
+        }
+    }
+
+    var senseColor: Color {
+        switch sense?.lowercased() {
+        case "sight": return .blue
+        case "touch": return .orange
+        case "hearing": return .purple
+        case "smell": return .green
+        case "taste": return .pink
+        default: return .gray
+        }
+    }
+}
+
+/// Instructions for grounding exercises (5-4-3-2-1 technique, body scan, etc.)
+struct GroundingInstructions: Codable, Equatable, Hashable {
+    let technique: String
+    let prompts: [GroundingPrompt]
+}
+
+/// A single prompt in a journaling exercise
+struct JournalingPrompt: Codable, Equatable, Hashable, Identifiable {
+    let text: String
+    let category: String?
+
+    var id: String { text.prefix(30).description }
+}
+
+/// Instructions for journaling exercises
+struct JournalingInstructions: Codable, Equatable, Hashable {
+    let prompts: [JournalingPrompt]
+    let reflectionQuestions: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case prompts
+        case reflectionQuestions = "reflection_questions"
+    }
+}
+
+/// A single movement step
+struct MovementStep: Codable, Equatable, Hashable, Identifiable {
+    let name: String
+    let description: String
+    let durationSeconds: Int
+    let isRestPeriod: Bool?
+    let imageUrl: String?
+
+    var id: String { name }
+
+    enum CodingKeys: String, CodingKey {
+        case name, description
+        case durationSeconds = "duration_seconds"
+        case isRestPeriod = "is_rest_period"
+        case imageUrl = "image_url"
+    }
+}
+
+/// Instructions for movement exercises
+struct MovementInstructions: Codable, Equatable, Hashable {
+    let movements: [MovementStep]
+}
+
+/// Type-specific exercise instructions parsed from JSONB for immersive players
+enum PlayerInstructions: Codable, Equatable, Hashable {
+    case breathing(BreathingInstructions)
+    case meditation(MeditationInstructions)
+    case grounding(GroundingInstructions)
+    case journaling(JournalingInstructions)
+    case movement(MovementInstructions)
+    case generic([GenericStep])
+
+    // Custom coding to handle type-based discrimination
+    enum CodingKeys: String, CodingKey {
+        case type
+        case data
+    }
+
+    init(from decoder: Decoder) throws {
+        // Try to decode as array of GenericStep first (legacy format)
+        if let container = try? decoder.singleValueContainer(),
+           let steps = try? container.decode([GenericStep].self) {
+            self = .generic(steps)
+            return
+        }
+
+        // Try type-discriminated format
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let type = try container.decode(String.self, forKey: .type)
+
+        switch type {
+        case "breathing":
+            let data = try container.decode(BreathingInstructions.self, forKey: .data)
+            self = .breathing(data)
+        case "meditation":
+            let data = try container.decode(MeditationInstructions.self, forKey: .data)
+            self = .meditation(data)
+        case "grounding":
+            let data = try container.decode(GroundingInstructions.self, forKey: .data)
+            self = .grounding(data)
+        case "journaling":
+            let data = try container.decode(JournalingInstructions.self, forKey: .data)
+            self = .journaling(data)
+        case "movement":
+            let data = try container.decode(MovementInstructions.self, forKey: .data)
+            self = .movement(data)
+        default:
+            throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "Unknown instruction type: \(type)")
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+
+        switch self {
+        case .breathing(let data):
+            try container.encode("breathing", forKey: .type)
+            try container.encode(data, forKey: .data)
+        case .meditation(let data):
+            try container.encode("meditation", forKey: .type)
+            try container.encode(data, forKey: .data)
+        case .grounding(let data):
+            try container.encode("grounding", forKey: .type)
+            try container.encode(data, forKey: .data)
+        case .journaling(let data):
+            try container.encode("journaling", forKey: .type)
+            try container.encode(data, forKey: .data)
+        case .movement(let data):
+            try container.encode("movement", forKey: .type)
+            try container.encode(data, forKey: .data)
+        case .generic(let steps):
+            var container = encoder.singleValueContainer()
+            try container.encode(steps)
+        }
+    }
+}
+
 struct Exercise: Codable, Identifiable, Equatable, Hashable {
     let id: String
     let type: ExerciseType
@@ -2150,6 +2365,9 @@ struct Exercise: Codable, Identifiable, Equatable, Hashable {
     let contentKind: ContentKind
     let contentText: String?
     let audioUrl: String?
+
+    // Structured instructions for immersive player
+    let instructions: PlayerInstructions?
 
     // Credibility fields
     let evidenceBasis: EvidenceBasis?
@@ -3917,6 +4135,7 @@ enum CreativeWorkType: String, Codable, CaseIterable {
 
 /// Art generation styles
 enum ArtStyle: String, Codable, CaseIterable {
+    case none
     case watercolor
     case abstract
     case serene
@@ -3927,6 +4146,7 @@ enum ArtStyle: String, Codable, CaseIterable {
 
     var displayName: String {
         switch self {
+        case .none: return "None"
         case .watercolor: return "Watercolor"
         case .abstract: return "Abstract"
         case .serene: return "Serene"
@@ -3939,6 +4159,7 @@ enum ArtStyle: String, Codable, CaseIterable {
 
     var description: String {
         switch self {
+        case .none: return "Let AI choose the best style for your mood"
         case .watercolor: return "Soft, flowing colors with delicate brushstrokes"
         case .abstract: return "Bold shapes and colors, modern aesthetic"
         case .serene: return "Peaceful scenes with calming atmosphere"
@@ -3951,6 +4172,7 @@ enum ArtStyle: String, Codable, CaseIterable {
 
     var icon: String {
         switch self {
+        case .none: return "wand.and.stars"
         case .watercolor: return "drop.fill"
         case .abstract: return "square.on.circle"
         case .serene: return "leaf.fill"

@@ -351,6 +351,7 @@ enum PracticeMode {
 
 // MARK: - Previews
 
+#if DEBUG
 #Preview {
     BoundaryPracticeView(
         service: BoundaryPlannerService(supabase: .mock),
@@ -369,3 +370,4 @@ enum PracticeMode {
         )
     )
 }
+#endif

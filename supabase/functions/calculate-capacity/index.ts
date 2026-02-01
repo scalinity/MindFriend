@@ -148,7 +148,7 @@ async function validateAndAuthenticate(
     throw new Error("Authentication failed: No user found");
   }
 
-  console.log("User authenticated successfully:", user.id);
+  console.log("User authenticated successfully:", user.id.substring(0, 8) + "...");
   const userId = user.id;
 
   // Rate limiting
@@ -503,15 +503,23 @@ serve(async (req) => {
     });
 
     // Determine appropriate status code
-    const statusCode = (error as any).message?.includes("Authentication")
+    const errorMessage = (error as any).message || "";
+    const statusCode = errorMessage.includes("Authentication")
       ? 401
-      : (error as any).message?.includes("Rate limit")
+      : errorMessage.includes("Rate limit")
         ? 429
-        : 500;
+        : errorMessage.includes("Content-Type") || errorMessage.includes("Invalid")
+          ? 400
+          : 500;
+
+    // SECURITY: Return generic error messages for 500 errors to prevent info leakage
+    const clientMessage = statusCode === 500 
+      ? "Internal server error" 
+      : errorMessage;
 
     return new Response(
       JSON.stringify({
-        error: (error as any).message || "Internal server error",
+        error: clientMessage,
       }),
       {
         status: statusCode,

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 console.log("[voice-token] Module loaded");
 
@@ -13,17 +14,15 @@ interface VoiceTokenResponse {
   session_id: string;
 }
 
-// Simple CORS headers
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Content-Type": "application/json",
-};
-
 serve(async (req) => {
   console.log("[voice-token] Request received");
+
+  // Get CORS headers based on request origin (restrictive, not wildcard)
+  const origin = req.headers.get("Origin");
+  const corsHeaders = {
+    ...getCorsHeaders(origin),
+    "Content-Type": "application/json",
+  };
 
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -85,47 +84,71 @@ serve(async (req) => {
 
     console.log("[voice-token] User authenticated:", user.id.slice(0, 8));
 
-    // Check quota
-    const { data: minutesRemaining, error: quotaError } = await supabase.rpc(
-      "get_voice_minutes_remaining",
-      { p_user_id: user.id },
+    // Check premium status from BOTH profile AND subscriptions table
+    // (some users may have subscription but profile not synced)
+    const [profileResult, subscriptionResult] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("subscription_tier")
+        .eq("id", user.id)
+        .single(),
+      supabase
+        .from("subscriptions")
+        .select("status, expires_at")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .gt("expires_at", new Date().toISOString())
+        .maybeSingle(),
+    ]);
+
+    const profilePremium = profileResult.data?.subscription_tier === "premium";
+    const subscriptionPremium = !!subscriptionResult.data;
+    const isPremium = profilePremium || subscriptionPremium;
+
+    console.log(
+      "[voice-token] Premium check - profile:",
+      profilePremium,
+      "subscription:",
+      subscriptionPremium,
+      "final:",
+      isPremium,
     );
 
-    if (quotaError) {
-      console.log("[voice-token] Quota check error:", quotaError.message);
-      return new Response(
-        JSON.stringify({
-          error: `Quota check failed: ${quotaError.message}`,
-          code: "QUOTA_ERROR",
-        }),
-        { status: 500, headers: corsHeaders },
+    // Check quota (skip for premium users - they have unlimited)
+    let minutesRemaining = isPremium ? 999 : 0;
+
+    if (!isPremium) {
+      const { data: quotaMinutes, error: quotaError } = await supabase.rpc(
+        "get_voice_minutes_remaining",
+        { p_user_id: user.id },
       );
+
+      if (quotaError) {
+        console.log("[voice-token] Quota check error:", quotaError.message);
+        return new Response(
+          JSON.stringify({
+            error: `Quota check failed: ${quotaError.message}`,
+            code: "QUOTA_ERROR",
+          }),
+          { status: 500, headers: corsHeaders },
+        );
+      }
+
+      minutesRemaining = quotaMinutes;
+      console.log("[voice-token] Minutes remaining:", minutesRemaining);
+
+      if (minutesRemaining <= 0) {
+        return new Response(
+          JSON.stringify({
+            error: "Voice quota exceeded",
+            code: "QUOTA_EXCEEDED",
+            minutes_remaining: 0,
+            upgrade_required: true,
+          }),
+          { status: 403, headers: corsHeaders },
+        );
+      }
     }
-
-    console.log("[voice-token] Minutes remaining:", minutesRemaining);
-
-    if (minutesRemaining <= 0) {
-      return new Response(
-        JSON.stringify({
-          error: "Voice quota exceeded",
-          code: "QUOTA_EXCEEDED",
-          minutes_remaining: 0,
-          upgrade_required: true,
-        }),
-        { status: 403, headers: corsHeaders },
-      );
-    }
-
-    // Check premium status
-    const { data: subscription } = await supabase
-      .from("subscriptions")
-      .select("status, expires_at")
-      .eq("user_id", user.id)
-      .eq("status", "active")
-      .gt("expires_at", new Date().toISOString())
-      .maybeSingle();
-
-    const isPremium = !!subscription;
     const voice = "ara";
     const availableVoices = isPremium
       ? ["ara", "rex", "sal", "eve", "leo"]

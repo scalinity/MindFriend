@@ -267,6 +267,7 @@ final class CopingKitsViewModel: ObservableObject {
 
     // MARK: - Sample Data (for previews)
 
+    #if DEBUG
     static func preview() -> CopingKitsViewModel {
         let viewModel = CopingKitsViewModel(service: CopingKitService(supabase: SupabaseClient.mock))
 
@@ -326,6 +327,7 @@ final class CopingKitsViewModel: ObservableObject {
 
         return viewModel
     }
+    #endif
 }
 
 // Note: SupabaseClient.mock is defined in SupabaseClient.swift

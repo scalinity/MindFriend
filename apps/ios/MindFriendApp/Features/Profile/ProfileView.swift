@@ -758,6 +758,14 @@ struct NotificationSettingsView: View {
                 preferredNotifyHour: preferredNotifyHour
             )
 
+            // Schedule/cancel local quest reminder notification
+            let components = Calendar.current.dateComponents([.hour, .minute], from: questTime)
+            try await container.questNotificationService.updateSchedule(
+                enabled: remindersEnabled,
+                hour: components.hour ?? 9,
+                minute: components.minute ?? 0
+            )
+
             // Note: Settings are saved to database. AppState will be refreshed on next fetch.
             // We could fetch the updated profile here if needed for immediate UI updates.
         } catch {
@@ -1276,7 +1284,7 @@ struct EditProfileView: View {
 // MARK: - Premium Badge Label
 
 struct PremiumBadgeLabel: View {
-    let badge: Badge
+    let badge: EarnedBadge
 
     private var displayName: String {
         switch badge.code {

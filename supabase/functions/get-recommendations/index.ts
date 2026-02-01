@@ -17,15 +17,12 @@ interface GetRecommendationsRequest {
 }
 
 interface ExerciseRecommendation {
-  exercise_id: string;
-  exercise_name: string;
-  exercise_type: string;
-  duration: number;
-  predicted_efficacy: number;
-  confidence: number;
-  completion_count: number;
-  reason: string;
-  trend: string | null;
+  contentId: string;
+  contentType: string;
+  contentName: string;
+  durationMinutes: number;
+  score: number;
+  reasons: string[];
 }
 
 serve(async (req) => {
@@ -79,11 +76,20 @@ serve(async (req) => {
     const url = new URL(req.url);
     const body = req.method === "POST" ? await req.json() : {};
 
-    const currentState = body.state || url.searchParams.get("state") || "rest";
+    // Support both direct params and nested context object (iOS sends context.currentMood)
+    const context = body.context || {};
+    const currentState =
+      body.state || context.state || url.searchParams.get("state") || "rest";
     const currentEmotion =
-      body.emotion || url.searchParams.get("emotion") || "neutral";
+      body.emotion ||
+      context.currentMood ||
+      url.searchParams.get("emotion") ||
+      "neutral";
     const timeOfDay =
-      body.timeOfDay || url.searchParams.get("timeOfDay") || "morning";
+      body.timeOfDay ||
+      context.timeOfDay ||
+      url.searchParams.get("timeOfDay") ||
+      "morning";
     const limit = parseInt(body.limit || url.searchParams.get("limit") || "5");
 
     logger.addContext({ currentState, currentEmotion, timeOfDay, limit });
@@ -98,9 +104,9 @@ serve(async (req) => {
         *,
         exercises:exercise_id (
           id,
-          name,
+          title,
           type,
-          duration
+          duration_minutes
         )
       `,
       )
@@ -146,28 +152,24 @@ serve(async (req) => {
             timeOfDay,
           );
 
+          const reason = generateReason(
+            profile,
+            contextualScore,
+            currentState,
+            timeOfDay,
+          );
           return {
-            exercise_id: profile.exercise_id,
-            exercise_name: exercise.name,
-            exercise_type: exercise.type,
-            duration: exercise.duration,
-            predicted_efficacy: contextualScore,
-            confidence: profile.confidence,
-            completion_count: profile.completion_count,
-            reason: generateReason(
-              profile,
-              contextualScore,
-              currentState,
-              timeOfDay,
-            ),
-            trend: profile.trend,
+            contentId: profile.exercise_id,
+            contentType: exercise.type,
+            contentName: exercise.title,
+            durationMinutes: exercise.duration_minutes,
+            score: contextualScore / 100, // Convert 0-100 to 0-1
+            reasons: [reason],
           };
         });
 
-      // Sort by predicted efficacy
-      recommendations.sort(
-        (a, b) => b.predicted_efficacy - a.predicted_efficacy,
-      );
+      // Sort by score
+      recommendations.sort((a, b) => b.score - a.score);
 
       // Return top N
       recommendations = recommendations.slice(0, limit);
@@ -186,6 +188,7 @@ serve(async (req) => {
         currentState,
         currentEmotion,
         limit - recommendations.length,
+        timeOfDay,
       );
 
       recommendations = [...recommendations, ...genericRecs];
@@ -289,32 +292,126 @@ function generateReason(
   return `Works ${percentage}% of the time${context}`;
 }
 
+// Mapping of emotions/moods to ideal exercise types
+const MOOD_TO_EXERCISE_TYPES: Record<string, string[]> = {
+  stressed: ["breathing", "meditation", "grounding"],
+  anxious: ["breathing", "grounding", "movement"],
+  low: ["movement", "journaling", "grounding"],
+  sad: ["journaling", "movement", "meditation"],
+  angry: ["breathing", "movement", "grounding"],
+  overwhelmed: ["breathing", "grounding", "meditation"],
+  calm: ["meditation", "journaling", "movement"],
+  good: ["meditation", "journaling", "movement"],
+  great: ["movement", "meditation", "journaling"],
+  okay: ["breathing", "meditation", "grounding"],
+  neutral: ["breathing", "meditation", "grounding"],
+};
+
+// Time of day preferences
+const TIME_TO_EXERCISE_TYPES: Record<string, string[]> = {
+  morning: ["breathing", "movement", "meditation"],
+  afternoon: ["grounding", "movement", "journaling"],
+  evening: ["meditation", "journaling", "breathing"],
+  night: ["meditation", "breathing", "journaling"],
+};
+
 async function getGenericRecommendations(
   supabaseClient: any,
   currentState: string,
   currentEmotion: string,
   limit: number,
+  timeOfDay: string = "morning",
 ): Promise<ExerciseRecommendation[]> {
-  // Fetch popular exercises (by overall completion count across all users)
-  // For MVP, use simple heuristic: breathing for anxiety, meditation for stress, etc.
+  // Fetch all exercises to score them
   const { data: exercises, error } = await supabaseClient
     .from("exercises")
-    .select("*")
-    .limit(limit);
+    .select("*");
 
   if (error || !exercises) {
     return [];
   }
 
-  return exercises.map((exercise: any) => ({
-    exercise_id: exercise.id,
-    exercise_name: exercise.name,
-    exercise_type: exercise.type,
-    duration: exercise.duration,
-    predicted_efficacy: 60, // Generic baseline
-    confidence: 0,
-    completion_count: 0,
-    reason: `Popular exercise for ${currentEmotion} (you haven't tried this yet)`,
-    trend: null,
-  }));
+  // Get preferred types for mood and time
+  const moodTypes = MOOD_TO_EXERCISE_TYPES[currentEmotion] || [
+    "breathing",
+    "meditation",
+    "grounding",
+  ];
+  const timeTypes = TIME_TO_EXERCISE_TYPES[timeOfDay] || [
+    "breathing",
+    "meditation",
+    "grounding",
+  ];
+
+  // Score each exercise
+  const scoredExercises = exercises.map((exercise: any) => {
+    let score = 0.5; // Base score
+    const reasons: string[] = [];
+
+    // Boost for mood match (primary factor)
+    const moodRank = moodTypes.indexOf(exercise.type);
+    if (moodRank === 0) {
+      score += 0.35;
+      reasons.push(`Perfect for feeling ${currentEmotion}`);
+    } else if (moodRank === 1) {
+      score += 0.25;
+      reasons.push(`Great choice when ${currentEmotion}`);
+    } else if (moodRank === 2) {
+      score += 0.15;
+      reasons.push(`Good option for your mood`);
+    }
+
+    // Boost for time of day match
+    const timeRank = timeTypes.indexOf(exercise.type);
+    if (timeRank === 0) {
+      score += 0.1;
+      if (reasons.length === 0) reasons.push(`Ideal for ${timeOfDay}`);
+    } else if (timeRank === 1) {
+      score += 0.05;
+    }
+
+    // Slight boost for shorter exercises (more accessible)
+    if (exercise.duration_minutes <= 5) {
+      score += 0.05;
+    }
+
+    // Cap at 0.95
+    score = Math.min(score, 0.95);
+
+    // Default reason if none set
+    if (reasons.length === 0) {
+      reasons.push(`Try this ${exercise.type} exercise`);
+    }
+
+    return {
+      contentId: exercise.id,
+      contentType: exercise.type,
+      contentName: exercise.title,
+      durationMinutes: exercise.duration_minutes,
+      score,
+      reasons,
+    };
+  });
+
+  // Sort by score descending
+  scoredExercises.sort(
+    (a: ExerciseRecommendation, b: ExerciseRecommendation) => b.score - a.score,
+  );
+
+  // Return top N with variety (don't return all of the same type)
+  const result: ExerciseRecommendation[] = [];
+  const typeCounts: Record<string, number> = {};
+
+  for (const exercise of scoredExercises) {
+    if (result.length >= limit) break;
+
+    // Limit to 2 exercises per type for variety
+    const typeCount = typeCounts[exercise.contentType] || 0;
+    if (typeCount < 2) {
+      result.push(exercise);
+      typeCounts[exercise.contentType] = typeCount + 1;
+    }
+  }
+
+  return result;
 }

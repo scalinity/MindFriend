@@ -362,6 +362,7 @@ struct AssessmentFlowView: View {
     }
 }
 
+#if DEBUG
 #Preview {
     AssessmentFlowView(
         template: AssessmentTemplate(
@@ -380,3 +381,4 @@ struct AssessmentFlowView: View {
         isPresented: .constant(true)
     )
 }
+#endif
