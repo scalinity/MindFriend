@@ -34,19 +34,15 @@ final class GeneratedContentService: ObservableObject {
         let session: Session
         do {
             session = try await supabase.auth.session
-            #if DEBUG
-            print("[GeneratedContentService] Session loaded successfully for user: \(session.user.id)")
-            #endif
+            Log.data.debug("[GeneratedContent] Session acquired")
         } catch {
-            #if DEBUG
-            print("[GeneratedContentService] ERROR: Failed to get session: \(error)")
-            #endif
+            Log.data.error("[GeneratedContent] Failed to get session")
             self.error = .notAuthenticated
             throw GeneratedContentError.notAuthenticated
         }
 
         let request = GenerateContentRequest(contentType: type, params: params)
-        print("[GeneratedContentService] Invoking edge function 'generate-content'...")
+        Log.data.debug("[GeneratedContent] Invoking edge function 'generate-content'")
 
         do {
             let response: GenerateContentResponse = try await supabase.functions.invoke(
@@ -343,15 +339,9 @@ final class GeneratedContentService: ObservableObject {
         let session: Session
         do {
             session = try await supabase.auth.session
-            #if DEBUG
-            print("[GeneratedContentService] rateContent - Session loaded for user: \(session.user.id)")
-            print("[GeneratedContentService] rateContent - Token prefix: \(String(session.accessToken.prefix(30)))...")
-            print("[GeneratedContentService] rateContent - Token expires at: \(session.expiresAt)")
-            #endif
+            Log.data.debug("[GeneratedContent] rateContent - Session acquired")
         } catch {
-            #if DEBUG
-            print("[GeneratedContentService] rateContent - ERROR: Failed to get session: \(error)")
-            #endif
+            Log.data.error("[GeneratedContent] rateContent - Failed to get session")
             throw GeneratedContentError.notAuthenticated
         }
 

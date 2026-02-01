@@ -164,6 +164,21 @@ final class InterventionService: ObservableObject {
 
     /// Manually check if an intervention should be triggered
     func checkTriggers(context: TriggerContext? = nil) async throws -> CheckTriggersResponse {
+        // Validate session before making Edge Function call
+        // This prevents 401 errors when the session has expired
+        do {
+            _ = try await supabase.auth.session
+        } catch {
+            print("No valid session for intervention check, skipping")
+            return CheckTriggersResponse(
+                shouldTrigger: false,
+                triggerType: nil,
+                intervention: nil,
+                contextMessage: nil,
+                suppressionReason: "no_session"
+            )
+        }
+
         let contextToSend: TriggerContext
         if let context = context {
             contextToSend = context

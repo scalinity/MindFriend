@@ -158,6 +158,9 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
     /// Cached token for fast reconnection
     private var cachedToken: String?
 
+    /// Reconnection task for cancellation during disconnect
+    private var reconnectionTask: Task<Void, Never>?
+
     /// Expiry time of cached token
     private var cachedTokenExpiry: Date?
 
@@ -176,6 +179,11 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
     // Voice instructions for MindFriend personality
     private let voiceInstructions = """
     You are a warm, supportive AI companion for MindFriend, a mental wellness app.
+
+    IMPORTANT: You have access to real-time voice emotion detection. The app analyzes the user's tone of voice and may provide emotion context (like "[Detected emotion: sad]") in system messages. When you see this:
+    - Acknowledge and validate the detected emotion naturally
+    - Tailor your response to match their emotional state
+    - Don't explicitly say "I detected you're feeling X" - instead respond with appropriate empathy
 
     Guidelines:
     - Be empathetic, understanding, and non-judgmental
@@ -198,6 +206,7 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
         // This respects the user's previous opt-in choice
         if emotionAnalysisEnabled {
             emotionAnalyzer.setVoiceConsent(true)
+            audioCapture.emotionBufferEnabled = true
             #if DEBUG
             print("[GrokVoiceService] Init: emotion analysis enabled from UserDefaults, consent granted")
             #endif
@@ -361,6 +370,10 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
         emotionAnalysisTask?.cancel()
         emotionAnalysisTask = nil
 
+        // Cancel any pending reconnection task (prevents ghost connections after disconnect)
+        reconnectionTask?.cancel()
+        reconnectionTask = nil
+
         // Cancel any pending timeout tasks first
         sessionCreatedTimeoutTask?.cancel()
         sessionCreatedTimeoutTask = nil
@@ -394,6 +407,11 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
         cachedTokenExpiry = nil
         lastSpeechActivityTime = nil
         vadFramesAboveThreshold = 0
+
+        // Clear echo suppression state
+        playbackStartTime = nil
+        echoGateFramesAboveThreshold = 0
+        echoGateFramesBelowThreshold = 0
 
         // Clear emotion state
         currentEmotion = nil
@@ -547,6 +565,9 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
 
         // Persist the setting
         UserDefaults.standard.set(enabled, forKey: "voiceEmotionAnalysisEnabled")
+
+        // Enable/disable audio buffer accumulation (critical for performance)
+        audioCapture.emotionBufferEnabled = enabled
 
         // Grant or revoke consent based on user preference
         emotionAnalyzer.setVoiceConsent(enabled)
@@ -719,8 +740,8 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
                 "turn_detection": [
                     "type": "server_vad",
                     "threshold": 0.15,
-                    "prefix_padding_ms": 400,
-                    "silence_duration_ms": 800,  // Reduced from 1200 for faster response
+                    "prefix_padding_ms": 300,  // Reduced from 400 for faster start detection
+                    "silence_duration_ms": 1200,  // Increased from 700 to allow natural breathing pauses during speech
                     "create_response": true,
                 ],
             ],
@@ -742,25 +763,45 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
     // Requires sustained speech (not just a brief spike) to trigger barge-in
     // Higher threshold + more frames = stronger echo rejection
     private var echoGateFramesAboveThreshold: Int = 0
+    private var echoGateFramesBelowThreshold: Int = 0  // Track consecutive low frames for grace period
     private let echoGateRequiredFrames: Int = 5  // ~210ms sustained speech required (increased from 3)
-    private let echoGateThreshold: Float = 0.35  // Higher threshold to filter speaker echo (increased from 0.20)
+    private let echoGateGracePeriodFrames: Int = 2  // Allow 2 consecutive low frames (~84ms) before resetting
+    private let echoGateThreshold: Float = 0.50  // Higher threshold to filter speaker echo (increased from 0.35)
 
-    private func sendAudioData(_ audioData: Data) {
-        // Echo gate: when AI is speaking, require sustained high mic level
+    // Initial playback suppression: block all audio for first 300ms of AI speech
+    // This prevents the initial burst of echo before the echo gate kicks in
+    private var playbackStartTime: Date?
+    private let playbackSuppressionDuration: TimeInterval = 0.3
+
+    /// Determines if audio should be suppressed to prevent echo
+    /// Encapsulates all echo suppression logic in one place for maintainability
+    /// - Returns: true if audio should be suppressed (dropped), false if it should be sent
+    private func shouldSuppressAudioForEcho() -> Bool {
+        // 1. Initial playback suppression: block audio for first 300ms of AI speech
+        // This prevents the initial burst of echo before the echo gate kicks in
+        if isSpeaking, let startTime = playbackStartTime {
+            let timeSinceStart = Date().timeIntervalSince(startTime)
+            if timeSinceStart < playbackSuppressionDuration {
+                return true  // Suppress during initial playback window
+            }
+        }
+
+        // 2. Echo gate: when AI is speaking, require sustained high mic level
         // This prevents the AI's own audio from triggering false barge-ins
         // iOS AEC handles most echo, but this provides an additional safety layer
         if isSpeaking {
             if micLevel >= echoGateThreshold {
                 echoGateFramesAboveThreshold += 1
+                echoGateFramesBelowThreshold = 0  // Reset low frame counter when above threshold
 
-                // Only send audio after sustained speech is detected
+                // Only allow audio after sustained speech is detected
                 if echoGateFramesAboveThreshold < echoGateRequiredFrames {
                     #if DEBUG
                     if echoGateFramesAboveThreshold == 1 {
                         Log.voice.debug("[Voice] Echo gate: potential speech detected, waiting for sustained input (mic: \(self.micLevel))")
                     }
                     #endif
-                    return
+                    return true  // Suppress until sustained speech confirmed
                 }
 
                 #if DEBUG
@@ -769,26 +810,42 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
                 }
                 #endif
             } else {
-                // Reset counter when level drops below threshold
-                if echoGateFramesAboveThreshold > 0 {
-                    #if DEBUG
-                    Log.voice.debug("[Voice] Echo gate: level dropped, resetting (mic: \(self.micLevel))")
-                    #endif
+                // Track consecutive low frames with grace period to avoid audio gaps on brief pauses
+                echoGateFramesBelowThreshold += 1
+
+                // Only reset after grace period expires (allows brief pauses in natural speech)
+                if echoGateFramesBelowThreshold > echoGateGracePeriodFrames {
+                    if echoGateFramesAboveThreshold > 0 {
+                        #if DEBUG
+                        Log.voice.debug("[Voice] Echo gate: level dropped for \(self.echoGateFramesBelowThreshold) frames, resetting (mic: \(self.micLevel))")
+                        #endif
+                    }
+                    echoGateFramesAboveThreshold = 0
+                    echoGateFramesBelowThreshold = 0
                 }
-                echoGateFramesAboveThreshold = 0
-                return
+                return true  // Suppress when mic level too low during playback
             }
         } else {
-            // Reset echo gate counter when not speaking
+            // Reset echo gate counters when not speaking
             echoGateFramesAboveThreshold = 0
+            echoGateFramesBelowThreshold = 0
         }
 
-        // Echo suppression: wait briefly after playback ends to avoid residual echo
+        // 3. Post-playback cooldown: wait briefly after playback ends for residual echo
         if let lastEnd = audioPlayback.lastPlaybackEndTime {
             let timeSincePlaybackEnd = Date().timeIntervalSince(lastEnd)
             if timeSincePlaybackEnd < audioPlayback.echoCooldownSeconds {
-                return
+                return true  // Suppress during cooldown period
             }
+        }
+
+        return false  // No suppression needed, audio can be sent
+    }
+
+    private func sendAudioData(_ audioData: Data) {
+        // Check all echo suppression conditions
+        if shouldSuppressAudioForEcho() {
+            return
         }
 
         let base64 = audioData.base64EncodedString()
@@ -796,6 +853,39 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
             "type": "input_audio_buffer.append",
             "audio": base64,
         ])
+    }
+
+    /// Inject emotion context into the conversation so AI can respond appropriately
+    /// TEMPORARILY DISABLED - emotion analysis disabled
+    private func injectEmotionContext(_ emotion: String, confidence: Double) {
+        // DISABLED: Emotion analysis disabled
+        return
+
+        guard connectionState.isConnected else { return }
+
+        // Only inject if confidence is high enough
+        guard confidence >= 0.7 else { return }
+
+        // Create a system message with emotion context
+        let emotionContext = "[Detected emotion from voice: \(emotion)]"
+
+        webSocketManager.send([
+            "type": "conversation.item.create",
+            "item": [
+                "type": "message",
+                "role": "system",
+                "content": [
+                    [
+                        "type": "input_text",
+                        "text": emotionContext
+                    ]
+                ]
+            ]
+        ])
+
+        #if DEBUG
+        Log.voice.debug("[Voice] Injected emotion context: \(emotionContext)")
+        #endif
     }
 
     // MARK: - Private Methods - WebSocket
@@ -912,9 +1002,11 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
                 // 3. Update state
                 isSpeaking = false
                 isWaitingForResponse = false
+                playbackStartTime = nil  // Reset so next response gets fresh suppression window
 
                 // 4. Reset echo gate for fresh start
                 echoGateFramesAboveThreshold = 0
+                echoGateFramesBelowThreshold = 0
 
                 // 5. Notify delegate of barge-in
                 delegate?.voiceService(self, didEmit: .bargeInTriggered)
@@ -975,6 +1067,7 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
             #endif
             isWaitingForResponse = true
             isSpeaking = true
+            playbackStartTime = Date()  // Track when playback started for echo suppression
 
         case "response.output_item.added":
             #if DEBUG
@@ -1183,7 +1276,10 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
         isReconnecting = true
         connectionState = .reconnecting
 
-        Task {
+        // Store task reference so it can be cancelled in disconnect()
+        reconnectionTask = Task { [weak self] in
+            guard let self else { return }
+            guard !Task.isCancelled else { return }
             do {
                 // Get cached or fresh token
                 let token = try await getCachedOrFreshToken()
@@ -1245,11 +1341,15 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
                 #endif
 
             } catch {
+                // Check if task was cancelled (normal during disconnect)
+                guard !Task.isCancelled else { return }
                 #if DEBUG
                 Log.voice.error("[Voice] Reconnection failed: \(error)")
                 #endif
-                isReconnecting = false
-                connectionState = .error(error.localizedDescription)
+                await MainActor.run { [weak self] in
+                    self?.isReconnecting = false
+                    self?.connectionState = .error(error.localizedDescription)
+                }
             }
         }
     }
@@ -1321,7 +1421,8 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
         }
 
         do {
-            guard let session = try? await supabase.auth.session else { return }
+            // Refresh session to ensure we have a valid token (not stale)
+            let session = try await supabase.auth.refreshSession()
             _ = try await supabase.functions.invoke(
                 "voice-session-end",
                 options: FunctionInvokeOptions(
@@ -1358,7 +1459,12 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
 
     /// Analyze emotion from recent audio buffer after speech ends
     /// Runs asynchronously without blocking voice flow
+    /// TEMPORARILY DISABLED - causing voice latency issues
     private func analyzeEmotionIfNeeded() {
+        // DISABLED: Emotion analysis causing voice latency/cutoff issues
+        // TODO: Re-enable after fixing performance problems
+        return
+
         // Check if analysis is enabled
         guard emotionAnalysisEnabled else {
             #if DEBUG
@@ -1376,7 +1482,7 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
             return
         }
 
-        // Get audio buffer
+        // Get audio buffer (fast array slice on main thread)
         guard let audioBuffer = audioCapture.getRecentAudioBuffer(duration: 3.0) else {
             #if DEBUG
             Log.voice.debug("[Voice] Emotion analysis skipped: insufficient audio (<3s)")
@@ -1388,57 +1494,97 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
         emotionAnalysisTask?.cancel()
         emotionAnalysisTask = nil
 
-        // Capture analysis start time (will only be recorded on success to fix race condition)
+        // Update cooldown IMMEDIATELY to prevent race condition where multiple analyses start
+        // before the first one completes. This reserves the analysis slot.
         let analysisStartTime = Date()
+        lastEmotionAnalysisTime = analysisStartTime
 
-        // Start analysis in background
-        emotionAnalysisTask = Task { [weak self] in
-            guard let self = self else { return }
+        // Capture values needed for background processing
+        let sensitivityThreshold = emotionSensitivityThreshold
+        let analyzer = emotionAnalyzer
 
+        // Start analysis in DETACHED task to avoid blocking main thread
+        // This is critical for voice responsiveness - resampling is CPU-intensive
+        emotionAnalysisTask = Task.detached(priority: .utility) { [weak self] in
             // Check cancellation early before expensive operations
             guard !Task.isCancelled else { return }
 
-            // Verify still connected before analysis
-            guard self.connectionState.isConnected else { return }
+            // Resample from 24kHz to 16kHz for EmotionAnalyzer (CPU-intensive, now off main thread)
+            let resampledBuffer = Self.resampleAudio(audioBuffer, fromRate: 24000, toRate: 16000)
+
+            // Check cancellation before expensive ML inference
+            guard !Task.isCancelled else { return }
+
+            #if DEBUG
+            await MainActor.run {
+                Log.voice.debug("[Voice] Analyzing emotion from \(resampledBuffer.count) samples")
+            }
+            #endif
 
             do {
-                // Resample from 24kHz to 16kHz for EmotionAnalyzer
-                let resampledBuffer = self.audioCapture.resampleForEmotionAnalysis(audioBuffer)
-
-                // Check cancellation before expensive ML inference
-                guard !Task.isCancelled else { return }
-
-                #if DEBUG
-                Log.voice.debug("[Voice] Analyzing emotion from \(resampledBuffer.count) samples")
-                #endif
-
-                // Run analysis (this is async and won't block the main thread)
-                let result = try await self.emotionAnalyzer.analyzeAudioBuffer(resampledBuffer)
+                // Run analysis (EmotionAnalyzer uses detached tasks internally for FFT)
+                let result = try await analyzer.analyzeAudioBuffer(resampledBuffer)
 
                 // Check if task was cancelled after analysis
                 guard !Task.isCancelled else { return }
 
                 // Check confidence threshold
-                guard result.confidence >= self.emotionSensitivityThreshold else {
+                guard result.confidence >= sensitivityThreshold else {
                     #if DEBUG
-                    Log.voice.debug("[Voice] Emotion detected but below threshold: \(result.emotion) @ \(result.confidence)")
+                    await MainActor.run {
+                        Log.voice.debug("[Voice] Emotion detected but below threshold: \(result.emotion) @ \(result.confidence)")
+                    }
                     #endif
                     return
                 }
 
-                // Update state on main actor - only update cooldown on SUCCESS
-                await MainActor.run {
-                    // Update cooldown time only on successful analysis (fixes race condition)
-                    self.lastEmotionAnalysisTime = analysisStartTime
+                // Update state on main actor
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    // Verify still connected before updating state
+                    guard self.connectionState.isConnected else { return }
+                    // Note: lastEmotionAnalysisTime was already set at function start to prevent race condition
                     self.handleEmotionResult(result)
                 }
             } catch {
                 #if DEBUG
-                Log.voice.debug("[Voice] Emotion analysis failed: \(error)")
+                await MainActor.run {
+                    Log.voice.debug("[Voice] Emotion analysis failed: \(error)")
+                }
                 #endif
                 // Fail silently - emotion analysis errors should never interrupt voice
             }
         }
+    }
+
+    /// Resample audio buffer - static function to allow calling from detached task
+    /// - Parameters:
+    ///   - inputBuffer: Source audio samples
+    ///   - fromRate: Source sample rate (e.g., 24000)
+    ///   - toRate: Target sample rate (e.g., 16000)
+    /// - Returns: Resampled audio buffer
+    private nonisolated static func resampleAudio(_ inputBuffer: [Float], fromRate: Double, toRate: Double) -> [Float] {
+        // Validate inputs to prevent division by zero or invalid calculations
+        guard !inputBuffer.isEmpty, fromRate > 0, toRate > 0 else { return [] }
+
+        let ratio = fromRate / toRate
+        let outputLength = Int(Double(inputBuffer.count) / ratio)
+
+        guard outputLength > 0 else { return [] }
+
+        var outputBuffer = [Float](repeating: 0, count: outputLength)
+
+        // Linear interpolation resampling
+        for i in 0..<outputLength {
+            let sourceIndex = Double(i) * ratio
+            let lowerIndex = Int(sourceIndex)
+            let upperIndex = min(lowerIndex + 1, inputBuffer.count - 1)
+            let fraction = Float(sourceIndex - Double(lowerIndex))
+
+            outputBuffer[i] = inputBuffer[lowerIndex] * (1 - fraction) + inputBuffer[upperIndex] * fraction
+        }
+
+        return outputBuffer
     }
 
     /// Handle successful emotion analysis result
@@ -1459,6 +1605,10 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
         if emotionHistory.count > maxEmotionHistorySize {
             emotionHistory.removeFirst(emotionHistory.count - maxEmotionHistorySize)
         }
+
+        // Inject emotion context into conversation for AI awareness
+        // This will be visible to the AI for subsequent responses
+        injectEmotionContext(result.emotion, confidence: result.confidence)
 
         // Emit event to delegate
         delegate?.voiceService(self, didEmit: .emotionDetected(result))

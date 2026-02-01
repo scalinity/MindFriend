@@ -27,6 +27,27 @@ struct MoodCheckInView: View {
     private let anxietyLabels = ["Very Low", "Low", "Moderate", "High", "Very High"]
     private let energyLabels = ["Exhausted", "Tired", "Okay", "Energetic", "Very High"]
 
+    /// Maximum characters allowed in mood note (prevents payload attacks)
+    private let maxNoteLength = 1000
+
+    /// Safe emoji lookup with bounds checking
+    private var currentMoodEmoji: String {
+        let index = max(0, min(moodEmojis.count - 1, Int(moodScore) - 1))
+        return moodEmojis[index]
+    }
+
+    /// Safe anxiety label lookup with bounds checking
+    private var currentAnxietyLabel: String {
+        let index = max(0, min(anxietyLabels.count - 1, Int(anxietyScore) - 1))
+        return anxietyLabels[index]
+    }
+
+    /// Safe energy label lookup with bounds checking
+    private var currentEnergyLabel: String {
+        let index = max(0, min(energyLabels.count - 1, Int(energyScore) - 1))
+        return energyLabels[index]
+    }
+
     init(existingMood: MoodEntry? = nil) {
         self.existingMood = existingMood
     }
@@ -41,7 +62,7 @@ struct MoodCheckInView: View {
                             .font(.title2)
                             .fontWeight(.semibold)
 
-                        Text(moodEmojis[Int(moodScore) - 1])
+                        Text(currentMoodEmoji)
                             .font(.system(size: 80))
 
                         MoodSlider(value: Binding(
@@ -72,7 +93,7 @@ struct MoodCheckInView: View {
                                     Text("Anxiety Level")
                                         .font(.headline)
                                     Spacer()
-                                    Text(anxietyLabels[Int(anxietyScore) - 1])
+                                    Text(currentAnxietyLabel)
                                         .foregroundStyle(.secondary)
                                 }
                                 Slider(value: $anxietyScore, in: 1...5, step: 1)
@@ -84,7 +105,7 @@ struct MoodCheckInView: View {
                                     Text("Energy Level")
                                         .font(.headline)
                                     Spacer()
-                                    Text(energyLabels[Int(energyScore) - 1])
+                                    Text(currentEnergyLabel)
                                         .foregroundStyle(.secondary)
                                 }
                                 Slider(value: $energyScore, in: 1...5, step: 1)
@@ -99,9 +120,22 @@ struct MoodCheckInView: View {
                                     .textFieldStyle(.roundedBorder)
                                     .lineLimit(3...6)
                                     .submitLabel(.done)
+                                    .onChange(of: note) { _, newValue in
+                                        // Enforce maximum note length
+                                        if newValue.count > maxNoteLength {
+                                            note = String(newValue.prefix(maxNoteLength))
+                                        }
+                                    }
                                     .onSubmit {
                                         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                                     }
+
+                                // Character count indicator
+                                if note.count > maxNoteLength - 100 {
+                                    Text("\(note.count)/\(maxNoteLength)")
+                                        .font(.caption2)
+                                        .foregroundStyle(note.count >= maxNoteLength ? .red : .secondary)
+                                }
                             }
                         }
                         .transition(.opacity.combined(with: .move(edge: .top)))
@@ -168,6 +202,7 @@ struct MoodCheckInView: View {
     }
 
     private func saveMood() {
+        Log.ui.debug("[MoodCheckIn] Saving mood, score: \(Int(moodScore)), isUpdate: \(existingMood != nil)")
         isSaving = true
 
         let formatter = DateFormatter()
@@ -224,11 +259,14 @@ struct MoodCheckInView: View {
                         appState.showLevelUpCelebration(level: result.newLevel, title: result.newTitle)
                     }
 
+                    Log.ui.info("[MoodCheckIn] Saved successfully")
                     dismiss()
                 }
             } catch {
+                // Log detailed error for debugging, show generic message to user
+                Log.data.error("[MoodCheckIn] Failed to save mood: \(error)")
                 await MainActor.run {
-                    appState.showError(.apiError(error.localizedDescription))
+                    appState.showError(.apiError("Unable to save mood. Please try again."))
                 }
             }
 

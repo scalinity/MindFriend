@@ -316,18 +316,13 @@ final class SensoryRegulationService: ObservableObject {
         )
 
         do {
-            let response = try await supabase.functions.invoke(
+            let response: CreateSessionResponse = try await supabase.functions.invoke(
                 "create-sensory-session",
                 options: .init(body: request)
             )
-            
-            guard let responseData = try? JSONSerialization.data(withJSONObject: response),
-                  let decodedResponse = try? JSONDecoder().decode(CreateSessionResponse.self, from: responseData) else {
-                throw SensoryError.networkError
-            }
 
-            // ✅ CORRECTNESS FIX: Validate session ID from backend
-            guard let sessionId = UUID(uuidString: decodedResponse.sessionId) else {
+            // Validate session ID from backend
+            guard let sessionId = UUID(uuidString: response.sessionId) else {
                 throw SensoryError.networkError
             }
 
@@ -350,6 +345,7 @@ final class SensoryRegulationService: ObservableObject {
             return session
 
         } catch {
+            print("Error creating session on server: \(error)")
             throw SensoryError.networkError
         }
     }
@@ -384,19 +380,15 @@ final class SensoryRegulationService: ObservableObject {
         )
 
         do {
-            let response = try await supabase.functions.invoke(
+            let response: CompleteSessionResponse = try await supabase.functions.invoke(
                 "complete-sensory-session",
                 options: .init(body: request)
             )
-            
-            guard let responseData = try? JSONSerialization.data(withJSONObject: response),
-                  let decodedResponse = try? JSONDecoder().decode(CompleteSessionResponse.self, from: responseData) else {
-                throw SensoryError.networkError
-            }
 
-            return decodedResponse.achievementsUnlocked
+            return response.achievementsUnlocked
 
         } catch {
+            print("Error completing session on server: \(error)")
             throw SensoryError.networkError
         }
     }

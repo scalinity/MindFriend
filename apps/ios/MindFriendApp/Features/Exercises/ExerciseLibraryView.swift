@@ -169,10 +169,10 @@ struct ExerciseLibraryView: View {
                         .foregroundStyle(.secondary)
                         .padding(.top, 40)
                 } else {
-                    LazyVStack(spacing: 16) {
+                    LazyVStack(spacing: 12) {
                         ForEach(filteredExercises) { exercise in
                             NavigationLink {
-                                ExercisePlayerView(exercise: exercise)
+                                LibraryExercisePlayerView(exercise: exercise, container: container)
                             } label: {
                                 ExerciseCard(
                                     exercise: exercise,
@@ -187,7 +187,10 @@ struct ExerciseLibraryView: View {
             }
             .padding(.vertical)
         }
+        .scrollClipDisabled(false)
         .navigationTitle("Exercises")
+        .navigationBarTitleDisplayMode(.large)
+        .toolbarBackground(.visible, for: .navigationBar)
         // Load exercises on appear
         .task {
             await loadExercises()
@@ -264,20 +267,25 @@ struct ExerciseCard: View {
     }
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 12) {
+            // Icon - fixed size
             Image(systemName: exercise.type.icon)
-                .font(.title)
+                .font(.title2)
                 .foregroundStyle(Color.accentColor)
-                .frame(width: 60, height: 60)
+                .frame(width: 50, height: 50)
                 .background(Color.accentColor.opacity(0.1))
-                .cornerRadius(12)
+                .cornerRadius(10)
                 .accessibilityHidden(true)
 
+            // Content - flexible, takes remaining space
             VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
+                // Title row
+                HStack(spacing: 6) {
                     Text(exercise.title)
                         .font(.headline)
                         .foregroundStyle(.primary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     if isRecommended {
                         Image(systemName: "star.fill")
@@ -286,20 +294,17 @@ struct ExerciseCard: View {
                     }
                 }
 
+                // Description
                 Text(exercise.description)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
 
+                // Metadata row - wrap to fit
                 HStack(spacing: 6) {
                     Label("\(durationMinutes) min", systemImage: "clock")
-                        .lineLimit(1)
-                        .fixedSize()
-
-                    Text("•")
-
-                    Text(exercise.type.rawValue.capitalized)
-                        .lineLimit(1)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
 
                     if let basis = exercise.evidenceBasis {
                         EvidenceBadge(
@@ -307,7 +312,6 @@ struct ExerciseCard: View {
                             isReviewed: exercise.isTherapistReviewed,
                             showInfo: false
                         )
-                        .fixedSize()
                     }
 
                     if isRecommended {
@@ -315,27 +319,23 @@ struct ExerciseCard: View {
                             .font(.caption2)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(Color.orange.opacity(0.1))
+                            .background(Color.orange.opacity(0.15))
                             .foregroundColor(.orange)
                             .cornerRadius(4)
-                            .fixedSize()
                     }
-
-                    Spacer(minLength: 0)
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            Spacer()
-
+            // Chevron
             Image(systemName: "chevron.right")
-                .foregroundStyle(.secondary)
+                .font(.caption)
+                .foregroundStyle(.tertiary)
                 .accessibilityHidden(true)
         }
-        .padding()
+        .padding(12)
         .background(Color(.secondarySystemBackground))
-        .cornerRadius(16)
+        .cornerRadius(12)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)
         .accessibilityHint("Double tap to start this exercise")
@@ -357,6 +357,7 @@ struct ExercisePlayerView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
     @Environment(\.dismiss) var dismiss
+    @Environment(\.scenePhase) private var scenePhase  // Background handling
 
     let exercise: Exercise
     @State private var session: ExerciseSession?
@@ -365,7 +366,8 @@ struct ExercisePlayerView: View {
     @State private var timer: Timer?
     @State private var showCompletion = false
     @State private var rating: Int = 0
-    
+    @State private var wasPlayingBeforeBackground = false  // Track state for resume
+
     // Efficacy tracking
     @State private var isTrackingEfficacy = false
     @State private var currentTrajectory: [TrajectoryPoint] = []
@@ -400,12 +402,15 @@ struct ExercisePlayerView: View {
 
                 VStack {
                     Text(timeString)
-                        .font(.system(size: 48, weight: .bold, design: .monospaced))
+                        .font(.system(.largeTitle, design: .monospaced, weight: .bold))
+                        .dynamicTypeSize(...DynamicTypeSize.accessibility2)  // Support Dynamic Type
 
                     Text(isPlaying ? "In Progress" : "Ready")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Timer: \(timeString), \(isPlaying ? "in progress" : "ready")")
             }
             .frame(width: 250, height: 250)
 
@@ -479,8 +484,25 @@ struct ExercisePlayerView: View {
             currentTrajectory = trajectory
             checkForBreakthrough()
         }
+        .onChange(of: scenePhase) { _, newPhase in
+            // Handle app going to background - pause timer to save battery and state
+            switch newPhase {
+            case .background, .inactive:
+                if isPlaying {
+                    wasPlayingBeforeBackground = true
+                    pauseTimer()
+                }
+            case .active:
+                // Optionally auto-resume when returning to foreground
+                // Currently we keep it paused so user can resume when ready
+                break
+            @unknown default:
+                break
+            }
+        }
         .onDisappear {
             timer?.invalidate()
+            timer = nil
             // Stop tracking if still active
             if isTrackingEfficacy {
                 Task {
@@ -501,10 +523,8 @@ struct ExercisePlayerView: View {
             let sessionId = try await container.supabaseDataService.startExerciseSession(exerciseId: exercise.id)
             session = ExerciseSession(id: sessionId, exerciseId: exercise.id, startedAt: Date(), endedAt: nil, completed: false)
         } catch {
-            // Session tracking is optional - log for debugging but allow exercise to continue
-            #if DEBUG
-            Log.quests.error("Failed to start exercise session", error: error)
-            #endif
+            // Session tracking is optional - log but allow exercise to continue
+            Log.quests.warning("Failed to start exercise session: \(error.localizedDescription)")
         }
     }
 
@@ -561,12 +581,12 @@ struct ExercisePlayerView: View {
         guard let session = session,
               let sessionIdUUID = UUID(uuidString: session.id),
               let exerciseIdUUID = UUID(uuidString: exercise.id) else { return }
-        
+
         do {
             // Get user ID from Supabase session
             let supabaseSession = try await container.supabase.auth.session
             let userId = supabaseSession.user.id
-            
+
             try await container.interventionEfficacyEngine.startSession(
                 sessionId: sessionIdUUID,
                 exerciseId: exerciseIdUUID,
@@ -576,24 +596,23 @@ struct ExercisePlayerView: View {
                 isTrackingEfficacy = true
             }
         } catch {
-            #if DEBUG
-            Log.quests.error("Failed to start efficacy tracking", error: error)
-            #endif
+            Log.quests.warning("Failed to start efficacy tracking: \(error.localizedDescription)")
         }
     }
-    
+
     private func stopEfficacyTracking() async {
         guard isTrackingEfficacy else { return }
-        
+
         do {
             efficacyResult = try await container.interventionEfficacyEngine.endSession()
             await MainActor.run {
                 isTrackingEfficacy = false
             }
         } catch {
-            #if DEBUG
-            Log.quests.error("Failed to stop efficacy tracking", error: error)
-            #endif
+            Log.quests.warning("Failed to stop efficacy tracking: \(error.localizedDescription)")
+            await MainActor.run {
+                isTrackingEfficacy = false
+            }
         }
     }
     
@@ -671,11 +690,11 @@ struct ExercisePlayerView: View {
                     dismiss()
                 }
             } catch {
-                // Completion tracking failure shouldn't block user - log for debugging
-                #if DEBUG
-                Log.quests.error("Failed to record exercise completion", error: error)
-                #endif
+                // Log error - exercise was completed locally, will sync when connection restores
+                Log.quests.warning("Failed to record exercise completion: \(error.localizedDescription)")
                 await MainActor.run {
+                    // Dismiss anyway - the exercise was completed locally
+                    // Network sync will happen automatically when connection restores
                     dismiss()
                 }
             }

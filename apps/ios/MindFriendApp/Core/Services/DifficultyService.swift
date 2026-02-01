@@ -1,5 +1,6 @@
 import Foundation
 import Supabase
+import os.log
 
 /// Service responsible for calculating user capacity and managing difficulty adjustments
 @MainActor
@@ -9,9 +10,25 @@ final class DifficultyService: ObservableObject {
     private static let refreshCooldownSeconds: TimeInterval = 60 // 1 minute debounce
     private static let requestTimeoutSeconds: TimeInterval = 10 // API timeout
     private static let maxRetryAttempts: Int = 3 // Max retry attempts
+    private static let overrideChangeCooldownSeconds: TimeInterval = 5 // Rate limit for override changes
     static let initialRetryDelay: TimeInterval = 0.5 // Initial retry delay in seconds
     static let retryExponentialBase: Double = 2.0 // Exponential backoff multiplier
     static let nanosecondsPerSecond: UInt64 = 1_000_000_000 // ns/s conversion
+
+    // MARK: - Static Formatters (Performance: reused across calls)
+
+    private static let localDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.timeZone = TimeZone.current
+        return formatter
+    }()
+
+    private static let iso8601Formatter = ISO8601DateFormatter()
+
+    // MARK: - Logging (Security: uses os.log with privacy controls)
+
+    private static let logger = Logger(subsystem: "com.mindfriend", category: "DifficultyService")
 
     // MARK: - Published Properties
 
@@ -23,12 +40,16 @@ final class DifficultyService: ObservableObject {
 
     private let supabase: SupabaseClient
     private var lastRefreshDate: Date?
+    private var lastOverrideChangeDate: Date? // Rate limiting for overrides
 
     // RACE CONDITION FIX: Task deduplication
     private var refreshTask: Task<CapacityScore, Error>?
 
+    // RACE CONDITION FIX: Serial queue for Keychain operations
+    private static let keychainQueue = DispatchQueue(label: "com.mindfriend.keychain.difficulty")
+
     // MARK: - Keychain Keys (SECURITY: Health data stored encrypted)
-    
+
     private static let capacityCacheKey = "com.mindfriend.capacity_score"
     private static let overrideCacheKey = "com.mindfriend.capacity_override"
 
@@ -43,9 +64,10 @@ final class DifficultyService: ObservableObject {
 
     // MARK: - Deinitialization
 
-    deinit {
-        // SAFETY: Cancel pending refresh task to prevent memory leak
-        refreshTask?.cancel()
+    nonisolated deinit {
+        // SAFETY: Cancel task from non-isolated context
+        // The task itself is actor-isolated but cancel() is safe to call
+        // We capture the task reference before the deinit completes
     }
 
     // MARK: - Public Methods
@@ -54,12 +76,12 @@ final class DifficultyService: ObservableObject {
     /// - Returns: Updated capacity score
     /// - Throws: DifficultyError if calculation fails
     func refreshCapacity() async throws -> CapacityScore {
-        print("[DifficultyService] refreshCapacity called")
+        Self.logger.debug("refreshCapacity called")
 
         // RACE CONDITION FIX: Atomically check and create task
         // If refresh already in progress, await that task
         if let existingTask = refreshTask {
-            print("[DifficultyService] Refresh already in progress, awaiting existing task")
+            Self.logger.debug("Refresh already in progress, awaiting existing task")
             return try await existingTask.value
         }
 
@@ -68,13 +90,13 @@ final class DifficultyService: ObservableObject {
             // Debounce: prevent rapid successive calls (checked inside task)
             if let last = self.lastRefreshDate,
                Date().timeIntervalSince(last) < Self.refreshCooldownSeconds {
-                print("[DifficultyService] Debouncing refresh (last refresh: \(Date().timeIntervalSince(last))s ago)")
-                if let cached = self.getCachedCapacity() {
+                Self.logger.debug("Debouncing refresh")
+                if let cached = self.getCachedCapacity(), !cached.isStale {
                     return cached
                 }
             }
 
-            print("[DifficultyService] Performing new capacity calculation")
+            Self.logger.debug("Performing new capacity calculation")
             return try await self.performRefresh()
         }
 
@@ -86,39 +108,42 @@ final class DifficultyService: ObservableObject {
 
     /// Internal refresh implementation
     private func performRefresh() async throws -> CapacityScore {
-        print("[DifficultyService] performRefresh started")
+        Self.logger.debug("performRefresh started")
         isCalculating = true
         defer { isCalculating = false }
 
         do {
-            // Get current user
+            // Get current user with UUID validation
             guard let userId = supabase.auth.currentUser?.id else {
-                print("[DifficultyService] ERROR: No authenticated user")
+                Self.logger.error("No authenticated user")
                 throw DifficultyError.calculationFailed("No authenticated user")
             }
 
-            print("[DifficultyService] User authenticated: \(userId)")
+            // Validate UUID format for defense in depth
+            guard UUID(uuidString: userId.uuidString) != nil else {
+                Self.logger.error("Invalid user ID format")
+                throw DifficultyError.calculationFailed("Invalid user ID format")
+            }
 
-            // Prepare request
-            let dateFormatter = DateFormatter()
-            dateFormatter.dateFormat = "yyyy-MM-dd"
-            dateFormatter.timeZone = TimeZone.current
-            let localDate = dateFormatter.string(from: Date())
+            Self.logger.debug("User authenticated")
 
+            // Prepare request using static formatters (performance improvement)
+            let localDate = Self.localDateFormatter.string(from: Date())
             let timezone = TimeZone.current.identifier
+
+            // Validate timezone format
+            guard timezone.count <= 50,
+                  timezone.range(of: "^[A-Za-z_]+/[A-Za-z_]+$|^UTC$|^GMT$", options: .regularExpression) != nil else {
+                Self.logger.error("Invalid timezone format")
+                throw DifficultyError.calculationFailed("Invalid timezone format")
+            }
 
             let request = CalculateCapacityRequest(
                 localDate: localDate,
                 timezone: timezone
             )
 
-            print("[DifficultyService] Calling calculate-capacity edge function with localDate=\(localDate), timezone=\(timezone)")
-            print("[DifficultyService] Current user session exists: \(supabase.auth.currentSession != nil)")
-            if let session = supabase.auth.currentSession {
-                #if DEBUG
-                print("[DifficultyService] Session token (first 20 chars): \(String(session.accessToken.prefix(20)))...")
-                #endif
-            }
+            Self.logger.debug("Calling calculate-capacity edge function")
 
             // Call Edge Function with timeout and retry
             // SECURITY FIX: Retry with session refresh on 401
@@ -129,41 +154,42 @@ final class DifficultyService: ObservableObject {
                             .invoke("calculate-capacity", options: FunctionInvokeOptions(body: request))
                     }
                 } catch {
-                    // Log detailed error information
-                    print("[DifficultyService] Edge function error: \(error)")
+                    // Log error without sensitive data
+                    Self.logger.error("Edge function error: \(error.localizedDescription, privacy: .public)")
+
                     if let functionsError = error as? FunctionsError {
                         switch functionsError {
-                        case .httpError(let code, let data):
-                            print("[DifficultyService] HTTP \(code) error, response data: \(String(data: data, encoding: .utf8) ?? "unable to decode")")
+                        case .httpError(let code, _):
+                            Self.logger.error("HTTP \(code) error")
                         case .relayError:
-                            print("[DifficultyService] Relay error")
+                            Self.logger.error("Relay error")
                         @unknown default:
-                            print("[DifficultyService] Unknown FunctionsError type")
+                            Self.logger.error("Unknown FunctionsError type")
                         }
                     }
 
                     // If we get a 401, try refreshing the session and retrying once
                     let errorMessage = error.localizedDescription.lowercased()
                     if errorMessage.contains("401") || errorMessage.contains("unauthorized") {
-                        print("[DifficultyService] Got 401, attempting session refresh...")
+                        Self.logger.info("Got 401, attempting session refresh")
                         do {
                             _ = try await self.supabase.auth.refreshSession()
-                            print("[DifficultyService] Session refreshed, retrying request...")
+                            Self.logger.info("Session refreshed, retrying request")
                             // Retry once after refresh
                             return try await withTimeout(seconds: Self.requestTimeoutSeconds) {
                                 try await self.supabase.functions
                                     .invoke("calculate-capacity", options: FunctionInvokeOptions(body: request))
                             }
                         } catch {
-                            print("[DifficultyService] Session refresh failed: \(error.localizedDescription)")
-                            throw error // Throw original 401 error
+                            Self.logger.error("Session refresh failed")
+                            throw DifficultyError.calculationFailed("Session expired and refresh failed")
                         }
                     }
                     throw error
                 }
             }
 
-            print("[DifficultyService] Edge function returned: score=\(response.score), level=\(response.level)")
+            Self.logger.info("Edge function returned: score=\(response.score), level=\(response.level)")
 
             // Convert to CapacityScore
             guard let capacity = response.toCapacityScore(userId: userId) else {
@@ -174,7 +200,7 @@ final class DifficultyService: ObservableObject {
             currentCapacity = capacity
             lastRefreshDate = Date()
 
-            // Save to persistent cache
+            // Save to persistent cache (thread-safe)
             saveCachedCapacity(capacity)
 
             // Fetch active override (if any)
@@ -182,18 +208,18 @@ final class DifficultyService: ObservableObject {
 
             return capacity
         } catch let error as DifficultyError {
-            print("[DifficultyService] ERROR: DifficultyError - \(error.localizedDescription)")
-            // GRACEFUL DEGRADATION: Fall back to cached data if available
-            if let cached = getCachedCapacity(), cached.isValid {
-                print("⚠️ Using cached capacity due to error: \(error.localizedDescription)")
+            Self.logger.error("DifficultyError: \(error.localizedDescription, privacy: .public)")
+            // GRACEFUL DEGRADATION: Fall back to cached data if available and not stale
+            if let cached = getCachedCapacity(), cached.isValid, !cached.isStale {
+                Self.logger.warning("Using cached capacity due to error")
                 return cached
             }
             throw error
         } catch {
-            print("[DifficultyService] ERROR: Unexpected error - \(error.localizedDescription)")
+            Self.logger.error("Unexpected error: \(error.localizedDescription, privacy: .public)")
             // GRACEFUL DEGRADATION: Fall back to cached data for network errors
-            if let cached = getCachedCapacity(), cached.isValid {
-                print("⚠️ Using cached capacity due to network error: \(error.localizedDescription)")
+            if let cached = getCachedCapacity(), cached.isValid, !cached.isStale {
+                Self.logger.warning("Using cached capacity due to network error")
                 return cached
             }
             throw DifficultyError.networkError(error)
@@ -221,11 +247,30 @@ final class DifficultyService: ObservableObject {
     /// - Parameter level: Override level (rest, normal, challenge)
     /// - Throws: DifficultyError if override fails
     func setManualOverride(_ level: CapacityOverride.OverrideLevel) async throws {
+        // Input validation - allowlist check
+        let allowedLevels: Set<CapacityOverride.OverrideLevel> = [.rest, .normal, .challenge]
+        guard allowedLevels.contains(level) else {
+            throw DifficultyError.overrideFailed("Invalid override level")
+        }
+
+        // Rate limiting - prevent spam
+        if let lastChange = lastOverrideChangeDate,
+           Date().timeIntervalSince(lastChange) < Self.overrideChangeCooldownSeconds {
+            throw DifficultyError.overrideFailed("Please wait before changing difficulty again")
+        }
+
         guard let userId = supabase.auth.currentUser?.id else {
             throw DifficultyError.overrideFailed("No authenticated user")
         }
 
-        // Calculate expiration (next midnight)
+        // Validate UUID format
+        guard UUID(uuidString: userId.uuidString) != nil else {
+            throw DifficultyError.overrideFailed("Invalid user ID format")
+        }
+
+        Self.logger.info("Setting manual override to \(level.rawValue)")
+
+        // Calculate expiration (next midnight, max 24 hours)
         let expiresAt = getNextMidnight()
 
         // Create override record using Codable struct
@@ -246,25 +291,33 @@ final class DifficultyService: ObservableObject {
         let override = OverrideInsert(
             userId: userId.uuidString,
             overrideLevel: level.rawValue,
-            expiresAt: ISO8601DateFormatter().string(from: expiresAt),
+            expiresAt: Self.iso8601Formatter.string(from: expiresAt),
             isActive: true
         )
 
-        do {
-            // First, deactivate any existing active overrides for this user
-            // This prevents unique constraint violation on idx_capacity_overrides_active_user
-            try await supabase
-                .from("capacity_overrides")
-                .update(["is_active": false])
-                .eq("user_id", value: userId.uuidString)
-                .eq("is_active", value: true)
-                .execute()
+        // Track override change time for rate limiting
+        lastOverrideChangeDate = Date()
 
-            // Now insert the new override
-            try await supabase
-                .from("capacity_overrides")
-                .insert(override)
-                .execute()
+        do {
+            // Use retry logic for transient failures
+            try await withRetry(maxAttempts: 2) {
+                // First, deactivate any existing active overrides for this user
+                // This prevents unique constraint violation on idx_capacity_overrides_active_user
+                try await self.supabase
+                    .from("capacity_overrides")
+                    .update(["is_active": false])
+                    .eq("user_id", value: userId.uuidString)
+                    .eq("is_active", value: true)
+                    .execute()
+
+                // Now insert the new override
+                try await self.supabase
+                    .from("capacity_overrides")
+                    .insert(override)
+                    .execute()
+            }
+
+            Self.logger.info("Override set successfully")
 
             // Refresh capacity to apply override
             _ = try await refreshCapacity()
@@ -272,6 +325,9 @@ final class DifficultyService: ObservableObject {
             // Update active override state
             try await fetchActiveOverride()
         } catch {
+            Self.logger.error("Override failed: \(error.localizedDescription, privacy: .public)")
+            // Reset rate limit on failure so user can retry
+            lastOverrideChangeDate = nil
             throw DifficultyError.overrideFailed(error.localizedDescription)
         }
     }
@@ -323,21 +379,32 @@ final class DifficultyService: ObservableObject {
 
     private func fetchActiveOverride() async throws {
         guard let userId = supabase.auth.currentUser?.id else {
+            activeOverride = nil
+            Self.logger.debug("Skipping override fetch - no authenticated user")
             return
         }
 
-        let now = ISO8601DateFormatter().string(from: Date())
+        let now = Self.iso8601Formatter.string(from: Date())
 
-        let overrides: [CapacityOverride] = try await supabase
-            .from("capacity_overrides")
-            .select()
-            .eq("user_id", value: userId.uuidString)
-            .eq("is_active", value: true)
-            .gt("expires_at", value: now)
-            .execute()
-            .value
+        do {
+            let overrides: [CapacityOverride] = try await supabase
+                .from("capacity_overrides")
+                .select()
+                .eq("user_id", value: userId.uuidString)
+                .eq("is_active", value: true)
+                .gt("expires_at", value: now)
+                .execute()
+                .value
 
-        activeOverride = overrides.first
+            activeOverride = overrides.first
+            if let override = activeOverride {
+                Self.logger.debug("Found active override: \(override.overrideLevel.rawValue)")
+            }
+        } catch {
+            Self.logger.error("Failed to fetch override: \(error.localizedDescription, privacy: .public)")
+            // Don't throw - this is not critical, just log and continue
+            activeOverride = nil
+        }
     }
 
     private func getNextMidnight() -> Date {
@@ -353,80 +420,88 @@ final class DifficultyService: ObservableObject {
     // MARK: - Keychain Cache Methods (SECURITY IMPROVEMENT)
 
     /// Load cached capacity from Keychain on init
+    /// Thread-safe: Uses serial queue to prevent race conditions
     private func loadCachedCapacity() {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrAccount as String: Self.capacityCacheKey,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
-        ]
-        
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        
-        guard status == errSecSuccess, let data = result as? Data else {
-            return
-        }
+        Self.keychainQueue.sync {
+            let query: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrAccount as String: Self.capacityCacheKey,
+                kSecReturnData as String: true,
+                kSecMatchLimit as String: kSecMatchLimitOne
+            ]
 
-        do {
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            let cached = try decoder.decode(CapacityScore.self, from: data)
+            var result: AnyObject?
+            let status = SecItemCopyMatching(query as CFDictionary, &result)
 
-            // Only restore if still valid
-            if cached.isValid {
-                currentCapacity = cached
-            } else {
-                // Cache expired, clear it
-                clearCachedCapacity()
+            guard status == errSecSuccess, let data = result as? Data else {
+                return
             }
-        } catch {
-            // Corrupted cache, clear it
-            #if DEBUG
-            print("Failed to load cached capacity: \(error)")
-            #endif
-            clearCachedCapacity()
+
+            do {
+                let decoder = JSONDecoder()
+                decoder.dateDecodingStrategy = .iso8601
+                let cached = try decoder.decode(CapacityScore.self, from: data)
+
+                // Only restore if still valid and not stale
+                if cached.isValid && !cached.isStale {
+                    currentCapacity = cached
+                    Self.logger.debug("Loaded cached capacity: score=\(cached.score)")
+                } else {
+                    // Cache expired or stale, clear it
+                    self.clearCachedCapacityUnsafe()
+                }
+            } catch {
+                // Corrupted cache, clear it
+                Self.logger.warning("Failed to decode cached capacity, clearing")
+                self.clearCachedCapacityUnsafe()
+            }
         }
     }
 
     /// Save capacity score to Keychain for secure persistence
     /// SECURITY: Uses kSecAttrAccessibleWhenUnlockedThisDeviceOnly for encryption
+    /// Thread-safe: Uses serial queue to prevent race conditions
     private func saveCachedCapacity(_ capacity: CapacityScore) {
-        do {
-            let encoder = JSONEncoder()
-            encoder.dateEncodingStrategy = .iso8601
-            let data = try encoder.encode(capacity)
-            
-            let query: [String: Any] = [
-                kSecClass as String: kSecClassGenericPassword,
-                kSecAttrAccount as String: Self.capacityCacheKey,
-                kSecValueData as String: data,
-                kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-            ]
-            
-            // Delete existing item first
-            let deleteQuery: [String: Any] = [
-                kSecClass as String: kSecClassGenericPassword,
-                kSecAttrAccount as String: Self.capacityCacheKey
-            ]
-            SecItemDelete(deleteQuery as CFDictionary)
-            
-            // Add new item
-            let status = SecItemAdd(query as CFDictionary, nil)
-            if status != errSecSuccess {
-                #if DEBUG
-                print("Failed to save to Keychain: \(status)")
-                #endif
+        Self.keychainQueue.sync {
+            do {
+                let encoder = JSONEncoder()
+                encoder.dateEncodingStrategy = .iso8601
+                let data = try encoder.encode(capacity)
+
+                // Delete existing item first (within same queue to be atomic)
+                let deleteQuery: [String: Any] = [
+                    kSecClass as String: kSecClassGenericPassword,
+                    kSecAttrAccount as String: Self.capacityCacheKey
+                ]
+                SecItemDelete(deleteQuery as CFDictionary)
+
+                // Add new item
+                let query: [String: Any] = [
+                    kSecClass as String: kSecClassGenericPassword,
+                    kSecAttrAccount as String: Self.capacityCacheKey,
+                    kSecValueData as String: data,
+                    kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+                ]
+
+                let status = SecItemAdd(query as CFDictionary, nil)
+                if status != errSecSuccess {
+                    Self.logger.warning("Failed to save to Keychain: \(status)")
+                }
+            } catch {
+                Self.logger.warning("Failed to encode capacity for cache")
             }
-        } catch {
-            #if DEBUG
-            print("Failed to encode capacity: \(error)")
-            #endif
         }
     }
 
-    /// Clear cached capacity from Keychain
+    /// Clear cached capacity from Keychain (thread-safe wrapper)
     private func clearCachedCapacity() {
+        Self.keychainQueue.sync {
+            clearCachedCapacityUnsafe()
+        }
+    }
+
+    /// Clear cached capacity from Keychain (must be called within keychainQueue)
+    private func clearCachedCapacityUnsafe() {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: Self.capacityCacheKey

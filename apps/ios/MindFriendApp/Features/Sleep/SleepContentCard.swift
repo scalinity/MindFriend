@@ -3,6 +3,7 @@ import SwiftUI
 /// Card component for displaying sleep content (stories, soundscapes, routines)
 struct SleepContentCard: View {
     let content: SleepContent
+    var isPremiumUser: Bool = false
     let onTap: () -> Void
 
     var body: some View {
@@ -11,7 +12,8 @@ struct SleepContentCard: View {
                 // Thumbnail with overlay
                 ZStack(alignment: .bottomLeading) {
                     // Thumbnail or gradient placeholder
-                    if let thumbnailUrl = content.thumbnailURL {
+                    // Soundscapes always use gradient placeholder for consistency
+                    if content.contentType != .soundscape, let thumbnailUrl = content.thumbnailURL {
                         AsyncImage(url: thumbnailUrl) { phase in
                             switch phase {
                             case .empty:
@@ -33,21 +35,23 @@ struct SleepContentCard: View {
                         thumbnailPlaceholder
                     }
 
-                    // Duration badge
-                    HStack(spacing: 4) {
-                        Image(systemName: "clock")
-                            .font(.caption2)
-                        Text(content.formattedDuration)
-                            .font(.caption2)
+                    // Duration badge (hidden for soundscapes)
+                    if content.contentType != .soundscape {
+                        HStack(spacing: 4) {
+                            Image(systemName: "clock")
+                                .font(.caption2)
+                            Text(content.formattedDuration)
+                                .font(.caption2)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.ultraThinMaterial)
+                        .cornerRadius(8)
+                        .padding(8)
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(.ultraThinMaterial)
-                    .cornerRadius(8)
-                    .padding(8)
 
-                    // Premium badge
-                    if content.isPremium {
+                    // Premium badge - only show if content is premium AND user is not premium
+                    if content.isPremium && !isPremiumUser {
                         HStack {
                             Spacer()
                             Image(systemName: "crown.fill")
@@ -68,6 +72,8 @@ struct SleepContentCard: View {
                         .fontWeight(.medium)
                         .foregroundStyle(.white)
                         .lineLimit(2)
+                        .minimumScaleFactor(0.8)
+                        .frame(height: 40, alignment: .top)
 
                     HStack(spacing: 4) {
                         Image(systemName: content.contentType.icon)
@@ -76,12 +82,6 @@ struct SleepContentCard: View {
                         Text(content.category.displayName)
                             .font(.caption)
                             .foregroundStyle(.white.opacity(0.7))
-                    }
-
-                    if let narrator = content.narrator {
-                        Text("by \(narrator)")
-                            .font(.caption2)
-                            .foregroundStyle(.white.opacity(0.5))
                     }
                 }
             }
@@ -120,6 +120,7 @@ struct SleepContentCard: View {
 /// Horizontal list item for sleep content
 struct SleepContentListItem: View {
     let content: SleepContent
+    var isPremiumUser: Bool = false
     let onTap: () -> Void
 
     var body: some View {
@@ -158,17 +159,12 @@ struct SleepContentListItem: View {
                             .font(.caption)
                             .foregroundStyle(.white.opacity(0.7))
 
-                        if content.isPremium {
+                        // Premium badge - only show if content is premium AND user is not premium
+                        if content.isPremium && !isPremiumUser {
                             Label("Premium", systemImage: "crown.fill")
                                 .font(.caption)
                                 .foregroundStyle(.yellow)
                         }
-                    }
-
-                    if let narrator = content.narrator {
-                        Text("by \(narrator)")
-                            .font(.caption2)
-                            .foregroundStyle(.white.opacity(0.5))
                     }
                 }
 

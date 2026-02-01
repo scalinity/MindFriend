@@ -264,6 +264,8 @@ extension BoundaryType {
 
 // MARK: - Previews
 
+#if DEBUG
 #Preview {
     BoundaryDefinitionView(service: BoundaryPlannerService(supabase: .mock))
 }
+#endif

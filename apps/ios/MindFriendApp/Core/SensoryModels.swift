@@ -76,7 +76,8 @@ struct TactilePattern: Identifiable, Codable {
     let name: String
     let description: String
     let category: PatternCategory
-    let durationSeconds: Int
+    let durationSeconds: Int      // Total session duration (for display)
+    let loopDurationSeconds: Int  // Actual AHAP pattern duration for looping
     let isPremium: Bool
     let ahapFilename: String
     let thumbnailName: String?
@@ -97,11 +98,16 @@ struct TactilePattern: Identifiable, Codable {
         }
     }
 
-    /// Load AHAP pattern dictionary from bundle
-    func loadAHAPPattern() -> [CHHapticPattern.Key: Any]? {
-        guard let url = Bundle.main.url(forResource: ahapFilename, withExtension: "ahap"),
+    /// Get the URL for the AHAP file in the bundle
+    func ahapURL() -> URL? {
+        Bundle.main.url(forResource: ahapFilename, withExtension: "ahap")
+    }
+    
+    /// Load AHAP pattern dictionary from bundle (for modification purposes)
+    func loadAHAPDictionary() -> [String: Any]? {
+        guard let url = ahapURL(),
               let data = try? Data(contentsOf: url),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [CHHapticPattern.Key: Any] else {
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return nil
         }
         return json
@@ -241,6 +247,7 @@ extension TactilePattern {
             description: "60 BPM pulse pattern for grounding",
             category: .grounding,
             durationSeconds: 300,
+            loopDurationSeconds: 5,  // AHAP events: 0-4s
             isPremium: false,
             ahapFilename: "heartbeat",
             thumbnailName: "heartbeat_thumb"
@@ -251,6 +258,7 @@ extension TactilePattern {
             description: "Deep, slow rhythm like the earth's heartbeat",
             category: .grounding,
             durationSeconds: 300,
+            loopDurationSeconds: 5,  // AHAP events: 0-4.9s
             isPremium: true,
             ahapFilename: "earth_pulse",
             thumbnailName: "earth_pulse_thumb"
@@ -263,6 +271,7 @@ extension TactilePattern {
             description: "Rising and falling intensity like ocean waves",
             category: .calming,
             durationSeconds: 300,
+            loopDurationSeconds: 8,  // AHAP events: 0-8s
             isPremium: false,
             ahapFilename: "wave",
             thumbnailName: "wave_thumb"
@@ -273,6 +282,7 @@ extension TactilePattern {
             description: "Tactile inhale/exhale timing cues",
             category: .calming,
             durationSeconds: 300,
+            loopDurationSeconds: 10,  // AHAP events: 0-10s (4s inhale + 6s exhale)
             isPremium: false,
             ahapFilename: "breath_cue",
             thumbnailName: "breath_cue_thumb"
@@ -285,6 +295,7 @@ extension TactilePattern {
             description: "Numbered taps for pacing and focus",
             category: .focus,
             durationSeconds: 240,
+            loopDurationSeconds: 19,  // AHAP events: 0-19s (4-7-8 breathing)
             isPremium: false,
             ahapFilename: "counting",
             thumbnailName: "counting_thumb"
@@ -297,6 +308,7 @@ extension TactilePattern {
             description: "Emergency grounding pattern (... --- ...)",
             category: .grounding,
             durationSeconds: 120,
+            loopDurationSeconds: 5,  // AHAP events: 0-4.8s
             isPremium: false,
             ahapFilename: "sos",
             thumbnailName: "sos_thumb"

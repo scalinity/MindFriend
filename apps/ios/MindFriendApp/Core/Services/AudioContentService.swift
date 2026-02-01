@@ -144,6 +144,9 @@ final class AudioContentService {
 
     /// Record playback session start
     func recordPlaybackStart(trackId: String, context: String = "browse") async throws {
+        // Ensure we have a valid session before making authenticated API calls
+        let _ = try await supabase.auth.session
+        
         let body: [String: AudioContentServiceAnyEncodable] = [
             "trackId": AudioContentServiceAnyEncodable(trackId),
             "eventType": AudioContentServiceAnyEncodable("start"),
@@ -157,6 +160,9 @@ final class AudioContentService {
 
     /// Record playback completion
     func recordPlaybackComplete(trackId: String, positionSeconds: Int, durationListenedSeconds: Int) async throws {
+        // Ensure we have a valid session before making authenticated API calls
+        let _ = try await supabase.auth.session
+        
         let body: [String: AudioContentServiceAnyEncodable] = [
             "trackId": AudioContentServiceAnyEncodable(trackId),
             "eventType": AudioContentServiceAnyEncodable("complete"),

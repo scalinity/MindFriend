@@ -167,10 +167,10 @@ struct SleepSoundscapeRow: View {
                             .font(.headline)
                             .foregroundColor(isLocked ? .secondary : .primary)
 
-                        if soundscape.isPremium {
-                            Image(systemName: isLocked ? "lock.fill" : "crown.fill")
+                        if isLocked {
+                            Image(systemName: "lock.fill")
                                 .font(.caption)
-                                .foregroundColor(isLocked ? .gray : .yellow)
+                                .foregroundColor(.gray)
                         }
                     }
 

@@ -244,8 +244,10 @@ extension CopingKitStep {
 
 // MARK: - Preview
 
+#if DEBUG
 #Preview {
     let viewModel = CopingKitsViewModel.preview()
     let kit = viewModel.availableKits[0]
     return CopingKitDetailView(viewModel: viewModel, kit: kit)
 }
+#endif

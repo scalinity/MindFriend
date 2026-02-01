@@ -4,6 +4,7 @@ import SwiftUI
 struct ManualSleepEntryView: View {
     @EnvironmentObject private var container: DependencyContainer
     @Binding var isPresented: Bool
+    var onSave: (() -> Void)?
 
     @State private var sleepStart = Calendar.current.date(byAdding: .hour, value: -8, to: Date()) ?? Date()
     @State private var sleepEnd = Date()
@@ -180,6 +181,7 @@ struct ManualSleepEntryView: View {
             // Use the tracking service to create the entry (handles score calculation)
             _ = try await container.sleepTrackingService.createEntry(entry, goals: goals)
 
+            onSave?()
             isPresented = false
         } catch {
             errorMessage = "Failed to save: \(error.localizedDescription)"
@@ -188,6 +190,6 @@ struct ManualSleepEntryView: View {
 }
 
 #Preview {
-    ManualSleepEntryView(isPresented: .constant(true))
+    ManualSleepEntryView(isPresented: .constant(true), onSave: nil)
         .environmentObject(DependencyContainer.preview)
 }

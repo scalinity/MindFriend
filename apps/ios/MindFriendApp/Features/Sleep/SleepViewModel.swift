@@ -121,6 +121,9 @@ final class SleepViewModel: ObservableObject {
 
         playerState.currentContent = content
         playerState.isBuffering = true
+        
+        // Enable looping by default for soundscapes
+        audioPlayerService.isLoopingEnabled = content.contentType == .soundscape
 
         // Check for resume position
         let resumePosition = try? await sleepService.getResumePosition(for: content.id)

@@ -124,31 +124,21 @@ struct TactilePatternCard: View {
 
                     Spacer()
 
-                    if isPremium {
-                        Image(systemName: isLocked ? "lock.fill" : "crown.fill")
+                    if isLocked {
+                        Image(systemName: "lock.fill")
                             .font(.caption)
-                            .foregroundColor(isLocked ? .gray : .yellow)
+                            .foregroundColor(.gray)
                             .padding(4)
-                            .background(
-                                isLocked ? Color.gray.opacity(0.2) : Color.clear
-                            )
+                            .background(Color.gray.opacity(0.2))
                             .clipShape(Circle())
                     }
                 }
 
                 // Pattern info
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(name)
-                            .font(.headline)
-                            .foregroundColor(isLocked ? .secondary : .primary)
-                        
-                        if isLocked {
-                            Image(systemName: "crown.fill")
-                                .font(.caption2)
-                                .foregroundColor(.yellow)
-                        }
-                    }
+                    Text(name)
+                        .font(.headline)
+                        .foregroundColor(isLocked ? .secondary : .primary)
 
                     Text(category)
                         .font(.caption)

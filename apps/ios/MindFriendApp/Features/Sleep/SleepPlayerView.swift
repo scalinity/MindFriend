@@ -88,12 +88,19 @@ struct SleepPlayerView: View {
 
             Spacer()
 
-            Button {
-                showTimerPicker = true
-            } label: {
-                Image(systemName: viewModel.playerState.sleepTimerDuration != nil ? "moon.fill" : "moon")
-                    .font(.title2)
-                    .foregroundStyle(viewModel.playerState.sleepTimerDuration != nil ? .indigo : .white.opacity(0.8))
+            // Only show timer button for non-soundscape content
+            if content.contentType != .soundscape {
+                Button {
+                    showTimerPicker = true
+                } label: {
+                    Image(systemName: viewModel.playerState.sleepTimerDuration != nil ? "moon.fill" : "moon")
+                        .font(.title2)
+                        .foregroundStyle(viewModel.playerState.sleepTimerDuration != nil ? .indigo : .white.opacity(0.8))
+                }
+            } else {
+                // Spacer to balance layout for soundscapes
+                Color.clear
+                    .frame(width: 32, height: 32)
             }
         }
         .padding(.top, 8)
@@ -153,23 +160,10 @@ struct SleepPlayerView: View {
                 .foregroundStyle(.white)
                 .multilineTextAlignment(.center)
 
-            if let narrator = content.narrator {
-                Text("Narrated by \(narrator)")
-                    .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.6))
-            }
-
-            HStack(spacing: 12) {
-                Label(content.category.displayName, systemImage: content.category.icon)
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.5))
-
-                if content.isLoopable {
-                    Label("Loopable", systemImage: "repeat")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.5))
-                }
-            }
+            // Only show category, no "Loopable" text (soundscapes loop by default)
+            Label(content.category.displayName, systemImage: content.category.icon)
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.5))
         }
         .padding(.vertical)
     }
@@ -188,15 +182,17 @@ struct SleepPlayerView: View {
                     Capsule()
                         .fill(Color.white)
                         .frame(
-                            width: CGFloat(isDraggingProgress ? dragProgress : viewModel.playerState.progress) * geometry.size.width,
+                            width: CGFloat(isDraggingProgress ? dragProgress : min(1, max(0, viewModel.playerState.progress))) * geometry.size.width,
                             height: 4
                         )
+                        .animation(isDraggingProgress ? nil : .linear(duration: 0.5), value: viewModel.playerState.progress)
 
                     // Knob
                     Circle()
                         .fill(Color.white)
                         .frame(width: 12, height: 12)
-                        .offset(x: CGFloat(isDraggingProgress ? dragProgress : viewModel.playerState.progress) * (geometry.size.width - 12))
+                        .offset(x: CGFloat(isDraggingProgress ? dragProgress : min(1, max(0, viewModel.playerState.progress))) * (geometry.size.width - 12))
+                        .animation(isDraggingProgress ? nil : .linear(duration: 0.5), value: viewModel.playerState.progress)
                         .gesture(
                             DragGesture()
                                 .onChanged { value in
@@ -276,38 +272,41 @@ struct SleepPlayerView: View {
 
     private var timerView: some View {
         Group {
-            if let remaining = viewModel.playerState.sleepTimerRemaining {
-                HStack(spacing: 8) {
-                    Image(systemName: "moon.fill")
+            // Only show timer view for non-soundscape content
+            if content.contentType != .soundscape {
+                if let remaining = viewModel.playerState.sleepTimerRemaining {
+                    HStack(spacing: 8) {
+                        Image(systemName: "moon.fill")
+                            .foregroundStyle(.indigo)
+
+                        Text("Sleep timer: \(formatTime(remaining))")
+                            .font(.subheadline)
+                            .foregroundStyle(.white.opacity(0.7))
+
+                        Spacer()
+
+                        Button("Cancel") {
+                            viewModel.cancelSleepTimer()
+                        }
+                        .font(.subheadline)
                         .foregroundStyle(.indigo)
-
-                    Text("Sleep timer: \(formatTime(remaining))")
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.7))
-
-                    Spacer()
-
-                    Button("Cancel") {
-                        viewModel.cancelSleepTimer()
                     }
-                    .font(.subheadline)
-                    .foregroundStyle(.indigo)
-                }
-                .padding()
-                .background(Color.white.opacity(0.05))
-                .cornerRadius(12)
-            } else if viewModel.playerState.isFading {
-                HStack(spacing: 8) {
-                    ProgressView()
-                        .tint(.indigo)
+                    .padding()
+                    .background(Color.white.opacity(0.05))
+                    .cornerRadius(12)
+                } else if viewModel.playerState.isFading {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .tint(.indigo)
 
-                    Text("Fading out...")
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.7))
+                        Text("Fading out...")
+                            .font(.subheadline)
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
+                    .padding()
+                    .background(Color.white.opacity(0.05))
+                    .cornerRadius(12)
                 }
-                .padding()
-                .background(Color.white.opacity(0.05))
-                .cornerRadius(12)
             }
         }
     }

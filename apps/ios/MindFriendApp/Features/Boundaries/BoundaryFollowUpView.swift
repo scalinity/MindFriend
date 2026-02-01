@@ -221,9 +221,11 @@ final class BoundaryFollowUpViewModel: ObservableObject {
 
 // MARK: - Previews
 
+#if DEBUG
 #Preview {
     BoundaryFollowUpView(
         service: BoundaryPlannerService(supabase: .mock),
         followUpId: UUID()
     )
 }
+#endif

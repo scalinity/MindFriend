@@ -315,6 +315,49 @@ final class InterventionNotificationManager: NSObject, InterventionNotificationM
         print("Intervention rescheduled for \(NotificationConstants.remindLaterDelayMinutes) minutes later")
     }
 
+    /// Reschedule intervention using content from the notification response
+    /// This is used when the user taps "Remind Later" action
+    func rescheduleFromResponse(_ response: UNNotificationResponse) async throws {
+        let content = response.notification.request.content
+        let userInfo = content.userInfo
+
+        // Extract the deep link to preserve in the rescheduled notification
+        guard let deepLinkString = userInfo["deep_link"] as? String else {
+            throw NotificationError.invalidDeepLink
+        }
+
+        // Create new content preserving the original
+        let newContent = UNMutableNotificationContent()
+        newContent.title = content.title
+        newContent.body = content.body
+        newContent.sound = content.sound
+        newContent.badge = content.badge
+        newContent.threadIdentifier = content.threadIdentifier
+        newContent.categoryIdentifier = content.categoryIdentifier
+        newContent.userInfo = userInfo
+
+        // Schedule for 30 minutes later
+        let trigger = UNTimeIntervalNotificationTrigger(
+            timeInterval: TimeInterval(NotificationConstants.remindLaterDelayMinutes * 60),
+            repeats: false
+        )
+
+        // Use a new identifier to avoid conflicts
+        let newIdentifier = UUID().uuidString
+        let request = UNNotificationRequest(
+            identifier: newIdentifier,
+            content: newContent,
+            trigger: trigger
+        )
+
+        try await notificationCenter.add(request)
+
+        pendingInterventionCount += 1
+        await updateBadgeCount()
+
+        Log.notifications.debug("[Interventions] Rescheduled for \(NotificationConstants.remindLaterDelayMinutes) minutes later")
+    }
+
     /// Remove delivered notification from notification center
     func removeDeliveredNotification(deliveryId: UUID) {
         notificationCenter.removeDeliveredNotifications(withIdentifiers: [deliveryId.uuidString])

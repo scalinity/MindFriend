@@ -337,6 +337,13 @@ struct CalculateResponse: Codable {
     let score: DebtScore?
 }
 
+struct RecoveryProgramResponse: Codable {
+    let success: Bool
+    let program: RecoveryProgram?
+    let error: String?
+    let needsMoreData: Bool?
+}
+
 // MARK: - Error Types
 
 enum WellbeingDebtError: LocalizedError {
@@ -344,6 +351,7 @@ enum WellbeingDebtError: LocalizedError {
     case profileNotFound
     case generationFailed(String)
     case invalidDate(String)
+    case needsMoreData(String)
 
     var errorDescription: String? {
         switch self {
@@ -355,6 +363,8 @@ enum WellbeingDebtError: LocalizedError {
             return "Recovery program generation failed: \(reason)"
         case .invalidDate(let date):
             return "Invalid date format: \(date)"
+        case .needsMoreData(let message):
+            return message
         }
     }
 }

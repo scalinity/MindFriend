@@ -174,7 +174,7 @@ actor WellbeingDebtService {
         )
 
         do {
-            let response: RecoveryProgram = try await supabase.functions
+            let response: RecoveryProgramResponse = try await supabase.functions
                 .invoke(
                     "generate-recovery-program",
                     options: FunctionInvokeOptions(
@@ -182,10 +182,115 @@ actor WellbeingDebtService {
                     )
                 )
 
-            return response
+            // Check if user needs more data first
+            if response.needsMoreData == true {
+                let message = response.error ?? "Not enough data to generate a recovery program. Please track your mood and activities for a few days."
+                throw WellbeingDebtError.needsMoreData(message)
+            }
+
+            guard response.success, let program = response.program else {
+                let reason = response.error ?? "Unknown error"
+                throw WellbeingDebtError.generationFailed(reason)
+            }
+
+            return program
+        } catch let decodingError as DecodingError {
+            // Provide more detailed error information for debugging
+            switch decodingError {
+            case .keyNotFound(let key, let context):
+                throw WellbeingDebtError.generationFailed("Missing key '\(key.stringValue)' at path: \(context.codingPath.map { $0.stringValue }.joined(separator: "."))")
+            case .typeMismatch(let type, let context):
+                throw WellbeingDebtError.generationFailed("Type mismatch for \(type) at path: \(context.codingPath.map { $0.stringValue }.joined(separator: "."))")
+            case .valueNotFound(let type, let context):
+                throw WellbeingDebtError.generationFailed("Value not found for \(type) at path: \(context.codingPath.map { $0.stringValue }.joined(separator: "."))")
+            case .dataCorrupted(let context):
+                throw WellbeingDebtError.generationFailed("Data corrupted at path: \(context.codingPath.map { $0.stringValue }.joined(separator: "."))")
+            @unknown default:
+                throw WellbeingDebtError.generationFailed("Decoding error: \(decodingError.localizedDescription)")
+            }
+        } catch let wellbeingError as WellbeingDebtError {
+            throw wellbeingError
         } catch {
             throw WellbeingDebtError.generationFailed(error.localizedDescription)
         }
+    }
+
+    /// Save a recovery program to the database
+    /// - Parameter program: The recovery program to save
+    /// - Returns: The saved program with server-generated ID
+    func saveRecoveryProgram(_ program: RecoveryProgram) async throws -> RecoveryProgram {
+        let userId = try await getCurrentUserId()
+        
+        // First, mark any existing active programs as abandoned
+        try await supabase
+            .from("recovery_programs")
+            .update(["status": "abandoned"])
+            .eq("user_id", value: userId)
+            .eq("status", value: "active")
+            .execute()
+        
+        // Insert the new program
+        struct SavedProgram: Codable {
+            let id: UUID?
+            let userId: String
+            let generatedAt: String
+            let targetDebtReduction: Decimal
+            let dailyActions: [DailyActions]
+            let status: String
+            
+            enum CodingKeys: String, CodingKey {
+                case id
+                case userId = "user_id"
+                case generatedAt = "generated_at"
+                case targetDebtReduction = "target_debt_reduction"
+                case dailyActions = "daily_actions"
+                case status
+            }
+        }
+        
+        let toSave = SavedProgram(
+            id: nil,
+            userId: userId,
+            generatedAt: program.generatedAt,
+            targetDebtReduction: program.targetDebtReduction,
+            dailyActions: program.dailyActions,
+            status: "active"
+        )
+        
+        let saved: SavedProgram = try await supabase
+            .from("recovery_programs")
+            .insert(toSave)
+            .select()
+            .single()
+            .execute()
+            .value
+        
+        // Return updated program with ID
+        return RecoveryProgram(
+            userId: saved.userId,
+            generatedAt: saved.generatedAt,
+            targetDebtReduction: saved.targetDebtReduction,
+            dailyActions: saved.dailyActions
+        )
+    }
+    
+    /// Fetch the user's active recovery program
+    /// - Returns: Active recovery program, or nil if none exists
+    func fetchActiveRecoveryProgram() async throws -> RecoveryProgram? {
+        let userId = try await getCurrentUserId()
+        
+        // Select only the fields we need and filter by user_id explicitly
+        let response: [RecoveryProgram] = try await supabase
+            .from("recovery_programs")
+            .select("user_id, generated_at, target_debt_reduction, daily_actions")
+            .eq("user_id", value: userId)
+            .eq("status", value: "active")
+            .order("created_at", ascending: false)
+            .limit(1)
+            .execute()
+            .value
+        
+        return response.first
     }
 
     // MARK: - Helper Methods

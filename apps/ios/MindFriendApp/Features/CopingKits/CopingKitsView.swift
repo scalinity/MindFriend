@@ -282,6 +282,7 @@ struct PremiumUpgradeSheet: View {
 
 // MARK: - Preview
 
+#if DEBUG
 #Preview {
     ScrollView {
         CopingKitsView(viewModel: CopingKitsViewModel.preview())
@@ -289,3 +290,4 @@ struct PremiumUpgradeSheet: View {
     }
     .background(Color(.systemGroupedBackground))
 }
+#endif

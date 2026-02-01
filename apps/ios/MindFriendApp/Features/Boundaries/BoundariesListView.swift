@@ -461,6 +461,8 @@ final class BoundariesListViewModel: ObservableObject {
 
 // MARK: - Previews
 
+#if DEBUG
 #Preview {
     BoundariesListView(service: BoundaryPlannerService(supabase: .mock))
 }
+#endif
