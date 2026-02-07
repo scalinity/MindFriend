@@ -174,3 +174,9 @@ supabase/migrations_backup/
 *.bak
 *.bak[0-9]*
 *.backup
+
+# Supabase temp/cache
+supabase/.temp/
+
+# Xcode project backups
+*.pbxproj.backup*
