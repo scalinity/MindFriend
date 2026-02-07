@@ -512,7 +512,7 @@ final class FamilyService: ObservableObject {
 
     /// Join a together session
     func joinTogetherSession(sessionId: String) async throws {
-        guard let userId = supabase.auth.currentUser?.id else {
+        guard let _ = supabase.auth.currentUser?.id else {
             throw FamilyServiceError.notAuthenticated
         }
 
@@ -669,7 +669,7 @@ final class FamilyService: ObservableObject {
             filter: "session_id=eq.\(sessionId)"
         )
 
-        await channel.subscribe()
+        try? await channel.subscribeWithError()
 
         sessionsSubscriptionTask = Task {
             for await insertion in insertions {

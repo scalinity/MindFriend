@@ -501,7 +501,16 @@ struct CircleDetailView: View {
         }
         .sheet(isPresented: $showCreateRitual) {
             CreateRitualSheet(circleId: safeParseCircleUUID(circle.id, context: "CreateRitualSheet")) { ritual in
-                selectedRitual = ritual
+                // Only open session view for active rituals (starting now)
+                // Scheduled rituals shouldn't auto-open the session
+                if ritual.status == .active {
+                    selectedRitual = ritual
+                } else {
+                    // For scheduled rituals, just refresh the list to show the new ritual
+                    Task {
+                        await loadData()
+                    }
+                }
             }
         }
         .fullScreenCover(item: $selectedRitual) { ritual in

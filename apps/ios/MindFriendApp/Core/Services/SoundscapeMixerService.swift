@@ -2,7 +2,7 @@
 // Multi-track audio mixer using AVAudioEngine for layered soundscapes
 
 import Foundation
-import AVFoundation
+@preconcurrency import AVFoundation
 import MediaPlayer
 import Combine
 import Supabase
@@ -110,22 +110,20 @@ final class SoundscapeMixerService: NSObject, ObservableObject {
     }
 
     deinit {
-        // Capture values needed for cleanup - deinit is nonisolated
-        let engine = audioEngine
-        let layerNodes = layers.map { $0.playerNode }
-        let timers = (sleepTimer, fadeTimer)
-        
-        // Schedule cleanup on main thread since timers must be invalidated there
-        DispatchQueue.main.async {
-            timers.0?.invalidate()
-            timers.1?.invalidate()
+        // Use assumeIsolated since @MainActor class deinit runs on main thread
+        MainActor.assumeIsolated {
+            let engine = self.audioEngine
+            let layerNodes = self.layers.map { $0.playerNode }
+            
+            self.sleepTimer?.invalidate()
+            self.fadeTimer?.invalidate()
             for node in layerNodes {
                 node.stop()
                 engine?.detach(node)
             }
             engine?.stop()
-            NotificationCenter.default.removeObserver(self as AnyObject)
         }
+        NotificationCenter.default.removeObserver(self)
     }
 
     // MARK: - Audio Session Setup
@@ -535,10 +533,10 @@ final class SoundscapeMixerService: NSObject, ObservableObject {
 
             currentStep += 1
             let progress = Double(currentStep) / Double(fadeSteps)
-            // Quadratic fade curve for natural perception
-            let volume = Float(pow(1.0 - progress, 2)) * self.state.masterVolume
 
             Task { @MainActor in
+                // Quadratic fade curve for natural perception
+                let volume = Float(pow(1.0 - progress, 2)) * self.state.masterVolume
                 self.audioEngine?.mainMixerNode.outputVolume = volume
                 self.state.sleepTimerRemaining = self.fadeOutDuration * (1.0 - progress)
 

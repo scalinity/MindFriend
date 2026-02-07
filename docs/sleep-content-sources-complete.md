@@ -172,7 +172,7 @@ SET
     title = 'Jack and His Golden Snuff-Box',
     description = 'A classic English fairy tale about a young man who inherits a magical snuff-box.',
     narrator = 'Joy Chan (LibriVox)',
-    audio_url = 'https://zfaucivtzfwnrijsbfug.supabase.co/storage/v1/object/public/sleep-content/stories/jack-golden-snuff-box.m4a',
+    audio_url = 'https://YOUR_PROJECT_REF.supabase.co/storage/v1/object/public/sleep-content/stories/jack-golden-snuff-box.m4a',
     duration_seconds = 1162
 WHERE title = 'Rainy Night in the Forest';
 ```

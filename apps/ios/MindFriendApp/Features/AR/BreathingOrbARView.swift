@@ -421,7 +421,7 @@ public struct BreathingOrbARView: View {
         let interval: TimeInterval = 0.1
 
         phaseTimer?.invalidate()
-        phaseTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak exerciseService] timer in
+        phaseTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { timer in
             guard !self.isExerciseEnded else {
                 timer.invalidate()
                 return
@@ -460,18 +460,20 @@ public struct BreathingOrbARView: View {
         guard !isExerciseEnded else { return }
         
         sessionTimer?.invalidate()
-        sessionTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak exerciseService] timer in
-            guard !self.isExerciseEnded else {
-                timer.invalidate()
-                return
-            }
-            
-            if self.timeRemaining > 0 {
-                self.timeRemaining -= 1
-                exerciseService?.recordTrackingQuality(self.trackingState.qualityValue)
-            } else {
-                timer.invalidate()
-                self.endExercise(completed: true)
+        sessionTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+            MainActor.assumeIsolated {
+                guard !self.isExerciseEnded else {
+                    self.sessionTimer?.invalidate()
+                    return
+                }
+
+                if self.timeRemaining > 0 {
+                    self.timeRemaining -= 1
+                    self.exerciseService.recordTrackingQuality(self.trackingState.qualityValue)
+                } else {
+                    self.sessionTimer?.invalidate()
+                    self.endExercise(completed: true)
+                }
             }
         }
     }

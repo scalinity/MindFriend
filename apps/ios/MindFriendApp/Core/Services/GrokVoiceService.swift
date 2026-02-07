@@ -628,7 +628,7 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
             #if DEBUG
             if let current = currentSession {
                 Log.voice.debug("[VoiceToken] Current session exists, user: \(current.user.id)")
-                Log.voice.debug("[VoiceToken] Token expires at: \(current.expiresAt ?? 0)")
+                Log.voice.debug("[VoiceToken] Token expires at: \(current.expiresAt)")
             } else {
                 Log.voice.debug("[VoiceToken] No current session found")
             }
@@ -638,7 +638,7 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
             let session = try await supabase.auth.refreshSession()
             #if DEBUG
             Log.voice.debug("[VoiceToken] Session refreshed successfully, user: \(session.user.id)")
-            Log.voice.debug("[VoiceToken] New token expires at: \(session.expiresAt ?? 0)")
+            Log.voice.debug("[VoiceToken] New token expires at: \(session.expiresAt)")
             Log.voice.debug("[VoiceToken] Access token retrieved (redacted), length: \(session.accessToken.count)")
             #endif
 
@@ -860,32 +860,6 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
     private func injectEmotionContext(_ emotion: String, confidence: Double) {
         // DISABLED: Emotion analysis disabled
         return
-
-        guard connectionState.isConnected else { return }
-
-        // Only inject if confidence is high enough
-        guard confidence >= 0.7 else { return }
-
-        // Create a system message with emotion context
-        let emotionContext = "[Detected emotion from voice: \(emotion)]"
-
-        webSocketManager.send([
-            "type": "conversation.item.create",
-            "item": [
-                "type": "message",
-                "role": "system",
-                "content": [
-                    [
-                        "type": "input_text",
-                        "text": emotionContext
-                    ]
-                ]
-            ]
-        ])
-
-        #if DEBUG
-        Log.voice.debug("[Voice] Injected emotion context: \(emotionContext)")
-        #endif
     }
 
     // MARK: - Private Methods - WebSocket
@@ -1289,9 +1263,9 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
 
                 // Wait for session.created
                 try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                    sessionCreatedContinuation = continuation
+                    self.sessionCreatedContinuation = continuation
 
-                    sessionCreatedTimeoutTask = Task { @MainActor [weak self] in
+                    self.sessionCreatedTimeoutTask = Task { @MainActor [weak self] in
                         try? await Task.sleep(nanoseconds: 10_000_000_000)
                         guard let self, !Task.isCancelled else { return }
                         if let cont = self.sessionCreatedContinuation {
@@ -1306,9 +1280,9 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
 
                 // Wait for session.updated
                 try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                    sessionUpdatedContinuation = continuation
+                    self.sessionUpdatedContinuation = continuation
 
-                    sessionUpdatedTimeoutTask = Task { @MainActor [weak self] in
+                    self.sessionUpdatedTimeoutTask = Task { @MainActor [weak self] in
                         try? await Task.sleep(nanoseconds: 10_000_000_000)
                         guard let self, !Task.isCancelled else { return }
                         if let cont = self.sessionUpdatedContinuation {
@@ -1465,96 +1439,6 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
         // TODO: Re-enable after fixing performance problems
         return
 
-        // Check if analysis is enabled
-        guard emotionAnalysisEnabled else {
-            #if DEBUG
-            Log.voice.debug("[Voice] Emotion analysis skipped: disabled")
-            #endif
-            return
-        }
-
-        // Check cooldown
-        if let lastTime = lastEmotionAnalysisTime,
-           Date().timeIntervalSince(lastTime) < emotionAnalysisCooldown {
-            #if DEBUG
-            Log.voice.debug("[Voice] Emotion analysis skipped: cooldown")
-            #endif
-            return
-        }
-
-        // Get audio buffer (fast array slice on main thread)
-        guard let audioBuffer = audioCapture.getRecentAudioBuffer(duration: 3.0) else {
-            #if DEBUG
-            Log.voice.debug("[Voice] Emotion analysis skipped: insufficient audio (<3s)")
-            #endif
-            return
-        }
-
-        // Cancel any pending analysis
-        emotionAnalysisTask?.cancel()
-        emotionAnalysisTask = nil
-
-        // Update cooldown IMMEDIATELY to prevent race condition where multiple analyses start
-        // before the first one completes. This reserves the analysis slot.
-        let analysisStartTime = Date()
-        lastEmotionAnalysisTime = analysisStartTime
-
-        // Capture values needed for background processing
-        let sensitivityThreshold = emotionSensitivityThreshold
-        let analyzer = emotionAnalyzer
-
-        // Start analysis in DETACHED task to avoid blocking main thread
-        // This is critical for voice responsiveness - resampling is CPU-intensive
-        emotionAnalysisTask = Task.detached(priority: .utility) { [weak self] in
-            // Check cancellation early before expensive operations
-            guard !Task.isCancelled else { return }
-
-            // Resample from 24kHz to 16kHz for EmotionAnalyzer (CPU-intensive, now off main thread)
-            let resampledBuffer = Self.resampleAudio(audioBuffer, fromRate: 24000, toRate: 16000)
-
-            // Check cancellation before expensive ML inference
-            guard !Task.isCancelled else { return }
-
-            #if DEBUG
-            await MainActor.run {
-                Log.voice.debug("[Voice] Analyzing emotion from \(resampledBuffer.count) samples")
-            }
-            #endif
-
-            do {
-                // Run analysis (EmotionAnalyzer uses detached tasks internally for FFT)
-                let result = try await analyzer.analyzeAudioBuffer(resampledBuffer)
-
-                // Check if task was cancelled after analysis
-                guard !Task.isCancelled else { return }
-
-                // Check confidence threshold
-                guard result.confidence >= sensitivityThreshold else {
-                    #if DEBUG
-                    await MainActor.run {
-                        Log.voice.debug("[Voice] Emotion detected but below threshold: \(result.emotion) @ \(result.confidence)")
-                    }
-                    #endif
-                    return
-                }
-
-                // Update state on main actor
-                await MainActor.run { [weak self] in
-                    guard let self else { return }
-                    // Verify still connected before updating state
-                    guard self.connectionState.isConnected else { return }
-                    // Note: lastEmotionAnalysisTime was already set at function start to prevent race condition
-                    self.handleEmotionResult(result)
-                }
-            } catch {
-                #if DEBUG
-                await MainActor.run {
-                    Log.voice.debug("[Voice] Emotion analysis failed: \(error)")
-                }
-                #endif
-                // Fail silently - emotion analysis errors should never interrupt voice
-            }
-        }
     }
 
     /// Resample audio buffer - static function to allow calling from detached task

@@ -218,7 +218,7 @@ final class OutcomeTrackingService: ObservableObject {
             completed_at: response.completedAt
         )
 
-        logger.info("Inserting assessment response for user \(uid.uuidString), score: \(totalScore)")
+        logger.info("Inserting assessment response")
         try await supabase
             .from("assessment_responses")
             .insert(insert)
@@ -290,7 +290,10 @@ final class OutcomeTrackingService: ObservableObject {
         switch type {
         case .phq9:
             // PHQ-9 Question 9 (suicide/self-harm) - any non-zero answer is a crisis indicator
-            if let q9Answer = answers["9"], q9Answer > 0 {
+            // Check multiple possible key formats for robustness: "phq9_q9", "9", "PHQ9_Q9"
+            let q9Keys = ["phq9_q9", "9", "PHQ9_Q9", "PHQ9_9"]
+            let q9Answer = q9Keys.compactMap { answers[$0] }.first ?? 0
+            if q9Answer > 0 {
                 return true
             }
             // Also flag for severe depression scores
@@ -347,7 +350,7 @@ final class OutcomeTrackingService: ObservableObject {
             .insert(insert)
             .execute()
 
-        logger.warning("Crisis event logged for user \(uid.uuidString)")
+        logger.warning("Crisis event logged")
     }
 
     // MARK: - Schedule Management
@@ -503,10 +506,10 @@ final class OutcomeTrackingService: ObservableObject {
                 .value
 
             self.outcomeGoals = goals
-            logger.info("Loaded \\(goals.count) active outcome goals")
+            logger.info("Loaded \(goals.count) active outcome goals")
         } catch {
             self.error = error
-            logger.error("Failed to load outcome goals: \\(error.localizedDescription)")
+            logger.error("Failed to load outcome goals: \(error.localizedDescription)")
             throw error
         }
     }
@@ -521,7 +524,7 @@ final class OutcomeTrackingService: ObservableObject {
 
         do {
             let uid = try userId
-            logger.info("Loading assessment responses for user: \(uid.uuidString)")
+            logger.info("Loading assessment responses")
 
             let responses: [AssessmentResponse] = try await supabase
                 .from("assessment_responses")
@@ -533,7 +536,7 @@ final class OutcomeTrackingService: ObservableObject {
                 .value
 
             self.recentResponses = responses
-            logger.info("Loaded \(responses.count) recent assessment responses for user \(uid.uuidString)")
+            logger.info("Loaded \(responses.count) recent assessment responses")
         } catch {
             self.error = error
             logger.error("Failed to load recent assessment responses: \(error.localizedDescription)")

@@ -286,6 +286,12 @@ struct CompleteQuestIntent: AppIntent {
 
     @Parameter(title: "Quest ID") var questId: String
 
+    init() {}
+
+    init(questId: String) {
+        self.questId = questId
+    }
+
     func perform() async throws -> some IntentResult {
         SharedDataStore.shared.markQuestCompleted(questId: questId)
         return .result()

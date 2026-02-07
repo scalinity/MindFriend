@@ -66,7 +66,7 @@ struct ResultsView: View {
             .prefix(5)
         
         guard recentHistory.count >= 2 else {
-            return (image: "dash.circle.fill", color: Color.gray, label: "No trend")
+            return (image: "minus.circle.fill", color: Color.gray, label: "No trend")
         }
         
         let previousScore = recentHistory.dropFirst().first?.totalScore ?? response.totalScore
@@ -77,7 +77,7 @@ struct ResultsView: View {
         } else if scoreDelta > 0 {
             return (image: "arrow.up.circle.fill", color: Color(red: 1.0, green: 0.2, blue: 0.2), label: String(localized: "Worsening"))
         } else {
-            return (image: "dash.circle.fill", color: Color.gray, label: String(localized: "Stable"))
+            return (image: "minus.circle.fill", color: Color.gray, label: String(localized: "Stable"))
         }
     }
     
@@ -597,17 +597,21 @@ final class AssessmentResultsItemSource: NSObject, UIActivityItemSource {
         return metadata
     }
 
-    private var shareText: String {
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateStyle = .medium
-        dateFormatter.timeStyle = .short
+    /// Cached DateFormatter for share text (DateFormatter is expensive to create)
+    private static let shareFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }()
 
+    private var shareText: String {
         return """
         My \(assessmentName) Results
 
         Score: \(score)/\(maxScore)
         Level: \(severityLevel.capitalized)
-        Date: \(dateFormatter.string(from: date))
+        Date: \(Self.shareFormatter.string(from: date))
 
         Tracked with MindFriend
         """

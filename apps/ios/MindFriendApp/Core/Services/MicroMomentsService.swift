@@ -152,7 +152,7 @@ final class MicroMomentsService: ObservableObject {
     func recordCompletion(_ data: MicroCompletionData) async throws -> MicroCompletionResponse {
         let formatter = ISO8601DateFormatter()
 
-        var body: [String: MicroMomentAnyEncodable] = [
+        let body: [String: MicroMomentAnyEncodable] = [
             "moment_id": MicroMomentAnyEncodable(data.templateId),
             "completed_at": MicroMomentAnyEncodable(formatter.string(from: Date())),
             "duration_seconds": MicroMomentAnyEncodable(data.durationActualSeconds),

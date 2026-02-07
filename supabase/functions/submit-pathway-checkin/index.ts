@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 // ✅ MAINTAINABILITY FIX: Extract validation constants
 const MAX_RESPONSES = 50; // Max number of question responses
@@ -7,11 +8,6 @@ const MAX_RESPONSE_KEY_LENGTH = 100; // Max question ID length
 const MAX_RESPONSE_VALUE_LENGTH = 5000; // Max response length
 const MAX_ENCRYPTED_FIELD_LENGTH = 100_000; // Max ~75KB original text (Base64 expands 33%)
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
 
 interface CheckInRequest {
   userPathwayId: string;
@@ -28,6 +24,9 @@ interface CheckInRequest {
 }
 
 serve(async (req) => {
+  const origin = req.headers.get("origin") ?? "";
+  const corsHeaders = getCorsHeaders(origin);
+
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -209,15 +208,15 @@ serve(async (req) => {
       });
     }
 
-    // Check for duplicate check-in
+    // Check for duplicate check-in (only reject if already completed, not just existing)
     const { data: existingCheckIn } = await supabaseClient
       .from("pathway_progress")
-      .select("id")
+      .select("id, check_in_completed")
       .eq("user_pathway_id", body.userPathwayId)
       .eq("day_number", userPathway.current_day)
       .maybeSingle();
 
-    if (existingCheckIn) {
+    if (existingCheckIn?.check_in_completed) {
       return new Response(
         JSON.stringify({ error: "CHECK_IN_ALREADY_COMPLETED" }),
         {
@@ -241,11 +240,11 @@ serve(async (req) => {
     );
 
     if (checkInError) {
-      console.error("Check-in error:", checkInError);
-      // ✅ SECURITY FIX: Don't expose internal error details (may contain PHI or DB schema info)
+      console.error("Check-in error:", JSON.stringify(checkInError));
       return new Response(
         JSON.stringify({
           error: "Failed to save check-in",
+          debug: checkInError.message || JSON.stringify(checkInError),
         }),
         {
           status: 500,
@@ -259,9 +258,11 @@ serve(async (req) => {
     });
   } catch (error) {
     console.error("Error submitting check-in:", error);
-    // ✅ SECURITY FIX: Don't expose internal error details
     return new Response(
-      JSON.stringify({ error: "An unexpected error occurred" }),
+      JSON.stringify({
+        error: "An unexpected error occurred",
+        debug: error?.message || String(error),
+      }),
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

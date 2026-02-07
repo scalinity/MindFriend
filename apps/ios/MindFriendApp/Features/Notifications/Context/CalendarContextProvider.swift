@@ -35,7 +35,7 @@ final class CalendarContextProvider: CalendarContextProviding {
     func getContext() async -> CalendarContext {
         // Check authorization status
         let status = EKEventStore.authorizationStatus(for: .event)
-        guard status == .fullAccess || status == .authorized else {
+        guard status == .fullAccess else {
             return .default
         }
 

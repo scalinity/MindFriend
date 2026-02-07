@@ -1,10 +1,12 @@
 import Foundation
 import SwiftUI
 import Supabase
+import OSLog
 
 /// Service that provides wellness insights by correlating mood data with activities
 @MainActor
 final class WellnessInsightsService: ObservableObject {
+    private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "MindFriend", category: "WellnessInsights")
 
     private let supabaseClient: SupabaseClient
     private let authService: SupabaseAuthService
@@ -27,7 +29,7 @@ final class WellnessInsightsService: ObservableObject {
     /// Load weekly mood trend data (last 7 days)
     func loadWeeklyMoodTrend() async {
         guard userId != nil else {
-            print("WellnessInsightsService: Not authenticated, skipping mood trend load")
+            Self.logger.debug("Not authenticated, skipping mood trend load")
             return
         }
 
@@ -35,12 +37,12 @@ final class WellnessInsightsService: ObservableObject {
         defer { isLoading = false }
 
         do {
-            // Fetch mood entries from last 7 days
-            let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+            // Fetch mood entries from last 7 days (today + 6 previous days)
+            let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -6, to: Calendar.current.startOfDay(for: Date())) ?? Date()
 
             let entries: [MoodEntry] = try await supabaseClient
                 .from("moods")
-                .select("id, mood_score, created_at")
+                .select("id, mood_score, anxiety_score, energy_score, note, local_date, source, created_at")
                 .gte("created_at", value: sevenDaysAgo.toISODateString())
                 .order("created_at", ascending: true)
                 .execute()
@@ -71,7 +73,7 @@ final class WellnessInsightsService: ObservableObject {
 
             weeklyMoodTrend = points
         } catch {
-            print("Failed to load mood trend: \(error)")
+            Self.logger.error("Failed to load mood trend: \(error.localizedDescription)")
             weeklyMoodTrend = []
         }
     }
@@ -79,7 +81,7 @@ final class WellnessInsightsService: ObservableObject {
     /// Find activities that correlate with improved mood
     func findHelpfulActivities() async {
         guard userId != nil else {
-            print("WellnessInsightsService: Not authenticated, skipping helpful activities load")
+            Self.logger.debug("Not authenticated, skipping helpful activities load")
             return
         }
 
@@ -134,7 +136,7 @@ final class WellnessInsightsService: ObservableObject {
 
             helpfulActivities = Array(activities)
         } catch {
-            print("Failed to find helpful activities: \(error)")
+            Self.logger.error("Failed to find helpful activities: \(error.localizedDescription)")
             helpfulActivities = []
         }
     }
@@ -158,10 +160,15 @@ struct WellnessMoodDataPoint: Identifiable {
     /// Stable ID based on date (not random UUID)
     var id: Date { date }
 
-    var dayLabel: String {
+    /// Cached DateFormatter for day labels (DateFormatter is expensive to create)
+    private static let dayFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "E"
-        return formatter.string(from: date)
+        return formatter
+    }()
+
+    var dayLabel: String {
+        Self.dayFormatter.string(from: date)
     }
 
     var hasMoodData: Bool { averageMood != nil }

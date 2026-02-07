@@ -34,6 +34,10 @@ final class PersonalizationService: ObservableObject {
     private let supabase: SupabaseClient
     private let authService: SupabaseAuthService
 
+    /// Cached auth headers to avoid concurrent refreshSession() calls
+    /// which can invalidate each other's tokens (OAuth refresh tokens are single-use)
+    private var cachedAuthHeaders: [String: String]?
+
     // MARK: - Initialization
 
     init(supabase: SupabaseClient, authService: SupabaseAuthService) {
@@ -44,18 +48,37 @@ final class PersonalizationService: ObservableObject {
     // MARK: - Auth Helpers
 
     private func authHeadersForFunctions() async throws -> [String: String] {
+        // Use cached headers if available (set by refreshAuthOnce before concurrent calls)
+        if let cached = cachedAuthHeaders {
+            return cached
+        }
+
         // Refresh session and get fresh token directly from the refresh call
-        // This is more reliable than calling ensureValidSession() then reading from a different accessor
         let session: Session
         do {
             session = try await supabase.auth.refreshSession()
+            #if DEBUG
             print("🔐 PersonalizationService: Session refreshed, token length: \(session.accessToken.count)")
+            #endif
         } catch {
             print("❌ PersonalizationService: Session refresh failed: \(error)")
             throw AuthError.sessionExpired
         }
 
         return ["Authorization": "Bearer \(session.accessToken)"]
+    }
+
+    /// Refresh session once and cache headers for concurrent use.
+    /// Call this before fanning out multiple async tasks to avoid
+    /// concurrent refreshSession() calls invalidating each other's tokens.
+    private func refreshAuthOnce() async throws {
+        let session: Session
+        do {
+            session = try await supabase.auth.refreshSession()
+        } catch {
+            throw AuthError.sessionExpired
+        }
+        cachedAuthHeaders = ["Authorization": "Bearer \(session.accessToken)"]
     }
 
     /// Ensures valid session and returns user ID, or throws if not authenticated
@@ -131,11 +154,22 @@ final class PersonalizationService: ObservableObject {
         isLoading = true
         error = nil
 
-        async let profileTask = loadPreferenceProfile()
-        async let learnedTask = loadLearnedPreferences()
-        async let patternsTask = loadUsagePatterns()
-        async let insightsTask = loadInsights()
-        async let suggestionsTask = loadScheduleSuggestions()
+        // Refresh session once before fanning out concurrent tasks.
+        // This prevents 5 concurrent refreshSession() calls from
+        // invalidating each other's single-use OAuth refresh tokens.
+        do {
+            try await refreshAuthOnce()
+        } catch {
+            self.error = "Authentication failed"
+            isLoading = false
+            return
+        }
+
+        async let profileTask: Void = loadPreferenceProfile()
+        async let learnedTask: Void = loadLearnedPreferences()
+        async let patternsTask: Void = loadUsagePatterns()
+        async let insightsTask: Void = loadInsights()
+        async let suggestionsTask: Void = loadScheduleSuggestions()
 
         // Await all tasks and collect results
         _ = await profileTask
@@ -144,6 +178,8 @@ final class PersonalizationService: ObservableObject {
         _ = await insightsTask
         _ = await suggestionsTask
 
+        // Clear cached headers after concurrent tasks complete
+        cachedAuthHeaders = nil
         isLoading = false
     }
 

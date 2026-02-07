@@ -108,12 +108,12 @@ struct CompassRenderer: View {
                 let angle = Angle(degrees: baseAngle + (offset * spreadAngle / Double(max(categoryValues.count - 1, 1))))
 
                 let valueRadius = radius * (0.5 + 0.3 * (1.0 - Double(value.rank - 1) / 4.0))
-                let x = center.x + cos(angle.radians) * valueRadius
-                let y = center.y + sin(angle.radians) * valueRadius
+                let _ = center.x + cos(angle.radians) * valueRadius
+                let _ = center.y + sin(angle.radians) * valueRadius
 
                 // Draw circle
                 let circleSize = 40.0 - Double(value.rank - 1) * 5.0
-                let circle = Circle()
+                let _ = Circle()
                     .fill(categoryColor(for: value.category))
                     .frame(width: circleSize, height: circleSize)
 

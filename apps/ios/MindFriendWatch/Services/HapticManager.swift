@@ -3,7 +3,7 @@ import WatchKit
 /// Centralized haptic feedback manager for Apple Watch
 /// Provides optimized haptic patterns for breathing exercises and user feedback
 @MainActor
-final class HapticManager {
+final class HapticManager: HapticProviding {
     static let shared = HapticManager()
 
     private let device = WKInterfaceDevice.current()

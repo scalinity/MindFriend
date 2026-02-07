@@ -467,7 +467,7 @@ final class JournalService {
         )
 
         // Insert, ignore conflict (already used today)
-        try? await supabase
+        _ = try? await supabase
             .from("journal_prompt_history")
             .upsert(entry, onConflict: "user_id,prompt_id,used_date")
             .execute()

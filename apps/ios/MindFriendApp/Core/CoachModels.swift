@@ -184,7 +184,7 @@ struct PatternAnalytics: Codable {
         let code: String
         let name: String
         let count: Int
-        let percentage: Double
+        let percentage: Double?
         let trend: Trend?
         let helpfulRate: Double?
 
@@ -195,12 +195,7 @@ struct PatternAnalytics: Codable {
         }
 
         enum CodingKeys: String, CodingKey {
-            case code
-            case name
-            case count
-            case percentage
-            case trend
-            case helpfulRate = "helpful_rate"
+            case code, name, count, percentage, trend, helpfulRate
         }
     }
 

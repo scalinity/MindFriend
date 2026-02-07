@@ -310,7 +310,7 @@ struct MatchResultView: View {
 }
 
 extension SupportMatchResponse: Identifiable {
-    var id: UUID { sessionId ?? UUID() }
+    var id: String { sessionId?.uuidString ?? "pending-\(estimatedWait ?? 0)" }
 }
 
 #Preview("Request Support") {

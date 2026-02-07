@@ -52,7 +52,7 @@ struct ChatView: View {
                                             action,
                                             encounterId: coachData.encounterId,
                                             distortionCode: coachData.distortionCode,
-                                            confidence: coachData.confidence ?? 0.0
+                                            confidence: coachData.confidence
                                         )
                                     }
                                 }

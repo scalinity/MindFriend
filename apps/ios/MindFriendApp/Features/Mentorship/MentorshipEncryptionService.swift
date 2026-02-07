@@ -50,10 +50,7 @@ final class MentorshipEncryptionService: ObservableObject {
         }
         
         let sealedBox = try AES.GCM.seal(plaintext, using: key)
-        
-        guard let nonce = sealedBox.nonce.withUnsafeBytes({ Data($0) }) as? Data else {
-            throw EncryptionError.encryptionFailed
-        }
+        let nonce = sealedBox.nonce.withUnsafeBytes({ Data($0) })
         
         return (ciphertext: sealedBox.ciphertext, nonce: nonce)
     }

@@ -4,6 +4,7 @@ import {
   getCurrentWeekStart,
   calculateScheduledTime,
 } from "../_shared/email-utils.ts";
+import { getMoodTrendMessage } from "../_shared/notification-utils.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -184,6 +185,42 @@ serve(async (req: Request) => {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         });
+
+        // Send weekly summary push notification
+        const completedQuests = questsForUser.filter((q: any) => q.completed).length;
+        // Calculate simple mood trend from moodData
+        let moodTrend: string | null = null;
+        let avgMood: number | null = null;
+        if (moodData.length >= 2) {
+          const intensities = moodData.map((m: any) => m.intensity);
+          avgMood = intensities.reduce((a: number, b: number) => a + b, 0) / intensities.length;
+          const firstHalf = intensities.slice(0, Math.floor(intensities.length / 2));
+          const secondHalf = intensities.slice(Math.floor(intensities.length / 2));
+          const firstAvg = firstHalf.reduce((a: number, b: number) => a + b, 0) / firstHalf.length;
+          const secondAvg = secondHalf.reduce((a: number, b: number) => a + b, 0) / secondHalf.length;
+          if (secondAvg - firstAvg > 0.5) moodTrend = "improving";
+          else if (firstAvg - secondAvg > 0.5) moodTrend = "declining";
+          else moodTrend = "stable";
+        }
+
+        // Fire push notification (non-blocking, don't fail email queue on push error)
+        fetch(`${supabaseUrl}/functions/v1/send-notification`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${supabaseServiceKey}`,
+          },
+          body: JSON.stringify({
+            type: "weekly_summary",
+            recipientId: pref.user_id,
+            data: {
+              checkins: moodData.length,
+              quests: completedQuests,
+              exercises: exercisesCompleted,
+              moodMessage: getMoodTrendMessage(moodTrend, avgMood),
+            },
+          }),
+        }).catch((err) => console.error(`Weekly push notification failed for user ${pref.user_id}:`, err));
       }
 
       // Batch insert all queue entries for this batch

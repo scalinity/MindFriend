@@ -4,7 +4,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { logSanitized, sanitizeForLogging } from "../_shared/logging-sanitization.ts";
+import {
+  logSanitized,
+  sanitizeForLogging,
+} from "../_shared/logging-sanitization.ts";
+import { authenticateRequest, isAuthError } from "../_shared/auth.ts";
 
 // Configuration Constants
 const RETRY_MAX_ATTEMPTS = 3;
@@ -37,12 +41,6 @@ const CIRCUIT_BREAKER_RESET_TIMEOUT_MS = 30000; // 30 seconds
  * - Only log error.message, never full error objects
  */
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
-
 interface TriggerContext {
   biometrics?: {
     heartRate?: number; // BPM
@@ -65,7 +63,12 @@ interface CheckTriggersRequest {
   context?: TriggerContext;
 }
 
-type TriggerType = "time_based" | "biometric" | "pattern" | "calendar" | "manual";
+type TriggerType =
+  | "time_based"
+  | "biometric"
+  | "pattern"
+  | "calendar"
+  | "manual";
 
 interface CheckTriggersResponse {
   shouldTrigger: boolean;
@@ -82,8 +85,8 @@ interface CheckTriggersResponse {
 
 // Circuit Breaker State
 enum CircuitState {
-  CLOSED = "CLOSED",   // Normal operation
-  OPEN = "OPEN",       // Reject requests
+  CLOSED = "CLOSED", // Normal operation
+  OPEN = "OPEN", // Reject requests
   HALF_OPEN = "HALF_OPEN", // Testing recovery
 }
 
@@ -118,7 +121,7 @@ class CircuitBreaker {
 
   private onSuccess() {
     this.failureCount = 0;
-    
+
     if (this.state === CircuitState.HALF_OPEN) {
       this.successCount++;
       if (this.successCount >= 2) {
@@ -144,24 +147,11 @@ class CircuitBreaker {
 // Global circuit breaker instance
 const circuitBreaker = new CircuitBreaker();
 
-// Singleton Supabase client to prevent connection pool exhaustion
-let supabaseClient: ReturnType<typeof createClient> | null = null;
-
-function getSupabaseClient() {
-  if (!supabaseClient) {
-    supabaseClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-  }
-  return supabaseClient;
-}
-
 // Retry helper with exponential backoff
 async function withRetry<T>(
   operation: () => Promise<T>,
   maxRetries = RETRY_MAX_ATTEMPTS,
-  baseDelay = RETRY_BASE_DELAY_MS
+  baseDelay = RETRY_BASE_DELAY_MS,
 ): Promise<T> {
   let lastError: Error | null = null;
   for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -184,17 +174,19 @@ function validateBiometrics(biometrics?: {
   hrv?: number;
 }): void {
   if (!biometrics) return;
-  
+
   if (biometrics.heartRate !== undefined) {
     if (
       typeof biometrics.heartRate !== "number" ||
       biometrics.heartRate < HEART_RATE_MIN ||
       biometrics.heartRate > HEART_RATE_MAX
     ) {
-      throw new Error(`Invalid heart rate: must be between ${HEART_RATE_MIN}-${HEART_RATE_MAX} BPM`);
+      throw new Error(
+        `Invalid heart rate: must be between ${HEART_RATE_MIN}-${HEART_RATE_MAX} BPM`,
+      );
     }
   }
-  
+
   if (biometrics.hrv !== undefined) {
     if (
       typeof biometrics.hrv !== "number" ||
@@ -207,6 +199,9 @@ function validateBiometrics(biometrics?: {
 }
 
 serve(async (req) => {
+  const origin = req.headers.get("origin") ?? "";
+  const corsHeaders = getCorsHeaders(origin);
+
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -215,31 +210,13 @@ serve(async (req) => {
   try {
     // Wrap main logic in circuit breaker
     return await circuitBreaker.execute(async () => {
-      // Get authenticated user
-      const authHeader = req.headers.get("Authorization");
-      if (!authHeader) {
-        return new Response(
-          JSON.stringify({ error: "Missing authorization header" }),
-          {
-            status: 401,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          },
-        );
+      // Authenticate using shared helper (creates fresh client per request)
+      const authResult = await authenticateRequest(req);
+      if (isAuthError(authResult)) {
+        return authResult.response;
       }
 
-      const supabase = getSupabaseClient();
-
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
-
-      if (authError || !user) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+      const { user, supabaseAdmin: supabase } = authResult;
 
       const userId = user.id;
 
@@ -259,9 +236,9 @@ serve(async (req) => {
           .from("user_settings")
           .select("timezone")
           .eq("user_id", userId)
-          .maybeSingle()
+          .maybeSingle(),
       );
-      
+
       const userTimezone = settings?.timezone || "UTC";
 
       // CRITICAL FIX: Use Intl.DateTimeFormat instead of toLocaleString + new Date()
@@ -273,11 +250,11 @@ serve(async (req) => {
         second: "2-digit",
         hour12: false,
       });
-      
+
       const parts = formatter.formatToParts(new Date());
-      const hour = parts.find(p => p.type === "hour")?.value || "00";
-      const minute = parts.find(p => p.type === "minute")?.value || "00";
-      const second = parts.find(p => p.type === "second")?.value || "00";
+      const hour = parts.find((p) => p.type === "hour")?.value || "00";
+      const minute = parts.find((p) => p.type === "minute")?.value || "00";
+      const second = parts.find((p) => p.type === "second")?.value || "00";
       const currentTime = `${hour}:${minute}:${second}`;
 
       // 1. Load user preferences
@@ -286,7 +263,7 @@ serve(async (req) => {
           .from("intervention_preferences")
           .select("*")
           .eq("user_id", userId)
-          .maybeSingle()
+          .maybeSingle(),
       );
 
       if (prefsError && prefsError.code !== "PGRST116") {
@@ -307,7 +284,7 @@ serve(async (req) => {
               quiet_hours_end: null,
             })
             .select()
-            .single()
+            .single(),
         );
 
         if (insertError) throw insertError;
@@ -319,7 +296,7 @@ serve(async (req) => {
           newPrefs,
           userTimezone,
           req.headers.get("Authorization") || "",
-          context
+          context,
         );
       }
 
@@ -341,7 +318,7 @@ serve(async (req) => {
         prefs,
         userTimezone,
         req.headers.get("Authorization") || "",
-        context
+        context,
       );
 
       return new Response(JSON.stringify(response), {
@@ -354,7 +331,7 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({
           error: "Service temporarily unavailable",
-          suppressionReason: "circuit_breaker_open"
+          suppressionReason: "circuit_breaker_open",
         }),
         {
           status: 503,
@@ -371,10 +348,10 @@ serve(async (req) => {
       },
     });
 
-    return new Response(
-      JSON.stringify({ error: "Internal server error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ error: "Internal server error" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
 
@@ -394,11 +371,11 @@ async function evaluateTriggers(
     second: "2-digit",
     hour12: false,
   });
-  
+
   const parts = formatter.formatToParts(new Date());
-  const hour = parts.find(p => p.type === "hour")?.value || "00";
-  const minute = parts.find(p => p.type === "minute")?.value || "00";
-  const second = parts.find(p => p.type === "second")?.value || "00";
+  const hour = parts.find((p) => p.type === "hour")?.value || "00";
+  const minute = parts.find((p) => p.type === "minute")?.value || "00";
+  const second = parts.find((p) => p.type === "second")?.value || "00";
   const currentTime = `${hour}:${minute}:${second}`;
 
   // 2. Check quiet hours
@@ -408,7 +385,7 @@ async function evaluateTriggers(
         check_time: currentTime,
         quiet_start: prefs.quiet_hours_start,
         quiet_end: prefs.quiet_hours_end,
-      })
+      }),
     );
 
     if (quietError) {
@@ -429,12 +406,12 @@ async function evaluateTriggers(
     month: "2-digit",
     day: "2-digit",
   });
-  
+
   const dateParts = formatterDate.formatToParts(now);
-  const year = dateParts.find(p => p.type === "year")?.value || "2024";
-  const month = dateParts.find(p => p.type === "month")?.value || "01";
-  const day = dateParts.find(p => p.type === "day")?.value || "01";
-  
+  const year = dateParts.find((p) => p.type === "year")?.value || "2024";
+  const month = dateParts.find((p) => p.type === "month")?.value || "01";
+  const day = dateParts.find((p) => p.type === "day")?.value || "01";
+
   // Construct start and end of day in user's timezone
   const todayStart = new Date(`${year}-${month}-${day}T00:00:00`);
   const todayEnd = new Date(`${year}-${month}-${day}T23:59:59.999`);
@@ -445,7 +422,7 @@ async function evaluateTriggers(
       .select("*", { count: "exact", head: true })
       .eq("user_id", userId)
       .gte("delivered_at", todayStart.toISOString())
-      .lte("delivered_at", todayEnd.toISOString())
+      .lte("delivered_at", todayEnd.toISOString()),
   );
 
   if (countError) {
@@ -473,7 +450,7 @@ async function evaluateTriggers(
       .gte("dismissed_at", cooldownCutoff.toISOString())
       .order("dismissed_at", { ascending: false })
       .limit(1)
-      .maybeSingle()
+      .maybeSingle(),
   );
 
   if (dismissError) {
@@ -497,7 +474,7 @@ async function evaluateTriggers(
 
   // 6. Select best intervention (use function-to-function auth)
   const confidence = calculateConfidence(context, triggerType);
-  
+
   const suggestionResponse = await withRetry(() =>
     fetch(
       `${Deno.env.get("SUPABASE_URL")}/functions/v1/get-micro-suggestions`,
@@ -505,15 +482,16 @@ async function evaluateTriggers(
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": authHeader,
+          apikey: Deno.env.get("SUPABASE_ANON_KEY")!,
+          Authorization: authHeader,
         },
         body: JSON.stringify({
           triggerType,
           triggerConfidence: confidence,
           limit: 1,
         }),
-      }
-    )
+      },
+    ),
   );
 
   if (!suggestionResponse.ok) {
@@ -565,13 +543,13 @@ function determineTriggerType(context?: TriggerContext): TriggerType | null {
   if (context.upcomingEvents && context.upcomingEvents.length > 0) {
     // Check if any event warrants intervention
     const highStressEvent = context.upcomingEvents.find(
-      event => event.stressScore >= 0.7 || event.needsArmor
+      (event) => event.stressScore >= 0.7 || event.needsArmor,
     );
     if (highStressEvent) {
       return "calendar";
     }
   }
-  
+
   if (context.biometrics) {
     const { heartRate, hrv } = context.biometrics;
 
@@ -604,24 +582,29 @@ function calculateConfidence(
   triggerType?: TriggerType,
 ): number {
   if (!context || !triggerType) return 0.5;
-  
+
   let baseConfidence = 0.5;
 
   if (triggerType === "calendar" && context.upcomingEvents) {
     // Find the highest stress event
-    const highestStressEvent = context.upcomingEvents.reduce((max, event) => 
-      event.stressScore > max.stressScore ? event : max
+    const highestStressEvent = context.upcomingEvents.reduce((max, event) =>
+      event.stressScore > max.stressScore ? event : max,
     );
-    
+
     // Use stress score as base confidence
     // User-marked "needs armor" events get max confidence
-    baseConfidence = highestStressEvent.needsArmor ? 1.0 : highestStressEvent.stressScore;
+    baseConfidence = highestStressEvent.needsArmor
+      ? 1.0
+      : highestStressEvent.stressScore;
   } else if (triggerType === "biometric" && context.biometrics) {
     const { heartRate, hrv } = context.biometrics;
 
     if (heartRate) {
       // Scale confidence: 100 BPM = 0.5, 130+ BPM = 1.0
-      baseConfidence = Math.min(1.0, (heartRate - HR_CONFIDENCE_BASE) / HR_CONFIDENCE_RANGE + 0.5);
+      baseConfidence = Math.min(
+        1.0,
+        (heartRate - HR_CONFIDENCE_BASE) / HR_CONFIDENCE_RANGE + 0.5,
+      );
     } else if (hrv) {
       // Scale confidence: 30 ms = 0.5, 0 ms = 1.0
       baseConfidence = Math.min(1.0, 1.0 - hrv / HRV_CONFIDENCE_RANGE);
@@ -630,11 +613,14 @@ function calculateConfidence(
     baseConfidence = 1.0; // Time-based triggers are always high confidence
   } else if (triggerType === "pattern" && context.recentMood) {
     // Scale confidence: mood 2 = 0.6, mood 1 = 1.0
-    baseConfidence = Math.min(1.0, MOOD_CONFIDENCE_BASE - context.recentMood * MOOD_CONFIDENCE_MULTIPLIER);
+    baseConfidence = Math.min(
+      1.0,
+      MOOD_CONFIDENCE_BASE - context.recentMood * MOOD_CONFIDENCE_MULTIPLIER,
+    );
   } else {
     baseConfidence = 0.7; // Default moderate confidence
   }
-  
+
   // Apply ML timing confidence boost/suppression (-0.5 to +0.5)
   if (context.timingConfidence !== undefined) {
     const adjustedConfidence = baseConfidence + context.timingConfidence;
@@ -653,13 +639,15 @@ function generateContextMessage(
       if (context?.upcomingEvents && context.upcomingEvents.length > 0) {
         const nextEvent = context.upcomingEvents[0];
         const eventDate = new Date(nextEvent.startDate);
-        const minutesUntil = Math.round((eventDate.getTime() - Date.now()) / (1000 * 60));
-        
+        const minutesUntil = Math.round(
+          (eventDate.getTime() - Date.now()) / (1000 * 60),
+        );
+
         // User-marked "needs armor" events get special message
         if (nextEvent.needsArmor) {
           return `You marked your upcoming event as needing support. Let's armor up before it starts.`;
         }
-        
+
         // Classification-specific messages
         switch (nextEvent.classification) {
           case "meeting":
@@ -677,7 +665,7 @@ function generateContextMessage(
         }
       }
       return "Let's prepare for what's ahead.";
-    
+
     case "biometric":
       if (
         context?.biometrics?.heartRate &&
@@ -685,7 +673,10 @@ function generateContextMessage(
       ) {
         return "I noticed your heart rate is elevated. A quick breathing exercise might help.";
       }
-      if (context?.biometrics?.hrv && context.biometrics.hrv < HRV_LOW_THRESHOLD) {
+      if (
+        context?.biometrics?.hrv &&
+        context.biometrics.hrv < HRV_LOW_THRESHOLD
+      ) {
         return "Your stress levels seem high. Let's take a moment to reset.";
       }
       return "I sensed you might need a quick wellness break.";

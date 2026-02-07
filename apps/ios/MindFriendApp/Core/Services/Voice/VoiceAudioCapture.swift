@@ -83,7 +83,7 @@ final class VoiceAudioCapture {
 
         // Configure audio session for recording
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetooth])
+        try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetoothHFP])
         try session.setActive(true)
 
         let inputNode = audioEngine.inputNode
@@ -190,7 +190,7 @@ final class VoiceAudioCapture {
         }
 
         var error: NSError?
-        var inputConsumed = false
+        nonisolated(unsafe) var inputConsumed = false
 
         let inputBlock: AVAudioConverterInputBlock = { _, outStatus in
             if inputConsumed {

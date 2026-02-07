@@ -22,6 +22,9 @@ final class AppState: ObservableObject {
     /// Whether we're using cached data (before network verification)
     @Published var isUsingCachedData: Bool = false
 
+    /// Whether the Supabase session has been restored (safe to make edge function calls)
+    @Published var sessionRestored: Bool = false
+
     // MARK: - Entitlements
     @Published var entitlements: Entitlements = .free
 
@@ -61,6 +64,7 @@ final class AppState: ObservableObject {
         self.authState = .authenticated
         self.hasCompletedInitialAuth = true
         self.isUsingCachedData = false
+        self.sessionRestored = true
     }
 
     /// Set authenticated state with cached data (before network verification)
@@ -82,6 +86,7 @@ final class AppState: ObservableObject {
         self.authState = .unauthenticated
         self.hasCompletedInitialAuth = true
         self.isUsingCachedData = false
+        self.sessionRestored = false
     }
 
     func requireOnboarding() {

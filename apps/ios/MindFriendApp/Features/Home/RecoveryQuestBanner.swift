@@ -57,7 +57,7 @@ struct RecoveryQuestBanner: View {
             timeRemaining = expiresAt.timeIntervalSince(Date())
 
             // Create timer with proper lifecycle management
-            timerSubscription = Timer.publish(every: 1, on: .main, in: .common)
+            timerSubscription = Timer.publish(every: 30, on: .main, in: .common)
                 .autoconnect()
                 .sink { _ in
                     timeRemaining = expiresAt.timeIntervalSince(Date())

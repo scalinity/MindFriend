@@ -321,7 +321,7 @@ final class BoundaryPracticeViewModel: ObservableObject {
                     source_id: boundary.id.uuidString
                 )
                 
-                let response = try await supabase
+                _ = try await supabase
                     .from("custom_scenarios")
                     .insert(scenarioData)
                     .select()

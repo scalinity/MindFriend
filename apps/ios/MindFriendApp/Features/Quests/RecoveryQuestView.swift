@@ -32,7 +32,7 @@ struct RecoveryQuestView: View {
                     Button("Cancel") { dismiss() }
                 }
             }
-            .alert("Error", isPresented: .constant(errorMessage != nil)) {
+            .alert("Error", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
                 Button("OK") { errorMessage = nil }
             } message: {
                 Text(errorMessage ?? "")
@@ -68,10 +68,10 @@ struct RecoveryQuestView: View {
 
     private var questContentSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(quest.title)
+            Text(quest.title ?? "Recovery Quest")
                 .font(.headline)
 
-            Text(quest.description)
+            Text(quest.description ?? "Complete this quest to restore your streak.")
                 .foregroundStyle(.secondary)
 
             Divider()
@@ -107,7 +107,7 @@ struct RecoveryQuestView: View {
             HStack {
                 Image(systemName: "clock")
                     .foregroundStyle(.secondary)
-                Text("\(quest.estimatedMinutes) minutes")
+                Text("\(quest.estimatedMinutes ?? 10) minutes")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

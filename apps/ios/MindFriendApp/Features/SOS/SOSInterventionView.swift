@@ -76,7 +76,7 @@ struct SOSInterventionView: View {
                 }
             )
 
-        case .breathing(let cycleIndex, let totalCycles, _):
+        case .breathing(_, _, _):
             SOSBreathingView(
                 onComplete: {
                     sosCoordinator.completeBreathing()

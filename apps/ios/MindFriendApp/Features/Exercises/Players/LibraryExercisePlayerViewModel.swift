@@ -175,6 +175,9 @@ class LibraryExercisePlayerViewModel: ObservableObject {
         if let audioUrlString = exercise.audioUrl, let audioUrl = URL(string: audioUrlString) {
             hasAudio = true
             audioPlayer.load(url: audioUrl)
+            print("[MeditationAudio] Loaded audio URL: \(audioUrlString)")
+        } else {
+            print("[MeditationAudio] No audio URL for exercise '\(exercise.title)' (audioUrl=\(exercise.audioUrl ?? "nil"))")
         }
     }
 
@@ -265,7 +268,7 @@ class LibraryExercisePlayerViewModel: ObservableObject {
         // Stop efficacy tracking
         Task {
             if isTrackingEfficacy {
-                try? await stopEfficacyTracking()
+                await stopEfficacyTracking()
             }
             isTrackingEfficacy = false
             currentTrajectory = []
@@ -474,11 +477,15 @@ class LibraryExercisePlayerViewModel: ObservableObject {
             // Get user ID from session or use a placeholder
             let exerciseUUID = UUID(uuidString: exercise.id) ?? UUID()
             let sessionUUID = UUID(uuidString: session.id) ?? UUID()
-            // Note: userId should come from auth - using placeholder for now
+            // Get current user ID from Supabase auth
+            guard let userId = try? await supabase.auth.session.user.id else {
+                print("No authenticated user for efficacy tracking")
+                return
+            }
             try await engine.startSession(
                 sessionId: sessionUUID,
                 exerciseId: exerciseUUID,
-                userId: UUID()  // TODO: Get from auth service
+                userId: userId
             )
             isTrackingEfficacy = true
         } catch {

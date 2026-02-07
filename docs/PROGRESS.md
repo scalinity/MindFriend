@@ -1315,7 +1315,7 @@ Implemented comprehensive Sleep Tracking and Optimization System with HealthKit 
 
 **Production Deployment:**
 
-- Edge Functions live at: `https://zfaucivtzfwnrijsbfug.supabase.co/functions/v1/[generate-wind-down|analyze-sleep-patterns]`
+- Edge Functions live at: `https://YOUR_PROJECT_REF.supabase.co/functions/v1/[generate-wind-down|analyze-sleep-patterns]`
 - HealthKit permissions required in Info.plist before production use
 - Bedtime reminder notifications pending implementation
 - Integration with main navigation pending
@@ -1450,7 +1450,7 @@ Implemented the Wellbeing Debt Calculator feature that models cumulative stress 
 
 **Production Deployment:**
 
-- Edge Functions live at: `https://zfaucivtzfwnrijsbfug.supabase.co/functions/v1/[function-name]`
+- Edge Functions live at: `https://YOUR_PROJECT_REF.supabase.co/functions/v1/[function-name]`
 - Cron jobs scheduled via pg_cron extension
 - Daily processing: detect-transactions (1 AM) → calculate-debt-score (2 AM)
 
@@ -1839,10 +1839,10 @@ Completed Phase 2 of Intervention Efficacy Engine (N005): Created UI views, inte
 **Edge Functions Deployed:**
 | Function | Status | Bundle Size | Dashboard |
 |----------|--------|-------------|-----------|
-| `calculate-efficacy` | ✅ Deployed | 71.62kB | [View](https://supabase.com/dashboard/project/zfaucivtzfwnrijsbfug/functions) |
-| `get-recommendations` | ✅ Deployed | 70.06kB | [View](https://supabase.com/dashboard/project/zfaucivtzfwnrijsbfug/functions) |
-| `get-efficacy-dashboard` | ✅ Deployed | 68.93kB | [View](https://supabase.com/dashboard/project/zfaucivtzfwnrijsbfug/functions) |
-| `aggregate-efficacy-profiles` | ✅ Deployed | 70.99kB | [View](https://supabase.com/dashboard/project/zfaucivtzfwnrijsbfug/functions) |
+| `calculate-efficacy` | ✅ Deployed | 71.62kB | [View](https://supabase.com/dashboard/project/YOUR_PROJECT_REF/functions) |
+| `get-recommendations` | ✅ Deployed | 70.06kB | [View](https://supabase.com/dashboard/project/YOUR_PROJECT_REF/functions) |
+| `get-efficacy-dashboard` | ✅ Deployed | 68.93kB | [View](https://supabase.com/dashboard/project/YOUR_PROJECT_REF/functions) |
+| `aggregate-efficacy-profiles` | ✅ Deployed | 70.99kB | [View](https://supabase.com/dashboard/project/YOUR_PROJECT_REF/functions) |
 
 **Deployment Issues Fixed:**
 
@@ -1897,7 +1897,7 @@ SELECT cron.schedule(
   '0 2 * * *',
   $$
   SELECT net.http_post(
-    url:='https://zfaucivtzfwnrijsbfug.supabase.co/functions/v1/aggregate-efficacy-profiles',
+    url:='https://YOUR_PROJECT_REF.supabase.co/functions/v1/aggregate-efficacy-profiles',
     headers:='{"Authorization": "Bearer ' || current_setting('app.settings.service_role_key') || '", "Content-Type": "application/json"}'::jsonb
   ) as request_id;
   $$
@@ -2763,9 +2763,9 @@ Conducted comprehensive multi-agent code review of N005 implementation, fixed 21
 **Production Deployment:**
 | Function | Bundle Size | Status | URL |
 |----------|-------------|--------|-----|
-| `calculate-efficacy` | 71.62kB | ACTIVE | https://supabase.com/dashboard/project/zfaucivtzfwnrijsbfug/functions |
-| `get-recommendations` | 70.06kB | ACTIVE | https://supabase.com/dashboard/project/zfaucivtzfwnrijsbfug/functions |
-| `aggregate-efficacy-profiles` | 70.99kB | ACTIVE | https://supabase.com/dashboard/project/zfaucivtzfwnrijsbfug/functions |
+| `calculate-efficacy` | 71.62kB | ACTIVE | https://supabase.com/dashboard/project/YOUR_PROJECT_REF/functions |
+| `get-recommendations` | 70.06kB | ACTIVE | https://supabase.com/dashboard/project/YOUR_PROJECT_REF/functions |
+| `aggregate-efficacy-profiles` | 70.99kB | ACTIVE | https://supabase.com/dashboard/project/YOUR_PROJECT_REF/functions |
 
 ### Testing
 
@@ -2810,7 +2810,7 @@ SELECT cron.schedule(
   '0 2 * * *',
   $$
   SELECT net.http_post(
-    url:='https://zfaucivtzfwnrijsbfug.supabase.co/functions/v1/aggregate-efficacy-profiles',
+    url:='https://YOUR_PROJECT_REF.supabase.co/functions/v1/aggregate-efficacy-profiles',
     headers:='{"Authorization": "Bearer ' || current_setting('app.settings.service_role_key') || '", "Content-Type": "application/json"}'::jsonb
   ) as request_id;
   $$
@@ -11359,7 +11359,7 @@ Configured automated nightly cron job to run the `aggregate-efficacy-profiles` E
 |-----------|-------|
 | Job Name | `aggregate-efficacy-profiles-nightly` |
 | Schedule | `0 2 * * *` (2 AM UTC daily) |
-| Function URL | `https://zfaucivtzfwnrijsbfug.supabase.co/functions/v1/aggregate-efficacy-profiles` |
+| Function URL | `https://YOUR_PROJECT_REF.supabase.co/functions/v1/aggregate-efficacy-profiles` |
 | Authentication | Service role key (from Supabase secrets) |
 | Extension | `pg_cron` (enabled) |
 
@@ -11576,7 +11576,7 @@ Applied critical fixes identified during Phase 2 code review. Addressed division
 - Manual deployment step required: Set database credentials via ALTER DATABASE
   ```sql
   ALTER DATABASE postgres SET app.service_role_key = '<service-role-key>';
-  ALTER DATABASE postgres SET app.supabase_url = 'https://zfaucivtzfwnrijsbfug.supabase.co';
+  ALTER DATABASE postgres SET app.supabase_url = 'https://YOUR_PROJECT_REF.supabase.co';
   ```
 - Retry utility created but not yet integrated into Edge Functions (future enhancement)
 - Plaintext health data issue requires product decision on encryption strategy
@@ -11752,7 +11752,7 @@ All critical and high-priority issues identified by review agents have been reso
 
    ```sql
    ALTER DATABASE postgres SET app.service_role_key = '<service-role-key>';
-   ALTER DATABASE postgres SET app.supabase_url = 'https://zfaucivtzfwnrijsbfug.supabase.co';
+   ALTER DATABASE postgres SET app.supabase_url = 'https://YOUR_PROJECT_REF.supabase.co';
    ```
 
 2. **Set cron secret environment variable** (in Supabase Dashboard):

@@ -142,7 +142,7 @@ struct DistortionEvent: Codable, Identifiable {
         // The encrypted field is never exposed to the client directly
         // For now, we expect the server to return decrypted text in a different field
         // or handle decryption before sending to client
-        if let encryptedData = try? container.decode(Data.self, forKey: .transcriptTextEncrypted) {
+        if let _ = try? container.decode(Data.self, forKey: .transcriptTextEncrypted) {
             // Edge Function should decrypt before sending to client
             // This is a safeguard - in practice, the server sends decrypted text
             transcriptText = "[Encrypted - decrypt server-side]"

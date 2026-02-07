@@ -11,7 +11,7 @@ echo "🔧 Setting up B2B Phase 1 test environment..."
 SUPABASE_URL="http://127.0.0.1:54321"
 SUPABASE_ANON_KEY=$(supabase status --output json | jq -r '.anon_key')
 TEST_EMAIL="test@example.com"
-TEST_PASSWORD="TestPassword123!"
+TEST_PASSWORD="${TEST_PASSWORD:-ChangeMe123!}"
 
 echo "📝 Creating test user..."
 

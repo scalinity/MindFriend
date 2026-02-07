@@ -81,7 +81,7 @@ struct CreateFamilySheet: View {
                 let ageFilter = Int(childAgeFilter) ?? 18
                 let maxMembersCount = Int(maxMembers) ?? 6
 
-                let family = try await container.familyService.createFamily(
+                _ = try await container.familyService.createFamily(
                     name: familyName,
                     defaultChildAgeFilter: ageFilter,
                     maxMembers: maxMembersCount

@@ -18,18 +18,12 @@ final class ActionCardService: ActionCardServiceProtocol {
     }
 
     func generateActionCards(_ request: GenerateActionCardsRequest) async throws -> GenerateActionCardsResponse {
-        let response = try await supabase.functions.invoke(
+        let result: GenerateActionCardsResponse = try await supabase.functions.invoke(
             "generate-action-cards",
             options: FunctionInvokeOptions(body: request)
         )
-        
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        guard let responseData = try? JSONSerialization.data(withJSONObject: response) else {
-            throw NSError(domain: "ActionCardService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid response"])
-        }
-        
-        return try decoder.decode(GenerateActionCardsResponse.self, from: responseData)
+
+        return result
     }
 
     func recordActionTaken(_ request: CardActionRequest) async throws {

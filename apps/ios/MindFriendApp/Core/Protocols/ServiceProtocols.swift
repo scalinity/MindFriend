@@ -59,4 +59,5 @@ protocol TransitionServiceProtocol {
     func getJournalDraft(for pathwayId: UUID) throws -> String?
     func saveJournalDraft(_ text: String, for pathwayId: UUID) throws
     func clearJournalDraft(for pathwayId: UUID)
+    func clearDailyContentCache(for pathwayId: UUID)
 }

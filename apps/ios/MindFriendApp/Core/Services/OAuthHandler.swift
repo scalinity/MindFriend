@@ -98,7 +98,7 @@ final class OAuthHandler: NSObject, ObservableObject {
 
         let state = generateState()
         let codeVerifier = generateCodeVerifier()
-        let codeChallenge = generateCodeChallenge(from: codeVerifier)
+        let _ = generateCodeChallenge(from: codeVerifier)
 
         let oauthState = OAuthState(
             state: state,
@@ -133,17 +133,16 @@ final class OAuthHandler: NSObject, ObservableObject {
             authError = nil
         }
 
-        let safariVC = SFSafariViewController(url: authUrl)
-        safariVC.delegate = self
-
         await MainActor.run {
+            let safariVC = SFSafariViewController(url: authUrl)
+            safariVC.delegate = self
             viewController.present(safariVC, animated: true)
         }
     }
 
     /// Exchanges Notion authorization code for token
     func exchangeNotionCode(_ code: String) async throws -> OAuthToken {
-        guard let storedState = encryptionService.retrieveOAuthState(for: .notion) else {
+        guard let _ = encryptionService.retrieveOAuthState(for: .notion) else {
             throw OAuthError.invalidState
         }
 
@@ -210,7 +209,7 @@ final class OAuthHandler: NSObject, ObservableObject {
 
     /// Disconnects Notion
     func disconnectNotion() {
-        encryptionService.deleteOAuthToken(for: .notion)
+        _ = encryptionService.deleteOAuthToken(for: .notion)
     }
 
     // MARK: - Connection Status
@@ -407,7 +406,7 @@ final class OAuthEncryptionService: EncryptionServiceProtocol {
 
     func deleteOAuthState(for integrationType: IntegrationType) {
         let account = "oauth_state_\(integrationType.rawValue)"
-        deleteFromKeychain(for: account)
+        _ = deleteFromKeychain(for: account)
     }
 
     // MARK: - Keychain Helpers

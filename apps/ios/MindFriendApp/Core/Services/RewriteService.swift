@@ -97,7 +97,7 @@ final class RewriteService: RewriteServiceProtocol {
             .from("subscriptions")
             .select("status")
             .eq("user_id", value: userId)
-            .in("status", value: ["active", "trialing"])
+            .in("status", values: ["active", "trialing"])
             .execute()
             .value
 

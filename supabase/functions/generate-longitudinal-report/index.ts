@@ -5,6 +5,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 interface ReportRequest {
   report_type: "quarterly" | "annual" | "custom";
@@ -25,14 +26,11 @@ interface ReportContent {
   recommendations: string[];
 }
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
 
 serve(async (req) => {
+  const origin = req.headers.get("origin") ?? "";
+  const corsHeaders = getCorsHeaders(origin);
+
   console.log("=== [generate-longitudinal-report] START ===");
   console.log("[1] Method:", req.method);
   console.log("[2] URL:", req.url);
@@ -50,8 +48,6 @@ serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
     console.log("[4] SUPABASE_URL present:", !!supabaseUrl);
-    console.log("[4b] SUPABASE_ANON_KEY present:", !!supabaseAnonKey);
-    console.log("[5] SUPABASE_SERVICE_ROLE_KEY present:", !!serviceRoleKey);
 
     if (!supabaseUrl || !supabaseAnonKey || !serviceRoleKey) {
       console.error("[ERROR] Missing environment variables");
@@ -103,8 +99,6 @@ serve(async (req) => {
     }
 
     const token = authHeader.replace("Bearer ", "");
-    console.log("[9] Token extracted, length:", token.length);
-
     // Create user-scoped client with the JWT token (same pattern as privacy-lock-settings)
     const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
       global: {

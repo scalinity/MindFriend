@@ -27,7 +27,8 @@ const RATE_LIMIT_MAX_REQUESTS = 10;
 const rateLimitCache = new Map<string, { count: number; resetAt: number }>();
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") || "app.mindfriend.com",
+  "Access-Control-Allow-Origin":
+    Deno.env.get("ALLOWED_ORIGIN") || "https://getmindfriend.app",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -35,9 +36,18 @@ const corsHeaders = {
 
 // Allowed context tag prefixes (whitelist)
 const ALLOWED_TAG_PREFIXES = [
-  "mood:", "time:", "day:", "emotion:", "exercise:",
-  "pathway:", "phase:", "category:", "type:", "effectiveness:",
-  "goal:", "challenge:"
+  "mood:",
+  "time:",
+  "day:",
+  "emotion:",
+  "exercise:",
+  "pathway:",
+  "phase:",
+  "category:",
+  "type:",
+  "effectiveness:",
+  "goal:",
+  "challenge:",
 ];
 
 interface ContributeRequest {
@@ -50,26 +60,34 @@ interface ContributeRequest {
  * Checks rate limit for a user
  * @returns true if allowed, false if rate limited
  */
-function checkRateLimit(userId: string): { allowed: boolean; remaining: number; resetAt: number } {
+function checkRateLimit(userId: string): {
+  allowed: boolean;
+  remaining: number;
+  resetAt: number;
+} {
   const now = Date.now();
   const key = `wisdom:${userId}`;
-  
+
   let entry = rateLimitCache.get(key);
-  
+
   // Reset if window expired
   if (!entry || now > entry.resetAt) {
     entry = { count: 0, resetAt: now + RATE_LIMIT_WINDOW_MS };
     rateLimitCache.set(key, entry);
   }
-  
+
   // Check limit
   if (entry.count >= RATE_LIMIT_MAX_REQUESTS) {
     return { allowed: false, remaining: 0, resetAt: entry.resetAt };
   }
-  
+
   // Increment and allow
   entry.count++;
-  return { allowed: true, remaining: RATE_LIMIT_MAX_REQUESTS - entry.count, resetAt: entry.resetAt };
+  return {
+    allowed: true,
+    remaining: RATE_LIMIT_MAX_REQUESTS - entry.count,
+    resetAt: entry.resetAt,
+  };
 }
 
 /**
@@ -77,13 +95,14 @@ function checkRateLimit(userId: string): { allowed: boolean; remaining: number; 
  */
 function sanitizeContextTags(tags: string[]): string[] {
   return tags
-    .filter(tag => {
+    .filter((tag) => {
       // Must be a string
       if (typeof tag !== "string") return false;
       // Must not be empty or too long
       if (tag.length === 0 || tag.length > 50) return false;
       // Must match allowed prefix pattern
-      if (!ALLOWED_TAG_PREFIXES.some(prefix => tag.startsWith(prefix))) return false;
+      if (!ALLOWED_TAG_PREFIXES.some((prefix) => tag.startsWith(prefix)))
+        return false;
       // Must not contain dangerous characters
       if (/[<>"'\\;]/.test(tag)) return false;
       // Value after prefix must be alphanumeric/underscore only
@@ -169,7 +188,7 @@ serve(async (req) => {
           error: schemaValidation.hasPII
             ? "PII_DETECTED"
             : "INVALID_DATA_SCHEMA",
-          message: schemaValidation.hasPII 
+          message: schemaValidation.hasPII
             ? "Please remove personal information before submitting"
             : "Invalid data format",
         }),
@@ -205,7 +224,11 @@ serve(async (req) => {
     const userHash = await hashUserId(user.id);
 
     // Build and sanitize context tags from contribution data
-    const enrichedTags = buildContextTags(contributionType, data, sanitizeContextTags(contextTags));
+    const enrichedTags = buildContextTags(
+      contributionType,
+      data,
+      sanitizeContextTags(contextTags),
+    );
 
     // Insert contribution
     const { data: contribution, error: insertError } = await supabase
@@ -242,8 +265,8 @@ serve(async (req) => {
       }),
       {
         status: 201,
-        headers: { 
-          ...corsHeaders, 
+        headers: {
+          ...corsHeaders,
           "Content-Type": "application/json",
           "X-RateLimit-Remaining": String(rateLimit.remaining),
         },

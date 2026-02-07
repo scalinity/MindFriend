@@ -351,7 +351,7 @@ final class HealthKitService: ObservableObject {
         let cappedDays = min(days, 90)
         let calendar = Calendar.current
         let endDate = Date()
-        guard let startDate = calendar.date(byAdding: .day, value: -cappedDays, to: endDate) else {
+        guard let _ = calendar.date(byAdding: .day, value: -cappedDays, to: endDate) else {
             return []
         }
 

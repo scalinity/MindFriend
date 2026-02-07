@@ -22,7 +22,12 @@ export type NotificationType =
   | "proactive_reengagement"
   | "proactive_pattern_insight"
   // Assessment reminders
-  | "assessment_reminder";
+  | "assessment_reminder"
+  // Buddy & Couples types
+  | "buddy_encouragement"
+  | "couples_exercise_invite"
+  // Wellness Agent
+  | "agent_action";
 
 // Map notification types to user settings columns
 export const TYPE_TO_SETTING: Record<NotificationType, string> = {
@@ -46,6 +51,11 @@ export const TYPE_TO_SETTING: Record<NotificationType, string> = {
   proactive_pattern_insight: "proactive_enabled",
   // Assessment reminders - uses general reminders setting
   assessment_reminder: "reminders_enabled",
+  // Buddy & Couples - uses general reminders setting
+  buddy_encouragement: "reminders_enabled",
+  couples_exercise_invite: "reminders_enabled",
+  // Wellness Agent - uses proactive_enabled setting
+  agent_action: "proactive_enabled",
 };
 
 export interface NotificationContent {
@@ -88,6 +98,16 @@ export interface NotificationData {
   assessmentCode?: string;
   assessmentName?: string;
   daysSinceLastAssessment?: number;
+  // Buddy & Couples fields
+  messageType?: string;
+  sessionId?: string;
+  exerciseName?: string;
+  // Wellness Agent fields
+  title?: string;
+  body?: string;
+  deepLink?: string;
+  actionId?: string;
+  actionType?: string;
 }
 
 // Build notification content based on type
@@ -282,6 +302,35 @@ export function buildNotificationContent(
         title: "Wellness Check-In 📊",
         body,
         deepLink: `mindfriend://assessment/${code}`,
+      };
+    }
+
+    case "buddy_encouragement": {
+      const name = data.senderName || "Your buddy";
+      return {
+        title: "Buddy Encouragement 💪",
+        body: `${name} sent you some encouragement!`,
+        deepLink: "mindfriend://home",
+      };
+    }
+
+    case "couples_exercise_invite": {
+      const name = data.senderName || "Your partner";
+      const exercise = data.exerciseName || "an exercise";
+      return {
+        title: "Exercise Invite 💑",
+        body: `${name} invited you to do ${exercise} together`,
+        deepLink: data.sessionId
+          ? `mindfriend://couples/session/${data.sessionId}`
+          : "mindfriend://couples",
+      };
+    }
+
+    case "agent_action": {
+      return {
+        title: data.title || "MindFriend",
+        body: data.body || "Your wellness companion has something for you",
+        deepLink: data.deepLink || "mindfriend://home",
       };
     }
 

@@ -15,14 +15,14 @@ enum AnyCodableValue: Codable, Equatable, Hashable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
-        if let int = try? container.decode(Int.self) {
+        if let bool = try? container.decode(Bool.self) {
+            self = .bool(bool)
+        } else if let int = try? container.decode(Int.self) {
             self = .int(int)
         } else if let double = try? container.decode(Double.self) {
             self = .double(double)
         } else if let string = try? container.decode(String.self) {
             self = .string(string)
-        } else if let bool = try? container.decode(Bool.self) {
-            self = .bool(bool)
         } else if let array = try? container.decode([AnyCodableValue].self) {
             self = .array(array)
         } else if let dict = try? container.decode([String: AnyCodableValue].self) {
@@ -579,10 +579,10 @@ struct StreakProtectionResult: Codable {
     let streakProtected: Bool
     let newStreak: Int
     let shieldsRemaining: Int
-    let shieldsMax: Int
+    let shieldsMax: Int?
     let recoveryAvailable: Bool
     let streakBeforeBreak: Int?
-    let recoveryExpiresAt: Date?
+    let recoveryExpiresAtRaw: String?
 
     enum CodingKeys: String, CodingKey {
         case success
@@ -592,7 +592,17 @@ struct StreakProtectionResult: Codable {
         case shieldsMax = "shields_max"
         case recoveryAvailable = "recovery_available"
         case streakBeforeBreak = "streak_before_break"
-        case recoveryExpiresAt = "recovery_expires_at"
+        case recoveryExpiresAtRaw = "recovery_expires_at"
+    }
+
+    /// Parsed recovery expiration date
+    var recoveryExpiresAt: Date? {
+        guard let raw = recoveryExpiresAtRaw else { return nil }
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = iso.date(from: raw) { return date }
+        iso.formatOptions = [.withInternetDateTime]
+        return iso.date(from: raw)
     }
 }
 
@@ -604,10 +614,10 @@ struct StartRecoveryResult: Codable {
     let error: String?
 
     struct RecoveryQuestInfo: Codable {
-        let id: String
-        let title: String
-        let description: String
-        let estimatedMinutes: Int
+        let id: String?
+        let title: String?
+        let description: String?
+        let estimatedMinutes: Int?
         let instructions: [String]?
     }
 }
@@ -3312,6 +3322,35 @@ struct RecommendedAction: Codable, Identifiable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case type, title, icon, priority
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        type = try container.decode(ActionType.self, forKey: .type)
+        title = try container.decode(String.self, forKey: .title)
+        priority = try container.decode(Int.self, forKey: .priority)
+        // icon is optional in the RPC response - provide sensible defaults per type
+        icon = try container.decodeIfPresent(String.self, forKey: .icon) ?? Self.defaultIcon(for: type)
+    }
+
+    init(type: ActionType, title: String, icon: String, priority: Int) {
+        self.type = type
+        self.title = title
+        self.icon = icon
+        self.priority = priority
+    }
+
+    private static func defaultIcon(for type: ActionType) -> String {
+        switch type {
+        case .exercise: return "figure.mind.and.body"
+        case .chat: return "bubble.left.fill"
+        case .circle: return "person.2.fill"
+        case .quest: return "star.fill"
+        case .breathing: return "wind"
+        case .journal: return "book.fill"
+        case .celebrate: return "party.popper.fill"
+        case .share: return "heart.circle.fill"
+        }
     }
 }
 

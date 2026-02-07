@@ -16,6 +16,7 @@ import type {
   DistortionType,
   ErrorResponse,
 } from "./types.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 // =====================================================
 // Environment Variable Validation (P0 Security Fix)
@@ -113,22 +114,25 @@ const DISTORTION_PATTERNS: Record<DistortionType, string[]> = {
 };
 
 serve(async (req) => {
+  const origin = req.headers.get("origin") ?? "";
+  const corsHeaders = getCorsHeaders(origin);
+
   // CORS headers
   if (req.method === "OPTIONS") {
-    return new Response(null, {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "authorization, content-type",
-      },
-    });
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {
     // Authenticate user
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return errorResponse("UNAUTHORIZED", "Missing authorization header", 401);
+      return errorResponse(
+        "UNAUTHORIZED",
+        "Missing authorization header",
+        401,
+        undefined,
+        corsHeaders,
+      );
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -138,7 +142,13 @@ serve(async (req) => {
     } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
 
     if (authError || !user) {
-      return errorResponse("UNAUTHORIZED", "Invalid or expired token", 401);
+      return errorResponse(
+        "UNAUTHORIZED",
+        "Invalid or expired token",
+        401,
+        undefined,
+        corsHeaders,
+      );
     }
 
     // Parse request body
@@ -150,6 +160,8 @@ serve(async (req) => {
         "INVALID_REQUEST",
         "Missing required fields: text, sessionId",
         400,
+        undefined,
+        corsHeaders,
       );
     }
 
@@ -196,10 +208,7 @@ serve(async (req) => {
     };
 
     return new Response(JSON.stringify(response), {
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
-      },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
     // P0 FIX: Sanitize error logging to prevent sensitive data leakage
@@ -212,7 +221,13 @@ serve(async (req) => {
       // DO NOT include error.stack, full error object, or request body
     });
 
-    return errorResponse("LLM_FAILURE", "Internal server error", 500);
+    return errorResponse(
+      "LLM_FAILURE",
+      "Internal server error",
+      500,
+      undefined,
+      corsHeaders,
+    );
   }
 });
 
@@ -387,13 +402,14 @@ function errorResponse(
   message: string,
   status: number,
   details?: unknown,
+  corsHeaders?: Record<string, string>,
 ): Response {
   const error: ErrorResponse = { code, message, details };
   return new Response(JSON.stringify(error), {
     status,
     headers: {
       "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
+      ...corsHeaders,
     },
   });
 }
