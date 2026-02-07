@@ -3,7 +3,7 @@ INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_typ
 VALUES (
   'creative-works',
   'creative-works', 
-  false,  -- Private bucket - user creative works should not be publicly accessible
+  true,  -- Public bucket - iOS app reads creative works via public URLs
   52428800,  -- 50MB limit
   ARRAY['image/png', 'image/jpeg', 'image/webp', 'image/gif']
 )
@@ -28,6 +28,13 @@ USING (
   bucket_id = 'creative-works'
   AND (storage.foldername(name))[1] = auth.uid()::text
 );
+
+-- Allow public read access (iOS app uses public URLs for displaying creative works)
+CREATE POLICY "Public read access for creative works"
+ON storage.objects
+FOR SELECT
+TO public
+USING (bucket_id = 'creative-works');
 
 -- Allow service role full access
 CREATE POLICY "Service role full access to creative works"
