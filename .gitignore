@@ -141,6 +141,12 @@ BUG_VERIFICATION_REPORT_*.md
 CODEBASE_AUDIT_*.md
 REVIEW_ORCHESTRATOR_*.md
 EMAIL_SYSTEM_BUG_REPORT.md
+**/AUDIT_REPORT.md
+**/GDPR_*.md
+**/SECURITY-AUDIT-*.md
+**/security-audit-*.md
+**/security-audit*.md
+docs/security-audits/
 
 # Ad-hoc SQL scripts
 add_push_token.sql
@@ -174,6 +180,7 @@ supabase/migrations_backup/
 *.bak
 *.bak[0-9]*
 *.backup
+*.backup.*
 
 # Supabase temp/cache
 supabase/.temp/
