@@ -405,8 +405,8 @@ final class TherapistService {
             try await supabase.storage
                 .from("therapist-photos")
                 .upload(
-                    path: filePath,
-                    file: imageData,
+                    filePath,
+                    data: imageData,
                     options: FileOptions(
                         contentType: "image/jpeg",
                         upsert: true

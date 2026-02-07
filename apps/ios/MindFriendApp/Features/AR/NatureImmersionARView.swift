@@ -312,17 +312,19 @@ public struct NatureImmersionARView: View {
 
         sessionTimer?.invalidate()
         sessionTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-            guard !self.isExerciseEnded else {
-                self.sessionTimer?.invalidate()
-                return
-            }
+            MainActor.assumeIsolated {
+                guard !self.isExerciseEnded else {
+                    self.sessionTimer?.invalidate()
+                    return
+                }
 
-            if self.timeRemaining > 0 {
-                self.timeRemaining -= 1
-                self.exerciseService.recordTrackingQuality(self.trackingState.qualityValue)
-            } else {
-                self.sessionTimer?.invalidate()
-                self.endExercise(completed: true)
+                if self.timeRemaining > 0 {
+                    self.timeRemaining -= 1
+                    self.exerciseService.recordTrackingQuality(self.trackingState.qualityValue)
+                } else {
+                    self.sessionTimer?.invalidate()
+                    self.endExercise(completed: true)
+                }
             }
         }
     }

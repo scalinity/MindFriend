@@ -154,7 +154,7 @@ struct CircleTemplateEditorView: View {
     }
 
     private func saveTemplate() {
-        let template = CircleTemplate(
+        let _ = CircleTemplate(
             id: UUID(),
             circleId: UUID(), // Will be set by backend
             name: editorVM.name,

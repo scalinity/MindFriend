@@ -2,64 +2,63 @@ import SwiftUI
 
 struct PathwaySelectionView: View {
     @EnvironmentObject var container: DependencyContainer
+    @EnvironmentObject var appState: AppState
     @State private var pathways: [TransitionPathway] = []
     @State private var selectedCategory: PathwayCategory? = nil
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var selectedPathway: TransitionPathway?
-    @State private var showOnboarding = false
 
     var body: some View {
-        NavigationView {
-            VStack(spacing: 0) {
-                // Category filter
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
-                        ForEach([nil] + PathwayCategory.allCases, id: \.self) { category in
-                            PathwayCategoryChip(
-                                category: category,
-                                isSelected: selectedCategory == category,
-                                action: { selectedCategory = category }
-                            )
+        VStack(spacing: 0) {
+            // Category filter
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach([nil] + PathwayCategory.allCases, id: \.self) { category in
+                        PathwayCategoryChip(
+                            category: category,
+                            isSelected: selectedCategory == category,
+                            action: { selectedCategory = category }
+                        )
+                    }
+                }
+                .padding()
+            }
+
+            if isLoading {
+                Spacer()
+                ProgressView()
+                Spacer()
+            } else if let error = errorMessage {
+                Spacer()
+                Text(error)
+                    .foregroundColor(.red)
+                Spacer()
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 16) {
+                        ForEach(filteredPathways) { pathway in
+                            PathwayCard(pathway: pathway, isPremiumUser: appState.entitlements.tier == .premium)
+                                .onTapGesture {
+                                    if pathway.isPremium && appState.entitlements.tier != .premium {
+                                        appState.showPaywall = true
+                                    } else {
+                                        selectedPathway = pathway
+                                    }
+                                }
                         }
                     }
                     .padding()
                 }
-
-                if isLoading {
-                    Spacer()
-                    ProgressView()
-                    Spacer()
-                } else if let error = errorMessage {
-                    Spacer()
-                    Text(error)
-                        .foregroundColor(.red)
-                    Spacer()
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 16) {
-                            ForEach(filteredPathways) { pathway in
-                                PathwayCard(pathway: pathway)
-                                    .onTapGesture {
-                                        selectedPathway = pathway
-                                        showOnboarding = true
-                                    }
-                            }
-                        }
-                        .padding()
-                    }
-                }
             }
-            .navigationTitle("Life Transitions")
-            .sheet(isPresented: $showOnboarding) {
-                if let pathway = selectedPathway {
-                    PathwayOnboardingFlow(pathway: pathway)
-                        .environmentObject(container)
-                }
-            }
-            .task {
-                await loadPathways()
-            }
+        }
+        .navigationTitle("Life Transitions")
+        .sheet(item: $selectedPathway) { pathway in
+            PathwayOnboardingFlow(pathway: pathway)
+                .environmentObject(container)
+        }
+        .task {
+            await loadPathways()
         }
     }
 
@@ -101,6 +100,7 @@ struct PathwayCategoryChip: View {
 
 struct PathwayCard: View {
     let pathway: TransitionPathway
+    var isPremiumUser: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -119,7 +119,7 @@ struct PathwayCard: View {
 
                 Spacer()
 
-                if pathway.isPremium {
+                if pathway.isPremium && !isPremiumUser {
                     Image(systemName: "crown.fill")
                         .foregroundColor(.yellow)
                 }

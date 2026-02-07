@@ -596,13 +596,16 @@ struct UserExperience {
     let multiplierExpiresAt: Date?
 
     var progressToNextLevel: Double {
-        guard xpToNextLevel > 0 else { return 0 }
-        // Calculate XP required to reach current level
-        let xpForCurrentLevel = 50 * (currentLevel - 1) * (currentLevel - 1)
-        let xpForNextLevel = 50 * currentLevel * currentLevel
-        let xpInCurrentLevel = totalXp - xpForCurrentLevel
-        let xpNeededForLevel = xpForNextLevel - xpForCurrentLevel
-        return Double(xpInCurrentLevel) / Double(xpNeededForLevel)
+        guard xpToNextLevel > 0 else { return 1.0 }
+        // Use the actual xpThresholds table from UserLevel for consistency
+        let thresholds = UserLevel.xpThresholds
+        let currentLevelIndex = min(max(currentLevel - 1, 0), thresholds.count - 1)
+        let nextLevelIndex = min(currentLevel, thresholds.count - 1)
+        let xpForCurrentLevel = thresholds[currentLevelIndex]
+        let xpForNextLevel = thresholds[nextLevelIndex]
+        guard xpForNextLevel > xpForCurrentLevel else { return 1.0 }
+        let progress = Double(totalXp - xpForCurrentLevel) / Double(xpForNextLevel - xpForCurrentLevel)
+        return min(max(progress, 0), 1.0)
     }
 
     /// Memberwise initializer for constructing from profile stats
@@ -906,15 +909,13 @@ struct AwardXPResponse: Codable {
 }
 
 struct CheckBadgeProgressResponse: Codable {
-    let checked: Int
+    let badgesChecked: Int
     let newlyEarned: [EarnedBadge]
-    let progressUpdated: [String]
 
     // Explicit initializer for creating fallback responses
-    init(checked: Int, newlyEarned: [EarnedBadge], progressUpdated: [String]) {
-        self.checked = checked
+    init(badgesChecked: Int, newlyEarned: [EarnedBadge]) {
+        self.badgesChecked = badgesChecked
         self.newlyEarned = newlyEarned
-        self.progressUpdated = progressUpdated
     }
 
     struct EarnedBadge: Codable {
@@ -922,17 +923,6 @@ struct CheckBadgeProgressResponse: Codable {
         let slug: String
         let name: String
         let xpReward: Int
-
-        enum CodingKeys: String, CodingKey {
-            case id, slug, name
-            case xpReward = "xp_reward"
-        }
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case checked
-        case newlyEarned = "newly_earned"
-        case progressUpdated = "progress_updated"
     }
 }
 

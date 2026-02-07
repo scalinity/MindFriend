@@ -160,15 +160,17 @@ final class AudioPlayerService: NSObject, ObservableObject {
             forInterval: CMTime(seconds: 0.5, preferredTimescale: 600),
             queue: .main
         ) { [weak self] time in
-            self?.state.currentTime = time.seconds
-            self?.updateNowPlayingInfo()
+            MainActor.assumeIsolated {
+                self?.state.currentTime = time.seconds
+                self?.updateNowPlayingInfo()
 
-            // Check for completion (95% played)
-            if let duration = self?.state.duration,
-               duration > 0,
-               time.seconds / duration > 0.95 {
-                Task {
-                    await self?.recordPlaybackComplete()
+                // Check for completion (95% played)
+                if let duration = self?.state.duration,
+                   duration > 0,
+                   time.seconds / duration > 0.95 {
+                    Task {
+                        await self?.recordPlaybackComplete()
+                    }
                 }
             }
         }
@@ -255,16 +257,18 @@ final class AudioPlayerService: NSObject, ObservableObject {
         sleepTimerRemaining = seconds
 
         sleepTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] timer in
-            guard let self = self else {
-                timer.invalidate()
-                return
-            }
+            MainActor.assumeIsolated {
+                guard let self = self else {
+                    timer.invalidate()
+                    return
+                }
 
-            self.sleepTimerRemaining -= 1
+                self.sleepTimerRemaining -= 1
 
-            if self.sleepTimerRemaining <= 0 {
-                timer.invalidate()
-                self.fadeOutAndStop()
+                if self.sleepTimerRemaining <= 0 {
+                    timer.invalidate()
+                    self.fadeOutAndStop()
+                }
             }
         }
     }
@@ -291,18 +295,20 @@ final class AudioPlayerService: NSObject, ObservableObject {
         isSleepFading = true
 
         Timer.scheduledTimer(withTimeInterval: fadeInterval, repeats: true) { [weak self] timer in
-            currentStep += 1
-            // Use quadratic fade curve for more natural audio perception
-            let progress = Double(currentStep) / Double(fadeSteps)
-            let volume = Float(pow(1.0 - progress, 2))
-            self?.player?.volume = volume
+            MainActor.assumeIsolated {
+                currentStep += 1
+                // Use quadratic fade curve for more natural audio perception
+                let progress = Double(currentStep) / Double(fadeSteps)
+                let volume = Float(pow(1.0 - progress, 2))
+                self?.player?.volume = volume
 
-            if currentStep >= fadeSteps {
-                timer.invalidate()
-                self?.isSleepFading = false
-                self?.stop()
-                self?.player?.volume = 1.0
-                completion?()
+                if currentStep >= fadeSteps {
+                    timer.invalidate()
+                    self?.isSleepFading = false
+                    self?.stop()
+                    self?.player?.volume = 1.0
+                    completion?()
+                }
             }
         }
     }
@@ -357,7 +363,7 @@ final class AudioPlayerService: NSObject, ObservableObject {
     private func recordPlaybackStart(_ track: AudioTrack, context: String) async {
         // Ensure we have a valid session before making authenticated API calls
         guard let _ = try? await supabase.auth.session,
-              let userId = supabase.auth.currentUser?.id else { return }
+              let _ = supabase.auth.currentUser?.id else { return }
 
         let body: [String: AudioPlayerServiceAnyEncodable] = [
             "trackId": AudioPlayerServiceAnyEncodable(track.id),
@@ -419,7 +425,7 @@ final class AudioPlayerService: NSObject, ObservableObject {
 
         if favorites.contains(track.id) {
             favorites.remove(track.id)
-            try? await supabase
+            _ = try? await supabase
                 .from("user_audio_favorites")
                 .delete()
                 .eq("user_id", value: userId)
@@ -427,7 +433,7 @@ final class AudioPlayerService: NSObject, ObservableObject {
                 .execute()
         } else {
             favorites.insert(track.id)
-            try? await supabase
+            _ = try? await supabase
                 .from("user_audio_favorites")
                 .insert([
                     "user_id": userId.uuidString,

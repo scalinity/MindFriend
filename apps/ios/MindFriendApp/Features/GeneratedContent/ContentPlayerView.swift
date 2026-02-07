@@ -630,15 +630,18 @@ final class ContentPlayerViewModel: ObservableObject {
         // Add time observer
         let interval = CMTime(seconds: 0.5, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
         timeObserver = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
-            guard let self = self,
-                  let duration = self.player?.currentItem?.duration,
-                  duration.isNumeric else { return }
+            guard let self = self else { return }
 
-            let currentSeconds = time.seconds
-            let totalSeconds = duration.seconds
+            MainActor.assumeIsolated {
+                guard let duration = self.player?.currentItem?.duration,
+                      duration.isNumeric else { return }
 
-            self.currentTime = currentSeconds
-            self.playbackProgress = currentSeconds / totalSeconds
+                let currentSeconds = time.seconds
+                let totalSeconds = duration.seconds
+
+                self.currentTime = currentSeconds
+                self.playbackProgress = currentSeconds / totalSeconds
+            }
         }
 
         // Observe when playback ends
@@ -647,10 +650,12 @@ final class ContentPlayerViewModel: ObservableObject {
             object: playerItem,
             queue: .main
         ) { [weak self] _ in
-            self?.isPlaying = false
-            self?.playbackProgress = 0
-            self?.currentTime = 0
-            self?.player?.seek(to: .zero)
+            MainActor.assumeIsolated {
+                self?.isPlaying = false
+                self?.playbackProgress = 0
+                self?.currentTime = 0
+                self?.player?.seek(to: .zero)
+            }
         }
     }
 

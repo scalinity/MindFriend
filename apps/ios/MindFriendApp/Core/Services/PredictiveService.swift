@@ -463,12 +463,12 @@ final class PredictiveService: ObservableObject {
     /// Update prediction accuracy after user logs mood
     /// This is called automatically by database trigger, but can be called manually if needed
     func updatePredictionAccuracy(actualMood: Int) async throws {
-        let uid = try userId
+        let _ = try userId
         let today = Calendar.current.startOfDay(for: Date())
         
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
-        let todayString = formatter.string(from: today)
+        let _ = formatter.string(from: today)
         
         // Convert mood from 1-5 scale to 1-10 scale
         let scaledMood = Decimal(actualMood * 2)

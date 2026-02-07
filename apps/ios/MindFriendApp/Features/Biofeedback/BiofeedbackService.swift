@@ -334,7 +334,7 @@ final class BiofeedbackService: ObservableObject, BiofeedbackServicing {
                 extensionSeconds: currentExtension + additionalSeconds
             )
 
-            try await withRetry {
+            _ = try await withRetry {
                 try await supabase
                     .from("biofeedback_sessions")
                     .update(updateRequest)
@@ -544,7 +544,7 @@ final class BiofeedbackService: ObservableObject, BiofeedbackServicing {
         }
 
         do {
-            try await withRetry {
+            _ = try await withRetry {
                 try await supabase
                     .from("healthkit_heart_rate")
                     .insert(insertData)
@@ -574,7 +574,7 @@ final class BiofeedbackService: ObservableObject, BiofeedbackServicing {
         }
 
         do {
-            try await withRetry {
+            _ = try await withRetry {
                 try await supabase
                     .from("healthkit_hrv")
                     .insert(insertData)

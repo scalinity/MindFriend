@@ -8,6 +8,13 @@ enum QuestLoadingState {
     case error(String)
 }
 
+// MARK: - Recovery Quest Sheet Item
+struct RecoveryQuestItem: Identifiable {
+    let id = UUID()
+    let attemptId: String
+    let quest: StartRecoveryResult.RecoveryQuestInfo
+}
+
 // MARK: - Timing Constants
 private enum RefreshTiming {
     /// Minimum interval before allowing scene phase refresh (seconds)
@@ -29,8 +36,7 @@ struct HomeView: View {
     @State private var weeklyInsight: WeeklySummary?
     // Streak shield state
     @State private var shieldStatus: StreakShieldStatus?
-    @State private var showRecoveryQuest = false
-    @State private var recoveryQuestData: (attemptId: String, quest: StartRecoveryResult.RecoveryQuestInfo)?
+    @State private var recoveryQuestItem: RecoveryQuestItem?
     @State private var isStartingRecovery = false
     @State private var lastLoadTime: Date?
     @State private var hasCheckedReengagement = false
@@ -59,6 +65,8 @@ struct HomeView: View {
     // Home tutorial state
     @AppStorage("home_tutorial_completed") private var homeTutorialCompleted = false
     @State private var showHomeTutorial = false
+    // Task management - ensures only one loadData runs at a time
+    @State private var loadTask: Task<Void, Never>?
 
     /// Background color adapts to mood context
     private var adaptiveBackgroundColor: Color {
@@ -142,6 +150,7 @@ struct HomeView: View {
                     }
                 }
                 .refreshable {
+                    loadTask?.cancel()
                     await loadData()
                 }
                 .confirmationDialog(
@@ -158,7 +167,7 @@ struct HomeView: View {
                 }
             } else {
             ScrollView {
-                VStack(spacing: 24) {
+                LazyVStack(spacing: 24) {
                     // Adaptive greeting with time-of-day context
                     AdaptiveGreetingHeader(
                         userName: appState.currentUser?.displayName ?? "Friend",
@@ -184,7 +193,7 @@ struct HomeView: View {
 
                     // Streak with shields (moved above briefing for visibility)
                     StreakCardWithShields(
-                        currentStreak: appState.currentStreak,
+                        currentStreak: shieldStatus?.currentStreak ?? appState.currentStreak,
                         longestStreak: appState.currentUser?.stats?.longestStreakDays ?? 0,
                         shieldsRemaining: shieldStatus?.shieldsRemaining ?? appState.currentUser?.stats?.streakShieldsRemaining ?? 1,
                         shieldsMax: shieldStatus?.shieldsMax ?? appState.currentUser?.stats?.streakShieldsMax ?? 1,
@@ -198,14 +207,8 @@ struct HomeView: View {
                     TodaysHabitsHomeCard()
                         .environmentObject(container)
 
-                    // Grace period banner (48-hour window to complete missed quest)
-                    if let shieldStatus = shieldStatus,
-                       shieldStatus.recoveryQuestAvailable,
-                       let expiresAt = shieldStatus.recoveryQuestExpiresAt {
-                        GracePeriodBanner(expiresAt: expiresAt) {
-                            startRecoveryQuest()
-                        }
-                    }
+                    // Note: Recovery banner is shown inside StreakCardWithShields when recoveryAvailable=true
+                    // No separate GracePeriodBanner needed here (was duplicating the recovery CTA)
 
                     // Daily Briefing Card (F009)
                     DailyBriefingCard(viewModel: container.dailyBriefingViewModel)
@@ -214,8 +217,12 @@ struct HomeView: View {
                         }
 
                     // Wellbeing Debt Card (N006 - real data)
-                    WellbeingDebtCard()
-                        .environmentObject(container)
+                    NavigationLink {
+                        WellbeingDebtDashboardView()
+                            .environmentObject(container)
+                    } label: {
+                        WellbeingDebtCard()
+                    }
 
                     // Sleep Dashboard Card (F012)
                     NavigationLink {
@@ -377,6 +384,7 @@ struct HomeView: View {
                 }
             }
             .refreshable {
+                loadTask?.cancel()
                 await loadData()
             }
             .onChange(of: scenePhase) { _, newPhase in
@@ -386,18 +394,21 @@ struct HomeView: View {
                     let shouldRefresh = lastLoadTime == nil ||
                         Date().timeIntervalSince(lastLoadTime!) > RefreshTiming.scenePhaseRefreshInterval
                     if shouldRefresh {
-                        Task { await loadData() }
+                        startLoadData()
                     }
                 }
             }
-            .sheet(isPresented: $showRecoveryQuest) {
-                if let data = recoveryQuestData {
-                    RecoveryQuestView(
-                        streakToRecover: shieldStatus?.streakBeforeBreak ?? 0,
-                        attemptId: data.attemptId,
-                        quest: data.quest
-                    )
-                }
+            .sheet(item: $recoveryQuestItem, onDismiss: {
+                // Refresh home data to reflect restored streak
+                startLoadData()
+            }) { item in
+                RecoveryQuestView(
+                    streakToRecover: shieldStatus?.streakBeforeBreak ?? 0,
+                    attemptId: item.attemptId,
+                    quest: item.quest
+                )
+                .environmentObject(appState)
+                .environmentObject(container)
             }
             .sheet(isPresented: $showInviteBuddySheet) {
                 InviteBuddySheet()
@@ -458,6 +469,8 @@ struct HomeView: View {
         }
         // Clean up background tasks when view disappears
         .onDisappear {
+            loadTask?.cancel()
+            loadTask = nil
             homeContextTask?.cancel()
             homeContextTask = nil
             isLoadingHomeContext = false  // Reset loading state to prevent lockout
@@ -469,22 +482,18 @@ struct HomeView: View {
                 showHomeTutorial = true
             }
 
-            Task {
-                // Refresh when returning to HomeView after initial load
-                // Debounce: only refresh if enough time since last load to prevent rapid-fire requests
-                if let lastLoad = lastLoadTime {
-                    let timeSinceLastLoad = Date().timeIntervalSince(lastLoad)
-                    if timeSinceLastLoad > RefreshTiming.onAppearDebounceInterval {
-                        await loadData()
-                    }
+            // Refresh when returning to HomeView after initial load
+            // Debounce: only refresh if enough time since last load to prevent rapid-fire requests
+            if let lastLoad = lastLoadTime {
+                let timeSinceLastLoad = Date().timeIntervalSince(lastLoad)
+                if timeSinceLastLoad > RefreshTiming.onAppearDebounceInterval {
+                    startLoadData()
                 }
             }
         }
         // Refresh when quest arc changes (started, paused, resumed, or exited)
         .onReceive(NotificationCenter.default.publisher(for: .questArcDidChange)) { _ in
-            Task {
-                await loadData()
-            }
+            startLoadData()
         }
         // Sync questState when todayQuest changes (e.g., after quest completion in QuestDetailView)
         // Priority: completed > assigned (prevents loadData race condition from reverting completion)
@@ -570,14 +579,16 @@ struct HomeView: View {
 
                 if result.success, let quest = result.quest {
                     await MainActor.run {
-                        recoveryQuestData = (attemptId: result.attemptId ?? "", quest: quest)
-                        showRecoveryQuest = true
+                        recoveryQuestItem = RecoveryQuestItem(
+                            attemptId: result.attemptId ?? "",
+                            quest: quest
+                        )
                     }
 
                     // Track analytics
                     Analytics.shared.track(.recoveryQuestStarted, properties: [
                         "streak_to_recover": shieldStatus?.streakBeforeBreak ?? 0,
-                        "quest_id": quest.id
+                        "quest_id": quest.id ?? "unknown"
                     ])
                 } else {
                     appState.showError(.apiError(result.error ?? "Failed to start recovery quest"))
@@ -606,6 +617,15 @@ struct HomeView: View {
     // Task handle for cancellation support
     @State private var homeContextTask: Task<Void, Never>?
 
+    /// Cancels any in-flight load and starts a new one.
+    /// Prevents concurrent loadData calls from piling up API requests.
+    private func startLoadData() {
+        loadTask?.cancel()
+        loadTask = Task {
+            await loadData()
+        }
+    }
+
     private func loadData() async {
         // Only show loading state if we don't have a loaded quest
         // This preserves existing data during refresh and prevents flickering if cancelled
@@ -630,6 +650,23 @@ struct HomeView: View {
             return
         }
 
+        // Wait for Supabase session to be restored before making edge function calls.
+        // When the app launches with cached auth, HomeView appears BEFORE restoreSession()
+        // completes, so edge function calls would fail with 401 without this gate.
+        if !appState.sessionRestored {
+            Log.ui.debug("[HomeView] Waiting for session restoration before loading data...")
+            let deadline = Date().addingTimeInterval(10)
+            while !appState.sessionRestored && Date() < deadline {
+                if Task.isCancelled { return }
+                try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            }
+            if !appState.sessionRestored {
+                Log.ui.warning("[HomeView] Session not restored after 10s timeout, proceeding anyway")
+            } else {
+                Log.ui.debug("[HomeView] Session restored, proceeding with data load")
+            }
+        }
+
         do {
             // Check and reset weekly XP if needed (fire-and-forget, don't block)
             Task { _ = try? await container.supabaseDataService.resetWeeklyXPIfNeeded() }
@@ -640,86 +677,31 @@ struct HomeView: View {
                 await checkReengagement()
             }
 
-            // Check streak protection status first (handles shield usage/recovery availability)
-            // CRITICAL: This determines if shields are used or recovery is offered
-            var protectionResult: StreakProtectionResult?
-            do {
-                protectionResult = try await container.supabaseDataService.checkStreakProtection()
-            } catch is CancellationError {
-                // Task cancelled - don't log or report, just bail
-                Log.general.debug("[HomeView] Streak protection check cancelled")
-                return
-            } catch {
-                // Log and report the primary error
-                Log.general.error("[HomeView] Streak protection check failed: \(error.localizedDescription)")
-                error.report(context: [
-                    "action": "streak_protection_check",
-                    "location": "HomeView.loadData"
-                ])
-
-                // Track failure for monitoring
-                Analytics.shared.track(.errorOccurred, properties: [
-                    "action": "streak_protection_check_failed",
-                    "error_type": String(describing: type(of: error))
-                ])
-
-                // Fallback: attempt to fetch shield status directly
+            // Parallelize ALL independent API calls for better performance
+            // Streak protection runs in parallel instead of blocking everything
+            async let protectionTask: StreakProtectionResult? = {
                 do {
-                    shieldStatus = try await container.supabaseDataService.getShieldStatus()
-                    Log.general.info("[HomeView] Recovered shield status via fallback after protection check failed")
+                    return try await container.supabaseDataService.checkStreakProtection()
+                } catch is CancellationError {
+                    throw CancellationError()
                 } catch {
-                    Log.general.error("[HomeView] Fallback shield status fetch also failed: \(error.localizedDescription)")
+                    Log.general.error("[HomeView] Streak protection check failed: \(error.localizedDescription)")
                     error.report(context: [
-                        "action": "shield_status_fallback",
+                        "action": "streak_protection_check",
                         "location": "HomeView.loadData"
                     ])
-                    // Both primary and fallback failed - user will see stale data from appState/stats as last resort
-                    // Note: We don't show an error here to avoid alarming users; stale data is acceptable
-                }
-            }
-
-            // Handle streak protection events
-            if let protection = protectionResult {
-                // Validate server response (protect against malicious/corrupted data)
-                let validatedShieldsRemaining = max(0, min(protection.shieldsRemaining, protection.shieldsMax))
-                let validatedShieldsMax = max(0, protection.shieldsMax)
-                let validatedStreak = max(0, protection.newStreak)
-                let validatedStreakBeforeBreak = protection.streakBeforeBreak.map { max(0, $0) }
-                // Validate recovery expiry is in the future (ignore past dates)
-                let validatedRecoveryExpiry = protection.recoveryExpiresAt.flatMap { $0 > Date() ? $0 : nil }
-
-                if protection.streakProtected {
-                    // Shield was just used - track analytics
-                    Analytics.shared.track(.streakShieldUsed, properties: [
-                        "shields_remaining": validatedShieldsRemaining,
-                        "streak_protected": validatedStreak
+                    Analytics.shared.track(.errorOccurred, properties: [
+                        "action": "streak_protection_check_failed",
+                        "error_type": String(describing: type(of: error))
                     ])
+                    // Fallback: attempt to fetch shield status directly
+                    if let fallbackStatus = try? await container.supabaseDataService.getShieldStatus() {
+                        await MainActor.run { shieldStatus = fallbackStatus }
+                        Log.general.info("[HomeView] Recovered shield status via fallback after protection check failed")
+                    }
+                    return nil
                 }
-                if protection.recoveryAvailable {
-                    // Recovery became available - track analytics
-                    Analytics.shared.track(.recoveryQuestOffered, properties: [
-                        "streak_to_recover": validatedStreakBeforeBreak ?? 0
-                    ])
-                }
-
-                // Use protection result to build shield status, avoiding duplicate API call
-                // Use defaults for fields not returned by protection check
-                shieldStatus = StreakShieldStatus(
-                    shieldsRemaining: validatedShieldsRemaining,
-                    shieldsMax: validatedShieldsMax,
-                    shieldsResetAt: nil,  // Not returned from protection check
-                    lastShieldUsedAt: nil,  // Not returned from protection check
-                    recoveryQuestAvailable: protection.recoveryAvailable && validatedRecoveryExpiry != nil,
-                    recoveryQuestExpiresAt: validatedRecoveryExpiry,
-                    streakBeforeBreak: validatedStreakBeforeBreak,
-                    recoveryAttemptsRemaining: (protection.recoveryAvailable && validatedRecoveryExpiry != nil) ? 1 : 0,
-                    recoveryAttemptsMax: 1,  // Default to 1, premium upgrade handled elsewhere
-                    currentStreak: validatedStreak
-                )
-            }
-
-            // Parallelize independent API calls for better performance
-            // Note: Shield status is populated from protection check above to avoid duplicate call
+            }()
             async let questTask = container.supabaseDataService.getTodayQuest()
             async let profileTask = container.supabaseAuthService.fetchProfile()
 
@@ -762,6 +744,8 @@ struct HomeView: View {
             // Await experience load (updates achievementService.userExperience)
             _ = await experienceTask
             let pathwaysResult = await pathwaysTask ?? []
+            // Await streak protection (runs in parallel, nil on failure)
+            let protectionResult = try? await protectionTask
 
             // Compute level info from user_stats (via achievementService)
             let levelResult: UserLevel
@@ -868,7 +852,40 @@ struct HomeView: View {
                 todayPrediction = container.predictiveService.todayPrediction
                 pendingMoodIntervention = container.predictiveService.pendingMoodIntervention
 
-                // Shield status is set from protection check above
+                // Handle streak protection result (nil means it failed and fallback was used)
+                if let protection = protectionResult {
+                    let protectionShieldsMax = protection.shieldsMax ?? appState.currentUser?.stats?.streakShieldsMax ?? 1
+                    let validatedShieldsRemaining = max(0, min(protection.shieldsRemaining, protectionShieldsMax))
+                    let validatedShieldsMax = max(0, protectionShieldsMax)
+                    let validatedStreak = max(0, protection.newStreak)
+                    let validatedStreakBeforeBreak = protection.streakBeforeBreak.map { max(0, $0) }
+                    let validatedRecoveryExpiry = protection.recoveryExpiresAt.flatMap { $0 > Date() ? $0 : nil }
+
+                    if protection.streakProtected {
+                        Analytics.shared.track(.streakShieldUsed, properties: [
+                            "shields_remaining": validatedShieldsRemaining,
+                            "streak_protected": validatedStreak
+                        ])
+                    }
+                    if protection.recoveryAvailable {
+                        Analytics.shared.track(.recoveryQuestOffered, properties: [
+                            "streak_to_recover": validatedStreakBeforeBreak ?? 0
+                        ])
+                    }
+
+                    shieldStatus = StreakShieldStatus(
+                        shieldsRemaining: validatedShieldsRemaining,
+                        shieldsMax: validatedShieldsMax,
+                        shieldsResetAt: nil,
+                        lastShieldUsedAt: nil,
+                        recoveryQuestAvailable: protection.recoveryAvailable && validatedRecoveryExpiry != nil,
+                        recoveryQuestExpiresAt: validatedRecoveryExpiry,
+                        streakBeforeBreak: validatedStreakBeforeBreak,
+                        recoveryAttemptsRemaining: (protection.recoveryAvailable && validatedRecoveryExpiry != nil) ? 1 : 0,
+                        recoveryAttemptsMax: 1,
+                        currentStreak: protection.recoveryAvailable ? 0 : validatedStreak
+                    )
+                }
             }
 
             // Load home context in background without blocking main content
@@ -1805,6 +1822,7 @@ struct ContextualActionsRow: View {
                     ContextualActionButton(action: action)
                 }
             }
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
@@ -1825,9 +1843,11 @@ struct ContextualActionButton: View {
                 Text(action.title)
                     .font(.caption)
                     .foregroundStyle(.primary)
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .minimumScaleFactor(0.8)
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.vertical, 12)
             .background(Color(uiColor: .secondarySystemBackground))
             .cornerRadius(12)

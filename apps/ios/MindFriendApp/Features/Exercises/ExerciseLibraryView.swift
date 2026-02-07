@@ -506,7 +506,7 @@ struct ExercisePlayerView: View {
             // Stop tracking if still active
             if isTrackingEfficacy {
                 Task {
-                    try? await stopEfficacyTracking()
+                    await stopEfficacyTracking()
                 }
             }
         }
@@ -557,7 +557,7 @@ struct ExercisePlayerView: View {
         // Reset efficacy tracking
         Task {
             if isTrackingEfficacy {
-                try? await stopEfficacyTracking()
+                await stopEfficacyTracking()
             }
             isTrackingEfficacy = false
             currentTrajectory = []

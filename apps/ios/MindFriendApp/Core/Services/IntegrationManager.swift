@@ -335,10 +335,12 @@ final class IntegrationManager: ObservableObject {
         connections[type] = connection
     }
 
+    private var syncTimer: Timer?
+
     private func setupBackgroundSync() {
         // Set up periodic sync for connected integrations
         // This would typically use BGTaskScheduler in production
-        Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in
+        syncTimer = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 await self?.syncAll()
             }

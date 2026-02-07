@@ -195,7 +195,7 @@ struct MilestonePostCard: View {
                 Image(systemName: "star.fill")
                     .foregroundStyle(.yellow)
 
-                Text(post.userDisplayName ?? "Someone")
+                Text(post.userDisplayName)
                     .font(.subheadline.weight(.semibold))
 
                 Spacer()

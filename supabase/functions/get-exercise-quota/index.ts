@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 interface QuotaResponse {
   used: number;
@@ -9,26 +10,21 @@ interface QuotaResponse {
 }
 
 // Constants for quota limits
-const FREE_TIER_DAILY_LIMIT = 3;
-const PREMIUM_DAILY_LIMIT = 999; // Practical "unlimited"
-
-// Standard CORS headers for all responses
-const corsHeaders = {
-  "Content-Type": "application/json",
-  "Access-Control-Allow-Origin": "*",
-};
+const FREE_TIER_MONTHLY_LIMIT = 1;
+const PREMIUM_MONTHLY_LIMIT = 999; // Practical "unlimited"
 
 serve(async (req: Request): Promise<Response> => {
+  const origin = req.headers.get("origin") ?? "";
+  const corsHeaders = {
+    ...getCorsHeaders(origin),
+    "Content-Type": "application/json",
+  };
+
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, {
       status: 204,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers":
-          "authorization, x-client-info, apikey, content-type",
-      },
+      headers: corsHeaders,
     });
   }
 
@@ -68,19 +64,21 @@ serve(async (req: Request): Promise<Response> => {
       .maybeSingle();
 
     const isPremium = !!subscription;
-    const dailyLimit = isPremium ? PREMIUM_DAILY_LIMIT : FREE_TIER_DAILY_LIMIT;
+    const monthlyLimit = isPremium
+      ? PREMIUM_MONTHLY_LIMIT
+      : FREE_TIER_MONTHLY_LIMIT;
 
-    // Count today's generations using UTC midnight for consistency
+    // Count this month's generations using UTC first-of-month for consistency
     const now = new Date();
-    const todayUTC = new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    const monthStartUTC = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
     );
 
     const { count, error: countError } = await supabase
       .from("generated_content")
       .select("id", { count: "exact", head: true })
       .eq("user_id", user.id)
-      .gte("created_at", todayUTC.toISOString());
+      .gte("created_at", monthStartUTC.toISOString());
 
     if (countError) {
       console.error("Error counting generations:", countError);
@@ -94,8 +92,8 @@ serve(async (req: Request): Promise<Response> => {
 
     const response: QuotaResponse = {
       used,
-      limit: dailyLimit,
-      remaining: Math.max(0, dailyLimit - used),
+      limit: monthlyLimit,
+      remaining: Math.max(0, monthlyLimit - used),
       isPremium,
     };
 

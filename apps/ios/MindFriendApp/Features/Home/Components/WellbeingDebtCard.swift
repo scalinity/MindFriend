@@ -24,25 +24,6 @@ struct WellbeingDebtCard: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        NavigationLink {
-            WellbeingDebtDashboardView()
-                .environmentObject(container)
-        } label: {
-            cardContent
-        }
-        .buttonStyle(PlainButtonStyle())
-        .task {
-            await loadDebtScore()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .wellbeingDebtDidRecalculate)) { _ in
-            Task {
-                await loadDebtScore()
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var cardContent: some View {
         VStack(spacing: 16) {
             if isLoading {
                 loadingView
@@ -54,10 +35,20 @@ struct WellbeingDebtCard: View {
                 noDataView
             }
         }
+        .frame(maxWidth: .infinity)
         .padding()
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.05), radius: 8, y: 4)
+        .background(Color(uiColor: .secondarySystemBackground))
+        .cornerRadius(16)
+        .onAppear {
+            Task {
+                await loadDebtScore()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .wellbeingDebtDidRecalculate)) { _ in
+            Task {
+                await loadDebtScore()
+            }
+        }
     }
 
     // MARK: - Score View
@@ -75,7 +66,8 @@ struct WellbeingDebtCard: View {
                     Text("Wellbeing Balance")
                         .font(.headline)
                         .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: true, vertical: false)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                 }
 
                 // Trend indicator

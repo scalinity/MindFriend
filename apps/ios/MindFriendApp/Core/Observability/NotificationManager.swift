@@ -183,6 +183,19 @@ final class NotificationManager: NSObject, ObservableObject {
         let userInfo = response.notification.request.content.userInfo
         Log.notifications.debug("[Notifications] Notification tapped: \(userInfo)")
         
+        // Handle medication notification actions (LOG_TAKEN, SKIP_MEDICATION, SNOOZE)
+        if let medicationIdString = userInfo["medicationId"] as? String,
+           let medicationId = UUID(uuidString: medicationIdString) {
+            let scheduledAtString = userInfo["timestamp"] as? String
+            let scheduledAt = scheduledAtString.flatMap { ISO8601DateFormatter().date(from: $0) } ?? Date()
+            handleMedicationNotificationAction(
+                response: response,
+                medicationId: medicationId,
+                scheduledAt: scheduledAt
+            )
+            return
+        }
+        
         // Handle intervention notifications specially
         if let type = userInfo["type"] as? String, type == "intervention" {
             Task {
@@ -524,6 +537,96 @@ final class NotificationManager: NSObject, ObservableObject {
     /// Clear app badge
     func clearBadge() async {
         await setBadgeCount(0)
+    }
+
+    // MARK: - Medication Notification Actions
+
+    /// Handle medication notification actions (LOG_TAKEN, SKIP_MEDICATION, SNOOZE)
+    private func handleMedicationNotificationAction(
+        response: UNNotificationResponse,
+        medicationId: UUID,
+        scheduledAt: Date
+    ) {
+        let actionIdentifier = response.actionIdentifier
+
+        switch actionIdentifier {
+        case "LOG_TAKEN":
+            Task {
+                do {
+                    let medicationService = DependencyContainer.shared.medicationService
+                    try await medicationService.logDose(
+                        medicationId: medicationId,
+                        scheduledAt: scheduledAt,
+                        notes: "Logged from notification"
+                    )
+                    let current = UIApplication.shared.applicationIconBadgeNumber
+                    UIApplication.shared.applicationIconBadgeNumber = max(0, current - 1)
+                    Log.notifications.info("[Medications] Logged medication taken: \(medicationId)")
+                } catch {
+                    Log.notifications.error("[Medications] Failed to log medication: \(error.localizedDescription)")
+                }
+            }
+
+        case "SKIP_MEDICATION":
+            Task {
+                do {
+                    let medicationService = DependencyContainer.shared.medicationService
+                    try await medicationService.skipDose(
+                        medicationId: medicationId,
+                        scheduledAt: scheduledAt,
+                        reason: "Skipped via notification"
+                    )
+                    Log.notifications.info("[Medications] Skipped medication: \(medicationId)")
+                } catch {
+                    Log.notifications.error("[Medications] Failed to skip medication: \(error.localizedDescription)")
+                }
+            }
+
+        case "SNOOZE":
+            Task {
+                do {
+                    let medicationService = DependencyContainer.shared.medicationService
+                    let snoozeTime = Date(timeIntervalSinceNow: 15 * 60)
+
+                    if let medication = medicationService.medications.first(where: { $0.id == medicationId }) {
+                        let content = UNMutableNotificationContent()
+                        content.title = "Medication Reminder"
+                        content.body = medication.useGenericNotification
+                            ? "Time for your medication"
+                            : "Time to take \(medication.name)"
+                        content.sound = .default
+                        content.categoryIdentifier = "MEDICATION"
+                        content.userInfo = [
+                            "medicationId": medicationId.uuidString,
+                            "medicationName": medication.name,
+                            "timestamp": ISO8601DateFormatter().string(from: snoozeTime)
+                        ]
+
+                        var dateComponents = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: snoozeTime)
+                        dateComponents.second = 0
+
+                        let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: false)
+                        let request = UNNotificationRequest(
+                            identifier: "med-snooze-\(medicationId.uuidString)-\(Date().timeIntervalSince1970)",
+                            content: content,
+                            trigger: trigger
+                        )
+
+                        try await UNUserNotificationCenter.current().add(request)
+                        Log.notifications.info("[Medications] Snoozed medication: \(medicationId)")
+                    }
+                } catch {
+                    Log.notifications.error("[Medications] Failed to snooze medication: \(error.localizedDescription)")
+                }
+            }
+
+        case UNNotificationDefaultActionIdentifier:
+            // User tapped the notification - navigate to medication detail via deep link
+            Log.notifications.info("[Medications] User tapped medication notification: \(medicationId)")
+
+        default:
+            break
+        }
     }
 }
 

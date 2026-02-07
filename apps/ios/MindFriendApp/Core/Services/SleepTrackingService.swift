@@ -274,7 +274,7 @@ final class SleepTrackingService: ObservableObject {
             .execute()
             .value
 
-        guard var session = response.first else {
+        guard let session = response.first else {
             throw SleepTrackingError.sessionNotFound
         }
 

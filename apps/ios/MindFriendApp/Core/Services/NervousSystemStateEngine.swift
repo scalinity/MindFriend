@@ -71,7 +71,7 @@ final class NervousSystemStateEngine: ObservableObject {
         let behavioralFeatures = behavioralTracker.getCurrentBehavioralFeatures()
 
         // Classify
-        let result = try await classifier.classify(
+        let result = await classifier.classify(
             voice: voiceFeatures,
             hrv: hrvFeatures,
             behavioral: behavioralFeatures
@@ -108,7 +108,6 @@ final class NervousSystemStateEngine: ObservableObject {
 
     /// Classify state passively (foreground, no voice)
     func classifyPassiveState() async throws -> NervousSystemState {
-        let startTime = Date()
         isClassifying = true
         defer { isClassifying = false }
 
@@ -119,7 +118,7 @@ final class NervousSystemStateEngine: ObservableObject {
         // Classify
         let result = classifier.classify(
             voice: nil,
-            hrv: try await hrvFeatures,
+            hrv: await hrvFeatures,
             behavioral: behavioralFeatures
         )
 

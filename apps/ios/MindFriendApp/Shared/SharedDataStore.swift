@@ -7,7 +7,7 @@ public final class SharedDataStore: Sendable {
     public static let shared = SharedDataStore()
 
     private let suiteName = "group.com.mindfriend.app"
-    private let userDefaults: UserDefaults?
+    private nonisolated(unsafe) let userDefaults: UserDefaults?
 
     private init() {
         self.userDefaults = UserDefaults(suiteName: suiteName)

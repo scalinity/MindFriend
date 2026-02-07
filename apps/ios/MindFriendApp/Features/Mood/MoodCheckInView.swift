@@ -1,5 +1,4 @@
 import SwiftUI
-import MindFriendApp
 
 struct MoodCheckInView: View {
     @EnvironmentObject var appState: AppState
@@ -202,6 +201,7 @@ struct MoodCheckInView: View {
     }
 
     private func saveMood() {
+        guard !isSaving else { return }
         Log.ui.debug("[MoodCheckIn] Saving mood, score: \(Int(moodScore)), isUpdate: \(existingMood != nil)")
         isSaving = true
 

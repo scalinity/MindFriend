@@ -8,7 +8,7 @@ struct MindFriendApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     @StateObject private var appState = AppState()
-    @StateObject private var container = DependencyContainer()
+    @StateObject private var container = DependencyContainer.shared
     @StateObject private var notificationManager = NotificationManager.shared
     @StateObject private var deepLinkRouter = DeepLinkRouter.shared
     @StateObject private var localizationService = LocalizationService.shared
@@ -32,8 +32,8 @@ struct MindFriendApp: App {
                 .environmentObject(localizationService)
                 .environmentObject(container.achievementService)
                 .preferredColorScheme(selectedTheme.colorScheme)
-                // Force view refresh when language changes
-                .id(localizationService.refreshTrigger)
+                // Language changes propagate through @Environment(\.locale)
+                .environment(\.locale, Locale(identifier: localizationService.currentLanguage))
                 .environment(\.layoutDirection, localizationService.isRTL ? .rightToLeft : .leftToRight)
                 .task {
                     // DEBUG: Log calendar permission status and Info.plist keys at app launch
@@ -56,23 +56,13 @@ struct MindFriendApp: App {
 
                     let calendarStatus = EKEventStore.authorizationStatus(for: .event)
                     var statusName: String
-                    if #available(iOS 17.0, *) {
-                        switch calendarStatus {
-                        case .notDetermined: statusName = "notDetermined (0)"
-                        case .restricted: statusName = "restricted (1)"
-                        case .denied: statusName = "denied (2)"
-                        case .fullAccess: statusName = "fullAccess (3)"
-                        case .writeOnly: statusName = "writeOnly (4)"
-                        @unknown default: statusName = "unknown (\(calendarStatus.rawValue))"
-                        }
-                    } else {
-                        switch calendarStatus {
-                        case .notDetermined: statusName = "notDetermined (0)"
-                        case .restricted: statusName = "restricted (1)"
-                        case .denied: statusName = "denied (2)"
-                        case .authorized: statusName = "authorized (3)"
-                        @unknown default: statusName = "unknown (\(calendarStatus.rawValue))"
-                        }
+                    switch calendarStatus {
+                    case .notDetermined: statusName = "notDetermined (0)"
+                    case .restricted: statusName = "restricted (1)"
+                    case .denied: statusName = "denied (2)"
+                    case .fullAccess: statusName = "fullAccess (3)"
+                    case .writeOnly: statusName = "writeOnly (4)"
+                    @unknown default: statusName = "unknown (\(calendarStatus.rawValue))"
                     }
                     print("🗓️ [APP LAUNCH] Calendar authorization status: \(statusName)")
                     #endif
@@ -111,6 +101,10 @@ struct MindFriendApp: App {
                     // Wait for both to complete in parallel
                     let hasSession = await sessionTask
                     _ = await notificationTask
+
+                    // Signal that the Supabase session is now restored
+                    // (HomeView waits for this before making edge function calls)
+                    appState.sessionRestored = true
 
                     // OPTIMIZATION 3: Update from network if needed
                     if hasSession {

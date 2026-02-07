@@ -20,18 +20,14 @@ final class MedicationDetailViewModel: ObservableObject {
         isLoading = true
         defer { isLoading = false }
 
-        do {
-            // Fetch logs for this medication (last 30 days)
-            let startDate = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
-            let endDate = Date()
+        // Fetch logs for this medication (last 30 days)
+        let _ = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
+        let _ = Date()
 
-            // This would be implemented in a future phase with a method to fetch specific medication logs
-            // For now, we'll use the available logs from the service
+        // This would be implemented in a future phase with a method to fetch specific medication logs
+        // For now, we'll use the available logs from the service
 
-            errorMessage = ""
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        errorMessage = ""
     }
 
     func logDose(scheduledAt: Date) async {

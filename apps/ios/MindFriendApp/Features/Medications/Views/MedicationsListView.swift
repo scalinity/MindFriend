@@ -106,7 +106,7 @@ struct MedicationsListView: View {
             .sheet(isPresented: $showAddMedication) {
                 AddMedicationView(isPresented: $showAddMedication)
             }
-            .alert(isPresented: .constant(!viewModel.errorMessage.isEmpty)) {
+            .alert(isPresented: Binding(get: { !viewModel.errorMessage.isEmpty }, set: { if !$0 { viewModel.errorMessage = "" } })) {
                 Alert(
                     title: Text("Error"),
                     message: Text(viewModel.errorMessage),

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 // ✅ MAINTAINABILITY FIX: Extract validation constants
 const MAX_PERSONALIZATION_SIZE = 10000; // 10KB max for personalization JSONB
@@ -9,13 +10,11 @@ const MAX_SUPPORT_PERSON_NAME_LENGTH = 100; // Max length for each name
 const MAX_GOALS = 5; // Max number of goals
 const MAX_GOAL_LENGTH = 200; // Max length for each goal
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
 
 serve(async (req) => {
+  const origin = req.headers.get("origin") ?? "";
+  const corsHeaders = getCorsHeaders(origin);
+
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -39,7 +38,7 @@ serve(async (req) => {
         },
       );
     }
-    
+
     const token = authHeader.replace("Bearer ", "");
     const {
       data: { user },
@@ -65,10 +64,13 @@ serve(async (req) => {
 
     // Validate pathwayKey format (should be snake_case identifier)
     if (!/^[a-z_]+$/.test(pathwayKey)) {
-      return new Response(JSON.stringify({ error: "Invalid pathwayKey format" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: "Invalid pathwayKey format" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     // Validate personalization JSONB size and structure
@@ -76,7 +78,9 @@ serve(async (req) => {
       const personalizationStr = JSON.stringify(personalization);
       if (personalizationStr.length > MAX_PERSONALIZATION_SIZE) {
         return new Response(
-          JSON.stringify({ error: "Personalization data too large (max 10KB)" }),
+          JSON.stringify({
+            error: "Personalization data too large (max 10KB)",
+          }),
           {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -85,7 +89,12 @@ serve(async (req) => {
       }
 
       // Validate personalization structure
-      const allowedFields = ["transitionDate", "specificContext", "supportPeople", "goals"];
+      const allowedFields = [
+        "transitionDate",
+        "specificContext",
+        "supportPeople",
+        "goals",
+      ];
       const invalidFields = Object.keys(personalization).filter(
         (key) => !allowedFields.includes(key),
       );
@@ -102,10 +111,17 @@ serve(async (req) => {
       }
 
       // Validate specificContext length
-      if (personalization.specificContext && typeof personalization.specificContext === "string") {
-        if (personalization.specificContext.length > MAX_SPECIFIC_CONTEXT_LENGTH) {
+      if (
+        personalization.specificContext &&
+        typeof personalization.specificContext === "string"
+      ) {
+        if (
+          personalization.specificContext.length > MAX_SPECIFIC_CONTEXT_LENGTH
+        ) {
           return new Response(
-            JSON.stringify({ error: "specificContext too long (max 500 chars)" }),
+            JSON.stringify({
+              error: "specificContext too long (max 500 chars)",
+            }),
             {
               status: 400,
               headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -115,7 +131,10 @@ serve(async (req) => {
       }
 
       // Validate supportPeople array
-      if (personalization.supportPeople && Array.isArray(personalization.supportPeople)) {
+      if (
+        personalization.supportPeople &&
+        Array.isArray(personalization.supportPeople)
+      ) {
         if (personalization.supportPeople.length > MAX_SUPPORT_PEOPLE) {
           return new Response(
             JSON.stringify({ error: "Too many supportPeople (max 10)" }),
@@ -128,9 +147,14 @@ serve(async (req) => {
 
         // ✅ INPUT VALIDATION FIX: Validate individual element lengths
         for (const person of personalization.supportPeople) {
-          if (typeof person !== "string" || person.length > MAX_SUPPORT_PERSON_NAME_LENGTH) {
+          if (
+            typeof person !== "string" ||
+            person.length > MAX_SUPPORT_PERSON_NAME_LENGTH
+          ) {
             return new Response(
-              JSON.stringify({ error: "Support person name too long (max 100 chars)" }),
+              JSON.stringify({
+                error: "Support person name too long (max 100 chars)",
+              }),
               {
                 status: 400,
                 headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -233,8 +257,8 @@ serve(async (req) => {
       `Goals: ${personalization?.goals?.join(", ") || "Not specified"}.`;
 
     // Call stored procedure for atomic enrollment (includes: user_pathways, companion_memory, profiles, pathway_progress)
-    const { data: enrollmentResult, error: enrollError } = await supabaseClient
-      .rpc("enroll_user_in_pathway", {
+    const { data: enrollmentResult, error: enrollError } =
+      await supabaseClient.rpc("enroll_user_in_pathway", {
         p_user_id: user.id,
         p_pathway_id: pathway.id,
         p_personalization: personalization || {},
@@ -242,11 +266,12 @@ serve(async (req) => {
       });
 
     if (enrollError) {
-      console.error("Enrollment error:", enrollError);
+      console.error("Enrollment error:", JSON.stringify(enrollError));
       // ✅ SECURITY FIX: Don't expose internal error details
       return new Response(
         JSON.stringify({
           error: "ENROLLMENT_FAILED",
+          debug: enrollError.message || JSON.stringify(enrollError),
         }),
         {
           status: 500,
@@ -276,7 +301,7 @@ serve(async (req) => {
       day: 1,
       title: "Welcome",
       message: "Begin your journey",
-      focusArea: "introduction",
+      focus_area: "introduction",
     };
 
     // Get exercises for phase 1
@@ -288,31 +313,38 @@ serve(async (req) => {
       .limit(3);
 
     const todayContent = {
-      dayNumber: 1,
-      phaseNumber: 1,
+      day_number: 1,
+      phase_number: 1,
       theme: dailyTheme,
-      checkInPrompt: "How are you feeling today?",
+      check_in_prompt: "How are you feeling today?",
       exercises: exercises || [],
-      journalPrompt: phase1?.journal_prompts?.[0] || null,
+      journal_prompt: phase1?.journal_prompts?.[0] || null,
       affirmation:
         "You are taking an important step toward healing and growth.",
-      upcomingMilestone: null,
+      upcoming_milestone: null,
     };
 
     return new Response(
       JSON.stringify({
-        userPathway,
-        todayContent,
+        userPathway: userPathway,
+        todayContent: todayContent,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       },
     );
   } catch (error) {
-    console.error("Error enrolling in pathway:", error);
+    console.error(
+      "Error enrolling in pathway:",
+      error?.message || error,
+      error?.stack || "",
+    );
     // ✅ SECURITY FIX: Don't expose internal error details
     return new Response(
-      JSON.stringify({ error: "An unexpected error occurred" }),
+      JSON.stringify({
+        error: "An unexpected error occurred",
+        debug: error?.message || String(error),
+      }),
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

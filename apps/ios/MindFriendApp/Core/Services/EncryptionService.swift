@@ -16,9 +16,8 @@ final class EncryptionService {
     /// Generates or retrieves the encryption key from Keychain
     private func getOrCreateKey() -> SymmetricKey? {
         // Try to retrieve existing key
-        if let existingKeyData = retrieveKeyFromKeychain(),
-           let existingKey = try? SymmetricKey(data: existingKeyData) {
-            return existingKey
+        if let existingKeyData = retrieveKeyFromKeychain() {
+            return SymmetricKey(data: existingKeyData)
         }
 
         // Generate new key
@@ -36,8 +35,13 @@ final class EncryptionService {
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         ]
 
-        // Delete any existing key first
-        SecItemDelete(query as CFDictionary)
+        // Delete any existing key first (use lookup-only query without kSecValueData)
+        let deleteQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: "integration_encryption_key"
+        ]
+        SecItemDelete(deleteQuery as CFDictionary)
 
         let status = SecItemAdd(query as CFDictionary, nil)
         if status != errSecSuccess {

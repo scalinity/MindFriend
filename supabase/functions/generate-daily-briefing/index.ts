@@ -77,7 +77,6 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     console.log(`[3] SUPABASE_URL present: ${!!supabaseUrl}`);
-    console.log(`[3] SUPABASE_SERVICE_ROLE_KEY present: ${!!supabaseKey}`);
 
     if (!supabaseUrl || !supabaseKey) {
       console.log("[3] ERROR: Missing Supabase env vars");
@@ -90,8 +89,6 @@ serve(async (req) => {
     // Step 4: Validate JWT and get user
     console.log("[4] Validating JWT...");
     const token = authHeader.replace("Bearer ", "");
-    console.log(`[4] Token length: ${token.length}`);
-
     const { data: authData, error: authError } =
       await supabase.auth.getUser(token);
 

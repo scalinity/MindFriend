@@ -12,7 +12,7 @@ INSERT INTO sleep_content (
     'Gentle rain falling on concrete. A soothing ambient sound for relaxation and sleep.',
     'soundscape', 'nature', 80,
     NULL, false, false,
-    'https://***REMOVED***/storage/v1/object/public/soundscapes/rain.mp3',
+    'https://YOUR_PROJECT_REF.supabase.co/storage/v1/object/public/soundscapes/rain.mp3',
     NULL, true, true, false, 10, NOW(), NOW()
 ) ON CONFLICT DO NOTHING;
 
@@ -27,7 +27,7 @@ INSERT INTO sleep_content (
     'Peaceful forest sounds with birdsong and gentle rustling leaves. Perfect for meditation.',
     'soundscape', 'nature', 54,
     NULL, true, false,
-    'https://***REMOVED***/storage/v1/object/public/soundscapes/forest.mp3',
+    'https://YOUR_PROJECT_REF.supabase.co/storage/v1/object/public/soundscapes/forest.mp3',
     NULL, true, true, false, 11, NOW(), NOW()
 ) ON CONFLICT DO NOTHING;
 
@@ -42,7 +42,7 @@ INSERT INTO sleep_content (
     'Warm crackling fireplace sounds. Feel cozy and relaxed as you drift off to sleep.',
     'soundscape', 'ambient', 45,
     NULL, true, false,
-    'https://***REMOVED***/storage/v1/object/public/soundscapes/fireplace.mp3',
+    'https://YOUR_PROJECT_REF.supabase.co/storage/v1/object/public/soundscapes/fireplace.mp3',
     NULL, true, true, true, 12, NOW(), NOW()
 ) ON CONFLICT DO NOTHING;
 
@@ -57,7 +57,7 @@ INSERT INTO sleep_content (
     'Deep, low-frequency brown noise. Excellent for blocking distractions and promoting deep sleep.',
     'soundscape', 'white_noise', 600,
     NULL, true, false,
-    'https://***REMOVED***/storage/v1/object/public/soundscapes/brown_noise.mp3',
+    'https://YOUR_PROJECT_REF.supabase.co/storage/v1/object/public/soundscapes/brown_noise.mp3',
     NULL, true, true, true, 13, NOW(), NOW()
 ) ON CONFLICT DO NOTHING;
 
@@ -72,7 +72,7 @@ INSERT INTO sleep_content (
     'Balanced pink noise with equal energy per octave. Scientifically shown to improve sleep quality.',
     'soundscape', 'white_noise', 19,
     NULL, true, false,
-    'https://***REMOVED***/storage/v1/object/public/soundscapes/pink_noise.mp3',
+    'https://YOUR_PROJECT_REF.supabase.co/storage/v1/object/public/soundscapes/pink_noise.mp3',
     NULL, true, true, false, 14, NOW(), NOW()
 ) ON CONFLICT DO NOTHING;
 
@@ -87,6 +87,6 @@ INSERT INTO sleep_content (
     'Gentle ocean waves washing onto shore. A classic soundscape for relaxation.',
     'soundscape', 'nature', 57,
     NULL, true, false,
-    'https://***REMOVED***/storage/v1/object/public/soundscapes/ocean.mp3',
+    'https://YOUR_PROJECT_REF.supabase.co/storage/v1/object/public/soundscapes/ocean.mp3',
     NULL, true, true, false, 15, NOW(), NOW()
 ) ON CONFLICT DO NOTHING;

@@ -241,7 +241,7 @@ final class SleepHealthKitManager: ObservableObject {
             case HKCategoryValueSleepAnalysis.asleepREM.rawValue:
                 remSleep += duration
             case HKCategoryValueSleepAnalysis.asleepCore.rawValue,
-                 HKCategoryValueSleepAnalysis.asleep.rawValue:
+                 HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue:
                 lightSleep += duration
             case HKCategoryValueSleepAnalysis.awake.rawValue:
                 awakeTime += duration

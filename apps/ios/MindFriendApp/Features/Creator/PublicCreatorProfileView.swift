@@ -312,7 +312,7 @@ struct ContentLibraryItem: View {
 
                     HStack(spacing: 8) {
                         Label(content.contentType.displayName, systemImage: content.contentType.icon)
-                        if let duration = content.durationSeconds {
+                        if let _ = content.durationSeconds {
                             Label(content.formattedDuration, systemImage: "clock")
                         }
                         if let rating = content.averageRating {

@@ -26,21 +26,6 @@ struct LibraryExercisePlayerView: View {
         ZStack {
             // Type-specific player content
             playerContent
-
-            // Efficacy trajectory overlay (shown during exercise)
-            if viewModel.isTrackingEfficacy && !viewModel.currentTrajectory.isEmpty {
-                VStack {
-                    Spacer()
-                    TrajectoryVisualizationView(
-                        trajectory: viewModel.currentTrajectory,
-                        isLive: viewModel.isPlaying
-                    )
-                    .frame(height: 120)
-                    .padding(.horizontal)
-                    .padding(.bottom, 100)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-                }
-            }
         }
         .navigationTitle(exercise.title)
         .navigationBarTitleDisplayMode(.inline)

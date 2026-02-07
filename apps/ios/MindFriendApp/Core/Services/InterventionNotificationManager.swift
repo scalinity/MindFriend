@@ -163,7 +163,7 @@ final class InterventionNotificationManager: NSObject, InterventionNotificationM
 
     func updateBadgeCount() async {
         let pending = await getPendingCount()
-        await UIApplication.shared.applicationIconBadgeNumber = pending
+        try? await UNUserNotificationCenter.current().setBadgeCount(pending)
     }
 
     func cancelPendingInterventions() async {
@@ -322,7 +322,7 @@ final class InterventionNotificationManager: NSObject, InterventionNotificationM
         let userInfo = content.userInfo
 
         // Extract the deep link to preserve in the rescheduled notification
-        guard let deepLinkString = userInfo["deep_link"] as? String else {
+        guard let _ = userInfo["deep_link"] as? String else {
             throw NotificationError.invalidDeepLink
         }
 

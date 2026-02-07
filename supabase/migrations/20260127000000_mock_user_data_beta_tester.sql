@@ -1,4 +1,4 @@
--- Mock User Data for Test User b@gmail.com
+-- Mock User Data for Test User beta-tester@example.com
 -- Creates 35+ days of realistic activity to simulate a month+ of app usage
 -- Idempotent: safe to run multiple times
 
@@ -94,11 +94,11 @@ BEGIN
   -- Temporarily disable the challenge progress trigger (it references a non-existent column)
   ALTER TABLE exercise_sessions DISABLE TRIGGER trigger_exercise_to_challenge_progress;
 
-  -- Get user_id for b@gmail.com
-  SELECT id INTO v_user_id FROM auth.users WHERE email = 'b@gmail.com' LIMIT 1;
+  -- Get user_id for beta-tester@example.com
+  SELECT id INTO v_user_id FROM auth.users WHERE email = 'beta-tester@example.com' LIMIT 1;
 
   IF v_user_id IS NULL THEN
-    RAISE NOTICE 'User b@gmail.com not found. Skipping mock data generation.';
+    RAISE NOTICE 'User beta-tester@example.com not found. Skipping mock data generation.';
     -- Re-enable trigger before returning
     ALTER TABLE exercise_sessions ENABLE TRIGGER trigger_exercise_to_challenge_progress;
     RETURN;
@@ -435,7 +435,7 @@ BEGIN
     level_title = 'Practitioner',
     last_quest_date = CURRENT_DATE::TEXT;
 
-  RAISE NOTICE 'Mock data generation complete for user b@gmail.com!';
+  RAISE NOTICE 'Mock data generation complete for user beta-tester@example.com!';
   RAISE NOTICE 'Generated: 35 moods, ~28 quests, ~18 exercises, 4 conversations, 11 badges';
 
   -- Re-enable the trigger

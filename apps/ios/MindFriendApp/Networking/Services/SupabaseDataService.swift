@@ -558,9 +558,13 @@ final class SupabaseDataService: ObservableObject {
     /// Check streak protection and apply shield or enable recovery if needed
     /// Call this on app open/foreground to check if streak needs protection
     func checkStreakProtection() async throws -> StreakProtectionResult {
+        let session = try await supabase.auth.session
         let result: StreakProtectionResult = try await supabase.functions.invoke(
             "assign-quest",
-            options: .init(body: ["action": "check_protection"])
+            options: .init(
+                headers: ["Authorization": "Bearer \(session.accessToken)"],
+                body: ["action": "check_protection"]
+            )
         )
 
         if result.streakProtected {
@@ -579,9 +583,13 @@ final class SupabaseDataService: ObservableObject {
 
     /// Start a recovery quest to restore a broken streak
     func startRecoveryQuest() async throws -> StartRecoveryResult {
+        let session = try await supabase.auth.session
         let result: StartRecoveryResult = try await supabase.functions.invoke(
             "assign-quest",
-            options: .init(body: ["action": "start_recovery"])
+            options: .init(
+                headers: ["Authorization": "Bearer \(session.accessToken)"],
+                body: ["action": "start_recovery"]
+            )
         )
 
         if result.success {
@@ -595,12 +603,16 @@ final class SupabaseDataService: ObservableObject {
 
     /// Complete a recovery quest and restore the streak
     func completeRecoveryQuest(attemptId: String) async throws -> CompleteRecoveryResult {
+        let session = try await supabase.auth.session
         let result: CompleteRecoveryResult = try await supabase.functions.invoke(
             "assign-quest",
-            options: .init(body: [
-                "action": "complete_recovery",
-                "attemptId": attemptId
-            ])
+            options: .init(
+                headers: ["Authorization": "Bearer \(session.accessToken)"],
+                body: [
+                    "action": "complete_recovery",
+                    "attemptId": attemptId
+                ]
+            )
         )
 
         if result.success, let restoredStreak = result.restoredStreak {
@@ -662,7 +674,7 @@ final class SupabaseDataService: ObservableObject {
                 durationSeconds: duration,
                 contentKind: .text,  // Default since DB doesn't have this column
                 contentText: nil,
-                audioUrl: nil,
+                audioUrl: exercise.audioUrl,
                 instructions: instructions,
                 evidenceBasis: exercise.evidenceBasis.flatMap { EvidenceBasis(rawValue: $0) },
                 therapistReviewed: exercise.therapistReviewed,
@@ -977,7 +989,7 @@ final class SupabaseDataService: ObservableObject {
         }
 
         // Ensure we have a valid session before calling Edge Function
-        guard let accessToken = authService.session?.accessToken else {
+        guard let _ = authService.session?.accessToken else {
             Log.data.warning("[Data] No access token available")
             throw APIError.badRequest("Not signed in. Please sign in again.")
         }
@@ -2026,13 +2038,13 @@ final class SupabaseDataService: ObservableObject {
             .execute()
             .value
 
-        guard let data = results.first, data.buddyId != nil else {
+        guard let data = results.first else {
             return nil
         }
 
         return BuddyWidgetData(
-            buddyName: data.buddyName ?? "Buddy",
-            buddyStreak: data.buddyStreak ?? 0,
+            buddyName: data.buddyName,
+            buddyStreak: data.buddyStreak,
             buddyId: data.buddyId.uuidString,
             relationshipId: data.relationshipId?.uuidString ?? "",
             hasCompletedToday: data.hasCompletedToday ?? false,
@@ -2326,7 +2338,7 @@ final class SupabaseDataService: ObservableObject {
         return PartnerInfo(
             partnerId: partnerId,
             partnerName: partnerProfile.displayName ?? "Partner",
-            partnerStreak: partnerProfile.currentStreakDays ?? 0,
+            partnerStreak: partnerProfile.currentStreakDays,
             hasCompletedToday: hasCompletedToday,
             lastActive: partnerProfile.lastActiveAt ?? partnerProfile.createdAt,
             isSharingMood: partnerSettings.shareMood,
@@ -4879,7 +4891,7 @@ final class SupabaseDataService: ObservableObject {
     func uploadProfilePicture(data: Data, path: String, userId: UUID) async throws {
         try await supabase.storage
             .from("profile-pictures")
-            .upload(path: path, file: data, options: FileOptions(contentType: "image/jpeg", upsert: true))
+            .upload(path, data: data, options: FileOptions(contentType: "image/jpeg", upsert: true))
     }
 
     /// Get public URL for uploaded file
@@ -4955,7 +4967,7 @@ final class SupabaseDataService: ObservableObject {
                 .execute()
                 .value
             oldAvatarUrl = profileData["avatar_url"] ?? nil
-            if let url = oldAvatarUrl {
+            if let _ = oldAvatarUrl {
                 Log.data.debug("[Data] uploadAndSetAvatar: Found existing avatar to clean up")
             }
         } catch {
@@ -5303,7 +5315,7 @@ final class SupabaseDataService: ObservableObject {
     
     /// Rate a generated exercise
     func rateContent(contentId: String, rating: Int, feedback: String? = nil) async throws {
-        guard let contentUUID = UUID(uuidString: contentId) else {
+        guard let _ = UUID(uuidString: contentId) else {
             throw NSError(domain: "SupabaseDataService", code: 400, userInfo: [
                 NSLocalizedDescriptionKey: "Invalid content ID"
             ])

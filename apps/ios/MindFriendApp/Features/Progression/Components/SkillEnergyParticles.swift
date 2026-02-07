@@ -22,7 +22,7 @@ struct SkillEnergyParticles: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let centerY = geometry.size.height / 2
+            let _ = geometry.size.height / 2
 
             ZStack {
                 // Rising particles

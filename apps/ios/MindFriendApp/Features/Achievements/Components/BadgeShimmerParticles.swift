@@ -99,8 +99,8 @@ struct DiamondShape: Shape {
         var path = Path()
         let centerX = rect.midX
         let centerY = rect.midY
-        let halfWidth = rect.width / 2
-        let halfHeight = rect.height / 2
+        let _ = rect.width / 2
+        let _ = rect.height / 2
 
         path.move(to: CGPoint(x: centerX, y: rect.minY))
         path.addLine(to: CGPoint(x: rect.maxX, y: centerY))

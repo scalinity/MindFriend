@@ -60,6 +60,7 @@ final class QuestNotificationService: QuestNotificationServicing {
     private let hourKey = "quest_reminder_hour"
     private let minuteKey = "quest_reminder_minute"
     private let hasSetDefaultKey = "quest_reminder_default_set"
+    private let hourSetKey = "quest_reminder_hour_set"
 
     // MARK: - Computed Properties
 
@@ -74,12 +75,10 @@ final class QuestNotificationService: QuestNotificationServicing {
     }
 
     var reminderHour: Int {
-        let stored = UserDefaults.standard.integer(forKey: hourKey)
-        // Default to 9 AM if not set (0 means not set since valid hours are 0-23)
-        if stored == 0 && !UserDefaults.standard.bool(forKey: hasSetDefaultKey) {
-            return 9
+        if UserDefaults.standard.bool(forKey: hourSetKey) {
+            return UserDefaults.standard.integer(forKey: hourKey)
         }
-        return stored
+        return 8  // Default: 8 AM
     }
 
     var reminderMinute: Int {
@@ -112,6 +111,7 @@ final class QuestNotificationService: QuestNotificationServicing {
     func updateSchedule(enabled: Bool, hour: Int, minute: Int) async throws {
         // Persist settings
         UserDefaults.standard.set(true, forKey: hasSetDefaultKey)
+        UserDefaults.standard.set(true, forKey: hourSetKey)
         UserDefaults.standard.set(enabled, forKey: enabledKey)
         UserDefaults.standard.set(hour, forKey: hourKey)
         UserDefaults.standard.set(minute, forKey: minuteKey)

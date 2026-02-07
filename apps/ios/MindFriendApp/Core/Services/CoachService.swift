@@ -101,20 +101,15 @@ class CoachService: ObservableObject, CoachServiceProtocol {
         let session = try await supabase.auth.session
         let user = session.user
         
-        let encoder = JSONEncoder()
+        let _ = JSONEncoder()
         let body: [String: String] = ["userId": user.id.uuidString]
         
-        let response = try await supabase.functions.invoke(
+        let result: PatternAnalytics = try await supabase.functions.invoke(
             "my-patterns",
             options: FunctionInvokeOptions(body: body)
         )
-        
-        guard let responseData = try? JSONSerialization.data(withJSONObject: response) else {
-            throw NSError(domain: "CoachService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid response"])
-        }
-        
-        let decoder = JSONDecoder()
-        return try decoder.decode(PatternAnalytics.self, from: responseData)
+
+        return result
     }
 
     func getWeeklySummary() async throws -> WeeklyPatternSummary? {

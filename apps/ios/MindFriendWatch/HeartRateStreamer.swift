@@ -22,8 +22,13 @@ final class HeartRateStreamer: NSObject, ObservableObject {
     private var heartRateQuery: HKAnchoredObjectQuery?
 
     // Streaming configuration
-    private var streamingInterval: TimeInterval = 1.0 // seconds
+    private let streamingInterval: TimeInterval = 5.0 // seconds — 5s balances biofeedback responsiveness with data minimization
     private var lastSentTime: Date = .distantPast
+    private let throttleLock = NSLock()
+
+    // Cached HealthKit types (avoid repeated allocation on hot path)
+    private static let heartRateQuantityType = HKQuantityType.quantityType(forIdentifier: .heartRate)!
+    private static let heartRateUnit = HKUnit.count().unitDivided(by: .minute())
 
     // MARK: - Singleton
 
@@ -40,11 +45,9 @@ final class HeartRateStreamer: NSObject, ObservableObject {
             throw HeartRateStreamerError.healthKitUnavailable
         }
 
-        let heartRateType = HKQuantityType.quantityType(forIdentifier: .heartRate)!
-        let hrvType = HKQuantityType.quantityType(forIdentifier: .heartRateVariabilitySDNN)!
         let workoutType = HKWorkoutType.workoutType()
 
-        let readTypes: Set<HKObjectType> = [heartRateType, hrvType]
+        let readTypes: Set<HKObjectType> = [Self.heartRateQuantityType]
         let shareTypes: Set<HKSampleType> = [workoutType]
 
         try await healthStore.requestAuthorization(toShare: shareTypes, read: readTypes)
@@ -53,9 +56,18 @@ final class HeartRateStreamer: NSObject, ObservableObject {
     // MARK: - Streaming Control
 
     func startStreaming() async throws {
-        guard !isStreaming else { return }
+        // Guard against double-start race condition
+        guard !isStreaming, workoutSession == nil else { return }
 
-        try await requestAuthorization()
+        // Check existing authorization status first
+        // Only check workout write status since HealthKit does not expose read authorization status for privacy.
+        let workoutType = HKWorkoutType.workoutType()
+        let workoutStatus = healthStore.authorizationStatus(for: workoutType)
+        if workoutStatus == .notDetermined {
+            try await requestAuthorization()
+        } else if workoutStatus == .sharingDenied {
+            throw HeartRateStreamerError.authorizationDenied
+        }
 
         // Configure workout session for continuous heart rate
         let configuration = HKWorkoutConfiguration()
@@ -91,6 +103,9 @@ final class HeartRateStreamer: NSObject, ObservableObject {
             }
 
         } catch {
+            // Clean up on failure
+            workoutSession = nil
+            builder = nil
             await MainActor.run {
                 self.error = error.localizedDescription
             }
@@ -99,16 +114,35 @@ final class HeartRateStreamer: NSObject, ObservableObject {
     }
 
     func stopStreaming() {
-        heartRateQuery?.stop()
+        // Capture references before nil-ing to avoid race condition
+        let currentQuery = heartRateQuery
+        let currentBuilder = builder
+        let currentSession = workoutSession
+
         heartRateQuery = nil
 
-        Task {
-            try? await builder?.endCollection(at: Date())
-            workoutSession?.end()
-        }
+        // Nil delegates before releasing to prevent callbacks after cleanup
+        currentSession?.delegate = nil
+        currentBuilder?.delegate = nil
 
         workoutSession = nil
         builder = nil
+
+        // Stop query
+        if let query = currentQuery {
+            healthStore.stop(query)
+        }
+
+        // End session asynchronously using captured references
+        Task {
+            try? await currentBuilder?.endCollection(at: Date())
+            currentSession?.end()
+        }
+
+        // Reset throttle state
+        throttleLock.lock()
+        lastSentTime = .distantPast
+        throttleLock.unlock()
 
         Task { @MainActor in
             self.isStreaming = false
@@ -119,8 +153,6 @@ final class HeartRateStreamer: NSObject, ObservableObject {
     // MARK: - Heart Rate Query
 
     private func startHeartRateQuery() {
-        let heartRateType = HKQuantityType.quantityType(forIdentifier: .heartRate)!
-
         let predicate = HKQuery.predicateForSamples(
             withStart: Date().addingTimeInterval(-60),
             end: nil,
@@ -128,7 +160,7 @@ final class HeartRateStreamer: NSObject, ObservableObject {
         )
 
         let query = HKAnchoredObjectQuery(
-            type: heartRateType,
+            type: Self.heartRateQuantityType,
             predicate: predicate,
             anchor: nil,
             limit: HKObjectQueryNoLimit
@@ -155,22 +187,29 @@ final class HeartRateStreamer: NSObject, ObservableObject {
     private func processHeartRateSamples(_ samples: [HKQuantitySample]?) {
         guard let samples = samples, !samples.isEmpty else { return }
 
-        // Get the most recent sample
-        let sortedSamples = samples.sorted { $0.endDate > $1.endDate }
-        guard let latestSample = sortedSamples.first else { return }
+        // Get the most recent sample (O(n) vs O(n log n) sort, zero allocation)
+        guard let latestSample = samples.max(by: { $0.endDate < $1.endDate }) else { return }
 
-        let heartRateUnit = HKUnit.count().unitDivided(by: .minute())
-        let bpm = latestSample.quantity.doubleValue(for: heartRateUnit)
+        let bpm = latestSample.quantity.doubleValue(for: Self.heartRateUnit)
+
+        // Validate heart rate is in physiological range
+        guard bpm > 20 && bpm < 300 else { return }
 
         // Update local state
         Task { @MainActor in
             self.currentHeartRate = bpm
         }
 
-        // Send to iPhone (throttled)
+        // Send to iPhone (throttled with lock for thread safety)
+        throttleLock.lock()
         let now = Date()
-        if now.timeIntervalSince(lastSentTime) >= streamingInterval {
+        let shouldSend = now.timeIntervalSince(lastSentTime) >= streamingInterval
+        if shouldSend {
             lastSentTime = now
+        }
+        throttleLock.unlock()
+
+        if shouldSend {
             sendHeartRateToPhone(bpm: bpm, timestamp: latestSample.endDate)
         }
     }
@@ -178,10 +217,7 @@ final class HeartRateStreamer: NSObject, ObservableObject {
     // MARK: - Phone Communication
 
     private func sendHeartRateToPhone(bpm: Double, timestamp: Date) {
-        guard WCSession.default.isReachable else {
-            // Queue for later if not reachable
-            return
-        }
+        guard WCSession.isSupported(), WCSession.default.isReachable else { return }
 
         let message: [String: Any] = [
             "actionType": "heartRateUpdate",
@@ -192,21 +228,6 @@ final class HeartRateStreamer: NSObject, ObservableObject {
         WCSession.default.sendMessage(message, replyHandler: nil) { error in
             print("[HeartRateStreamer] Failed to send heart rate: \(error)")
         }
-    }
-
-    // MARK: - HRV Calculation (RMSSD)
-
-    func calculateRMSSD(from rrIntervals: [Double]) -> Double? {
-        guard rrIntervals.count >= 2 else { return nil }
-
-        var sumSquaredDiffs: Double = 0
-        for i in 1..<rrIntervals.count {
-            let diff = rrIntervals[i] - rrIntervals[i - 1]
-            sumSquaredDiffs += diff * diff
-        }
-
-        let meanSquaredDiff = sumSquaredDiffs / Double(rrIntervals.count - 1)
-        return sqrt(meanSquaredDiff)
     }
 }
 

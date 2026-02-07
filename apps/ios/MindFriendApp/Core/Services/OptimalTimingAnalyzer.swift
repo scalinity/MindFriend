@@ -27,7 +27,7 @@ private enum TimingConstants {
 // MARK: - Implementation
 
 @MainActor
-final class OptimalTimingAnalyzer: OptimalTimingAnalyzing {
+final class OptimalTimingAnalyzer: @preconcurrency OptimalTimingAnalyzing {
     // MARK: - Properties
 
     private let supabase: SupabaseClient
@@ -56,11 +56,17 @@ final class OptimalTimingAnalyzer: OptimalTimingAnalyzing {
             return cached
         }
 
+        // Get fresh session token for explicit auth header
+        let session = try await supabase.auth.session
+
         // Call Edge Function to perform server-side analysis
         struct EmptyRequest: Codable {}
         let response: TimingPreferences = try await supabase.functions.invoke(
             "analyze-intervention-patterns",
-            options: FunctionInvokeOptions(body: EmptyRequest())
+            options: FunctionInvokeOptions(
+                headers: ["Authorization": "Bearer \(session.accessToken)"],
+                body: EmptyRequest()
+            )
         )
 
         // Cache result
@@ -126,6 +132,13 @@ final class OptimalTimingAnalyzer: OptimalTimingAnalyzing {
         Task {
             do {
                 try await refreshPatterns()
+            } catch let functionsError as FunctionsError {
+                if case .httpError(let code, _) = functionsError, code == 400 {
+                    // Expected for new users with no intervention history
+                    print("Timing analysis: insufficient data (expected for new users)")
+                } else {
+                    print("Initial timing analysis failed: \(functionsError.localizedDescription)")
+                }
             } catch {
                 print("Initial timing analysis failed: \(error.localizedDescription)")
             }
@@ -147,7 +160,7 @@ final class OptimalTimingAnalyzer: OptimalTimingAnalyzing {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         let jsonData = try encoder.encode(preferences)
-        let jsonObject = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any] ?? [:]
+        let _ = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any] ?? [:]
 
         // Update intervention_preferences.preferred_times
         struct PreferencesUpdate: Encodable {

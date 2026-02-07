@@ -198,7 +198,7 @@ final class VoicePolyvagalExtractor {
     private func calculateArousalLevel(_ emotionScores: [EmotionLabel: Double]) -> Double {
         // Arousal: High (fear, anger, surprise), Low (sad, calm, neutral)
         let highArousal = (emotionScores[.fearful] ?? 0) + (emotionScores[.angry] ?? 0) + (emotionScores[.surprised] ?? 0)
-        let lowArousal = (emotionScores[.sad] ?? 0) + (emotionScores[.calm] ?? 0) + (emotionScores[.neutral] ?? 0)
+        let _ = (emotionScores[.sad] ?? 0) + (emotionScores[.calm] ?? 0) + (emotionScores[.neutral] ?? 0)
         let total = emotionScores.values.reduce(0, +)
 
         if total == 0 { return 0.5 }

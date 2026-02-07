@@ -255,7 +255,7 @@ final class AchievementService: ObservableObject {
             // Edge Function may not exist or may fail - don't crash the app
             Log.data.warning("[Achievements] checkBadgeProgress failed: \(error.localizedDescription)")
             // Return empty response to allow caller to continue
-            return CheckBadgeProgressResponse(checked: 0, newlyEarned: [], progressUpdated: [])
+            return CheckBadgeProgressResponse(badgesChecked: 0, newlyEarned: [])
         }
     }
 

@@ -15,7 +15,9 @@ enum SupabaseConfig {
               !urlString.isEmpty,
               !urlString.contains("$("),  // Not substituted
               let url = URL(string: urlString) else {
-            fatalError("SUPABASE_URL not configured. Add Debug.xcconfig/Release.xcconfig with SUPABASE_URL.")
+            // Log error for debugging, use a non-functional placeholder to prevent crash
+            assertionFailure("SUPABASE_URL not configured. Add Debug.xcconfig/Release.xcconfig with SUPABASE_URL.")
+            return URL(string: "https://placeholder.supabase.co")!
         }
         return url
     }()
@@ -24,7 +26,9 @@ enum SupabaseConfig {
         guard let key = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_ANON_KEY") as? String,
               !key.isEmpty,
               !key.contains("$(") else {  // Not substituted
-            fatalError("SUPABASE_ANON_KEY not configured. Add Debug.xcconfig/Release.xcconfig with SUPABASE_ANON_KEY.")
+            // Log error for debugging, use empty string to prevent crash
+            assertionFailure("SUPABASE_ANON_KEY not configured. Add Debug.xcconfig/Release.xcconfig with SUPABASE_ANON_KEY.")
+            return ""
         }
         return key
     }()
@@ -950,6 +954,7 @@ struct DBExercise: Codable {
     let durationMinutes: Int?  // Legacy column, may exist in some rows
     let isPremium: Bool?
     let instructionsRaw: DBExerciseInstructionsRaw?
+    let audioUrl: String?
 
     // Credibility fields
     let evidenceBasis: String?
@@ -963,6 +968,7 @@ struct DBExercise: Codable {
         case durationSeconds = "duration_seconds"
         case durationMinutes = "duration_minutes"
         case isPremium = "is_premium"
+        case audioUrl = "audio_url"
         case evidenceBasis = "evidence_basis"
         case therapistReviewed = "therapist_reviewed"
         case reviewDate = "review_date"

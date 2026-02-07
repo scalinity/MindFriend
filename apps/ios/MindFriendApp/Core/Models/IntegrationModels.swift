@@ -162,7 +162,7 @@ struct OAuthToken: Codable, Sendable {
     }
 
     var needsRefresh: Bool {
-        guard let refreshToken = refreshToken else { return false }
+        guard let _ = refreshToken else { return false }
         // Refresh if expires within 5 minutes
         return Date().addingTimeInterval(300) >= expiresAt
     }

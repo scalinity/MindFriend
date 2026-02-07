@@ -102,10 +102,10 @@ struct SavedExercisesView: View {
         } label: {
             Image(systemName: "line.3.horizontal.decrease.circle")
         }
-        .onChange(of: viewModel.filterType) { _ in
+        .onChange(of: viewModel.filterType) {
             Task { await viewModel.loadExercises() }
         }
-        .onChange(of: viewModel.favoritesOnly) { _ in
+        .onChange(of: viewModel.favoritesOnly) {
             Task { await viewModel.loadExercises() }
         }
     }

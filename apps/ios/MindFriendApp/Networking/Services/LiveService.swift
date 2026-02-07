@@ -333,7 +333,7 @@ final class LiveService: ObservableObject {
         }
 
         // Subscribe
-        await channel.subscribe()
+        try? await channel.subscribeWithError()
 
         sessionChannel = channel
         isConnected = true
@@ -583,7 +583,7 @@ final class LiveService: ObservableObject {
             }
         }
 
-        await channel.subscribe()
+        try? await channel.subscribeWithError()
         roomChannel = channel
 
         logger.info("Subscribed to circle room channel: circle:room:\(roomId)")
@@ -671,7 +671,7 @@ final class LiveService: ObservableObject {
             }
         }
 
-        await channel.subscribe()
+        try? await channel.subscribeWithError()
         presenceChannel = channel
 
         // Initial fetch

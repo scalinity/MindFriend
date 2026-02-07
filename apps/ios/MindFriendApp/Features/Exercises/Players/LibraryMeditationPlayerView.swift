@@ -30,12 +30,6 @@ struct LibraryMeditationPlayerView: View {
             controlsSection
         }
         .background(Color(.systemBackground))
-        .onAppear {
-            // Auto-play audio when view appears if audio is available
-            if viewModel.hasAudio {
-                viewModel.audioPlayer.play()
-            }
-        }
         .onDisappear {
             // Stop audio when leaving
             if viewModel.hasAudio {

@@ -151,7 +151,7 @@ struct SOSGroundingView: View {
                 Button {
                     sosCoordinator.triggerHaptic(.groundingTap)
 
-                    if let nextSense = currentSense.next {
+                    if let _ = currentSense.next {
                         // More senses to go
                         sosCoordinator.advanceGrounding()
                     } else {

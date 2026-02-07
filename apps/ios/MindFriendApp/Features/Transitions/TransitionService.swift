@@ -2,7 +2,7 @@ import Foundation
 import Supabase
 
 @MainActor
-final class TransitionService: TransitionServiceProtocol {
+final class TransitionService: @preconcurrency TransitionServiceProtocol {
     private let supabase: SupabaseClient
     private let networkRetry: NetworkRetryService
     private let cacheService: PathwayCacheService  // ✅ Made private - use delegation methods instead
@@ -111,9 +111,10 @@ final class TransitionService: TransitionServiceProtocol {
         )
         
         // Cache the result (now throws - log but don't fail the request)
-        Task.detached(priority: .utility) { [weak self] in
+        let cache = self.cacheService
+        Task.detached(priority: .utility) {
             do {
-                try self?.cacheService.cacheDailyContent(content, for: userPathwayId)
+                try cache.cacheDailyContent(content, for: userPathwayId)
             } catch {
                 // ✅ SECURITY FIX: Don't log error details (may contain PHI)
                 print("⚠️ Failed to cache daily content for pathway \(userPathwayId.uuidString)")
@@ -181,34 +182,17 @@ final class TransitionService: TransitionServiceProtocol {
             encryptedJournalEntry: encryptedJournalEntry
         )
 
-        do {
-            let response: CheckInResponse = try await networkRetry.execute(
-                {
-                    try await self.supabase.functions.invoke(
-                        "submit-pathway-checkin",
-                        options: FunctionInvokeOptions(body: request)
-                    )
-                },
-                shouldRetry: NetworkRetryService.isRetryableError
-            )
-            
-            // Clear draft on success
-            cacheService.clearCheckInDraft(for: userPathwayId)
-            
-            return response
-        } catch {
-            // Queue for retry if network error
-            if NetworkRetryService.isRetryableError(error) {
-                let pending = PathwayCacheService.PendingCheckIn(
-                    userPathwayId: userPathwayId,
-                    checkInData: checkInData,
-                    exercisesCompleted: exercisesCompleted,
-                    journalEntry: journalEntry
-                )
-                cacheService.queuePendingCheckIn(pending)
-            }
-            throw error
-        }
+        let response: CheckInResponse = try await supabase.functions.invoke(
+            "submit-pathway-checkin",
+            options: FunctionInvokeOptions(body: request)
+        )
+
+        // Clear draft on success
+        cacheService.clearCheckInDraft(for: userPathwayId)
+        // Clear cached daily content so dashboard reloads for the new day
+        cacheService.clearDailyContentCache(for: userPathwayId)
+
+        return response
     }
     
     // MARK: - Background Sync
@@ -352,5 +336,10 @@ final class TransitionService: TransitionServiceProtocol {
     /// Clear journal draft for a pathway
     func clearJournalDraft(for pathwayId: UUID) {
         cacheService.clearJournalDraft(for: pathwayId)
+    }
+
+    /// Clear cached daily content for a pathway (forces fresh fetch)
+    func clearDailyContentCache(for pathwayId: UUID) {
+        cacheService.clearDailyContentCache(for: pathwayId)
     }
 }

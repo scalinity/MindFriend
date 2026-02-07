@@ -16,103 +16,178 @@ struct GeneratedExercisePlayerView: View {
     }
 
     var body: some View {
-        ZStack {
-            // Type-specific player
-            Group {
-                switch content.contentType {
-                case .breathing:
-                    if let exercise = content.exerciseContent,
-                       case .breathing(let breathingEx) = exercise {
-                        BreathingPlayerView(
-                            exercise: breathingEx,
-                            viewModel: viewModel
-                        )
-                    } else {
-                        fallbackTextView
-                    }
-
-                case .meditation, .grounding, .mindfulness:
-                    if let exercise = content.exerciseContent {
-                        switch exercise {
-                        case .meditation(let meditationEx):
-                            MeditationPlayerView(
-                                exercise: meditationEx,
+        NavigationStack {
+            ZStack {
+                // Type-specific player
+                Group {
+                    switch content.contentType {
+                    case .breathing:
+                        if let exercise = content.exerciseContent,
+                           case .breathing(let breathingEx) = exercise {
+                            BreathingPlayerView(
+                                exercise: breathingEx,
                                 viewModel: viewModel
                             )
-                        case .grounding(let groundingEx):
-                            GroundingPlayerView(
-                                exercise: groundingEx,
-                                viewModel: viewModel
-                            )
-                        default:
-                            fallbackTextView
+                        } else {
+                            textPlayerView
                         }
-                    } else {
-                        fallbackTextView
-                    }
 
-                case .journaling:
-                    if let exercise = content.exerciseContent,
-                       case .journaling(let journalingEx) = exercise {
-                        JournalingPlayerView(
-                            exercise: journalingEx,
-                            viewModel: viewModel
-                        )
-                    } else {
-                        fallbackTextView
-                    }
+                    case .meditation, .grounding, .mindfulness:
+                        if let exercise = content.exerciseContent {
+                            switch exercise {
+                            case .meditation(let meditationEx):
+                                MeditationPlayerView(
+                                    exercise: meditationEx,
+                                    viewModel: viewModel
+                                )
+                            case .grounding(let groundingEx):
+                                GroundingPlayerView(
+                                    exercise: groundingEx,
+                                    viewModel: viewModel
+                                )
+                            default:
+                                textPlayerView
+                            }
+                        } else {
+                            textPlayerView
+                        }
 
-                default:
-                    fallbackTextView
-                }
-            }
-        }
-        .navigationBarBackButtonHidden(viewModel.isPlaying)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Close") {
-                    viewModel.stop()
-                    dismiss()
-                }
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Button(action: { viewModel.showRatingPrompt = true }) {
-                    Image(systemName: content.userRating != nil ? "star.fill" : "star")
-                        .foregroundColor(.yellow)
-                }
-            }
-        }
-        .sheet(isPresented: $viewModel.showRatingPrompt) {
-            RatingPromptView(
-                content: content,
-                onRate: { rating, feedback in
-                    Task {
-                        await viewModel.submitRating(rating, feedback: feedback)
+                    case .journaling:
+                        if let exercise = content.exerciseContent,
+                           case .journaling(let journalingEx) = exercise {
+                            JournalingPlayerView(
+                                exercise: journalingEx,
+                                viewModel: viewModel
+                            )
+                        } else {
+                            textPlayerView
+                        }
+
+                    default:
+                        textPlayerView
                     }
-                },
-                onDismiss: { viewModel.showRatingPrompt = false }
-            )
-        }
-        .onAppear {
-            viewModel.start()
-        }
-        .onDisappear {
-            viewModel.stop()
+                }
+            }
+            .navigationTitle(content.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") {
+                        viewModel.stop()
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button(action: { viewModel.showRatingPrompt = true }) {
+                        Image(systemName: content.userRating != nil ? "star.fill" : "star")
+                            .foregroundColor(.yellow)
+                    }
+                }
+            }
+            .sheet(isPresented: $viewModel.showRatingPrompt) {
+                RatingPromptView(
+                    content: content,
+                    onRate: { rating, feedback in
+                        Task {
+                            await viewModel.submitRating(rating, feedback: feedback)
+                        }
+                    },
+                    onDismiss: { viewModel.showRatingPrompt = false }
+                )
+            }
+            .onAppear {
+                viewModel.start()
+            }
+            .onDisappear {
+                viewModel.stop()
+            }
         }
     }
 
-    private var fallbackTextView: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text(content.title)
-                    .font(.title2.bold())
+    /// Text-based player with audio playback for generated exercises
+    private var textPlayerView: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    // Content type badge
+                    HStack {
+                        Image(systemName: content.contentType.icon)
+                            .foregroundColor(.blue)
+                        Text(content.contentType.displayName)
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.bottom, 4)
 
-                Text(content.textContent)
-                    .font(.body)
+                    Text(content.textContent)
+                        .font(.body)
+                        .lineSpacing(6)
+                }
+                .padding()
+            }
 
-                Spacer()
+            Divider()
+
+            // Playback controls
+            VStack(spacing: 12) {
+                // Progress bar
+                if viewModel.isAudioPlaying {
+                    ProgressView(value: viewModel.audioProgress)
+                        .tint(.blue)
+                    
+                    // Time display
+                    HStack {
+                        Text(viewModel.audioElapsedFormatted)
+                            .font(.caption.monospacedDigit())
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text(viewModel.audioRemainingFormatted)
+                            .font(.caption.monospacedDigit())
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                HStack(spacing: 24) {
+                    // Play/Stop button
+                    Button(action: {
+                        if viewModel.isAudioPlaying {
+                            viewModel.stopAudio()
+                        } else {
+                            viewModel.playAudio(for: content)
+                        }
+                    }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: viewModel.isAudioPlaying ? "stop.fill" : "play.fill")
+                            Text(viewModel.isAudioPlaying ? "Stop" : (content.hasAudio ? "Play Audio" : "Read Aloud"))
+                                .font(.subheadline.weight(.medium))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color.blue)
+                        .foregroundStyle(.white)
+                        .cornerRadius(10)
+                    }
+
+                    // Done button
+                    Button(action: {
+                        viewModel.stopAudio()
+                        viewModel.showRatingPrompt = true
+                    }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "checkmark")
+                            Text("Done")
+                                .font(.subheadline.weight(.medium))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color(.systemGray5))
+                        .foregroundStyle(.primary)
+                        .cornerRadius(10)
+                    }
+                }
             }
             .padding()
+            .background(Color(.systemBackground))
         }
     }
 }
@@ -199,9 +274,9 @@ struct MeditationPlayerView: View {
                     }
                     .padding(.vertical)
                 }
-                .onChange(of: viewModel.currentSegmentIndex) { newIndex in
+                .onChange(of: viewModel.currentSegmentIndex) {
                     withAnimation {
-                        proxy.scrollTo(newIndex, anchor: .center)
+                        proxy.scrollTo(viewModel.currentSegmentIndex, anchor: .center)
                     }
                 }
             }
@@ -505,8 +580,26 @@ class ExercisePlayerViewModel: ObservableObject {
     @Published var breathingCircleScale: CGFloat = 0.5
     @Published var currentCycle: Int = 1
 
+    // Audio playback for text-based player
+    @Published var isAudioPlaying = false
+    @Published var audioProgress: Double = 0
+    @Published var audioElapsed: TimeInterval = 0
+    @Published var audioDuration: TimeInterval = 0
+
     private var timer: Timer?
     private var breathingTimer: Timer?
+    private var audioPlayer: AVPlayer?
+    private var timeObserver: Any?
+    private var playerEndObserver: NSObjectProtocol?
+
+    var audioElapsedFormatted: String {
+        formatTime(audioElapsed)
+    }
+
+    var audioRemainingFormatted: String {
+        let remaining = max(0, audioDuration - audioElapsed)
+        return "-\(formatTime(remaining))"
+    }
 
     var breathingPhaseText: String {
         switch breathingPhase {
@@ -564,6 +657,7 @@ class ExercisePlayerViewModel: ObservableObject {
         breathingTimer?.invalidate()
         timer = nil
         breathingTimer = nil
+        stopAudio()
     }
 
     func togglePlayPause() {
@@ -592,6 +686,83 @@ class ExercisePlayerViewModel: ObservableObject {
         } catch {
             print("Failed to submit rating: \(error)")
         }
+    }
+
+    func playAudio(for content: GeneratedContent) {
+        // Configure audio session
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            print("Failed to configure audio session: \(error)")
+        }
+
+        if let urlString = content.audioUrl, let url = URL(string: urlString) {
+            // Play server-generated audio (Google Cloud TTS Chirp 3 HD)
+            let playerItem = AVPlayerItem(url: url)
+            audioPlayer = AVPlayer(playerItem: playerItem)
+
+            // Observe time progress
+            let interval = CMTime(seconds: 0.5, preferredTimescale: 600)
+            timeObserver = audioPlayer?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
+                guard let self else { return }
+                MainActor.assumeIsolated {
+                    let elapsed = time.seconds
+                    let duration = self.audioPlayer?.currentItem?.duration.seconds ?? 0
+                    guard duration.isFinite && duration > 0 else { return }
+                    self.audioElapsed = elapsed
+                    self.audioDuration = duration
+                    self.audioProgress = elapsed / duration
+                }
+            }
+
+            // Observe playback end
+            playerEndObserver = NotificationCenter.default.addObserver(
+                forName: .AVPlayerItemDidPlayToEndTime,
+                object: playerItem,
+                queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.isAudioPlaying = false
+                    self?.audioProgress = 1.0
+                }
+            }
+
+            isAudioPlaying = true
+            audioProgress = 0
+            audioElapsed = 0
+            audioPlayer?.play()
+        } else {
+            // Fallback: use native TTS when no audio URL available
+            playNativeTTS(content.textContent)
+        }
+    }
+
+    func stopAudio() {
+        // Stop AVPlayer
+        audioPlayer?.pause()
+        if let observer = timeObserver {
+            audioPlayer?.removeTimeObserver(observer)
+            timeObserver = nil
+        }
+        if let observer = playerEndObserver {
+            NotificationCenter.default.removeObserver(observer)
+            playerEndObserver = nil
+        }
+        audioPlayer = nil
+        isAudioPlaying = false
+        audioProgress = 0
+        audioElapsed = 0
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    private func playNativeTTS(_ text: String) {
+        let synthesizer = AVSpeechSynthesizer()
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.9
+        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+        isAudioPlaying = true
+        synthesizer.speak(utterance)
     }
 
     // MARK: - Private Methods
@@ -674,26 +845,27 @@ class ExercisePlayerViewModel: ObservableObject {
 
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             guard let self = self else { return }
+            MainActor.assumeIsolated {
+                self.elapsedTime += 1
+                self.timeRemaining = max(0, TimeInterval(self.content.duration ?? 300) - self.elapsedTime)
+                self.progress = self.elapsedTime / TimeInterval(self.content.duration ?? 300)
 
-            self.elapsedTime += 1
-            self.timeRemaining = max(0, TimeInterval(self.content.duration ?? 300) - self.elapsedTime)
-            self.progress = self.elapsedTime / TimeInterval(self.content.duration ?? 300)
-
-            // Auto-advance segments
-            if let exercise = self.content.exerciseContent {
-                switch exercise {
-                case .meditation(let meditationEx):
-                    self.updateMeditationSegment(meditationEx)
-                case .grounding(let groundingEx):
-                    self.updateGroundingSegment(groundingEx)
-                default:
-                    break
+                // Auto-advance segments
+                if let exercise = self.content.exerciseContent {
+                    switch exercise {
+                    case .meditation(let meditationEx):
+                        self.updateMeditationSegment(meditationEx)
+                    case .grounding(let groundingEx):
+                        self.updateGroundingSegment(groundingEx)
+                    default:
+                        break
+                    }
                 }
-            }
 
-            if self.timeRemaining <= 0 {
-                self.stop()
-                self.showRatingPrompt = true
+                if self.timeRemaining <= 0 {
+                    self.stop()
+                    self.showRatingPrompt = true
+                }
             }
         }
     }

@@ -5,7 +5,7 @@ import Combine
 
 /// Service for detecting and managing AR capabilities on the current device
 @MainActor
-public final class ARCapabilityService: ObservableObject, ARCapabilityServiceProtocol {
+public final class ARCapabilityService: ObservableObject, @preconcurrency ARCapabilityServiceProtocol {
 
     // MARK: - Published Properties
 
@@ -50,7 +50,7 @@ public final class ARCapabilityService: ObservableObject, ARCapabilityServicePro
     /// - Returns: Tuple of (canRun, reason if cannot)
     public func canRun(exercise: ARExercise) -> (canRun: Bool, reason: String?) {
         // Check AR capability level
-        let requiredCapabilities = exercise.sceneConfig.requiredCapabilities
+        let _ = exercise.sceneConfig.requiredCapabilities
 
         // For nature immersion, require LiDAR
         if exercise.arType == .natureImmersion && !capabilities.lidar {

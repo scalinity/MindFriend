@@ -343,7 +343,6 @@ struct FlowLayoutView<Item, Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            var row: [Item] = []
 
             ForEach(items.indices, id: \.self) { index in
                 let item = items[index]

@@ -29,6 +29,9 @@ final class StreamingAudioPlayer: ObservableObject {
     private let prefetchQueue = DispatchQueue(label: "com.mindfriend.prefetch", qos: .utility)
     private var prefetchTask: Task<Void, Never>?
 
+    /// When true, playback will start automatically once the player item is ready
+    private var pendingPlay = false
+
     // MARK: - Configuration
 
     /// Minimum buffer duration before allowing playback (seconds)
@@ -45,6 +48,15 @@ final class StreamingAudioPlayer: ObservableObject {
         isLoading = true
         error = nil
 
+        // Configure audio session for playback
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .default)
+            try session.setActive(true)
+        } catch {
+            print("[StreamingAudioPlayer] Audio session setup failed: \(error)")
+        }
+
         // Create player item
         let asset = AVURLAsset(url: url, options: [
             AVURLAssetPreferPreciseDurationAndTimingKey: true
@@ -52,6 +64,7 @@ final class StreamingAudioPlayer: ObservableObject {
 
         playerItem = AVPlayerItem(asset: asset)
         player = AVPlayer(playerItem: playerItem)
+        player?.automaticallyWaitsToMinimizeStalling = true
 
         setupObservers()
 
@@ -73,13 +86,16 @@ final class StreamingAudioPlayer: ObservableObject {
     func play() {
         guard let player = player else { return }
 
-        // Wait for minimum buffer
-        if bufferedTime < minBufferDuration && isBuffering {
+        // If not ready yet, defer playback until readyToPlay
+        if playerItem?.status != .readyToPlay {
+            pendingPlay = true
+            print("[StreamingAudioPlayer] Deferring play until ready")
             return
         }
 
         player.play()
         isPlaying = true
+        pendingPlay = false
     }
 
     func pause() {
@@ -127,7 +143,7 @@ final class StreamingAudioPlayer: ObservableObject {
             forInterval: interval,
             queue: .main
         ) { [weak self] time in
-            self?.currentTime = time.seconds
+            MainActor.assumeIsolated { self?.currentTime = time.seconds }
         }
 
         // Status observer
@@ -172,9 +188,16 @@ final class StreamingAudioPlayer: ObservableObject {
             if let duration = playerItem?.duration.seconds, !duration.isNaN {
                 self.duration = duration
             }
+            // Auto-play if play() was called before we were ready
+            if pendingPlay {
+                print("[StreamingAudioPlayer] Now ready, starting deferred playback")
+                play()
+            }
         case .failed:
             isLoading = false
+            pendingPlay = false
             error = playerItem?.error?.localizedDescription ?? "Failed to load audio"
+            print("[StreamingAudioPlayer] Playback failed: \(error ?? "unknown")")
         case .unknown:
             break
         @unknown default:
@@ -224,14 +247,15 @@ final class StreamingAudioPlayer: ObservableObject {
         isPlaying = false
         isLoading = false
         isBuffering = false
+        pendingPlay = false
         currentTime = 0
         duration = 0
         bufferedTime = 0
     }
 
     deinit {
-        Task { @MainActor in
-            cleanup()
+        Task { @MainActor [weak self] in
+            self?.cleanup()
         }
     }
 }
@@ -339,8 +363,8 @@ final class VoicePreviewPlayer: ObservableObject {
     }
 
     deinit {
-        Task { @MainActor in
-            stop()
+        Task { @MainActor [weak self] in
+            self?.stop()
         }
     }
 }

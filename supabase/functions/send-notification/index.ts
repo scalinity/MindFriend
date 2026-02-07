@@ -251,20 +251,7 @@ serve(async (req) => {
     }
 
     // Validate notification type
-    const validTypes: NotificationType[] = [
-      "circle_activity",
-      "hug",
-      "streak_risk",
-      "weekly_summary",
-      "challenge",
-      "shield_used",
-      "shield_reset",
-      "recovery_available",
-      "reengagement_gentle",
-      "reengagement_social",
-      "reengagement_progress",
-      "reengagement_fresh_start",
-    ];
+    const validTypes: NotificationType[] = Object.keys(TYPE_TO_SETTING) as NotificationType[];
     if (!validTypes.includes(body.type)) {
       return new Response(
         JSON.stringify({ error: "Invalid notification type" }),
@@ -273,10 +260,20 @@ serve(async (req) => {
     }
 
     // SECURITY FIX #001: Restrict user-initiated notifications to safe types
-    const USER_ALLOWED_TYPES: NotificationType[] = [
+    // Circle-scoped types require circleId and membership validation
+    const CIRCLE_SCOPED_USER_TYPES: NotificationType[] = [
       "circle_activity",
       "hug",
       "challenge",
+    ];
+    // Direct user-to-user types (no circle validation needed)
+    const DIRECT_USER_TYPES: NotificationType[] = [
+      "buddy_encouragement",
+      "couples_exercise_invite",
+    ];
+    const USER_ALLOWED_TYPES: NotificationType[] = [
+      ...CIRCLE_SCOPED_USER_TYPES,
+      ...DIRECT_USER_TYPES,
     ];
     if (
       callerId !== "service_role" &&
@@ -294,7 +291,7 @@ serve(async (req) => {
     }
 
     // SECURITY FIX #001: Validate circle membership for circle-scoped notifications
-    if (callerId !== "service_role" && USER_ALLOWED_TYPES.includes(body.type)) {
+    if (callerId !== "service_role" && CIRCLE_SCOPED_USER_TYPES.includes(body.type)) {
       const circleId = body.data.circleId;
       if (!circleId) {
         return new Response(

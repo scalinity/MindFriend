@@ -2,3 +2,10 @@
 # iOS xcconfig files with credentials
 apps/ios/Debug.xcconfig
 apps/ios/Release.xcconfig
+.sentryclirc
+
+# Backup files
+*.bak
+*.bak2
+*.bak3
+*.bak4

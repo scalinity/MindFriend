@@ -224,7 +224,7 @@ struct VisualAnimationDisplay: View {
         GeometryReader { geometry in
             let centerX = geometry.size.width / 2
             let centerY = geometry.size.height / 2
-            let baseSize: CGFloat = min(geometry.size.width, geometry.size.height) * 0.4
+            let _: CGFloat = min(geometry.size.width, geometry.size.height) * 0.4
             
             ZStack {
                 switch animationType {

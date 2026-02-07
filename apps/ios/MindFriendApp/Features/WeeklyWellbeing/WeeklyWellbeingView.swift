@@ -138,7 +138,7 @@ struct WeeklyWellbeingView: View {
                 }
 
                 // Previous score indicator
-                if let previous = metric.previousScore {
+                if let _ = metric.previousScore {
                     HStack {
                         Image(systemName: trendIcon(metric.trend))
                             .foregroundStyle(trendColor(metric.trend))

@@ -1,4 +1,5 @@
 import SwiftUI
+import Supabase
 
 struct PathwayOnboardingFlow: View {
     @EnvironmentObject var container: DependencyContainer
@@ -70,7 +71,22 @@ struct PathwayOnboardingFlow: View {
                 personalization: personalization
             )
             dismiss()
+        } catch let funcError as FunctionsError {
+            print("[EnrollPathway] FunctionsError: \(funcError)")
+            if case .httpError(let code, let data) = funcError {
+                let body = String(data: data, encoding: .utf8) ?? "no body"
+                print("[EnrollPathway] HTTP \(code): \(body)")
+                // Already enrolled — just dismiss, the home view will pick it up
+                if code == 409 {
+                    dismiss()
+                    return
+                }
+                errorMessage = "Error \(code): \(body)"
+            } else {
+                errorMessage = "Function error: \(funcError.localizedDescription)"
+            }
         } catch {
+            print("[EnrollPathway] Error: \(error)")
             errorMessage = error.localizedDescription
         }
 

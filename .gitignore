@@ -106,3 +106,71 @@ emotion_model_training/
 venv311/
 ravdess.zip
 *.zip
+
+# ========================================
+# Public repo safety additions
+# ========================================
+
+# Xcode build artifacts (CRITICAL - 9.3 GB)
+FreshBuildData/
+FreshDerivedData/
+*.pcm
+build_log*.txt
+
+# Claude Code / AI tool config
+.claude/
+
+# IDE configs
+.cursor/
+.postman/
+
+# Apple certificate/key formats
+*.p8
+*.p12
+
+# Google Services config
+GoogleService-Info.plist
+
+# Security audit reports (internal only)
+SECURITY_AUDIT_*.md
+SECURITY_AUDIT_*.txt
+SECURITY_AUDIT_*.json
+REHEARSAL_SECURITY_AUDIT_*.md
+BUG_ANALYSIS_*.json
+BUG_VERIFICATION_REPORT_*.md
+CODEBASE_AUDIT_*.md
+REVIEW_ORCHESTRATOR_*.md
+EMAIL_SYSTEM_BUG_REPORT.md
+
+# Ad-hoc SQL scripts
+add_push_token.sql
+clear_rate_limits.sql
+test_pathway_edge_cases*.sql
+test_quota_function.sql
+
+# Website backups
+website-*.html
+
+# Misc tool configs
+opencode.json
+icon-config.json
+kimispecs-prompts.txt
+WARP.md
+rehearsal-simulate-review-scores.json
+
+# Python environments
+venv/
+venv311/
+
+# Migration archives and backups
+supabase/migrations_archive*/
+supabase/migrations_backup/
+
+# Production/staging env files
+.env.production
+.env.staging
+
+# Edge function backups
+*.bak
+*.bak[0-9]*
+*.backup

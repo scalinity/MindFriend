@@ -4,12 +4,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { isCurrentlyQuietHours } from "../_shared/timing-optimizer.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
 
 interface AgentAction {
   id: string;
@@ -31,6 +27,9 @@ interface DeviceToken {
 }
 
 serve(async (req) => {
+  const origin = req.headers.get("origin") ?? "";
+  const corsHeaders = getCorsHeaders(origin);
+
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -245,14 +244,14 @@ async function sendNotificationViaFunction(
       "send-notification",
       {
         body: {
-          user_id: userId,
-          title: action.content.title,
-          body: action.content.body,
+          type: "agent_action",
+          recipientId: userId,
           data: {
-            action_id: action.id,
-            action_type: action.action_type,
-            deep_link: action.content.deepLink,
-            category: "AGENT_ACTION",
+            title: action.content.title,
+            body: action.content.body,
+            deepLink: action.content.deepLink,
+            actionId: action.id,
+            actionType: action.action_type,
           },
         },
       },

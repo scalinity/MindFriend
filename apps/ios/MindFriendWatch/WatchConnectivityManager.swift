@@ -2,6 +2,16 @@ import WatchConnectivity
 import Foundation
 import WidgetKit
 
+// MARK: - Shared Constants
+
+/// App Group suite for sharing data between Watch app and complications extension
+enum WatchAppConstants {
+    static let appGroupSuite = "group.com.mindfriend.app"
+    static var sharedDefaults: UserDefaults {
+        UserDefaults(suiteName: appGroupSuite) ?? .standard
+    }
+}
+
 // MARK: - Sync Data Types
 
 /// Data that can be synced between iOS and watchOS
@@ -45,7 +55,7 @@ private enum SyncKeys {
 // MARK: - Watch Connectivity Manager
 
 @MainActor
-public final class WatchConnectivityManager: NSObject, ObservableObject {
+public final class WatchConnectivityManager: NSObject, ObservableObject, ConnectivityProviding {
     // MARK: - Singleton
 
     public static let shared = WatchConnectivityManager()
@@ -75,6 +85,12 @@ public final class WatchConnectivityManager: NSObject, ObservableObject {
     // MARK: - Private Properties
 
     private var session: WCSession?
+
+    // Timeline reload debounce
+    #if os(watchOS)
+    private var lastTimelineReload: Date = .distantPast
+    private let reloadDebounceInterval: TimeInterval = 2.0
+    #endif
 
     /// Returns the session if ready for iOS-to-Watch communication
     /// Checks: session exists, activated, paired, watch app installed
@@ -193,10 +209,10 @@ public final class WatchConnectivityManager: NSObject, ObservableObject {
         guard let session = readyiOSSession else { return }
 
         do {
-            try session.updateApplicationContext([
-                "streak": streak,
-                "timestamp": Date().timeIntervalSince1970
-            ])
+            var context = session.applicationContext
+            context["streak"] = streak
+            context["timestamp"] = Date().timeIntervalSince1970
+            try session.updateApplicationContext(context)
         } catch {
             print("[WatchConnectivity] Failed to send streak: \(error)")
         }
@@ -209,11 +225,11 @@ public final class WatchConnectivityManager: NSObject, ObservableObject {
         guard let session = readyiOSSession else { return }
 
         do {
-            try session.updateApplicationContext([
-                "completedToday": completed,
-                "dailyGoal": goal,
-                "timestamp": Date().timeIntervalSince1970
-            ])
+            var context = session.applicationContext
+            context["completedToday"] = completed
+            context["dailyGoal"] = goal
+            context["timestamp"] = Date().timeIntervalSince1970
+            try session.updateApplicationContext(context)
         } catch {
             print("[WatchConnectivity] Failed to send daily progress: \(error)")
         }
@@ -226,12 +242,12 @@ public final class WatchConnectivityManager: NSObject, ObservableObject {
         guard let session = readyiOSSession else { return }
 
         do {
-            try session.updateApplicationContext([
-                "todayMood": mood,
-                "todayMoodScore": score,
-                "moodTimestamp": Date().timeIntervalSince1970,
-                "timestamp": Date().timeIntervalSince1970
-            ])
+            var context = session.applicationContext
+            context["todayMood"] = mood
+            context["todayMoodScore"] = score
+            context["moodTimestamp"] = Date().timeIntervalSince1970
+            context["timestamp"] = Date().timeIntervalSince1970
+            try session.updateApplicationContext(context)
         } catch {
             print("[WatchConnectivity] Failed to send mood: \(error)")
         }
@@ -244,15 +260,15 @@ public final class WatchConnectivityManager: NSObject, ObservableObject {
         guard let session = readyiOSSession else { return }
 
         do {
-            try session.updateApplicationContext([
-                "questId": id,
-                "questTitle": title,
-                "questDescription": description,
-                "questCategory": category,
-                "questXpReward": xpReward,
-                "questIsCompleted": isCompleted,
-                "timestamp": Date().timeIntervalSince1970
-            ])
+            var context = session.applicationContext
+            context["questId"] = id
+            context["questTitle"] = title
+            context["questDescription"] = description
+            context["questCategory"] = category
+            context["questXpReward"] = xpReward
+            context["questIsCompleted"] = isCompleted
+            context["timestamp"] = Date().timeIntervalSince1970
+            try session.updateApplicationContext(context)
         } catch {
             print("[WatchConnectivity] Failed to send quest: \(error)")
         }
@@ -333,6 +349,12 @@ public final class WatchConnectivityManager: NSObject, ObservableObject {
             session.sendMessage(message, replyHandler: nil) { error in
                 print("[WatchConnectivity] Failed to send breathing completion: \(error)")
             }
+        } else {
+            do {
+                try session.updateApplicationContext(message)
+            } catch {
+                print("[WatchConnectivity] Failed to send breathing via context: \(error)")
+            }
         }
         #endif
     }
@@ -352,40 +374,49 @@ public final class WatchConnectivityManager: NSObject, ObservableObject {
 
     #if os(watchOS)
     private func storeMoodLocally(_ mood: String, score: Int) {
-        UserDefaults.standard.set(mood, forKey: "watch_today_mood")
-        UserDefaults.standard.set(score, forKey: "watch_today_mood_score")
-        UserDefaults.standard.set(Date(), forKey: "watch_mood_date")
+        // Use Keychain for sensitive mood data (consistent with WatchMoodView)
+        WatchKeychain.save(mood, forKey: "watch_today_mood")
+        WatchKeychain.save(String(score), forKey: "watch_today_mood_score")
+        WatchKeychain.save(Date().ISO8601Format(), forKey: "watch_mood_date")
+
+        // Also update shared App Group UserDefaults for complications (non-sensitive display data)
+        WatchAppConstants.sharedDefaults.set(mood, forKey: "watch_today_mood_display")
+        WatchAppConstants.sharedDefaults.set(Date(), forKey: "watch_mood_date_display")
 
         // Reload complications
         WidgetCenter.shared.reloadAllTimelines()
     }
 
     private func updateLocalDataFromContext(_ context: [String: Any]) {
-        if let streak = context["streak"] as? Int {
+        if let streak = context["streak"] as? Int, streak >= 0 {
             self.currentStreak = streak
-            UserDefaults.standard.set(streak, forKey: "watch_streak")
+            WatchAppConstants.sharedDefaults.set(streak, forKey: "watch_streak")
         }
 
-        if let mood = context["todayMood"] as? String {
+        if let mood = context["todayMood"] as? String, !mood.isEmpty {
             self.todayMood = mood
-            UserDefaults.standard.set(mood, forKey: "watch_today_mood")
+            WatchKeychain.save(mood, forKey: "watch_today_mood")
+            // Also store in shared defaults for complications
+            WatchAppConstants.sharedDefaults.set(mood, forKey: "watch_today_mood_display")
         }
 
-        if let moodScore = context["todayMoodScore"] as? Int {
+        if let moodScore = context["todayMoodScore"] as? Int, (1...5).contains(moodScore) {
             self.todayMoodScore = moodScore
-            UserDefaults.standard.set(moodScore, forKey: "watch_today_mood_score")
+            WatchKeychain.save(String(moodScore), forKey: "watch_today_mood_score")
         }
 
-        if let completed = context["completedToday"] as? Int {
+        if let completed = context["completedToday"] as? Int, completed >= 0 {
             self.completedToday = completed
+            WatchAppConstants.sharedDefaults.set(completed, forKey: "watch_completed_today")
         }
 
-        if let goal = context["dailyGoal"] as? Int {
+        if let goal = context["dailyGoal"] as? Int, goal > 0 {
             self.dailyGoal = goal
+            WatchAppConstants.sharedDefaults.set(goal, forKey: "watch_daily_goal")
         }
 
         // Quest data
-        if let questId = context["questId"] as? String {
+        if let questId = context["questId"] as? String, !questId.isEmpty {
             self.currentQuestId = questId
         }
         if let questTitle = context["questTitle"] as? String {
@@ -397,7 +428,7 @@ public final class WatchConnectivityManager: NSObject, ObservableObject {
         if let questCat = context["questCategory"] as? String {
             self.currentQuestCategory = questCat
         }
-        if let questXp = context["questXpReward"] as? Int {
+        if let questXp = context["questXpReward"] as? Int, questXp >= 0 {
             self.currentQuestXpReward = questXp
         }
         if let questCompleted = context["questIsCompleted"] as? Bool {
@@ -458,7 +489,8 @@ extension WatchConnectivityManager: WCSessionDelegate {
 
     nonisolated public func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
         Task { @MainActor in
-            print("[WatchConnectivity] Received message: \(message)")
+            let actionType = message[SyncKeys.actionType] as? String ?? "unknown"
+            print("[WatchConnectivity] Received message: \(actionType)")
 
             #if os(iOS)
             if let actionType = message[SyncKeys.actionType] as? String {
@@ -482,26 +514,41 @@ extension WatchConnectivityManager: WCSessionDelegate {
     private func handleWatchAction(_ actionType: String, data: [String: Any]) {
         switch actionType {
         case "moodLogged":
-            if let mood = data[SyncKeys.mood] as? String,
-               let score = data[SyncKeys.moodScore] as? Int {
-                self.onMoodReceived?(mood, score)
+            guard let mood = data[SyncKeys.mood] as? String, !mood.isEmpty,
+                  let score = data[SyncKeys.moodScore] as? Int, (1...5).contains(score) else {
+                print("[WatchConnectivity] Invalid mood data received")
+                return
             }
+            self.onMoodReceived?(mood, score)
 
         case "questCompleted":
-            if let questId = data[SyncKeys.questId] as? String {
-                self.onQuestCompleted?(questId)
+            guard let questId = data[SyncKeys.questId] as? String, !questId.isEmpty else {
+                print("[WatchConnectivity] Invalid quest data received")
+                return
             }
+            self.onQuestCompleted?(questId)
 
         case "breathingCompleted":
-            if let cycles = data[SyncKeys.breathingCycles] as? Int {
-                self.onBreathingCompleted?(cycles)
+            guard let cycles = data[SyncKeys.breathingCycles] as? Int, cycles > 0 else {
+                print("[WatchConnectivity] Invalid breathing data received")
+                return
             }
+            self.onBreathingCompleted?(cycles)
 
         case "requestSync":
             self.onSyncRequested?()
 
-        default:
+        case "heartRateUpdate":
+            // Validate heart rate data
+            guard let heartRate = data["heartRate"] as? Double, heartRate > 20, heartRate < 300 else {
+                return
+            }
+            // Heart rate forwarded to biometric services via notification
             break
+
+        default:
+            let safeAction = String(actionType.prefix(50)).replacingOccurrences(of: "\n", with: "")
+            print("[WatchConnectivity] Unknown action type: \(safeAction)")
         }
     }
     #endif

@@ -29,7 +29,7 @@ struct MentorshipChatView: View {
                         .padding()
                     }
                     .scrollDismissesKeyboard(.interactively)
-                    .onChange(of: messagingService.messages.count) { _ in
+                    .onChange(of: messagingService.messages.count) {
                         if let lastId = messagingService.messages.last?.id {
                             withAnimation {
                                 proxy.scrollTo(lastId, anchor: .bottom)

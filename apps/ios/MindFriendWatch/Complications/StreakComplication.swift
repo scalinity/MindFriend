@@ -1,6 +1,10 @@
 import WidgetKit
 import SwiftUI
 
+// MARK: - Shared Defaults (App Group for cross-process access)
+
+private let sharedDefaults = UserDefaults(suiteName: "group.com.mindfriend.app") ?? .standard
+
 // MARK: - Streak Complication
 
 struct StreakComplication: Widget {
@@ -24,36 +28,34 @@ struct StreakComplication: Widget {
 // MARK: - Provider
 
 struct StreakComplicationProvider: TimelineProvider {
-    typealias Entry = StreakComplicationEntry
+    typealias Entry = StreakEntry
 
-    func placeholder(in context: Context) -> StreakComplicationEntry {
-        StreakComplicationEntry(date: Date(), streak: 7, isPlaceholder: true)
+    func placeholder(in context: Context) -> StreakEntry {
+        StreakEntry(date: Date(), streak: 7, isPlaceholder: true)
     }
 
-    func getSnapshot(in context: Context, completion: @escaping (StreakComplicationEntry) -> Void) {
-        let streak = UserDefaults.standard.integer(forKey: "watch_streak")
-        let entry = StreakComplicationEntry(date: Date(), streak: max(streak, 0), isPlaceholder: false)
+    func getSnapshot(in context: Context, completion: @escaping (StreakEntry) -> Void) {
+        let streak = sharedDefaults.integer(forKey: "watch_streak")
+        let entry = StreakEntry(date: Date(), streak: max(streak, 0), isPlaceholder: false)
         completion(entry)
     }
 
-    func getTimeline(in context: Context, completion: @escaping (Timeline<StreakComplicationEntry>) -> Void) {
-        let streak = UserDefaults.standard.integer(forKey: "watch_streak")
-        let entry = StreakComplicationEntry(date: Date(), streak: max(streak, 0), isPlaceholder: false)
+    func getTimeline(in context: Context, completion: @escaping (Timeline<StreakEntry>) -> Void) {
+        let streak = sharedDefaults.integer(forKey: "watch_streak")
+        let entry = StreakEntry(date: Date(), streak: max(streak, 0), isPlaceholder: false)
 
-        // Refresh at midnight or in 1 hour
+        // Refresh at midnight (streak only changes daily; data-driven updates use reloadTimelines)
         let calendar = Calendar.current
-        let nextHour = calendar.date(byAdding: .hour, value: 1, to: Date()) ?? Date()
         let midnight = calendar.startOfDay(for: calendar.date(byAdding: .day, value: 1, to: Date()) ?? Date())
-        let nextUpdate = min(nextHour, midnight)
 
-        let timeline = Timeline(entries: [entry], policy: .after(nextUpdate))
+        let timeline = Timeline(entries: [entry], policy: .after(midnight))
         completion(timeline)
     }
 }
 
 // MARK: - Entry
 
-struct StreakComplicationEntry: TimelineEntry {
+struct StreakEntry: TimelineEntry {
     let date: Date
     let streak: Int
     let isPlaceholder: Bool
@@ -63,7 +65,7 @@ struct StreakComplicationEntry: TimelineEntry {
 
 struct StreakComplicationEntryView: View {
     @Environment(\.widgetFamily) var family
-    var entry: StreakComplicationEntry
+    var entry: StreakEntry
 
     var body: some View {
         switch family {
@@ -189,17 +191,17 @@ struct StreakComplicationEntryView: View {
 #Preview(as: .accessoryCircular) {
     StreakComplication()
 } timeline: {
-    StreakComplicationEntry(date: .now, streak: 14, isPlaceholder: false)
+    StreakEntry(date: .now, streak: 14, isPlaceholder: false)
 }
 
 #Preview(as: .accessoryRectangular) {
     StreakComplication()
 } timeline: {
-    StreakComplicationEntry(date: .now, streak: 7, isPlaceholder: false)
+    StreakEntry(date: .now, streak: 7, isPlaceholder: false)
 }
 
 #Preview(as: .accessoryInline) {
     StreakComplication()
 } timeline: {
-    StreakComplicationEntry(date: .now, streak: 14, isPlaceholder: false)
+    StreakEntry(date: .now, streak: 14, isPlaceholder: false)
 }

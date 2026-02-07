@@ -296,11 +296,6 @@ struct UpcomingMilestone: Codable, Identifiable, Hashable, Sendable {
 struct EnrollPathwayResponse: Codable, Sendable {
     let userPathway: UserPathway
     let todayContent: DailyPathwayContent
-
-    enum CodingKeys: String, CodingKey {
-        case userPathway = "user_pathway"
-        case todayContent = "today_content"
-    }
 }
 
 struct AdvancePhaseResponse: Codable, Sendable {

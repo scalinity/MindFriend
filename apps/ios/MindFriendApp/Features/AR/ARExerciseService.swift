@@ -134,7 +134,7 @@ public final class ARExerciseService: ObservableObject, ARExerciseServiceProtoco
                 completedSteps: 0
             )
 
-            try await withRetry(maxAttempts: Self.maxRetryAttempts) {
+            _ = try await withRetry(maxAttempts: Self.maxRetryAttempts) {
                 try await supabase
                     .from("ar_exercise_sessions")
                     .insert(session)
@@ -198,7 +198,7 @@ public final class ARExerciseService: ObservableObject, ARExerciseServiceProtoco
                 completedSteps: validatedSteps
             )
 
-            try await withRetry(maxAttempts: Self.maxRetryAttempts) {
+            _ = try await withRetry(maxAttempts: Self.maxRetryAttempts) {
                 try await supabase
                     .from("ar_exercise_sessions")
                     .update(updateData)
@@ -239,7 +239,7 @@ public final class ARExerciseService: ObservableObject, ARExerciseServiceProtoco
             usedVoiceGuidance: currentVoiceIndex > 0
         )
 
-        try? await supabase
+        _ = try? await supabase
             .from("ar_exercise_sessions")
             .update(updateData)
             .eq("id", value: sessionId.uuidString)

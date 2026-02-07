@@ -44,7 +44,7 @@ struct ExperimentCatalogView: View {
             .presentationDetents([.height(280)])
             .presentationDragIndicator(.visible)
         }
-        .alert("Error", isPresented: .constant(startError != nil)) {
+        .alert("Error", isPresented: Binding(get: { startError != nil }, set: { if !$0 { startError = nil } })) {
             Button("OK") {
                 startError = nil
             }

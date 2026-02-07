@@ -91,7 +91,7 @@ struct MorningCheckInView: View {
 
                 Spacer()
 
-                if let breakdown = viewModel.entry.scoreBreakdown {
+                if let _ = viewModel.entry.scoreBreakdown {
                     SleepScoreRing(score: viewModel.entry.sleepScore ?? 0, size: 80)
                 }
             }

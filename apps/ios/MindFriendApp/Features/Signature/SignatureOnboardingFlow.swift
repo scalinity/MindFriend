@@ -451,7 +451,7 @@ struct SignatureOnboardingFlow: View {
         Task {
             do {
                 let engine = container.stressSignatureEngine
-                var signature = try await engine.createSignature(
+                _ = try await engine.createSignature(
                     selectedComponentIds: selectedComponents
                 )
 

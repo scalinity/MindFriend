@@ -29,6 +29,7 @@ export interface Voice {
 
 export interface TTSRequest {
   text: string;
+  ssml?: string; // SSML input (takes priority over text when provided)
   voiceId: string;
   useChirp3HD?: boolean; // Use premium Chirp 3 HD voices
   voiceSettings?: {
@@ -65,49 +66,49 @@ export const CHIRP3_HD_PRESETS: Record<string, GoogleVoiceConfig> = {
     voiceName: "en-US-Chirp3-HD-Leda",
     languageCode: "en-US",
     ssmlGender: "FEMALE",
-    speakingRate: 0.85,
+    speakingRate: 1.0,
     pitch: 0.0, // Chirp 3 HD handles pitch naturally
   },
   meditation_male: {
     voiceName: "en-US-Chirp3-HD-Orus",
     languageCode: "en-US",
     ssmlGender: "MALE",
-    speakingRate: 0.85,
+    speakingRate: 1.0,
     pitch: 0.0,
   },
   sleep_story: {
     voiceName: "en-US-Chirp3-HD-Aoede",
     languageCode: "en-US",
     ssmlGender: "FEMALE",
-    speakingRate: 0.8,
+    speakingRate: 0.95,
     pitch: 0.0,
   },
   breathing: {
     voiceName: "en-US-Chirp3-HD-Kore",
     languageCode: "en-US",
     ssmlGender: "FEMALE",
-    speakingRate: 0.75,
+    speakingRate: 0.9,
     pitch: 0.0,
   },
   grounding: {
     voiceName: "en-US-Chirp3-HD-Zephyr",
     languageCode: "en-US",
     ssmlGender: "FEMALE",
-    speakingRate: 0.9,
+    speakingRate: 1.0,
     pitch: 0.0,
   },
   affirmation: {
     voiceName: "en-US-Chirp3-HD-Charon",
     languageCode: "en-US",
     ssmlGender: "MALE",
-    speakingRate: 0.95,
+    speakingRate: 1.05,
     pitch: 0.0,
   },
   default: {
     voiceName: "en-US-Chirp3-HD-Leda",
     languageCode: "en-US",
     ssmlGender: "FEMALE",
-    speakingRate: 0.9,
+    speakingRate: 1.0,
     pitch: 0.0,
   },
 };
@@ -206,10 +207,12 @@ export class GoogleTTSClient {
   }
 
   async textToSpeech(request: TTSRequest): Promise<TTSResponse> {
-    const { text, voiceId, useChirp3HD = false } = request;
+    const { text, ssml, voiceId, useChirp3HD = false } = request;
+
+    const inputContent = ssml || text;
 
     // Validate text is non-empty before computing byte length
-    if (!text || text.trim().length === 0) {
+    if (!inputContent || inputContent.trim().length === 0) {
       throw new GoogleTTSError(
         "Text content is required",
         "INVALID_REQUEST",
@@ -218,7 +221,7 @@ export class GoogleTTSClient {
     }
 
     // Validate text byte length (Google limit: 5000 bytes UTF-8)
-    const textBytes = new TextEncoder().encode(text);
+    const textBytes = new TextEncoder().encode(inputContent);
     if (textBytes.length > MAX_TEXT_BYTES) {
       throw new GoogleTTSError(
         "Text too long",
@@ -233,7 +236,7 @@ export class GoogleTTSClient {
 
     // Build Google API request body
     const body = {
-      input: { text },
+      input: ssml ? { ssml } : { text },
       voice: {
         languageCode: preset.languageCode,
         name: preset.voiceName,
@@ -311,7 +314,7 @@ export class GoogleTTSClient {
     return {
       audioData,
       contentType: "audio/mpeg",
-      characterCount: text.length,
+      characterCount: inputContent.length,
     };
   }
 }

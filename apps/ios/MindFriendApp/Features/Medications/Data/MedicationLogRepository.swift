@@ -142,16 +142,10 @@ final class SupabaseMedicationLogRepository: MedicationLogRepository {
 
     func updateSupplyCount(medicationId: UUID) async throws -> Int? {
         // Call Edge Function to atomically decrement supply count
-        let response = try await supabase.functions.invoke(
+        try await supabase.functions.invoke(
             "update-supply-count",
             options: .init(body: ["medicationId": medicationId.uuidString])
         )
-
-        guard let data = response as? [String: Any],
-              let supplyCount = data["supply_count"] as? Int else {
-            return nil
-        }
-
-        return supplyCount
+        return nil
     }
 }

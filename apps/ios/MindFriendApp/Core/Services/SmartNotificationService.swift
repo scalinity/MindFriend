@@ -355,7 +355,7 @@ final class SmartNotificationService: ObservableObject {
     private func setupObservers() {
         // Observe context engine changes
         contextEngine.$shouldSuppressNotifications
-            .sink { [weak self] shouldSuppress in
+            .sink { shouldSuppress in
                 if shouldSuppress {
                     Log.notifications.debug("[SmartNotifications] Context changed to suppression")
                 }

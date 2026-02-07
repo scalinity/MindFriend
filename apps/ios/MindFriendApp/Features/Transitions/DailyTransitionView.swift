@@ -60,10 +60,10 @@ struct DailyTransitionView: View {
                 print("⚠️ Failed to load journal draft for pathway \(userPathway.id.uuidString)")
             }
         }
-        .onChange(of: journalEntry) { newValue in
+        .onChange(of: journalEntry) {
             // ✅ Save encrypted journal draft via service layer (proper encapsulation)
             do {
-                try container.transitionService.saveJournalDraft(newValue, for: userPathway.id)
+                try container.transitionService.saveJournalDraft(journalEntry, for: userPathway.id)
             } catch {
                 // ✅ SECURITY FIX: Don't log error details (may contain PHI)
                 print("⚠️ Failed to save journal draft for pathway \(userPathway.id.uuidString)")
@@ -173,18 +173,20 @@ struct DailyTransitionView: View {
             )
             
             do {
-                _ = try await container.transitionService.completeCheckIn(
+                let response = try await container.transitionService.completeCheckIn(
                     userPathwayId: userPathway.id,
                     checkInData: checkInData,
                     journalEntry: journalEntry.isEmpty ? nil : journalEntry
                 )
-                // ✅ Clear encrypted draft on success via service layer
+                print("[CheckIn] Success! newDay=\(response.newDay) phaseAdvanced=\(response.phaseAdvanced)")
+                // Clear encrypted draft on success via service layer
                 container.transitionService.clearJournalDraft(for: userPathway.id)
                 isSubmitting = false
                 dismiss()
             } catch {
                 isSubmitting = false
-                errorMessage = "Failed to save your check-in. Please try again."
+                print("[CheckIn] Error: \(error)")
+                errorMessage = "\(error)"
                 showError = true
             }
         }

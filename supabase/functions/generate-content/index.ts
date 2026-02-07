@@ -84,6 +84,9 @@ interface GenerateContentRequest {
     // Series
     seriesId?: string;
     seriesPosition?: number;
+
+    // NEW: Timezone for context gathering
+    timezone?: string;
   };
 }
 
@@ -203,14 +206,12 @@ serve(async (req) => {
     const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const XAI_API_KEY = Deno.env.get("XAI_API_KEY");
-    const GOOGLE_TTS_API_KEY = Deno.env.get("GOOGLE_TTS_API_KEY");
 
     if (
       !SUPABASE_URL ||
       !SUPABASE_ANON_KEY ||
       !SUPABASE_SERVICE_ROLE_KEY ||
-      !XAI_API_KEY ||
-      !GOOGLE_TTS_API_KEY
+      !XAI_API_KEY
     ) {
       console.error("CRITICAL: Missing required environment variables");
       return new Response(
@@ -219,6 +220,12 @@ serve(async (req) => {
           status: 503,
           headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
         },
+      );
+    }
+
+    if (!Deno.env.get("GOOGLE_CLOUD_TTS_KEY")) {
+      console.warn(
+        "GOOGLE_CLOUD_TTS_KEY not set - TTS will be unavailable for premium users",
       );
     }
 
@@ -240,10 +247,6 @@ serve(async (req) => {
     }
 
     const token = authHeader.replace("Bearer ", "");
-    console.log(`[generate-content] Token length: ${token.length}`);
-    console.log(
-      `[generate-content] Token prefix: ${token.substring(0, 30)}...`,
-    );
 
     // Create Supabase clients
     const supabaseUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -282,7 +285,7 @@ serve(async (req) => {
     }
 
     console.log(
-      `[generate-content] SUCCESS: User authenticated - ID: ${user.id}, email: ${user.email}`,
+      `[generate-content] SUCCESS: User authenticated - ID: ${user.id.slice(0, 8)}...`,
     );
 
     // Rate limiting
@@ -423,7 +426,7 @@ serve(async (req) => {
         JSON.stringify({
           error: "AI_QUOTA_EXCEEDED",
           message:
-            "You've reached your daily generation limit. Upgrade to Premium for unlimited content!",
+            "You've reached your monthly generation limit. Upgrade to Premium for unlimited content!",
           quotaUsed: quota.quota_used,
           quotaLimit: quota.quota_limit,
         }),
@@ -485,6 +488,7 @@ serve(async (req) => {
             supabaseAdmin,
             user.id,
             request.contentType,
+            request.params.timezone,
           );
         } catch (contextError) {
           console.warn(
@@ -584,29 +588,61 @@ serve(async (req) => {
 
         if (budget?.allowed) {
           console.log(
-            `[generate-content] TTS budget allowed, synthesizing audio...`,
+            `[generate-content] TTS budget allowed, synthesizing audio with Chirp 3 HD...`,
           );
           try {
             const googleTTS = createGoogleTTSClient();
-            const voiceId = request.params.voiceId || DEFAULT_VOICE_ID;
-            console.log(`[generate-content] Using voiceId: ${voiceId}`);
-
-            // Synthesize voice with Google Cloud TTS (premium feature)
-            // Use displayText (extracted readable content) not raw JSON
-            const ttsResult = await googleTTS.textToSpeech({
-              text: displayText,
-              voiceId,
-            });
+            // Map content type to voice preset key
+            const voiceId =
+              request.params.voiceId || request.contentType || DEFAULT_VOICE_ID;
             console.log(
-              `[generate-content] TTS synthesis successful, ${ttsResult.audioData?.length || 0} bytes, ${ttsResult.characterCount} chars`,
+              `[generate-content] Using Chirp 3 HD voiceId: ${voiceId}`,
+            );
+
+            // Chunk text if it exceeds Google's 5000 byte limit
+            const chunks = chunkTextForTTS(displayText, 4800);
+            console.log(
+              `[generate-content] Text split into ${chunks.length} chunk(s)`,
+            );
+
+            const audioChunks: Uint8Array[] = [];
+            let totalCharCount = 0;
+
+            for (let i = 0; i < chunks.length; i++) {
+              console.log(
+                `[generate-content] Synthesizing chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars)`,
+              );
+              const ttsResult = await googleTTS.textToSpeech({
+                text: chunks[i],
+                voiceId,
+                useChirp3HD: true,
+              });
+              audioChunks.push(ttsResult.audioData);
+              totalCharCount += ttsResult.characterCount;
+            }
+
+            // Concatenate audio chunks
+            const totalLength = audioChunks.reduce(
+              (sum, chunk) => sum + chunk.length,
+              0,
+            );
+            const combinedAudio = new Uint8Array(totalLength);
+            let offset = 0;
+            for (const chunk of audioChunks) {
+              combinedAudio.set(chunk, offset);
+              offset += chunk.length;
+            }
+
+            console.log(
+              `[generate-content] TTS synthesis successful, ${combinedAudio.length} bytes, ${totalCharCount} chars`,
             );
 
             // Upload to Supabase Storage
             const fileName = `${user.id}/${contentId}.mp3`;
             const { error: uploadError } = await supabaseAdmin.storage
               .from("generated-audio")
-              .upload(fileName, ttsResult.audioData, {
-                contentType: ttsResult.contentType,
+              .upload(fileName, combinedAudio, {
+                contentType: "audio/mpeg",
                 upsert: true,
               });
 
@@ -621,8 +657,8 @@ serve(async (req) => {
 
               audioUrl = urlData?.publicUrl;
               console.log(`[generate-content] Audio URL: ${audioUrl}`);
-              actualDuration = estimateDuration(textContent);
-              generationCost = estimateTTSCost(ttsResult.characterCount);
+              actualDuration = estimateDuration(displayText);
+              generationCost = estimateTTSCost(totalCharCount);
             } else {
               console.error(
                 "[generate-content] Audio upload error:",
@@ -961,6 +997,56 @@ function calculateQualityScore(
   }
 
   return Math.min(10, score);
+}
+
+/**
+ * Split text into chunks that fit within Google TTS byte limit
+ * Splits at sentence boundaries to maintain natural speech
+ */
+function chunkTextForTTS(text: string, maxBytes: number): string[] {
+  const encoder = new TextEncoder();
+
+  // If text fits in one chunk, return as-is
+  if (encoder.encode(text).length <= maxBytes) {
+    return [text];
+  }
+
+  const chunks: string[] = [];
+  // Split on sentence boundaries
+  const sentences = text.split(/(?<=[.!?])\s+/);
+  let currentChunk = "";
+
+  for (const sentence of sentences) {
+    const potential = currentChunk ? currentChunk + " " + sentence : sentence;
+    if (encoder.encode(potential).length > maxBytes) {
+      if (currentChunk) {
+        chunks.push(currentChunk.trim());
+        currentChunk = sentence;
+      } else {
+        // Single sentence exceeds limit, split by words
+        const words = sentence.split(/\s+/);
+        let wordChunk = "";
+        for (const word of words) {
+          const wordPotential = wordChunk ? wordChunk + " " + word : word;
+          if (encoder.encode(wordPotential).length > maxBytes) {
+            if (wordChunk) chunks.push(wordChunk.trim());
+            wordChunk = word;
+          } else {
+            wordChunk = wordPotential;
+          }
+        }
+        if (wordChunk) currentChunk = wordChunk;
+      }
+    } else {
+      currentChunk = potential;
+    }
+  }
+
+  if (currentChunk.trim()) {
+    chunks.push(currentChunk.trim());
+  }
+
+  return chunks;
 }
 
 /**

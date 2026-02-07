@@ -72,7 +72,7 @@ struct SoundscapeMixerView: View {
     private var headerSection: some View {
         HStack {
             // Sleep timer status
-            if let remaining = mixerService.state.sleepTimerRemaining {
+            if let _ = mixerService.state.sleepTimerRemaining {
                 HStack(spacing: 6) {
                     Image(systemName: mixerService.state.isFading ? "moon.zzz.fill" : "moon.fill")
                         .font(.caption)

@@ -31,9 +31,8 @@ final class GeneratedContentService: ObservableObject {
 
         // Ensure session is loaded before making function call
         // This forces the SDK to restore session from storage if needed
-        let session: Session
         do {
-            session = try await supabase.auth.session
+            _ = try await supabase.auth.session
             Log.data.debug("[GeneratedContent] Session acquired")
         } catch {
             Log.data.error("[GeneratedContent] Failed to get session")
@@ -336,9 +335,8 @@ final class GeneratedContentService: ObservableObject {
         feedback: String? = nil
     ) async throws -> RateContentResponse {
         // Ensure session is loaded before making function call
-        let session: Session
         do {
-            session = try await supabase.auth.session
+            _ = try await supabase.auth.session
             Log.data.debug("[GeneratedContent] rateContent - Session acquired")
         } catch {
             Log.data.error("[GeneratedContent] rateContent - Failed to get session")

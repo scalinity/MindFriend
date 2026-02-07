@@ -180,7 +180,7 @@ struct QuestArcDetailView: View {
                         .foregroundStyle(.orange)
                     Text("Paused")
                         .font(.subheadline.weight(.medium))
-                    if let pausedAt = userArc.pausedAt {
+                    if let _ = userArc.pausedAt {
                         Text("- Resume within 30 days")
                             .font(.caption)
                             .foregroundStyle(.secondary)

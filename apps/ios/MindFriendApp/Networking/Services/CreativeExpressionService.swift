@@ -146,7 +146,6 @@ final class CreativeExpressionService: ObservableObject {
         print("[ArtGen] Request body built: \(body)")
 
         var finalWorkId: String?
-        var finalImageData: Data?
 
         // Stream the generation
         print("[ArtGen] Creating SSE stream...")
@@ -169,7 +168,7 @@ final class CreativeExpressionService: ObservableObject {
 
                 case .complete(let imageData, let metadata):
                     print("[ArtGen] Complete event received, image size: \(imageData.count)")
-                    finalImageData = imageData
+                    _ = imageData
                     // Extract creativeWorkId from metadata
                     if let workId = metadata?["creativeWorkId"] as? String {
                         finalWorkId = workId
@@ -256,8 +255,8 @@ final class CreativeExpressionService: ObservableObject {
         try await supabase.storage
             .from("creative-works")
             .upload(
-                path: storagePath,
-                file: audioData,
+                storagePath,
+                data: audioData,
                 options: FileOptions(contentType: "audio/m4a")
             )
 
@@ -312,7 +311,7 @@ final class CreativeExpressionService: ObservableObject {
             throw CreativeError.analysisFailed(error)
         }
 
-        guard response.success, let analysis = response.analysis else {
+        guard response.success, let _ = response.analysis else {
             throw CreativeError.analysisFailed("No analysis returned")
         }
 
@@ -360,8 +359,8 @@ final class CreativeExpressionService: ObservableObject {
         try await supabase.storage
             .from("creative-works")
             .upload(
-                path: storagePath,
-                file: imageData,
+                storagePath,
+                data: imageData,
                 options: FileOptions(contentType: "image/png")
             )
 
@@ -484,7 +483,7 @@ final class CreativeExpressionService: ObservableObject {
         if let work = creativeWorks.first(where: { $0.id == id }),
            let path = work.storagePath {
             // Delete from storage
-            try? await supabase.storage
+            _ = try? await supabase.storage
                 .from("creative-works")
                 .remove(paths: [path])
         }

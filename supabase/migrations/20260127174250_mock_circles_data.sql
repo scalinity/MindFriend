@@ -1,5 +1,5 @@
 -- Mock Circles Data for App Store Screenshots
--- Uses b@gmail.com as the primary user
+-- Uses beta-tester@example.com as the primary user
 -- Creates a circle with posts from the user to demonstrate features
 
 DO $$
@@ -10,11 +10,11 @@ DECLARE
     v_post2_id UUID;
     v_post3_id UUID;
 BEGIN
-    -- Get the user ID for b@gmail.com
-    SELECT id INTO v_user_id FROM auth.users WHERE email = 'b@gmail.com';
+    -- Get the user ID for beta-tester@example.com
+    SELECT id INTO v_user_id FROM auth.users WHERE email = 'beta-tester@example.com';
 
     IF v_user_id IS NULL THEN
-        RAISE NOTICE 'User b@gmail.com not found, skipping mock data';
+        RAISE NOTICE 'User beta-tester@example.com not found, skipping mock data';
         RETURN;
     END IF;
 

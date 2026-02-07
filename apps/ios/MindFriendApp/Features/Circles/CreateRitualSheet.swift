@@ -1,4 +1,5 @@
 import SwiftUI
+import Supabase
 
 /// Sheet for creating a new circle ritual
 struct CreateRitualSheet: View {
@@ -116,11 +117,13 @@ struct CreateRitualSheet: View {
     private func createRitual() {
         guard !title.isEmpty else { return }
 
+        print("[CreateRitualSheet] createRitual called: circleId=\(circleId), title=\(title)")
         isCreating = true
         errorMessage = nil
 
         Task {
             do {
+                print("[CreateRitualSheet] Calling ritualService.createRitual...")
                 let ritual = try await container.ritualService.createRitual(
                     circleId: circleId,
                     title: title,
@@ -129,13 +132,39 @@ struct CreateRitualSheet: View {
                     scheduledFor: startNow ? nil : scheduledDate
                 )
 
+                print("[CreateRitualSheet] Ritual created successfully: \(ritual.id)")
                 await MainActor.run {
+                    isCreating = false
                     onCreated(ritual)
                     dismiss()
                 }
-            } catch {
+            } catch let error as FunctionsError {
+                print("[CreateRitualSheet] FunctionsError caught: \(error)")
+                // Extract meaningful message from the Supabase functions error
+                let message: String
+                if case .httpError(let code, let data) = error {
+                    print("[CreateRitualSheet] HTTP error \(code)")
+                    if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let errorMsg = json["message"] as? String {
+                        message = errorMsg
+                        print("[CreateRitualSheet] Error message from server: \(message)")
+                    } else {
+                        message = "Failed to create ritual. Please try again."
+                        if let body = String(data: data, encoding: .utf8) {
+                            print("[CreateRitualSheet] Raw error body: \(body)")
+                        }
+                    }
+                } else {
+                    message = "Failed to create ritual. Please try again."
+                }
                 await MainActor.run {
-                    errorMessage = error.localizedDescription
+                    errorMessage = message
+                    isCreating = false
+                }
+            } catch {
+                print("[CreateRitualSheet] Generic error caught: \(error)")
+                await MainActor.run {
+                    errorMessage = "Failed to create ritual. Please try again."
                     isCreating = false
                 }
             }

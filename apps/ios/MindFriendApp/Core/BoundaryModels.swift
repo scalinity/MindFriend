@@ -499,7 +499,8 @@ struct ScriptResponse: Codable, Identifiable {
     let script: String
     let toneDescription: String
     let tips: [String]
-    var id: UUID { UUID() }
+    let id: UUID
+    var isCompleted: Bool = false
     
     enum CodingKeys: String, CodingKey {
         case variation
@@ -524,6 +525,7 @@ struct ScriptResponse: Codable, Identifiable {
         self.script = try container.decode(String.self, forKey: .script)
         self.toneDescription = try container.decode(String.self, forKey: .toneDescription)
         self.tips = try container.decode([String].self, forKey: .tips)
+        self.id = UUID()
     }
 }
 

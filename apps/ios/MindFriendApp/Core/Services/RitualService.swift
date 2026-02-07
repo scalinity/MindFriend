@@ -59,6 +59,8 @@ final class RitualService: ObservableObject {
         startNow: Bool,
         scheduledFor: Date? = nil
     ) async throws -> CircleRitual {
+        print("[RitualService] createRitual called: circleId=\(circleId), title=\(title), type=\(ritualType.rawValue), startNow=\(startNow)")
+        
         let request = CreateRitualRequest(
             circleId: circleId.uuidString,
             title: title,
@@ -67,31 +69,41 @@ final class RitualService: ObservableObject {
             scheduledFor: scheduledFor?.ISO8601Format()
         )
 
-        let data: Data = try await supabase.functions.invoke(
-            "create-circle-ritual",
-            options: .init(body: request)
-        )
-
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-
-        let createResponse = try decoder.decode(CreateRitualResponse.self, from: data)
-        return convertToCircleRitual(createResponse.ritual)
+        print("[RitualService] Invoking create-circle-ritual Edge Function...")
+        
+        do {
+            // Use the generic invoke that decodes directly to the response type
+            let createResponse: CreateRitualResponse = try await supabase.functions.invoke(
+                "create-circle-ritual",
+                options: .init(body: request)
+            )
+            
+            print("[RitualService] Edge Function succeeded, ritual id: \(createResponse.ritual.id)")
+            return convertToCircleRitual(createResponse.ritual)
+        } catch let error as FunctionsError {
+            print("[RitualService] FunctionsError: \(error)")
+            if case .httpError(let code, let data) = error {
+                print("[RitualService] HTTP error \(code)")
+                if let body = String(data: data, encoding: .utf8) {
+                    print("[RitualService] Error body: \(body)")
+                }
+            }
+            throw error
+        } catch {
+            print("[RitualService] Error: \(error)")
+            throw error
+        }
     }
 
     /// Join an active or starting ritual
     func joinRitual(ritualId: UUID) async throws -> (ritual: CircleRitual, currentStep: RitualStep?, attendees: [RitualAttendeeInfo]) {
         let request = JoinRitualRequest(ritualId: ritualId.uuidString)
 
-        let data: Data = try await supabase.functions.invoke(
+        // Use the generic invoke that decodes directly to the response type
+        let joinResponse: JoinRitualResponse = try await supabase.functions.invoke(
             "join-circle-ritual",
             options: .init(body: request)
         )
-
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-
-        let joinResponse = try decoder.decode(JoinRitualResponse.self, from: data)
 
         let ritual = convertJoinResponseToRitual(joinResponse.ritual)
         let currentStep = joinResponse.currentStep.map { step in
@@ -121,13 +133,11 @@ final class RitualService: ObservableObject {
     func completeRitual(ritualId: UUID) async throws -> (attendeeCount: Int, recapPostId: UUID?) {
         let request = CompleteRitualRequest(ritualId: ritualId.uuidString)
 
-        let data: Data = try await supabase.functions.invoke(
+        // Use the generic invoke that decodes directly to the response type
+        let completeResponse: CompleteRitualResponse = try await supabase.functions.invoke(
             "complete-circle-ritual",
             options: .init(body: request)
         )
-
-        let decoder = JSONDecoder()
-        let completeResponse = try decoder.decode(CompleteRitualResponse.self, from: data)
 
         return (completeResponse.ritual.attendeeCount, completeResponse.recapPostId)
     }
@@ -139,13 +149,11 @@ final class RitualService: ObservableObject {
             content: content
         )
 
-        let data: Data = try await supabase.functions.invoke(
+        // Use the generic invoke that decodes directly to the response type
+        let addResponse: AddReflectionResponse = try await supabase.functions.invoke(
             "add-ritual-reflection",
             options: .init(body: request)
         )
-
-        let decoder = JSONDecoder()
-        let addResponse = try decoder.decode(AddReflectionResponse.self, from: data)
 
         return RitualReflection(
             id: addResponse.reflection.id,
@@ -363,7 +371,7 @@ final class RitualService: ObservableObject {
             }
         }
 
-        await channel.subscribe()
+        try? await channel.subscribeWithError()
         self.realtimeChannel = channel
     }
 

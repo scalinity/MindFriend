@@ -372,7 +372,7 @@ public struct BreathingOrbFallbackView: View {
         let interval: TimeInterval = 0.1
 
         phaseTimer?.invalidate()
-        phaseTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak exerciseService] timer in
+        phaseTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { timer in
             guard !self.isExerciseEnded else {
                 timer.invalidate()
                 return
@@ -409,7 +409,7 @@ public struct BreathingOrbFallbackView: View {
         guard !isExerciseEnded else { return }
         
         sessionTimer?.invalidate()
-        sessionTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak exerciseService] timer in
+        sessionTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { timer in
             guard !self.isExerciseEnded else {
                 timer.invalidate()
                 return

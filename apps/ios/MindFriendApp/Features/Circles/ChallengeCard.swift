@@ -149,7 +149,7 @@ struct ChallengeCard: View {
             do {
                 try await container.supabaseDataService.completeChallenge(id: challenge.id)
                 await MainActor.run {
-                    withAnimation {
+                    _ = withAnimation {
                         localCompletions.insert(currentUserId)
                     }
                     isCompleting = false

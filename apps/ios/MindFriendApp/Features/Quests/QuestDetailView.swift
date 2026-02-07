@@ -68,6 +68,7 @@ struct QuestDetailView: View {
                 quest: quest,
                 reflectionNote: $reflectionNote,
                 rating: $rating,
+                isCompleting: $isCompleting,
                 onComplete: completeQuest
             )
         }
@@ -78,6 +79,7 @@ struct QuestDetailView: View {
 
     private func completeQuest() {
         Log.quests.debug("[Quest] completeQuest() called")
+        guard !isCompleting else { return }
         isCompleting = true
 
         Task { @MainActor in
@@ -550,6 +552,7 @@ struct QuestReflectionSheet: View {
     let quest: Quest
     @Binding var reflectionNote: String
     @Binding var rating: Int
+    @Binding var isCompleting: Bool
     let onComplete: () -> Void
 
     @Environment(\.dismiss) var dismiss
@@ -594,14 +597,21 @@ struct QuestReflectionSheet: View {
                         Log.quests.debug("[Quest] Save & Complete button tapped")
                         onComplete()
                     } label: {
-                        Text("Save & Complete")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.accentColor)
-                            .foregroundStyle(.white)
-                            .cornerRadius(12)
+                        HStack(spacing: 8) {
+                            if isCompleting {
+                                ProgressView()
+                                    .tint(.white)
+                            }
+                            Text(isCompleting ? "Completing..." : "Save & Complete")
+                        }
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(isCompleting ? Color.accentColor.opacity(0.6) : Color.accentColor)
+                        .foregroundStyle(.white)
+                        .cornerRadius(12)
                     }
+                    .disabled(isCompleting)
                 }
                 .padding()
             }

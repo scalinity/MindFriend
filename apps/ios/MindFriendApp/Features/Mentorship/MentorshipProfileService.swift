@@ -44,7 +44,7 @@ final class MentorshipProfileService: ObservableObject {
         error = nil
 
         do {
-            try await dataService.updateProfile(isMentorAvailable: available)
+            _ = try await dataService.updateProfile(isMentorAvailable: available)
             if var currentProfile = profile {
                 currentProfile.isMentorAvailable = available
                 profile = currentProfile

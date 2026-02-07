@@ -182,14 +182,6 @@ struct TriggerContext: Codable {
         let needsArmor: Bool
         let startDate: String
         let hasTitle: Bool
-        
-        enum CodingKeys: String, CodingKey {
-            case id, classification
-            case stressScore = "stress_score"
-            case needsArmor = "needs_armor"
-            case startDate = "start_date"
-            case hasTitle = "has_title"
-        }
     }
 
     enum CodingKeys: String, CodingKey {
@@ -276,14 +268,6 @@ struct SanitizedTriggerContext: Codable {
     let recentMood: Int?
     let upcomingEvents: [TriggerContext.SanitizedEvent]?
     let timingConfidence: Double?
-    
-    enum CodingKeys: String, CodingKey {
-        case biometrics
-        case timeOfDay = "time_of_day"
-        case recentMood = "recent_mood"
-        case upcomingEvents = "upcoming_events"
-        case timingConfidence = "timing_confidence"
-    }
 }
 
 struct CheckTriggersRequest: Codable {
@@ -296,12 +280,6 @@ struct CheckTriggersResponse: Codable {
     let intervention: MicroMomentTemplate?
     let contextMessage: String?
     let suppressionReason: String?
-
-    enum CodingKeys: String, CodingKey {
-        case shouldTrigger = "should_trigger"
-        case triggerType = "trigger_type"
-        case intervention
-        case contextMessage = "context_message"
-        case suppressionReason = "suppression_reason"
-    }
 }
+
+// ... existing code ...

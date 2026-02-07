@@ -15,9 +15,9 @@ final class InsightLabService: ObservableObject {
     // JSON decoder configured for ISO8601 dates
     private let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         decoder.dateDecodingStrategy = .custom { decoder in
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
             let container = try decoder.singleValueContainer()
             let dateString = try container.decode(String.self)
 
@@ -141,7 +141,8 @@ final class InsightLabService: ObservableObject {
 
         let startResponse: StartExperimentResponse = try await supabase.functions.invoke(
             "start-insight-experiment",
-            options: FunctionInvokeOptions(body: request)
+            options: FunctionInvokeOptions(body: request),
+            decoder: decoder
         )
 
         print("[InsightLabService] Received response - experimentId: \(startResponse.experimentId), title: \(startResponse.title), days: \(startResponse.days.count)")
@@ -182,7 +183,8 @@ final class InsightLabService: ObservableObject {
 
         let recordResponse: RecordDayResponse = try await supabase.functions.invoke(
             "record-experiment-day",
-            options: FunctionInvokeOptions(body: request)
+            options: FunctionInvokeOptions(body: request),
+            decoder: decoder
         )
 
         // Update local state
@@ -217,7 +219,8 @@ final class InsightLabService: ObservableObject {
 
         return try await supabase.functions.invoke(
             "generate-experiment-report",
-            options: FunctionInvokeOptions(body: request)
+            options: FunctionInvokeOptions(body: request),
+            decoder: decoder
         )
     }
 

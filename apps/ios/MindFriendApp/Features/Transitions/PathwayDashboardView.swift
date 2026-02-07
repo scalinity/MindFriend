@@ -3,7 +3,7 @@ import SwiftUI
 struct PathwayDashboardView: View {
     @EnvironmentObject var container: DependencyContainer
     @Environment(\.dismiss) private var dismiss
-    let userPathway: UserPathway
+    @State private var userPathway: UserPathway
 
     @State private var dailyContent: DailyPathwayContent?
     @State private var isLoading = false
@@ -11,6 +11,10 @@ struct PathwayDashboardView: View {
     @State private var showDailyView = false
     @State private var showPhaseProgress = false
     @State private var showCompletion = false
+
+    init(userPathway: UserPathway) {
+        _userPathway = State(initialValue: userPathway)
+    }
 
     var body: some View {
         Group {
@@ -123,7 +127,9 @@ struct PathwayDashboardView: View {
                 }
             }
         }
-        .sheet(isPresented: $showDailyView) {
+        .sheet(isPresented: $showDailyView, onDismiss: {
+            Task { await refreshAfterCheckIn() }
+        }) {
             if let content = dailyContent {
                 NavigationStack {
                     DailyTransitionView(userPathway: userPathway, content: content)
@@ -141,14 +147,37 @@ struct PathwayDashboardView: View {
         errorMessage = nil
 
         do {
-            dailyContent = try await container.transitionService.getDailyContent(
+            let content = try await container.transitionService.getDailyContent(
                 userPathwayId: userPathway.id
             )
+            // Validate cached content matches current day; if stale, clear and refetch
+            if content.dayNumber != userPathway.currentDay {
+                container.transitionService.clearDailyContentCache(for: userPathway.id)
+                dailyContent = try await container.transitionService.getDailyContent(
+                    userPathwayId: userPathway.id
+                )
+            } else {
+                dailyContent = content
+            }
             isLoading = false
         } catch {
             isLoading = false
             errorMessage = "Failed to load daily content. Please try again."
         }
+    }
+
+    func refreshAfterCheckIn() async {
+        // Reload the user pathway to get updated current_day
+        do {
+            let pathways = try await container.transitionService.fetchActivePathways()
+            if let updated = pathways.first(where: { $0.id == userPathway.id }) {
+                userPathway = updated
+            }
+        } catch {
+            print("[PathwayDashboard] Failed to refresh pathway: \(error)")
+        }
+        // Reload daily content for the new day
+        await loadDailyContent()
     }
 }
 
@@ -176,6 +205,8 @@ struct PhaseIndicator: View {
 
             Text(phase.name)
                 .font(.caption2)
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)

@@ -155,9 +155,6 @@ final class SyncQueueManager: ObservableObject {
         defer {
             isSyncing = false
             updatePendingCount()
-            Task {
-                await saveQueue()
-            }
         }
 
         var successCount = 0
@@ -210,6 +207,9 @@ final class SyncQueueManager: ObservableObject {
         } else {
             syncStatusMessage = "\(failureCount) items failed to sync"
         }
+
+        // Save queue state after sync completes
+        await saveQueue()
     }
 
     /// Force sync now (user initiated)

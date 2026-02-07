@@ -13,7 +13,7 @@ protocol FocusModeProviding {
 /// Provides Focus Mode context
 /// Uses FocusStatusCenter on iOS 18+, falls back to manual toggle on iOS 17
 @MainActor
-final class FocusModeProvider: FocusModeProviding {
+final class FocusModeProvider: @preconcurrency FocusModeProviding {
     /// Manual DND toggle for iOS 17 users (stored in UserDefaults)
     var manualDNDEnabled: Bool {
         get { UserDefaults.standard.bool(forKey: "smartNotifications.manualDND") }

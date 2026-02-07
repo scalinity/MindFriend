@@ -70,21 +70,20 @@ struct ExperimentProgressView: View {
                 }
             }
         }
-        .confirmationDialog(
+        .alert(
             "Cancel Experiment",
-            isPresented: $showingCancelConfirmation,
-            titleVisibility: .visible
+            isPresented: $showingCancelConfirmation
         ) {
+            Button("Keep Going", role: .cancel) {}
             Button("Cancel Experiment", role: .destructive) {
                 Task {
                     await cancelExperiment()
                 }
             }
-            Button("Keep Going", role: .cancel) {}
         } message: {
             Text("Are you sure? Your progress will be lost and no report will be generated.")
         }
-        .alert("Error", isPresented: .constant(errorMessage != nil)) {
+        .alert("Error", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
             Button("OK") {
                 errorMessage = nil
             }

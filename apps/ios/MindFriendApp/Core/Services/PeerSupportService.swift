@@ -340,7 +340,7 @@ final class PeerSupportService: ObservableObject {
             filter: "session_id=eq.\(sessionId)"
         )
 
-        await channel.subscribe()
+        try? await channel.subscribeWithError()
 
         // Store task so it can be cancelled
         subscriptionTask = Task {

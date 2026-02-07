@@ -118,7 +118,7 @@ struct MyPatternsView: View {
                                         DistortionBarView(
                                             name: viewModel.distortionName(for: stat.code),
                                             count: stat.count,
-                                            percentage: stat.percentage,
+                                            percentage: stat.percentage ?? 0,
                                             color: viewModel.getDistortionColor(for: index),
                                             trend: stat.trend?.rawValue ?? "stable"
                                         )

@@ -1,6 +1,10 @@
 import WidgetKit
 import SwiftUI
 
+// MARK: - Shared Defaults (App Group for cross-process access)
+
+private let sharedDefaults = UserDefaults(suiteName: "group.com.mindfriend.app") ?? .standard
+
 // MARK: - Mood Complication
 
 struct MoodComplication: Widget {
@@ -26,12 +30,23 @@ struct MoodComplicationProvider: TimelineProvider {
     typealias Entry = MoodComplicationEntry
 
     func placeholder(in context: Context) -> MoodComplicationEntry {
-        MoodComplicationEntry(date: Date(), mood: "good", emoji: "🙂", hasLoggedToday: false, isPlaceholder: true)
+        let mood = sharedDefaults.string(forKey: "watch_today_mood_display")
+        let moodDate = sharedDefaults.object(forKey: "watch_mood_date_display") as? Date
+        let hasLoggedToday = moodDate.map { Calendar.current.isDateInToday($0) } ?? false
+
+        let entry = MoodComplicationEntry(
+            date: Date(),
+            mood: mood,
+            emoji: emojiForMood(mood),
+            hasLoggedToday: hasLoggedToday,
+            isPlaceholder: true
+        )
+        return entry
     }
 
     func getSnapshot(in context: Context, completion: @escaping (MoodComplicationEntry) -> Void) {
-        let mood = UserDefaults.standard.string(forKey: "watch_today_mood")
-        let moodDate = UserDefaults.standard.object(forKey: "watch_mood_date") as? Date
+        let mood = sharedDefaults.string(forKey: "watch_today_mood_display")
+        let moodDate = sharedDefaults.object(forKey: "watch_mood_date_display") as? Date
         let hasLoggedToday = moodDate.map { Calendar.current.isDateInToday($0) } ?? false
 
         let entry = MoodComplicationEntry(
@@ -45,8 +60,8 @@ struct MoodComplicationProvider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<MoodComplicationEntry>) -> Void) {
-        let mood = UserDefaults.standard.string(forKey: "watch_today_mood")
-        let moodDate = UserDefaults.standard.object(forKey: "watch_mood_date") as? Date
+        let mood = sharedDefaults.string(forKey: "watch_today_mood_display")
+        let moodDate = sharedDefaults.object(forKey: "watch_mood_date_display") as? Date
         let hasLoggedToday = moodDate.map { Calendar.current.isDateInToday($0) } ?? false
 
         let entry = MoodComplicationEntry(

@@ -22,9 +22,10 @@ SELECT cron.schedule(
   '0 2 * * *',                            -- Schedule: 2 AM UTC daily
   $$
   SELECT net.http_post(
-    url := 'https://***REMOVED***/functions/v1/aggregate-efficacy-profiles',
+    -- Replace YOUR_PROJECT_REF with your Supabase project reference
+    url := 'https://YOUR_PROJECT_REF.supabase.co/functions/v1/aggregate-efficacy-profiles',
     headers := jsonb_build_object(
-      'Authorization', 'Bearer 6b65582b222e549585cfa8d26dc45c54f385f768db28dba3f6ba3e70ebe573aa',
+      'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key', true),
       'Content-Type', 'application/json'
     )
   ) as request_id;

@@ -133,7 +133,35 @@ Deno.serve(async (req) => {
     // Remove user from circles they're a member of (not owner)
     await supabaseAdmin.from("circle_members").delete().eq("user_id", userId);
 
-    // 7. Delete the auth user - this cascades to profiles and most other data
+    // 7. Clean up Storage objects for the user
+    const storageBuckets = [
+      "profile-pictures",
+      "creative-works",
+      "capsules",
+      "voice-synthesis",
+      "audio",
+    ];
+    for (const bucket of storageBuckets) {
+      try {
+        const { data: files } = await supabaseAdmin.storage
+          .from(bucket)
+          .list(userId);
+        if (files && files.length > 0) {
+          const filePaths = files.map(
+            (f: { name: string }) => `${userId}/${f.name}`,
+          );
+          await supabaseAdmin.storage.from(bucket).remove(filePaths);
+          log.info(`Cleaned up ${files.length} files from ${bucket}`);
+        }
+      } catch (storageError) {
+        // Log but don't fail - some buckets may not have user files
+        log.warn(`Storage cleanup failed for ${bucket}`, {
+          error: String(storageError),
+        });
+      }
+    }
+
+    // 8. Delete the auth user - this cascades to profiles and most other data
     const { error: deleteAuthError } =
       await supabaseAdmin.auth.admin.deleteUser(userId);
 

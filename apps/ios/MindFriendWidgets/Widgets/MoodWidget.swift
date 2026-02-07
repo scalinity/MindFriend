@@ -221,6 +221,12 @@ struct LogMoodIntent: AppIntent {
 
     @Parameter(title: "Mood") var mood: String
 
+    init() {}
+
+    init(mood: String) {
+        self.mood = mood
+    }
+
     func perform() async throws -> some IntentResult {
         // Update mood in SharedDataStore
         let score = WidgetMoodHelper.score(for: mood)

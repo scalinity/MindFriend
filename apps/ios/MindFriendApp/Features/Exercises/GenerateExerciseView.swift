@@ -3,8 +3,9 @@ import SwiftUI
 /// View for generating a new personalized exercise
 struct GenerateExerciseView: View {
     @StateObject private var viewModel: GenerateExerciseViewModel
+    @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
-    
+
     let container: DependencyContainer
 
     init(container: DependencyContainer) {
@@ -96,7 +97,14 @@ struct GenerateExerciseView: View {
                     }
 
                     // Generate button
-                    Button(action: { Task { await viewModel.generateExercise() } }) {
+                    Button(action: {
+                        let isPremium = appState.entitlements.tier == .premium
+                        if isPremium || viewModel.canGenerate {
+                            Task { await viewModel.generateExercise() }
+                        } else {
+                            appState.showPaywall = true
+                        }
+                    }) {
                         if viewModel.isGenerating {
                             HStack {
                                 ProgressView()
@@ -108,7 +116,7 @@ struct GenerateExerciseView: View {
                             .background(Color.blue.opacity(0.8))
                             .foregroundStyle(.white)
                             .cornerRadius(12)
-                        } else {
+                        } else if appState.entitlements.tier == .premium || viewModel.canGenerate {
                             Text("Generate Exercise for Me")
                                 .font(.headline)
                                 .frame(maxWidth: .infinity)
@@ -116,20 +124,28 @@ struct GenerateExerciseView: View {
                                 .background(Color.blue)
                                 .foregroundStyle(.white)
                                 .cornerRadius(12)
+                        } else {
+                            Text("Upgrade to Generate")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.orange)
+                                .foregroundStyle(.white)
+                                .cornerRadius(12)
                         }
                     }
-                    .disabled(viewModel.isGenerating || !viewModel.canGenerate)
+                    .disabled(viewModel.isGenerating)
                     .padding(.top, 8)
 
-                    // Quota status
-                    if let quota = viewModel.quotaStatus {
+                    // Quota status (free users only)
+                    if appState.entitlements.tier != .premium, let quota = viewModel.quotaStatus {
                         HStack {
-                            Image(systemName: quota.isPremium ? "crown.fill" : "sparkles")
-                                .foregroundColor(quota.isPremium ? .yellow : .blue)
+                            Image(systemName: "sparkles")
+                                .foregroundColor(.blue)
 
-                            Text(quota.isPremium
-                                ? "Premium: Unlimited generations"
-                                : "\(quota.remaining) of \(quota.limit) generations remaining today")
+                            Text(quota.remaining > 0
+                                ? "1 free generation per month"
+                                : "Free generation used this month")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
@@ -269,6 +285,7 @@ class GenerateExerciseViewModel: ObservableObject {
                 let duration: Int
                 let theme: String?
                 let customPrompt: String?
+                let timezone: String
             }
             
             // Response matches Edge Function generate-content response
@@ -292,7 +309,8 @@ class GenerateExerciseViewModel: ObservableObject {
                 params: GenerateContentParams(
                     duration: duration,
                     theme: includeMood ? mood.rawValue : nil,
-                    customPrompt: nil
+                    customPrompt: nil,
+                    timezone: TimeZone.current.identifier
                 )
             )
 
@@ -339,7 +357,7 @@ class GenerateExerciseViewModel: ObservableObject {
         } catch {
             // Fall back to default quota on error
             await MainActor.run {
-                quotaStatus = QuotaStatus(used: 0, limit: 3, remaining: 3, isPremium: false)
+                quotaStatus = QuotaStatus(used: 0, limit: 1, remaining: 1, isPremium: false)
             }
         }
     }

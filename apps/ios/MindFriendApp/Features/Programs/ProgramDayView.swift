@@ -231,7 +231,7 @@ struct ProgramDayView: View {
         defer { isCompleting = false }
 
         do {
-            let contentDict = Dictionary(uniqueKeysWithValues:
+            let _ = Dictionary(uniqueKeysWithValues:
                 completedContent.map { ($0, true) }
             )
 

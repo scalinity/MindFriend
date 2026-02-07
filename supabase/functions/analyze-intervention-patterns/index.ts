@@ -5,6 +5,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { logSanitized } from "../_shared/logging-sanitization.ts";
+import { authenticateRequest, isAuthError } from "../_shared/auth.ts";
 
 /**
  * LOGGING POLICY:
@@ -47,19 +48,6 @@ interface TimingPreferences {
   windowDays: number;
 }
 
-// Singleton Supabase client
-let supabaseClient: ReturnType<typeof createClient> | null = null;
-
-function getSupabaseClient() {
-  if (!supabaseClient) {
-    supabaseClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-  }
-  return supabaseClient;
-}
-
 // Retry helper
 async function withRetry<T>(
   operation: () => Promise<T>,
@@ -88,31 +76,13 @@ serve(async (req) => {
   }
 
   try {
-    // Authenticate user
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Missing authorization header" }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+    // Authenticate using shared helper (creates fresh client per request)
+    const authResult = await authenticateRequest(req);
+    if (isAuthError(authResult)) {
+      return authResult.response;
     }
 
-    const supabase = getSupabaseClient();
-
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
-
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const { user, supabaseAdmin: supabase } = authResult;
 
     const userId = user.id;
 

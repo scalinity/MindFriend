@@ -99,7 +99,7 @@ final class SocialVitalityEngine: ObservableObject {
             throw EngineError.unauthorized
         }
 
-        let response = try await supabase
+        _ = try await supabase
             .from("relationship_correlations")
             .select("""
                 id,
@@ -168,7 +168,7 @@ final class SocialVitalityEngine: ObservableObject {
 
     /// Update peer alert preferences
     func updateAlertPreferences(_ preferences: PeerAlertPreferences) async throws {
-        guard let userId = supabase.auth.currentUser?.id else {
+        guard let _ = supabase.auth.currentUser?.id else {
             throw EngineError.unauthorized
         }
 

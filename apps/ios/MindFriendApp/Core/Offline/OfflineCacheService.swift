@@ -33,11 +33,24 @@ actor OfflineCacheService {
 
         try? FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
 
+        // Set file protection to complete until first unlock for data-at-rest protection
+        try? (cacheDirectory as NSURL).setResourceValue(
+            URLFileProtection.completeUntilFirstUserAuthentication,
+            forKey: .fileProtectionKey
+        )
+
         encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
 
         decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
+    }
+
+    /// Clear all cached data (call on user sign-out to prevent data leaking between accounts)
+    func clearAll() {
+        memoryCache.removeAll()
+        try? fileManager.removeItem(at: cacheDirectory)
+        try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
     }
 
     // MARK: - Generic Cache Operations

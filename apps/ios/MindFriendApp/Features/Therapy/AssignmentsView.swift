@@ -158,7 +158,7 @@ struct AssignmentRow: View {
                         .foregroundColor(assignment.status == .completed ? .secondary : .primary)
 
                     if let therapist = assignment.connection?.therapist {
-                        Text("Assigned by \(therapist.displayName)")
+                        Text("Assigned by \(therapist.displayName ?? "")")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                     }

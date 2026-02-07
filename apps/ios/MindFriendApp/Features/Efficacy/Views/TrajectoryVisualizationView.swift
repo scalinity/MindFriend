@@ -89,7 +89,7 @@ struct TrajectoryVisualizationView: View {
                 .opacity(0.3)
 
                 // Highlight breakthrough points
-                if let breakthrough = detectBreakthrough(at: index) {
+                if let _ = detectBreakthrough(at: index) {
                     PointMark(
                         x: .value("Time", point.secondsFromStart),
                         y: .value("Score", point.compositeScore)
