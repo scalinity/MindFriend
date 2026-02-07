@@ -28,7 +28,7 @@ final class CascadeDetector {
         }
 
         // Check for deterioration pattern (moving toward dorsal)
-        let stateValues = windowStates.map { $0.state.polyvagalValue }
+        let _ = windowStates.map { $0.state.polyvagalValue }
 
         // Cascade = consistent movement toward lower polyvagal values (toward dorsal)
         var transitionCount = 0

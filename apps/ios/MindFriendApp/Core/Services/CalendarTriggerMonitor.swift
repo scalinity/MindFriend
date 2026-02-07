@@ -36,7 +36,7 @@ private enum CalendarConstants {
 // MARK: - Implementation
 
 @MainActor
-final class CalendarTriggerMonitor: CalendarTriggerMonitoring {
+final class CalendarTriggerMonitor: @preconcurrency CalendarTriggerMonitoring {
     // MARK: - Properties
 
     /// Event store - recreated after permission changes to ensure fresh state
@@ -83,7 +83,10 @@ final class CalendarTriggerMonitor: CalendarTriggerMonitoring {
                 return await withCheckedContinuation { continuation in
                     eventStore.requestAccess(to: .event) { granted, error in
                         if let error = error {
-                            self.lastPermissionError = error.localizedDescription
+                            let errorMessage = error.localizedDescription
+                            Task { @MainActor in
+                                self.lastPermissionError = errorMessage
+                            }
                         }
                         if granted {
                             // Refresh event store on main thread
@@ -232,14 +235,10 @@ final class CalendarTriggerMonitor: CalendarTriggerMonitoring {
             .execute()
             .value
 
-        let encoder = JSONEncoder()
-        let configData = try encoder.encode(config)
-        let configDict = try JSONSerialization.jsonObject(with: configData) as? [String: Any] ?? [:]
-
         if let existingTrigger = triggers.first {
             // Update existing
             struct TriggerUpdate: Encodable {
-                let triggerConfig: [String: Any]
+                let triggerConfig: CalendarTriggerConfig
                 let isActive: Bool
                 let updatedAt: String
 
@@ -248,24 +247,10 @@ final class CalendarTriggerMonitor: CalendarTriggerMonitoring {
                     case isActive = "is_active"
                     case updatedAt = "updated_at"
                 }
-
-                func encode(to encoder: Encoder) throws {
-                    var container = encoder.container(keyedBy: CodingKeys.self)
-                    let jsonData = try JSONSerialization.data(withJSONObject: triggerConfig)
-                    guard let jsonString = String(data: jsonData, encoding: .utf8) else {
-                        throw EncodingError.invalidValue(
-                            triggerConfig,
-                            EncodingError.Context(codingPath: [CodingKeys.triggerConfig], debugDescription: "Failed to convert JSON data to UTF-8 string")
-                        )
-                    }
-                    try container.encode(jsonString, forKey: .triggerConfig)
-                    try container.encode(isActive, forKey: .isActive)
-                    try container.encode(updatedAt, forKey: .updatedAt)
-                }
             }
 
             let update = TriggerUpdate(
-                triggerConfig: configDict,
+                triggerConfig: config,
                 isActive: !config.enabledCalendarIds.isEmpty,
                 updatedAt: ISO8601DateFormatter().string(from: Date())
             )
@@ -280,7 +265,7 @@ final class CalendarTriggerMonitor: CalendarTriggerMonitoring {
             struct TriggerInsert: Encodable {
                 let userId: String
                 let triggerType: String
-                let triggerConfig: String
+                let triggerConfig: CalendarTriggerConfig
                 let isActive: Bool
                 let priority: Int
 
@@ -293,17 +278,12 @@ final class CalendarTriggerMonitor: CalendarTriggerMonitoring {
                 }
             }
 
-            let jsonData = try JSONSerialization.data(withJSONObject: configDict)
-            guard let jsonString = String(data: jsonData, encoding: .utf8) else {
-                throw CalendarError.encodingFailed("Failed to convert calendar config to UTF-8 string")
-            }
-
             let insert = TriggerInsert(
                 userId: userId.uuidString,
                 triggerType: "calendar",
-                triggerConfig: jsonString,
+                triggerConfig: config,
                 isActive: !config.enabledCalendarIds.isEmpty,
-                priority: 100 // Higher than time-based (0), lower than biometric (200)
+                priority: 100
             )
 
             try await supabase
@@ -341,9 +321,11 @@ final class CalendarTriggerMonitor: CalendarTriggerMonitoring {
             .value
 
         if let trigger = triggers.first {
-            // Decode config from JSONB
+            // Decode config from JSONB - use JSONEncoder since triggerConfig is [String: AnyCodableValue]
+            // JSONSerialization can't handle custom AnyCodableValue enums
+            let encoder = JSONEncoder()
+            let jsonData = try encoder.encode(trigger.triggerConfig)
             let decoder = JSONDecoder()
-            let jsonData = try JSONSerialization.data(withJSONObject: trigger.triggerConfig)
             let config = try decoder.decode(CalendarTriggerConfig.self, from: jsonData)
             cachedConfig = config
             return config

@@ -8,11 +8,11 @@ DECLARE
     v_member_count INT := 0;
     v_mock_names TEXT[] := ARRAY['Sarah', 'Mike', 'Emma', 'Alex'];
 BEGIN
-    -- Get the main user ID for b@gmail.com
-    SELECT id INTO v_main_user_id FROM auth.users WHERE email = 'b@gmail.com';
+    -- Get the main user ID for beta-tester@example.com
+    SELECT id INTO v_main_user_id FROM auth.users WHERE email = 'beta-tester@example.com';
 
     IF v_main_user_id IS NULL THEN
-        RAISE NOTICE 'User b@gmail.com not found, skipping';
+        RAISE NOTICE 'User beta-tester@example.com not found, skipping';
         RETURN;
     END IF;
 

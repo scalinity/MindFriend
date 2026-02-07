@@ -19,12 +19,11 @@ actor DailyBriefingService {
     /// JSON decoder configured for ISO 8601 dates (matching Supabase timestamp format)
     private static let iso8601Decoder: JSONDecoder = {
         let decoder = JSONDecoder()
-        let fractional = ISO8601DateFormatter()
-        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let whole = ISO8601DateFormatter()
-        whole.formatOptions = [.withInternetDateTime]
-
         decoder.dateDecodingStrategy = .custom { decoder in
+            let fractional = ISO8601DateFormatter()
+            fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            let whole = ISO8601DateFormatter()
+            whole.formatOptions = [.withInternetDateTime]
             let container = try decoder.singleValueContainer()
             let string = try container.decode(String.self)
             if let date = fractional.date(from: string) { return date }

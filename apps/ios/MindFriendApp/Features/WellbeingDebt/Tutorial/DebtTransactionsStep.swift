@@ -121,7 +121,7 @@ struct DebtTransactionsStep: View {
     private func animateItems() {
         let allItems = deposits.map(\.label) + withdrawals.map(\.label)
         for (index, item) in allItems.enumerated() {
-            withAnimation(.easeOut(duration: 0.3).delay(Double(index) * 0.1)) {
+            _ = withAnimation(.easeOut(duration: 0.3).delay(Double(index) * 0.1)) {
                 visibleItems.insert(item)
             }
         }

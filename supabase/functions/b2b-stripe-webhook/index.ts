@@ -15,7 +15,7 @@ const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET")!;
-const allowTestBypass = Deno.env.get("TEST_WEBHOOK_BYPASS_AUTH") === "true";
+// Removed TEST_WEBHOOK_BYPASS_AUTH - signature verification must never be bypassed
 
 serve(async (req) => {
   try {
@@ -31,19 +31,15 @@ serve(async (req) => {
     const body = await req.text();
     let event: Stripe.Event;
 
-    if (allowTestBypass) {
-      console.log("TEST_WEBHOOK_BYPASS_AUTH enabled: skipping Stripe signature verification");
-      event = JSON.parse(body) as Stripe.Event;
-    } else {
-      try {
-        event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
-      } catch (err) {
-        console.error("Webhook signature verification failed:", err);
-        return new Response(JSON.stringify({ error: "Invalid signature" }), {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
+    // Always verify webhook signature - never bypass in production
+    try {
+      event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+    } catch (err) {
+      console.error("Webhook signature verification failed:", err);
+      return new Response(JSON.stringify({ error: "Invalid signature" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);

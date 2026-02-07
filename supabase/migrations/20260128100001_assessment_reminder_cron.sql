@@ -46,7 +46,8 @@ BEGIN
             '0 9 * * *',
             $cron$
             SELECT net.http_post(
-                url := 'https://***REMOVED***/functions/v1/send-assessment-reminders',
+                -- Replace YOUR_PROJECT_REF with your Supabase project reference
+                url := 'https://YOUR_PROJECT_REF.supabase.co/functions/v1/send-assessment-reminders',
                 headers := jsonb_build_object(
                     'Content-Type', 'application/json',
                     'x-cron-secret', public.get_cron_secret()

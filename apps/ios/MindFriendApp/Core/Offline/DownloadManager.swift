@@ -151,26 +151,26 @@ final class DownloadManager: NSObject, ObservableObject {
 
     /// Cancel a download
     func cancelDownload(taskId: UUID) {
+        // Capture MainActor-isolated data before entering non-isolated closure
+        let taskMap = self.backgroundTaskMap
+
         // Find and cancel the URLSession task
         urlSession.getAllTasks { [weak self] tasks in
-            guard let self = self else { return }
-
             // Find the task identifier for this download task ID
-            if let taskIdentifier = self.backgroundTaskMap.first(where: { $0.value == taskId })?.key,
+            if let taskIdentifier = taskMap.first(where: { $0.value == taskId })?.key,
                let task = tasks.first(where: { $0.taskIdentifier == taskIdentifier }) {
                 task.cancel()
 
-                Task { @MainActor in
-                    self.activeTasks.removeAll { $0.id == taskId }
-                    // Remove using the correct key (taskIdentifier), not taskId.hashValue
-                    self.backgroundTaskMap.removeValue(forKey: taskIdentifier)
-                    await self.saveActiveTasks()
+                Task { @MainActor [weak self] in
+                    self?.activeTasks.removeAll { $0.id == taskId }
+                    self?.backgroundTaskMap.removeValue(forKey: taskIdentifier)
+                    await self?.saveActiveTasks()
                 }
             } else {
                 // Task not found in map, just clean up activeTasks
-                Task { @MainActor in
-                    self.activeTasks.removeAll { $0.id == taskId }
-                    await self.saveActiveTasks()
+                Task { @MainActor [weak self] in
+                    self?.activeTasks.removeAll { $0.id == taskId }
+                    await self?.saveActiveTasks()
                 }
             }
         }
@@ -181,18 +181,20 @@ final class DownloadManager: NSObject, ObservableObject {
         urlSession.getAllTasks { [weak self] tasks in
             guard let self = self else { return }
 
-            if let taskIdentifier = self.backgroundTaskMap.first(where: { $0.value == taskId })?.key,
-               let downloadTask = tasks.first(where: { $0.taskIdentifier == taskIdentifier }) as? URLSessionDownloadTask {
+            MainActor.assumeIsolated {
+                if let taskIdentifier = self.backgroundTaskMap.first(where: { $0.value == taskId })?.key,
+                   let downloadTask = tasks.first(where: { $0.taskIdentifier == taskIdentifier }) as? URLSessionDownloadTask {
 
-                downloadTask.cancel(byProducingResumeData: { resumeData in
-                    Task { @MainActor in
-                        if let index = self.activeTasks.firstIndex(where: { $0.id == taskId }) {
-                            self.activeTasks[index].status = .paused
-                            self.activeTasks[index].resumeData = resumeData
+                    downloadTask.cancel(byProducingResumeData: { resumeData in
+                        Task { @MainActor in
+                            if let index = self.activeTasks.firstIndex(where: { $0.id == taskId }) {
+                                self.activeTasks[index].status = .paused
+                                self.activeTasks[index].resumeData = resumeData
+                            }
+                            await self.saveActiveTasks()
                         }
-                        await self.saveActiveTasks()
-                    }
-                })
+                    })
+                }
             }
         }
     }
@@ -435,11 +437,25 @@ extension DownloadManager: URLSessionDownloadDelegate {
         downloadTask: URLSessionDownloadTask,
         didFinishDownloadingTo location: URL
     ) {
+        // CRITICAL: The system deletes the temp file at `location` when this method returns.
+        // We must copy it synchronously before dispatching to MainActor.
+        let tempCopy = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension(location.pathExtension)
+        do {
+            try FileManager.default.copyItem(at: location, to: tempCopy)
+        } catch {
+            print("[DownloadManager] Failed to copy temp download file: \(error)")
+            return
+        }
+
         Task { @MainActor in
             await handleDownloadCompletion(
                 taskIdentifier: downloadTask.taskIdentifier,
-                location: location
+                location: tempCopy
             )
+            // Clean up our temp copy after processing
+            try? FileManager.default.removeItem(at: tempCopy)
         }
     }
 

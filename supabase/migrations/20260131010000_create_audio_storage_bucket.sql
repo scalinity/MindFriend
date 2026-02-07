@@ -14,12 +14,18 @@ CREATE POLICY "Anyone can read audio files"
 ON storage.objects FOR SELECT
 USING (bucket_id = 'audio');
 
--- Allow service role to upload audio files (Edge Functions use service role)
-CREATE POLICY "Service role can upload audio files"
+-- Allow authenticated users to upload audio files to their own folder only
+CREATE POLICY "Users can upload audio to own folder"
 ON storage.objects FOR INSERT
-WITH CHECK (bucket_id = 'audio');
+WITH CHECK (
+  bucket_id = 'audio'
+  AND auth.uid()::text = (storage.foldername(name))[1]
+);
 
--- Allow service role to update audio files
-CREATE POLICY "Service role can update audio files"
+-- Allow authenticated users to update their own audio files
+CREATE POLICY "Users can update own audio files"
 ON storage.objects FOR UPDATE
-USING (bucket_id = 'audio');
+USING (
+  bucket_id = 'audio'
+  AND auth.uid()::text = (storage.foldername(name))[1]
+);

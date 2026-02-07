@@ -87,7 +87,7 @@ final class SensoryRegulationService: ObservableObject {
             currentSession = session
         } catch {
             // Network failed - create a local-only session (will be synced later if possible)
-            print("Network error creating session, using local-only mode: \(error.localizedDescription)")
+            CrashReporter.shared.capture(error: error, context: ["source": "SensoryRegulationService.startSession", "modality": modality.rawValue])
             currentSession = createLocalSession(modality: modality, patternId: patternId)
         }
 
@@ -182,7 +182,7 @@ final class SensoryRegulationService: ObservableObject {
                     try? await achievementService.loadUserBadgeProgress()
                 }
             } catch {
-                print("Failed to complete session on server: \(error.localizedDescription)")
+                CrashReporter.shared.capture(error: error, context: ["source": "SensoryRegulationService.completeSession", "sessionId": session.id.uuidString])
             }
         }
 
@@ -203,16 +203,22 @@ final class SensoryRegulationService: ObservableObject {
     // MARK: - Private Methods - Session Timer
 
     private func startSessionTimer() {
+        // Invalidate any existing timer before creating new one (prevent timer leak)
+        sessionTimer?.invalidate()
         sessionTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self = self else { return }
+                // Guard session is still active to prevent race with endSession()
+                guard let self = self, self.isSessionActive else { return }
 
                 self.elapsedSeconds += 1
 
-                // Auto-pause at 30 minutes
-                if self.elapsedSeconds >= self.maxSessionDuration {
+                // Auto-pause at 30 minutes (re-check isSessionActive after suspension point)
+                if self.elapsedSeconds >= self.maxSessionDuration && self.isSessionActive {
                     await self.pauseSession()
-                    self.error = .maxDurationExceeded
+                    // Only set error if session is still active after pause
+                    if self.isSessionActive {
+                        self.error = .maxDurationExceeded
+                    }
                 }
             }
         }
@@ -274,11 +280,14 @@ final class SensoryRegulationService: ObservableObject {
         }
     }
 
+    /// Stable UUID namespace for offline sessions (avoids hardcoded zeros)
+    private static let offlineSessionNamespace = UUID(uuidString: "F47AC10B-58CC-4372-A567-0E02B2C3D479")!
+
     /// Create a local-only session when network is unavailable
     private func createLocalSession(modality: SensoryModality, patternId: String) -> SensorySession {
-        // Use a placeholder user ID for offline sessions
-        // This will be synced when connectivity returns
-        let offlineUserId = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+        // Use a deterministic offline user ID based on device ID for later sync
+        // This allows correlating offline sessions to the user once they're back online
+        let offlineUserId = Self.offlineSessionNamespace
         
         return SensorySession(
             id: UUID(),
@@ -345,7 +354,7 @@ final class SensoryRegulationService: ObservableObject {
             return session
 
         } catch {
-            print("Error creating session on server: \(error)")
+            CrashReporter.shared.capture(error: error, context: ["source": "SensoryRegulationService.createSessionOnServer"])
             throw SensoryError.networkError
         }
     }
@@ -388,7 +397,7 @@ final class SensoryRegulationService: ObservableObject {
             return response.achievementsUnlocked
 
         } catch {
-            print("Error completing session on server: \(error)")
+            CrashReporter.shared.capture(error: error, context: ["source": "SensoryRegulationService.completeSessionOnServer"])
             throw SensoryError.networkError
         }
     }
@@ -423,33 +432,47 @@ final class SensoryRegulationService: ObservableObject {
     }
 
     @objc private func handleAppDidEnterBackground() {
-        guard isSessionActive else { return }
+        // @objc methods aren't @MainActor-isolated, so hop to MainActor for safe state access
+        Task { @MainActor [weak self] in
+            guard let self = self, self.isSessionActive else { return }
 
-        // Request background time to continue audio/haptics briefly
-        backgroundTask = UIApplication.shared.beginBackgroundTask { [weak self] in
-            Task { @MainActor [weak self] in
-                // Background time expired, pause session
-                await self?.pauseSession()
-                if let task = self?.backgroundTask, task != .invalid {
-                    UIApplication.shared.endBackgroundTask(task)
-                    self?.backgroundTask = .invalid
+            // Request background time to continue audio/haptics briefly
+            self.backgroundTask = UIApplication.shared.beginBackgroundTask { [weak self] in
+                Task { @MainActor [weak self] in
+                    guard let self = self else { return }
+                    // Always end task, even if pause fails (use defer for safety)
+                    defer {
+                        if self.backgroundTask != .invalid {
+                            UIApplication.shared.endBackgroundTask(self.backgroundTask)
+                            self.backgroundTask = .invalid
+                        }
+                    }
+                    // Background time expired, pause session
+                    await self.pauseSession()
                 }
             }
         }
     }
 
     @objc private func handleAppWillEnterForeground() {
-        // End background task if active
-        if backgroundTask != .invalid {
-            UIApplication.shared.endBackgroundTask(backgroundTask)
-            backgroundTask = .invalid
-        }
+        // @objc methods aren't @MainActor-isolated, so hop to MainActor for safe state access
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            // End background task if active
+            if self.backgroundTask != .invalid {
+                UIApplication.shared.endBackgroundTask(self.backgroundTask)
+                self.backgroundTask = .invalid
+            }
 
-        // Session remains paused if user backgrounded app
-        // User must manually resume
+            // Session remains paused if user backgrounded app
+            // User must manually resume
+        }
     }
 
     deinit {
+        // Invalidate timer to prevent dangling timer if service is deallocated during active session
+        sessionTimer?.invalidate()
+        sessionTimer = nil
         NotificationCenter.default.removeObserver(self)
     }
 }

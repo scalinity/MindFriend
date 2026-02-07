@@ -133,7 +133,7 @@ final class CopingKitsViewModel: ObservableObject {
     }
 
     func nextStep(result: [String: String]? = nil) async {
-        guard let kit = selectedKit,
+        guard let _ = selectedKit,
               let progressId = currentProgressId else { return }
 
         isCompleting = true

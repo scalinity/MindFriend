@@ -30,7 +30,7 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>202601311729</string>
+	<string>202602032156</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSAppTransportSecurity</key>
@@ -46,36 +46,36 @@
 			</dict>
 		</dict>
 	</dict>
-	<key>NSCalendarsUsageDescription</key>
-	<string>MindFriend can add wellness reminders and quest schedules to your calendar.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>MindFriend monitors your calendar to proactively offer calming interventions before stressful events like meetings and deadlines.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>MindFriend can add wellness reminders and quest schedules to your calendar.</string>
 	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
 	<string>MindFriend can add wellness reminders and quest schedules to your calendar.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>MindFriend uses the camera to let you add photos to your journal entries and profile.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>MindFriend uses Face ID to securely unlock your private journal and mood data.</string>
-	<key>NSHealthClinicalHealthRecordsShareUsageDescription</key>
-	<string>MindFriend analyzes your sleep data to provide personalized recommendations and track your sleep quality over time.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>MindFriend analyzes your sleep data to provide personalized recommendations and track your sleep quality over time.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>MindFriend writes your logged sleep sessions to the Health app to keep your sleep data synchronized.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright 2024 MindFriend. All rights reserved.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>MindFriend uses your location to provide context-aware wellness suggestions based on your environment.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>MindFriend uses the microphone for voice journaling and guided meditation recordings.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>MindFriend needs access to your photos to let you add images to your journal entries and profile.</string>
-	<key>NSUserTrackingUsageDescription</key>
-	<string>MindFriend uses this to provide personalized wellness insights. You can opt out at any time in Settings.</string>
 	<key>SENTRY_DSN</key>
 	<string>$(SENTRY_DSN)</string>
 	<key>SUPABASE_ANON_KEY</key>
 	<string>$(SUPABASE_ANON_KEY)</string>
 	<key>SUPABASE_URL</key>
 	<string>$(SUPABASE_URL)</string>
+	<key>GOOGLE_CLIENT_ID</key>
+	<string>$(GOOGLE_CLIENT_ID)</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

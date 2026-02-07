@@ -593,7 +593,7 @@ final class EmotionAnalyzer: ObservableObject {
 
         while frameStart + frameLength <= samples.count {
             // Extract and window the frame using vDSP
-            var frame = Array(samples[frameStart..<(frameStart + frameLength)])
+            let frame = Array(samples[frameStart..<(frameStart + frameLength)])
             var windowedFrame = [Double](repeating: 0, count: frameLength)
             vDSP_vmulD(frame, 1, window, 1, &windowedFrame, 1, vDSP_Length(frameLength))
 
@@ -899,7 +899,7 @@ final class EmotionAnalyzer: ObservableObject {
 
         while frameStart + frameLength <= samples.count {
             // Extract and window the frame
-            var frame = Array(samples[frameStart..<frameStart + frameLength])
+            let frame = Array(samples[frameStart..<frameStart + frameLength])
             var windowedFrame = [Double](repeating: 0, count: frameLength)
             vDSP_vmulD(frame, 1, window, 1, &windowedFrame, 1, vDSP_Length(frameLength))
 
@@ -1043,7 +1043,7 @@ final class EmotionAnalyzer: ObservableObject {
 
         while frameStart + frameLength <= samples.count {
             // Extract and window the frame
-            var frame = Array(samples[frameStart..<frameStart + frameLength])
+            let frame = Array(samples[frameStart..<frameStart + frameLength])
             var windowedFrame = [Double](repeating: 0, count: frameLength)
             vDSP_vmulD(frame, 1, window, 1, &windowedFrame, 1, vDSP_Length(frameLength))
 
@@ -1194,9 +1194,9 @@ final class EmotionAnalyzer: ObservableObject {
         let shapeCount = outputArray.shape.count
         let count: Int
         if shapeCount >= 2 {
-            count = min(Int(truncating: outputArray.shape[1] as? NSNumber ?? NSNumber(value: emotionLabels.count)), emotionLabels.count)
+            count = min(Int(truncating: outputArray.shape[1] as NSNumber), emotionLabels.count)
         } else {
-            count = min(Int(truncating: outputArray.shape[0] as? NSNumber ?? NSNumber(value: emotionLabels.count)), emotionLabels.count)
+            count = min(Int(truncating: outputArray.shape[0] as NSNumber), emotionLabels.count)
         }
 
         for i in 0..<count {

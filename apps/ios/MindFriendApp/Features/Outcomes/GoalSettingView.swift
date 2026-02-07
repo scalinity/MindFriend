@@ -338,7 +338,7 @@ struct GoalSettingView: View {
             
             do {
                 // Call OutcomeTrackingService to save the custom goal
-                try await outcomeService.createCustomOutcomeGoal(
+                _ = try await outcomeService.createCustomOutcomeGoal(
                     assessmentTemplateId: template.id,
                     baselineScore: baselineScore,
                     targetScore: selectedTargetScore,

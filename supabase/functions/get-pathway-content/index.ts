@@ -1,13 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
 
 serve(async (req) => {
+  const origin = req.headers.get("origin") ?? "";
+  const corsHeaders = getCorsHeaders(origin);
+
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -131,14 +130,14 @@ serve(async (req) => {
     );
 
     const content = {
-      dayNumber: userPathway.current_day,
-      phaseNumber: userPathway.current_phase,
+      day_number: userPathway.current_day,
+      phase_number: userPathway.current_phase,
       theme: dailyTheme,
-      checkInPrompt,
+      check_in_prompt: checkInPrompt,
       exercises: exercises || [],
-      journalPrompt,
+      journal_prompt: journalPrompt,
       affirmation,
-      upcomingMilestone,
+      upcoming_milestone: upcomingMilestone,
     };
 
     return new Response(JSON.stringify(content), {
@@ -147,7 +146,10 @@ serve(async (req) => {
   } catch (error) {
     console.error("Error getting pathway content:", error); // Log full error server-side
     return new Response(
-      JSON.stringify({ error: "An unexpected error occurred" }),
+      JSON.stringify({
+        error: "An unexpected error occurred",
+        debug: error?.message || String(error),
+      }),
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -223,7 +225,7 @@ function findUpcomingMilestone(
     return {
       key: `week_${Math.ceil(dayInPhase / 7) + 1}`,
       name: `Week ${Math.ceil(dayInPhase / 7) + 1} Complete`,
-      daysAway: daysUntilNextWeek,
+      days_away: daysUntilNextWeek,
     };
   }
 

@@ -45,11 +45,6 @@ struct QuestChoiceView: View {
             }
             .navigationTitle("Today's Quest")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") { dismiss() }
-                }
-            }
             .navigationDestination(item: $selectedQuest) { quest in
                 QuestDetailView(quest: quest)
             }

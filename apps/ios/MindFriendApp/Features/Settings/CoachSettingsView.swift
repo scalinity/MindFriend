@@ -166,7 +166,7 @@ struct CoachSettingsView: View {
                     .disabled(viewModel.isLoading)
                 }
             }
-            .alert("Error", isPresented: .constant(viewModel.errorMessage != nil), actions: {
+            .alert("Error", isPresented: Binding(get: { viewModel.errorMessage != nil }, set: { if !$0 { viewModel.errorMessage = nil } }), actions: {
                 Button("OK") {
                     viewModel.errorMessage = nil
                 }

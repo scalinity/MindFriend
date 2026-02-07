@@ -11,9 +11,9 @@ final class DifficultyService: ObservableObject {
     private static let requestTimeoutSeconds: TimeInterval = 10 // API timeout
     private static let maxRetryAttempts: Int = 3 // Max retry attempts
     private static let overrideChangeCooldownSeconds: TimeInterval = 5 // Rate limit for override changes
-    static let initialRetryDelay: TimeInterval = 0.5 // Initial retry delay in seconds
-    static let retryExponentialBase: Double = 2.0 // Exponential backoff multiplier
-    static let nanosecondsPerSecond: UInt64 = 1_000_000_000 // ns/s conversion
+    nonisolated static let initialRetryDelay: TimeInterval = 0.5 // Initial retry delay in seconds
+    nonisolated static let retryExponentialBase: Double = 2.0 // Exponential backoff multiplier
+    nonisolated static let nanosecondsPerSecond: UInt64 = 1_000_000_000 // ns/s conversion
 
     // MARK: - Static Formatters (Performance: reused across calls)
 

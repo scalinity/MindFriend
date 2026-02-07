@@ -68,6 +68,11 @@ final class BillingService: ObservableObject {
     init(authService: SupabaseAuthService) {
         self.authService = authService
         startTransactionListener()
+        // Apple requires checking currentEntitlements at launch to catch
+        // transactions granted outside the app (renewals, family sharing, promos)
+        Task { [weak self] in
+            await self?.syncCurrentEntitlements()
+        }
     }
 
     deinit {
@@ -765,6 +770,19 @@ final class BillingService: ObservableObject {
                 } catch {
                     Log.billing.error("Transaction update error: \(error)")
                 }
+            }
+        }
+    }
+
+    /// Sync current entitlements at launch per Apple StoreKit 2 best practices.
+    /// Catches transactions granted outside the app (renewals, family sharing, promos).
+    private func syncCurrentEntitlements() async {
+        for await result in Transaction.currentEntitlements {
+            do {
+                let transaction = try checkVerified(result)
+                try await submitTransaction(transaction, jwsRepresentation: result.jwsRepresentation)
+            } catch {
+                Log.billing.error("Current entitlement sync error: \(error)")
             }
         }
     }

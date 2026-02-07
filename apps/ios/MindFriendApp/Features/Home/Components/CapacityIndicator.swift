@@ -93,7 +93,7 @@ struct CapacityIndicator: View {
         .task {
             // Auto-refresh on appear if cache expired
             if difficultyService.getCachedCapacity() == nil {
-                try? await difficultyService.refreshCapacity()
+                _ = try? await difficultyService.refreshCapacity()
             }
         }
     }

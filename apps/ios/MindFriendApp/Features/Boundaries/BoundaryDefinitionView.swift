@@ -152,12 +152,12 @@ struct BoundaryDefinitionView: View {
                 }
             }
             .task {
-                await viewModel.loadTemplates()
+                viewModel.loadTemplates()
             }
             .alert("definition.error_title", isPresented: $viewModel.showError) {
                 Button("Retry") {
                     Task {
-                        await viewModel.loadTemplates()
+                        viewModel.loadTemplates()
                     }
                 }
                 Button("Cancel", role: .cancel) {

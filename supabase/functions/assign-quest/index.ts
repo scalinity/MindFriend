@@ -834,19 +834,40 @@ serve(async (req) => {
       });
     }
 
+    // Parse request body early to determine action-specific rate limits
+    const body = await req.json().catch(() => ({}));
+    const action = body.action || "assign";
+
+    // Input validation: only allow known actions (allowlist)
+    if (!VALID_ACTIONS.has(action)) {
+      return new Response(JSON.stringify({ error: "Invalid action" }), {
+        status: 400,
+        headers,
+      });
+    }
+
     // Rate limiting for authenticated requests
-    const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MS).toISOString();
+    // check_protection uses a separate counter since it's called on every app foreground
+    const rateLimitEndpoint =
+      action === "check_protection" ? "assign_quest_check" : "assign_quest";
+    const windowStart = new Date(
+      Date.now() - RATE_LIMIT_WINDOW_MS,
+    ).toISOString();
     const { data: rateLimitResult, error: rateLimitError } =
       await supabaseAdmin.rpc("check_rate_limit", {
         p_user_id: user.id,
-        p_endpoint: "assign_quest",
+        p_endpoint: rateLimitEndpoint,
         p_window_start: windowStart,
         p_max_requests: RATE_LIMIT_MAX_REQUESTS,
         p_window_ms: RATE_LIMIT_WINDOW_MS,
       });
 
     // Fail closed on rate limit errors
-    if (rateLimitError || !rateLimitResult) {
+    // rpc() returns an array for TABLE-returning functions - extract first row
+    const rateLimitRow = Array.isArray(rateLimitResult)
+      ? rateLimitResult[0]
+      : rateLimitResult;
+    if (rateLimitError || !rateLimitRow) {
       console.error("Rate limit check failed:", rateLimitError?.message);
       return new Response(
         JSON.stringify({ error: "Service temporarily unavailable" }),
@@ -854,29 +875,19 @@ serve(async (req) => {
       );
     }
 
-    if (!rateLimitResult.allowed) {
-      console.warn(`Rate limit exceeded for user ${user.id.substring(0, 8)}...`);
+    if (!rateLimitRow.allowed) {
+      console.warn(
+        `Rate limit exceeded for user ${user.id.substring(0, 8)}... on ${rateLimitEndpoint}`,
+      );
       return new Response(
         JSON.stringify({ error: "Too many requests, please try again later" }),
         {
           status: 429,
           headers: {
             ...headers,
-            "Retry-After": String(rateLimitResult.retry_after_seconds || 60),
+            "Retry-After": String(rateLimitRow.retry_after_seconds || 60),
           },
         },
-      );
-    }
-
-    // Parse request body
-    const body = await req.json().catch(() => ({}));
-    const action = body.action || "assign";
-
-    // Input validation: only allow known actions (allowlist)
-    if (!VALID_ACTIONS.has(action)) {
-      return new Response(
-        JSON.stringify({ error: "Invalid action" }),
-        { status: 400, headers },
       );
     }
 
@@ -948,6 +959,41 @@ serve(async (req) => {
       const result = await startRecoveryQuest(supabaseAdmin, user.id);
 
       if (!result.success) {
+        // If already in progress or no attempts remaining, fetch existing attempt and return it
+        if (
+          result.error_message?.includes("already in progress") ||
+          result.error_message?.includes("No recovery attempts remaining")
+        ) {
+          const { data: existing } = await supabaseAdmin
+            .from("recovery_quest_attempts")
+            .select(
+              "id, quest_template_id, quest_templates(title, description, estimated_minutes)",
+            )
+            .eq("user_id", user.id)
+            .eq("status", "in_progress")
+            .single();
+
+          if (existing) {
+            const tmpl = (existing as any).quest_templates;
+            return new Response(
+              JSON.stringify({
+                success: true,
+                attemptId: existing.id,
+                quest: {
+                  id: existing.quest_template_id,
+                  title: tmpl?.title ?? "Recovery Quest",
+                  description:
+                    tmpl?.description ??
+                    "Complete this quest to restore your streak.",
+                  estimatedMinutes: tmpl?.estimated_minutes ?? 10,
+                  instructions: null,
+                },
+              }),
+              { status: 200, headers },
+            );
+          }
+        }
+
         return new Response(
           JSON.stringify({
             success: false,
@@ -984,12 +1030,16 @@ serve(async (req) => {
       }
 
       // Validate attemptId format (must be valid UUID)
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const uuidRegex =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       if (!uuidRegex.test(attemptId)) {
-        return new Response(JSON.stringify({ error: "Invalid attemptId format" }), {
-          status: 400,
-          headers,
-        });
+        return new Response(
+          JSON.stringify({ error: "Invalid attemptId format" }),
+          {
+            status: 400,
+            headers,
+          },
+        );
       }
 
       // Verify ownership: ensure the recovery attempt belongs to this user
@@ -1000,10 +1050,13 @@ serve(async (req) => {
         .single();
 
       if (attemptError || !attempt) {
-        return new Response(JSON.stringify({ error: "Recovery attempt not found" }), {
-          status: 404,
-          headers,
-        });
+        return new Response(
+          JSON.stringify({ error: "Recovery attempt not found" }),
+          {
+            status: 404,
+            headers,
+          },
+        );
       }
 
       // Ownership check: user must own this recovery attempt
@@ -1011,10 +1064,13 @@ serve(async (req) => {
         console.warn(
           `Ownership violation: user ${user.id.substring(0, 8)}... attempted to complete recovery ${attemptId} owned by another user`,
         );
-        return new Response(JSON.stringify({ error: "Recovery attempt not found" }), {
-          status: 404,
-          headers, // Return 404 to avoid leaking existence information
-        });
+        return new Response(
+          JSON.stringify({ error: "Recovery attempt not found" }),
+          {
+            status: 404,
+            headers, // Return 404 to avoid leaking existence information
+          },
+        );
       }
 
       // Check if already completed

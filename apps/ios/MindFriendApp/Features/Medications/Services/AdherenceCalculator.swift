@@ -1,5 +1,4 @@
 import Foundation
-import MindFriendApp
 
 struct MedicationAdherenceStats {
     let percentage: Double

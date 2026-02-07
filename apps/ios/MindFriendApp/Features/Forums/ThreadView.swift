@@ -330,8 +330,9 @@ final class ThreadViewModel: ObservableObject {
     }
 
     deinit {
+        let channel = MainActor.assumeIsolated { self.realtimeChannel }
         Task { @MainActor in
-            await realtimeChannel?.unsubscribe()
+            await channel?.unsubscribe()
         }
     }
 
@@ -386,7 +387,7 @@ final class ThreadViewModel: ObservableObject {
         let channel = forumService.supabase.channel("forum_threads:\(threadId.uuidString)")
 
         // Listen for new replies
-        let insertionStream = channel
+        let _ = channel
             .onPostgresChange(
                 InsertAction.self,
                 table: "forum_replies",
@@ -397,26 +398,19 @@ final class ThreadViewModel: ObservableObject {
             }
 
         realtimeChannel = channel
+        try? await channel.subscribeWithError()
 
-        do {
-            try await channel.subscribe()
+        // Handle new reply insertions
+        // TODO: Supabase RealtimeSubscription API has changed
+        // for-await syntax no longer supported. Using polling fallback instead.
+        // Task {
+        //     for await insertion in insertionStream {
+        //         await handleNewReply(insertion.record)
+        //     }
+        // }
 
-            // Handle new reply insertions
-            // TODO: Supabase RealtimeSubscription API has changed
-            // for-await syntax no longer supported. Using polling fallback instead.
-            // Task {
-            //     for await insertion in insertionStream {
-            //         await handleNewReply(insertion.record)
-            //     }
-            // }
-
-            // Start polling fallback (30s intervals)
-            startPollingFallback()
-        } catch {
-            print("Failed to subscribe to Realtime:", error)
-            // Fallback to polling only
-            startPollingFallback()
-        }
+        // Start polling fallback (30s intervals)
+        startPollingFallback()
     }
 
     private func handleNewReply(_ record: JSONObject) async {

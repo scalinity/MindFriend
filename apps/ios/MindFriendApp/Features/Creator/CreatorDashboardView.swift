@@ -534,7 +534,7 @@ struct NewContentView: View {
                 ToolbarItem(placement: .primaryAction) {
                     Button("Create") {
                         Task {
-                            try? await creatorService.createContent(
+                            _ = try? await creatorService.createContent(
                                 title: title,
                                 contentType: selectedType,
                                 format: selectedFormat,

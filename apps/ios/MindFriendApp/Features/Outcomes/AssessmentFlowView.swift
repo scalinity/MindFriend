@@ -347,7 +347,7 @@ struct AssessmentFlowView: View {
     private func submitAssessment() async {
         isSubmitting = true
         do {
-            let response = try await outcomeService.submitAssessment(
+            _ = try await outcomeService.submitAssessment(
                 type: AssessmentType(rawValue: template.code) ?? .phq9,
                 answers: answers,
                 notes: notes.isEmpty ? nil : notes

@@ -18,7 +18,8 @@ const RATE_LIMIT_MAX_REQUESTS = 30;
 const rateLimitCache = new Map<string, { count: number; resetAt: number }>();
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") || "app.mindfriend.com",
+  "Access-Control-Allow-Origin":
+    Deno.env.get("ALLOWED_ORIGIN") || "https://getmindfriend.app",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -32,23 +33,31 @@ interface VoteRequest {
 /**
  * Checks rate limit for a user
  */
-function checkRateLimit(userId: string): { allowed: boolean; remaining: number; resetAt: number } {
+function checkRateLimit(userId: string): {
+  allowed: boolean;
+  remaining: number;
+  resetAt: number;
+} {
   const now = Date.now();
   const key = `vote:${userId}`;
-  
+
   let entry = rateLimitCache.get(key);
-  
+
   if (!entry || now > entry.resetAt) {
     entry = { count: 0, resetAt: now + RATE_LIMIT_WINDOW_MS };
     rateLimitCache.set(key, entry);
   }
-  
+
   if (entry.count >= RATE_LIMIT_MAX_REQUESTS) {
     return { allowed: false, remaining: 0, resetAt: entry.resetAt };
   }
-  
+
   entry.count++;
-  return { allowed: true, remaining: RATE_LIMIT_MAX_REQUESTS - entry.count, resetAt: entry.resetAt };
+  return {
+    allowed: true,
+    remaining: RATE_LIMIT_MAX_REQUESTS - entry.count,
+    resetAt: entry.resetAt,
+  };
 }
 
 serve(async (req) => {
@@ -187,7 +196,7 @@ serve(async (req) => {
         p_strategy_id: strategyId,
         p_user_id: user.id,
         p_vote_type: voteType,
-      }
+      },
     );
 
     if (voteError) {
@@ -205,8 +214,10 @@ serve(async (req) => {
     }
 
     // Get updated counts from the RPC result
-    const helpfulCount = voteResult?.helpful_count ?? strategy.helpful_count ?? 0;
-    const notHelpfulCount = voteResult?.not_helpful_count ?? strategy.not_helpful_count ?? 0;
+    const helpfulCount =
+      voteResult?.helpful_count ?? strategy.helpful_count ?? 0;
+    const notHelpfulCount =
+      voteResult?.not_helpful_count ?? strategy.not_helpful_count ?? 0;
     const total = helpfulCount + notHelpfulCount;
     const helpfulPercentage =
       total > 0 ? Math.round((helpfulCount / total) * 100) : 0;
@@ -224,8 +235,8 @@ serve(async (req) => {
       }),
       {
         status: 200,
-        headers: { 
-          ...corsHeaders, 
+        headers: {
+          ...corsHeaders,
           "Content-Type": "application/json",
           "X-RateLimit-Remaining": String(rateLimit.remaining),
         },

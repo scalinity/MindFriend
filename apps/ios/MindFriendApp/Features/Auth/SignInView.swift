@@ -3,7 +3,13 @@ import AuthenticationServices
 import GoogleSignIn
 
 struct SignInView: View {
-    private let googleClientID = "937820575713-3n91aim648r7vhjr9iojm08opbp84c1n.apps.googleusercontent.com"
+    private let googleClientID: String = {
+        guard let clientID = Bundle.main.object(forInfoDictionaryKey: "GOOGLE_CLIENT_ID") as? String, !clientID.isEmpty else {
+            assertionFailure("GOOGLE_CLIENT_ID not configured in Info.plist")
+            return ""
+        }
+        return clientID
+    }()
 
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer

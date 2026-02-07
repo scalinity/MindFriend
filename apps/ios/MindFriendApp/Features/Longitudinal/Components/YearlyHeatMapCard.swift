@@ -346,7 +346,7 @@ private struct HeatMapLegendItem: View {
 private enum PreviewData {
     static var sampleMoodsByDate: [String: Int] {
         var moods: [String: Int] = [:]
-        let calendar = Calendar.current
+        let _ = Calendar.current
 
         // Generate sample data for current year
         for month in 1...12 {

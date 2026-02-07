@@ -9,23 +9,37 @@ import WidgetKit
 /// Lightweight Keychain wrapper for Watch app (stores small amounts of sensitive data)
 enum WatchKeychain {
     private static let service = "app.mindfriend.watch"
-    
-    static func save(_ value: String, forKey key: String) {
-        guard let data = value.data(using: .utf8) else { return }
-        
+
+    @discardableResult
+    static func save(_ value: String, forKey key: String) -> Bool {
+        guard let data = value.data(using: .utf8) else { return false }
+
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: key,
+            kSecAttrAccount as String: key
+        ]
+
+        let attributes: [String: Any] = [
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         ]
-        
-        // Delete existing item first
-        SecItemDelete(query as CFDictionary)
-        
-        // Add new item
-        SecItemAdd(query as CFDictionary, nil)
+
+        // Try atomic update first (no data loss window)
+        var status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+
+        if status == errSecItemNotFound {
+            // Item doesn't exist yet — create it
+            var addQuery = query
+            addQuery[kSecValueData as String] = data
+            addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            status = SecItemAdd(addQuery as CFDictionary, nil)
+        }
+
+        if status != errSecSuccess {
+            print("[WatchKeychain] Failed to save key '\(key)': \(status)")
+        }
+        return status == errSecSuccess
     }
     
     static func retrieve(forKey key: String) -> String? {
@@ -163,7 +177,7 @@ struct WatchHomeView: View {
                         .tint(.green)
                 }
                 .padding()
-                .background(Color(uiColor: .systemGray6))
+                .background(Color.gray.opacity(0.15))
                 .clipShape(RoundedRectangle(cornerRadius: 8))
             }
             .padding()
@@ -182,21 +196,25 @@ struct WatchHomeView: View {
 
 @MainActor
 final class WatchHomeViewModel: ObservableObject {
-    @Published var streak = 14
-    @Published var completedToday = 2
+    @Published var streak = 0
+    @Published var completedToday = 0
     @Published var dailyGoal = 3
     @Published var showBreathing = false
     @Published var showFocus = false
 
     init() {
-        // Load from UserDefaults or sync with phone
         loadData()
     }
 
     private func loadData() {
-        streak = UserDefaults.standard.integer(forKey: "watch_streak")
-        completedToday = UserDefaults.standard.integer(forKey: "watch_completed_today")
-        dailyGoal = UserDefaults.standard.integer(forKey: "watch_daily_goal")
+        let savedStreak = WatchAppConstants.sharedDefaults.integer(forKey: "watch_streak")
+        streak = savedStreak
+
+        let savedCompleted = WatchAppConstants.sharedDefaults.integer(forKey: "watch_completed_today")
+        completedToday = savedCompleted
+
+        let savedGoal = WatchAppConstants.sharedDefaults.integer(forKey: "watch_daily_goal")
+        dailyGoal = savedGoal > 0 ? savedGoal : 3 // Default to 3 if not set
     }
 }
 
@@ -282,7 +300,7 @@ final class WatchBreathingViewModel: ObservableObject {
 
     @Published var instruction = "Ready?"
     @Published var secondsRemaining = 4
-    @Published var circleSize: CGFloat = 60
+    @Published var circleSize: CGFloat = 50
     @Published var isActive = false
     @Published var isComplete = false
     @Published var currentCycle = 1
@@ -302,6 +320,10 @@ final class WatchBreathingViewModel: ObservableObject {
 
     private var timer: Timer?
     private let haptics = HapticManager.shared
+
+    // Timer cleanup handled by stop() in onDisappear.
+    // The [weak self] in the timer callback prevents retain cycles,
+    // so the timer fires harmlessly if the view model is deallocated.
 
     // MARK: - Breath Phase
 
@@ -334,12 +356,6 @@ final class WatchBreathingViewModel: ObservableObject {
         }
     }
 
-    // MARK: - Lifecycle
-
-    deinit {
-        timer?.invalidate()
-    }
-
     // MARK: - Public Methods
 
     func startBreathing() {
@@ -367,6 +383,8 @@ final class WatchBreathingViewModel: ObservableObject {
         circleSize = maxCircleSize
 
         haptics.playInhaleStart()
+        // Invalidate existing timer before starting new one
+        timer?.invalidate()
         startTimer()
     }
 
@@ -409,43 +427,28 @@ final class WatchBreathingViewModel: ObservableObject {
         circleSize = maxCircleSize
 
         haptics.playSessionComplete()
+
+        // Sync breathing completion to iOS app
+        WatchConnectivityManager.shared.sendBreathingCompletedToPhone(cycles: totalCycles)
     }
 
     // MARK: - Timer
 
     private func startTimer() {
         timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in
+        let newTimer = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
                 self?.tick()
             }
         }
+        RunLoop.current.add(newTimer, forMode: .common)
+        timer = newTimer
     }
 
     private func tick() {
         secondsRemaining -= 1
 
-        // Play progress haptic at certain intervals
-        switch currentPhase {
-        case .inhale:
-            if secondsRemaining > 0 {
-                haptics.playInhaleProgress()
-            }
-        case .hold:
-            // Play subtle haptic at midpoint
-            if secondsRemaining == holdDuration / 2 {
-                haptics.playHoldProgress()
-            }
-        case .exhale:
-            // Subtle haptics during exhale
-            if secondsRemaining > 0 && secondsRemaining % 2 == 0 {
-                haptics.playClick()
-            }
-        default:
-            break
-        }
-
-        // Phase transitions
+        // Phase transitions first (prevents "0" from displaying)
         if secondsRemaining <= 0 {
             switch currentPhase {
             case .inhale:
@@ -457,6 +460,24 @@ final class WatchBreathingViewModel: ObservableObject {
             default:
                 break
             }
+            return
+        }
+
+        // Play progress haptic at certain intervals (only when secondsRemaining > 0)
+        switch currentPhase {
+        case .inhale:
+            haptics.playInhaleProgress()
+        case .hold:
+            let midpoint = holdDuration / 2
+            if midpoint > 0 && secondsRemaining == midpoint {
+                haptics.playHoldProgress()
+            }
+        case .exhale:
+            if secondsRemaining % 2 == 0 {
+                haptics.playClick()
+            }
+        default:
+            break
         }
     }
 }
@@ -518,7 +539,7 @@ struct WatchMoodView: View {
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding()
-                            .background(selectedMood == mood ? Color.blue.opacity(0.2) : Color(uiColor: .systemGray6))
+                            .background(selectedMood == mood ? Color.blue.opacity(0.2) : Color.gray.opacity(0.15))
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                         }
                     }
@@ -530,10 +551,19 @@ struct WatchMoodView: View {
     }
 
     private func saveMood(_ mood: String) {
-        // ✅ CHANGED: Use Keychain instead of UserDefaults for security
+        // Derive score from mood (great=5 ... stressed=1)
+        let moodScoreMap: [String: Int] = ["great": 5, "good": 4, "okay": 3, "low": 2, "stressed": 1]
+        let score = moodScoreMap[mood] ?? 3
+
+        // Use Keychain for sensitive mood data
         WatchKeychain.save(mood, forKey: "watch_today_mood")
         WatchKeychain.save(Date().ISO8601Format(), forKey: "watch_mood_date")
-        // ✅ REMOVED: UserDefaults.standard.set() calls
+        // Also store in shared App Group UserDefaults for complications
+        WatchAppConstants.sharedDefaults.set(mood, forKey: "watch_today_mood_display")
+        WatchAppConstants.sharedDefaults.set(Date(), forKey: "watch_mood_date_display")
+
+        // Sync mood to iOS app
+        WatchConnectivityManager.shared.sendMoodToPhone(mood, score: score)
     }
 }
 
@@ -587,7 +617,7 @@ struct WatchStatsView: View {
             }
             .font(.caption)
             .padding()
-            .background(Color(uiColor: .systemGray6))
+            .background(Color.gray.opacity(0.15))
             .clipShape(RoundedRectangle(cornerRadius: 8))
 
             Spacer()

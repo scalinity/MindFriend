@@ -145,3 +145,58 @@ verify_jwt = false  # Cron job, uses service role key internally
 [functions.check-streak-risk]
 verify_jwt = false  # Cron job, uses service role key internally
 
+[functions.generate-meditation-audio]
+verify_jwt = false  # Admin function, uses service role key internally
+
+# Notification System Functions
+[functions.send-notification]
+verify_jwt = false  # Verified internally (supports user JWT + service role)
+
+[functions.send-notification-batch]
+verify_jwt = false  # Verified internally in function code
+
+[functions.check-lapsed-users]
+verify_jwt = false  # Cron job, uses cron secret internally
+
+[functions.proactive-scheduler]
+verify_jwt = false  # Cron job, uses cron secret internally
+
+[functions.process-notification-queue]
+verify_jwt = false  # Cron job, uses cron secret internally
+
+[functions.send-weekly-summary]
+verify_jwt = false  # Cron job, uses service role key internally
+
+[functions.send-assessment-reminders]
+verify_jwt = false  # Cron job, uses cron secret internally
+
+# Intervention & Quest Functions (missing from config caused 401 errors)
+[functions.assign-quest]
+verify_jwt = false  # Verified internally in function code
+
+[functions.check-intervention-triggers]
+verify_jwt = false  # Verified internally in function code
+
+[functions.analyze-intervention-patterns]
+verify_jwt = false  # Verified internally in function code
+
+# Insight Lab Experiment Functions
+[functions.start-insight-experiment]
+verify_jwt = false  # Verified internally in function code
+
+[functions.record-experiment-day]
+verify_jwt = false  # Verified internally in function code
+
+[functions.generate-experiment-report]
+verify_jwt = false  # Verified internally in function code
+
+# Wellness Agent Functions
+[functions.agent-monitor]
+verify_jwt = false  # Cron job, uses cron secret internally
+
+[functions.agent-act]
+verify_jwt = false  # Cron job, uses cron secret internally
+
+[functions.agent-learn]
+verify_jwt = false  # Called by agent-act internally
+

@@ -276,7 +276,7 @@ final class DeepLinkRouter: ObservableObject {
             chatConversationId = conversationId
 
         case .circles(let circleId):
-            appState.selectedTab = .circles
+            appState.selectedTab = .home
             circleDetailId = circleId
 
         case .profile:
@@ -346,7 +346,7 @@ final class DeepLinkRouter: ObservableObject {
             Log.general.info("[DeepLink] Navigate to micro-moments: \(templateId ?? "hub")")
 
         case .sleep(let contentId):
-            appState.selectedTab = .sleep
+            appState.selectedTab = .home
             sleepContentId = contentId
 
         case .quote:
@@ -417,18 +417,15 @@ final class DeepLinkRouter: ObservableObject {
     func tabForRoute(_ route: DeepLinkRoute) -> MainTab? {
         switch route {
         case .home, .mood, .moodHistory, .quest, .streak, .progress,
-             .breathing, .journal, .microMoments, .quote, .insights, .assessment:
+             .breathing, .journal, .microMoments, .quote, .insights, .assessment,
+             .circles, .sleep:
             return .home
         case .chat:
             return .chat
-        case .circles:
-            return .circles
         case .profile, .settings, .achievements:
             return .profile
         case .programs, .therapeuticPrograms, .program, .meditation, .exercise, .exerciseLibrary:
             return .programs
-        case .sleep:
-            return .sleep
         case .buddy, .unknown:
             return nil
         }

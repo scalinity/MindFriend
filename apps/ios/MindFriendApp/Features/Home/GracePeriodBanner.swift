@@ -96,7 +96,7 @@ struct GracePeriodBanner: View {
     }
 
     private func startTimer() {
-        timerCancellable = Timer.publish(every: 1, on: .main, in: .common)
+        timerCancellable = Timer.publish(every: 30, on: .main, in: .common)
             .autoconnect()
             .sink { _ in
                 updateTimeRemaining()

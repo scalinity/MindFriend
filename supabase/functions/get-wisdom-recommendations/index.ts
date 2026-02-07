@@ -22,7 +22,8 @@ const RATE_LIMIT_MAX_REQUESTS = 20;
 const rateLimitCache = new Map<string, { count: number; resetAt: number }>();
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") || "app.mindfriend.com",
+  "Access-Control-Allow-Origin":
+    Deno.env.get("ALLOWED_ORIGIN") || "https://getmindfriend.app",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -30,9 +31,18 @@ const corsHeaders = {
 
 // Allowed context tag prefixes (whitelist)
 const ALLOWED_TAG_PREFIXES = [
-  "mood:", "time:", "day:", "emotion:", "exercise:",
-  "pathway:", "phase:", "category:", "type:", "effectiveness:",
-  "goal:", "challenge:"
+  "mood:",
+  "time:",
+  "day:",
+  "emotion:",
+  "exercise:",
+  "pathway:",
+  "phase:",
+  "category:",
+  "type:",
+  "effectiveness:",
+  "goal:",
+  "challenge:",
 ];
 
 interface RecommendationRequest {
@@ -66,21 +76,24 @@ interface StrategyResponse {
 /**
  * Checks rate limit for a user
  */
-function checkRateLimit(userId: string): { allowed: boolean; remaining: number } {
+function checkRateLimit(userId: string): {
+  allowed: boolean;
+  remaining: number;
+} {
   const now = Date.now();
   const key = `recs:${userId}`;
-  
+
   let entry = rateLimitCache.get(key);
-  
+
   if (!entry || now > entry.resetAt) {
     entry = { count: 0, resetAt: now + RATE_LIMIT_WINDOW_MS };
     rateLimitCache.set(key, entry);
   }
-  
+
   if (entry.count >= RATE_LIMIT_MAX_REQUESTS) {
     return { allowed: false, remaining: 0 };
   }
-  
+
   entry.count++;
   return { allowed: true, remaining: RATE_LIMIT_MAX_REQUESTS - entry.count };
 }
@@ -91,10 +104,11 @@ function checkRateLimit(userId: string): { allowed: boolean; remaining: number }
 function sanitizeContextTags(tags: string[]): string[] {
   if (!Array.isArray(tags)) return [];
   return tags
-    .filter(tag => {
+    .filter((tag) => {
       if (typeof tag !== "string") return false;
       if (tag.length === 0 || tag.length > 50) return false;
-      if (!ALLOWED_TAG_PREFIXES.some(prefix => tag.startsWith(prefix))) return false;
+      if (!ALLOWED_TAG_PREFIXES.some((prefix) => tag.startsWith(prefix)))
+        return false;
       if (/[<>"'\\;]/.test(tag)) return false;
       const value = tag.split(":")[1] || "";
       if (!/^[a-z0-9_]+$/.test(value)) return false;
@@ -195,15 +209,21 @@ serve(async (req) => {
 
     // Validate and sanitize inputs
     const sanitizedTags = sanitizeContextTags(contextTags);
-    const sanitizedGoals = (goals || []).filter(g => typeof g === "string" && g.length <= 50).slice(0, 5);
-    const sanitizedChallenges = (challenges || []).filter(c => typeof c === "string" && c.length <= 50).slice(0, 5);
+    const sanitizedGoals = (goals || [])
+      .filter((g) => typeof g === "string" && g.length <= 50)
+      .slice(0, 5);
+    const sanitizedChallenges = (challenges || [])
+      .filter((c) => typeof c === "string" && c.length <= 50)
+      .slice(0, 5);
     const sanitizedLimit = Math.min(Math.max(1, limit || 5), 20);
-    const sanitizedEmotion = emotion && typeof emotion === "string" && emotion.length <= 30 
-      ? emotion.replace(/[^a-zA-Z]/g, "").toLowerCase() 
-      : undefined;
-    const sanitizedMoodScore = typeof moodScore === "number" && moodScore >= 1 && moodScore <= 5 
-      ? moodScore 
-      : undefined;
+    const sanitizedEmotion =
+      emotion && typeof emotion === "string" && emotion.length <= 30
+        ? emotion.replace(/[^a-zA-Z]/g, "").toLowerCase()
+        : undefined;
+    const sanitizedMoodScore =
+      typeof moodScore === "number" && moodScore >= 1 && moodScore <= 5
+        ? moodScore
+        : undefined;
 
     // Build enriched context tags
     const enrichedTags = buildEnrichedTags(
@@ -215,7 +235,11 @@ serve(async (req) => {
     );
 
     // Fetch matching insights
-    const insights = await fetchMatchingInsights(supabase, enrichedTags, sanitizedLimit);
+    const insights = await fetchMatchingInsights(
+      supabase,
+      enrichedTags,
+      sanitizedLimit,
+    );
 
     // Calculate relevance scores and filter low-relevance insights
     const scoredInsights = insights

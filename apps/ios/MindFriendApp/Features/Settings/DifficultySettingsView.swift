@@ -169,8 +169,8 @@ struct DifficultySettingsView: View {
             } message: {
                 Text(errorMessage)
             }
-            .onChange(of: selectedOverride) { newValue in
-                if let level = newValue {
+            .onChange(of: selectedOverride) {
+                if let level = selectedOverride {
                     applyOverride(level)
                 }
             }

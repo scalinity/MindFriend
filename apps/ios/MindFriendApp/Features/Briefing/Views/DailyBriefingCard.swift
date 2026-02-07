@@ -130,7 +130,7 @@ struct DailyBriefingCard: View {
                 .foregroundColor(.secondary)
             Button("Retry") {
                 Task {
-                    await viewModel.loadTodaysBriefing()
+                    await viewModel.refreshBriefing()
                 }
             }
             .buttonStyle(.borderedProminent)

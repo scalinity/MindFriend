@@ -131,9 +131,9 @@ struct MentorshipProfileView: View {
                             .background(Color(.secondarySystemBackground))
                             .cornerRadius(12)
                             .padding(.horizontal)
-                            .onChange(of: availabilityHours) { newValue in
+                            .onChange(of: availabilityHours) {
                                 Task {
-                                    await profileService.updateAvailabilityHours(newValue)
+                                    await profileService.updateAvailabilityHours(availabilityHours)
                                 }
                             }
 
@@ -147,9 +147,9 @@ struct MentorshipProfileView: View {
                                     .background(Color(.tertiarySystemBackground))
                                     .cornerRadius(8)
                                     .lineLimit(5)
-                                    .onChange(of: bioText) { newValue in
+                                    .onChange(of: bioText) {
                                         Task {
-                                            await profileService.updateBio(newValue)
+                                            await profileService.updateBio(bioText)
                                         }
                                     }
 

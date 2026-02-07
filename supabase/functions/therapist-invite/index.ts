@@ -61,30 +61,14 @@ serve(async (req) => {
       );
     }
 
-    // Check if therapist exists in therapist_accounts
-    const { data: therapistAccount } = await supabase
-      .from("therapist_accounts")
-      .select("id, user_id, is_verified, practice_name")
-      .eq(
-        "user_id",
-        supabase.auth.admin.listUsers().then(async () => {
-          // Query auth.users by email (requires service role)
-          const { data: authUsers } = await supabase.auth.admin.listUsers();
-          const therapistUser = authUsers?.users?.find(
-            (u) => u.email === therapistEmail,
-          );
-          return therapistUser?.id;
-        }),
-      )
-      .single();
+    // Look up therapist by email - use targeted query instead of listing all users
+    const { data: therapistLookup } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("email", therapistEmail)
+      .maybeSingle();
 
-    // Get therapist user_id from auth.users
-    const { data: authUsers } = await supabase.auth.admin.listUsers();
-    const therapistUser = authUsers?.users?.find(
-      (u) => u.email === therapistEmail,
-    );
-
-    if (!therapistUser) {
+    if (!therapistLookup) {
       return new Response(
         JSON.stringify({
           error: "THERAPIST_NOT_FOUND",
@@ -94,6 +78,8 @@ serve(async (req) => {
         { status: 404, headers: { "Content-Type": "application/json" } },
       );
     }
+
+    const therapistUser = { id: therapistLookup.id };
 
     // Check if therapist has an account in therapist_accounts
     const { data: therapistAccountCheck } = await supabase
@@ -154,7 +140,15 @@ serve(async (req) => {
     }
 
     // Generate JWT token for magic link (7-day expiration)
-    const jwtSecret = Deno.env.get("JWT_SECRET") || "your-secret-key";
+    const jwtSecret = Deno.env.get("JWT_SECRET");
+    if (!jwtSecret) {
+      return new Response(
+        JSON.stringify({
+          error: "Server configuration error: JWT_SECRET not set",
+        }),
+        { status: 500, headers: { "Content-Type": "application/json" } },
+      );
+    }
     const key = await crypto.subtle.importKey(
       "raw",
       new TextEncoder().encode(jwtSecret),
@@ -270,18 +264,28 @@ function isValidEmail(email: string): boolean {
   return emailRegex.test(email);
 }
 
+function escapeHtml(unsafe: string): string {
+  return unsafe
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 function generateEmailHTML(
   clientName: string,
   magicLink: string,
   expiresAt: Date,
 ): string {
+  const safeName = escapeHtml(clientName);
   return `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Connection Request from ${clientName}</title>
+  <title>Connection Request from ${safeName}</title>
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
 
@@ -292,7 +296,7 @@ function generateEmailHTML(
   <div style="background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; border: 1px solid #e5e7eb;">
 
     <p style="font-size: 16px; margin-bottom: 20px;">
-      <strong>${clientName}</strong> has invited you to connect on MindFriend to share their wellness progress with you.
+      <strong>${safeName}</strong> has invited you to connect on MindFriend to share their wellness progress with you.
     </p>
 
     <div style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #e5e7eb; margin: 20px 0;">

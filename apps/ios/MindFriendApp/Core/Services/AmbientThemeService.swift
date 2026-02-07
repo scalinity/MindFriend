@@ -297,7 +297,7 @@ final class AmbientThemeService: ObservableObject {
 
                 guard !Task.isCancelled else { break }
 
-                await self?.checkAndUpdateTheme()
+                self?.checkAndUpdateTheme()
             }
         }
     }

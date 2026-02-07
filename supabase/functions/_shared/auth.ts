@@ -56,12 +56,7 @@ export async function authenticateRequest(
   } = await supabaseAdmin.auth.getUser(token);
 
   if (authError || !user) {
-    console.error(
-      "Auth error:",
-      authError?.message || "No user returned",
-      "Token prefix:",
-      token.substring(0, 20) + "...",
-    );
+    console.error("Auth error:", authError?.message || "No user returned");
     return {
       response: new Response(
         JSON.stringify({

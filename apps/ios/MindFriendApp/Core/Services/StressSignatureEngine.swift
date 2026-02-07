@@ -323,7 +323,7 @@ final class StressSignatureEngine: ObservableObject {
                 Calendar.current.isDate($0.detectedAt, inSameDayAs: Date())
             }
 
-            if let existing = existingAlert {
+            if let _ = existingAlert {
                 // Update local cache with fresh data
                 activeAlerts = freshAlerts
                 

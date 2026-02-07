@@ -257,14 +257,14 @@ final class CrashReporter {
 
         // Scrub exceptions
         event.exceptions = event.exceptions?.map { exception in
-            var scrubbed = exception
+            let scrubbed = exception
             scrubbed.value = scrubText(exception.value) ?? ""
             return scrubbed
         }
 
         // Scrub breadcrumbs (navigation, user actions, etc.)
         event.breadcrumbs = event.breadcrumbs?.map { crumb in
-            var scrubbed = crumb
+            let scrubbed = crumb
             scrubbed.message = scrubText(crumb.message) ?? ""
             scrubbed.data = scrubDictionary(crumb.data)
             return scrubbed
@@ -281,7 +281,7 @@ final class CrashReporter {
         event.extra = scrubDictionary(event.extra)
 
         // Scrub tags
-        if let tags = event.tags as? [String: String] {
+        if let tags = event.tags {
             event.tags = scrubDictionary(tags as [String: Any]) as? [String: String]
         }
 

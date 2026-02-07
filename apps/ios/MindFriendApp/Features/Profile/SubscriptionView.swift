@@ -790,7 +790,7 @@ struct EnterInviteCodeSheet: View {
 
         Task {
             do {
-                let response = try await container.billingService.acceptFamilyInvitation(code: inviteCode)
+                _ = try await container.billingService.acceptFamilyInvitation(code: inviteCode)
                 await MainActor.run {
                     success = true
                     appState.updateEntitlements(.premium)

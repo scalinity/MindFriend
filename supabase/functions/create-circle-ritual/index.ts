@@ -78,10 +78,10 @@ serve(async (req) => {
       );
     }
 
-    // Verify user is a circle member
+    // Verify user is a member of this circle
     const { data: membership, error: membershipError } = await supabase
       .from("circle_members")
-      .select("id, role")
+      .select("role")
       .eq("circle_id", body.circleId)
       .eq("user_id", user.id)
       .single();
@@ -89,21 +89,13 @@ serve(async (req) => {
     if (membershipError || !membership) {
       return errorResponse(
         "NOT_CIRCLE_MEMBER",
-        "You must be a circle member to create rituals",
+        "You must be a member of this circle to create rituals",
         403,
-        corsHeaders,
       );
     }
 
-    // Only owners and admins can create rituals
-    if (membership.role !== "owner" && membership.role !== "admin") {
-      return errorResponse(
-        "INSUFFICIENT_PERMISSIONS",
-        "Only circle owners and admins can create rituals",
-        403,
-        corsHeaders,
-      );
-    }
+    // All circle members can create rituals - no role check needed
+    // (RLS already ensures they're a member)
 
     // Get ritual prompts to determine duration
     const prompts = getRitualPrompts(body.ritualType);

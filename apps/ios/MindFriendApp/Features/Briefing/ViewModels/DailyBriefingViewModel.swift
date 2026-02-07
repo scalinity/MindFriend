@@ -8,6 +8,7 @@
 
 import Foundation
 import SwiftUI
+import OSLog
 
 /// ViewModel for daily briefing feature
 @MainActor
@@ -34,6 +35,13 @@ final class DailyBriefingViewModel: ObservableObject {
     private let briefingService: DailyBriefingService
     private let calendarService: CalendarService
 
+    /// Whether briefing has been successfully loaded (prevents redundant fetches)
+    private var hasLoaded = false
+
+    /// The calendar day (yyyy-MM-dd) for which briefing was loaded.
+    /// Resets hasLoaded automatically when the day changes.
+    private var loadedDate: String?
+
     // MARK: - Initialization
 
     init(
@@ -47,7 +55,20 @@ final class DailyBriefingViewModel: ObservableObject {
     // MARK: - Public Methods
 
     /// Load today's briefing (fetch cached or generate new)
+    /// Skips fetch if already loaded or currently loading to prevent request storms.
     func loadTodaysBriefing() async {
+        // Reset if the day has changed since last load
+        let today = formatDate(Date())
+        if loadedDate != today {
+            hasLoaded = false
+            loadedDate = nil
+        }
+
+        // Skip if already loaded successfully
+        guard !hasLoaded || briefing == nil else { return }
+        // Skip if already loading (prevents concurrent requests)
+        guard !isLoading else { return }
+
         isLoading = true
         error = nil
 
@@ -55,18 +76,36 @@ final class DailyBriefingViewModel: ObservableObject {
             // First, try to fetch cached briefing
             if let cached = try await briefingService.fetchTodaysBriefing() {
                 self.briefing = cached
+                self.hasLoaded = true
+                self.loadedDate = today
                 isLoading = false
                 return
             }
 
             // No cached briefing, generate new one
             await generateBriefing()
+            if briefing != nil {
+                hasLoaded = true
+                loadedDate = today
+            }
         } catch {
-            print("DailyBriefing: failed to load — \(error)")
-            self.briefing = nil
-            self.error = "Load failed: \(error.localizedDescription)"
+            // Don't log cancelled errors (expected when view disappears)
+            if !Task.isCancelled {
+                Log.general.error("DailyBriefing: failed to load", error: error)
+                self.briefing = nil
+                self.error = "Load failed: \(error.localizedDescription)"
+            }
             isLoading = false
         }
+    }
+
+    /// Force refresh briefing (for pull-to-refresh or retry)
+    func refreshBriefing() async {
+        hasLoaded = false
+        loadedDate = nil
+        // Note: Don't set isLoading = false here - loadTodaysBriefing() manages it
+        briefing = nil
+        await loadTodaysBriefing()
     }
 
     /// Regenerate briefing (bypass cache)
@@ -86,7 +125,7 @@ final class DailyBriefingViewModel: ObservableObject {
             self.briefing = updatedBriefing
         } catch {
             // Silently fail - not critical
-            print("Failed to mark briefing as viewed: \(error)")
+            Log.general.warning("Failed to mark briefing as viewed: \(error.localizedDescription)")
         }
     }
 
@@ -138,18 +177,25 @@ final class DailyBriefingViewModel: ObservableObject {
             self.briefing = newBriefing
             isLoading = false
         } catch {
-            print("DailyBriefing: failed to generate — \(error)")
+            Log.general.error("DailyBriefing: failed to generate", error: error)
             self.briefing = nil
             self.error = "Generate failed: \(error.localizedDescription)"
             isLoading = false
         }
     }
 
-    /// Format date to YYYY-MM-DD
-    private func formatDate(_ date: Date) -> String {
+    // MARK: - Date Formatting
+
+    /// Cached DateFormatter for date formatting (DateFormatter is expensive to create)
+    private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         formatter.timeZone = TimeZone.current
-        return formatter.string(from: date)
+        return formatter
+    }()
+
+    /// Format date to YYYY-MM-DD
+    private func formatDate(_ date: Date) -> String {
+        Self.dateFormatter.string(from: date)
     }
 }

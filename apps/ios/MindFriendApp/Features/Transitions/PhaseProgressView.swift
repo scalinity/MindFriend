@@ -257,7 +257,7 @@ class PhaseProgressViewModel: ObservableObject {
     func advancePhase() async {
         do {
             let response = try await transitionService.advancePhase(userPathwayId: userPathway.id)
-            newPhaseName = response.phaseName ?? "Next Phase"
+            newPhaseName = response.phaseName
             showAdvanceSuccess = true
         } catch {
             errorMessage = error.localizedDescription

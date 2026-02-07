@@ -164,10 +164,11 @@ final class InterventionService: ObservableObject {
 
     /// Manually check if an intervention should be triggered
     func checkTriggers(context: TriggerContext? = nil) async throws -> CheckTriggersResponse {
-        // Validate session before making Edge Function call
-        // This prevents 401 errors when the session has expired
+        // Refresh session to ensure FunctionsClient auth token is fresh
+        // This triggers functions.setAuth(token:) across the SDK
+        let refreshedSession: Session
         do {
-            _ = try await supabase.auth.session
+            refreshedSession = try await supabase.auth.refreshSession()
         } catch {
             print("No valid session for intervention check, skipping")
             return CheckTriggersResponse(
@@ -191,18 +192,42 @@ final class InterventionService: ObservableObject {
         let sanitizedContext = contextToSend.sanitized()
         let request = CheckTriggersRequest(context: sanitizedContext)
 
-        let response: CheckTriggersResponse = try await supabase.functions.invoke(
-            "check-intervention-triggers",
-            options: FunctionInvokeOptions(body: request)
-        )
+        do {
+            // Use explicit Authorization header - SDK auto-auth doesn't reliably propagate
+            let response: CheckTriggersResponse = try await supabase.functions.invoke(
+                "check-intervention-triggers",
+                options: FunctionInvokeOptions(
+                    headers: ["Authorization": "Bearer \(refreshedSession.accessToken)"],
+                    body: request
+                )
+            )
 
-        // If intervention should trigger, store it
-        if response.shouldTrigger, let intervention = response.intervention {
-            pendingIntervention = intervention
-            contextMessage = response.contextMessage
+            // If intervention should trigger, store it
+            if response.shouldTrigger, let intervention = response.intervention {
+                pendingIntervention = intervention
+                contextMessage = response.contextMessage
+            }
+
+            return response
+        } catch let functionsError as FunctionsError {
+            // Handle auth errors gracefully, surface everything else
+            if case .httpError(let code, let data) = functionsError {
+                if code == 401 {
+                    print("Auth rejected by edge function (401), treating as no-session")
+                    return CheckTriggersResponse(
+                        shouldTrigger: false,
+                        triggerType: nil,
+                        intervention: nil,
+                        contextMessage: nil,
+                        suppressionReason: "no_session"
+                    )
+                }
+                // Log non-auth errors with response body for debugging
+                let body = String(data: data, encoding: .utf8) ?? "empty"
+                print("Edge function error \(code): \(body)")
+            }
+            throw functionsError
         }
-
-        return response
     }
 
     /// Track that an intervention was delivered
@@ -433,11 +458,13 @@ final class InterventionService: ObservableObject {
         
         // Scan upcoming calendar events
         var upcomingEvents: [ClassifiedEvent] = []
-        do {
-            upcomingEvents = try await calendarMonitor.scanUpcomingEvents()
-            print("Found \(upcomingEvents.count) upcoming high-stress calendar events")
-        } catch {
-            print("Calendar scan failed: \(error.localizedDescription)")
+        if calendarMonitor.hasCalendarPermission() {
+            do {
+                upcomingEvents = try await calendarMonitor.scanUpcomingEvents()
+                print("Found \(upcomingEvents.count) upcoming high-stress calendar events")
+            } catch {
+                print("Calendar scan failed: \(error.localizedDescription)")
+            }
         }
         
         // Get timing confidence boost for current hour

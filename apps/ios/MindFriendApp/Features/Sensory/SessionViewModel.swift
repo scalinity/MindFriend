@@ -150,20 +150,21 @@ final class SessionViewModel: ObservableObject {
 
         heartRateTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
             guard let self = self else { return }
+            MainActor.assumeIsolated {
+                if self.isPlaying {
+                    // Gradually decrease heart rate during session (max reduction: 20 BPM)
+                    let elapsed = self.sensoryService.elapsedSeconds
+                    let targetReduction = min(20.0, Double(elapsed) / 90.0)  // 1 BPM per 4.5 seconds
+                    self.simulatedHeartRate = max(60, 80 - Int(targetReduction))
 
-            if self.isPlaying {
-                // Gradually decrease heart rate during session (max reduction: 20 BPM)
-                let elapsed = self.sensoryService.elapsedSeconds
-                let targetReduction = min(20.0, Double(elapsed) / 90.0)  // 1 BPM per 4.5 seconds
-                self.simulatedHeartRate = max(60, 80 - Int(targetReduction))
-
-                // Add slight random variation (±2 BPM)
-                self.simulatedHeartRate += Int.random(in: -2...2)
-                self.simulatedHeartRate = max(58, min(82, self.simulatedHeartRate))
-            } else {
-                // Heart rate returns to baseline when paused
-                if self.simulatedHeartRate < 80 {
-                    self.simulatedHeartRate = min(80, self.simulatedHeartRate + 2)
+                    // Add slight random variation (+/-2 BPM)
+                    self.simulatedHeartRate += Int.random(in: -2...2)
+                    self.simulatedHeartRate = max(58, min(82, self.simulatedHeartRate))
+                } else {
+                    // Heart rate returns to baseline when paused
+                    if self.simulatedHeartRate < 80 {
+                        self.simulatedHeartRate = min(80, self.simulatedHeartRate + 2)
+                    }
                 }
             }
         }

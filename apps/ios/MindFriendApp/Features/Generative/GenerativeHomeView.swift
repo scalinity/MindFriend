@@ -76,7 +76,7 @@ struct GenerativeHomeView: View {
                 SoundscapePlayerView(soundscape: soundscape)
             }
         }
-        .alert("Error", isPresented: .constant(error != nil)) {
+        .alert("Error", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
             Button("OK") { error = nil }
         } message: {
             if let error = error {

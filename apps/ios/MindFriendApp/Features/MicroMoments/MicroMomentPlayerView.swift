@@ -449,7 +449,7 @@ struct MicroMomentPlayerView: View {
     }
 
     private func startBreathingAnimation() {
-        guard let firstInstruction = template.instructions.first else { return }
+        guard let _ = template.instructions.first else { return }
 
         // Animate circle based on instruction action
         animateBreathingForCurrentStep()

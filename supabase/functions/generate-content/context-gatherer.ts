@@ -32,16 +32,32 @@ export interface GenerationContext {
  * @param supabase - Supabase client with service role key
  * @param userId - User ID to gather context for
  * @param exerciseType - Type of exercise being generated
+ * @param timezone - Optional IANA timezone string (e.g. "America/Los_Angeles")
  * @returns GenerationContext with mood, history, preferences
  */
 export async function gatherGenerationContext(
   supabase: SupabaseClient,
   userId: string,
   exerciseType: string,
+  timezone?: string,
 ): Promise<GenerationContext> {
-  // Determine time of day
+  // Determine time of day using user's timezone if available
   const now = new Date();
-  const hour = now.getHours();
+  let hour = now.getUTCHours();
+  
+  if (timezone) {
+    try {
+      const formatter = new Intl.DateTimeFormat("en-US", {
+        hour: "numeric",
+        hour12: false,
+        timeZone: timezone,
+      });
+      hour = parseInt(formatter.format(now), 10);
+    } catch (e) {
+      console.warn(`Invalid timezone "${timezone}", falling back to UTC`);
+    }
+  }
+  
   const timeOfDay =
     hour < 12
       ? "morning"

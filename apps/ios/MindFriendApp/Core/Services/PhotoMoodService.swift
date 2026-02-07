@@ -117,8 +117,8 @@ final class PhotoMoodService: ObservableObject {
             _ = try await supabase.storage
                 .from(bucketName)
                 .upload(
-                    path: photoPath,
-                    file: imageData,
+                    photoPath,
+                    data: imageData,
                     options: FileOptions(contentType: "image/jpeg")
                 )
         } catch {
@@ -133,8 +133,8 @@ final class PhotoMoodService: ObservableObject {
                 _ = try await supabase.storage
                     .from(bucketName)
                     .upload(
-                        path: thumbPath,
-                        file: thumbData,
+                        thumbPath,
+                        data: thumbData,
                         options: FileOptions(contentType: "image/jpeg")
                     )
                 finalThumbPath = thumbPath
@@ -175,9 +175,9 @@ final class PhotoMoodService: ObservableObject {
             return photoMood
         } catch {
             // Cleanup: delete uploaded files if DB insert fails
-            try? await supabase.storage.from(bucketName).remove(paths: [photoPath])
+            _ = try? await supabase.storage.from(bucketName).remove(paths: [photoPath])
             if let thumbPath = finalThumbPath {
-                try? await supabase.storage.from(bucketName).remove(paths: [thumbPath])
+                _ = try? await supabase.storage.from(bucketName).remove(paths: [thumbPath])
             }
             throw PhotoMoodError.uploadFailed("Failed to save mood: \(error.localizedDescription)")
         }

@@ -281,7 +281,7 @@ enum BackgroundSoundType: String, Codable, CaseIterable, Identifiable {
 
     /// Remote URL for sounds stored in Supabase storage
     var remoteUrl: URL? {
-        let baseUrl = "https://***REMOVED***/storage/v1/object/public/soundscapes"
+        let baseUrl = "\(SupabaseConfig.projectURL.absoluteString)/storage/v1/object/public/soundscapes"
         switch self {
         case .rain:
             return URL(string: "\(baseUrl)/rain.mp3")

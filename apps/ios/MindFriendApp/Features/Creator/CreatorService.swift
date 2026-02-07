@@ -192,7 +192,7 @@ final class CreatorService: ObservableObject {
 
         try await supabase.storage
             .from("content")
-            .upload(path: path, file: fileData)
+            .upload(path, data: fileData)
 
         let publicUrl = try supabase.storage
             .from("content")

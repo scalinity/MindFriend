@@ -570,7 +570,7 @@ struct PendingInvitationsView: View {
             if isLoading {
                 ProgressView()
                     .frame(maxWidth: .infinity)
-            } else if let error = loadError {
+            } else if let _ = loadError {
                 VStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle")
                         .foregroundStyle(.orange)

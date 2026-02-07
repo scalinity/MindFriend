@@ -42,7 +42,9 @@ final class AudioMixerEngine: ObservableObject {
             forInterval: interval,
             queue: .main
         ) { [weak self] time in
-            self?.currentTime = time.seconds
+            MainActor.assumeIsolated {
+                self?.currentTime = time.seconds
+            }
         }
 
         // Handle playback end
@@ -256,7 +258,11 @@ actor BackgroundSoundCache {
     }
 
     private init() {
-        createCacheDirectoryIfNeeded()
+        let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("BackgroundSounds", isDirectory: true)
+        if !FileManager.default.fileExists(atPath: dir.path) {
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
     }
 
     private func createCacheDirectoryIfNeeded() {
@@ -313,7 +319,8 @@ actor BackgroundSoundCache {
         var totalSize: Int64 = 0
 
         if let enumerator = fileManager.enumerator(at: cacheDirectory, includingPropertiesForKeys: [.fileSizeKey]) {
-            for case let fileURL as URL in enumerator {
+            let fileURLs = enumerator.allObjects.compactMap { $0 as? URL }
+            for fileURL in fileURLs {
                 let fileAttributes = try fileManager.attributesOfItem(atPath: fileURL.path)
                 if let size = fileAttributes[.size] as? Int64 {
                     totalSize += size

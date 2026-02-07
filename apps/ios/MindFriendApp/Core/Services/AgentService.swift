@@ -337,7 +337,7 @@ final class AgentService: ObservableObject, AgentServiceProtocol {
                 }
             }
 
-        await channel.subscribe()
+        try? await channel.subscribeWithError()
     }
 }
 
