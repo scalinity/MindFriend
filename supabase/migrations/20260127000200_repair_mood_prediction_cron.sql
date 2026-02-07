@@ -44,8 +44,7 @@ BEGIN
             '5 * * * *',
             $cron$
             SELECT net.http_post(
-                -- Replace YOUR_PROJECT_REF with your Supabase project reference
-                url := 'https://YOUR_PROJECT_REF.supabase.co/functions/v1/predict-mood',
+                url := current_setting('app.settings.supabase_url', true) || '/functions/v1/predict-mood',
                 headers := jsonb_build_object(
                     'Content-Type', 'application/json',
                     'x-cron-secret', public.get_cron_secret()
