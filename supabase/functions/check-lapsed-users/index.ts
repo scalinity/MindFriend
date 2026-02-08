@@ -120,140 +120,181 @@ serve(async (req) => {
       }>,
     };
 
-    // Process each lapsed user
-    for (const user of users) {
-      const notificationType = getNotificationType(user.days_absent);
+    // Process lapsed users: batch-fetch recent notifications and parallelize sends
+    const userIds = users.map((u) => u.user_id);
+    const notificationTypes = [
+      ...new Set(
+        users
+          .map((u) => getNotificationType(u.days_absent))
+          .filter((t): t is NotificationType => t !== null),
+      ),
+    ];
 
-      if (!notificationType) {
-        results.skipped++;
-        results.details.push({
-          userId: user.user_id,
-          daysAbsent: user.days_absent,
-          notificationType: null,
-          status: "skipped",
-          reason: "no_matching_notification_type",
-        });
-        continue;
-      }
+    // Batch check for recently sent notifications (instead of per-user queries)
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data: recentNotifications } = notificationTypes.length > 0
+      ? await supabaseAdmin
+          .from("notification_history")
+          .select("user_id, notification_type")
+          .in("user_id", userIds)
+          .in("notification_type", notificationTypes)
+          .gte("created_at", oneDayAgo)
+      : { data: [] };
 
-      // Get additional data for social hook notification
-      let hugsReceived = 0;
-      let circlePosts = 0;
+    const recentSet = new Set(
+      (recentNotifications || []).map(
+        (n: { user_id: string; notification_type: string }) =>
+          `${n.user_id}:${n.notification_type}`,
+      ),
+    );
 
-      if (notificationType === "reengagement_social") {
-        // Fetch hugs and circle posts count for this user
-        const { data: absenceData } = await supabaseAdmin.rpc(
-          "calculate_user_absence",
-          { p_user_id: user.user_id },
-        );
+    // Batch fetch absence data for social notification users
+    const socialUsers = users.filter(
+      (u) => getNotificationType(u.days_absent) === "reengagement_social",
+    );
+    const absenceDataMap = new Map<
+      string,
+      { hugs_received: number; circle_posts: number }
+    >();
 
-        if (absenceData && absenceData.length > 0) {
-          hugsReceived = absenceData[0].hugs_received || 0;
-          circlePosts = absenceData[0].circle_posts || 0;
+    if (socialUsers.length > 0) {
+      const absenceResults = await Promise.allSettled(
+        socialUsers.map((u) =>
+          supabaseAdmin
+            .rpc("calculate_user_absence", { p_user_id: u.user_id })
+            .then(({ data }) => ({
+              userId: u.user_id,
+              data: data?.[0] || null,
+            })),
+        ),
+      );
+
+      for (const res of absenceResults) {
+        if (res.status === "fulfilled" && res.value.data) {
+          absenceDataMap.set(res.value.userId, res.value.data);
         }
       }
+    }
 
-      // Check if we've already sent this type of notification recently
-      const { data: recentNotification } = await supabaseAdmin
-        .from("notification_history")
-        .select("id")
-        .eq("user_id", user.user_id)
-        .eq("notification_type", notificationType)
-        .gte(
-          "created_at",
-          new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-        )
-        .single();
+    // Process users: send notifications in parallel
+    const sendResults = await Promise.allSettled(
+      users.map(async (user) => {
+        const notificationType = getNotificationType(user.days_absent);
 
-      if (recentNotification) {
-        results.skipped++;
-        results.details.push({
-          userId: user.user_id,
-          daysAbsent: user.days_absent,
-          notificationType,
-          status: "skipped",
-          reason: "already_notified_today",
-        });
-        continue;
-      }
-
-      // Send the notification via send-notification function
-      const notificationPayload = {
-        type: notificationType,
-        recipientId: user.user_id,
-        data: {
-          displayName: user.display_name || "friend",
-          absenceDays: user.days_absent,
-          hugsReceived,
-          circlePosts,
-        },
-      };
-
-      try {
-        const notificationResponse = await fetch(
-          `${Deno.env.get("SUPABASE_URL")}/functions/v1/send-notification`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-            },
-            body: JSON.stringify(notificationPayload),
-          },
-        );
-
-        const notificationResult = await notificationResponse.json();
-
-        if (notificationResult.success && !notificationResult.skipped) {
-          results.sent++;
+        if (!notificationType) {
+          results.skipped++;
           results.details.push({
             userId: user.user_id,
             daysAbsent: user.days_absent,
-            notificationType,
-            status: "sent",
+            notificationType: null,
+            status: "skipped",
+            reason: "no_matching_notification_type",
           });
+          return;
+        }
 
-          // Log re-engagement event
-          await supabaseAdmin.from("reengagement_events").insert({
-            user_id: user.user_id,
-            event_type: "notification_sent",
-            absence_days: user.days_absent,
-            metadata: { notification_type: notificationType },
-          });
-        } else if (notificationResult.skipped) {
+        // Check against pre-fetched recent notifications
+        if (recentSet.has(`${user.user_id}:${notificationType}`)) {
           results.skipped++;
           results.details.push({
             userId: user.user_id,
             daysAbsent: user.days_absent,
             notificationType,
             status: "skipped",
-            reason: notificationResult.reason,
+            reason: "already_notified_today",
           });
-        } else {
+          return;
+        }
+
+        // Get absence data from pre-fetched map
+        let hugsReceived = 0;
+        let circlePosts = 0;
+        if (notificationType === "reengagement_social") {
+          const absenceData = absenceDataMap.get(user.user_id);
+          if (absenceData) {
+            hugsReceived = absenceData.hugs_received || 0;
+            circlePosts = absenceData.circle_posts || 0;
+          }
+        }
+
+        // Send the notification via send-notification function
+        const notificationPayload = {
+          type: notificationType,
+          recipientId: user.user_id,
+          data: {
+            displayName: user.display_name || "friend",
+            absenceDays: user.days_absent,
+            hugsReceived,
+            circlePosts,
+          },
+        };
+
+        try {
+          const notificationResponse = await fetch(
+            `${Deno.env.get("SUPABASE_URL")}/functions/v1/send-notification`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+              },
+              body: JSON.stringify(notificationPayload),
+            },
+          );
+
+          const notificationResult = await notificationResponse.json();
+
+          if (notificationResult.success && !notificationResult.skipped) {
+            results.sent++;
+            results.details.push({
+              userId: user.user_id,
+              daysAbsent: user.days_absent,
+              notificationType,
+              status: "sent",
+            });
+
+            // Log re-engagement event
+            await supabaseAdmin.from("reengagement_events").insert({
+              user_id: user.user_id,
+              event_type: "notification_sent",
+              absence_days: user.days_absent,
+              metadata: { notification_type: notificationType },
+            });
+          } else if (notificationResult.skipped) {
+            results.skipped++;
+            results.details.push({
+              userId: user.user_id,
+              daysAbsent: user.days_absent,
+              notificationType,
+              status: "skipped",
+              reason: notificationResult.reason,
+            });
+          } else {
+            results.failed++;
+            results.details.push({
+              userId: user.user_id,
+              daysAbsent: user.days_absent,
+              notificationType,
+              status: "failed",
+              reason: notificationResult.error,
+            });
+          }
+        } catch (sendError) {
+          console.error(
+            `Failed to send notification to user ${user.user_id}:`,
+            sendError,
+          );
           results.failed++;
           results.details.push({
             userId: user.user_id,
             daysAbsent: user.days_absent,
             notificationType,
             status: "failed",
-            reason: notificationResult.error,
+            reason: String(sendError),
           });
         }
-      } catch (sendError) {
-        console.error(
-          `Failed to send notification to user ${user.user_id}:`,
-          sendError,
-        );
-        results.failed++;
-        results.details.push({
-          userId: user.user_id,
-          daysAbsent: user.days_absent,
-          notificationType,
-          status: "failed",
-          reason: String(sendError),
-        });
-      }
-    }
+      }),
+    );
 
     console.log(
       `Re-engagement notifications complete: ${results.sent} sent, ${results.skipped} skipped, ${results.failed} failed`,

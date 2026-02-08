@@ -232,36 +232,47 @@ final class SupabaseDataService: ObservableObject {
             throw DataError.operationFailed("No quest alternatives available")
         }
 
-        // Fetch the related quest templates to populate the joined data
-        if let primaryId = alternatives.primaryQuestId as UUID? {
-            let templates: [QuestTemplate] = try await supabase
-                .from(Tables.questTemplates)
-                .select()
-                .eq("id", value: primaryId)
-                .execute()
-                .value
-            alternatives.primaryQuest = templates.first
-        }
+        // Fetch the related quest templates in parallel
+        async let primaryTask: [QuestTemplate] = {
+            if let primaryId = alternatives.primaryQuestId as UUID? {
+                return try await supabase
+                    .from(Tables.questTemplates)
+                    .select()
+                    .eq("id", value: primaryId)
+                    .execute()
+                    .value
+            }
+            return []
+        }()
 
-        if let quickId = alternatives.quickVariantId {
-            let variants: [QuestQuickVariant] = try await supabase
-                .from("quest_quick_variants")
-                .select()
-                .eq("id", value: quickId)
-                .execute()
-                .value
-            alternatives.quickVariant = variants.first
-        }
+        async let quickTask: [QuestQuickVariant] = {
+            if let quickId = alternatives.quickVariantId {
+                return try await supabase
+                    .from("quest_quick_variants")
+                    .select()
+                    .eq("id", value: quickId)
+                    .execute()
+                    .value
+            }
+            return []
+        }()
 
-        if let altId = alternatives.altQuestId {
-            let templates: [QuestTemplate] = try await supabase
-                .from(Tables.questTemplates)
-                .select()
-                .eq("id", value: altId)
-                .execute()
-                .value
-            alternatives.altQuest = templates.first
-        }
+        async let altTask: [QuestTemplate] = {
+            if let altId = alternatives.altQuestId {
+                return try await supabase
+                    .from(Tables.questTemplates)
+                    .select()
+                    .eq("id", value: altId)
+                    .execute()
+                    .value
+            }
+            return []
+        }()
+
+        let (primaryTemplates, quickVariants, altTemplates) = try await (primaryTask, quickTask, altTask)
+        alternatives.primaryQuest = primaryTemplates.first
+        alternatives.quickVariant = quickVariants.first
+        alternatives.altQuest = altTemplates.first
 
         return alternatives
     }
@@ -298,27 +309,34 @@ final class SupabaseDataService: ObservableObject {
             throw DataError.operationFailed("Reroll failed - no alternatives returned")
         }
 
-        // Fetch the new primary quest template
-        if let primaryId = alternatives.primaryQuestId as UUID? {
-            let templates: [QuestTemplate] = try await supabase
-                .from(Tables.questTemplates)
-                .select()
-                .eq("id", value: primaryId)
-                .execute()
-                .value
-            alternatives.primaryQuest = templates.first
-        }
+        // Fetch the new primary quest template and quick variant in parallel
+        async let primaryTask: [QuestTemplate] = {
+            if let primaryId = alternatives.primaryQuestId as UUID? {
+                return try await supabase
+                    .from(Tables.questTemplates)
+                    .select()
+                    .eq("id", value: primaryId)
+                    .execute()
+                    .value
+            }
+            return []
+        }()
 
-        // Fetch quick variant if available
-        if let quickId = alternatives.quickVariantId {
-            let variants: [QuestQuickVariant] = try await supabase
-                .from("quest_quick_variants")
-                .select()
-                .eq("id", value: quickId)
-                .execute()
-                .value
-            alternatives.quickVariant = variants.first
-        }
+        async let quickTask: [QuestQuickVariant] = {
+            if let quickId = alternatives.quickVariantId {
+                return try await supabase
+                    .from("quest_quick_variants")
+                    .select()
+                    .eq("id", value: quickId)
+                    .execute()
+                    .value
+            }
+            return []
+        }()
+
+        let (primaryTemplates, quickVariants) = try await (primaryTask, quickTask)
+        alternatives.primaryQuest = primaryTemplates.first
+        alternatives.quickVariant = quickVariants.first
 
         Analytics.shared.track(.questRerolled, properties: [
             "alternatives_id": alternativesId.uuidString,

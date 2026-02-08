@@ -71,35 +71,36 @@ serve(async (req) => {
     } else if (firstReminderUsers && firstReminderUsers.length > 0) {
       console.log(`Found ${firstReminderUsers.length} users for 6 PM reminder`);
 
-      for (const user of firstReminderUsers as AtRiskUser[]) {
-        try {
-          const response = await supabaseAdmin.functions.invoke(
-            "send-notification",
-            {
-              body: {
-                type: "streak_risk",
-                recipientId: user.user_id,
-                data: {
-                  streak: user.current_streak_days,
-                  urgency: 0, // Encouraging message
-                  target_hour: FIRST_REMINDER_HOUR,
-                },
+      const firstResults = await Promise.allSettled(
+        (firstReminderUsers as AtRiskUser[]).map((user) =>
+          supabaseAdmin.functions.invoke("send-notification", {
+            body: {
+              type: "streak_risk",
+              recipientId: user.user_id,
+              data: {
+                streak: user.current_streak_days,
+                urgency: 0, // Encouraging message
+                target_hour: FIRST_REMINDER_HOUR,
               },
             },
-          );
+          }).then((response) => {
+            if (response.error) {
+              console.error(
+                "Error sending 6 PM reminder to",
+                user.user_id,
+                response.error,
+              );
+              results.errors++;
+            } else {
+              results.firstReminders++;
+            }
+          })
+        ),
+      );
 
-          if (response.error) {
-            console.error(
-              "Error sending 6 PM reminder to",
-              user.user_id,
-              response.error,
-            );
-            results.errors++;
-          } else {
-            results.firstReminders++;
-          }
-        } catch (err) {
-          console.error("Exception sending 6 PM reminder:", err);
+      for (const res of firstResults) {
+        if (res.status === "rejected") {
+          console.error("Exception sending 6 PM reminder:", res.reason);
           results.errors++;
         }
       }
@@ -118,35 +119,36 @@ serve(async (req) => {
         `Found ${secondReminderUsers.length} users for 9 PM reminder`,
       );
 
-      for (const user of secondReminderUsers as AtRiskUser[]) {
-        try {
-          const response = await supabaseAdmin.functions.invoke(
-            "send-notification",
-            {
-              body: {
-                type: "streak_risk",
-                recipientId: user.user_id,
-                data: {
-                  streak: user.current_streak_days,
-                  urgency: 1, // Warning message
-                  target_hour: SECOND_REMINDER_HOUR,
-                },
+      const secondResults = await Promise.allSettled(
+        (secondReminderUsers as AtRiskUser[]).map((user) =>
+          supabaseAdmin.functions.invoke("send-notification", {
+            body: {
+              type: "streak_risk",
+              recipientId: user.user_id,
+              data: {
+                streak: user.current_streak_days,
+                urgency: 1, // Warning message
+                target_hour: SECOND_REMINDER_HOUR,
               },
             },
-          );
+          }).then((response) => {
+            if (response.error) {
+              console.error(
+                "Error sending 9 PM reminder to",
+                user.user_id,
+                response.error,
+              );
+              results.errors++;
+            } else {
+              results.secondReminders++;
+            }
+          })
+        ),
+      );
 
-          if (response.error) {
-            console.error(
-              "Error sending 9 PM reminder to",
-              user.user_id,
-              response.error,
-            );
-            results.errors++;
-          } else {
-            results.secondReminders++;
-          }
-        } catch (err) {
-          console.error("Exception sending 9 PM reminder:", err);
+      for (const res of secondResults) {
+        if (res.status === "rejected") {
+          console.error("Exception sending 9 PM reminder:", res.reason);
           results.errors++;
         }
       }

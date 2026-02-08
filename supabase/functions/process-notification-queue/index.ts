@@ -250,22 +250,26 @@ serve(async (req) => {
       }
     }
 
-    // Batch update notification statuses
-    for (const update of notificationUpdates) {
-      await supabaseAdmin
-        .from("notification_history")
-        .update({ status: update.status, sent_at: update.sent_at })
-        .eq("id", update.id);
-    }
+    // Batch update notification statuses in parallel
+    await Promise.all(
+      notificationUpdates.map((update) =>
+        supabaseAdmin
+          .from("notification_history")
+          .update({ status: update.status, sent_at: update.sent_at })
+          .eq("id", update.id)
+      ),
+    );
 
-    // Batch delete invalid tokens
-    for (const { user_id, token } of invalidTokens) {
-      await supabaseAdmin
-        .from("push_tokens")
-        .delete()
-        .eq("user_id", user_id)
-        .eq("token", token);
-    }
+    // Batch delete invalid tokens in parallel
+    await Promise.all(
+      invalidTokens.map(({ user_id, token }) =>
+        supabaseAdmin
+          .from("push_tokens")
+          .delete()
+          .eq("user_id", user_id)
+          .eq("token", token)
+      ),
+    );
 
     console.log("Queue processing complete:", results);
 

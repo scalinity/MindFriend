@@ -196,10 +196,10 @@ serve(async (req) => {
       });
     }
 
-    // Get user profile to check subscription tier
+    // Get user profile to check subscription tier and absence data
     const { data: profile, error: profileError } = await supabaseAdmin
       .from("profiles")
-      .select("subscription_tier")
+      .select("subscription_tier, last_absence_days")
       .eq("id", user.id)
       .single();
 
@@ -354,19 +354,14 @@ serve(async (req) => {
       }
     }
 
-    // Fetch re-engagement context (for returning users after absence)
+    // Use re-engagement context from already-fetched profile (for returning users after absence)
     let reengagementContext = "";
-    const { data: profileExtended } = await supabaseAdmin
-      .from("profiles")
-      .select("last_absence_days")
-      .eq("id", user.id)
-      .single();
 
     if (
-      profileExtended?.last_absence_days &&
-      profileExtended.last_absence_days >= 3
+      profile?.last_absence_days &&
+      profile.last_absence_days >= 3
     ) {
-      const days = profileExtended.last_absence_days;
+      const days = profile.last_absence_days;
       reengagementContext = "\n\n## Important context - Returning user:\n";
       reengagementContext += `The user is returning after ${days} days away. `;
 

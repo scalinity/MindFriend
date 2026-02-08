@@ -294,18 +294,19 @@ serve(async (req) => {
       }
     }
 
-    // Get user's notification preferences and profile
-    const { data: settings } = await supabaseAdmin
-      .from("user_settings")
-      .select("*")
-      .eq("user_id", body.recipientId)
-      .single();
-
-    const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("timezone, display_name")
-      .eq("id", body.recipientId)
-      .single();
+    // Get user's notification preferences and profile in parallel
+    const [{ data: settings }, { data: profile }] = await Promise.all([
+      supabaseAdmin
+        .from("user_settings")
+        .select("*")
+        .eq("user_id", body.recipientId)
+        .single(),
+      supabaseAdmin
+        .from("profiles")
+        .select("timezone, display_name")
+        .eq("id", body.recipientId)
+        .single(),
+    ]);
 
     // Check if this notification type is enabled
     const settingColumn = TYPE_TO_SETTING[body.type];
