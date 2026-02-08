@@ -90,10 +90,9 @@ serve(async (req) => {
                 user.user_id,
                 response.error,
               );
-              results.errors++;
-            } else {
-              results.firstReminders++;
+              return "error" as const;
             }
+            return "sent" as const;
           })
         ),
       );
@@ -102,6 +101,10 @@ serve(async (req) => {
         if (res.status === "rejected") {
           console.error("Exception sending 6 PM reminder:", res.reason);
           results.errors++;
+        } else if (res.value === "error") {
+          results.errors++;
+        } else {
+          results.firstReminders++;
         }
       }
     }
@@ -138,10 +141,9 @@ serve(async (req) => {
                 user.user_id,
                 response.error,
               );
-              results.errors++;
-            } else {
-              results.secondReminders++;
+              return "error" as const;
             }
+            return "sent" as const;
           })
         ),
       );
@@ -150,6 +152,10 @@ serve(async (req) => {
         if (res.status === "rejected") {
           console.error("Exception sending 9 PM reminder:", res.reason);
           results.errors++;
+        } else if (res.value === "error") {
+          results.errors++;
+        } else {
+          results.secondReminders++;
         }
       }
     }

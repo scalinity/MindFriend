@@ -176,34 +176,36 @@ serve(async (req) => {
       }
     }
 
-    // Process users: send notifications in parallel
+    // Process users: send notifications in parallel and aggregate results after
     const sendResults = await Promise.allSettled(
-      users.map(async (user) => {
+      users.map(async (user): Promise<{
+        userId: string;
+        daysAbsent: number;
+        notificationType: string | null;
+        status: string;
+        reason?: string;
+      }> => {
         const notificationType = getNotificationType(user.days_absent);
 
         if (!notificationType) {
-          results.skipped++;
-          results.details.push({
+          return {
             userId: user.user_id,
             daysAbsent: user.days_absent,
             notificationType: null,
             status: "skipped",
             reason: "no_matching_notification_type",
-          });
-          return;
+          };
         }
 
         // Check against pre-fetched recent notifications
         if (recentSet.has(`${user.user_id}:${notificationType}`)) {
-          results.skipped++;
-          results.details.push({
+          return {
             userId: user.user_id,
             daysAbsent: user.days_absent,
             notificationType,
             status: "skipped",
             reason: "already_notified_today",
-          });
-          return;
+          };
         }
 
         // Get absence data from pre-fetched map
@@ -245,14 +247,6 @@ serve(async (req) => {
           const notificationResult = await notificationResponse.json();
 
           if (notificationResult.success && !notificationResult.skipped) {
-            results.sent++;
-            results.details.push({
-              userId: user.user_id,
-              daysAbsent: user.days_absent,
-              notificationType,
-              status: "sent",
-            });
-
             // Log re-engagement event
             await supabaseAdmin.from("reengagement_events").insert({
               user_id: user.user_id,
@@ -260,41 +254,58 @@ serve(async (req) => {
               absence_days: user.days_absent,
               metadata: { notification_type: notificationType },
             });
+
+            return {
+              userId: user.user_id,
+              daysAbsent: user.days_absent,
+              notificationType,
+              status: "sent",
+            };
           } else if (notificationResult.skipped) {
-            results.skipped++;
-            results.details.push({
+            return {
               userId: user.user_id,
               daysAbsent: user.days_absent,
               notificationType,
               status: "skipped",
               reason: notificationResult.reason,
-            });
+            };
           } else {
-            results.failed++;
-            results.details.push({
+            return {
               userId: user.user_id,
               daysAbsent: user.days_absent,
               notificationType,
               status: "failed",
               reason: notificationResult.error,
-            });
+            };
           }
         } catch (sendError) {
           console.error(
             `Failed to send notification to user ${user.user_id}:`,
             sendError,
           );
-          results.failed++;
-          results.details.push({
+          return {
             userId: user.user_id,
             daysAbsent: user.days_absent,
             notificationType,
             status: "failed",
             reason: String(sendError),
-          });
+          };
         }
       }),
     );
+
+    // Aggregate results sequentially after all promises settle
+    for (const res of sendResults) {
+      if (res.status === "fulfilled") {
+        const detail = res.value;
+        results.details.push(detail);
+        if (detail.status === "sent") results.sent++;
+        else if (detail.status === "skipped") results.skipped++;
+        else if (detail.status === "failed") results.failed++;
+      } else {
+        results.failed++;
+      }
+    }
 
     console.log(
       `Re-engagement notifications complete: ${results.sent} sent, ${results.skipped} skipped, ${results.failed} failed`,
