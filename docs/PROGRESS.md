@@ -35,6 +35,44 @@ Any additional context, blockers, or follow-ups.
 
 ---
 
+## [2026-02-09] GitHub Copilot Instructions Setup
+
+**Type:** Docs
+**Status:** Complete
+**Branch:** copilot/setup-copilot-instructions
+
+### Summary
+
+Set up comprehensive GitHub Copilot instructions to guide AI code generation for consistent, secure, and maintainable code following MindFriend project standards.
+
+### Changes
+
+- **File:** `.github/copilot-instructions.md` — Created main Copilot instructions covering project overview, architecture, coding standards, security requirements, testing, and feature-specific guidelines (357 lines)
+- **File:** `.github/instructions/ios.instructions.md` — Created iOS-specific instructions for SwiftUI patterns, Supabase SDK usage, accessibility, StoreKit 2, push notifications, and performance best practices (344 lines)
+- **File:** `.github/instructions/edge-functions.instructions.md` — Created Edge Functions instructions for authentication, database operations, AI integration, APNs, StoreKit verification, and testing patterns (500 lines)
+
+### Testing
+
+- [x] Files created with proper markdown formatting
+- [x] Frontmatter metadata added to path-specific instructions
+- [x] Instructions align with existing CLAUDE.md and MindFriend-spec.md
+- [x] All files committed and pushed successfully
+
+### Notes
+
+These instructions will be automatically read by GitHub Copilot when generating code, helping ensure:
+- Security best practices (JWT validation, RLS policies, no direct API calls from client)
+- Architectural consistency (Supabase-first, feature module structure)
+- Code quality (SwiftUI patterns, error handling, accessibility)
+- Testing coverage (unit tests, integration tests)
+- Documentation requirements (PROGRESS.md logging, decisions.md for architectural choices)
+
+Path-specific instructions use `applyTo` frontmatter to target specific file patterns:
+- iOS instructions apply to `apps/ios/**/*.swift`
+- Edge Functions instructions apply to `supabase/functions/**/*.ts`
+
+---
+
 ## [2026-01-16] Production Quest Library Expansion
 
 **Type:** Feature
