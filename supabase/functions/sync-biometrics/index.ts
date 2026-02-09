@@ -229,8 +229,8 @@ async function updateBaselines(supabase: any, userId: string) {
       if (v > max) max = v;
     }
     const mean = sum / values.length;
-    const variance = sumSq / values.length - mean * mean;
-    const stdDev = Math.sqrt(Math.max(0, variance));
+    const variance = Math.max(0, sumSq / values.length - mean * mean);
+    const stdDev = Math.sqrt(variance);
 
     baselineUpserts.push(
       supabase.from("biometric_baselines").upsert(
