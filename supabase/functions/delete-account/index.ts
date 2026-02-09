@@ -69,23 +69,14 @@ Deno.serve(async (req) => {
     // Most tables cascade automatically when the auth user is deleted
     // because profiles.id references auth.users(id) with CASCADE
 
-    // 1. Delete rate limits (no FK)
-    await supabaseAdmin.from("rate_limits").delete().eq("user_id", userId);
-
-    // 2. Delete notification history (no FK cascade)
-    await supabaseAdmin
-      .from("notification_history")
-      .delete()
-      .eq("user_id", userId);
-
-    // 3. Delete memory fragments (complex relationships)
-    await supabaseAdmin.from("memory_fragments").delete().eq("user_id", userId);
-
-    // 4. Delete voice sessions
-    await supabaseAdmin.from("voice_sessions").delete().eq("user_id", userId);
-
-    // 5. Handle family memberships (remove from groups, not delete groups)
-    await supabaseAdmin.from("family_members").delete().eq("user_id", userId);
+    // Delete independent records in parallel (no FK dependencies between them)
+    await Promise.all([
+      supabaseAdmin.from("rate_limits").delete().eq("user_id", userId),
+      supabaseAdmin.from("notification_history").delete().eq("user_id", userId),
+      supabaseAdmin.from("memory_fragments").delete().eq("user_id", userId),
+      supabaseAdmin.from("voice_sessions").delete().eq("user_id", userId),
+      supabaseAdmin.from("family_members").delete().eq("user_id", userId),
+    ]);
 
     // 6. Transfer ownership of circles user owns to another member
     // This preserves circle content for remaining members
@@ -133,7 +124,7 @@ Deno.serve(async (req) => {
     // Remove user from circles they're a member of (not owner)
     await supabaseAdmin.from("circle_members").delete().eq("user_id", userId);
 
-    // 7. Clean up Storage objects for the user
+    // 7. Clean up Storage objects for the user (buckets are independent)
     const storageBuckets = [
       "profile-pictures",
       "creative-works",
@@ -141,25 +132,27 @@ Deno.serve(async (req) => {
       "voice-synthesis",
       "audio",
     ];
-    for (const bucket of storageBuckets) {
-      try {
-        const { data: files } = await supabaseAdmin.storage
-          .from(bucket)
-          .list(userId);
-        if (files && files.length > 0) {
-          const filePaths = files.map(
-            (f: { name: string }) => `${userId}/${f.name}`,
-          );
-          await supabaseAdmin.storage.from(bucket).remove(filePaths);
-          log.info(`Cleaned up ${files.length} files from ${bucket}`);
+    await Promise.all(
+      storageBuckets.map(async (bucket) => {
+        try {
+          const { data: files } = await supabaseAdmin.storage
+            .from(bucket)
+            .list(userId);
+          if (files && files.length > 0) {
+            const filePaths = files.map(
+              (f: { name: string }) => `${userId}/${f.name}`,
+            );
+            await supabaseAdmin.storage.from(bucket).remove(filePaths);
+            log.info(`Cleaned up ${files.length} files from ${bucket}`);
+          }
+        } catch (storageError) {
+          // Log but don't fail - some buckets may not have user files
+          log.warn(`Storage cleanup failed for ${bucket}`, {
+            error: String(storageError),
+          });
         }
-      } catch (storageError) {
-        // Log but don't fail - some buckets may not have user files
-        log.warn(`Storage cleanup failed for ${bucket}`, {
-          error: String(storageError),
-        });
-      }
-    }
+      }),
+    );
 
     // 8. Delete the auth user - this cascades to profiles and most other data
     const { error: deleteAuthError } =

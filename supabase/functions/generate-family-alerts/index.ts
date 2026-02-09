@@ -72,19 +72,30 @@ serve(async (req: Request): Promise<Response> => {
 
       if (children.length === 0) continue;
 
+      // Batch-load activity summaries for all children in this family
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      const today = new Date();
+      const childIds = children.map((c) => c.id);
+
+      const { data: allSummaries } = await supabase
+        .from("family_activity_summaries")
+        .select("*")
+        .eq("family_id", family.id)
+        .in("member_id", childIds)
+        .gte("period_start", sevenDaysAgo.toISOString().split("T")[0]);
+
+      // Group summaries by member_id for O(1) lookups
+      const summariesByMember = new Map<string, any[]>();
+      for (const s of allSummaries || []) {
+        const list = summariesByMember.get(s.member_id) || [];
+        list.push(s);
+        summariesByMember.set(s.member_id, list);
+      }
+
       // Check each child for alert conditions
       for (const child of children) {
-        // Get activity summary for last 7 days
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-        const today = new Date();
-
-        const { data: summaries } = await supabase
-          .from("family_activity_summaries")
-          .select("*")
-          .eq("family_id", family.id)
-          .eq("member_id", child.id)
-          .gte("period_start", sevenDaysAgo.toISOString().split("T")[0]);
+        const summaries = summariesByMember.get(child.id) || [];
 
         if (!summaries || summaries.length === 0) continue;
 

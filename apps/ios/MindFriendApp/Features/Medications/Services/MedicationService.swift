@@ -141,7 +141,11 @@ class MedicationService: ObservableObject {
     func getTodayScheduleItems() -> [ScheduledMedication] {
         var items: [ScheduledMedication] = []
 
+        // Build a lookup dictionary for O(1) log searches instead of O(p) linear scan
+        let logsByMedication = Dictionary(grouping: todayLogs, by: { $0.medicationId })
+
         for med in medications {
+            let medsLogs = logsByMedication[med.id] ?? []
             for time in med.scheduledTimes {
                 let hour = Calendar.current.component(.hour, from: time)
                 let minute = Calendar.current.component(.minute, from: time)
@@ -152,8 +156,8 @@ class MedicationService: ObservableObject {
                     of: Date()
                 ) ?? Date()
 
-                let existingLog = todayLogs.first {
-                    $0.medicationId == med.id && isSameHour($0.scheduledAt, scheduledAt)
+                let existingLog = medsLogs.first {
+                    isSameHour($0.scheduledAt, scheduledAt)
                 }
 
                 items.append(ScheduledMedication(

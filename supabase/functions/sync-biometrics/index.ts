@@ -90,61 +90,63 @@ serve(async (req) => {
 
     const payload: SyncPayload = await req.json();
 
-    // Upsert daily summaries
+    // Upsert daily summaries in a single batch
     let summariesSynced = 0;
-    for (const summary of payload.dailySummaries || []) {
+    const summaryRows = (payload.dailySummaries || []).map((summary) => {
       const sleepEfficiency =
         summary.timeInBedMinutes && summary.sleepDurationMinutes
           ? summary.sleepDurationMinutes / summary.timeInBedMinutes
           : null;
 
-      const { error } = await supabase.from("biometric_daily_summaries").upsert(
-        {
-          user_id: user.id,
-          date: summary.date,
-          sleep_duration_minutes: summary.sleepDurationMinutes,
-          sleep_quality_score: summary.sleepQualityScore,
-          sleep_start_time: summary.sleepStartTime,
-          sleep_end_time: summary.sleepEndTime,
-          time_in_bed_minutes: summary.timeInBedMinutes,
-          sleep_efficiency: sleepEfficiency,
-          hrv_average_ms: summary.hrvAverageMs,
-          hrv_min_ms: summary.hrvMinMs,
-          hrv_max_ms: summary.hrvMaxMs,
-          resting_heart_rate: summary.restingHeartRate,
-          steps_count: summary.stepsCount,
-          active_energy_kcal: summary.activeEnergyKcal,
-          exercise_minutes: summary.exerciseMinutes,
-          stand_hours: summary.standHours,
-          distance_meters: summary.distanceMeters,
-          mindful_minutes: summary.mindfulMinutes,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id,date" },
-      );
+      return {
+        user_id: user.id,
+        date: summary.date,
+        sleep_duration_minutes: summary.sleepDurationMinutes,
+        sleep_quality_score: summary.sleepQualityScore,
+        sleep_start_time: summary.sleepStartTime,
+        sleep_end_time: summary.sleepEndTime,
+        time_in_bed_minutes: summary.timeInBedMinutes,
+        sleep_efficiency: sleepEfficiency,
+        hrv_average_ms: summary.hrvAverageMs,
+        hrv_min_ms: summary.hrvMinMs,
+        hrv_max_ms: summary.hrvMaxMs,
+        resting_heart_rate: summary.restingHeartRate,
+        steps_count: summary.stepsCount,
+        active_energy_kcal: summary.activeEnergyKcal,
+        exercise_minutes: summary.exerciseMinutes,
+        stand_hours: summary.standHours,
+        distance_meters: summary.distanceMeters,
+        mindful_minutes: summary.mindfulMinutes,
+        updated_at: new Date().toISOString(),
+      };
+    });
 
-      if (!error) summariesSynced++;
+    if (summaryRows.length > 0) {
+      const { error } = await supabase
+        .from("biometric_daily_summaries")
+        .upsert(summaryRows, { onConflict: "user_id,date" });
+      if (!error) summariesSynced = summaryRows.length;
     }
 
-    // Insert workouts
+    // Upsert workouts in a single batch
     let workoutsSynced = 0;
-    for (const workout of payload.workouts || []) {
-      const { error } = await supabase.from("biometric_workouts").upsert(
-        {
-          user_id: user.id,
-          healthkit_uuid: workout.healthkitUuid,
-          workout_type: workout.workoutType,
-          start_time: workout.startTime,
-          end_time: workout.endTime,
-          duration_minutes: workout.durationMinutes,
-          active_energy_kcal: workout.activeEnergyKcal,
-          distance_meters: workout.distanceMeters,
-          average_heart_rate: workout.averageHeartRate,
-        },
-        { onConflict: "user_id,healthkit_uuid" },
-      );
+    const workoutRows = (payload.workouts || []).map((workout) => ({
+      user_id: user.id,
+      healthkit_uuid: workout.healthkitUuid,
+      workout_type: workout.workoutType,
+      start_time: workout.startTime,
+      end_time: workout.endTime,
+      duration_minutes: workout.durationMinutes,
+      active_energy_kcal: workout.activeEnergyKcal,
+      distance_meters: workout.distanceMeters,
+      average_heart_rate: workout.averageHeartRate,
+    }));
 
-      if (!error) workoutsSynced++;
+    if (workoutRows.length > 0) {
+      const { error } = await supabase
+        .from("biometric_workouts")
+        .upsert(workoutRows, { onConflict: "user_id,healthkit_uuid" });
+      if (!error) workoutsSynced = workoutRows.length;
     }
 
     // Update connection status
@@ -206,6 +208,8 @@ async function updateBaselines(supabase: any, userId: string) {
     { type: "resting_hr", field: "resting_heart_rate" },
   ];
 
+  // Calculate and upsert baselines in parallel
+  const baselineUpserts = [];
   for (const metric of metrics) {
     const values = summaries
       .map((s: any) => s[metric.field])
@@ -213,28 +217,38 @@ async function updateBaselines(supabase: any, userId: string) {
 
     if (values.length < 7) continue;
 
-    const mean =
-      values.reduce((a: number, b: number) => a + b, 0) / values.length;
-    const variance =
-      values.reduce(
-        (sum: number, v: number) => sum + Math.pow(v - mean, 2),
-        0,
-      ) / values.length;
-    const stdDev = Math.sqrt(variance);
+    // Single pass to compute sum and sum-of-squares
+    let sum = 0;
+    let sumSq = 0;
+    let min = values[0];
+    let max = values[0];
+    for (const v of values) {
+      sum += v;
+      sumSq += v * v;
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+    const mean = sum / values.length;
+    const variance = sumSq / values.length - mean * mean;
+    const stdDev = Math.sqrt(Math.max(0, variance));
 
-    await supabase.from("biometric_baselines").upsert(
-      {
-        user_id: userId,
-        metric_type: metric.type,
-        baseline_value: mean,
-        baseline_std_dev: stdDev,
-        baseline_min: Math.min(...values),
-        baseline_max: Math.max(...values),
-        computed_from_days: values.length,
-        last_computed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id,metric_type" },
+    baselineUpserts.push(
+      supabase.from("biometric_baselines").upsert(
+        {
+          user_id: userId,
+          metric_type: metric.type,
+          baseline_value: mean,
+          baseline_std_dev: stdDev,
+          baseline_min: min,
+          baseline_max: max,
+          computed_from_days: values.length,
+          last_computed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id,metric_type" },
+      ),
     );
   }
+
+  await Promise.all(baselineUpserts);
 }

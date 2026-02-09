@@ -391,9 +391,11 @@ final class BiofeedbackSettingsViewModel: ObservableObject {
         isSyncing = true
 
         do {
-            // Fetch HealthKit data
-            let hrSamples = try await heartRateMonitor.fetchRecentHeartRateData(hours: 24 * 14)
-            let hrvSamples = try await heartRateMonitor.fetchHRVData(days: 14)
+            // Fetch HealthKit data in parallel
+            async let hrSamplesTask = heartRateMonitor.fetchRecentHeartRateData(hours: 24 * 14)
+            async let hrvSamplesTask = heartRateMonitor.fetchHRVData(days: 14)
+            let hrSamples = try await hrSamplesTask
+            let hrvSamples = try await hrvSamplesTask
 
             // Convert to storage format
             guard let userId = UUID(uuidString: UserDefaults.standard.string(forKey: "user_id") ?? "") else {

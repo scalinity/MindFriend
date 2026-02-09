@@ -36,10 +36,19 @@ final class AudioLibraryViewModel: ObservableObject {
 
             self.allTracks = allTracks.map { AudioTrack(from: $0) }
 
-            // Load featured tracks (featured + recently released)
-            self.featuredTracks = self.allTracks.filter { $0.isFeatured }.prefix(8).map { $0 }
+            // Partition tracks into featured and non-featured in a single pass
+            var featured: [AudioTrack] = []
+            var nonFeatured: [AudioTrack] = []
+            for track in self.allTracks {
+                if track.isFeatured && featured.count < 8 {
+                    featured.append(track)
+                } else if !track.isFeatured {
+                    nonFeatured.append(track)
+                }
+            }
+            self.featuredTracks = featured
             if featuredTracks.count < 3 {
-                let recent = self.allTracks.filter { !$0.isFeatured }.prefix(3 - featuredTracks.count)
+                let recent = nonFeatured.prefix(3 - featuredTracks.count)
                 featuredTracks.append(contentsOf: recent)
             }
 

@@ -106,8 +106,14 @@ final class NotificationQueue: ObservableObject {
     /// Expire notifications older than 24 hours
     /// Returns IDs of expired notifications
     func expireOldNotifications() -> [UUID] {
-        let expiredIds = queue.filter { $0.isExpired }.map { $0.id }
-        queue.removeAll { $0.isExpired }
+        var expiredIds: [UUID] = []
+        queue.removeAll { notification in
+            if notification.isExpired {
+                expiredIds.append(notification.id)
+                return true
+            }
+            return false
+        }
 
         if !expiredIds.isEmpty {
             Log.notifications.debug("[NotificationQueue] Expired \(expiredIds.count) notifications")

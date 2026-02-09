@@ -31,22 +31,27 @@ struct EfficacyCalculator {
         let netEmotionalChange = max(-1, min(1, endingScore - startingScore))
         
         // Regulation quality: 1 - std_dev of middle 60%
-        let midScores = midPhase.map { $0.compositeScore }
-
-        // Guard against empty midPhase (shouldn't happen with >= 3 points, but defensive)
-        guard !midScores.isEmpty else {
+        // Single pass to compute mean and variance simultaneously
+        guard !midPhase.isEmpty else {
             // Return neutral baseline if midPhase is empty
             return nil
         }
 
-        let midMean = midScores.reduce(0, +) / Double(midScores.count)
-        let midVariance = midScores.reduce(0) { $0 + pow($1 - midMean, 2) } / Double(midScores.count)
-        let midStdDev = sqrt(midVariance)
+        var midSum = 0.0
+        var midSumSq = 0.0
+        for point in midPhase {
+            let s = point.compositeScore
+            midSum += s
+            midSumSq += s * s
+        }
+        let midMean = midSum / Double(midPhase.count)
+        let midVariance = midSumSq / Double(midPhase.count) - midMean * midMean
+        let midStdDev = sqrt(max(0, midVariance))
         let regulationQuality = max(0, min(1, 1 - midStdDev))
         
-        // Sustained improvement
-        let preAvg = prePhase.map { $0.compositeScore }.reduce(0, +) / Double(prePhase.count)
-        let postAvg = postPhase.map { $0.compositeScore }.reduce(0, +) / Double(postPhase.count)
+        // Sustained improvement (single pass for each phase average)
+        let preAvg = prePhase.reduce(0.0) { $0 + $1.compositeScore } / Double(prePhase.count)
+        let postAvg = postPhase.reduce(0.0) { $0 + $1.compositeScore } / Double(postPhase.count)
         let sustainedImprovement = max(-1, min(1, postAvg - preAvg))
         
         // Composite score using CORRECTED FORMULA: 2 * (weighted_sum) - 1
