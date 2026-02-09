@@ -92,6 +92,7 @@ serve(async (req) => {
 
     // Upsert daily summaries in a single batch
     let summariesSynced = 0;
+    const now = new Date().toISOString();
     const summaryRows = (payload.dailySummaries || []).map((summary) => {
       const sleepEfficiency =
         summary.timeInBedMinutes && summary.sleepDurationMinutes
@@ -117,7 +118,7 @@ serve(async (req) => {
         stand_hours: summary.standHours,
         distance_meters: summary.distanceMeters,
         mindful_minutes: summary.mindfulMinutes,
-        updated_at: new Date().toISOString(),
+        updated_at: now,
       };
     });
 

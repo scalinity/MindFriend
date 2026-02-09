@@ -33,7 +33,7 @@ struct EfficacyCalculator {
         // Regulation quality: 1 - std_dev of middle 60%
         // Single pass to compute mean and variance simultaneously
         guard !midPhase.isEmpty else {
-            // Return neutral baseline if midPhase is empty
+            // Return nil if midPhase is empty (cannot assess regulation quality without middle phase)
             return nil
         }
 

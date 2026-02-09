@@ -83,7 +83,8 @@ serve(async (req: Request): Promise<Response> => {
         .select("*")
         .eq("family_id", family.id)
         .in("member_id", childIds)
-        .gte("period_start", sevenDaysAgo.toISOString().split("T")[0]);
+        .gte("period_start", sevenDaysAgo.toISOString().split("T")[0])
+        .order("period_start", { ascending: true });
 
       // Group summaries by member_id for O(1) lookups
       const summariesByMember = new Map<string, any[]>();
