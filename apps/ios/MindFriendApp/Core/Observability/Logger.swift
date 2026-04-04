@@ -79,33 +79,33 @@ enum Log {
     
     /// Log a debug message (only visible in Console.app with debug filter)
     static func debug(_ message: String) {
-        general.debug("\(message, privacy: .public)")
+        general.debug("\(message, privacy: .auto)")
     }
-    
+
     /// Log an informational message
     static func info(_ message: String) {
-        general.info("\(message, privacy: .public)")
+        general.info("\(message, privacy: .auto)")
     }
-    
+
     /// Log a warning message
     static func warning(_ message: String) {
-        general.warning("⚠️ \(message, privacy: .public)")
+        general.warning("\(message, privacy: .auto)")
     }
-    
+
     /// Log an error message (also reports to Sentry)
     static func error(_ message: String, error: Error? = nil, file: String = #file, function: String = #function, line: Int = #line) {
         if let error = error {
-            general.error("❌ \(message, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            general.error("\(message, privacy: .auto): \(error.localizedDescription, privacy: .auto)")
             CrashReporter.shared.capture(error: error, context: ["message": message, "file": file, "function": function, "line": line])
         } else {
-            general.error("❌ \(message, privacy: .public)")
+            general.error("\(message, privacy: .auto)")
             CrashReporter.shared.capture(message: message, context: ["file": file, "function": function, "line": line])
         }
     }
-    
+
     /// Log a fault (critical error, also reports to Sentry)
     static func fault(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
-        general.fault("🔥 \(message, privacy: .public)")
+        general.fault("\(message, privacy: .auto)")
         CrashReporter.shared.capture(message: "FAULT: \(message)", context: ["file": file, "function": function, "line": line])
     }
 }
@@ -118,9 +118,9 @@ extension Logger {
     func error(_ message: String, error: Error? = nil, file: String = #file, function: String = #function, line: Int = #line) {
         // 1. Log to System Console (OSLog)
         if let error = error {
-            self.error("\(message, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            self.error("\(message, privacy: .auto): \(error.localizedDescription, privacy: .auto)")
         } else {
-            self.error("\(message, privacy: .public)")
+            self.error("\(message, privacy: .auto)")
         }
         
         // 2. Report to Sentry

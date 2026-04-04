@@ -54,19 +54,25 @@ private final class SSESessionDelegate: NSObject, URLSessionDataDelegate {
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
         if let httpResponse = response as? HTTPURLResponse {
             httpStatusCode = httpResponse.statusCode
+            #if DEBUG
             print("[SSE-Delegate] Received response status: \(httpResponse.statusCode)")
             print("[SSE-Delegate] Content-Type: \(httpResponse.value(forHTTPHeaderField: "Content-Type") ?? "nil")")
+            #endif
         }
         completionHandler(.allow)
     }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         guard let text = String(data: data, encoding: .utf8) else {
+            #if DEBUG
             print("[SSE-Delegate] Failed to decode data chunk")
+            #endif
             return
         }
 
+        #if DEBUG
         print("[SSE-Delegate] Received data chunk: \(data.count) bytes")
+        #endif
 
         // Check if this is an error response (non-200)
         if let statusCode = httpStatusCode, statusCode != 200 {
@@ -82,14 +88,18 @@ private final class SSESessionDelegate: NSObject, URLSessionDataDelegate {
             buffer.removeSubrange(..<eventEnd.upperBound)
 
             if !eventData.isEmpty {
+                #if DEBUG
                 print("[SSE-Delegate] Complete event received")
+                #endif
                 eventHandler?(eventData)
             }
         }
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        #if DEBUG
         print("[SSE-Delegate] Session completed, error: \(error?.localizedDescription ?? "none")")
+        #endif
 
         if let error = error {
             completionHandler?(error)
@@ -98,7 +108,9 @@ private final class SSESessionDelegate: NSObject, URLSessionDataDelegate {
         } else {
             // Process any remaining buffered data
             if !buffer.isEmpty {
+                #if DEBUG
                 print("[SSE-Delegate] Processing remaining buffer: \(buffer.count) chars")
+                #endif
                 eventHandler?(buffer)
             }
             completionHandler?(nil)
@@ -138,7 +150,9 @@ final class SSEStreamingHelper {
                         .appendingPathComponent("functions")
                         .appendingPathComponent("v1")
                         .appendingPathComponent(functionName)
+                    #if DEBUG
                     print("[SSE] URL: \(url.absoluteString)")
+                    #endif
 
                     // Create request
                     var request = URLRequest(url: url)
@@ -153,7 +167,9 @@ final class SSEStreamingHelper {
                     var bodyWithStream = body
                     bodyWithStream["stream"] = true
                     request.httpBody = try JSONSerialization.data(withJSONObject: bodyWithStream)
+                    #if DEBUG
                     print("[SSE] Request body: \(String(data: request.httpBody!, encoding: .utf8) ?? "nil")")
+                    #endif
 
                     // Use delegate-based approach for reliable streaming
                     let delegate = SSESessionDelegate()
@@ -166,24 +182,34 @@ final class SSEStreamingHelper {
                     // Create session with delegate
                     let urlSession = URLSession(configuration: sessionConfig, delegate: delegate, delegateQueue: nil)
 
+                    #if DEBUG
                     print("[SSE] Sending request with delegate-based streaming...")
+                    #endif
 
                     // Configure delegate to handle events
                     await withCheckedContinuation { (eventContinuation: CheckedContinuation<Void, Never>) in
                         delegate.configure(
                             onEvent: { eventData in
+                                #if DEBUG
                                 print("[SSE] Event received via delegate")
+                                #endif
                                 if let event = self.parseSSEEvent(eventData) {
+                                    #if DEBUG
                                     print("[SSE] Parsed event type: \(event)")
+                                    #endif
                                     continuation.yield(event)
 
+                                    #if DEBUG
                                     if case .complete = event {
                                         print("[SSE] Complete event - will finish after session completes")
                                     }
+                                    #endif
                                 }
                             },
                             onComplete: { error in
+                                #if DEBUG
                                 print("[SSE] Delegate completed, error: \(error?.localizedDescription ?? "none")")
+                                #endif
                                 if let error = error {
                                     continuation.finish(throwing: error)
                                 } else {
@@ -196,12 +222,21 @@ final class SSEStreamingHelper {
                         // Start the data task
                         let task = urlSession.dataTask(with: request)
                         task.resume()
+                        #if DEBUG
                         print("[SSE] Data task started")
+                        #endif
                     }
 
+                    // Invalidate session to prevent URLSession leak
+                    urlSession.finishTasksAndInvalidate()
+
+                    #if DEBUG
                     print("[SSE] Stream completed")
+                    #endif
                 } catch {
+                    #if DEBUG
                     print("[SSE] ERROR: \(error)")
+                    #endif
                     continuation.finish(throwing: error)
                 }
             }
@@ -216,7 +251,9 @@ final class SSEStreamingHelper {
         AsyncThrowingStream { continuation in
             Task {
                 do {
+                    #if DEBUG
                     print("[SSE-Bytes] Starting stream for function: \(functionName)")
+                    #endif
 
                     // Get auth session
                     guard let session = try? await supabase.auth.session else {
@@ -231,7 +268,9 @@ final class SSEStreamingHelper {
                         .appendingPathComponent("functions")
                         .appendingPathComponent("v1")
                         .appendingPathComponent(functionName)
+                    #if DEBUG
                     print("[SSE-Bytes] URL: \(url.absoluteString)")
+                    #endif
 
                     // Create request
                     var request = URLRequest(url: url)
@@ -245,7 +284,9 @@ final class SSEStreamingHelper {
                     var bodyWithStream = body
                     bodyWithStream["stream"] = true
                     request.httpBody = try JSONSerialization.data(withJSONObject: bodyWithStream)
+                    #if DEBUG
                     print("[SSE-Bytes] Request body: \(String(data: request.httpBody!, encoding: .utf8) ?? "nil")")
+                    #endif
 
                     // Create URLSession for streaming with delegate for better SSE handling
                     let sessionConfig = URLSessionConfiguration.default
@@ -256,32 +297,44 @@ final class SSEStreamingHelper {
                     sessionConfig.urlCache = nil
                     let urlSession = URLSession(configuration: sessionConfig)
 
+                    #if DEBUG
                     print("[SSE-Bytes] Sending request...")
+                    #endif
 
                     // Use bytes for streaming
                     let (bytes, response) = try await urlSession.bytes(for: request)
+                    #if DEBUG
                     print("[SSE-Bytes] Got response")
+                    #endif
 
                     // Check response
                     guard let httpResponse = response as? HTTPURLResponse else {
+                        #if DEBUG
                         print("[SSE-Bytes] ERROR: Response is not HTTPURLResponse")
+                        #endif
                         continuation.finish(throwing: SSEStreamError.invalidURL)
                         return
                     }
 
+                    #if DEBUG
                     print("[SSE-Bytes] HTTP status: \(httpResponse.statusCode)")
                     print("[SSE-Bytes] Content-Type: \(httpResponse.value(forHTTPHeaderField: "Content-Type") ?? "nil")")
                     print("[SSE-Bytes] All headers: \(httpResponse.allHeaderFields)")
+                    #endif
 
                     if httpResponse.statusCode != 200 {
+                        #if DEBUG
                         print("[SSE-Bytes] ERROR: Non-200 status code")
+                        #endif
                         // Try to read error body for better error messages
                         var errorBody = ""
                         for try await byte in bytes {
                             errorBody.append(Character(UnicodeScalar(byte)))
                             if errorBody.count > 1024 { break } // Limit read
                         }
+                        #if DEBUG
                         print("[SSE-Bytes] Error body: \(errorBody)")
+                        #endif
                         // Extract error message from JSON if possible
                         var errorMessage: String?
                         if let data = errorBody.data(using: .utf8),
@@ -293,7 +346,9 @@ final class SSEStreamingHelper {
                     }
 
                     // Parse SSE stream
+                    #if DEBUG
                     print("[SSE-Bytes] Starting to read bytes...")
+                    #endif
                     var buffer = ""
                     var byteCount = 0
                     var eventCount = 0
@@ -303,9 +358,11 @@ final class SSEStreamingHelper {
                         buffer.append(Character(UnicodeScalar(byte)))
 
                         // Log progress every 1000 bytes
+                        #if DEBUG
                         if byteCount % 1000 == 0 {
                             print("[SSE-Bytes] Received \(byteCount) bytes so far...")
                         }
+                        #endif
 
                         // Check for complete SSE event (ends with double newline)
                         while let eventEnd = buffer.range(of: "\n\n") {
@@ -313,35 +370,51 @@ final class SSEStreamingHelper {
                             buffer.removeSubrange(..<eventEnd.upperBound)
 
                             eventCount += 1
+                            #if DEBUG
                             print("[SSE-Bytes] Event #\(eventCount) raw data (first 200 chars): \(String(eventData.prefix(200)))")
+                            #endif
 
                             // Parse the event
                             if let event = parseSSEEvent(eventData) {
+                                #if DEBUG
                                 print("[SSE-Bytes] Parsed event: \(event)")
+                                #endif
                                 continuation.yield(event)
 
                                 // Check for completion
                                 if case .complete = event {
+                                    #if DEBUG
                                     print("[SSE-Bytes] Complete event received, finishing stream")
+                                    #endif
                                     continuation.finish()
                                     return
                                 }
                                 if case .error(let error) = event {
+                                    #if DEBUG
                                     print("[SSE-Bytes] Error event received: \(error)")
+                                    #endif
                                     continuation.finish()
                                     return
                                 }
                             } else {
+                                #if DEBUG
                                 print("[SSE-Bytes] WARNING: Failed to parse event data")
+                                #endif
                             }
                         }
                     }
 
+                    #if DEBUG
                     print("[SSE-Bytes] Byte stream ended. Total bytes: \(byteCount), events: \(eventCount)")
                     print("[SSE-Bytes] Remaining buffer: \(buffer)")
+                    #endif
+                    urlSession.finishTasksAndInvalidate()
                     continuation.finish()
                 } catch {
+                    #if DEBUG
                     print("[SSE-Bytes] ERROR: \(error)")
+                    #endif
+                    urlSession.finishTasksAndInvalidate()
                     continuation.finish(throwing: error)
                 }
             }
@@ -350,53 +423,81 @@ final class SSEStreamingHelper {
 
     /// Parse an SSE event string into an ImageStreamEvent
     private static func parseSSEEvent(_ eventString: String) -> ImageStreamEvent? {
+        #if DEBUG
         print("[SSE-Parse] Parsing event string (length: \(eventString.count))")
+        #endif
 
         // Extract data from "data: {...}" format
         let lines = eventString.split(separator: "\n")
+        #if DEBUG
         print("[SSE-Parse] Lines count: \(lines.count)")
+        #endif
 
         for line in lines {
+            #if DEBUG
             print("[SSE-Parse] Line: \(String(line.prefix(100)))")
+            #endif
             if line.hasPrefix("data: ") {
                 let jsonString = String(line.dropFirst(6))
+                #if DEBUG
                 print("[SSE-Parse] JSON string (first 100): \(String(jsonString.prefix(100)))")
+                #endif
 
                 guard let data = jsonString.data(using: .utf8) else {
+                    #if DEBUG
                     print("[SSE-Parse] ERROR: Failed to convert to Data")
+                    #endif
                     continue
                 }
 
                 guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                    #if DEBUG
                     print("[SSE-Parse] ERROR: Failed to parse JSON")
+                    #endif
                     continue
                 }
 
                 guard let type = json["type"] as? String else {
+                    #if DEBUG
                     print("[SSE-Parse] ERROR: No 'type' field in JSON. Keys: \(json.keys)")
+                    #endif
                     continue
                 }
 
+                #if DEBUG
                 print("[SSE-Parse] Event type: \(type)")
+                #endif
 
                 switch type {
                 case "partial":
+                    #if DEBUG
                     print("[SSE-Parse] Handling partial event")
+                    #endif
                     if let imageBase64 = json["imageBase64"] as? String,
                        let imageData = Data(base64Encoded: imageBase64),
                        let index = json["index"] as? Int {
+                        #if DEBUG
                         print("[SSE-Parse] Partial image decoded, size: \(imageData.count), index: \(index)")
+                        #endif
                         return .partial(index: index, imageData: imageData)
                     } else {
+                        #if DEBUG
                         print("[SSE-Parse] ERROR: Failed to decode partial image. Has imageBase64: \(json["imageBase64"] != nil), has index: \(json["index"] != nil)")
+                        #endif
                     }
 
                 case "complete":
+                    #if DEBUG
                     print("[SSE-Parse] Handling complete event")
+                    #endif
                     if let imageBase64 = json["imageBase64"] as? String {
+                        #if DEBUG
                         print("[SSE-Parse] imageBase64 length: \(imageBase64.count)")
+                        #endif
                         if let imageData = Data(base64Encoded: imageBase64) {
+                            #if DEBUG
                             print("[SSE-Parse] Image decoded, size: \(imageData.count)")
+                            #endif
                             // Extract metadata
                             var metadata: [String: Any] = [:]
                             if let success = json["success"] as? Bool {
@@ -404,7 +505,9 @@ final class SSEStreamingHelper {
                             }
                             if let creativeWorkId = json["creativeWorkId"] as? String {
                                 metadata["creativeWorkId"] = creativeWorkId
+                                #if DEBUG
                                 print("[SSE-Parse] creativeWorkId: \(creativeWorkId)")
+                                #endif
                             }
                             if let imageUrl = json["imageUrl"] as? String {
                                 metadata["imageUrl"] = imageUrl
@@ -412,32 +515,46 @@ final class SSEStreamingHelper {
                             if let generationId = json["generationId"] as? String {
                                 metadata["generationId"] = generationId
                             }
+                            #if DEBUG
                             print("[SSE-Parse] Metadata keys: \(metadata.keys)")
+                            #endif
                             return .complete(imageData: imageData, metadata: metadata.isEmpty ? nil : metadata)
                         } else {
+                            #if DEBUG
                             print("[SSE-Parse] ERROR: Failed to decode base64 image")
+                            #endif
                         }
                     } else {
+                        #if DEBUG
                         print("[SSE-Parse] ERROR: No imageBase64 in complete event. Keys: \(json.keys)")
+                        #endif
                     }
 
                 case "error":
                     let errorMessage = json["error"] as? String ?? "Unknown error"
+                    #if DEBUG
                     print("[SSE-Parse] Error event: \(errorMessage)")
+                    #endif
                     return .error(SSEStreamError.decodingError(errorMessage))
 
                 case "done":
                     // Stream complete without explicit complete event
+                    #if DEBUG
                     print("[SSE-Parse] Done event (no data)")
+                    #endif
                     return nil
 
                 default:
+                    #if DEBUG
                     print("[SSE-Parse] Unknown event type: \(type)")
+                    #endif
                     break
                 }
             }
         }
+        #if DEBUG
         print("[SSE-Parse] No valid event found")
+        #endif
         return nil
     }
 }

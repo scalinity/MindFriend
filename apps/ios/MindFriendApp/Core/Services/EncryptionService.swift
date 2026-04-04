@@ -10,50 +10,61 @@ final class EncryptionService {
 
     private let logger = Logger(subsystem: "com.mindfriend", category: "Encryption")
     private let keychainService = "com.mindfriend.integrations"
+    private let keyQueue = DispatchQueue(label: "com.mindfriend.encryption.keyQueue")
 
     // MARK: - Key Management
 
     /// Generates or retrieves the encryption key from Keychain
     private func getOrCreateKey() -> SymmetricKey? {
-        // Try to retrieve existing key
-        if let existingKeyData = retrieveKeyFromKeychain() {
-            return SymmetricKey(data: existingKeyData)
+        keyQueue.sync {
+            // Try to retrieve existing key
+            if let existingKeyData = _retrieveKeyFromKeychain() {
+                return SymmetricKey(data: existingKeyData)
+            }
+
+            // Generate new key
+            let newKey = SymmetricKey(size: .bits256)
+
+            // Store in Keychain
+            let keyData = Data(newKey.withUnsafeBytes { Data($0) })
+
+            let query: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: keychainService,
+                kSecAttrAccount as String: "integration_encryption_key",
+                kSecValueData as String: keyData,
+                // SEC-HIGH-001: Use WhenUnlockedThisDeviceOnly for better security
+                kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+            ]
+
+            // Delete any existing key first (use lookup-only query without kSecValueData)
+            let deleteQuery: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: keychainService,
+                kSecAttrAccount as String: "integration_encryption_key"
+            ]
+            SecItemDelete(deleteQuery as CFDictionary)
+
+            let status = SecItemAdd(query as CFDictionary, nil)
+            if status != errSecSuccess {
+                logger.error("Failed to store encryption key: \(status)")
+                return nil
+            }
+
+            logger.info("Created new encryption key")
+            return newKey
         }
-
-        // Generate new key
-        let newKey = SymmetricKey(size: .bits256)
-
-        // Store in Keychain
-        let keyData = Data(newKey.withUnsafeBytes { Data($0) })
-
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: "integration_encryption_key",
-            kSecValueData as String: keyData,
-            // SEC-HIGH-001: Use WhenUnlockedThisDeviceOnly for better security
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-        ]
-
-        // Delete any existing key first (use lookup-only query without kSecValueData)
-        let deleteQuery: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: "integration_encryption_key"
-        ]
-        SecItemDelete(deleteQuery as CFDictionary)
-
-        let status = SecItemAdd(query as CFDictionary, nil)
-        if status != errSecSuccess {
-            logger.error("Failed to store encryption key: \(status)")
-            return nil
-        }
-
-        logger.info("Created new encryption key")
-        return newKey
     }
 
+    /// Thread-safe wrapper for retrieveKeyFromKeychain
     private func retrieveKeyFromKeychain() -> Data? {
+        keyQueue.sync {
+            _retrieveKeyFromKeychain()
+        }
+    }
+
+    /// Internal keychain retrieval — must be called within keyQueue
+    private func _retrieveKeyFromKeychain() -> Data? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,

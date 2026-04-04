@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { sanitizeForPrompt } from "../_shared/sanitize.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 interface GenerateRewritesRequest {
   conversationId: string;
@@ -40,6 +42,14 @@ function isValidUUID(str: string): boolean {
 const PREMIUM_TYPES = ["more_actionable", "more_compassionate"];
 
 serve(async (req: Request): Promise<Response> => {
+  const origin = req.headers.get("Origin");
+  const corsHeaders = getCorsHeaders(origin);
+
+  // Handle CORS preflight
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -49,6 +59,7 @@ serve(async (req: Request): Promise<Response> => {
   if (!authHeader) {
     return new Response(JSON.stringify({ error: "Missing authorization" }), {
       status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
@@ -60,6 +71,7 @@ serve(async (req: Request): Promise<Response> => {
   if (authError || !user) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
@@ -71,6 +83,7 @@ serve(async (req: Request): Promise<Response> => {
     if (!isValidUUID(conversationId) || !isValidUUID(messageId)) {
       return new Response(JSON.stringify({ error: "Invalid ID format" }), {
         status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -78,7 +91,7 @@ serve(async (req: Request): Promise<Response> => {
     if (messageText.length > 2000) {
       return new Response(
         JSON.stringify({ error: "Message exceeds maximum length" }),
-        { status: 400 },
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -92,6 +105,7 @@ serve(async (req: Request): Promise<Response> => {
     if (!validTypes.includes(rewriteType)) {
       return new Response(JSON.stringify({ error: "Invalid rewrite type" }), {
         status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -116,7 +130,7 @@ serve(async (req: Request): Promise<Response> => {
             "It sounds like you're going through a really difficult time. If you're having thoughts of hurting yourself, please reach out for help immediately.",
           crisis_resources: true,
         }),
-        { status: 200 },
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -131,6 +145,7 @@ serve(async (req: Request): Promise<Response> => {
     if (convError || !conversation) {
       return new Response(JSON.stringify({ error: "Conversation not found" }), {
         status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -153,7 +168,7 @@ serve(async (req: Request): Promise<Response> => {
           message: "This rewrite type requires a premium subscription",
           upgradeRequired: true,
         }),
-        { status: 403 },
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -171,7 +186,7 @@ serve(async (req: Request): Promise<Response> => {
         console.error("Quota check error:", quotaError);
         return new Response(
           JSON.stringify({ error: "Failed to check quota" }),
-          { status: 500 },
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
@@ -183,7 +198,7 @@ serve(async (req: Request): Promise<Response> => {
             isPremiumUser: false,
             upgradeRequired: true,
           }),
-          { status: 403 },
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
     }
@@ -198,6 +213,7 @@ serve(async (req: Request): Promise<Response> => {
     if (!rewriteTypeData) {
       return new Response(JSON.stringify({ error: "Invalid rewrite type" }), {
         status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -221,6 +237,7 @@ Format: JSON array [{"text": "...", "explanation": "..."}]`;
     if (!xaiApiKey) {
       return new Response(JSON.stringify({ error: "AI service unavailable" }), {
         status: 503,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -234,7 +251,7 @@ Format: JSON array [{"text": "...", "explanation": "..."}]`;
         model: "grok-2",
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: messageText },
+          { role: "user", content: sanitizeForPrompt(messageText) },
         ],
         temperature: 0.7,
         max_tokens: 500,
@@ -245,7 +262,7 @@ Format: JSON array [{"text": "...", "explanation": "..."}]`;
       console.error("xAI API error:", await aiResponse.text());
       return new Response(
         JSON.stringify({ error: "Failed to generate rewrites" }),
-        { status: 500 },
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -266,7 +283,7 @@ Format: JSON array [{"text": "...", "explanation": "..."}]`;
       console.error("Failed to parse AI response:", content);
       return new Response(
         JSON.stringify({ error: "Invalid AI response format" }),
-        { status: 500 },
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -305,12 +322,13 @@ Format: JSON array [{"text": "...", "explanation": "..."}]`;
         isPremiumUser: isPremium,
         historyId: history?.id,
       }),
-      { headers: { "Content-Type": "application/json" } },
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
     console.error("Error generating rewrites:", error);
     return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });

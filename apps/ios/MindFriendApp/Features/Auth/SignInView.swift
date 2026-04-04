@@ -440,7 +440,7 @@ struct EmailAuthView: View {
     }
 
     private var isFormValid: Bool {
-        let emailValid = email.contains("@") && email.contains(".")
+        let emailValid = email.range(of: "[^@]+@[^@]+\\.[^@]+", options: .regularExpression) != nil
         let passwordValid = password.count >= 6
 
         if isSignUp {

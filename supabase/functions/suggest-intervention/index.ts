@@ -238,7 +238,7 @@ serve(async (req) => {
     );
   }
 
-  if (!isAuthorizedCronRequest(req.headers, cronSecret, serviceRoleKey)) {
+  if (!(await isAuthorizedCronRequest(req.headers, cronSecret, serviceRoleKey))) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
       headers,

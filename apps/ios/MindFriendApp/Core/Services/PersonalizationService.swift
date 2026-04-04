@@ -61,7 +61,9 @@ final class PersonalizationService: ObservableObject {
             print("🔐 PersonalizationService: Session refreshed, token length: \(session.accessToken.count)")
             #endif
         } catch {
+            #if DEBUG
             print("❌ PersonalizationService: Session refresh failed: \(error)")
+            #endif
             throw AuthError.sessionExpired
         }
 
@@ -95,6 +97,7 @@ final class PersonalizationService: ObservableObject {
     }
 
     private func logFunctionsError(_ error: FunctionsError, context: String) {
+        #if DEBUG
         switch error {
         case .relayError:
             print("❌ PersonalizationService[\(context)]: Relay error invoking Edge Function")
@@ -103,9 +106,10 @@ final class PersonalizationService: ObservableObject {
             if let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 print("❌ PersonalizationService[\(context)]: Error JSON: \(errorJson)")
             } else if let errorString = String(data: data, encoding: .utf8) {
-                print("❌ PersonalizationService[\(context)]: Error raw: \(errorString)")
+                print("PersonalizationService[\(context)]: Error raw: \(errorString)")
             }
         }
+        #endif
     }
 
     private func invokeFunction<T: Decodable>(
@@ -411,7 +415,9 @@ final class PersonalizationService: ObservableObject {
             throw AuthError.sessionExpired
         }
 
-        print("🔍 PersonalizationService: Getting recommendations for user \(userId)")
+        #if DEBUG
+        print("PersonalizationService: Getting recommendations for user \(userId)")
+        #endif
 
         struct RecommendationContextPayload: Encodable {
             let currentMood: String?
@@ -443,7 +449,9 @@ final class PersonalizationService: ObservableObject {
             "get-recommendations",
             body: payload
         )
-        print("✅ PersonalizationService: Got \(result.recommendations.count) recommendations")
+        #if DEBUG
+        print("PersonalizationService: Got \(result.recommendations.count) recommendations")
+        #endif
         return result.recommendations
     }
 

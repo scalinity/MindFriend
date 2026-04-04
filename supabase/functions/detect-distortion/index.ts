@@ -17,6 +17,7 @@ import type {
   ErrorResponse,
 } from "./types.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { sanitizeForPrompt } from "../_shared/sanitize.ts";
 
 // =====================================================
 // Environment Variable Validation (P0 Security Fix)
@@ -165,6 +166,32 @@ serve(async (req) => {
       );
     }
 
+    // Validate input length
+    if (text.length > 4000) {
+      return errorResponse(
+        "INVALID_REQUEST",
+        "Text exceeds maximum length of 4000 characters",
+        400,
+        undefined,
+        corsHeaders,
+      );
+    }
+
+    // Validate sessionId UUID format
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!UUID_REGEX.test(sessionId)) {
+      return errorResponse(
+        "INVALID_REQUEST",
+        "Invalid sessionId format",
+        400,
+        undefined,
+        corsHeaders,
+      );
+    }
+
+    // Sanitize text before LLM interpolation
+    const sanitizedText = sanitizeForPrompt(text);
+
     // Run pattern matching detection
     const patternResult = detectPatterns(text);
 
@@ -182,7 +209,7 @@ serve(async (req) => {
       XAI_API_KEY
     ) {
       // Medium confidence: enhance with LLM
-      const llmResult = await enhanceWithLLM(text, XAI_API_KEY);
+      const llmResult = await enhanceWithLLM(sanitizedText, XAI_API_KEY);
       if (llmResult && llmResult.confidence >= CONFIDENCE_THRESHOLD) {
         detectedDistortion = llmResult;
         detectionMethod = "llm";
@@ -312,7 +339,7 @@ If no distortion detected, respond: {"type": null, "confidence": 0, "reasoning":
           },
           {
             role: "user",
-            content: `Analyze this text for cognitive distortions:\n\n"${text}"`,
+            content: `Analyze this text for cognitive distortions:\n\n"${sanitizedText}"`,
           },
         ],
         temperature: 0.3,

@@ -5,6 +5,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { isCurrentlyQuietHours } from "../_shared/timing-optimizer.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { isAuthorizedCronRequest } from "../_shared/auth.ts";
 
 
 interface AgentAction {
@@ -41,16 +42,13 @@ serve(async (req) => {
 
     // Authenticate request - require service role or valid cron token
     const authHeader = req.headers.get("Authorization");
-    const cronSecret = Deno.env.get("CRON_SECRET");
+    const cronSecret = Deno.env.get("CRON_SECRET") || "";
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
-    // Allow cron jobs with secret, or admin service calls
-    const isCronRequest =
-      cronSecret && req.headers.get("X-Cron-Secret") === cronSecret;
-    const isServiceRequest = authHeader?.includes(
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-    );
+    // Allow cron jobs with secret, or admin service calls (timing-safe comparison)
+    const isAuthorized = await isAuthorizedCronRequest(req.headers, cronSecret, serviceRoleKey);
 
-    if (!isCronRequest && !isServiceRequest) {
+    if (!isAuthorized) {
       // Validate user token for manual triggers
       if (!authHeader) {
         return new Response(
@@ -126,14 +124,41 @@ serve(async (req) => {
         );
 
         if (inQuietHours) {
-          // Reschedule for after quiet hours
-          const tomorrow9am = new Date();
-          tomorrow9am.setDate(tomorrow9am.getDate() + 1);
-          tomorrow9am.setHours(9, 0, 0, 0);
+          // Reschedule for after quiet hours using user's timezone
+          // Fetch user timezone for proper scheduling
+          const { data: userSettings } = await supabase
+            .from("user_settings")
+            .select("timezone")
+            .eq("user_id", action.user_id)
+            .maybeSingle();
+          const userTz = userSettings?.timezone || "UTC";
+
+          // Calculate tomorrow 9am in the user's timezone
+          const userFormatter = new Intl.DateTimeFormat("en-US", {
+            timeZone: userTz,
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+          });
+          const userParts = userFormatter.formatToParts(new Date());
+          const uYear = userParts.find(p => p.type === "year")?.value || "2026";
+          const uMonth = userParts.find(p => p.type === "month")?.value || "01";
+          const uDay = userParts.find(p => p.type === "day")?.value || "01";
+          // Tomorrow 9am in user's local time, interpreted in their timezone
+          const tomorrowDate = new Date(`${uYear}-${uMonth}-${uDay}T09:00:00`);
+          tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+          // Convert to UTC by creating a date string in the user's timezone
+          const tomorrow9amLocal = new Date(
+            tomorrowDate.toLocaleString("en-US", { timeZone: userTz })
+          );
+          // Use the offset to get correct UTC time
+          const tomorrow9amUtc = new Date(
+            tomorrowDate.getTime() + (tomorrowDate.getTime() - tomorrow9amLocal.getTime())
+          );
 
           await supabase
             .from("agent_actions")
-            .update({ scheduled_for: tomorrow9am.toISOString() })
+            .update({ scheduled_for: tomorrow9amUtc.toISOString() })
             .eq("id", action.id);
 
           skipped++;

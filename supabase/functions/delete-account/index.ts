@@ -140,6 +140,7 @@ Deno.serve(async (req) => {
       "capsules",
       "voice-synthesis",
       "audio",
+      "generated-audio",
     ];
     for (const bucket of storageBuckets) {
       try {

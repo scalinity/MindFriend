@@ -35,7 +35,9 @@ final class SecureStorage {
                 // Key doesn't exist - this is expected, continue to create
             } catch {
                 // Unexpected error - log and rethrow
-                print("⚠️ Keychain load error: \(error)")
+                #if DEBUG
+                print("Keychain load error: \(error)")
+                #endif
                 throw error
             }
 
@@ -93,7 +95,9 @@ final class SecureStorage {
         
         // Log if delete failed (except item not found, which is OK)
         if deleteStatus != errSecSuccess && deleteStatus != errSecItemNotFound {
-            print("⚠️ Keychain delete warning: \(deleteStatus)")
+            #if DEBUG
+            print("Keychain delete warning: \(deleteStatus)")
+            #endif
         }
 
         let status = SecItemAdd(query as CFDictionary, nil)

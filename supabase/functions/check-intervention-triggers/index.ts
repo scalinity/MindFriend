@@ -233,22 +233,6 @@ serve(async (req) => {
       
       const userTimezone = settings?.timezone || "UTC";
 
-      // CRITICAL FIX: Use Intl.DateTimeFormat instead of toLocaleString + new Date()
-      // to avoid timezone re-interpretation bugs
-      const formatter = new Intl.DateTimeFormat("en-US", {
-        timeZone: userTimezone,
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: false,
-      });
-      
-      const parts = formatter.formatToParts(new Date());
-      const hour = parts.find(p => p.type === "hour")?.value || "00";
-      const minute = parts.find(p => p.type === "minute")?.value || "00";
-      const second = parts.find(p => p.type === "second")?.value || "00";
-      const currentTime = `${hour}:${minute}:${second}`;
-
       // 1. Load user preferences
       const { data: prefs, error: prefsError } = await withRetry(() =>
         supabase
@@ -282,7 +266,7 @@ serve(async (req) => {
         if (insertError) throw insertError;
 
         // Use new default preferences
-        return evaluateTriggers(
+        const defaultResponse = await evaluateTriggers(
           supabase,
           userId,
           newPrefs,
@@ -290,6 +274,9 @@ serve(async (req) => {
           req.headers.get("Authorization") || "",
           context
         );
+        return new Response(JSON.stringify(defaultResponse), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
       // Check if interventions are enabled
@@ -556,14 +543,14 @@ function determineTriggerType(context?: TriggerContext): TriggerType | null {
     }
   }
 
+  // Pattern-based (low recent mood) - checked before time_based for priority
+  if (context.recentMood && context.recentMood <= MOOD_PATTERN_THRESHOLD) {
+    return "pattern";
+  }
+
   // Time-based trigger
   if (context.timeOfDay) {
     return "time_based";
-  }
-
-  // Pattern-based (low recent mood)
-  if (context.recentMood && context.recentMood <= MOOD_PATTERN_THRESHOLD) {
-    return "pattern";
   }
 
   return "time_based"; // Default fallback
@@ -600,7 +587,7 @@ function calculateConfidence(
     baseConfidence = 1.0; // Time-based triggers are always high confidence
   } else if (triggerType === "pattern" && context.recentMood) {
     // Scale confidence: mood 2 = 0.6, mood 1 = 1.0
-    baseConfidence = Math.min(1.0, MOOD_CONFIDENCE_BASE - context.recentMood * MOOD_CONFIDENCE_MULTIPLIER);
+    baseConfidence = Math.max(0, Math.min(1.0, MOOD_CONFIDENCE_BASE - context.recentMood * MOOD_CONFIDENCE_MULTIPLIER));
   } else {
     baseConfidence = 0.7; // Default moderate confidence
   }

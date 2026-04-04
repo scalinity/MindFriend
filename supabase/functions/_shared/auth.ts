@@ -91,22 +91,22 @@ export function isAuthError(
 }
 
 /**
- * Constant-time string comparison to prevent timing attacks
+ * Constant-time string comparison to prevent timing attacks.
+ * Hashes both strings to fixed-length buffers first to eliminate length-leak,
+ * then compares the hashes byte-by-byte in constant time.
  */
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) {
-    // Still compare to maintain constant time even on length mismatch
-    let result = 0;
-    const minLen = Math.max(a.length, b.length);
-    for (let i = 0; i < minLen; i++) {
-      result |=
-        (a.charCodeAt(i % a.length) || 0) ^ (b.charCodeAt(i % b.length) || 0);
-    }
-    return false;
-  }
+async function timingSafeEqual(a: string, b: string): Promise<boolean> {
+  const encoder = new TextEncoder();
+  const [hashA, hashB] = await Promise.all([
+    crypto.subtle.digest("SHA-256", encoder.encode(a)),
+    crypto.subtle.digest("SHA-256", encoder.encode(b)),
+  ]);
+  const bytesA = new Uint8Array(hashA);
+  const bytesB = new Uint8Array(hashB);
+  // Both are always 32 bytes (SHA-256), so no length leak
   let result = 0;
-  for (let i = 0; i < a.length; i++) {
-    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  for (let i = 0; i < bytesA.length; i++) {
+    result |= bytesA[i] ^ bytesB[i];
   }
   return result === 0;
 }
@@ -116,14 +116,14 @@ function timingSafeEqual(a: string, b: string): boolean {
  * Used by scheduled functions that also support manual triggers
  * Uses constant-time comparison to prevent timing attacks
  */
-export function isAuthorizedCronRequest(
+export async function isAuthorizedCronRequest(
   headers: Headers,
   cronSecret: string,
   serviceRoleKey: string,
-): boolean {
+): Promise<boolean> {
   // Check for cron secret in custom header
   const cronHeader = headers.get("x-cron-secret");
-  if (cronHeader && cronSecret && timingSafeEqual(cronHeader, cronSecret)) {
+  if (cronHeader && cronSecret && await timingSafeEqual(cronHeader, cronSecret)) {
     return true;
   }
 
@@ -131,7 +131,7 @@ export function isAuthorizedCronRequest(
   const authHeader = headers.get("Authorization");
   if (authHeader?.startsWith("Bearer ") && serviceRoleKey) {
     const token = authHeader.replace("Bearer ", "");
-    if (timingSafeEqual(token, serviceRoleKey)) {
+    if (await timingSafeEqual(token, serviceRoleKey)) {
       return true;
     }
   }

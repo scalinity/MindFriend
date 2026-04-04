@@ -421,7 +421,7 @@ serve(async (req) => {
     }
   } catch (error) {
     return new Response(
-      JSON.stringify({ error: "Export failed", message: String(error) }),
+      JSON.stringify({ error: "Internal server error" }),
       {
         status: 500,
         headers: { "Content-Type": "application/json" },

@@ -4,6 +4,9 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { sanitizeForPrompt } from "../_shared/sanitize.ts";
+import { authenticateRequest, isAuthError } from "../_shared/auth.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 const XAI_API_KEY = Deno.env.get("XAI_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
@@ -53,7 +56,21 @@ const CRISIS_KEYWORDS = [
 ];
 
 serve(async (req) => {
+  const origin = req.headers.get("Origin");
+  const corsHeaders = getCorsHeaders(origin);
+
+  // Handle CORS preflight
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
   try {
+    // Authenticate request
+    const authResult = await authenticateRequest(req);
+    if (isAuthError(authResult)) {
+      return authResult.response;
+    }
+
     // Initialize Supabase client with service role
     const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
 
@@ -65,7 +82,24 @@ serve(async (req) => {
     if (!contentType || !contentId || !content) {
       return new Response(
         JSON.stringify({ error: "Missing required fields" }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    // Validate contentId UUID format
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!UUID_REGEX.test(contentId)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid contentId format" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    // Validate content length
+    if (content.length > 10000) {
+      return new Response(
+        JSON.stringify({ error: "Content exceeds maximum length of 10000 characters" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -156,13 +190,13 @@ serve(async (req) => {
 
     return new Response(JSON.stringify(response), {
       status: 200,
-      headers: { "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
     console.error("Moderation function error:", error);
     return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500,
-      headers: { "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
@@ -179,7 +213,9 @@ async function moderateWithGrok(
     throw new Error("XAI_API_KEY not configured");
   }
 
-  const fullText = title ? `${title}\n\n${content}` : content;
+  const sanitizedTitle = title ? sanitizeForPrompt(title) : undefined;
+  const sanitizedContent = sanitizeForPrompt(content);
+  const fullText = sanitizedTitle ? `${sanitizedTitle}\n\n${sanitizedContent}` : sanitizedContent;
 
   const prompt = `You are a content moderator for a mental health support forum. Analyze this forum post for safety and appropriateness.
 

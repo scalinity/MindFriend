@@ -470,8 +470,8 @@ final class PredictiveService: ObservableObject {
         formatter.dateFormat = "yyyy-MM-dd"
         let _ = formatter.string(from: today)
         
-        // Convert mood from 1-5 scale to 1-10 scale
-        let scaledMood = Decimal(actualMood * 2)
+        // Convert mood from 1-5 scale to 1-10 scale (linear mapping: 1->1, 5->10)
+        let scaledMood = Decimal(1 + (actualMood - 1) * 9 / 4)
         
         // Get today's prediction
         guard let prediction = todayPrediction else {

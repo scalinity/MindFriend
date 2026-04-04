@@ -243,7 +243,6 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({
           error: "Failed to save check-in",
-          debug: checkInError.message || JSON.stringify(checkInError),
         }),
         {
           status: 500,
@@ -260,7 +259,6 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         error: "An unexpected error occurred",
-        debug: error?.message || String(error),
       }),
       {
         status: 500,

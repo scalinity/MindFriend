@@ -83,69 +83,96 @@ serve(async (req) => {
       async (batch) => {
         const batchResults: AggregationResult[] = [];
 
-        for (const userId of batch) {
-          try {
-            // Fetch moods for this user in target week
-            const { data: moods, error: moodsError } = await supabase
-              .from("moods")
-              .select("mood_score, created_at")
-              .eq("user_id", userId)
-              .gte("created_at", previousWeek.start.toISOString())
-              .lt("created_at", previousWeek.end.toISOString());
+        try {
+          // Batch query: fetch all moods for this batch of users in one query
+          const { data: allMoods, error: moodsError } = await supabase
+            .from("moods")
+            .select("user_id, mood_score, created_at")
+            .in("user_id", batch)
+            .gte("created_at", previousWeek.start.toISOString())
+            .lt("created_at", previousWeek.end.toISOString());
 
-            if (moodsError) throw moodsError;
+          if (moodsError) throw moodsError;
 
-            // Skip if insufficient data (< 3 mood entries)
-            if (!moods || moods.length < 3) {
-              batchResults.push({ userId, success: true }); // Skip silently
-              continue;
+          // Batch query: fetch all exercises for this batch of users in one query
+          const { data: allExercises, error: exercisesError } = await supabase
+            .from("exercise_sessions")
+            .select("user_id, id")
+            .in("user_id", batch)
+            .gte("completed_at", previousWeek.start.toISOString())
+            .lt("completed_at", previousWeek.end.toISOString());
+
+          if (exercisesError) throw exercisesError;
+
+          // Group moods by user_id
+          const moodsByUser = new Map<string, typeof allMoods>();
+          for (const mood of allMoods || []) {
+            if (!moodsByUser.has(mood.user_id)) moodsByUser.set(mood.user_id, []);
+            moodsByUser.get(mood.user_id)!.push(mood);
+          }
+
+          // Group exercises by user_id
+          const exercisesByUser = new Map<string, number>();
+          for (const ex of allExercises || []) {
+            exercisesByUser.set(ex.user_id, (exercisesByUser.get(ex.user_id) || 0) + 1);
+          }
+
+          for (const userId of batch) {
+            try {
+              const moods = moodsByUser.get(userId) || [];
+
+              // Skip if insufficient data (< 3 mood entries)
+              if (moods.length < 3) {
+                batchResults.push({ userId, success: true }); // Skip silently
+                continue;
+              }
+
+              // Calculate avg_mood and mood_variance
+              const moodScores = moods.map((m) => m.mood_score);
+              const avgMood = calculateAverage(moodScores);
+              const moodVariance = calculatePopulationVariance(moodScores);
+
+              // Count active days
+              const activeDays = countUniqueDays(moods.map((m) => m.created_at));
+
+              const exercisesCompleted = exercisesByUser.get(userId) || 0;
+
+              // Upsert weekly stats
+              const { error: upsertError } = await supabase
+                .from("longitudinal_weekly_stats")
+                .upsert(
+                  {
+                    user_id: userId,
+                    week_start: previousWeek.start.toISOString(),
+                    avg_mood: avgMood,
+                    mood_variance: moodVariance,
+                    active_days: activeDays,
+                    exercises_completed: exercisesCompleted,
+                    updated_at: new Date().toISOString(),
+                  },
+                  { onConflict: "user_id,week_start" },
+                );
+
+              if (upsertError) throw upsertError;
+
+              batchResults.push({ userId, success: true });
+            } catch (error) {
+              console.error(`Error processing user ${userId}:`, error);
+              batchResults.push({
+                userId,
+                success: false,
+                error: error instanceof Error ? error.message : "Unknown error",
+              });
             }
-
-            // Calculate avg_mood and mood_variance
-            const moodScores = moods.map((m) => m.mood_score);
-            const avgMood = calculateAverage(moodScores);
-            const moodVariance = calculatePopulationVariance(moodScores);
-
-            // Count active days
-            const activeDays = countUniqueDays(moods.map((m) => m.created_at));
-
-            // Fetch exercises completed in target week
-            const { data: exercises, error: exercisesError } = await supabase
-              .from("exercise_sessions")
-              .select("id")
-              .eq("user_id", userId)
-              .gte("completed_at", previousWeek.start.toISOString())
-              .lt("completed_at", previousWeek.end.toISOString());
-
-            if (exercisesError) throw exercisesError;
-
-            const exercisesCompleted = exercises?.length || 0;
-
-            // Upsert weekly stats
-            const { error: upsertError } = await supabase
-              .from("longitudinal_weekly_stats")
-              .upsert(
-                {
-                  user_id: userId,
-                  week_start: previousWeek.start.toISOString(),
-                  avg_mood: avgMood,
-                  mood_variance: moodVariance,
-                  active_days: activeDays,
-                  exercises_completed: exercisesCompleted,
-                  updated_at: new Date().toISOString(),
-                },
-                { onConflict: "user_id,week_start" },
-              );
-
-            if (upsertError) throw upsertError;
-
-            batchResults.push({ userId, success: true });
-          } catch (error) {
-            console.error(`Error processing user ${userId}:`, error);
+          }
+        } catch (error) {
+          // Batch-level query failure - mark all as failed
+          console.error("Batch query error:", error);
+          for (const userId of batch) {
             batchResults.push({
               userId,
               success: false,
-              error: error instanceof Error ? error.message : "Unknown error",
+              error: error instanceof Error ? error.message : "Batch query error",
             });
           }
         }

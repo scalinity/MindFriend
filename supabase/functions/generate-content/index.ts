@@ -21,6 +21,7 @@ import {
   DEFAULT_VOICE_ID,
   GoogleTTSError,
 } from "../_shared/google-tts.ts";
+import { sanitizeForPrompt } from "../_shared/sanitize.ts";
 import { checkRateLimit } from "../_shared/ratelimit.ts";
 // NEW: Import context-aware generation modules
 import {
@@ -193,13 +194,13 @@ serve(async (req) => {
   }
 
   const startTime = Date.now();
+  const DEBUG = Deno.env.get("DEBUG") === "true";
 
   try {
-    // === DEBUG LOGGING START ===
-    console.log(
-      `[generate-content] Request received at ${new Date().toISOString()}`,
-    );
-    console.log(`[generate-content] Method: ${req.method}, URL: ${req.url}`);
+    if (DEBUG) {
+      console.log(`[generate-content] Request received at ${new Date().toISOString()}`);
+      console.log(`[generate-content] Method: ${req.method}, URL: ${req.url}`);
+    }
 
     // Validate required environment variables (rule-032)
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
@@ -231,10 +232,12 @@ serve(async (req) => {
 
     // Auth validation
     const authHeader = req.headers.get("Authorization");
-    console.log(`[generate-content] Auth header present: ${!!authHeader}`);
-    console.log(
-      `[generate-content] Auth header starts with Bearer: ${authHeader?.startsWith("Bearer ")}`,
-    );
+    if (DEBUG) {
+      console.log(`[generate-content] Auth header present: ${!!authHeader}`);
+      console.log(
+        `[generate-content] Auth header starts with Bearer: ${authHeader?.startsWith("Bearer ")}`,
+      );
+    }
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       console.error(
@@ -247,10 +250,12 @@ serve(async (req) => {
     }
 
     const token = authHeader.replace("Bearer ", "");
-    console.log(`[generate-content] Token length: ${token.length}`);
-    console.log(
-      `[generate-content] Token prefix: ${token.substring(0, 30)}...`,
-    );
+    if (DEBUG) {
+      console.log(`[generate-content] Token length: ${token.length}`);
+      console.log(
+        `[generate-content] Token prefix: ${token.substring(0, 30)}...`,
+      );
+    }
 
     // Create Supabase clients
     const supabaseUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -265,15 +270,17 @@ serve(async (req) => {
     ) as AnySupabaseClient;
 
     // Get authenticated user
-    console.log(`[generate-content] Calling supabaseUser.auth.getUser()...`);
+    if (DEBUG) console.log(`[generate-content] Calling supabaseUser.auth.getUser()...`);
     const {
       data: { user },
       error: authError,
     } = await supabaseUser.auth.getUser();
 
-    console.log(
-      `[generate-content] getUser result - user: ${user?.id ?? "null"}, error: ${authError?.message ?? "none"}`,
-    );
+    if (DEBUG) {
+      console.log(
+        `[generate-content] getUser result - user: ${user?.id ?? "null"}, error: ${authError?.message ?? "none"}`,
+      );
+    }
 
     if (authError || !user) {
       console.error(`[generate-content] REJECTED: Auth validation failed`);
@@ -288,9 +295,11 @@ serve(async (req) => {
       });
     }
 
-    console.log(
-      `[generate-content] SUCCESS: User authenticated - ID: ${user.id}, email: ${user.email}`,
-    );
+    if (DEBUG) {
+      console.log(
+        `[generate-content] SUCCESS: User authenticated - ID: ${user.id}`,
+      );
+    }
 
     // Rate limiting
     const rateLimitResult = await checkRateLimit(
@@ -389,15 +398,11 @@ serve(async (req) => {
       profile?.subscription_tier === "family";
 
     // Check and enforce quota
-    console.log(
-      `[generate-content] About to call supabaseAdmin.rpc for quota check`,
-    );
-    console.log(
-      `[generate-content] supabaseAdmin type: ${typeof supabaseAdmin}`,
-    );
-    console.log(
-      `[generate-content] supabaseAdmin.rpc type: ${typeof supabaseAdmin.rpc}`,
-    );
+    if (DEBUG) {
+      console.log(`[generate-content] About to call supabaseAdmin.rpc for quota check`);
+      console.log(`[generate-content] supabaseAdmin type: ${typeof supabaseAdmin}`);
+      console.log(`[generate-content] supabaseAdmin.rpc type: ${typeof supabaseAdmin.rpc}`);
+    }
     const { data: quotaResult, error: quotaError } = await supabaseAdmin.rpc(
       "check_and_increment_content_quota",
       {
@@ -420,10 +425,7 @@ serve(async (req) => {
       quota_limit: 3,
     };
 
-    console.log(
-      `[generate-content] Quota check result:`,
-      JSON.stringify(quota),
-    );
+    if (DEBUG) console.log(`[generate-content] Quota check result:`, JSON.stringify(quota));
 
     if (!quota.allowed) {
       return new Response(
@@ -563,59 +565,46 @@ serve(async (req) => {
       let actualDuration: number | undefined;
       let generationCost = 0;
 
-      console.log(`[generate-content] isPremium: ${isPremium}`);
+      if (DEBUG) console.log(`[generate-content] isPremium: ${isPremium}`);
       if (isPremium) {
         // Check monthly TTS character budget ($5/month cap)
         // Use displayText (extracted readable content) not raw JSON
         const charCount = displayText.length;
-        console.log(
-          `[generate-content] Premium user - checking TTS budget for ${charCount} characters`,
-        );
+        if (DEBUG) console.log(`[generate-content] Premium user - checking TTS budget for ${charCount} characters`);
         const { data: budgetResult, error: budgetError } =
           await supabaseAdmin.rpc("check_tts_monthly_budget", {
             p_user_id: user.id,
             p_character_count: charCount,
           });
 
-        console.log(
-          `[generate-content] TTS budget check - error: ${budgetError?.message || "none"}, result:`,
-          JSON.stringify(budgetResult),
-        );
+        if (DEBUG) console.log(`[generate-content] TTS budget check - error: ${budgetError?.message || "none"}, result:`, JSON.stringify(budgetResult));
         const budget = budgetResult?.[0];
         if (budgetError || !budget?.allowed) {
           // Monthly budget exceeded — fall back to text-only like free tier
-          console.log(
+          if (DEBUG) console.log(
             `Premium user ${user.id}: monthly TTS budget exceeded (${budget?.chars_used || "?"}/${budget?.chars_limit || "?"} chars), returning text-only`,
           );
           actualDuration = estimateDuration(displayText);
         }
 
         if (budget?.allowed) {
-          console.log(
-            `[generate-content] TTS budget allowed, synthesizing audio with Chirp 3 HD...`,
-          );
+          if (DEBUG) console.log(`[generate-content] TTS budget allowed, synthesizing audio with Chirp 3 HD...`);
           try {
             const googleTTS = createGoogleTTSClient();
             // Map content type to voice preset key
             const voiceId =
               request.params.voiceId || request.contentType || DEFAULT_VOICE_ID;
-            console.log(
-              `[generate-content] Using Chirp 3 HD voiceId: ${voiceId}`,
-            );
+            if (DEBUG) console.log(`[generate-content] Using Chirp 3 HD voiceId: ${voiceId}`);
 
             // Chunk text if it exceeds Google's 5000 byte limit
             const chunks = chunkTextForTTS(displayText, 4800);
-            console.log(
-              `[generate-content] Text split into ${chunks.length} chunk(s)`,
-            );
+            if (DEBUG) console.log(`[generate-content] Text split into ${chunks.length} chunk(s)`);
 
             const audioChunks: Uint8Array[] = [];
             let totalCharCount = 0;
 
             for (let i = 0; i < chunks.length; i++) {
-              console.log(
-                `[generate-content] Synthesizing chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars)`,
-              );
+              if (DEBUG) console.log(`[generate-content] Synthesizing chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars)`);
               const ttsResult = await googleTTS.textToSpeech({
                 text: chunks[i],
                 voiceId,
@@ -637,9 +626,7 @@ serve(async (req) => {
               offset += chunk.length;
             }
 
-            console.log(
-              `[generate-content] TTS synthesis successful, ${combinedAudio.length} bytes, ${totalCharCount} chars`,
-            );
+            if (DEBUG) console.log(`[generate-content] TTS synthesis successful, ${combinedAudio.length} bytes, ${totalCharCount} chars`);
 
             // Upload to Supabase Storage
             const fileName = `${user.id}/${contentId}.mp3`;
@@ -651,16 +638,14 @@ serve(async (req) => {
               });
 
             if (!uploadError) {
-              console.log(
-                `[generate-content] Audio uploaded successfully to: ${fileName}`,
-              );
+              if (DEBUG) console.log(`[generate-content] Audio uploaded successfully to: ${fileName}`);
               // Get public URL
               const { data: urlData } = supabaseAdmin.storage
                 .from("generated-audio")
                 .getPublicUrl(fileName);
 
               audioUrl = urlData?.publicUrl;
-              console.log(`[generate-content] Audio URL: ${audioUrl}`);
+              if (DEBUG) console.log(`[generate-content] Audio URL: ${audioUrl}`);
               actualDuration = estimateDuration(displayText);
               generationCost = estimateTTSCost(totalCharCount);
             } else {
@@ -687,9 +672,7 @@ serve(async (req) => {
       } else {
         // Free tier: estimate duration from displayText for UI display
         actualDuration = estimateDuration(displayText);
-        console.log(
-          `Free tier user ${user.id}: skipping TTS, text-only content`,
-        );
+        if (DEBUG) console.log(`Free tier user: skipping TTS, text-only content`);
       }
 
       // Calculate quality score (simple heuristic)
@@ -703,9 +686,7 @@ serve(async (req) => {
 
       // Update final record
       const processingTime = Date.now() - startTime;
-      console.log(
-        `[generate-content] Updating DB record ${contentId} with audio_url: ${audioUrl ? "present" : "null"}`,
-      );
+      if (DEBUG) console.log(`[generate-content] Updating DB record ${contentId} with audio_url: ${audioUrl ? "present" : "null"}`);
       const { error: finalUpdateError } = await supabaseAdmin
         .from("generated_content")
         .update({
@@ -721,10 +702,8 @@ serve(async (req) => {
         console.error(
           `[generate-content] CRITICAL: Failed to update DB record: ${finalUpdateError.message}`,
         );
-      } else {
-        console.log(
-          `[generate-content] DB record updated successfully with audio_url`,
-        );
+      } else if (DEBUG) {
+        console.log(`[generate-content] DB record updated successfully with audio_url`);
       }
 
       // Also create request record for analytics
@@ -762,10 +741,7 @@ serve(async (req) => {
           triggerWarnings.length > 0 ? triggerWarnings : undefined,
       };
 
-      console.log(
-        `[generate-content] SUCCESS - Returning response:`,
-        JSON.stringify(response, null, 2),
-      );
+      if (DEBUG) console.log(`[generate-content] SUCCESS - Returning response:`, JSON.stringify(response, null, 2));
 
       return new Response(JSON.stringify(response), {
         status: 200,
@@ -849,32 +825,34 @@ async function generateTextContent(
     const basePrompt = CONTENT_PROMPTS[request.contentType];
     const durationMinutes = Math.round((request.params.duration || 300) / 60);
 
+    // Sanitize user-supplied params before interpolating into prompts
+    const safeTheme = sanitizeForPrompt(request.params.theme || request.params.focus || "general wellness", 200);
+    const safeFocus = sanitizeForPrompt(request.params.focus || "mindfulness", 200);
+    const safeGroundingScenario = sanitizeForPrompt(request.params.groundingScenario || "general", 200);
+    const safeCustomPrompt = request.params.customPrompt ? sanitizeForPrompt(request.params.customPrompt, 2000) : "anxious thoughts";
+
     userPrompt = basePrompt
       .replace("{duration}", String(durationMinutes))
-      .replace(
-        "{theme}",
-        request.params.theme || request.params.focus || "general wellness",
-      )
-      .replace("{focus}", request.params.focus || "mindfulness")
+      .replace("{theme}", safeTheme)
+      .replace("{focus}", safeFocus)
       .replace("{approach}", request.params.approach || "mindfulness")
       .replace("{pattern}", request.params.pattern || "4-4-4")
       .replace("{location}", request.params.location || "indoor")
-      .replace("{scenario}", request.params.groundingScenario || "general")
+      .replace("{scenario}", safeGroundingScenario)
       .replace("{timeOfDay}", "anytime")
-      .replace("{thought}", request.params.customPrompt || "anxious thoughts");
+      .replace("{thought}", safeCustomPrompt);
 
     // Add custom prompt if provided
     if (request.params.customPrompt) {
-      userPrompt += `\n\nAdditional user request: ${request.params.customPrompt}`;
+      userPrompt += `\n\nAdditional user request: ${safeCustomPrompt}`;
     }
 
     systemPrompt =
       "You are a professional wellness content creator specializing in mental health and relaxation content. Create calming, therapeutic content that promotes wellbeing.";
   }
 
-  console.log(
-    `[generate-content] Calling xAI API with model: grok-4-1-fast-reasoning`,
-  );
+  const DEBUG = Deno.env.get("DEBUG") === "true";
+  if (DEBUG) console.log(`[generate-content] Calling xAI API with model: grok-4-1-fast-reasoning`);
   const response = await fetch(XAI_API_URL, {
     method: "POST",
     headers: {
@@ -1153,7 +1131,7 @@ function extractDisplayText(
     }
   } catch {
     // Not valid JSON, return as-is (it's already plain text)
-    console.log("[generate-content] Content is not JSON, using as plain text");
+    if (DEBUG) console.log("[generate-content] Content is not JSON, using as plain text");
     return jsonContent;
   }
 }

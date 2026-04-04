@@ -270,7 +270,6 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({
           error: "ENROLLMENT_FAILED",
-          debug: enrollError.message || JSON.stringify(enrollError),
         }),
         {
           status: 500,
@@ -342,7 +341,6 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         error: "An unexpected error occurred",
-        debug: error?.message || String(error),
       }),
       {
         status: 500,
