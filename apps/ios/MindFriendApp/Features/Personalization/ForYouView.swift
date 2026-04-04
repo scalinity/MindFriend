@@ -12,7 +12,6 @@ struct ForYouView: View {
     @State private var anxietyLevel: AnxietyLevel = .calm
     @State private var energyLevel: EnergyLevel = .moderate
     @State private var exercises: [String: Exercise] = [:]
-    @State private var allExercises: [Exercise] = []
 
     private var personalizationService: PersonalizationService {
         container.personalizationService
@@ -144,22 +143,23 @@ struct ForYouView: View {
                 .foregroundStyle(.secondary)
 
             HStack(spacing: 16) {
-                ForEach(["great", "good", "okay", "low", "stressed"], id: \.self) { mood in
+                // Order: mood:1 (stressed) on left → mood:5 (great) on right
+                ForEach(MoodEmojiMapper.moodsLowToHigh, id: \.name) { mood in
                     Button {
                         withAnimation {
-                            currentMood = mood
+                            currentMood = mood.name
                         }
                         Task { await loadRecommendations() }
                     } label: {
                         VStack(spacing: 4) {
-                            Text(moodEmoji(mood))
+                            Text(mood.emoji)
                                 .font(.title)
-                            Text(mood.capitalized)
+                            Text(mood.name.capitalized)
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    .accessibilityLabel("Feeling \(mood)")
+                    .accessibilityLabel("Feeling \(mood.name)")
                 }
             }
             .frame(maxWidth: .infinity)
@@ -304,12 +304,6 @@ struct ForYouView: View {
 
             // Fetch exercises for navigation
             let fetchedExercises = try await container.supabaseDataService.getExercises()
-            self.allExercises = fetchedExercises
-            print("DEBUG ForYouView: Fetched \(fetchedExercises.count) exercises")
-            if let firstEx = fetchedExercises.first {
-                print("DEBUG ForYouView: Sample exercise ID: '\(firstEx.id)'")
-                print("DEBUG ForYouView: Normalized UUID: '\(normalizeUUID(firstEx.id))'")
-            }
 
             // Build map with normalized UUIDs as keys
             var exerciseMap: [String: Exercise] = [:]
@@ -319,32 +313,19 @@ struct ForYouView: View {
             }
             exercises = exerciseMap
 
-            // Debug: check if recommendations match
-            print("DEBUG ForYouView: Exercise map has \(exerciseMap.count) entries")
-            print("DEBUG ForYouView: Recommendations count: \(recommendations.count)")
+            #if DEBUG
+            print("DEBUG ForYouView: Fetched \(fetchedExercises.count) exercises, \(recommendations.count) recommendations")
             if let firstRec = recommendations.first {
-                let normalizedContentId = normalizeUUID(firstRec.contentId)
-                print("DEBUG ForYouView: Sample contentId: '\(firstRec.contentId)'")
-                print("DEBUG ForYouView: Normalized contentId: '\(normalizedContentId)'")
-                let found = exerciseMap[normalizedContentId] != nil
-                print("DEBUG ForYouView: Lookup result: \(found ? "FOUND" : "NOT FOUND")")
-
-                if !found {
-                    // Print all exercise IDs to help debug
-                    print("DEBUG ForYouView: All exercise normalized IDs:")
-                    for (idx, ex) in fetchedExercises.prefix(5).enumerated() {
-                        print("  [\(idx)] '\(normalizeUUID(ex.id))'")
-                    }
-                }
+                let found = exerciseMap[normalizeUUID(firstRec.contentId)] != nil
+                print("DEBUG ForYouView: First recommendation lookup: \(found ? "FOUND" : "NOT FOUND")")
             }
+            #endif
         } catch is CancellationError {
             // Task was cancelled (e.g., view disappeared or new refresh started)
             // Don't show this as an error to the user
-            print("DEBUG ForYouView: Task cancelled")
             return // Don't update loading state, another task may be in progress
         } catch let urlError as URLError where urlError.code == .cancelled {
             // Network request was cancelled
-            print("DEBUG ForYouView: Network request cancelled")
             return // Don't update loading state
         } catch {
             // Don't show "cancelled" errors from other sources
@@ -355,17 +336,6 @@ struct ForYouView: View {
         }
 
         isLoading = false
-    }
-
-    private func moodEmoji(_ mood: String) -> String {
-        switch mood {
-        case "great": return "😊"
-        case "good": return "🙂"
-        case "okay": return "😐"
-        case "low": return "😔"
-        case "stressed": return "😰"
-        default: return "🙂"
-        }
     }
 
     /// Normalize a UUID string to lowercase without hyphens for consistent comparison

@@ -83,15 +83,7 @@ struct MoodComplicationProvider: TimelineProvider {
     }
 
     private func emojiForMood(_ mood: String?) -> String {
-        guard let mood = mood else { return "😊" }
-        switch mood.lowercased() {
-        case "great", "amazing", "excellent": return "😊"
-        case "good", "happy": return "🙂"
-        case "okay", "neutral", "fine": return "😐"
-        case "low", "sad", "down": return "😔"
-        case "stressed", "anxious", "worried": return "😰"
-        default: return "🙂"
-        }
+        MoodEmojiMapper.emoji(for: mood)
     }
 }
 
@@ -201,10 +193,10 @@ struct MoodComplicationEntryView: View {
 
             Spacer()
 
-            // Quick mood buttons (if not logged)
+            // Quick mood buttons (if not logged) - matches iOS emojis
             if !entry.hasLoggedToday {
                 HStack(spacing: 4) {
-                    ForEach(["😊", "😐", "😔"], id: \.self) { emoji in
+                    ForEach(["😁", "😐", "😔"], id: \.self) { emoji in
                         Text(emoji)
                             .font(.caption)
                     }
@@ -228,5 +220,5 @@ struct MoodComplicationEntryView: View {
     MoodComplication()
 } timeline: {
     MoodComplicationEntry(date: .now, mood: nil, emoji: "🙂", hasLoggedToday: false, isPlaceholder: false)
-    MoodComplicationEntry(date: .now, mood: "great", emoji: "😊", hasLoggedToday: true, isPlaceholder: false)
+    MoodComplicationEntry(date: .now, mood: "great", emoji: "😁", hasLoggedToday: true, isPlaceholder: false)
 }

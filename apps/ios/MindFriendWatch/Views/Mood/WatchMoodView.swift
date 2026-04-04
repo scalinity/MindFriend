@@ -1,15 +1,12 @@
 import SwiftUI
-import WidgetKit
 
 struct WatchMoodView: View {
     @State private var selectedMood: String?
-    let moods = [
-        ("great", "😊"),
-        ("good", "🙂"),
-        ("okay", "😐"),
-        ("low", "😔"),
-        ("stressed", "😰")
-    ]
+
+    /// Moods ordered low→high (stressed=1 to great=5) for consistent UX with iOS
+    private var moods: [(String, String)] {
+        MoodEmojiMapper.moodsLowToHigh.map { ($0.name, $0.emoji) }
+    }
 
     var body: some View {
         VStack(spacing: 12) {
@@ -47,92 +44,15 @@ struct WatchMoodView: View {
     }
 
     private func saveMood(_ mood: String) {
-        // Derive score from mood (great=5 ... stressed=1)
-        let moodScoreMap: [String: Int] = ["great": 5, "good": 4, "okay": 3, "low": 2, "stressed": 1]
-        let score = moodScoreMap[mood] ?? 3
+        let score = MoodEmojiMapper.score(for: mood)
 
-        // Use Keychain for sensitive mood data
-        WatchKeychain.save(mood, forKey: "watch_today_mood")
-        WatchKeychain.save(Date().ISO8601Format(), forKey: "watch_mood_date")
-
-        // Also store in shared App Group UserDefaults for complications
-        WatchAppConstants.sharedDefaults.set(mood, forKey: "watch_today_mood_display")
-        WatchAppConstants.sharedDefaults.set(Date(), forKey: "watch_mood_date_display")
-
-        // Update mood history for stats
+        // Update mood history for stats (thread-safe)
         MoodHistoryManager.addMoodEntry(mood)
 
-        // Sync mood to iOS app
+        // Sync mood to iOS app (this also stores locally via storeMoodLocally)
         WatchConnectivityManager.shared.sendMoodToPhone(mood, score: score)
-    }
-}
 
-// MARK: - Mood History Manager
-
-/// Manages 7-day mood history for WatchStatsView
-enum MoodHistoryManager {
-    private static let historyKey = "watch_mood_history"
-    private static let maxDays = 7
-
-    struct MoodEntry: Codable {
-        let mood: String
-        let date: Date
-    }
-
-    /// Add a mood entry to history
-    static func addMoodEntry(_ mood: String) {
-        var history = loadHistory()
-
-        // Remove any existing entry for today
-        let today = Calendar.current.startOfDay(for: Date())
-        history.removeAll { Calendar.current.isDate($0.date, inSameDayAs: today) }
-
-        // Add new entry
-        history.append(MoodEntry(mood: mood, date: Date()))
-
-        // Keep only last 7 days
-        let cutoff = Calendar.current.date(byAdding: .day, value: -maxDays, to: Date()) ?? Date()
-        history = history.filter { $0.date > cutoff }
-
-        saveHistory(history)
-    }
-
-    /// Load mood history
-    static func loadHistory() -> [MoodEntry] {
-        guard let data = WatchAppConstants.sharedDefaults.data(forKey: historyKey),
-              let history = try? JSONDecoder().decode([MoodEntry].self, from: data) else {
-            return []
-        }
-        return history
-    }
-
-    /// Get mood emoji for a specific day offset (0 = today, 1 = yesterday, etc.)
-    static func moodEmoji(forDayOffset offset: Int) -> String {
-        let calendar = Calendar.current
-        guard let targetDate = calendar.date(byAdding: .day, value: -offset, to: Date()) else {
-            return "·"
-        }
-
-        let history = loadHistory()
-        if let entry = history.first(where: { calendar.isDate($0.date, inSameDayAs: targetDate) }) {
-            return emojiForMood(entry.mood)
-        }
-        return "·"
-    }
-
-    private static func saveHistory(_ history: [MoodEntry]) {
-        guard let data = try? JSONEncoder().encode(history) else { return }
-        WatchAppConstants.sharedDefaults.set(data, forKey: historyKey)
-    }
-
-    private static func emojiForMood(_ mood: String) -> String {
-        switch mood {
-        case "great": return "😊"
-        case "good": return "🙂"
-        case "okay": return "😐"
-        case "low": return "😔"
-        case "stressed": return "😰"
-        default: return "🙂"
-        }
+        // Haptic confirmation
+        HapticManager.shared.playSuccess()
     }
 }

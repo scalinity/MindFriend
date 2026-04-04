@@ -13,5 +13,7 @@ protocol ConnectivityProviding {
 
     // Callbacks
     var onMoodReceived: ((String, Int) -> Void)? { get set }
+    var onQuestCompleted: ((String) -> Void)? { get set }
     var onBreathingCompleted: ((Int) -> Void)? { get set }
+    var onSyncRequested: (() -> Void)? { get set }
 }

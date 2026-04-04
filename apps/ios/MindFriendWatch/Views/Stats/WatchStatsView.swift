@@ -49,6 +49,9 @@ struct WatchStatsView: View {
         }
         .padding()
         .navigationTitle("Stats")
+        .onAppear {
+            viewModel.loadData()
+        }
     }
 }
 

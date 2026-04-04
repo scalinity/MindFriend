@@ -1,6 +1,6 @@
+import { getCorsHeaders } from "../_shared/cors.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import { getCorsHeaders } from "../_shared/cors.ts";
 
 interface QuotaResponse {
   used: number;
@@ -22,10 +22,7 @@ serve(async (req: Request): Promise<Response> => {
 
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
-    return new Response(null, {
-      status: 204,
-      headers: corsHeaders,
-    });
+    return new Response(null, { status: 204, headers: corsHeaders });
   }
 
   try {
@@ -64,9 +61,7 @@ serve(async (req: Request): Promise<Response> => {
       .maybeSingle();
 
     const isPremium = !!subscription;
-    const monthlyLimit = isPremium
-      ? PREMIUM_MONTHLY_LIMIT
-      : FREE_TIER_MONTHLY_LIMIT;
+    const monthlyLimit = isPremium ? PREMIUM_MONTHLY_LIMIT : FREE_TIER_MONTHLY_LIMIT;
 
     // Count this month's generations using UTC first-of-month for consistency
     const now = new Date();

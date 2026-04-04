@@ -247,6 +247,10 @@ serve(async (req) => {
     }
 
     const token = authHeader.replace("Bearer ", "");
+    console.log(`[generate-content] Token length: ${token.length}`);
+    console.log(
+      `[generate-content] Token prefix: ${token.substring(0, 30)}...`,
+    );
 
     // Create Supabase clients
     const supabaseUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -285,7 +289,7 @@ serve(async (req) => {
     }
 
     console.log(
-      `[generate-content] SUCCESS: User authenticated - ID: ${user.id.slice(0, 8)}...`,
+      `[generate-content] SUCCESS: User authenticated - ID: ${user.id}, email: ${user.email}`,
     );
 
     // Rate limiting

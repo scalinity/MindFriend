@@ -260,7 +260,7 @@ Required environment variables for Edge Function:
 STRIPE_SECRET_KEY=sk_test_xxxxxxxxxxxxxxxxxxxxx  # Or sk_live_ for production
 STRIPE_WEBHOOK_SECRET=whsec_xxxxxxxxxxxxxxxxxxxxx
 SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=<REDACTED_KEY>
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 ## Stripe Dashboard Configuration
