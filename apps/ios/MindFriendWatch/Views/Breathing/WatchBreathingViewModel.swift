@@ -27,6 +27,7 @@ final class WatchBreathingViewModel: ObservableObject {
 
     private var timer: Timer?
     private let haptics: HapticProviding
+    private let connectivity: ConnectivityProviding
 
     // Timer cleanup handled by stop() in onDisappear.
     // The [weak self] in the timer callback prevents retain cycles,
@@ -44,8 +45,10 @@ final class WatchBreathingViewModel: ObservableObject {
 
     // MARK: - Initialization
 
-    init(haptics: HapticProviding = HapticManager.shared) {
+    init(haptics: HapticProviding = HapticManager.shared,
+         connectivity: ConnectivityProviding = WatchConnectivityManager.shared) {
         self.haptics = haptics
+        self.connectivity = connectivity
     }
 
     // MARK: - Computed Properties
@@ -142,7 +145,7 @@ final class WatchBreathingViewModel: ObservableObject {
         haptics.playSessionComplete()
 
         // Sync breathing completion to iOS app
-        WatchConnectivityManager.shared.sendBreathingCompletedToPhone(cycles: totalCycles)
+        connectivity.sendBreathingCompletedToPhone(cycles: totalCycles)
     }
 
     // MARK: - Timer

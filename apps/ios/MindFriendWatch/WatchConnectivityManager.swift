@@ -55,7 +55,7 @@ private enum SyncKeys {
 // MARK: - Watch Connectivity Manager
 
 @MainActor
-public final class WatchConnectivityManager: NSObject, ObservableObject, ConnectivityProviding {
+public final class WatchConnectivityManager: NSObject, ObservableObject {
     // MARK: - Singleton
 
     public static let shared = WatchConnectivityManager()
@@ -373,6 +373,16 @@ public final class WatchConnectivityManager: NSObject, ObservableObject, Connect
     // MARK: - Local Storage (Watch)
 
     #if os(watchOS)
+    /// Debounced timeline reload to prevent rapid successive calls
+    private func reloadTimelinesDebounced() {
+        let now = Date()
+        guard now.timeIntervalSince(lastTimelineReload) >= reloadDebounceInterval else {
+            return
+        }
+        lastTimelineReload = now
+        WidgetCenter.shared.reloadAllTimelines()
+    }
+
     private func storeMoodLocally(_ mood: String, score: Int) {
         // Use Keychain for sensitive mood data (consistent with WatchMoodView)
         WatchKeychain.save(mood, forKey: "watch_today_mood")
@@ -383,8 +393,8 @@ public final class WatchConnectivityManager: NSObject, ObservableObject, Connect
         WatchAppConstants.sharedDefaults.set(mood, forKey: "watch_today_mood_display")
         WatchAppConstants.sharedDefaults.set(Date(), forKey: "watch_mood_date_display")
 
-        // Reload complications
-        WidgetCenter.shared.reloadAllTimelines()
+        // Reload complications (debounced)
+        reloadTimelinesDebounced()
     }
 
     private func updateLocalDataFromContext(_ context: [String: Any]) {
@@ -398,6 +408,8 @@ public final class WatchConnectivityManager: NSObject, ObservableObject, Connect
             WatchKeychain.save(mood, forKey: "watch_today_mood")
             // Also store in shared defaults for complications
             WatchAppConstants.sharedDefaults.set(mood, forKey: "watch_today_mood_display")
+            // Update mood history for stats
+            MoodHistoryManager.addMoodEntry(mood)
         }
 
         if let moodScore = context["todayMoodScore"] as? Int, (1...5).contains(moodScore) {
@@ -437,8 +449,8 @@ public final class WatchConnectivityManager: NSObject, ObservableObject, Connect
 
         self.lastSyncDate = Date()
 
-        // Reload complications
-        WidgetCenter.shared.reloadAllTimelines()
+        // Reload complications (debounced)
+        reloadTimelinesDebounced()
     }
     #endif
 }
@@ -559,3 +571,9 @@ extension WatchConnectivityManager: WCSessionDelegate {
     }
     #endif
 }
+
+// MARK: - Protocol Conformance (watchOS only)
+
+#if os(watchOS)
+extension WatchConnectivityManager: ConnectivityProviding {}
+#endif

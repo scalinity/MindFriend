@@ -9,7 +9,8 @@ final class WatchStatsViewModel: ObservableObject {
 
     private static let dayOfWeekFormatter: DateFormatter = {
         let formatter = DateFormatter()
-        formatter.dateFormat = "E"
+        // Use localized template for proper internationalization
+        formatter.setLocalizedDateFormatFromTemplate("E")
         return formatter
     }()
 
