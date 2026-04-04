@@ -19,7 +19,23 @@ final class MentorshipEncryptionService: ObservableObject {
         SymmetricKey(size: .bits256)
     }
     
-    /// Derive encryption key from user ID and match ID
+    /// Get or create encryption key for a match.
+    /// Prefers Keychain-stored random key; falls back to deriveEncryptionKey for backward compatibility.
+    func getOrCreateKey(for matchId: UUID, userId: UUID) throws -> SymmetricKey {
+        // Try loading existing random key from Keychain
+        if let existing = try retrieveKeyFromKeychain(for: matchId) {
+            return existing
+        }
+        // Generate a new random key and store it
+        let key = generateEncryptionKey()
+        try storeKeyInKeychain(key, for: matchId)
+        return key
+    }
+
+    /// Derive encryption key from user ID and match ID.
+    /// Deprecated: Uses predictable public UUIDs with a zero-byte default salt.
+    /// Kept only for backward compatibility when decrypting legacy messages.
+    @available(*, deprecated, message: "Use getOrCreateKey(for:userId:) instead — derives from predictable UUIDs")
     func deriveEncryptionKey(
         userId: UUID,
         matchId: UUID,
@@ -27,20 +43,21 @@ final class MentorshipEncryptionService: ObservableObject {
     ) -> SymmetricKey {
         let input = (userId.uuidString + matchId.uuidString).data(using: .utf8) ?? Data()
         let saltData = salt ?? Data(repeating: 0, count: 16)
-        
+
         let derivedKey = HKDF<SHA256>.deriveKey(
             inputKeyMaterial: SymmetricKey(data: input),
             salt: saltData,
             info: Data("mentorship-encryption".utf8),
             outputByteCount: 32
         )
-        
+
         return derivedKey
     }
     
     // MARK: - Encryption/Decryption
     
     /// Encrypt message content
+    /// The returned ciphertext has the 16-byte GCM authentication tag appended.
     func encryptMessage(
         _ content: String,
         using key: SymmetricKey
@@ -48,33 +65,45 @@ final class MentorshipEncryptionService: ObservableObject {
         guard let plaintext = content.data(using: .utf8) else {
             throw EncryptionError.invalidInput
         }
-        
+
         let sealedBox = try AES.GCM.seal(plaintext, using: key)
         let nonce = sealedBox.nonce.withUnsafeBytes({ Data($0) })
-        
-        return (ciphertext: sealedBox.ciphertext, nonce: nonce)
+
+        // Append GCM tag (16 bytes) to ciphertext so decrypt can extract it
+        var ciphertextWithTag = sealedBox.ciphertext
+        ciphertextWithTag.append(sealedBox.tag)
+
+        return (ciphertext: ciphertextWithTag, nonce: nonce)
     }
-    
+
     /// Decrypt message content
+    /// Expects ciphertext with the 16-byte GCM authentication tag appended.
     func decryptMessage(
         ciphertext: Data,
         nonce: Data,
         using key: SymmetricKey
     ) throws -> String {
         do {
-            // Reconstruct nonce
             guard let nonceValue = try? AES.GCM.Nonce(data: nonce) else {
                 throw EncryptionError.invalidNonce
             }
-            
-            // Reconstruct sealed box
-            let sealedBox = try AES.GCM.SealedBox(nonce: nonceValue, ciphertext: ciphertext, tag: Data())
+
+            // GCM tag is always 16 bytes, appended at the end of ciphertext
+            let tagLength = 16
+            guard ciphertext.count >= tagLength else {
+                throw EncryptionError.decryptionFailed
+            }
+
+            let rawCiphertext = ciphertext.prefix(ciphertext.count - tagLength)
+            let tag = ciphertext.suffix(tagLength)
+
+            let sealedBox = try AES.GCM.SealedBox(nonce: nonceValue, ciphertext: rawCiphertext, tag: tag)
             let plaintext = try AES.GCM.open(sealedBox, using: key)
-            
+
             guard let message = String(data: plaintext, encoding: .utf8) else {
                 throw EncryptionError.decodingFailed
             }
-            
+
             return message
         } catch {
             if error is EncryptionError {

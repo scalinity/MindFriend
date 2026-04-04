@@ -167,6 +167,7 @@ final class AudioMixerEngine: ObservableObject {
     /// Update voice volume
     func setVoiceVolume(_ volume: Float) {
         voiceVolume = max(0, min(1, volume))
+        voicePlayer?.volume = voiceVolume
     }
 
     /// Update background volume
@@ -206,10 +207,15 @@ final class AudioMixerEngine: ObservableObject {
     }
 
     deinit {
-        if let observer = timeObserver {
-            voicePlayer?.removeTimeObserver(observer)
+        // Capture @MainActor-isolated values before async cleanup
+        let observer = timeObserver
+        let player = voicePlayer
+        Task { @MainActor in
+            if let observer = observer {
+                player?.removeTimeObserver(observer)
+            }
+            NotificationCenter.default.removeObserver(self)
         }
-        NotificationCenter.default.removeObserver(self)
     }
 }
 

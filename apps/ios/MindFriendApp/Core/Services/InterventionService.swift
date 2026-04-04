@@ -23,7 +23,8 @@ private enum InterventionConstants {
     static let hrvMin = 10.0 // Milliseconds
     static let hrvMax = 200.0 // Milliseconds
     static let heartRateElevatedThreshold = 100.0 // BPM - elevated stress indicator
-    static let hrvLowThreshold = 50.0 // Milliseconds - low parasympathetic tone
+    // Aligned with server-side HRV_LOW_THRESHOLD in check-intervention-triggers
+    static let hrvLowThreshold = 30.0 // Milliseconds - low parasympathetic tone
     static let preferencesCacheExpirationSeconds: TimeInterval = 5 * 60 // 5 minutes
 }
 

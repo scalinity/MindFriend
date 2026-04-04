@@ -84,88 +84,117 @@ serve(async (req) => {
       async (batch) => {
         const batchResults: MonthlyResult[] = [];
 
-        for (const userId of batch) {
-          try {
-            // Fetch moods for this user in target month
-            const { data: moods, error: moodsError } = await supabase
-              .from("moods")
-              .select("mood_score, created_at")
-              .eq("user_id", userId)
-              .gte("created_at", previousMonth.start.toISOString())
-              .lt("created_at", previousMonth.end.toISOString());
+        try {
+          // Batch query: fetch all moods for this batch of users in one query
+          const { data: allMoods, error: moodsError } = await supabase
+            .from("moods")
+            .select("user_id, mood_score, created_at")
+            .in("user_id", batch)
+            .gte("created_at", previousMonth.start.toISOString())
+            .lt("created_at", previousMonth.end.toISOString());
 
-            if (moodsError) throw moodsError;
+          if (moodsError) throw moodsError;
 
-            // Skip if insufficient data
-            if (!moods || moods.length < 5) {
+          // Batch query: fetch prior month stats for trend calculation
+          const priorMonthStart = getPreviousMonthStart(previousMonthStart);
+          const { data: allPriorStats } = await supabase
+            .from("longitudinal_monthly_stats")
+            .select("user_id, avg_mood")
+            .in("user_id", batch)
+            .eq("month_start", priorMonthStart.toISOString());
+
+          // Batch query: fetch life events for all users in batch
+          const { data: allLifeEvents } = await supabase
+            .from("longitudinal_life_events")
+            .select("user_id, id, event_type, event_date")
+            .in("user_id", batch)
+            .gte("event_date", previousMonth.start.toISOString().split("T")[0])
+            .lt("event_date", previousMonth.end.toISOString().split("T")[0]);
+
+          // Group moods by user_id
+          const moodsByUser = new Map<string, typeof allMoods>();
+          for (const mood of allMoods || []) {
+            if (!moodsByUser.has(mood.user_id)) moodsByUser.set(mood.user_id, []);
+            moodsByUser.get(mood.user_id)!.push(mood);
+          }
+
+          // Index prior stats by user_id
+          const priorStatsByUser = new Map<string, number | null>();
+          for (const ps of allPriorStats || []) {
+            priorStatsByUser.set(ps.user_id, ps.avg_mood);
+          }
+
+          // Group life events by user_id
+          const eventsByUser = new Map<string, typeof allLifeEvents>();
+          for (const ev of allLifeEvents || []) {
+            if (!eventsByUser.has(ev.user_id)) eventsByUser.set(ev.user_id, []);
+            eventsByUser.get(ev.user_id)!.push(ev);
+          }
+
+          for (const userId of batch) {
+            try {
+              const moods = moodsByUser.get(userId) || [];
+
+              // Skip if insufficient data
+              if (moods.length < 5) {
+                batchResults.push({ userId, success: true });
+                continue;
+              }
+
+              // Calculate avg_mood
+              const moodScores = moods.map((m) => m.mood_score);
+              const avgMood = calculateAverage(moodScores);
+
+              // Calculate active_days_pct
+              const activeDays = countUniqueDays(moods.map((m) => m.created_at));
+              const activeDaysPct =
+                Math.round((activeDays / daysInMonth) * 10000) / 100;
+
+              const priorAvgMood = priorStatsByUser.get(userId) ?? null;
+              const moodTrend = calculateMoodTrend(avgMood, priorAvgMood);
+
+              const lifeEvents = eventsByUser.get(userId) || [];
+              const notableEvents = lifeEvents.map((e) => ({
+                event_id: e.id,
+                event_type: e.event_type,
+                event_date: e.event_date,
+              }));
+
+              // Upsert monthly stats
+              const { error: upsertError } = await supabase
+                .from("longitudinal_monthly_stats")
+                .upsert(
+                  {
+                    user_id: userId,
+                    month_start: previousMonth.start.toISOString(),
+                    avg_mood: avgMood,
+                    mood_trend: moodTrend,
+                    active_days_pct: activeDaysPct,
+                    notable_events: notableEvents,
+                  },
+                  { onConflict: "user_id,month_start" },
+                );
+
+              if (upsertError) throw upsertError;
+
               batchResults.push({ userId, success: true });
-              continue;
+            } catch (error) {
+              console.error(`Error processing user ${userId}:`, error);
+              batchResults.push({
+                userId,
+                success: false,
+                error: error instanceof Error ? error.message : "Unknown error",
+              });
             }
-
-            // Calculate avg_mood
-            const moodScores = moods.map((m) => m.mood_score);
-            const avgMood = calculateAverage(moodScores);
-
-            // Calculate active_days_pct
-            const activeDays = countUniqueDays(moods.map((m) => m.created_at));
-            const activeDaysPct =
-              Math.round((activeDays / daysInMonth) * 10000) / 100;
-
-            // Get prior month avg_mood for trend calculation
-            const priorMonthStart = getPreviousMonthStart(previousMonthStart);
-            const { data: priorStats } = await supabase
-              .from("longitudinal_monthly_stats")
-              .select("avg_mood")
-              .eq("user_id", userId)
-              .eq("month_start", priorMonthStart.toISOString())
-              .single();
-
-            const moodTrend = calculateMoodTrend(
-              avgMood,
-              priorStats?.avg_mood ?? null,
-            );
-
-            // Get notable events (life events with high impact)
-            const { data: lifeEvents } = await supabase
-              .from("longitudinal_life_events")
-              .select("id, event_type, event_date")
-              .eq("user_id", userId)
-              .gte(
-                "event_date",
-                previousMonth.start.toISOString().split("T")[0],
-              )
-              .lt("event_date", previousMonth.end.toISOString().split("T")[0]);
-
-            const notableEvents = (lifeEvents || []).map((e) => ({
-              event_id: e.id,
-              event_type: e.event_type,
-              event_date: e.event_date,
-            }));
-
-            // Upsert monthly stats
-            const { error: upsertError } = await supabase
-              .from("longitudinal_monthly_stats")
-              .upsert(
-                {
-                  user_id: userId,
-                  month_start: previousMonth.start.toISOString(),
-                  avg_mood: avgMood,
-                  mood_trend: moodTrend,
-                  active_days_pct: activeDaysPct,
-                  notable_events: notableEvents,
-                },
-                { onConflict: "user_id,month_start" },
-              );
-
-            if (upsertError) throw upsertError;
-
-            batchResults.push({ userId, success: true });
-          } catch (error) {
-            console.error(`Error processing user ${userId}:`, error);
+          }
+        } catch (error) {
+          // Batch-level query failure - mark all as failed
+          console.error("Batch query error:", error);
+          for (const userId of batch) {
             batchResults.push({
               userId,
               success: false,
-              error: error instanceof Error ? error.message : "Unknown error",
+              error: error instanceof Error ? error.message : "Batch query error",
             });
           }
         }

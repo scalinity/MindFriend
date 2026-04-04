@@ -379,9 +379,12 @@ extension SupabaseDataService {
     // Note: currentUserId is already defined in SupabaseDataService class
 
     func fetchWarningSignature() async throws -> WarningSignature? {
+        guard let userId = currentUserId else { return nil }
+
         let response = try await supabase
             .from("stress_signatures")
             .select()
+            .eq("user_id", value: userId.uuidString)
             .order("updated_at", ascending: false)
             .limit(1)
             .execute()
@@ -428,11 +431,14 @@ extension SupabaseDataService {
     }
 
     func fetchActivePatternAlerts() async throws -> [PatternAlert] {
+        guard let userId = currentUserId else { return [] }
+
         let oneDayAgo = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
 
         let response = try await supabase
             .from("pattern_alerts")
             .select()
+            .eq("user_id", value: userId.uuidString)
             .is("dismissed_at", value: nil)
             .gte("detected_at", value: ISO8601DateFormatter().string(from: oneDayAgo))
             .order("detected_at", ascending: false)
@@ -553,9 +559,14 @@ extension SupabaseDataService {
     }
 
     func fetchSignatureAccuracyStats() async throws -> SignatureAccuracyStats {
+        guard let userId = currentUserId else {
+            return SignatureAccuracyStats(totalAlerts: 0, accuratePredictions: 0, falseAlarms: 0, helpedPrevent: 0, missedPatterns: 0)
+        }
+
         let response = try await supabase
             .from("pattern_alerts")
             .select("user_feedback")
+            .eq("user_id", value: userId.uuidString)
             .execute()
 
         struct FeedbackRow: Decodable {

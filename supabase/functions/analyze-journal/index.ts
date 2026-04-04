@@ -13,6 +13,7 @@ import {
 type UntypedSupabaseClient = SupabaseClient<any, "public", any>;
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { checkRateLimit, getRateLimitHeaders } from "../_shared/ratelimit.ts";
+import { sanitizeForPrompt } from "../_shared/sanitize.ts";
 
 // Constants
 const MAX_CONTENT_LENGTH = 50000; // ~12,500 tokens
@@ -540,9 +541,13 @@ serve(async (req) => {
       );
     }
 
-    const userMessage = entry.title
-      ? `Title: ${entry.title}\n\n${entry.content}`
-      : entry.content;
+    // Sanitize journal content before sending to LLM
+    const sanitizedContent = sanitizeForPrompt(entry.content, 50000);
+    const sanitizedTitle = entry.title ? sanitizeForPrompt(entry.title, 200) : null;
+
+    const userMessage = sanitizedTitle
+      ? `Title: ${sanitizedTitle}\n\n${sanitizedContent}`
+      : sanitizedContent;
 
     const aiResponse = await fetch(XAI_API_URL, {
       method: "POST",

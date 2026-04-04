@@ -241,13 +241,6 @@ final class SyncQueueManager: ObservableObject {
         } catch {
             syncQueue.moodEntries[index].lastSyncError = error.localizedDescription
             syncQueue.moodEntries[index].syncAttempts = entry.syncAttempts
-
-            // Apply exponential backoff delay before next attempt
-            if entry.syncAttempts < maxRetryAttempts {
-                let delay = calculateBackoffDelay(attempt: entry.syncAttempts)
-                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-            }
-
             return false
         }
     }
@@ -274,12 +267,6 @@ final class SyncQueueManager: ObservableObject {
         } catch {
             syncQueue.questCompletions[index].lastSyncError = error.localizedDescription
             syncQueue.questCompletions[index].syncAttempts = completion.syncAttempts
-
-            if completion.syncAttempts < maxRetryAttempts {
-                let delay = calculateBackoffDelay(attempt: completion.syncAttempts)
-                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-            }
-
             return false
         }
     }
@@ -306,12 +293,6 @@ final class SyncQueueManager: ObservableObject {
         } catch {
             syncQueue.exerciseSessions[index].lastSyncError = error.localizedDescription
             syncQueue.exerciseSessions[index].syncAttempts = session.syncAttempts
-
-            if session.syncAttempts < maxRetryAttempts {
-                let delay = calculateBackoffDelay(attempt: session.syncAttempts)
-                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-            }
-
             return false
         }
     }

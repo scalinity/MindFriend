@@ -178,20 +178,23 @@ final class DownloadManager: NSObject, ObservableObject {
 
     /// Pause a download
     func pauseDownload(taskId: UUID) {
+        // Capture MainActor-isolated data before entering non-isolated closure
+        let taskMap = self.backgroundTaskMap
+
         urlSession.getAllTasks { [weak self] tasks in
             guard let self = self else { return }
 
-            MainActor.assumeIsolated {
-                if let taskIdentifier = self.backgroundTaskMap.first(where: { $0.value == taskId })?.key,
+            Task { @MainActor [weak self] in
+                if let taskIdentifier = taskMap.first(where: { $0.value == taskId })?.key,
                    let downloadTask = tasks.first(where: { $0.taskIdentifier == taskIdentifier }) as? URLSessionDownloadTask {
 
                     downloadTask.cancel(byProducingResumeData: { resumeData in
                         Task { @MainActor in
-                            if let index = self.activeTasks.firstIndex(where: { $0.id == taskId }) {
-                                self.activeTasks[index].status = .paused
-                                self.activeTasks[index].resumeData = resumeData
+                            if let index = self?.activeTasks.firstIndex(where: { $0.id == taskId }) {
+                                self?.activeTasks[index].status = .paused
+                                self?.activeTasks[index].resumeData = resumeData
                             }
-                            await self.saveActiveTasks()
+                            await self?.saveActiveTasks()
                         }
                     })
                 }

@@ -181,19 +181,26 @@ public enum WidgetMoodHelper {
     }
 
     public static func emoji(for mood: String) -> String {
+        // Delegate to MoodEmojiMapper for canonical mood names
+        let mapped = MoodEmojiMapper.emoji(for: mood)
+        // MoodEmojiMapper returns "🙂" for unknown moods; handle extra synonyms here
+        if mapped != "🙂" || mood.lowercased() == "good" || mood.lowercased() == "happy" {
+            return mapped
+        }
+        // Handle synonyms not in MoodEmojiMapper
         switch mood.lowercased() {
-        case "great", "amazing", "excellent":
-            return "😊"
-        case "good", "happy":
+        case "amazing", "excellent":
+            return "😁"
+        case "happy":
             return "🙂"
-        case "okay", "neutral", "fine":
+        case "neutral", "fine":
             return "😐"
-        case "low", "sad", "down":
+        case "sad", "down":
+            return "😕"
+        case "anxious", "worried":
             return "😔"
-        case "stressed", "anxious", "worried":
-            return "😰"
         case "angry", "frustrated":
-            return "😤"
+            return "😔"
         default:
             return "🙂"
         }

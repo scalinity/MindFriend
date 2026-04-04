@@ -7,9 +7,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { create, getNumericDate } from "https://deno.land/x/djwt@v2.8/mod.ts";
-import { corsHeaders } from "../_shared/cors.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 serve(async (req) => {
+  const origin = req.headers.get("Origin");
+  const corsHeaders = getCorsHeaders(origin);
+
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -30,7 +33,7 @@ serve(async (req) => {
           error: "UNAUTHORIZED",
           message: "Missing authorization header",
         }),
-        { status: 401, headers: { "Content-Type": "application/json" } },
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -43,7 +46,7 @@ serve(async (req) => {
     if (authError || !user) {
       return new Response(
         JSON.stringify({ error: "UNAUTHORIZED", message: "Invalid token" }),
-        { status: 401, headers: { "Content-Type": "application/json" } },
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -57,7 +60,7 @@ serve(async (req) => {
           error: "INVALID_EMAIL",
           message: "Valid email address is required",
         }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -75,7 +78,7 @@ serve(async (req) => {
           message:
             "Therapist email not registered. They must create an account first.",
         }),
-        { status: 404, headers: { "Content-Type": "application/json" } },
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -94,7 +97,7 @@ serve(async (req) => {
           error: "NOT_A_THERAPIST",
           message: "This user is not registered as a therapist.",
         }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -104,7 +107,7 @@ serve(async (req) => {
           error: "THERAPIST_NOT_ACCEPTING",
           message: "This therapist is not accepting new connections.",
         }),
-        { status: 403, headers: { "Content-Type": "application/json" } },
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -125,7 +128,7 @@ serve(async (req) => {
             error: "CONNECTION_EXISTS",
             message: "You are already connected to this therapist.",
           }),
-          { status: 409, headers: { "Content-Type": "application/json" } },
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       } else if (existingConnection.status === "pending") {
         return new Response(
@@ -134,7 +137,7 @@ serve(async (req) => {
             message:
               "Invitation already sent. Waiting for therapist to accept.",
           }),
-          { status: 409, headers: { "Content-Type": "application/json" } },
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
     }
@@ -146,7 +149,7 @@ serve(async (req) => {
         JSON.stringify({
           error: "Server configuration error: JWT_SECRET not set",
         }),
-        { status: 500, headers: { "Content-Type": "application/json" } },
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
     const key = await crypto.subtle.importKey(
@@ -170,6 +173,12 @@ serve(async (req) => {
 
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
+    // Hash the invitation token - store only the hash in the database
+    const tokenBytes = new TextEncoder().encode(invitationToken);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", tokenBytes);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const invitationTokenHash = hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+
     // Create or update therapy_connection
     const { data: connection, error: connectionError } = await supabase
       .from("therapy_connections")
@@ -179,7 +188,7 @@ serve(async (req) => {
           therapist_id: therapistId,
           status: "pending",
           invited_by: "client",
-          invitation_token: invitationToken,
+          invitation_token_hash: invitationTokenHash,
           invitation_expires_at: expiresAt.toISOString(),
           invited_at: new Date().toISOString(),
         },
@@ -197,7 +206,7 @@ serve(async (req) => {
           error: "DATABASE_ERROR",
           message: "Failed to create invitation",
         }),
-        { status: 500, headers: { "Content-Type": "application/json" } },
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -248,13 +257,13 @@ serve(async (req) => {
         invitationId: connection.id,
         expiresAt: expiresAt.toISOString(),
       }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
     console.error("Therapist invite error:", error);
     return new Response(
       JSON.stringify({ error: "INTERNAL_ERROR", message: "An error occurred" }),
-      { status: 500, headers: { "Content-Type": "application/json" } },
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });

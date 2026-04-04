@@ -65,7 +65,7 @@ serve(async (req) => {
     // Check authorization
     const expectedCronSecret = Deno.env.get("CRON_SECRET") || "";
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-    const isCronOrService = isAuthorizedCronRequest(
+    const isCronOrService = await isAuthorizedCronRequest(
       req.headers,
       expectedCronSecret,
       serviceRoleKey,

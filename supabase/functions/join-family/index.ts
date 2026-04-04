@@ -363,11 +363,10 @@ serve(async (req: Request): Promise<Response> => {
     );
 
     if (rpcError || !rpcResult) {
-      console.error("RPC Error adding family member DEBUG:", JSON.stringify(rpcError));
+      console.error("RPC Error adding family member:", JSON.stringify(rpcError));
       return new Response(
         JSON.stringify({
           error: "Failed to add family member",
-          debugError: rpcError,
         }),
         {
           status: 400,
@@ -450,7 +449,7 @@ serve(async (req: Request): Promise<Response> => {
     console.error("Join family error:", error);
     // Don't expose raw error messages to client - return generic message
     return new Response(
-      JSON.stringify({ error: "Internal server error", debugError: error }),
+      JSON.stringify({ error: "Internal server error" }),
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

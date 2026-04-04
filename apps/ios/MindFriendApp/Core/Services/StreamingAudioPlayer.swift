@@ -343,15 +343,18 @@ final class VoicePreviewPlayer: ObservableObject {
 
     func stop() {
         player?.pause()
-        player = nil
-        playerItem = nil
 
+        // Remove observers BEFORE niling out player/playerItem
         if let observer = timeObserver {
             player?.removeTimeObserver(observer)
             timeObserver = nil
         }
 
         NotificationCenter.default.removeObserver(self, name: .AVPlayerItemDidPlayToEndTime, object: playerItem)
+
+        // Now safe to release player and playerItem
+        player = nil
+        playerItem = nil
 
         isPlaying = false
         currentVoiceId = nil

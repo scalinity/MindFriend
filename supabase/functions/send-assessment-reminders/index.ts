@@ -43,7 +43,7 @@ serve(async (req) => {
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
   if (
-    !isAuthorizedCronRequest(req.headers, expectedCronSecret, serviceRoleKey)
+    !(await isAuthorizedCronRequest(req.headers, expectedCronSecret, serviceRoleKey))
   ) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,

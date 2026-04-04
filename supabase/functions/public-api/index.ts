@@ -33,12 +33,36 @@ serve(async (req) => {
     });
   }
 
+  // Hash the API key for secure lookup
+  const keyBuffer = new TextEncoder().encode(apiKey);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", keyBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const keyHash = hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+
   // Validate API key and get user/tier
-  const { data: apiKeyData, error: keyError } = await supabase
+  // Try hash-based lookup first (new schema)
+  let apiKeyData: any = null;
+  let keyError: any = null;
+
+  const { data: hashResult, error: hashError } = await supabase
     .from("api_keys")
     .select("user_id, tier, is_active, rate_limit_remaining, last_request_at")
-    .eq("key", apiKey)
+    .eq("key_hash", keyHash)
     .single();
+
+  if (hashResult) {
+    apiKeyData = hashResult;
+    keyError = hashError;
+  } else {
+    // TODO: After migration, remove plaintext fallback
+    const { data: plainResult, error: plainError } = await supabase
+      .from("api_keys")
+      .select("user_id, tier, is_active, rate_limit_remaining, last_request_at")
+      .eq("key", apiKey)
+      .single();
+    apiKeyData = plainResult;
+    keyError = plainError;
+  }
 
   if (keyError || !apiKeyData || !apiKeyData.is_active) {
     return new Response(
@@ -66,13 +90,14 @@ serve(async (req) => {
     apiKeyData.rate_limit_remaining ?? rateLimit.requestsPerDay;
 
   // Atomic decrement: only succeeds if rate_limit_remaining > 0
+  // TODO: After migration, remove plaintext fallback - use only key_hash
   const { data: updateResult, error: updateError } = await supabase
     .from("api_keys")
     .update({
       rate_limit_remaining: currentRemaining - 1,
       last_request_at: now.toISOString(),
     })
-    .eq("key", apiKey)
+    .eq("user_id", apiKeyData.user_id)
     .gt("rate_limit_remaining", 0)
     .select("rate_limit_remaining")
     .single();
