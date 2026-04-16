@@ -20,6 +20,9 @@ final class DependencyContainer: ObservableObject {
         // ✅ ARCHITECTURE FIX: Wire up logout handler to break circular dependency
         service.setLogoutHandler { [weak self] in
             self?.pathwayCacheService.clearAllCaches()
+            // Clear UI-level session caches keyed only by time (not user id)
+            // to prevent cross-user leakage on shared devices / account switch.
+            ProgressStoryLoadCache.clear()
         }
         return service
     }()

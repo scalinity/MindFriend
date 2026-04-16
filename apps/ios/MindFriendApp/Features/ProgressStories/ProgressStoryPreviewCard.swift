@@ -1,5 +1,26 @@
 import SwiftUI
 
+/// Session-level cache so scrolling the card in/out of a LazyVStack doesn't
+/// re-fire the edge-function call and thrash layout (which previously wedged
+/// HomeView's scroll position after scrolling to the bottom).
+///
+/// Must be cleared on sign-out (see `ProgressStoryLoadCache.clear`) — otherwise
+/// a different user signing in on the same process would see the previous
+/// user's weekly story because entries are keyed by week start, not user id.
+@MainActor
+enum ProgressStoryLoadCache {
+    static var stories: [String: WeeklyStory] = [:]
+    static var failedWeeks: Set<String> = []
+    static var inFlight: [String: Task<Void, Never>] = [:]
+
+    static func clear() {
+        inFlight.values.forEach { $0.cancel() }
+        inFlight.removeAll()
+        stories.removeAll()
+        failedWeeks.removeAll()
+    }
+}
+
 /// Preview card for Progress Stories shown on the Home screen
 /// Tapping opens the full-screen story viewer
 struct ProgressStoryPreviewCard: View {
@@ -170,51 +191,82 @@ struct ProgressStoryPreviewCard: View {
     // MARK: - Load Story
 
     private func loadStory() async {
+        var utcCalendar = Calendar(identifier: .gregorian)
+        utcCalendar.timeZone = TimeZone(identifier: "UTC")!
+
+        let today = Date()
+        let weekday = utcCalendar.component(.weekday, from: today)
+        let daysFromMonday = weekday == 1 ? 6 : weekday - 2
+        guard let currentMonday = utcCalendar.date(byAdding: .day, value: -daysFromMonday, to: today) else {
+            return
+        }
+
+        let currentWeekStart = HabitDateFormatter.dayOnly.string(from: currentMonday)
+
+        // Session cache: if we already have a story or a terminal failure for
+        // this week, hydrate local state and skip the network call. Prevents
+        // LazyVStack recycling from re-firing the edge function on every scroll.
+        if let cached = ProgressStoryLoadCache.stories[currentWeekStart] {
+            story = cached
+            return
+        }
+        if ProgressStoryLoadCache.failedWeeks.contains(currentWeekStart) {
+            errorMessage = "Unable to generate story"
+            return
+        }
+
+        // De-dupe concurrent loads: if a fetch is already in flight for this
+        // week (e.g. the card is rendered in multiple places, or .task re-fires
+        // before the previous finishes), await its completion and re-read cache.
+        if let existing = ProgressStoryLoadCache.inFlight[currentWeekStart] {
+            await existing.value
+            story = ProgressStoryLoadCache.stories[currentWeekStart]
+            if story == nil, ProgressStoryLoadCache.failedWeeks.contains(currentWeekStart) {
+                errorMessage = "Unable to generate story"
+            }
+            return
+        }
+
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
 
-        do {
-            // Calculate the Monday of the current week using UTC calendar
-            var utcCalendar = Calendar(identifier: .gregorian)
-            utcCalendar.timeZone = TimeZone(identifier: "UTC")!
+        let task = Task<Void, Never> { @MainActor in
+            do {
+                let stories = try await container.supabaseDataService.fetchWeeklyStories(
+                    limit: 1,
+                    offset: 0,
+                    favoritesOnly: false
+                )
 
-            let today = Date()
-            let weekday = utcCalendar.component(.weekday, from: today)
-            let daysFromMonday = weekday == 1 ? 6 : weekday - 2
-            guard let currentMonday = utcCalendar.date(byAdding: .day, value: -daysFromMonday, to: today) else {
+                if let existingStory = stories.first, existingStory.weekStart == currentWeekStart {
+                    ProgressStoryLoadCache.stories[currentWeekStart] = existingStory
+                    return
+                }
+
+                isGenerating = true
+                defer { isGenerating = false }
+
+                let generatedStory = try await container.supabaseDataService.generateWeeklyStory(weekStart: today)
+                ProgressStoryLoadCache.stories[currentWeekStart] = generatedStory
+            } catch is CancellationError {
+                // Don't mark this week as failed on cancellation — let the next
+                // attempt try fresh. Avoids the loop where scroll cancels load
+                // then the cached "failed" state blocks every subsequent retry.
                 return
+            } catch {
+                #if DEBUG
+                print("Failed to load/generate weekly story: \(error.localizedDescription)")
+                #endif
+                ProgressStoryLoadCache.failedWeeks.insert(currentWeekStart)
             }
+        }
+        ProgressStoryLoadCache.inFlight[currentWeekStart] = task
+        await task.value
+        ProgressStoryLoadCache.inFlight[currentWeekStart] = nil
 
-            // Format as YYYY-MM-DD in UTC for comparison
-            let formatter = DateFormatter()
-            formatter.dateFormat = "yyyy-MM-dd"
-            formatter.timeZone = TimeZone(identifier: "UTC")
-            let currentWeekStart = formatter.string(from: currentMonday)
-            
-            // Fetch the most recent story (limit 1)
-            let stories = try await container.supabaseDataService.fetchWeeklyStories(
-                limit: 1,
-                offset: 0,
-                favoritesOnly: false
-            )
-
-            // Check if we have a story for the current week
-            if let existingStory = stories.first, existingStory.weekStart == currentWeekStart {
-                story = existingStory
-                return
-            }
-            
-            // No story for current week - trigger generation
-            isGenerating = true
-            defer { isGenerating = false }
-            
-            let generatedStory = try await container.supabaseDataService.generateWeeklyStory(weekStart: today)
-            story = generatedStory
-            
-        } catch {
-            // Silently fail - card will show "no story" state
-            print("Failed to load/generate weekly story: \(error.localizedDescription)")
+        story = ProgressStoryLoadCache.stories[currentWeekStart]
+        if story == nil, ProgressStoryLoadCache.failedWeeks.contains(currentWeekStart) {
             errorMessage = "Unable to generate story"
         }
     }

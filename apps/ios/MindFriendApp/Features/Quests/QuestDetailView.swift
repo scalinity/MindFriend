@@ -173,6 +173,11 @@ struct QuestDetailView: View {
                         streakDays: profile.stats?.currentStreakDays ?? 0,
                         badgesEarned: []
                     )
+
+                    // Signal HomeView to refresh shield/streak status so the
+                    // streak card doesn't keep showing stale data from before
+                    // this completion (e.g. "Start your streak!" after 1-day).
+                    NotificationCenter.default.post(name: .todayQuestDidComplete, object: nil)
                 }
             } catch {
                 Log.quests.error("QuestDetailView completeQuest error", error: error)

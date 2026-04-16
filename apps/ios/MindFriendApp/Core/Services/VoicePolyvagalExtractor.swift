@@ -190,7 +190,11 @@ final class VoicePolyvagalExtractor {
     }
 
     private func calculateNegativeRatio(_ emotionScores: [EmotionLabel: Double]) -> Double {
-        let negative = (emotionScores[.sad] ?? 0) + (emotionScores[.fearful] ?? 0) + (emotionScores[.angry] ?? 0) + (emotionScores[.disgust] ?? 0)
+        let sad: Double = emotionScores[.sad] ?? 0
+        let fearful: Double = emotionScores[.fearful] ?? 0
+        let angry: Double = emotionScores[.angry] ?? 0
+        let disgust: Double = emotionScores[.disgust] ?? 0
+        let negative = sad + fearful + angry + disgust
         let total = emotionScores.values.reduce(0, +)
         return total > 0 ? negative / total : 0
     }

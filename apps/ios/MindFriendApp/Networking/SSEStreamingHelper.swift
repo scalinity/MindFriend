@@ -37,11 +37,19 @@ enum SSEStreamError: LocalizedError {
 
 /// Delegate-based SSE handler for more reliable streaming
 private final class SSESessionDelegate: NSObject, URLSessionDataDelegate {
+    // Cap unbounded accumulators so a misbehaving/hostile server that never
+    // emits the "\n\n" event terminator can't grow memory without limit.
+    // 8 MiB comfortably fits a single base64 image event from our edge
+    // function; anything larger is treated as a protocol error.
+    private static let maxBufferBytes = 8 * 1024 * 1024
+    private static let maxErrorBodyBytes = 64 * 1024
+
     private var buffer = ""
     private var eventHandler: ((String) -> Void)?
     private var completionHandler: ((Error?) -> Void)?
     private var httpStatusCode: Int?
     private var errorBody = ""
+    private var overflowed = false
 
     func configure(
         onEvent: @escaping (String) -> Void,
@@ -76,10 +84,13 @@ private final class SSESessionDelegate: NSObject, URLSessionDataDelegate {
 
         // Check if this is an error response (non-200)
         if let statusCode = httpStatusCode, statusCode != 200 {
-            errorBody += text
+            if errorBody.utf8.count < Self.maxErrorBodyBytes {
+                errorBody += text
+            }
             return
         }
 
+        if overflowed { return }
         buffer += text
 
         // Check for complete SSE events (ends with double newline)
@@ -93,6 +104,16 @@ private final class SSESessionDelegate: NSObject, URLSessionDataDelegate {
                 #endif
                 eventHandler?(eventData)
             }
+        }
+
+        // Bound the buffer: if we've accumulated more than maxBufferBytes
+        // without hitting an event terminator, the peer is either broken
+        // or hostile. Surface a decoding error and stop accumulating.
+        if buffer.utf8.count > Self.maxBufferBytes {
+            overflowed = true
+            buffer = ""
+            completionHandler?(SSEStreamError.decodingError("SSE event exceeded \(Self.maxBufferBytes) bytes without terminator"))
+            dataTask.cancel()
         }
     }
 
@@ -250,6 +271,15 @@ final class SSEStreamingHelper {
     ) -> AsyncThrowingStream<ImageStreamEvent, Error> {
         AsyncThrowingStream { continuation in
             Task {
+                // Create URLSession outside do/catch so cleanup is reachable from both branches
+                let sessionConfig = URLSessionConfiguration.default
+                sessionConfig.timeoutIntervalForRequest = 120
+                sessionConfig.timeoutIntervalForResource = 180
+                // Disable caching for SSE
+                sessionConfig.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+                sessionConfig.urlCache = nil
+                let urlSession = URLSession(configuration: sessionConfig)
+
                 do {
                     #if DEBUG
                     print("[SSE-Bytes] Starting stream for function: \(functionName)")
@@ -288,15 +318,6 @@ final class SSEStreamingHelper {
                     print("[SSE-Bytes] Request body: \(String(data: request.httpBody!, encoding: .utf8) ?? "nil")")
                     #endif
 
-                    // Create URLSession for streaming with delegate for better SSE handling
-                    let sessionConfig = URLSessionConfiguration.default
-                    sessionConfig.timeoutIntervalForRequest = 120
-                    sessionConfig.timeoutIntervalForResource = 180
-                    // Disable caching for SSE
-                    sessionConfig.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
-                    sessionConfig.urlCache = nil
-                    let urlSession = URLSession(configuration: sessionConfig)
-
                     #if DEBUG
                     print("[SSE-Bytes] Sending request...")
                     #endif
@@ -312,6 +333,7 @@ final class SSEStreamingHelper {
                         #if DEBUG
                         print("[SSE-Bytes] ERROR: Response is not HTTPURLResponse")
                         #endif
+                        urlSession.finishTasksAndInvalidate()
                         continuation.finish(throwing: SSEStreamError.invalidURL)
                         return
                     }
@@ -341,6 +363,7 @@ final class SSEStreamingHelper {
                            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                             errorMessage = json["error"] as? String ?? json["message"] as? String
                         }
+                        urlSession.finishTasksAndInvalidate()
                         continuation.finish(throwing: SSEStreamError.httpError(httpResponse.statusCode, errorMessage))
                         return
                     }
@@ -352,10 +375,18 @@ final class SSEStreamingHelper {
                     var buffer = ""
                     var byteCount = 0
                     var eventCount = 0
+                    // Match the delegate path's bound on unterminated events.
+                    let maxBufferBytes = 8 * 1024 * 1024
 
                     for try await byte in bytes {
                         byteCount += 1
                         buffer.append(Character(UnicodeScalar(byte)))
+
+                        if buffer.utf8.count > maxBufferBytes {
+                            continuation.finish(throwing: SSEStreamError.decodingError("SSE event exceeded \(maxBufferBytes) bytes without terminator"))
+                            urlSession.finishTasksAndInvalidate()
+                            return
+                        }
 
                         // Log progress every 1000 bytes
                         #if DEBUG

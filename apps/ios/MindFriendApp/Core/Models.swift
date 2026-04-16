@@ -5118,7 +5118,7 @@ struct StoryCard: Codable, Identifiable, Equatable {
     let variant: StoryCardVariant
     let data: StoryCardData
     let generatedAt: Date
-    
+
     enum CodingKeys: String, CodingKey {
         case id
         case cardType = "cardType"
@@ -5126,6 +5126,58 @@ struct StoryCard: Codable, Identifiable, Equatable {
         case data
         case generatedAt = "generatedAt"
     }
+
+    init(id: UUID, cardType: StoryCardType, variant: StoryCardVariant, data: StoryCardData, generatedAt: Date) {
+        self.id = id
+        self.cardType = cardType
+        self.variant = variant
+        self.data = data
+        self.generatedAt = generatedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(UUID.self, forKey: .id)
+        self.cardType = try container.decode(StoryCardType.self, forKey: .cardType)
+        self.variant = try container.decode(StoryCardVariant.self, forKey: .variant)
+        self.data = try container.decode(StoryCardData.self, forKey: .data)
+        // Edge function returns `generatedAt` as an ISO8601 string, but the
+        // default Supabase decoder is configured for Unix timestamps. Accept
+        // both so a backend format change doesn't crash the home feed loader.
+        self.generatedAt = try Self.decodeFlexibleDate(from: container, forKey: .generatedAt)
+    }
+
+    static func decodeFlexibleDate<K: CodingKey>(from container: KeyedDecodingContainer<K>, forKey key: K) throws -> Date {
+        if let timestamp = try? container.decode(Double.self, forKey: key) {
+            return Date(timeIntervalSince1970: timestamp)
+        }
+        if let string = try? container.decode(String.self, forKey: key) {
+            if let iso = ISO8601DateFormatter.withFractionalSeconds.date(from: string) {
+                return iso
+            }
+            if let iso = ISO8601DateFormatter.standard.date(from: string) {
+                return iso
+            }
+        }
+        throw DecodingError.dataCorruptedError(
+            forKey: key,
+            in: container,
+            debugDescription: "Expected Double timestamp or ISO8601 string for \(key.stringValue)"
+        )
+    }
+}
+
+private extension ISO8601DateFormatter {
+    static let standard: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+    static let withFractionalSeconds: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
 }
 
 /// Card types for story cards
@@ -5233,13 +5285,22 @@ struct GenerateWeeklyStoryResponse: Codable {
     let weekStart: String
     let cards: [StoryCard]
     let generatedAt: Date
-    
+
     enum CodingKeys: String, CodingKey {
         case success
         case userId = "userId"
         case weekStart = "weekStart"
         case cards
         case generatedAt = "generatedAt"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.success = try container.decode(Bool.self, forKey: .success)
+        self.userId = try container.decode(UUID.self, forKey: .userId)
+        self.weekStart = try container.decode(String.self, forKey: .weekStart)
+        self.cards = try container.decode([StoryCard].self, forKey: .cards)
+        self.generatedAt = try StoryCard.decodeFlexibleDate(from: container, forKey: .generatedAt)
     }
 }
 

@@ -664,4 +664,9 @@ extension Notification.Name {
     /// Posted when a quest arc is started, paused, resumed, or exited.
     /// HomeView and other views should refresh their quest data when this is received.
     static let questArcDidChange = Notification.Name("questArcDidChange")
+
+    /// Posted when today's quest is marked completed. HomeView uses this to
+    /// refetch streak/shield status so the streak card reflects the new streak
+    /// instead of the pre-completion cached value.
+    static let todayQuestDidComplete = Notification.Name("todayQuestDidComplete")
 }
