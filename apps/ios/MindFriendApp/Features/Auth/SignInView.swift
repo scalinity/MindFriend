@@ -3,12 +3,27 @@ import AuthenticationServices
 import GoogleSignIn
 
 struct SignInView: View {
-    private let googleClientID: String = {
-        guard let clientID = Bundle.main.object(forInfoDictionaryKey: "GOOGLE_CLIENT_ID") as? String, !clientID.isEmpty else {
-            assertionFailure("GOOGLE_CLIENT_ID not configured in Info.plist")
-            return ""
+    private let googleClientID: String? = {
+        // Primary: GOOGLE_CLIENT_ID from Info.plist (populated by xcconfig).
+        // Fallback: derive from the reversed CFBundleURLScheme Google Sign-In
+        // registers (`com.googleusercontent.apps.<id>`) so we don't crash a
+        // release build on missing xcconfig wiring.
+        if let clientID = Bundle.main.object(forInfoDictionaryKey: "GOOGLE_CLIENT_ID") as? String,
+           !clientID.isEmpty,
+           !clientID.contains("YOUR_GOOGLE_CLIENT_ID") {
+            return clientID
         }
-        return clientID
+        if let urlTypes = Bundle.main.object(forInfoDictionaryKey: "CFBundleURLTypes") as? [[String: Any]] {
+            for type in urlTypes {
+                if let schemes = type["CFBundleURLSchemes"] as? [String] {
+                    for scheme in schemes where scheme.hasPrefix("com.googleusercontent.apps.") {
+                        let suffix = scheme.replacingOccurrences(of: "com.googleusercontent.apps.", with: "")
+                        return "\(suffix).apps.googleusercontent.com"
+                    }
+                }
+            }
+        }
+        return nil
     }()
 
     @EnvironmentObject var appState: AppState
@@ -187,7 +202,16 @@ struct SignInView: View {
             return
         }
 
-        let config = GIDConfiguration(clientID: googleClientID)
+        // Hard-fail gracefully instead of letting GIDSignIn raise
+        // NSInvalidArgumentException on an empty clientID (was a release-only
+        // crash when GOOGLE_CLIENT_ID wasn't plumbed through xcconfig).
+        guard let clientID = googleClientID, !clientID.isEmpty else {
+            self.error = AuthError.unknown("Google Sign-In is not configured for this build. Please use email sign-in or contact support.")
+            self.showError = true
+            return
+        }
+
+        let config = GIDConfiguration(clientID: clientID)
         GIDSignIn.sharedInstance.configuration = config
 
         Task {
