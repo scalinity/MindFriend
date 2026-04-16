@@ -9,8 +9,9 @@ SUPABASE_HOST = YOUR_SUPABASE_PROJECT.supabase.co
 SUPABASE_URL = $(SUPABASE_PROTOCOL):$(SLASH)$(SLASH)$(SUPABASE_HOST)
 SUPABASE_ANON_KEY = YOUR_SUPABASE_ANON_KEY_HERE
 
-// Google OAuth Client ID
-GOOGLE_CLIENT_ID = YOUR_GOOGLE_CLIENT_ID_HERE
+// Google OAuth Client ID (iOS client from https://console.cloud.google.com/apis/credentials)
+// Format: <project-number>-<hash>.apps.googleusercontent.com
+GOOGLE_CLIENT_ID = YOUR_IOS_GOOGLE_CLIENT_ID.apps.googleusercontent.com
 
 // Sentry Crash Reporting (optional for development)
 // Leave empty to disable, or set to your Sentry DSN
