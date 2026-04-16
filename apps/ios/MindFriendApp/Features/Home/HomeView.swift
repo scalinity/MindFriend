@@ -693,9 +693,10 @@ struct HomeView: View {
             async let protectionTask: StreakProtectionResult? = {
                 do {
                     return try await container.supabaseDataService.checkStreakProtection()
-                } catch is CancellationError {
-                    return nil
                 } catch {
+                    // User navigation cancels URLSession tasks; that's not a bug.
+                    // Report only true failures to Sentry.
+                    if error.isCancellation { return nil }
                     Log.general.error("[HomeView] Streak protection check failed: \(error.localizedDescription)")
                     error.report(context: [
                         "action": "streak_protection_check",
@@ -719,16 +720,16 @@ struct HomeView: View {
             // triggers swift_Concurrency_fatalError ("asyncLet_finish_after_task_completion").
             async let questTask: Quest? = {
                 do { return try await container.supabaseDataService.getTodayQuest() }
-                catch is CancellationError { return nil }
                 catch {
+                    if error.isCancellation { return nil }
                     Log.ui.error("HomeView getTodayQuest failed", error: error)
                     return nil
                 }
             }()
             async let profileTask: UserProfile? = {
                 do { return try await container.supabaseAuthService.fetchProfile() }
-                catch is CancellationError { return nil }
                 catch {
+                    if error.isCancellation { return nil }
                     Log.ui.error("HomeView fetchProfile failed", error: error)
                     return nil
                 }
@@ -953,11 +954,11 @@ struct HomeView: View {
                 if !Task.isCancelled {
                     self.homeContext = context
                 }
-            } catch is CancellationError {
-                // Task was cancelled, ignore
             } catch {
+                // User-navigation cancellation (CancellationError or URLError.cancelled) is not a bug.
+                // Only report real failures.
+                if error.isCancellation { return }
                 Log.ui.error("Home context load failed: \(error.localizedDescription)")
-                // Provide fallback context on error
                 if !Task.isCancelled {
                     self.homeContext = HomeContext.default
                 }

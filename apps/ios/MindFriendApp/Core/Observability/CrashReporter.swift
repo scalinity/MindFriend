@@ -805,4 +805,16 @@ extension Error {
     func report(context: [String: Any]? = nil) {
         CrashReporter.shared.capture(error: self, context: context)
     }
+
+    /// True when the error originated from a user-initiated task/URL cancellation
+    /// (view disappear, pull-to-refresh re-entrancy, sign-out, etc.). These are
+    /// not bugs and must not be reported to Sentry — otherwise they pollute the
+    /// issue feed as "ongoing" non-crash infos.
+    var isCancellation: Bool {
+        if self is CancellationError { return true }
+        if let urlError = self as? URLError, urlError.code == .cancelled { return true }
+        let nserror = self as NSError
+        if nserror.domain == NSURLErrorDomain, nserror.code == NSURLErrorCancelled { return true }
+        return false
+    }
 }
