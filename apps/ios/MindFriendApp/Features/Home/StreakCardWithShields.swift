@@ -42,8 +42,14 @@ struct StreakCardWithShields: View {
                 shieldsDepletedWarning
             }
 
-            // Recovery banner when available
-            if recoveryAvailable, let streakToRecover = streakBeforeBreak {
+            // Recovery banner when available.
+            // Suppress once the user already has a fresh streak going —
+            // "recover the old one" is moot at that point. Also suppress if
+            // the broken streak wasn't meaningful (< 2 days).
+            if recoveryAvailable,
+               let streakToRecover = streakBeforeBreak,
+               streakToRecover >= 2,
+               currentStreak == 0 {
                 RecoveryQuestBanner(
                     streakToRecover: streakToRecover,
                     expiresAt: recoveryExpiresAt ?? Date().addingTimeInterval(24 * 60 * 60),

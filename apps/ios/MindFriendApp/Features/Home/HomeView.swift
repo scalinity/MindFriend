@@ -193,7 +193,13 @@ struct HomeView: View {
 
                     // Streak with shields (moved above briefing for visibility)
                     StreakCardWithShields(
-                        currentStreak: shieldStatus?.currentStreak ?? appState.currentStreak,
+                        // Prefer appState.currentStreak (updated reactively when a
+                        // quest completes) over shieldStatus (a snapshot from home
+                        // load time). Fall through to shieldStatus only if appState
+                        // hasn't been populated yet.
+                        currentStreak: appState.currentStreak > 0
+                            ? appState.currentStreak
+                            : (shieldStatus?.currentStreak ?? appState.currentStreak),
                         longestStreak: appState.currentUser?.stats?.longestStreakDays ?? 0,
                         shieldsRemaining: shieldStatus?.shieldsRemaining ?? appState.currentUser?.stats?.streakShieldsRemaining ?? 1,
                         shieldsMax: shieldStatus?.shieldsMax ?? appState.currentUser?.stats?.streakShieldsMax ?? 1,
@@ -495,6 +501,11 @@ struct HomeView: View {
         .onReceive(NotificationCenter.default.publisher(for: .questArcDidChange)) { _ in
             startLoadData()
         }
+        // Refresh after today's quest is completed so shieldStatus (and the
+        // streak card) reflects the new streak instead of the pre-completion snapshot.
+        .onReceive(NotificationCenter.default.publisher(for: .todayQuestDidComplete)) { _ in
+            startLoadData()
+        }
         // Sync questState when todayQuest changes (e.g., after quest completion in QuestDetailView)
         // Priority: completed > assigned (prevents loadData race condition from reverting completion)
         .onChange(of: appState.todayQuest) { _, newQuest in
@@ -683,7 +694,7 @@ struct HomeView: View {
                 do {
                     return try await container.supabaseDataService.checkStreakProtection()
                 } catch is CancellationError {
-                    throw CancellationError()
+                    return nil
                 } catch {
                     Log.general.error("[HomeView] Streak protection check failed: \(error.localizedDescription)")
                     error.report(context: [
@@ -702,8 +713,26 @@ struct HomeView: View {
                     return nil
                 }
             }()
-            async let questTask = container.supabaseDataService.getTodayQuest()
-            async let profileTask = container.supabaseAuthService.fetchProfile()
+            // Wrap throwing calls in non-throwing IIFEs so loadData never exits
+            // via throw through the async-let region. An early throw while sibling
+            // async lets are still running races with SwiftUI task cancellation and
+            // triggers swift_Concurrency_fatalError ("asyncLet_finish_after_task_completion").
+            async let questTask: Quest? = {
+                do { return try await container.supabaseDataService.getTodayQuest() }
+                catch is CancellationError { return nil }
+                catch {
+                    Log.ui.error("HomeView getTodayQuest failed", error: error)
+                    return nil
+                }
+            }()
+            async let profileTask: UserProfile? = {
+                do { return try await container.supabaseAuthService.fetchProfile() }
+                catch is CancellationError { return nil }
+                catch {
+                    Log.ui.error("HomeView fetchProfile failed", error: error)
+                    return nil
+                }
+            }()
 
             // Optional data (fail gracefully) - EXCLUDING homeContext which loads separately
             async let eventsTask = try? await container.supabaseDataService.getActiveEvents()
@@ -723,11 +752,11 @@ struct HomeView: View {
             // Load active pathways
             async let pathwaysTask = try? await container.transitionService.fetchActivePathways()
 
-            // Await all results concurrently
-            let questResult = try await questTask
-            let profileResult = try await profileTask
+            // Await all results concurrently (no throws in the async-let region)
+            let questResult = await questTask
+            let profileResult = await profileTask
             let actionPlanResult = try? await container.actionPlanService.fetchLatestPlan(
-                timezone: profileResult.timezone ?? "America/New_York"
+                timezone: profileResult?.timezone ?? "America/New_York"
             )
             let events = await eventsTask ?? []
             let participation = await participationTask ?? []
@@ -745,7 +774,7 @@ struct HomeView: View {
             _ = await experienceTask
             let pathwaysResult = await pathwaysTask ?? []
             // Await streak protection (runs in parallel, nil on failure)
-            let protectionResult = try? await protectionTask
+            let protectionResult = await protectionTask
 
             // Compute level info from user_stats (via achievementService)
             let levelResult: UserLevel
@@ -802,16 +831,18 @@ struct HomeView: View {
                     appState.todayActionPlanItems = []
                 }
 
-                // Update user profile
-                appState.currentUser = profileResult
-                appState.currentStreak = profileResult.stats?.currentStreakDays ?? 0
+                // Update user profile (keep previous value if profile fetch failed)
+                if let profileResult {
+                    appState.currentUser = profileResult
+                    appState.currentStreak = profileResult.stats?.currentStreakDays ?? 0
 
-                // Convert UserEntitlements to Entitlements
-                if let userEntitlements = profileResult.entitlements {
-                    let tier: Tier = userEntitlements.subscriptionTier == "premium" ? .premium : .free
-                    appState.entitlements = Entitlements(tier: tier, dailyAiQuota: tier == .premium ? 9999 : 20, dailyAiUsed: 0)
-                } else {
-                    appState.entitlements = .free
+                    // Convert UserEntitlements to Entitlements
+                    if let userEntitlements = profileResult.entitlements {
+                        let tier: Tier = userEntitlements.subscriptionTier == "premium" ? .premium : .free
+                        appState.entitlements = Entitlements(tier: tier, dailyAiQuota: tier == .premium ? 9999 : 20, dailyAiUsed: 0)
+                    } else {
+                        appState.entitlements = .free
+                    }
                 }
 
                 // Set level info
@@ -891,11 +922,6 @@ struct HomeView: View {
             // Load home context in background without blocking main content
             /// Uses Task cancellation pattern to prevent race conditions
             loadHomeContextInBackground()
-        } catch is CancellationError {
-            // Task was cancelled (e.g., user navigated away or pulled to refresh again)
-            // Don't show error state - just return and keep previous state
-            Log.ui.debug("HomeView loadData cancelled")
-            return
         } catch {
             Log.ui.error("HomeView loadData error", error: error)
             questState = .error(error.localizedDescription)

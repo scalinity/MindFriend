@@ -112,15 +112,16 @@ final class HabitService: ObservableObject {
             updatedAt: Date()
         )
         
-        let _: Habit = try await supabase
+        // PostgREST insert returns an empty body by default (Prefer: return=minimal)
+        // so don't try to decode `.value` — we refresh via fetchHabits() below.
+        try await supabase
             .from("habits")
             .insert(habit)
             .execute()
-            .value
-        
+
         try await fetchHabits()
     }
-    
+
     /// Create a habit from a template
     func createHabitFromTemplate(
         template: HabitTemplate,
@@ -128,9 +129,9 @@ final class HabitService: ObservableObject {
     ) async throws {
         let session = try await supabase.auth.session
         let userId = session.user.id
-        
+
         let behavior = template.behaviorTemplate
-        
+
         let habit = Habit(
             id: UUID(),
             userId: userId,
@@ -146,13 +147,12 @@ final class HabitService: ObservableObject {
             createdAt: Date(),
             updatedAt: Date()
         )
-        
-        let _: Habit = try await supabase
+
+        try await supabase
             .from("habits")
             .insert(habit)
             .execute()
-            .value
-        
+
         try await fetchHabits()
     }
     
@@ -174,13 +174,12 @@ final class HabitService: ObservableObject {
             updatedAt: Date()
         )
         
-        let _: Habit = try await supabase
+        try await supabase
             .from("habits")
             .update(updated)
             .eq("id", value: habit.id.uuidString)
             .execute()
-            .value
-        
+
         try await fetchHabits()
     }
     
@@ -199,7 +198,7 @@ final class HabitService: ObservableObject {
             .from("habit_completions")
             .select()
             .eq("habit_id", value: habit.id.uuidString)
-            .eq("completed_date", value: ISO8601DateFormatter().string(from: today))
+            .eq("completed_date", value: HabitDateFormatter.dayOnly.string(from: today))
             .execute()
             .value
         
@@ -221,12 +220,11 @@ final class HabitService: ObservableObject {
             createdAt: Date()
         )
         
-        let _: HabitCompletion = try await supabase
+        try await supabase
             .from("habit_completions")
             .insert(completion)
             .execute()
-            .value
-        
+
         // Check if habit should graduate (7-day streak)
         if newStreak >= HabitConfig.graduationStreakThreshold &&
            newStreak % HabitConfig.graduationStreakThreshold == 0 {
@@ -246,7 +244,7 @@ final class HabitService: ObservableObject {
             .from("habit_completions")
             .select()
             .eq("habit_id", value: habit.id.uuidString)
-            .eq("completed_date", value: ISO8601DateFormatter().string(from: today))
+            .eq("completed_date", value: HabitDateFormatter.dayOnly.string(from: today))
             .execute()
             .value
         
@@ -265,11 +263,10 @@ final class HabitService: ObservableObject {
             createdAt: Date()
         )
         
-        let _: HabitCompletion = try await supabase
+        try await supabase
             .from("habit_completions")
             .insert(completion)
             .execute()
-            .value
     }
     
     // MARK: - Streak Calculation
@@ -449,12 +446,11 @@ final class HabitService: ObservableObject {
             updatedAt: Date()
         )
         
-        let _: Routine = try await supabase
+        try await supabase
             .from("routines")
             .insert(routine)
             .execute()
-            .value
-        
+
         try await fetchRoutines()
     }
     
@@ -496,11 +492,10 @@ final class HabitService: ObservableObject {
             createdAt: Date()
         )
         
-        let _: RoutineHabit = try await supabase
+        try await supabase
             .from("routine_habits")
             .insert(routineHabit)
             .execute()
-            .value
     }
     
     /// Complete a routine
@@ -539,11 +534,10 @@ final class HabitService: ObservableObject {
             updatedAt: Date()
         )
         
-        let _: RoutineCompletion = try await supabase
+        try await supabase
             .from("routine_completions")
             .insert(completion)
             .execute()
-            .value
     }
     
     // MARK: - Weekly Stats

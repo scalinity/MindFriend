@@ -120,6 +120,19 @@ struct Habit: Identifiable, Codable {
 
 // MARK: - Habit Completion Model
 
+/// YYYY-MM-DD formatter used for PostgreSQL DATE columns. Fixed to UTC and
+/// POSIX locale so the serialized day doesn't shift under device timezone/locale.
+enum HabitDateFormatter {
+    static let dayOnly: DateFormatter = {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "UTC")
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+}
+
 struct HabitCompletion: Identifiable, Codable {
     let id: UUID
     let habitId: UUID
@@ -129,7 +142,7 @@ struct HabitCompletion: Identifiable, Codable {
     let skipped: Bool
     let skipReason: String?
     let createdAt: Date
-    
+
     enum CodingKeys: String, CodingKey {
         case id
         case habitId = "habit_id"
@@ -139,6 +152,52 @@ struct HabitCompletion: Identifiable, Codable {
         case skipped
         case skipReason = "skip_reason"
         case createdAt = "created_at"
+    }
+
+    init(id: UUID, habitId: UUID, userId: UUID, completedDate: Date, currentStreak: Int, skipped: Bool, skipReason: String?, createdAt: Date) {
+        self.id = id
+        self.habitId = habitId
+        self.userId = userId
+        self.completedDate = completedDate
+        self.currentStreak = currentStreak
+        self.skipped = skipped
+        self.skipReason = skipReason
+        self.createdAt = createdAt
+    }
+
+    // Encode completedDate as YYYY-MM-DD so PostgREST accepts it for the DATE
+    // column. The default Supabase encoder emits a full ISO8601 timestamp,
+    // which PostgREST rejects when inserting into `completed_date`.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(habitId, forKey: .habitId)
+        try container.encode(userId, forKey: .userId)
+        try container.encode(HabitDateFormatter.dayOnly.string(from: completedDate), forKey: .completedDate)
+        try container.encode(currentStreak, forKey: .currentStreak)
+        try container.encode(skipped, forKey: .skipped)
+        try container.encodeIfPresent(skipReason, forKey: .skipReason)
+        try container.encode(createdAt, forKey: .createdAt)
+    }
+
+    // Decode completedDate from YYYY-MM-DD (PostgREST returns DATE columns as
+    // a string). Falls back to the outer decoder's date strategy so any
+    // future schema change that uses a timestamp still parses.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(UUID.self, forKey: .id)
+        self.habitId = try container.decode(UUID.self, forKey: .habitId)
+        self.userId = try container.decode(UUID.self, forKey: .userId)
+        if let dateString = try? container.decode(String.self, forKey: .completedDate),
+           let parsed = HabitDateFormatter.dayOnly.date(from: dateString) {
+            self.completedDate = parsed
+        } else {
+            self.completedDate = try container.decode(Date.self, forKey: .completedDate)
+        }
+        self.currentStreak = try container.decode(Int.self, forKey: .currentStreak)
+        self.skipped = try container.decode(Bool.self, forKey: .skipped)
+        self.skipReason = try container.decodeIfPresent(String.self, forKey: .skipReason)
+        self.createdAt = try container.decode(Date.self, forKey: .createdAt)
     }
 }
 

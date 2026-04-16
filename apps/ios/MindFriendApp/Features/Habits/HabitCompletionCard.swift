@@ -203,6 +203,8 @@ struct TodaysHabitsHomeCard: View {
     @State private var streakInfoMap: [UUID: HabitStreakInfo] = [:]
     @State private var isLoading = true
     @State private var showHabitLibrary = false
+    @State private var showCompletionError = false
+    @State private var completionErrorMessage = ""
 
     private var completedCount: Int {
         streakInfoMap.values.filter { $0.isCompletedToday }.count
@@ -299,6 +301,11 @@ struct TodaysHabitsHomeCard: View {
                     .environmentObject(container)
             }
         }
+        .alert("Couldn't Mark Complete", isPresented: $showCompletionError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(completionErrorMessage)
+        }
     }
 
     private func loadHabits() async {
@@ -315,7 +322,9 @@ struct TodaysHabitsHomeCard: View {
                 streakInfoMap[habit.id] = info
             }
         } catch {
-            // Silently fail - show empty state
+            #if DEBUG
+            print("[TodaysHabitsHomeCard] loadHabits failed: \(error)")
+            #endif
             habits = []
         }
     }
@@ -336,7 +345,20 @@ struct TodaysHabitsHomeCard: View {
                 )
             }
         } catch {
-            // Handle error silently for now
+            // Surface failures so the tap has visible feedback instead of
+            // appearing to do nothing. Duplicate-completion is still treated
+            // as a soft refresh since the habit is already complete today.
+            #if DEBUG
+            print("[HabitsSummaryCard] completeHabit failed: \(error)")
+            #endif
+            if case HabitServiceError.duplicateCompletion = error {
+                if let info = try? await container.habitService.getCurrentStreak(for: habit) {
+                    streakInfoMap[habit.id] = info
+                }
+            } else {
+                completionErrorMessage = error.localizedDescription
+                showCompletionError = true
+            }
         }
     }
 }
