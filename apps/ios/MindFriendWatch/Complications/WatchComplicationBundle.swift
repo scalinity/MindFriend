@@ -1,6 +1,7 @@
 import WidgetKit
 import SwiftUI
 
+#if os(watchOS)
 /// Widget bundle for all MindFriend watch complications
 @main
 struct MindFriendWatchComplicationsBundle: WidgetBundle {
@@ -10,3 +11,4 @@ struct MindFriendWatchComplicationsBundle: WidgetBundle {
         BreathingComplication()
     }
 }
+#endif

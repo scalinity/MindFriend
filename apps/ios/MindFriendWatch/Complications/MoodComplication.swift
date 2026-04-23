@@ -1,5 +1,10 @@
+#if os(watchOS)
 import WidgetKit
 import SwiftUI
+
+// This complication is watchOS-only. Wrapped in `#if os(watchOS)` because the
+// Xcode scheme can pull this target into the iOS build graph, and
+// `WidgetFamily.accessoryCorner` is marked `@available(iOS, unavailable)`.
 
 // MARK: - Shared Defaults (App Group for cross-process access)
 
@@ -222,3 +227,4 @@ struct MoodComplicationEntryView: View {
     MoodComplicationEntry(date: .now, mood: nil, emoji: "🙂", hasLoggedToday: false, isPlaceholder: false)
     MoodComplicationEntry(date: .now, mood: "great", emoji: "😁", hasLoggedToday: true, isPlaceholder: false)
 }
+#endif

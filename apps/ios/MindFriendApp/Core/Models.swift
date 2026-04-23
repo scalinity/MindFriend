@@ -90,7 +90,7 @@ enum AnyCodableValue: Codable, Equatable, Hashable {
 
 // MARK: - User
 
-public struct UserProfile: Codable, Identifiable, Equatable {
+public struct UserProfile: Codable, Identifiable, Equatable, Sendable {
     public let id: UUID
     public let handle: String?
     public let displayName: String?
@@ -150,7 +150,7 @@ public struct UserProfile: Codable, Identifiable, Equatable {
 
 // MARK: - User Settings
 
-public struct UserSettings: Codable, Equatable {
+public struct UserSettings: Codable, Equatable, Sendable {
     var dailyQuestTimeLocal: String
     var quietHoursStartLocal: String?
     var quietHoursEndLocal: String?
@@ -247,7 +247,7 @@ struct ToggleRecoveryModeResult: Equatable {
     var failed: Bool { !success }
 }
 
-public struct UserStats: Codable, Equatable {
+public struct UserStats: Codable, Equatable, Sendable {
     var currentStreakDays: Int
     var longestStreakDays: Int
     var totalQuestsCompleted: Int
@@ -325,7 +325,7 @@ public struct UserStats: Codable, Equatable {
 
 // MARK: - User Entitlements
 
-public struct UserEntitlements: Codable, Equatable {
+public struct UserEntitlements: Codable, Equatable, Sendable {
     var subscriptionTier: String
     var premiumExpiresAt: Date?
     var features: [String: Bool]
@@ -339,7 +339,7 @@ public struct UserEntitlements: Codable, Equatable {
 
 // MARK: - User Badge
 
-public struct UserBadge: Codable, Identifiable, Equatable {
+public struct UserBadge: Codable, Identifiable, Equatable, Sendable {
     public var id: UUID
     var badgeId: String
     var earnedAt: Date

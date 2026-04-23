@@ -1,5 +1,10 @@
+#if os(watchOS)
 import WidgetKit
 import SwiftUI
+
+// This complication is watchOS-only. Wrapped in `#if os(watchOS)` because the
+// Xcode scheme can pull this target into the iOS build graph, and
+// `WidgetFamily.accessoryCorner` is marked `@available(iOS, unavailable)`.
 
 // MARK: - Shared Defaults (App Group for cross-process access)
 
@@ -205,3 +210,4 @@ struct StreakComplicationEntryView: View {
 } timeline: {
     StreakEntry(date: .now, streak: 14, isPlaceholder: false)
 }
+#endif

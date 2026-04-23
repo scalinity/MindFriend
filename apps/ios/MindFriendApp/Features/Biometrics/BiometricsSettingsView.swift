@@ -44,7 +44,12 @@ struct BiometricsSettingsView: View {
                     HStack {
                         Image(systemName: "heart.fill")
                             .foregroundStyle(.pink)
-                        Text("Apple Health")
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Apple Health")
+                            Text("via HealthKit")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                         Spacer()
                         if healthKit.isAuthorized {
                             Text("Connected")
@@ -61,7 +66,9 @@ struct BiometricsSettingsView: View {
                         }
                     }
                 } header: {
-                    Text("Connection Status")
+                    Text("HealthKit Connection")
+                } footer: {
+                    Text("MindFriend uses Apple's HealthKit framework to read and write data to the Apple Health app.")
                 }
 
                 Section {
@@ -130,7 +137,7 @@ struct BiometricsSettingsView: View {
                     }
                 }
             }
-            .navigationTitle("Health Settings")
+            .navigationTitle("Apple Health & HealthKit")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {

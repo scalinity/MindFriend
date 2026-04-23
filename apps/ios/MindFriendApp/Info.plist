@@ -30,7 +30,7 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>202604161059</string>
+	<string>202604231130</string>
 	<key>GOOGLE_CLIENT_ID</key>
 	<string>$(GOOGLE_CLIENT_ID)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>

@@ -1,3 +1,4 @@
+#if os(watchOS)
 import WidgetKit
 import SwiftUI
 
@@ -121,3 +122,4 @@ struct BreathingComplicationEntryView: View {
 } timeline: {
     BreathingComplicationEntry(date: .now, isPlaceholder: false)
 }
+#endif

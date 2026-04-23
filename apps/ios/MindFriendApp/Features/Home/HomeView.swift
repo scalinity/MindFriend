@@ -678,104 +678,125 @@ struct HomeView: View {
             }
         }
 
-        do {
-            // Check and reset weekly XP if needed (fire-and-forget, don't block)
-            Task { _ = try? await container.supabaseDataService.resetWeeklyXPIfNeeded() }
+        // Check and reset weekly XP if needed (fire-and-forget, don't block)
+        Task { _ = try? await container.supabaseDataService.resetWeeklyXPIfNeeded() }
 
-            // Check for re-engagement (only once per session)
-            if !hasCheckedReengagement {
-                hasCheckedReengagement = true
-                await checkReengagement()
+        // Check for re-engagement (only once per session)
+        if !hasCheckedReengagement {
+            hasCheckedReengagement = true
+            await checkReengagement()
+        }
+
+        // Parallelize ALL independent API calls using unstructured Tasks.
+        //
+        // Why unstructured Task instead of `async let`:
+        //   `async let` children allocate on the parent task's LIFO stack
+        //   allocator. Awaiting them in non-declaration order or
+        //   interleaving any sequential `try? await` between awaits can
+        //   violate LIFO ordering and crash with
+        //   "freed pointer was not the last allocation" (SIGABRT in
+        //   swift::_swift_task_dealloc_specific /
+        //   asyncLet_finish_after_task_completion).
+        //   SwiftUI `.task` cancellation during the onboarding→home
+        //   transition made this race trigger on fresh App Review
+        //   installs. Unstructured Tasks are heap-allocated so
+        //   out-of-order completion is safe.
+        let protectionTask = Task { () -> StreakProtectionResult? in
+            do {
+                return try await container.supabaseDataService.checkStreakProtection()
+            } catch {
+                // User navigation cancels URLSession tasks; that's not a bug.
+                // Report only true failures to Sentry.
+                if error.isCancellation { return nil }
+                Log.general.error("[HomeView] Streak protection check failed: \(error.localizedDescription)")
+                error.report(context: [
+                    "action": "streak_protection_check",
+                    "location": "HomeView.loadData"
+                ])
+                Analytics.shared.track(.errorOccurred, properties: [
+                    "action": "streak_protection_check_failed",
+                    "error_type": String(describing: type(of: error))
+                ])
+                // Fallback: attempt to fetch shield status directly
+                if let fallbackStatus = try? await container.supabaseDataService.getShieldStatus() {
+                    await MainActor.run { shieldStatus = fallbackStatus }
+                    Log.general.info("[HomeView] Recovered shield status via fallback after protection check failed")
+                }
+                return nil
             }
+        }
+        let questTask = Task { () -> Quest? in
+            do { return try await container.supabaseDataService.getTodayQuest() }
+            catch {
+                if error.isCancellation { return nil }
+                Log.ui.error("HomeView getTodayQuest failed", error: error)
+                return nil
+            }
+        }
+        let profileTask = Task { () -> UserProfile? in
+            do { return try await container.supabaseAuthService.fetchProfile() }
+            catch {
+                if error.isCancellation { return nil }
+                Log.ui.error("HomeView fetchProfile failed", error: error)
+                return nil
+            }
+        }
 
-            // Parallelize ALL independent API calls for better performance
-            // Streak protection runs in parallel instead of blocking everything
-            async let protectionTask: StreakProtectionResult? = {
-                do {
-                    return try await container.supabaseDataService.checkStreakProtection()
-                } catch {
-                    // User navigation cancels URLSession tasks; that's not a bug.
-                    // Report only true failures to Sentry.
-                    if error.isCancellation { return nil }
-                    Log.general.error("[HomeView] Streak protection check failed: \(error.localizedDescription)")
-                    error.report(context: [
-                        "action": "streak_protection_check",
-                        "location": "HomeView.loadData"
-                    ])
-                    Analytics.shared.track(.errorOccurred, properties: [
-                        "action": "streak_protection_check_failed",
-                        "error_type": String(describing: type(of: error))
-                    ])
-                    // Fallback: attempt to fetch shield status directly
-                    if let fallbackStatus = try? await container.supabaseDataService.getShieldStatus() {
-                        await MainActor.run { shieldStatus = fallbackStatus }
-                        Log.general.info("[HomeView] Recovered shield status via fallback after protection check failed")
-                    }
-                    return nil
-                }
-            }()
-            // Wrap throwing calls in non-throwing IIFEs so loadData never exits
-            // via throw through the async-let region. An early throw while sibling
-            // async lets are still running races with SwiftUI task cancellation and
-            // triggers swift_Concurrency_fatalError ("asyncLet_finish_after_task_completion").
-            async let questTask: Quest? = {
-                do { return try await container.supabaseDataService.getTodayQuest() }
-                catch {
-                    if error.isCancellation { return nil }
-                    Log.ui.error("HomeView getTodayQuest failed", error: error)
-                    return nil
-                }
-            }()
-            async let profileTask: UserProfile? = {
-                do { return try await container.supabaseAuthService.fetchProfile() }
-                catch {
-                    if error.isCancellation { return nil }
-                    Log.ui.error("HomeView fetchProfile failed", error: error)
-                    return nil
-                }
-            }()
+        // Optional data (fail gracefully) - EXCLUDING homeContext which loads separately
+        let eventsTask = Task { try? await container.supabaseDataService.getActiveEvents() }
+        let participationTask = Task { try? await container.supabaseDataService.getEventParticipation() }
+        let insightTask = Task { try? await container.supabaseDataService.getWeeklySummary() }
+        // REMOVED: homeContextTask - now loads separately to avoid blocking UI
+        let todayMoodTask = Task { try? await container.supabaseDataService.getTodayMood() }
+        let buddyTask = Task { try? await container.supabaseDataService.getBuddyWidgetData() }
+        let celebrationsTask = Task { try? await container.supabaseDataService.getPendingCelebrations() }
+        let recoveryModeTask = Task { try? await container.supabaseDataService.fetchRecoveryModeState() }
+        let questArcTask = Task { try? await container.questArcsService.getActiveArc() }
+        // Mood prediction data (fail gracefully)
+        let predictionTask = Task { try? await container.predictiveService.fetchTodayPrediction() }
+        let interventionTask = Task { try? await container.predictiveService.fetchPendingMoodIntervention() }
+        // Load user experience (XP/level from user_experience table)
+        let experienceTask = Task { try? await achievementService.loadUserExperience() }
+        // Load active pathways
+        let pathwaysTask = Task { try? await container.transitionService.fetchActivePathways() }
 
-            // Optional data (fail gracefully) - EXCLUDING homeContext which loads separately
-            async let eventsTask = try? await container.supabaseDataService.getActiveEvents()
-            async let participationTask = try? await container.supabaseDataService.getEventParticipation()
-            async let insightTask = try? await container.supabaseDataService.getWeeklySummary()
-            // REMOVED: homeContextTask - now loads separately to avoid blocking UI
-            async let todayMoodTask = try? await container.supabaseDataService.getTodayMood()
-            async let buddyTask = try? await container.supabaseDataService.getBuddyWidgetData()
-            async let celebrationsTask = try? await container.supabaseDataService.getPendingCelebrations()
-            async let recoveryModeTask = try? await container.supabaseDataService.fetchRecoveryModeState()
-            async let questArcTask = try? await container.questArcsService.getActiveArc()
-            // Mood prediction data (fail gracefully)
-            async let predictionTask: Void? = try? await container.predictiveService.fetchTodayPrediction()
-            async let interventionTask: Void? = try? await container.predictiveService.fetchPendingMoodIntervention()
-            // Load user experience (XP/level from user_experience table)
-            async let experienceTask: Void? = try? await achievementService.loadUserExperience()
-            // Load active pathways
-            async let pathwaysTask = try? await container.transitionService.fetchActivePathways()
-
-            // Await all results concurrently (no throws in the async-let region)
-            let questResult = await questTask
-            let profileResult = await profileTask
-            let actionPlanResult = try? await container.actionPlanService.fetchLatestPlan(
-                timezone: profileResult?.timezone ?? "America/New_York"
+        // Action plan needs profile's timezone. Await profile inside this
+        // Task so the action-plan fetch still runs in parallel with the
+        // other fan-out tasks (vs. blocking sequentially after them).
+        let actionPlanTask = Task { () -> (ActionPlan, [ActionPlanItem])? in
+            let profile = await profileTask.value
+            return try? await container.actionPlanService.fetchLatestPlan(
+                timezone: profile?.timezone ?? TimeZone.current.identifier
             )
-            let events = await eventsTask ?? []
-            let participation = await participationTask ?? []
-            let insightResult = (await insightTask) ?? nil
+        }
+
+        // Await all results inside a cancellation handler. If the enclosing
+        // SwiftUI `.task` is cancelled (view disappeared, onboarding→home
+        // identity change, etc.), onCancel fires and every child task is
+        // cancelled. URLSession propagates cancellation through the network
+        // stack, so in-flight HTTP requests abort instead of running to
+        // completion and wasting bandwidth/battery.
+        await withTaskCancellationHandler {
+            let questResult = await questTask.value
+            let profileResult = await profileTask.value
+            let actionPlanResult = await actionPlanTask.value
+            let events = (await eventsTask.value) ?? []
+            let participation = (await participationTask.value) ?? []
+            let insightResult = (await insightTask.value) ?? nil
             // REMOVED: contextResult - homeContext loads separately
-            let todayMoodResult = await todayMoodTask
-            let buddyResult = (await buddyTask) ?? nil
-            let pendingCelebrations = await celebrationsTask ?? []
-            let recoveryModeResult = await recoveryModeTask ?? .inactive
-            let questArcResult = await questArcTask ?? nil
+            let todayMoodResult = await todayMoodTask.value
+            let buddyResult = (await buddyTask.value) ?? nil
+            let pendingCelebrations = (await celebrationsTask.value) ?? []
+            let recoveryModeResult = (await recoveryModeTask.value) ?? .inactive
+            let questArcResult = (await questArcTask.value) ?? nil
             // Await prediction tasks (they update the service's published state)
-            _ = await predictionTask
-            _ = await interventionTask
+            _ = await predictionTask.value
+            _ = await interventionTask.value
             // Await experience load (updates achievementService.userExperience)
-            _ = await experienceTask
-            let pathwaysResult = await pathwaysTask ?? []
+            _ = await experienceTask.value
+            let pathwaysResult = (await pathwaysTask.value) ?? []
             // Await streak protection (runs in parallel, nil on failure)
-            let protectionResult = await protectionTask
+            let protectionResult = await protectionTask.value
 
             // Compute level info from user_stats (via achievementService)
             let levelResult: UserLevel
@@ -920,12 +941,30 @@ struct HomeView: View {
                 }
             }
 
-            // Load home context in background without blocking main content
-            /// Uses Task cancellation pattern to prevent race conditions
-            loadHomeContextInBackground()
-        } catch {
-            Log.ui.error("HomeView loadData error", error: error)
-            questState = .error(error.localizedDescription)
+            // Load home context in background without blocking main content.
+            // Skip if the parent task was cancelled while we were awaiting above —
+            // starting a new background task during teardown would race with view
+            // destruction and log spurious failures.
+            if !Task.isCancelled {
+                loadHomeContextInBackground()
+            }
+        } onCancel: {
+            protectionTask.cancel()
+            questTask.cancel()
+            profileTask.cancel()
+            actionPlanTask.cancel()
+            eventsTask.cancel()
+            participationTask.cancel()
+            insightTask.cancel()
+            todayMoodTask.cancel()
+            buddyTask.cancel()
+            celebrationsTask.cancel()
+            recoveryModeTask.cancel()
+            questArcTask.cancel()
+            predictionTask.cancel()
+            interventionTask.cancel()
+            experienceTask.cancel()
+            pathwaysTask.cancel()
         }
     }
 
@@ -1087,6 +1126,7 @@ struct MoodPromptCard: View {
                     Text("Log your mood to track your wellness journey")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
                 }
 
                 Spacer()

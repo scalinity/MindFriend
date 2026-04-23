@@ -247,10 +247,19 @@ struct PaywallView: View {
     }
     
     private var termsSection: some View {
-        Text("Subscription automatically renews unless cancelled at least 24 hours before the end of the current period. Manage subscriptions in Settings.")
+        VStack(spacing: 12) {
+            Text("Subscription automatically renews unless cancelled at least 24 hours before the end of the current period. Manage subscriptions in Settings.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            HStack(spacing: 16) {
+                Link("Terms of Use (EULA)", destination: URL(string: "https://getmindfriend.app/terms")!)
+                Text("•").foregroundStyle(.secondary)
+                Link("Privacy Policy", destination: URL(string: "https://getmindfriend.app/privacy")!)
+            }
             .font(.caption)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
+        }
     }
     
     // MARK: - Helpers

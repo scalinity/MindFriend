@@ -20,7 +20,11 @@ struct HealthKitConnectionSheet: View {
                 Text("Connect Apple Health")
                     .font(.title.bold())
 
-                Text("MindFriend can read your health data to provide personalized insights about how your physical wellness affects your mood.")
+                Text("Powered by HealthKit")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.pink)
+
+                Text("MindFriend uses HealthKit to read your health data from the Apple Health app to provide personalized insights about how your physical wellness affects your mood.")
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal)
