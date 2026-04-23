@@ -89,13 +89,12 @@ final class DailyBriefingViewModel: ObservableObject {
                 loadedDate = today
             }
         } catch {
-            // Don't log cancelled errors (expected when view disappears)
-            if !Task.isCancelled {
-                Log.general.error("DailyBriefing: failed to load", error: error)
-                self.briefing = nil
-                self.error = "Load failed: \(error.localizedDescription)"
-            }
             isLoading = false
+            // Don't log cancelled errors (expected when view disappears)
+            if Task.isCancelled || error.isCancellation { return }
+            Log.general.error("DailyBriefing: failed to load", error: error)
+            self.briefing = nil
+            self.error = "Load failed: \(error.localizedDescription)"
         }
     }
 
@@ -177,10 +176,13 @@ final class DailyBriefingViewModel: ObservableObject {
             self.briefing = newBriefing
             isLoading = false
         } catch {
+            isLoading = false
+            // User-navigation cancellations are expected, don't report to Sentry
+            // and don't clear state — the view may be dismounting or retrying.
+            if Task.isCancelled || error.isCancellation { return }
             Log.general.error("DailyBriefing: failed to generate", error: error)
             self.briefing = nil
             self.error = "Generate failed: \(error.localizedDescription)"
-            isLoading = false
         }
     }
 
