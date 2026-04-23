@@ -254,9 +254,9 @@ struct PaywallView: View {
                 .multilineTextAlignment(.center)
 
             HStack(spacing: 16) {
-                Link("Terms of Use (EULA)", destination: URL(string: "https://getmindfriend.app/terms")!)
+                Link("Terms of Use (EULA)", destination: AppURLs.termsOfUse)
                 Text("•").foregroundStyle(.secondary)
-                Link("Privacy Policy", destination: URL(string: "https://getmindfriend.app/privacy")!)
+                Link("Privacy Policy", destination: AppURLs.privacyPolicy)
             }
             .font(.caption)
         }

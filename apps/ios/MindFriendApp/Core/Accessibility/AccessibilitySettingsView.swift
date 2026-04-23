@@ -82,7 +82,7 @@ struct AccessibilitySettingsView: View {
                     NavigationLink(destination: AccessibilityFeedbackView()) {
                         Label("Report Issue", systemImage: "exclamationmark.bubble.fill")
                     }
-                    Link(destination: URL(string: "https://getmindfriend.app/accessibility")!) {
+                    Link(destination: AppURLs.accessibility) {
                         Label("Accessibility Guide", systemImage: "book.fill")
                     }
                 }

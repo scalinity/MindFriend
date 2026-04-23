@@ -119,3 +119,12 @@ extension Constants {
         static let purchaseCompleted = "purchase_completed"
     }
 }
+
+// MARK: - Public Legal & Marketing URLs
+
+enum AppURLs {
+    static let termsOfUse = URL(string: "https://getmindfriend.app/terms")!
+    static let privacyPolicy = URL(string: "https://getmindfriend.app/privacy")!
+    static let accessibility = URL(string: "https://getmindfriend.app/accessibility")!
+    static let marketing = URL(string: "https://getmindfriend.app")!
+}
