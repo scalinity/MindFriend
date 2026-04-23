@@ -219,6 +219,13 @@ struct ProfileView: View {
                 // Settings
                 Section("Settings") {
                     NavigationLink {
+                        BiometricsSettingsView(healthKit: container.healthKitService)
+                    } label: {
+                        Label("Apple Health (HealthKit)", systemImage: "heart.fill")
+                            .foregroundStyle(.pink)
+                    }
+
+                    NavigationLink {
                         NotificationSettingsView()
                     } label: {
                         Label("Notifications", systemImage: "bell.fill")
