@@ -225,5 +225,5 @@ struct BiometricsSettingsView: View {
 }
 
 #Preview {
-    BiometricsSettingsView(healthKit: HealthKitService())
+    BiometricsSettingsView(healthKit: HealthKitService.shared)
 }

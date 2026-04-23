@@ -372,12 +372,12 @@ struct ProfileView: View {
                         Label("Contact Support", systemImage: "envelope")
                     }
 
-                    Link(destination: URL(string: "https://getmindfriend.app/privacy")!) {
+                    Link(destination: AppURLs.privacyPolicy) {
                         Label("Privacy Policy", systemImage: "doc.text")
                     }
 
-                    Link(destination: URL(string: "https://getmindfriend.app/terms")!) {
-                        Label("Terms of Service", systemImage: "doc.text")
+                    Link(destination: AppURLs.termsOfUse) {
+                        Label("Terms of Use", systemImage: "doc.text")
                     }
                 }
 
