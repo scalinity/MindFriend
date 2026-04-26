@@ -16,6 +16,11 @@ import {
   GOOGLE_VOICE_PRESETS,
 } from "../_shared/google-tts.ts";
 import { checkRateLimit } from "../_shared/ratelimit.ts";
+import {
+  ConsentRequiredError,
+  aiConsentErrorResponse,
+  requireAIConsent,
+} from "../_shared/ai-consent.ts";
 
 // deno-lint-ignore no-explicit-any
 type UntypedSupabaseClient = SupabaseClient<any, "public", any>;
@@ -155,6 +160,16 @@ serve(async (req) => {
           headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
         },
       );
+    }
+
+    // AI consent check (App Store guidelines 5.1.1(i) / 5.1.2(i))
+    try {
+      await requireAIConsent(supabaseAdmin, user.id, "tts_voice");
+    } catch (e) {
+      if (e instanceof ConsentRequiredError) {
+        return aiConsentErrorResponse(e, baseCorsHeaders);
+      }
+      throw e;
     }
 
     // Parse request
