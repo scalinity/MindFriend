@@ -27,7 +27,7 @@ export class ConsentRequiredError extends Error {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyClient = SupabaseClient<any, "public", any>;
+export type UntypedSupabaseClient = SupabaseClient<any, "public", any>;
 
 /**
  * Throws ConsentRequiredError unless the user has an `ai_consents` row for
@@ -37,7 +37,7 @@ type AnyClient = SupabaseClient<any, "public", any>;
  * works regardless of the per-request RLS context.
  */
 export async function requireAIConsent(
-  supabase: AnyClient,
+  supabase: UntypedSupabaseClient,
   userId: string,
   feature: AIFeature,
 ): Promise<void> {
@@ -49,7 +49,7 @@ export async function requireAIConsent(
     .maybeSingle();
 
   if (error) {
-    console.error("[ai-consent] lookup error:", error);
+    console.error(`[ai-consent] lookup error for feature "${feature}":`, error);
     throw new ConsentRequiredError(feature);
   }
   if (!data) throw new ConsentRequiredError(feature);

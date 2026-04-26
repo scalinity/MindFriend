@@ -4,6 +4,7 @@ import {
 } from "https://deno.land/std@0.168.0/testing/asserts.ts";
 import {
   AIFeature,
+  ALL_AI_FEATURES,
   ConsentRequiredError,
   CURRENT_POLICY_VERSION,
   aiConsentErrorResponse,
@@ -92,10 +93,47 @@ Deno.test("aiConsentErrorResponse returns 403 with expected body", async () => {
   assertEquals(resp.headers.get("Access-Control-Allow-Origin"), "*");
 });
 
-Deno.test("AIFeature includes all 6 features", () => {
+Deno.test("ALL_AI_FEATURES contains exactly the 6 expected feature keys", () => {
   const expected: AIFeature[] = [
     "chat", "journal_ai", "voice_journal_ai",
     "image_gen", "insights", "tts_voice",
   ];
-  assertEquals(expected.length, 6);
+  assertEquals([...ALL_AI_FEATURES].sort(), expected.sort());
+});
+
+function fakeClientWithError(err: { message: string }) {
+  return {
+    from(_table: string) {
+      return {
+        select(_cols: string) {
+          return {
+            eq(_col1: string, _val1: string) {
+              return {
+                eq(_col2: string, _val2: string) {
+                  return {
+                    maybeSingle: async () => ({ data: null, error: err }),
+                  };
+                },
+              };
+            },
+          };
+        },
+      };
+    },
+  } as any;
+}
+
+Deno.test("db error throws ConsentRequiredError (fail-closed)", async () => {
+  const sb = fakeClientWithError({ message: "connection timeout" });
+  await assertRejects(
+    () => requireAIConsent(sb, USER_ID, "chat"),
+    ConsentRequiredError,
+  );
+});
+
+Deno.test("future policy_version passes (>= current is sufficient)", async () => {
+  const sb = fakeClient({
+    [`${USER_ID}|chat`]: { state: "granted", policy_version: CURRENT_POLICY_VERSION + 1 },
+  });
+  await requireAIConsent(sb, USER_ID, "chat"); // must not throw
 });
