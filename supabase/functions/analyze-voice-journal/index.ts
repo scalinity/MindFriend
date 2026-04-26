@@ -5,6 +5,11 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { checkRateLimit, getRateLimitHeaders } from "../_shared/ratelimit.ts";
+import {
+  ConsentRequiredError,
+  aiConsentErrorResponse,
+  requireAIConsent,
+} from "../_shared/ai-consent.ts";
 
 // Security constants
 const UUID_REGEX =
@@ -264,6 +269,16 @@ serve(async (req) => {
     // In production: Use proper speech-to-text + analysis
     const transcription =
       creativeWork.transcription || "[Voice recording - transcription pending]";
+
+    // AI consent check (App Store guidelines 5.1.1(i) / 5.1.2(i))
+    try {
+      await requireAIConsent(supabaseAdmin, user.id, "voice_journal_ai");
+    } catch (e) {
+      if (e instanceof ConsentRequiredError) {
+        return aiConsentErrorResponse(e, baseCorsHeaders);
+      }
+      throw e;
+    }
 
     // Analyze with AI
     const analysisPrompt = `You are analyzing a voice journal entry from a mental wellness app user.

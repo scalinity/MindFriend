@@ -1,6 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import {
+  ConsentRequiredError,
+  aiConsentErrorResponse,
+  requireAIConsent,
+} from "../_shared/ai-consent.ts";
 
 console.log("[voice-token] Module loaded");
 
@@ -163,6 +168,16 @@ serve(async (req) => {
         }),
         { status: 500, headers: corsHeaders },
       );
+    }
+
+    // AI consent check (App Store guidelines 5.1.1(i) / 5.1.2(i))
+    try {
+      await requireAIConsent(supabase, user.id, "voice_journal_ai");
+    } catch (e) {
+      if (e instanceof ConsentRequiredError) {
+        return aiConsentErrorResponse(e, corsHeaders);
+      }
+      throw e;
     }
 
     console.log("[voice-token] Calling xAI API...");
