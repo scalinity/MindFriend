@@ -20,6 +20,11 @@ import { CRISIS_RESPONSE } from "../_shared/crisis.ts"; // Keep response templat
 import { checkRateLimit, getRateLimitHeaders } from "../_shared/ratelimit.ts";
 import { sanitizeErrorMessage } from "../_shared/security.ts";
 import { sanitizeForPrompt } from "../_shared/sanitize.ts";
+import {
+  ConsentRequiredError,
+  aiConsentErrorResponse,
+  requireAIConsent,
+} from "../_shared/ai-consent.ts";
 // Cognitive Bias Coach imports
 import {
   detectDistortion,
@@ -244,6 +249,16 @@ serve(async (req) => {
       "Content-Type": "application/json",
       ...getRateLimitHeaders(rateLimitResult),
     };
+
+    // AI consent check (App Store guidelines 5.1.1(i) / 5.1.2(i))
+    try {
+      await requireAIConsent(supabaseAdmin, user.id, "chat");
+    } catch (e) {
+      if (e instanceof ConsentRequiredError) {
+        return aiConsentErrorResponse(e, baseCorsHeaders);
+      }
+      throw e;
+    }
 
     // Parse request body
     let requestBody: ChatRequest;
