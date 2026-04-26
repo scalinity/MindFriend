@@ -18,6 +18,11 @@ import type {
 } from "./types.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { sanitizeForPrompt } from "../_shared/sanitize.ts";
+import {
+  ConsentRequiredError,
+  aiConsentErrorResponse,
+  requireAIConsent,
+} from "../_shared/ai-consent.ts";
 
 // =====================================================
 // Environment Variable Validation (P0 Security Fix)
@@ -187,6 +192,16 @@ serve(async (req) => {
         undefined,
         corsHeaders,
       );
+    }
+
+    // AI consent check (App Store guidelines 5.1.1(i) / 5.1.2(i))
+    try {
+      await requireAIConsent(supabase, user.id, "journal_ai");
+    } catch (e) {
+      if (e instanceof ConsentRequiredError) {
+        return aiConsentErrorResponse(e, corsHeaders);
+      }
+      throw e;
     }
 
     // Sanitize text before LLM interpolation

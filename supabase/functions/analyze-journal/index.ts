@@ -14,6 +14,11 @@ type UntypedSupabaseClient = SupabaseClient<any, "public", any>;
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { checkRateLimit, getRateLimitHeaders } from "../_shared/ratelimit.ts";
 import { sanitizeForPrompt } from "../_shared/sanitize.ts";
+import {
+  ConsentRequiredError,
+  aiConsentErrorResponse,
+  requireAIConsent,
+} from "../_shared/ai-consent.ts";
 
 // Constants
 const MAX_CONTENT_LENGTH = 50000; // ~12,500 tokens
@@ -526,6 +531,16 @@ serve(async (req) => {
         }),
         { status: 400, headers: responseHeaders },
       );
+    }
+
+    // AI consent check (App Store guidelines 5.1.1(i) / 5.1.2(i))
+    try {
+      await requireAIConsent(supabaseAdmin, user.id, "journal_ai");
+    } catch (e) {
+      if (e instanceof ConsentRequiredError) {
+        return aiConsentErrorResponse(e, baseCorsHeaders);
+      }
+      throw e;
     }
 
     // Call Grok AI for analysis

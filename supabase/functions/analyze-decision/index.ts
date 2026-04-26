@@ -12,6 +12,11 @@ import {
   parseAIJSON,
 } from "../_shared/xai-client.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import {
+  ConsentRequiredError,
+  aiConsentErrorResponse,
+  requireAIConsent,
+} from "../_shared/ai-consent.ts";
 
 
 interface AnalyzeRequest {
@@ -60,6 +65,12 @@ serve(async (req) => {
           headers: { Authorization: req.headers.get("Authorization")! },
         },
       },
+    );
+
+    // Admin client for consent check (requires service-role key)
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
 
     // Get authenticated user
@@ -195,6 +206,16 @@ Decision:
 ${options ? `Options being considered:\n${options.map((opt) => `- ${opt.label}${opt.notes ? ` (${opt.notes})` : ""}`).join("\n")}` : ""}
 
 Analyze this decision against these values.`;
+
+    // AI consent check (App Store guidelines 5.1.1(i) / 5.1.2(i))
+    try {
+      await requireAIConsent(supabaseAdmin, user.id, "journal_ai");
+    } catch (e) {
+      if (e instanceof ConsentRequiredError) {
+        return aiConsentErrorResponse(e, corsHeaders);
+      }
+      throw e;
+    }
 
     // Call xAI Grok API
     console.log("[analyze-decision] Calling Grok API for decision analysis...");
