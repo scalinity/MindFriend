@@ -1,5 +1,4 @@
 import {
-  assert,
   assertEquals,
   assertRejects,
 } from "https://deno.land/std@0.168.0/testing/asserts.ts";
@@ -19,9 +18,9 @@ function fakeClient(rows: Record<string, { state: string; policy_version: number
       return {
         select(_cols: string) {
           return {
-            eq(col1: string, val1: string) {
+            eq(_col1: string, val1: string) {
               return {
-                eq(col2: string, val2: string) {
+                eq(_col2: string, val2: string) {
                   return {
                     maybeSingle: async () => ({
                       data: rows[`${val1}|${val2}`] ?? null,
