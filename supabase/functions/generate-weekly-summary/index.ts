@@ -26,6 +26,11 @@ import {
   AIInsightResult,
   InsightContext,
 } from "../_shared/ai-insights.ts";
+import {
+  requireAIConsent,
+  aiConsentErrorResponse,
+  ConsentRequiredError,
+} from "../_shared/ai-consent.ts";
 
 // Concurrency limit for parallel processing
 const CONCURRENCY_LIMIT = 10;
@@ -141,6 +146,15 @@ serve(async (req) => {
         `On-demand insight generation for user: ${authenticatedUserId}`,
       );
 
+      try {
+        await requireAIConsent(supabaseAdmin, authenticatedUserId, "insights");
+      } catch (e) {
+        if (e instanceof ConsentRequiredError) {
+          return aiConsentErrorResponse(e, headers);
+        }
+        throw e;
+      }
+
       const result = await processUserWithInsights(
         supabaseAdmin,
         authenticatedUserId,
@@ -230,15 +244,24 @@ serve(async (req) => {
     for (let i = 0; i < users.length; i += CONCURRENCY_LIMIT) {
       const chunk = users.slice(i, i + CONCURRENCY_LIMIT);
       const chunkResults = await Promise.allSettled(
-        chunk.map((user) =>
-          processUserWithInsights(
+        chunk.map(async (user) => {
+          try {
+            await requireAIConsent(supabaseAdmin, user.user_id, "insights");
+          } catch (e) {
+            if (e instanceof ConsentRequiredError) {
+              console.log(`[insights] skipping user ${user.user_id} — no insights consent`);
+              return { success: false, notificationSent: false };
+            }
+            throw e;
+          }
+          return processUserWithInsights(
             supabaseAdmin,
             user.user_id,
             now,
             xaiApiKey,
             true,
-          ),
-        ),
+          );
+        }),
       );
 
       for (const result of chunkResults) {

@@ -13,6 +13,10 @@ import {
   UserSnapshot,
 } from "../_shared/capsule-utils.ts";
 import { logError, createErrorResponse } from "../_shared/error-logger.ts";
+import {
+  requireAIConsent,
+  ConsentRequiredError,
+} from "../_shared/ai-consent.ts";
 
 // TypeScript interfaces for type safety
 interface TimeCapsule {
@@ -97,6 +101,16 @@ serve(async (_req) => {
             .eq("id", capsule.id);
           failureCount++;
           continue;
+        }
+
+        try {
+          await requireAIConsent(supabase, capsule.user_id, "insights");
+        } catch (e) {
+          if (e instanceof ConsentRequiredError) {
+            console.log(`[insights] skipping user ${capsule.user_id} — no insights consent`);
+            continue;
+          }
+          throw e;
         }
 
         // Capture current user snapshot

@@ -4,6 +4,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import {
+  requireAIConsent,
+  aiConsentErrorResponse,
+  ConsentRequiredError,
+} from "../_shared/ai-consent.ts";
 
 interface MilestoneRequest {
   level: number;
@@ -41,6 +46,15 @@ serve(async (req) => {
         status: 401,
         headers: corsHeaders,
       });
+    }
+
+    try {
+      await requireAIConsent(supabase, user.id, "insights");
+    } catch (e) {
+      if (e instanceof ConsentRequiredError) {
+        return aiConsentErrorResponse(e, corsHeaders);
+      }
+      throw e;
     }
 
     const body: MilestoneRequest = await req.json();

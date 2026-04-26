@@ -13,6 +13,11 @@ type UntypedSupabaseClient = SupabaseClient<any, "public", any>;
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { detectCrisis, getMatchedCrisisKeyword, CRISIS_RESPONSE } from "../_shared/crisis.ts";
 import { checkRateLimit, getRateLimitHeaders } from "../_shared/ratelimit.ts";
+import {
+  requireAIConsent,
+  aiConsentErrorResponse,
+  ConsentRequiredError,
+} from "../_shared/ai-consent.ts";
 
 // TYPE DEFINITIONS
 interface PrebuiltScenario {
@@ -301,6 +306,15 @@ serve(async (req) => {
         status: 401,
         headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    try {
+      await requireAIConsent(supabaseAdmin, user.id, "insights");
+    } catch (e) {
+      if (e instanceof ConsentRequiredError) {
+        return aiConsentErrorResponse(e, baseCorsHeaders);
+      }
+      throw e;
     }
 
     // Rate limiting
