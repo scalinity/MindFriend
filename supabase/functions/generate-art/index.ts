@@ -5,6 +5,11 @@
 console.log("[BOOT] generate-art function loading...");
 
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2.49.1";
+import {
+  ConsentRequiredError,
+  aiConsentErrorResponse,
+  requireAIConsent,
+} from "../_shared/ai-consent.ts";
 
 console.log("[BOOT] Supabase client imported successfully");
 
@@ -424,6 +429,16 @@ Deno.serve(async (req) => {
       "Content-Type": "application/json",
       ...getRateLimitHeaders(rateLimitResult),
     };
+
+    // AI consent check (App Store guidelines 5.1.1(i) / 5.1.2(i))
+    try {
+      await requireAIConsent(supabaseAdmin, user.id, "image_gen");
+    } catch (e) {
+      if (e instanceof ConsentRequiredError) {
+        return aiConsentErrorResponse(e, baseCorsHeaders);
+      }
+      throw e;
+    }
 
     // Parse request body
     console.log(`[${requestId}] Parsing request body...`);

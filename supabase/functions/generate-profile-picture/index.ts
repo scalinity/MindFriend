@@ -3,6 +3,11 @@
 
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2.49.1";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import {
+  ConsentRequiredError,
+  aiConsentErrorResponse,
+  requireAIConsent,
+} from "../_shared/ai-consent.ts";
 
 
 // Helper: Convert base64 string to Uint8Array
@@ -76,6 +81,16 @@ Deno.serve(async (req) => {
     const supabaseUser = createClient(supabaseUrl, anonKey!, {
       global: { headers: { Authorization: authHeader } },
     });
+
+    // AI consent check (App Store guidelines 5.1.1(i) / 5.1.2(i))
+    try {
+      await requireAIConsent(supabaseAdmin, user.id, "image_gen");
+    } catch (e) {
+      if (e instanceof ConsentRequiredError) {
+        return aiConsentErrorResponse(e, corsHeaders);
+      }
+      throw e;
+    }
 
     // Parse request
     let body;
