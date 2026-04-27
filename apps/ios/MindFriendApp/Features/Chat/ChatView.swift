@@ -157,17 +157,23 @@ struct ChatView: View {
         }
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
-                Button {
-                    if appState.entitlements.tier == .premium {
-                        showVoiceMode = true
-                    } else {
-                        appState.showPaywall = true
+                // Voice mode is itself an AI chat feature (xAI Realtime). Hide it when
+                // chat consent is denied so the user can't bypass their explicit
+                // "Continue without AI" choice through the toolbar. Crisis resources
+                // are non-AI safety material — always available.
+                if consent.isGranted(.chat) {
+                    Button {
+                        if appState.entitlements.tier == .premium {
+                            showVoiceMode = true
+                        } else {
+                            appState.showPaywall = true
+                        }
+                    } label: {
+                        Image(systemName: "mic.fill")
                     }
-                } label: {
-                    Image(systemName: "mic.fill")
+                    .accessibilityLabel("Voice mode")
+                    .accessibilityHint(appState.entitlements.tier == .premium ? "Start a voice conversation" : "Premium feature - tap to upgrade")
                 }
-                .accessibilityLabel("Voice mode")
-                .accessibilityHint(appState.entitlements.tier == .premium ? "Start a voice conversation" : "Premium feature - tap to upgrade")
 
                 Button {
                     appState.showCrisisResources = true
@@ -293,6 +299,11 @@ struct ChatView: View {
             } catch let urlError as URLError where urlError.code == .cancelled {
                 // URL request was cancelled - same handling as CancellationError
                 Log.chat.debug("URL request cancelled, server will complete request")
+            } catch is AIConsentRequiredError {
+                // Server enforced consent gate. The network mapper already called
+                // markUnknown(.chat), so the view re-renders to the empty state on
+                // the next tick. No alert needed.
+                Log.chat.debug("Chat consent revoked server-side; flipping to empty state")
             } catch let error as APIError {
                 if case .quotaExceeded = error {
                     appState.showPaywall = true

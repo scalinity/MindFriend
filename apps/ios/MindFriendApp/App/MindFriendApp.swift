@@ -365,7 +365,10 @@ struct RootView: View {
             needsConsentGate = svc.needsConsentGate()
         } catch {
             // Fail open: if we can't reach the server, don't trap the user behind the gate.
-            // Server-side requireAIConsent will still block AI calls.
+            // Server-side requireAIConsent will still block AI calls. We log the failure
+            // so future regressions (missing table, RLS misconfig, etc.) aren't invisible
+            // — we lost an hour debugging exactly this when the table wasn't deployed.
+            Log.data.error("[ai-consent] failed to load consents on launch: \(error)")
             needsConsentGate = false
         }
     }
