@@ -5,6 +5,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { checkRateLimit, getRateLimitHeaders } from "../_shared/ratelimit.ts";
 
 serve(async (req) => {
   const origin = req.headers.get("Origin");
@@ -55,6 +56,25 @@ serve(async (req) => {
     });
   }
 
+  // Rate limit: max 5 deletions per hour per user.
+  const rateLimitResult = await checkRateLimit(supabaseAdmin, user.id, "delete_ai_history", {
+    windowMs: 60 * 60 * 1000, // 1 hour
+    maxRequests: 5,
+  });
+  if (!rateLimitResult.allowed) {
+    return new Response(
+      JSON.stringify({ error: "Too many requests", retryAfter: rateLimitResult.retryAfter }),
+      {
+        status: 429,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+          ...getRateLimitHeaders(rateLimitResult),
+        },
+      },
+    );
+  }
+
   // messages cascade-delete via the FK on conversations.id, so we only need
   // to delete conversations.
   const { error: convErr, count: convCount } = await supabaseAdmin
@@ -73,10 +93,7 @@ serve(async (req) => {
   console.log(`[delete-ai-history] user=${user.id.slice(0, 8)} deleted_conversations=${convCount ?? 0}`);
 
   return new Response(
-    JSON.stringify({
-      ok: true,
-      conversations_deleted: convCount ?? 0,
-    }),
+    JSON.stringify({ ok: true }),
     {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
