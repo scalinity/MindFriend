@@ -252,6 +252,13 @@ struct ChatView: View {
                         dailyAiUsed: serverUsed
                     )
                     showQuotaWarning = response.quotaRemaining < Int.max && response.quotaRemaining <= quotaWarningThreshold
+
+                    // Trigger paywall the moment quota is exhausted, so the user sees the
+                    // upgrade prompt right after the AI response that consumed their last
+                    // message — not on a doomed 6th send.
+                    if appState.entitlements.isQuotaExceeded {
+                        appState.showPaywall = true
+                    }
                 } else {
                     showQuotaWarning = false
                 }
