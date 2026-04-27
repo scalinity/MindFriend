@@ -5,6 +5,7 @@ import Charts
 struct WeeklyInsightsView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
+    @EnvironmentObject var consent: AIConsentService
 
     @State private var currentInsight: WeeklySummary?
     @State private var pastInsights: [WeeklySummary] = []
@@ -16,7 +17,7 @@ struct WeeklyInsightsView: View {
     @AppStorage("insights_tutorial_completed") private var insightsTutorialCompleted = false
     @State private var showInsightsTutorial = false
 
-    var body: some View {
+    private var grantedBody: some View {
         ScrollView {
             VStack(spacing: 20) {
                 if isLoading || isGenerating {
@@ -65,7 +66,6 @@ struct WeeklyInsightsView: View {
             }
             .padding()
         }
-        .navigationTitle("Weekly Insights")
         .background(Color(.systemGroupedBackground))
         .task { await loadInsights(forceRegenerate: false) }
         .refreshable { await loadInsights(forceRegenerate: true) }
@@ -87,6 +87,18 @@ struct WeeklyInsightsView: View {
             })
             .environmentObject(container)
         }
+    }
+
+    var body: some View {
+        Group {
+            if consent.isGranted(.insights) {
+                grantedBody
+                    .aiFirstUseDisclosure(.insights)
+            } else {
+                AIDeniedEmptyStateView(feature: .insights)
+            }
+        }
+        .navigationTitle("Weekly Insights")
     }
 
     private func loadInsights(forceRegenerate: Bool) async {
