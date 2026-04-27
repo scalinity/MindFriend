@@ -80,6 +80,16 @@ serve(async (req: Request): Promise<Response> => {
     });
   }
 
+  // AI consent check (App Store guidelines 5.1.1(i) / 5.1.2(i))
+  try {
+    await requireAIConsent(supabase, user.id, "journal_ai");
+  } catch (e) {
+    if (e instanceof ConsentRequiredError) {
+      return aiConsentErrorResponse(e, corsHeaders);
+    }
+    throw e;
+  }
+
   try {
     const { conversationId, messageId, messageText, rewriteType, locale } =
       (await req.json()) as GenerateRewritesRequest;
@@ -220,16 +230,6 @@ serve(async (req: Request): Promise<Response> => {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
-    }
-
-    // AI consent check (App Store guidelines 5.1.1(i) / 5.1.2(i))
-    try {
-      await requireAIConsent(supabase, user.id, "journal_ai");
-    } catch (e) {
-      if (e instanceof ConsentRequiredError) {
-        return aiConsentErrorResponse(e, corsHeaders);
-      }
-      throw e;
     }
 
     // Generate rewrites using xAI

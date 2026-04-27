@@ -256,6 +256,16 @@ serve(async (req) => {
       });
     }
 
+    // AI consent check (App Store guidelines 5.1.1(i) / 5.1.2(i))
+    try {
+      await requireAIConsent(supabase, user.id, "journal_ai");
+    } catch (e) {
+      if (e instanceof ConsentRequiredError) {
+        return aiConsentErrorResponse(e, corsHeaders);
+      }
+      throw e;
+    }
+
     // Parse request
     const { thoughtRecordId } = await req.json();
 
@@ -298,16 +308,6 @@ serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         },
       );
-    }
-
-    // AI consent check (App Store guidelines 5.1.1(i) / 5.1.2(i))
-    try {
-      await requireAIConsent(supabase, user.id, "journal_ai");
-    } catch (e) {
-      if (e instanceof ConsentRequiredError) {
-        return aiConsentErrorResponse(e, corsHeaders);
-      }
-      throw e;
     }
 
     // Analyze with Grok

@@ -89,6 +89,16 @@ serve(async (req) => {
       );
     }
 
+    // AI consent check (App Store guidelines 5.1.1(i) / 5.1.2(i))
+    try {
+      await requireAIConsent(supabaseAdmin, user.id, "journal_ai");
+    } catch (e) {
+      if (e instanceof ConsentRequiredError) {
+        return aiConsentErrorResponse(e, corsHeaders);
+      }
+      throw e;
+    }
+
     // Parse request body
     const body: AnalyzeRequest = await req.json();
     const { decisionText, options } = body;
@@ -206,16 +216,6 @@ Decision:
 ${options ? `Options being considered:\n${options.map((opt) => `- ${opt.label}${opt.notes ? ` (${opt.notes})` : ""}`).join("\n")}` : ""}
 
 Analyze this decision against these values.`;
-
-    // AI consent check (App Store guidelines 5.1.1(i) / 5.1.2(i))
-    try {
-      await requireAIConsent(supabaseAdmin, user.id, "journal_ai");
-    } catch (e) {
-      if (e instanceof ConsentRequiredError) {
-        return aiConsentErrorResponse(e, corsHeaders);
-      }
-      throw e;
-    }
 
     // Call xAI Grok API
     console.log("[analyze-decision] Calling Grok API for decision analysis...");

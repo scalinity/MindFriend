@@ -157,6 +157,16 @@ serve(async (req) => {
       );
     }
 
+    // AI consent check (App Store guidelines 5.1.1(i) / 5.1.2(i))
+    try {
+      await requireAIConsent(supabase, user.id, "journal_ai");
+    } catch (e) {
+      if (e instanceof ConsentRequiredError) {
+        return aiConsentErrorResponse(e, corsHeaders);
+      }
+      throw e;
+    }
+
     // Parse request body
     const body: DetectDistortionRequest = await req.json();
     const { text, sessionId } = body;
@@ -192,16 +202,6 @@ serve(async (req) => {
         undefined,
         corsHeaders,
       );
-    }
-
-    // AI consent check (App Store guidelines 5.1.1(i) / 5.1.2(i))
-    try {
-      await requireAIConsent(supabase, user.id, "journal_ai");
-    } catch (e) {
-      if (e instanceof ConsentRequiredError) {
-        return aiConsentErrorResponse(e, corsHeaders);
-      }
-      throw e;
     }
 
     // Sanitize text before LLM interpolation

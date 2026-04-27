@@ -82,6 +82,16 @@ serve(async (req) => {
       });
     }
 
+    // AI consent check (App Store guidelines 5.1.1(i) / 5.1.2(i))
+    try {
+      await requireAIConsent(supabaseAdmin, user.id, "voice_journal_ai");
+    } catch (e) {
+      if (e instanceof ConsentRequiredError) {
+        return aiConsentErrorResponse(e, baseCorsHeaders);
+      }
+      throw e;
+    }
+
     // Rate limiting (3 per minute)
     const rateLimitResult = await checkRateLimit(
       supabaseAdmin,
@@ -269,16 +279,6 @@ serve(async (req) => {
     // In production: Use proper speech-to-text + analysis
     const transcription =
       creativeWork.transcription || "[Voice recording - transcription pending]";
-
-    // AI consent check (App Store guidelines 5.1.1(i) / 5.1.2(i))
-    try {
-      await requireAIConsent(supabaseAdmin, user.id, "voice_journal_ai");
-    } catch (e) {
-      if (e instanceof ConsentRequiredError) {
-        return aiConsentErrorResponse(e, baseCorsHeaders);
-      }
-      throw e;
-    }
 
     // Analyze with AI
     const analysisPrompt = `You are analyzing a voice journal entry from a mental wellness app user.

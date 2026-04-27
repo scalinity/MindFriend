@@ -363,6 +363,16 @@ serve(async (req) => {
       );
     }
 
+    // AI consent check (App Store guidelines 5.1.1(i) / 5.1.2(i))
+    try {
+      await requireAIConsent(supabaseAdmin, user.id, "journal_ai");
+    } catch (e) {
+      if (e instanceof ConsentRequiredError) {
+        return aiConsentErrorResponse(e, baseCorsHeaders);
+      }
+      throw e;
+    }
+
     // Rate limiting (10 requests per minute)
     const rateLimitResult = await checkRateLimit(
       supabaseAdmin,
@@ -531,16 +541,6 @@ serve(async (req) => {
         }),
         { status: 400, headers: responseHeaders },
       );
-    }
-
-    // AI consent check (App Store guidelines 5.1.1(i) / 5.1.2(i))
-    try {
-      await requireAIConsent(supabaseAdmin, user.id, "journal_ai");
-    } catch (e) {
-      if (e instanceof ConsentRequiredError) {
-        return aiConsentErrorResponse(e, baseCorsHeaders);
-      }
-      throw e;
     }
 
     // Call Grok AI for analysis
