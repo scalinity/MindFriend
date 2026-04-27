@@ -858,10 +858,28 @@ struct HomeView: View {
                     appState.currentUser = profileResult
                     appState.currentStreak = profileResult.stats?.currentStreakDays ?? 0
 
-                    // Convert UserEntitlements to Entitlements
+                    // Convert UserEntitlements to Entitlements.
+                    // We only learn the tier from the profile fetch; the daily quota/used
+                    // counts are authoritative from BillingService.loadEntitlements (DB)
+                    // and from the chat function response. Preserve those if already set,
+                    // otherwise fall back to the .free default (which has the correct
+                    // server-side quota of 5 — see public.check_and_increment_ai_quota).
                     if let userEntitlements = profileResult.entitlements {
                         let tier: Tier = userEntitlements.subscriptionTier == "premium" ? .premium : .free
-                        appState.entitlements = Entitlements(tier: tier, dailyAiQuota: tier == .premium ? 9999 : 20, dailyAiUsed: 0)
+                        let priorQuota = appState.entitlements.dailyAiQuota
+                        let priorUsed = appState.entitlements.dailyAiUsed
+                        if tier == .premium {
+                            appState.entitlements = Entitlements(tier: .premium, dailyAiQuota: 9999, dailyAiUsed: priorUsed)
+                        } else {
+                            // Use Entitlements.free's quota as the source of truth on first
+                            // load (5); preserve any server-synced values from a previous
+                            // chat send.
+                            appState.entitlements = Entitlements(
+                                tier: .free,
+                                dailyAiQuota: priorQuota > 0 ? priorQuota : Entitlements.free.dailyAiQuota,
+                                dailyAiUsed: priorUsed
+                            )
+                        }
                     } else {
                         appState.entitlements = .free
                     }
