@@ -879,6 +879,7 @@ struct PrivacySettingsView: View {
     @State private var shareMoodInCircles = true
     @State private var privacyMode: PrivacyMode = .standard
     @State private var isSaving = false
+    @State private var navigateToAIConsent = false
 
     var body: some View {
         Form {
@@ -916,8 +917,31 @@ struct PrivacySettingsView: View {
                     .disabled(isSaving)
                 }
             }
+
+            Section {
+                NavigationLink {
+                    AIConsentSettingsView()
+                        .environmentObject(container.aiConsentService)
+                } label: {
+                    Label("AI & Data Sharing", systemImage: "sparkles")
+                }
+            } header: {
+                Text("AI")
+            } footer: {
+                Text("Choose which AI features can process your data, and which providers receive it.")
+            }
         }
         .navigationTitle("Privacy")
+        .navigationDestination(isPresented: $navigateToAIConsent) {
+            AIConsentSettingsView()
+                .environmentObject(container.aiConsentService)
+        }
+        .onChange(of: appState.openAIConsentSettings) { _, newValue in
+            if newValue {
+                navigateToAIConsent = true
+                appState.openAIConsentSettings = false
+            }
+        }
         .onAppear {
             loadSettings()
         }
