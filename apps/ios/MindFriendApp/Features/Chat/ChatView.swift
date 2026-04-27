@@ -240,11 +240,17 @@ struct ChatView: View {
                 messages.append(response.userMessage)
                 messages.append(response.assistantMessage)
 
-                // Update quota tracking from server (authoritative source)
+                // Update quota tracking from server (authoritative source).
+                // Server's check_and_increment_ai_quota RPC owns BOTH the limit and the
+                // used count for free users — sync both so the UI stays in sync if the
+                // server-side limit ever changes.
                 if appState.entitlements.tier != .premium, let serverUsed = response.quotaUsed {
-                    // Sync from server-provided value (not local increment)
-                    appState.entitlements.dailyAiUsed = serverUsed
-                    // Only show warning if not unlimited (Int.max) and near limit
+                    let serverLimit = response.quotaLimit ?? appState.entitlements.dailyAiQuota
+                    appState.entitlements = Entitlements(
+                        tier: appState.entitlements.tier,
+                        dailyAiQuota: serverLimit > 0 ? serverLimit : appState.entitlements.dailyAiQuota,
+                        dailyAiUsed: serverUsed
+                    )
                     showQuotaWarning = response.quotaRemaining < Int.max && response.quotaRemaining <= quotaWarningThreshold
                 } else {
                     showQuotaWarning = false
