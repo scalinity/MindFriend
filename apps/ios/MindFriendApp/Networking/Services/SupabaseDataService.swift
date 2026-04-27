@@ -1031,6 +1031,19 @@ final class SupabaseDataService: ObservableObject {
             Log.data.debug("[Data] Response: quotaUsed=\(chatResponse.quotaUsed ?? -1), quotaLimit=\(chatResponse.quotaLimit ?? -1)")
         } catch {
             Log.data.error("[Data] Chat function error: \(error)")
+            // Map 403 ai_consent_required → typed AIConsentRequiredError so the chat view
+            // can flip to the empty state cleanly.
+            if let consentErr = await AIConsentErrorMapper.decode(
+                error,
+                consentService: SupabaseDataService.sharedAIConsentService
+            ) {
+                throw consentErr
+            }
+            // Map 429 → APIError.quotaExceeded so ChatView's existing handler shows the paywall
+            // instead of a generic "non-2xx" alert.
+            if case FunctionsError.httpError(let code, _) = error, code == 429 {
+                throw APIError.quotaExceeded
+            }
             throw error
         }
 
