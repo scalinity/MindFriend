@@ -258,6 +258,41 @@ struct PlanFeatures: Codable, Equatable, Hashable {
         case advancedInsights = "advanced_insights"
     }
 
+    init(
+        unlimitedChat: Bool,
+        unlimitedExercises: Bool,
+        premiumContent: Bool,
+        prioritySupport: Bool,
+        familySharing: Bool,
+        offlineMode: Bool,
+        customThemes: Bool,
+        advancedInsights: Bool
+    ) {
+        self.unlimitedChat = unlimitedChat
+        self.unlimitedExercises = unlimitedExercises
+        self.premiumContent = premiumContent
+        self.prioritySupport = prioritySupport
+        self.familySharing = familySharing
+        self.offlineMode = offlineMode
+        self.customThemes = customThemes
+        self.advancedInsights = advancedInsights
+    }
+
+    // Tolerant decode: a missing key defaults to false. The features JSONB
+    // column has historically drifted (camelCase vs snake_case, renamed flags),
+    // and a strict decode there takes the entire paywall down.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.unlimitedChat      = (try? c.decodeIfPresent(Bool.self, forKey: .unlimitedChat))      ?? false
+        self.unlimitedExercises = (try? c.decodeIfPresent(Bool.self, forKey: .unlimitedExercises)) ?? false
+        self.premiumContent     = (try? c.decodeIfPresent(Bool.self, forKey: .premiumContent))     ?? false
+        self.prioritySupport    = (try? c.decodeIfPresent(Bool.self, forKey: .prioritySupport))    ?? false
+        self.familySharing      = (try? c.decodeIfPresent(Bool.self, forKey: .familySharing))      ?? false
+        self.offlineMode        = (try? c.decodeIfPresent(Bool.self, forKey: .offlineMode))        ?? false
+        self.customThemes       = (try? c.decodeIfPresent(Bool.self, forKey: .customThemes))       ?? false
+        self.advancedInsights   = (try? c.decodeIfPresent(Bool.self, forKey: .advancedInsights))   ?? false
+    }
+
     // MARK: - Static Defaults
 
     static let free = PlanFeatures(

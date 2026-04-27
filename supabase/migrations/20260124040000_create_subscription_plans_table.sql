@@ -85,7 +85,7 @@ INSERT INTO subscription_plans (
     'Full access to MindFriend Premium features',
     999, 'USD', 'monthly', 1,
     'individual', 1,
-    '{"unlimitedChat": true, "priorityResponse": true, "advancedAnalytics": true, "smartReminders": true}'::jsonb,
+    '{"unlimited_chat": true, "unlimited_exercises": true, "premium_content": true, "priority_support": true, "family_sharing": false, "offline_mode": true, "custom_themes": true, "advanced_insights": true}'::jsonb,
     NULL, NULL,
     'com.mindfriend.premium.monthly',
     true, true
@@ -101,7 +101,7 @@ INSERT INTO subscription_plans (
     'Full access to MindFriend Premium features - Best value!',
     5999, 'USD', 'yearly', 12,
     'individual', 1,
-    '{"unlimitedChat": true, "priorityResponse": true, "advancedAnalytics": true, "smartReminders": true}'::jsonb,
+    '{"unlimited_chat": true, "unlimited_exercises": true, "premium_content": true, "priority_support": true, "family_sharing": false, "offline_mode": true, "custom_themes": true, "advanced_insights": true}'::jsonb,
     NULL, NULL,
     'com.mindfriend.premium.yearly',
     true, true
@@ -117,7 +117,7 @@ INSERT INTO subscription_plans (
     'Premium access for you and your partner',
     1499, 'USD', 'monthly', 1,
     'couples', 2,
-    '{"unlimitedChat": true, "priorityResponse": true, "advancedAnalytics": true, "smartReminders": true, "partnerMode": true}'::jsonb,
+    '{"unlimited_chat": true, "unlimited_exercises": true, "premium_content": true, "priority_support": true, "family_sharing": true, "offline_mode": true, "custom_themes": true, "advanced_insights": true}'::jsonb,
     NULL, NULL,
     'com.mindfriend.couples.monthly',
     true, true
@@ -133,7 +133,7 @@ INSERT INTO subscription_plans (
     'Premium access for you and your partner - Best value!',
     8999, 'USD', 'yearly', 12,
     'couples', 2,
-    '{"unlimitedChat": true, "priorityResponse": true, "advancedAnalytics": true, "smartReminders": true, "partnerMode": true}'::jsonb,
+    '{"unlimited_chat": true, "unlimited_exercises": true, "premium_content": true, "priority_support": true, "family_sharing": true, "offline_mode": true, "custom_themes": true, "advanced_insights": true}'::jsonb,
     NULL, NULL,
     'com.mindfriend.couples.annual',
     true, true
@@ -149,7 +149,7 @@ INSERT INTO subscription_plans (
     'Premium access for up to 6 family members',
     1999, 'USD', 'monthly', 1,
     'family', 6,
-    '{"unlimitedChat": true, "priorityResponse": true, "advancedAnalytics": true, "smartReminders": true, "familySharing": true}'::jsonb,
+    '{"unlimited_chat": true, "unlimited_exercises": true, "premium_content": true, "priority_support": true, "family_sharing": true, "offline_mode": true, "custom_themes": true, "advanced_insights": true}'::jsonb,
     NULL, NULL,
     'com.mindfriend.family.monthly',
     true, true
@@ -165,7 +165,7 @@ INSERT INTO subscription_plans (
     'Premium access for up to 6 family members - Best value!',
     11999, 'USD', 'yearly', 12,
     'family', 6,
-    '{"unlimitedChat": true, "priorityResponse": true, "advancedAnalytics": true, "smartReminders": true, "familySharing": true}'::jsonb,
+    '{"unlimited_chat": true, "unlimited_exercises": true, "premium_content": true, "priority_support": true, "family_sharing": true, "offline_mode": true, "custom_themes": true, "advanced_insights": true}'::jsonb,
     NULL, NULL,
     'com.mindfriend.family.annual',
     true, true
