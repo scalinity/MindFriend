@@ -1,7 +1,7 @@
 # MindFriend Privacy Policy
 
-**Effective Date:** January 14, 2026
-**Last Updated:** January 14, 2026
+**Effective Date:** April 26, 2026
+**Last Updated:** April 26, 2026
 **Owner:** Daniel Escalante ("MindFriend," "we," "us," or "our")
 **Privacy Contact:** support@mindfriend.app
 
@@ -39,7 +39,7 @@ We collect information in the following categories. Some of this data may be con
 
 - **Identifiers:** user ID, username/handle, display name
 - **Authentication data:** Sign in with Apple identifier, Google sign-in identifier, or email address (depending on your login method)
-- **Profile settings:** timezone, language/locale, notification preferences, privacy settings, AI tone preferences
+- **Profile settings:** timezone, language/locale, notification preferences, privacy settings
 
 ### 2.2 Wellness and mental health-related information (sensitive)
 
@@ -47,7 +47,7 @@ You may provide information that relates to your mental health and wellbeing, in
 
 - **Mood check-ins:** mood score(s), anxiety/energy ratings (if enabled), timestamps, reflections/notes
 - **Journal/reflection entries:** short notes or reflections tied to quests or exercises
-- **AI conversations:** messages you send to the AI companion and the AI responses
+- **AI conversations:** messages you send to the AI companion and the AI responses. See §6.7 for a per-feature breakdown of what is sent to which AI provider.
 - **Wellness activity history:** quests assigned/completed/skipped, exercise sessions, streaks/badges
 
 > **Important:** You control what you choose to share. Please avoid entering information you do not want processed (e.g., highly sensitive identifiers).
@@ -112,6 +112,8 @@ We collect information through:
 - When you chat with the AI companion
 - When you post in Circles or join via invite code
 - When you contact support
+
+When you first open the app, we ask you to choose which AI features you want to enable. You can change this at any time in Settings → Privacy → AI & Data Sharing.
 
 ### 3.2 Automatically collected information
 
@@ -186,7 +188,7 @@ Processing necessary to provide the Services you request, such as:
 
 We rely on **your consent** for:
 
-- Processing **sensitive wellness data** (mood logs, reflective notes, chat content) to provide personalization and wellness features
+- Processing **sensitive wellness data** (mood logs, reflective notes, chat content) to provide personalization and wellness features, where you have given affirmative consent through the in-app AI consent flow.
 - Push notifications (where required by platform policy)
 
 You may withdraw consent at any time (see Section 9). Withdrawal does not affect processing before withdrawal.
@@ -220,17 +222,21 @@ If you join a Circle, information you post (e.g., mood emoji, check-in text) is 
 
 We use vendors to help operate the Services:
 
-| Provider           | Purpose                                                                                      |
-| ------------------ | -------------------------------------------------------------------------------------------- |
-| **Supabase, Inc.** | Database hosting, user authentication, Edge Functions (backend logic)                        |
-| **xAI**            | AI chat processing — your messages to the AI companion are sent to xAI to generate responses |
-| **Apple (APNs)**   | Push notification delivery                                                                   |
+| Provider              | Purpose                                                                                          | Region |
+| --------------------- | -------------------------------------------------------------------------------- | ------ |
+| **Supabase, Inc.**    | Database hosting, user authentication, Edge Functions (backend logic)            | US     |
+| **xAI**               | AI generation of chat replies, journal analysis, voice-journal transcription and analysis, weekly insights, summaries, story generation, conversation titles | US     |
+| **OpenAI, L.L.C.**    | AI image generation for artwork and profile pictures (model: gpt-image-1-mini)   | US     |
+| **Google LLC**        | Cloud Text-to-Speech for spoken meditation playback                              | US/Global |
+| **Apple (APNs)**      | Push notification delivery                                                       | Global |
+| **Sentry**            | Crash and error reporting                                                        | US     |
 
-We require service providers to:
-
-- Use data only to provide services to us
-- Maintain security safeguards
-- Follow contractual privacy obligations
+Each provider is contractually bound to use the data only to provide
+the service to MindFriend, maintain security safeguards, and follow
+privacy obligations equivalent to those described in this policy.
+None of these providers may use your data to train their general
+foundation models without our (and your) explicit consent — we do
+not grant such permission.
 
 ### 6.3 With Apple (payments)
 
@@ -251,6 +257,33 @@ If we undergo a merger, acquisition, financing, reorganization, bankruptcy, or s
 ### 6.6 De-identified and aggregated information
 
 We may share aggregated or de-identified data that cannot reasonably identify you, for example for analytics, research, or reporting.
+
+### 6.7 Per-feature data flows to AI providers
+
+The table below identifies, for each AI-powered feature, exactly
+what is sent, to which provider, and for what purpose. You can
+enable or disable each of these independently in
+**Settings → Privacy → AI & Data Sharing**.
+
+| Feature in app                         | Data sent                                                                                                      | Sent to       | Purpose                                          |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------- | ------------------------------------------------ |
+| AI chat companion                      | The message you send and up to the most recent 20 messages of conversation context for that thread             | xAI           | Generate the AI's reply                          |
+| AI analysis of journals & reflections  | The text of the journal entry, thought record, or reflection you submit                                        | xAI           | Detect cognitive distortions, suggest reframes, summarize |
+| AI voice journaling                    | The audio recording you make and its transcribed text                                                          | xAI           | Transcribe speech and analyze the entry          |
+| AI insights & summaries                | Aggregated mood ratings, completed quests, exercise history, and journal text from the past week               | xAI           | Generate weekly story, pattern insights, milestone narratives |
+| AI image generation                    | The text prompt (which may include phrases derived from a journal entry you tagged for art generation)         | OpenAI        | Generate the requested artwork or profile picture |
+| Spoken meditation playback             | The text of the guided meditation script                                                                       | Google Cloud TTS | Synthesize speech audio for playback           |
+
+We do **not** send to any AI provider:
+- Your email address or sign-in identifiers
+- Your subscription or payment information
+- Content from other users (e.g., other Circle members' posts)
+- Information from Apple Health (HealthKit) data — this stays on
+  your device unless explicitly logged into a journal or mood entry
+
+You may revoke any of these consents at any time in
+**Settings → Privacy → AI & Data Sharing**. Revocation takes effect
+immediately and prevents future data from being sent.
 
 ---
 
@@ -307,6 +340,7 @@ Depending on where you live, you may have rights regarding your personal informa
 - **Portability:** request export of certain information in JSON format
 - **Withdraw consent:** where we rely on consent, you may withdraw it
 - **Opt out of notifications:** disable push notifications in app settings and/or system settings
+- **AI consent revocation:** enable or disable individual AI features at any time in **Settings → Privacy → AI & Data Sharing**. Disabling immediately stops sending new data to that AI provider.
 
 ### 9.2 GDPR/UK GDPR rights (EEA/UK users)
 
@@ -333,6 +367,7 @@ If you are a California resident, you may have the right to:
 
 - **Email:** support@mindfriend.app with subject "Privacy Request"
 - **In-app:** Settings → Privacy → "Export Data" / "Delete Account"
+- **AI consent:** in app, **Settings → Privacy → AI & Data Sharing**
 
 We will respond within the timeframes required by applicable law.
 

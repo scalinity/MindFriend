@@ -96,8 +96,8 @@
     <div class="mb-8">
       <h1 class="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Privacy Policy</h1>
       <div class="flex flex-wrap gap-4 text-sm text-gray-500">
-        <span><strong>Effective Date:</strong> January 14, 2026</span>
-        <span><strong>Last Updated:</strong> January 14, 2026</span>
+        <span><strong>Effective Date:</strong> April 26, 2026</span>
+        <span><strong>Last Updated:</strong> April 26, 2026</span>
       </div>
     </div>
 
@@ -161,7 +161,7 @@
       <ul>
         <li><strong>Identifiers:</strong> user ID, username/handle, display name</li>
         <li><strong>Authentication data:</strong> Sign in with Apple identifier, Google sign-in identifier, or email address (depending on your login method)</li>
-        <li><strong>Profile settings:</strong> timezone, language/locale, notification preferences, privacy settings, AI tone preferences</li>
+        <li><strong>Profile settings:</strong> timezone, language/locale, notification preferences, privacy settings</li>
       </ul>
 
       <h3>2.2 Wellness and mental health-related information (sensitive)</h3>
@@ -169,7 +169,7 @@
       <ul>
         <li><strong>Mood check-ins:</strong> mood score(s), anxiety/energy ratings (if enabled), timestamps, reflections/notes</li>
         <li><strong>Journal/reflection entries:</strong> short notes or reflections tied to quests or exercises</li>
-        <li><strong>AI conversations:</strong> messages you send to the AI companion and the AI responses</li>
+        <li><strong>AI conversations:</strong> messages you send to the AI companion and the AI responses. See §6.7 for a per-feature breakdown of what is sent to which AI provider.</li>
         <li><strong>Wellness activity history:</strong> quests assigned/completed/skipped, exercise sessions, streaks/badges</li>
       </ul>
       <blockquote>
@@ -240,6 +240,7 @@
         <li>When you post in Circles or join via invite code</li>
         <li>When you contact support</li>
       </ul>
+      <p>When you first open the app, we ask you to choose which AI features you want to enable. You can change this at any time in Settings &#x2192; Privacy &#x2192; AI &amp; Data Sharing.</p>
 
       <h3>3.2 Automatically collected information</h3>
       <ul>
@@ -319,7 +320,7 @@
       <h3>5.2 Consent (Article 6(1)(a); special category: Article 9(2)(a))</h3>
       <p>We rely on <strong>your consent</strong> for:</p>
       <ul>
-        <li>Processing <strong>sensitive wellness data</strong> (mood logs, reflective notes, chat content) to provide personalization and wellness features</li>
+        <li>Processing <strong>sensitive wellness data</strong> (mood logs, reflective notes, chat content) to provide personalization and wellness features, where you have given affirmative consent through the in-app AI consent flow.</li>
         <li>Push notifications (where required by platform policy)</li>
       </ul>
       <p>You may withdraw consent at any time (see Section 9). Withdrawal does not affect processing before withdrawal.</p>
@@ -351,29 +352,43 @@
           <tr>
             <th>Provider</th>
             <th>Purpose</th>
+            <th>Region</th>
           </tr>
         </thead>
         <tbody>
           <tr>
             <td><strong>Supabase, Inc.</strong></td>
             <td>Database hosting, user authentication, Edge Functions (backend logic)</td>
+            <td>US</td>
           </tr>
           <tr>
             <td><strong>xAI</strong></td>
-            <td>AI chat processing — your messages to the AI companion are sent to xAI to generate responses</td>
+            <td>AI generation of chat replies, journal analysis, voice-journal transcription and analysis, weekly insights, summaries, story generation, conversation titles</td>
+            <td>US</td>
+          </tr>
+          <tr>
+            <td><strong>OpenAI, L.L.C.</strong></td>
+            <td>AI image generation for artwork and profile pictures (model: gpt-image-1-mini)</td>
+            <td>US</td>
+          </tr>
+          <tr>
+            <td><strong>Google LLC</strong></td>
+            <td>Cloud Text-to-Speech for spoken meditation playback</td>
+            <td>US/Global</td>
           </tr>
           <tr>
             <td><strong>Apple (APNs)</strong></td>
             <td>Push notification delivery</td>
+            <td>Global</td>
+          </tr>
+          <tr>
+            <td><strong>Sentry</strong></td>
+            <td>Crash and error reporting</td>
+            <td>US</td>
           </tr>
         </tbody>
       </table>
-      <p>We require service providers to:</p>
-      <ul>
-        <li>Use data only to provide services to us</li>
-        <li>Maintain security safeguards</li>
-        <li>Follow contractual privacy obligations</li>
-      </ul>
+      <p>Each provider is contractually bound to use the data only to provide the service to MindFriend, maintain security safeguards, and follow privacy obligations equivalent to those described in this policy. None of these providers may use your data to train their general foundation models without our (and your) explicit consent &#x2014; we do not grant such permission.</p>
 
       <h3>6.3 With Apple (payments)</h3>
       <p>Subscriptions and in-app purchases are processed by Apple. Apple provides us limited transaction verification and subscription status information needed to grant entitlements.</p>
@@ -391,6 +406,65 @@
 
       <h3>6.6 De-identified and aggregated information</h3>
       <p>We may share aggregated or de-identified data that cannot reasonably identify you, for example for analytics, research, or reporting.</p>
+
+      <h3>6.7 Per-feature data flows to AI providers</h3>
+      <p>The table below identifies, for each AI-powered feature, exactly what is sent, to which provider, and for what purpose. You can enable or disable each of these independently in <strong>Settings &#x2192; Privacy &#x2192; AI &amp; Data Sharing</strong>.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Feature in app</th>
+            <th>Data sent</th>
+            <th>Sent to</th>
+            <th>Purpose</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>AI chat companion</td>
+            <td>The message you send and up to the most recent 20 messages of conversation context for that thread</td>
+            <td>xAI</td>
+            <td>Generate the AI&#x2019;s reply</td>
+          </tr>
+          <tr>
+            <td>AI analysis of journals &amp; reflections</td>
+            <td>The text of the journal entry, thought record, or reflection you submit</td>
+            <td>xAI</td>
+            <td>Detect cognitive distortions, suggest reframes, summarize</td>
+          </tr>
+          <tr>
+            <td>AI voice journaling</td>
+            <td>The audio recording you make and its transcribed text</td>
+            <td>xAI</td>
+            <td>Transcribe speech and analyze the entry</td>
+          </tr>
+          <tr>
+            <td>AI insights &amp; summaries</td>
+            <td>Aggregated mood ratings, completed quests, exercise history, and journal text from the past week</td>
+            <td>xAI</td>
+            <td>Generate weekly story, pattern insights, milestone narratives</td>
+          </tr>
+          <tr>
+            <td>AI image generation</td>
+            <td>The text prompt (which may include phrases derived from a journal entry you tagged for art generation)</td>
+            <td>OpenAI</td>
+            <td>Generate the requested artwork or profile picture</td>
+          </tr>
+          <tr>
+            <td>Spoken meditation playback</td>
+            <td>The text of the guided meditation script</td>
+            <td>Google Cloud TTS</td>
+            <td>Synthesize speech audio for playback</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>We do <strong>not</strong> send to any AI provider:</p>
+      <ul>
+        <li>Your email address or sign-in identifiers</li>
+        <li>Your subscription or payment information</li>
+        <li>Content from other users (e.g., other Circle members&#x2019; posts)</li>
+        <li>Information from Apple Health (HealthKit) data &#x2014; this stays on your device unless explicitly logged into a journal or mood entry</li>
+      </ul>
+      <p>You may revoke any of these consents at any time in <strong>Settings &#x2192; Privacy &#x2192; AI &amp; Data Sharing</strong>. Revocation takes effect immediately and prevents future data from being sent.</p>
 
       <hr>
 
@@ -469,6 +543,7 @@
         <li><strong>Portability:</strong> request export of certain information in JSON format</li>
         <li><strong>Withdraw consent:</strong> where we rely on consent, you may withdraw it</li>
         <li><strong>Opt out of notifications:</strong> disable push notifications in app settings and/or system settings</li>
+        <li><strong>AI consent revocation:</strong> enable or disable individual AI features at any time in <strong>Settings &#x2192; Privacy &#x2192; AI &amp; Data Sharing</strong>. Disabling immediately stops sending new data to that AI provider.</li>
       </ul>
 
       <h3>9.2 GDPR/UK GDPR rights (EEA/UK users)</h3>
@@ -494,7 +569,8 @@
       <h3>9.4 How to submit requests</h3>
       <ul>
         <li><strong>Email:</strong> <a href="mailto:support@mindfriend.app">support@mindfriend.app</a> with subject "Privacy Request"</li>
-        <li><strong>In-app:</strong> Settings → Privacy → "Export Data" / "Delete Account"</li>
+        <li><strong>In-app:</strong> Settings &#x2192; Privacy &#x2192; "Export Data" / "Delete Account"</li>
+        <li><strong>AI consent:</strong> in app, <strong>Settings &#x2192; Privacy &#x2192; AI &amp; Data Sharing</strong></li>
       </ul>
       <p>We will respond within the timeframes required by applicable law.</p>
 
