@@ -259,7 +259,7 @@ serve(async (req) => {
             await requireAIConsent(supabaseAdmin, user.user_id, "insights");
           } catch (e) {
             if (e instanceof ConsentRequiredError) {
-              console.log(`[insights] skipping user ${user.user_id} — no insights consent`);
+              console.log(`[insights] skipping user ${user.user_id.slice(0, 8)} — no insights consent`);
               return { success: false, notificationSent: false };
             }
             throw e;

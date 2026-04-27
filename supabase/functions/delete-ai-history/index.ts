@@ -70,7 +70,7 @@ serve(async (req) => {
     });
   }
 
-  console.log(`[delete-ai-history] user=${user.id} deleted_conversations=${convCount ?? 0}`);
+  console.log(`[delete-ai-history] user=${user.id.slice(0, 8)} deleted_conversations=${convCount ?? 0}`);
 
   return new Response(
     JSON.stringify({
