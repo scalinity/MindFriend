@@ -31,6 +31,7 @@ struct MindFriendApp: App {
                 .environmentObject(container.ambientThemeService)
                 .environmentObject(localizationService)
                 .environmentObject(container.achievementService)
+                .environmentObject(container.aiConsentService)
                 .preferredColorScheme(selectedTheme.colorScheme)
                 // Language changes propagate through @Environment(\.locale)
                 .environment(\.locale, Locale(identifier: localizationService.currentLanguage))
