@@ -4,6 +4,7 @@ import SwiftUI
 struct ContentRequestView: View {
     @StateObject private var viewModel: ContentRequestViewModel
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var consent: AIConsentService
     @Environment(\.dismiss) private var dismiss
 
     init(service: GeneratedContentService, contentType: GeneratedContentType? = nil) {
@@ -13,7 +14,7 @@ struct ContentRequestView: View {
         ))
     }
 
-    var body: some View {
+    private var grantedBody: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
@@ -70,6 +71,17 @@ struct ContentRequestView: View {
                 }
             }
             .keyboardDoneButton()
+        }
+    }
+
+    var body: some View {
+        Group {
+            if consent.isGranted(.imageGen) {
+                grantedBody
+                    .aiFirstUseDisclosure(.imageGen)
+            } else {
+                AIDeniedEmptyStateView(feature: .imageGen)
+            }
         }
     }
 
