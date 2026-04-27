@@ -40,6 +40,7 @@ final class AppState: ObservableObject {
     @Published var showPaywall: Bool = false
     @Published var showCrisisResources: Bool = false
     @Published var shouldOpenNewChat: Bool = false  // Triggers new chat from SOS or other flows
+    @Published var openAIConsentSettings: Bool = false  // Set to true to push the AI consent settings screen from ProfileView
 
     // MARK: - Level Up Celebration
     @Published var showLevelUp: Bool = false
