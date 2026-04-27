@@ -330,7 +330,8 @@ serve(async (req) => {
         ai_analysis: aiAnalysis,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", thoughtRecordId);
+      .eq("id", thoughtRecordId)
+      .eq("user_id", user.id);
 
     if (updateError) {
       console.error("Failed to update thought record:", updateError);
