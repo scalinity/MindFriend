@@ -1,10 +1,12 @@
 import {
+  assert,
   assertEquals,
   assertRejects,
 } from "https://deno.land/std@0.168.0/testing/asserts.ts";
 import {
   AIFeature,
   ALL_AI_FEATURES,
+  ConsentCheckFailedError,
   ConsentRequiredError,
   CURRENT_POLICY_VERSION,
   aiConsentErrorResponse,
@@ -123,12 +125,17 @@ function fakeClientWithError(err: { message: string }) {
   } as any;
 }
 
-Deno.test("db error throws ConsentRequiredError (fail-closed)", async () => {
+Deno.test("db error throws ConsentCheckFailedError (propagates as 5xx)", async () => {
   const sb = fakeClientWithError({ message: "connection timeout" });
   await assertRejects(
     () => requireAIConsent(sb, USER_ID, "chat"),
-    ConsentRequiredError,
+    ConsentCheckFailedError,
   );
+});
+
+Deno.test("ConsentCheckFailedError is not a ConsentRequiredError", () => {
+  const err = new ConsentCheckFailedError("chat", new Error("db down"));
+  assert(!(err instanceof ConsentRequiredError));
 });
 
 Deno.test("future policy_version passes (>= current is sufficient)", async () => {

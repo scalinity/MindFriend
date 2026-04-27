@@ -26,6 +26,13 @@ export class ConsentRequiredError extends Error {
   }
 }
 
+export class ConsentCheckFailedError extends Error {
+  constructor(public readonly feature: AIFeature, public override readonly cause: unknown) {
+    super(`AI consent check failed for feature: ${feature}`);
+    this.name = "ConsentCheckFailedError";
+  }
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type UntypedSupabaseClient = SupabaseClient<any, "public", any>;
 
@@ -50,7 +57,7 @@ export async function requireAIConsent(
 
   if (error) {
     console.error(`[ai-consent] lookup error for feature "${feature}":`, error);
-    throw new ConsentRequiredError(feature);
+    throw new ConsentCheckFailedError(feature, error);
   }
   if (!data) throw new ConsentRequiredError(feature);
   if (data.state !== "granted") throw new ConsentRequiredError(feature);
