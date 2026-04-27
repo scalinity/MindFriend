@@ -309,7 +309,7 @@ serve(async (req) => {
     }
 
     try {
-      await requireAIConsent(supabaseAdmin, user.id, "insights");
+      await requireAIConsent(supabaseAdmin, user.id, "chat");
     } catch (e) {
       if (e instanceof ConsentRequiredError) {
         return aiConsentErrorResponse(e, baseCorsHeaders);
