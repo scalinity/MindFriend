@@ -3,6 +3,7 @@ import SwiftUI
 struct JournalAnalysisView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
+    @EnvironmentObject var consent: AIConsentService
     @Environment(\.dismiss) var dismiss
 
     let analysis: JournalAnalysis
@@ -10,7 +11,7 @@ struct JournalAnalysisView: View {
     @State private var showingFeedbackFor: CognitiveDistortionInstance?
     @State private var feedbackSubmitted = false
 
-    var body: some View {
+    private var grantedBody: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
@@ -61,6 +62,17 @@ struct JournalAnalysisView: View {
                     showingFeedbackFor = nil
                 }
                 .environmentObject(container)
+            }
+        }
+    }
+
+    var body: some View {
+        Group {
+            if consent.isGranted(.journalAI) {
+                grantedBody
+                    .aiFirstUseDisclosure(.journalAI)
+            } else {
+                AIDeniedEmptyStateView(feature: .journalAI)
             }
         }
     }
