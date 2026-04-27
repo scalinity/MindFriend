@@ -1,5 +1,9 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
+// IMPORTANT: When bumping this version, also ship a migration that updates the
+// `policy_version <= N` predicate in the ai_consents_self_insert and
+// ai_consents_self_update RLS policies. Otherwise client writes to the new version
+// will be rejected.
 export const CURRENT_POLICY_VERSION = 1;
 
 export type AIFeature =
