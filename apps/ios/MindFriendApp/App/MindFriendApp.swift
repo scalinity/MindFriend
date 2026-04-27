@@ -357,6 +357,9 @@ struct RootView: View {
                         case .unauthenticated, .unknown:
                             consentGateChecked = false
                             needsConsentGate = false
+                            // Clear pending nav-to-AI-settings flag so it doesn't survive
+                            // sign-out and pop the sheet on the next user's sign-in.
+                            appState.openAIConsentSettings = false
                             container.aiConsentService.reset()
                         case .authenticated where !consentGateChecked:
                             await refreshConsentGate()
