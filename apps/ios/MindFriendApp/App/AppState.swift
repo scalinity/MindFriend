@@ -88,6 +88,12 @@ final class AppState: ObservableObject {
         self.hasCompletedInitialAuth = true
         self.isUsingCachedData = false
         self.sessionRestored = false
+        // Clear any modal/nav flags so they don't survive the next user's sign-in.
+        self.openAIConsentSettings = false
+        self.showPaywall = false
+        self.showCrisisResources = false
+        self.showWelcomeBack = false
+        self.shouldOpenNewChat = false
     }
 
     func requireOnboarding() {

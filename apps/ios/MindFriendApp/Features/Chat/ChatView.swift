@@ -259,11 +259,18 @@ struct ChatView: View {
                     )
                     showQuotaWarning = response.quotaRemaining < Int.max && response.quotaRemaining <= quotaWarningThreshold
 
-                    // Trigger paywall the moment quota is exhausted, so the user sees the
-                    // upgrade prompt right after the AI response that consumed their last
-                    // message — not on a doomed 6th send.
+                    // Trigger paywall once quota is exhausted, so the user gets the upgrade
+                    // prompt right after the AI response that consumed their last message.
+                    // Small delay so the user has a beat to read the AI's reply before the
+                    // sheet covers it.
                     if appState.entitlements.isQuotaExceeded {
-                        appState.showPaywall = true
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(1500))
+                            // Re-check in case the user already upgraded in the meantime.
+                            if appState.entitlements.isQuotaExceeded {
+                                appState.showPaywall = true
+                            }
+                        }
                     }
                 } else {
                     showQuotaWarning = false
@@ -300,10 +307,13 @@ struct ChatView: View {
                 // URL request was cancelled - same handling as CancellationError
                 Log.chat.debug("URL request cancelled, server will complete request")
             } catch is AIConsentRequiredError {
-                // Server enforced consent gate. The network mapper already called
-                // markUnknown(.chat), so the view re-renders to the empty state on
-                // the next tick. No alert needed.
-                Log.chat.debug("Chat consent revoked server-side; flipping to empty state")
+                // Server revoked consent mid-send. Mapper already called markUnknown(.chat),
+                // so the view will swap to AIDeniedEmptyStateView on the next render. Restore
+                // the user's typed text and rip the optimistic bubble so their message isn't
+                // silently lost between the chat and empty state.
+                Log.chat.warning("Chat consent revoked server-side; flipping to empty state")
+                messages.removeAll { $0.id == tempMessageId }
+                inputText = content
             } catch let error as APIError {
                 if case .quotaExceeded = error {
                     appState.showPaywall = true

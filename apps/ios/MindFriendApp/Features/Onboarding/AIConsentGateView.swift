@@ -14,17 +14,25 @@ struct AIConsentGateView: View {
     @State private var showError = false
     @State private var showPolicy = false
 
+    /// Snapshotted at init from `AIConsent.defaultsToOptIn` so the initial toggle state
+    /// and the primary-button enabled logic agree on a single locale read. Avoids any
+    /// chance of the two diverging if `Locale.current` somehow re-evaluates differently
+    /// between init and render.
+    private let defaultsToOptIn: Bool
+
     init(onComplete: @escaping () -> Void) {
         self.onComplete = onComplete
         // Locale-aware default: EEA/UK/CH defaults to OFF, rest of world defaults to ON.
-        let initial: Set<AIFeature> = AIConsent.defaultsToOptIn ? [] : Set(AIFeature.allCases)
+        let snapshot = AIConsent.defaultsToOptIn
+        self.defaultsToOptIn = snapshot
+        let initial: Set<AIFeature> = snapshot ? [] : Set(AIFeature.allCases)
         self._enabled = State(initialValue: initial)
     }
 
     /// Primary button is enabled when at least one feature is selected (in opt-in regions),
     /// or always enabled (in opt-out regions where defaults are on).
     private var primaryEnabled: Bool {
-        AIConsent.defaultsToOptIn ? !enabled.isEmpty : true
+        defaultsToOptIn ? !enabled.isEmpty : true
     }
 
     var body: some View {

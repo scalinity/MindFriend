@@ -821,9 +821,27 @@ struct HomeView: View {
                 )
             }
 
+            // Refresh entitlements from BillingService — authoritative source for
+            // `daily_ai_quota` and `daily_ai_used` (queries the DB row directly).
+            // Done before the MainActor.run block because it's async; the result is
+            // read in to AppState inside the synchronous block.
+            let refreshedEntitlements: Entitlements?
+            do {
+                try await container.billingService.refreshEntitlements()
+                refreshedEntitlements = container.billingService.entitlements
+            } catch {
+                Log.data.warning("[HomeView] refreshEntitlements failed: \(error)")
+                refreshedEntitlements = nil
+            }
+
             await MainActor.run {
                 // Track load time for stale state prevention
                 lastLoadTime = Date()
+
+                // Apply refreshed entitlements (replaces the previous hardcoded-20 fallback).
+                if let refreshedEntitlements {
+                    appState.entitlements = refreshedEntitlements
+                }
 
                 // Update quest state (protect completed status from race condition)
                 if let quest = questResult {
@@ -853,36 +871,11 @@ struct HomeView: View {
                     appState.todayActionPlanItems = []
                 }
 
-                // Update user profile (keep previous value if profile fetch failed)
+                // Update user profile (keep previous value if profile fetch failed).
+                // Entitlements were already updated above from BillingService.
                 if let profileResult {
                     appState.currentUser = profileResult
                     appState.currentStreak = profileResult.stats?.currentStreakDays ?? 0
-
-                    // Convert UserEntitlements to Entitlements.
-                    // We only learn the tier from the profile fetch; the daily quota/used
-                    // counts are authoritative from BillingService.loadEntitlements (DB)
-                    // and from the chat function response. Preserve those if already set,
-                    // otherwise fall back to the .free default (which has the correct
-                    // server-side quota of 5 — see public.check_and_increment_ai_quota).
-                    if let userEntitlements = profileResult.entitlements {
-                        let tier: Tier = userEntitlements.subscriptionTier == "premium" ? .premium : .free
-                        let priorQuota = appState.entitlements.dailyAiQuota
-                        let priorUsed = appState.entitlements.dailyAiUsed
-                        if tier == .premium {
-                            appState.entitlements = Entitlements(tier: .premium, dailyAiQuota: 9999, dailyAiUsed: priorUsed)
-                        } else {
-                            // Use Entitlements.free's quota as the source of truth on first
-                            // load (5); preserve any server-synced values from a previous
-                            // chat send.
-                            appState.entitlements = Entitlements(
-                                tier: .free,
-                                dailyAiQuota: priorQuota > 0 ? priorQuota : Entitlements.free.dailyAiQuota,
-                                dailyAiUsed: priorUsed
-                            )
-                        }
-                    } else {
-                        appState.entitlements = .free
-                    }
                 }
 
                 // Set level info

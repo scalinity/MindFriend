@@ -151,6 +151,9 @@ private struct PerFeatureRow: View {
                 Text(feature.displayName)
             }
             .accessibilityLabel(feature.displayName)
+            // Disable while a grant/revoke is in flight so a double-tap can't race two
+            // concurrent network calls against the same row.
+            .disabled(isMutating)
             // Use a single key with %@ format specifier so translators get one
             // string and the provider name is interpolated at render time. Without
             // this, all 6 rows would share the same translated string and show the

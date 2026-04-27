@@ -349,17 +349,14 @@ struct RootView: View {
                         }
                     }
                     .task(id: appState.authState) {
-                        // On sign-out (or session loss), clear cached consent state so the
-                        // next sign-in re-fetches from the server instead of inheriting the
-                        // prior user's grants. The cover and the gate check both depend on
-                        // a fresh consents dict.
+                        // On sign-out, clear cached consent state so the next sign-in
+                        // re-fetches from the server instead of inheriting prior grants.
+                        // (Modal flags like openAIConsentSettings, showPaywall, etc. are
+                        // cleared by AppState.setUnauthenticated.)
                         switch appState.authState {
                         case .unauthenticated, .unknown:
                             consentGateChecked = false
                             needsConsentGate = false
-                            // Clear pending nav-to-AI-settings flag so it doesn't survive
-                            // sign-out and pop the sheet on the next user's sign-in.
-                            appState.openAIConsentSettings = false
                             container.aiConsentService.reset()
                         case .authenticated where !consentGateChecked:
                             await refreshConsentGate()

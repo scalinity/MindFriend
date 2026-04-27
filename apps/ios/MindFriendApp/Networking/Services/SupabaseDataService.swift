@@ -102,6 +102,25 @@ final class SupabaseDataService: ObservableObject {
     // Set by DependencyContainer after both services are instantiated.
     static var sharedAIConsentService: AIConsentService?
 
+    /// Maps a raw Edge Function error to a typed iOS error for AI-touching endpoints.
+    /// - 403 with `code: "ai_consent_required"` → `AIConsentRequiredError(feature:)` (and
+    ///   the in-memory consent service is flipped to `.unknown` for that feature)
+    /// - 429 → `APIError.quotaExceeded` so views can show the paywall
+    /// - anything else → the original error, unchanged
+    /// Use as `throw await mapAIError(error)` inside any AI endpoint's catch.
+    func mapAIError(_ error: Error) async -> Error {
+        if let consentErr = await AIConsentErrorMapper.decode(
+            error,
+            consentService: SupabaseDataService.sharedAIConsentService
+        ) {
+            return consentErr
+        }
+        if case FunctionsError.httpError(let code, _) = error, code == 429 {
+            return APIError.quotaExceeded
+        }
+        return error
+    }
+
     /// In-memory cache for methodology info (static reference data)
     private var methodologyCache: [String: MethodologyInfo] = [:]
 
@@ -1030,21 +1049,8 @@ final class SupabaseDataService: ObservableObject {
             Log.data.debug("[Data] Chat function returned successfully")
             Log.data.debug("[Data] Response: quotaUsed=\(chatResponse.quotaUsed ?? -1), quotaLimit=\(chatResponse.quotaLimit ?? -1)")
         } catch {
-            Log.data.error("[Data] Chat function error: \(error)")
-            // Map 403 ai_consent_required → typed AIConsentRequiredError so the chat view
-            // can flip to the empty state cleanly.
-            if let consentErr = await AIConsentErrorMapper.decode(
-                error,
-                consentService: SupabaseDataService.sharedAIConsentService
-            ) {
-                throw consentErr
-            }
-            // Map 429 → APIError.quotaExceeded so ChatView's existing handler shows the paywall
-            // instead of a generic "non-2xx" alert.
-            if case FunctionsError.httpError(let code, _) = error, code == 429 {
-                throw APIError.quotaExceeded
-            }
-            throw error
+            Log.data.info("[Data] Chat function error: \(error)")
+            throw await mapAIError(error)
         }
 
         Analytics.shared.track(.chatMessageSent)
@@ -2835,8 +2841,12 @@ final class SupabaseDataService: ObservableObject {
             )
             Log.data.info("[generateWeeklyInsight] Edge function completed successfully")
         } catch let error as FunctionsError {
-            if let consentError = await AIConsentErrorMapper.decode(error, consentService: SupabaseDataService.sharedAIConsentService) {
-                throw consentError
+            // Route consent (403) and quota (429) through the shared mapper so the calling
+            // view can show the empty state / paywall via typed errors. Anything else falls
+            // through to the existing wrap-in-DataError path.
+            let mapped = await mapAIError(error)
+            if !(mapped is FunctionsError) {
+                throw mapped
             }
             switch error {
             case .httpError(let code, let data):
@@ -5199,16 +5209,21 @@ final class SupabaseDataService: ObservableObject {
             print("[Debug] generateProfilePicture: Success, quota remaining = \(result.quotaRemaining ?? -1)")
             return result
         } catch let error as FunctionsError {
+            // Consent gate: route 403 ai_consent_required through the shared mapper.
             if let consentError = await AIConsentErrorMapper.decode(error, consentService: SupabaseDataService.sharedAIConsentService) {
                 throw consentError
             }
-            Log.data.error("[Data] generateProfilePicture: FunctionsError - \(error)")
+            Log.data.info("[Data] generateProfilePicture: FunctionsError - \(error)")
 
-            // Check for specific error types
-            let errorString = String(describing: error).lowercased()
-
-            if errorString.contains("429") || errorString.contains("quota") || errorString.contains("limit") {
+            // Quota: prefer the typed `httpError(429, _)` shape; fall back to string match
+            // for older error envelopes that wrap the status as text.
+            if case .httpError(let code, _) = error, code == 429 {
                 Log.data.warning("[Data] generateProfilePicture: Quota exceeded (429)")
+                throw GenerateProfilePictureError.quotaExceeded
+            }
+            let errorString = String(describing: error).lowercased()
+            if errorString.contains("429") || errorString.contains("quota") || errorString.contains("limit") {
+                Log.data.warning("[Data] generateProfilePicture: Quota exceeded (string-matched)")
                 throw GenerateProfilePictureError.quotaExceeded
             }
             if errorString.contains("inappropriate") {
