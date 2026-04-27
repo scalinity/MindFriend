@@ -22,6 +22,8 @@ serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  let level: number | undefined;
+
   try {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -58,7 +60,7 @@ serve(async (req) => {
     }
 
     const body: MilestoneRequest = await req.json();
-    const level = body.level;
+    level = body.level;
 
     // Validate milestone level
     const milestones = [5, 10, 25, 50, 100];
@@ -200,7 +202,7 @@ Write in a warm, encouraging tone. Focus on growth, resilience, and self-compass
     console.error("Error:", error);
 
     // Fallback template
-    const fallbackNarrative = `Congratulations on reaching level ${(await req.json()).level}! 🎉 This is a significant milestone in your wellness journey. You've shown incredible dedication and commitment to your mental health. Every quest completed, every mood logged, and every exercise practiced has brought you here. Your resilience and self-compassion are truly inspiring. Keep nurturing your well-being—you're doing amazing! 🌟`;
+    const fallbackNarrative = `Congratulations on reaching level ${level ?? "this milestone"}! 🎉 This is a significant milestone in your wellness journey. You've shown incredible dedication and commitment to your mental health. Every quest completed, every mood logged, and every exercise practiced has brought you here. Your resilience and self-compassion are truly inspiring. Keep nurturing your well-being—you're doing amazing! 🌟`;
 
     console.error("Error generating milestone narrative:", error); // Log full error server-side
     return new Response(
