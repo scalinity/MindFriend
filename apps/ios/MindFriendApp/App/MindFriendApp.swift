@@ -337,6 +337,17 @@ struct RootView: View {
                                 .environmentObject(container.aiConsentService)
                         }
                     }
+                    .sheet(isPresented: $appState.openAIConsentSettings) {
+                        NavigationStack {
+                            AIConsentSettingsView()
+                                .environmentObject(container.aiConsentService)
+                                .toolbar {
+                                    ToolbarItem(placement: .topBarTrailing) {
+                                        Button("Done") { appState.openAIConsentSettings = false }
+                                    }
+                                }
+                        }
+                    }
                     .task(id: appState.authState) {
                         guard !consentGateChecked, case .authenticated = appState.authState else { return }
                         await refreshConsentGate()

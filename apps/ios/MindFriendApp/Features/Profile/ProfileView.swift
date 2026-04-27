@@ -879,8 +879,6 @@ struct PrivacySettingsView: View {
     @State private var shareMoodInCircles = true
     @State private var privacyMode: PrivacyMode = .standard
     @State private var isSaving = false
-    @State private var navigateToAIConsent = false
-
     var body: some View {
         Form {
             Section {
@@ -932,16 +930,6 @@ struct PrivacySettingsView: View {
             }
         }
         .navigationTitle("Privacy")
-        .navigationDestination(isPresented: $navigateToAIConsent) {
-            AIConsentSettingsView()
-                .environmentObject(container.aiConsentService)
-        }
-        .onChange(of: appState.openAIConsentSettings) { _, newValue in
-            if newValue {
-                navigateToAIConsent = true
-                appState.openAIConsentSettings = false
-            }
-        }
         .onAppear {
             loadSettings()
         }
