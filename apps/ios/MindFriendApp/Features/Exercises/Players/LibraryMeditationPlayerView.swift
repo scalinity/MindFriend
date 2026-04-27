@@ -3,6 +3,7 @@ import SwiftUI
 /// Meditation player with progressive instruction display
 struct LibraryMeditationPlayerView: View {
     @ObservedObject var viewModel: LibraryExercisePlayerViewModel
+    @EnvironmentObject var consent: AIConsentService
 
     var body: some View {
         VStack(spacing: 0) {
@@ -11,7 +12,12 @@ struct LibraryMeditationPlayerView: View {
 
             // Audio indicator if audio is available
             if viewModel.hasAudio {
-                audioIndicator
+                if consent.isGranted(.ttsVoice) {
+                    audioIndicator
+                        .aiFirstUseDisclosure(.ttsVoice)
+                } else {
+                    ttsVoiceDeniedNote
+                }
             }
 
             Divider()
@@ -36,6 +42,23 @@ struct LibraryMeditationPlayerView: View {
                 viewModel.audioPlayer.pause()
             }
         }
+    }
+
+    // MARK: - TTS Denied Note
+
+    private var ttsVoiceDeniedNote: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "speaker.slash")
+                .font(.caption)
+                .foregroundStyle(Color.secondary)
+            Text("Spoken audio off. Enable in Settings → Privacy → AI & Data Sharing.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background(Color(.secondarySystemBackground))
     }
 
     // MARK: - Audio Indicator
@@ -178,12 +201,12 @@ struct LibraryMeditationPlayerView: View {
             Button {
                 if viewModel.isPlaying {
                     viewModel.pauseTimer()
-                    if viewModel.hasAudio {
+                    if viewModel.hasAudio && consent.isGranted(.ttsVoice) {
                         viewModel.audioPlayer.pause()
                     }
                 } else {
                     viewModel.startTimer()
-                    if viewModel.hasAudio {
+                    if viewModel.hasAudio && consent.isGranted(.ttsVoice) {
                         viewModel.audioPlayer.play()
                     }
                 }
