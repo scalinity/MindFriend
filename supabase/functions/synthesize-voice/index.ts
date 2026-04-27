@@ -3,10 +3,7 @@
 // Supports re-synthesis with different voice settings
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import {
-  createClient,
-  SupabaseClient,
-} from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import {
   createGoogleTTSClient,
@@ -20,10 +17,9 @@ import {
   ConsentRequiredError,
   aiConsentErrorResponse,
   requireAIConsent,
+  UntypedSupabaseClient,
 } from "../_shared/ai-consent.ts";
 
-// deno-lint-ignore no-explicit-any
-type UntypedSupabaseClient = SupabaseClient<any, "public", any>;
 
 interface SynthesizeVoiceRequest {
   contentId: string;

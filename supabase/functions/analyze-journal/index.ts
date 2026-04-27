@@ -3,14 +3,8 @@
 // and provide supportive insights with gentle, non-clinical language
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import {
-  createClient,
-  SupabaseClient,
-} from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
-// Type alias for untyped Supabase client
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type UntypedSupabaseClient = SupabaseClient<any, "public", any>;
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { checkRateLimit, getRateLimitHeaders } from "../_shared/ratelimit.ts";
 import { sanitizeForPrompt } from "../_shared/sanitize.ts";
@@ -18,6 +12,7 @@ import {
   ConsentRequiredError,
   aiConsentErrorResponse,
   requireAIConsent,
+  UntypedSupabaseClient,
 } from "../_shared/ai-consent.ts";
 
 // Constants

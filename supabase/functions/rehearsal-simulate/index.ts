@@ -2,13 +2,7 @@
 // Handles scenario creation, AI role-play simulation, and communication feedback
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import {
-  createClient,
-  SupabaseClient,
-} from "https://esm.sh/@supabase/supabase-js@2.49.1";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type UntypedSupabaseClient = SupabaseClient<any, "public", any>;
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { detectCrisis, getMatchedCrisisKeyword, CRISIS_RESPONSE } from "../_shared/crisis.ts";
@@ -17,6 +11,7 @@ import {
   requireAIConsent,
   aiConsentErrorResponse,
   ConsentRequiredError,
+  UntypedSupabaseClient,
 } from "../_shared/ai-consent.ts";
 
 // TYPE DEFINITIONS
