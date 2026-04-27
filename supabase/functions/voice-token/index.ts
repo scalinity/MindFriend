@@ -172,7 +172,7 @@ serve(async (req) => {
 
     // AI consent check (App Store guidelines 5.1.1(i) / 5.1.2(i))
     try {
-      await requireAIConsent(supabase, user.id, "voice_journal_ai");
+      await requireAIConsent(supabase, user.id, "chat");
     } catch (e) {
       if (e instanceof ConsentRequiredError) {
         return aiConsentErrorResponse(e, corsHeaders);
