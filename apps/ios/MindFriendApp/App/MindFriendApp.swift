@@ -311,6 +311,9 @@ struct RootView: View {
     @EnvironmentObject var container: DependencyContainer
     @EnvironmentObject var ambientService: AmbientThemeService
 
+    @State private var needsConsentGate: Bool = false
+    @State private var consentGateChecked: Bool = false
+
     var body: some View {
         Group {
             switch appState.authState {
@@ -325,9 +328,34 @@ struct RootView: View {
                     .ambientBackground(service: ambientService)
                     .privacyLockOverlay(onUnlock: {})
                     .badgeEarnedCelebration()
+                    .fullScreenCover(isPresented: $needsConsentGate) {
+                        NavigationStack {
+                            AIConsentGateView { needsConsentGate = false }
+                                .interactiveDismissDisabled(true)
+                                .navigationBarBackButtonHidden(true)
+                                .environmentObject(container.aiConsentService)
+                        }
+                    }
+                    .task(id: appState.authState) {
+                        guard !consentGateChecked, case .authenticated = appState.authState else { return }
+                        await refreshConsentGate()
+                        consentGateChecked = true
+                    }
             }
         }
         .animation(.easeInOut(duration: 0.3), value: appState.authState)
+    }
+
+    private func refreshConsentGate() async {
+        let svc = container.aiConsentService
+        do {
+            try await svc.loadFromServer()
+            needsConsentGate = svc.needsConsentGate()
+        } catch {
+            // Fail open: if we can't reach the server, don't trap the user behind the gate.
+            // Server-side requireAIConsent will still block AI calls.
+            needsConsentGate = false
+        }
     }
 }
 
