@@ -44,6 +44,10 @@ final class DependencyContainer: ObservableObject {
         CoachService(supabase: self.supabaseClient)
     }()
 
+    lazy var aiConsentService: AIConsentService = {
+        AIConsentService(store: SupabaseAIConsentStore(client: self.supabaseClient))
+    }()
+
     // MARK: - Voice Services
     // Note: GrokVoiceService is instantiated directly in VoiceModeView/VoiceChatView as @StateObject
     // Direct instantiation preferred for audio services requiring tight lifecycle management
