@@ -183,6 +183,15 @@ serve(async (req) => {
       // Manual trigger for single user (development/testing)
       console.log(`Manual insight generation for user: ${manualUserId}`);
 
+      try {
+        await requireAIConsent(supabaseAdmin, manualUserId, "insights");
+      } catch (e) {
+        if (e instanceof ConsentRequiredError) {
+          return aiConsentErrorResponse(e, headers);
+        }
+        throw e;
+      }
+
       const result = await processUserWithInsights(
         supabaseAdmin,
         manualUserId,
@@ -208,6 +217,7 @@ serve(async (req) => {
       processed: 0,
       summariesGenerated: 0,
       notificationsSent: 0,
+      skipped: 0,
       errors: 0,
     };
 
@@ -267,9 +277,13 @@ serve(async (req) => {
       for (const result of chunkResults) {
         results.processed++;
         if (result.status === "fulfilled") {
-          results.summariesGenerated++;
-          if (result.value.notificationSent) {
-            results.notificationsSent++;
+          if (result.value?.success === true) {
+            results.summariesGenerated++;
+            if (result.value.notificationSent) {
+              results.notificationsSent++;
+            }
+          } else {
+            results.skipped++;
           }
         } else {
           console.error("User processing failed:", result.reason);
