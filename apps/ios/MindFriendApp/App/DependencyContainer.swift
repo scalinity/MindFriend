@@ -28,7 +28,9 @@ final class DependencyContainer: ObservableObject {
     }()
 
     lazy var supabaseDataService: SupabaseDataService = {
-        SupabaseDataService(authService: supabaseAuthService)
+        let service = SupabaseDataService(authService: supabaseAuthService)
+        SupabaseDataService.sharedAIConsentService = aiConsentService
+        return service
     }()
 
     // MARK: - Feature Services

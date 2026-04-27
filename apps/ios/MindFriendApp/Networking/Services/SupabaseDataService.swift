@@ -99,6 +99,9 @@ private struct DBMethodologyInfo: Codable {
 final class SupabaseDataService: ObservableObject {
     private let authService: SupabaseAuthService
 
+    // Set by DependencyContainer after both services are instantiated.
+    static var sharedAIConsentService: AIConsentService?
+
     /// In-memory cache for methodology info (static reference data)
     private var methodologyCache: [String: MethodologyInfo] = [:]
 
@@ -2819,6 +2822,9 @@ final class SupabaseDataService: ObservableObject {
             )
             Log.data.info("[generateWeeklyInsight] Edge function completed successfully")
         } catch let error as FunctionsError {
+            if let consentError = await AIConsentErrorMapper.decode(error, consentService: SupabaseDataService.sharedAIConsentService) {
+                throw consentError
+            }
             switch error {
             case .httpError(let code, let data):
                 let responseBody = String(data: data, encoding: .utf8) ?? "unknown"
@@ -5180,6 +5186,9 @@ final class SupabaseDataService: ObservableObject {
             print("[Debug] generateProfilePicture: Success, quota remaining = \(result.quotaRemaining ?? -1)")
             return result
         } catch let error as FunctionsError {
+            if let consentError = await AIConsentErrorMapper.decode(error, consentService: SupabaseDataService.sharedAIConsentService) {
+                throw consentError
+            }
             Log.data.error("[Data] generateProfilePicture: FunctionsError - \(error)")
 
             // Check for specific error types
