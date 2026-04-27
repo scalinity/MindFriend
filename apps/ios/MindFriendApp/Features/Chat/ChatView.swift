@@ -4,6 +4,7 @@ import OSLog
 struct ChatView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
+    @EnvironmentObject var consent: AIConsentService
     let conversation: Conversation
 
     @State private var messages: [Message] = []
@@ -28,7 +29,7 @@ struct ChatView: View {
         ))
     }
 
-    var body: some View {
+    private var grantedBody: some View {
         VStack(spacing: 0) {
             // Messages
             ScrollViewReader { proxy in
@@ -123,6 +124,32 @@ struct ChatView: View {
             .focused($isInputFocused)
         }
         .sentryMaskChat()
+        .fullScreenCover(isPresented: $showVoiceMode, onDismiss: {
+            isInputFocused = true
+            Task {
+                await loadMessages()
+            }
+        }) {
+            VoiceChatView(supabase: container.supabaseClient, conversationId: conversation.id)
+        }
+        // Note: We intentionally do NOT cancel sendTask on disappear.
+        // The server will complete the request and save the message.
+        // When the user returns, they'll see the completed response.
+        // Load messages on appearance
+        .task {
+            await loadMessages()
+        }
+    }
+
+    var body: some View {
+        Group {
+            if consent.isGranted(.chat) {
+                grantedBody
+                    .aiFirstUseDisclosure(.chat)
+            } else {
+                AIDeniedEmptyStateView(feature: .chat)
+            }
+        }
         .navigationTitle(displayTitle)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
@@ -151,21 +178,6 @@ struct ChatView: View {
                 .accessibilityLabel("Get crisis help")
                 .accessibilityHint("Opens crisis resources and hotlines")
             }
-        }
-        .fullScreenCover(isPresented: $showVoiceMode, onDismiss: {
-            isInputFocused = true
-            Task {
-                await loadMessages()
-            }
-        }) {
-            VoiceChatView(supabase: container.supabaseClient, conversationId: conversation.id)
-        }
-        // Note: We intentionally do NOT cancel sendTask on disappear.
-        // The server will complete the request and save the message.
-        // When the user returns, they'll see the completed response.
-        // Load messages on appearance
-        .task {
-            await loadMessages()
         }
     }
 
