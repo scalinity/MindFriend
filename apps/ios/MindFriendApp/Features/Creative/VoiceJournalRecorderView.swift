@@ -4,6 +4,7 @@ import AVFoundation
 struct VoiceJournalRecorderView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
+    @EnvironmentObject var consent: AIConsentService
     @Environment(\.dismiss) private var dismiss
 
     @StateObject private var recorder = VoiceJournalRecorder()
@@ -12,7 +13,7 @@ struct VoiceJournalRecorderView: View {
     @State private var isSaving = false
     @State private var error: String?
 
-    var body: some View {
+    private var grantedBody: some View {
         NavigationStack {
             VStack(spacing: 32) {
                 Spacer()
@@ -158,6 +159,17 @@ struct VoiceJournalRecorderView: View {
             }
             .onDisappear {
                 recorder.cleanup()
+            }
+        }
+    }
+
+    var body: some View {
+        Group {
+            if consent.isGranted(.voiceJournalAI) {
+                grantedBody
+                    .aiFirstUseDisclosure(.voiceJournalAI)
+            } else {
+                AIDeniedEmptyStateView(feature: .voiceJournalAI)
             }
         }
     }
