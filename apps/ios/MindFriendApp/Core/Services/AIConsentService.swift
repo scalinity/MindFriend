@@ -28,6 +28,13 @@ final class AIConsentService: ObservableObject {
         isLoaded = true
     }
 
+    /// Clears all in-memory consent state. Call on sign-out so the next user
+    /// gets a fresh gate check instead of inheriting the previous user's grants.
+    func reset() {
+        consents = [:]
+        isLoaded = false
+    }
+
     func isGranted(_ feature: AIFeature) -> Bool {
         guard let r = consents[feature] else { return false }
         return r.state == .granted && r.policyVersion >= AIConsent.currentPolicyVersion

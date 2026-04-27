@@ -349,9 +349,21 @@ struct RootView: View {
                         }
                     }
                     .task(id: appState.authState) {
-                        guard !consentGateChecked, case .authenticated = appState.authState else { return }
-                        await refreshConsentGate()
-                        consentGateChecked = true
+                        // On sign-out (or session loss), clear cached consent state so the
+                        // next sign-in re-fetches from the server instead of inheriting the
+                        // prior user's grants. The cover and the gate check both depend on
+                        // a fresh consents dict.
+                        switch appState.authState {
+                        case .unauthenticated, .unknown:
+                            consentGateChecked = false
+                            needsConsentGate = false
+                            container.aiConsentService.reset()
+                        case .authenticated where !consentGateChecked:
+                            await refreshConsentGate()
+                            consentGateChecked = true
+                        default:
+                            break
+                        }
                     }
             }
         }
