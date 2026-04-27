@@ -120,6 +120,73 @@ final class BusinessModelsTests: XCTestCase {
         XCTAssertTrue(features.advancedInsights)
     }
 
+    // MARK: - PlanFeatures Lenient Decode (regression: paywall outage 2026-04-27)
+    //
+    // The remote subscription_plans.features JSONB has historically drifted
+    // (camelCase keys, renamed flags). A strict Codable decode there crashed
+    // BillingService.loadAvailablePlans() with "The data couldn't be read
+    // because it is missing." and took the entire gift/paywall sheet down.
+    // PlanFeatures.init(from:) is now lenient: any missing or wrong-typed
+    // key defaults to false. These tests lock that contract in.
+
+    func testPlanFeaturesDecodesEmptyObjectAsAllFalse() throws {
+        let json = Data("{}".utf8)
+        let features = try JSONDecoder().decode(PlanFeatures.self, from: json)
+        XCTAssertEqual(features, PlanFeatures.free)
+    }
+
+    func testPlanFeaturesDecodesPartialObjectFillingMissingWithFalse() throws {
+        let json = Data(#"{"unlimited_chat": true, "advanced_insights": true}"#.utf8)
+        let features = try JSONDecoder().decode(PlanFeatures.self, from: json)
+        XCTAssertTrue(features.unlimitedChat)
+        XCTAssertTrue(features.advancedInsights)
+        XCTAssertFalse(features.unlimitedExercises)
+        XCTAssertFalse(features.premiumContent)
+        XCTAssertFalse(features.prioritySupport)
+        XCTAssertFalse(features.familySharing)
+        XCTAssertFalse(features.offlineMode)
+        XCTAssertFalse(features.customThemes)
+    }
+
+    func testPlanFeaturesIgnoresLegacyCamelCaseKeys() throws {
+        // Mirrors the original broken seed: camelCase keys, plus made-up flags
+        // like priorityResponse / advancedAnalytics that never existed in the
+        // Swift model. The decoder must produce all-false rather than throw.
+        let json = Data(#"""
+        {
+            "unlimitedChat": true,
+            "priorityResponse": true,
+            "advancedAnalytics": true,
+            "smartReminders": true
+        }
+        """#.utf8)
+        let features = try JSONDecoder().decode(PlanFeatures.self, from: json)
+        XCTAssertEqual(features, PlanFeatures.free)
+    }
+
+    func testPlanFeaturesIgnoresWrongTypedValues() throws {
+        // A string "true" instead of bool true must not throw — it falls
+        // back to false rather than poisoning the whole decode.
+        let json = Data(#"{"unlimited_chat": "true", "premium_content": true}"#.utf8)
+        let features = try JSONDecoder().decode(PlanFeatures.self, from: json)
+        XCTAssertFalse(features.unlimitedChat)  // wrong type → false
+        XCTAssertTrue(features.premiumContent)  // correct type → true
+    }
+
+    func testPlanFeaturesRoundTripPreservesAllFields() throws {
+        let original = PlanFeatures.premium
+        let encoded = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(PlanFeatures.self, from: encoded)
+        XCTAssertEqual(decoded, original)
+    }
+
+    func testPlanFeaturesDecodesNullValuesAsFalse() throws {
+        let json = Data(#"{"unlimited_chat": null, "premium_content": true}"#.utf8)
+        let features = try JSONDecoder().decode(PlanFeatures.self, from: json)
+        XCTAssertFalse(features.unlimitedChat)
+        XCTAssertTrue(features.premiumContent)
+    }
+
     // MARK: - PromoCode Tests
 
     func testPromoCodeIsValidActive() {
@@ -702,5 +769,116 @@ final class BusinessModelsTests: XCTestCase {
         )
 
         XCTAssertTrue(gift.canBeRedeemed)
+    }
+}
+
+// MARK: - Migration Contract Tests
+// =============================================================================
+// Locks in the contract between the iOS data models and the SQL migrations.
+// If either side drifts (a Swift case added/removed, or a CHECK constraint
+// reworded), one of these tests fails before the drift can ship and break
+// production decoding the way the paywall did on 2026-04-27.
+// =============================================================================
+
+final class MigrationContractTests: XCTestCase {
+
+    // MARK: - Cognitive Distortion (currently disabled migration)
+    //
+    // The Postgres CHECK constraint in
+    //   supabase/migrations/20260123000001_cognitive_distortion.sql.disabled
+    // restricts distortion_events.distortion_type to these 10 strings. If we
+    // ever re-enable the migration, the Swift enum MUST stay in sync —
+    // otherwise rows we insert get rejected and rows we read fail to decode.
+    private static let expectedDistortionRawValues: Set<String> = [
+        "all_or_nothing",
+        "overgeneralization",
+        "mental_filter",
+        "disqualifying_positive",
+        "jumping_to_conclusions",
+        "magnification_minimization",
+        "emotional_reasoning",
+        "should_statements",
+        "labeling",
+        "personalization",
+    ]
+
+    func testDistortionTypeMatchesMigrationCheckConstraint() {
+        let swiftRawValues = Set(DistortionType.allCases.map(\.rawValue))
+        XCTAssertEqual(
+            swiftRawValues,
+            Self.expectedDistortionRawValues,
+            "DistortionType drifted from the cognitive_distortion migration's "
+            + "CHECK constraint. Either the migration or the Swift enum was "
+            + "changed without updating the other."
+        )
+    }
+
+    func testDistortionTypeRoundTripsViaCodable() throws {
+        for type in DistortionType.allCases {
+            let encoded = try JSONEncoder().encode([type])
+            let decoded = try JSONDecoder().decode([DistortionType].self, from: encoded)
+            XCTAssertEqual(decoded, [type], "Round-trip failed for \(type)")
+        }
+    }
+
+    // MARK: - Plan Features (subscription_plans.features JSONB)
+    //
+    // The seed in 20260124040000_create_subscription_plans_table.sql and the
+    // repair in 20260427210000_fix_subscription_plan_features.sql both write
+    // these 8 snake_case keys. PlanFeatures.CodingKeys must list exactly these
+    // — anything else is the failure mode that took the gift sheet down.
+    private static let expectedPlanFeatureKeys: Set<String> = [
+        "unlimited_chat",
+        "unlimited_exercises",
+        "premium_content",
+        "priority_support",
+        "family_sharing",
+        "offline_mode",
+        "custom_themes",
+        "advanced_insights",
+    ]
+
+    func testPlanFeaturesCodingKeysMatchMigrationJSONB() throws {
+        let encoded = try JSONEncoder().encode(PlanFeatures.premium)
+        let json = try JSONSerialization.jsonObject(with: encoded) as? [String: Any] ?? [:]
+        XCTAssertEqual(
+            Set(json.keys),
+            Self.expectedPlanFeatureKeys,
+            "PlanFeatures encoded with unexpected keys. Either CodingKeys "
+            + "drifted or new fields were added to the Swift struct without "
+            + "extending the migration."
+        )
+    }
+
+    // MARK: - Capacity Override (dynamic_difficulty migration)
+    //
+    // The Postgres CHECK constraint on capacity_overrides.override_level allows
+    // these three values (see 20260427230000_dynamic_difficulty.sql, formerly
+    // 20260123000000). DifficultyService.setManualOverride relies on the Swift
+    // enum's rawValues being a subset of these — anything else fails the DB
+    // CHECK at INSERT time.
+    private static let expectedOverrideRawValues: Set<String> = [
+        "rest",
+        "normal",
+        "challenge",
+    ]
+
+    func testCapacityOverrideLevelsMatchMigrationCheckConstraint() {
+        // OverrideLevel is not CaseIterable; enumerate the 3 known cases.
+        let allKnownLevels: [CapacityOverride.OverrideLevel] = [.rest, .normal, .challenge]
+        let swiftRawValues = Set(allKnownLevels.map(\.rawValue))
+        XCTAssertEqual(
+            swiftRawValues,
+            Self.expectedOverrideRawValues,
+            "CapacityOverride.OverrideLevel drifted from the dynamic_difficulty "
+            + "migration's CHECK constraint. Inserts would fail at the DB layer."
+        )
+
+        for raw in Self.expectedOverrideRawValues {
+            XCTAssertNotNil(
+                CapacityOverride.OverrideLevel(rawValue: raw),
+                "Migration allows '\(raw)' but Swift can't decode it"
+            )
+        }
     }
 }

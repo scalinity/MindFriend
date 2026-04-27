@@ -1,3 +1,37 @@
+-- ============================================================================
+-- DISABLED MIGRATION — DO NOT ACTIVATE WITHOUT REVIEW
+-- ============================================================================
+--
+-- Status as of 2026-04-27:
+--   • This migration has never been applied to remote (timestamp 20260123000001
+--     was claimed there by `circadian_vulnerability_shield`).
+--   • The `distortion_events` and `distortion_prompts` tables it would create
+--     do NOT exist on remote.
+--   • The iOS code references these tables (CognitiveDistortionEngine,
+--     SupabaseDataService.fetchDistortionEvents/...), but the engine is
+--     registered in DependencyContainer and never invoked from any UI or
+--     view model — the feature is dormant in production.
+--
+-- WHY DISABLED, NOT PUSHED:
+--   The Swift `DistortionEvent` Codable expects a plain `transcript_text` field,
+--   but this migration stores the column as `transcript_text_encrypted BYTEA`
+--   with companion `encrypt_transcript` / `decrypt_transcript` RPC functions.
+--   Pushing this schema as-is would create a column shape that the consumer
+--   code can't decode. The feature needs a coordinated decision:
+--     (a) Update Swift to call the encrypt/decrypt RPCs and use BYTEA, OR
+--     (b) Drop the encryption layer and use plain text (compliance review needed).
+--
+-- HOW TO RE-ENABLE:
+--   1. Resolve the schema/code alignment above.
+--   2. Rename to a fresh, non-colliding timestamp (e.g. 20260427230001_…).sql
+--      (drop the .disabled extension).
+--   3. Run `supabase db push`.
+--
+-- The Supabase CLI ignores any file not matching `<timestamp>_<name>.sql` —
+-- the trailing .disabled keeps this file in version control without affecting
+-- migration runs.
+-- ============================================================================
+
 -- =====================================================
 -- Cognitive Distortion Detector Migration
 -- =====================================================
