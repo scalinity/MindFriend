@@ -6,17 +6,18 @@ struct OnboardingFlow: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
 
-    @State private var currentStep: OnboardingStep = .quiz
+    @State private var currentStep: OnboardingStep = .aiConsent
     @State private var selectedFocus: WellnessFocus?
     @State private var isCompleting = false
     @State private var showError = false
     @State private var errorMessage = ""
 
     enum OnboardingStep: Int, CaseIterable {
-        case quiz = 0
-        case aiGreeting = 1
-        case buddyInvite = 2
-        case complete = 3
+        case aiConsent = 0
+        case quiz = 1
+        case aiGreeting = 2
+        case buddyInvite = 3
+        case complete = 4
 
         var progress: Double {
             Double(self.rawValue + 1) / Double(OnboardingStep.allCases.count)
@@ -35,6 +36,10 @@ struct OnboardingFlow: View {
             // Step content
             Group {
                 switch currentStep {
+                case .aiConsent:
+                    AIConsentGateView(onComplete: advanceToQuiz)
+                        .environmentObject(container.aiConsentService)
+
                 case .quiz:
                     OnboardingQuizView(
                         selectedFocus: $selectedFocus,
@@ -77,6 +82,11 @@ struct OnboardingFlow: View {
         }
     }
 
+    private func advanceToQuiz() {
+        withAnimation { currentStep = .quiz }
+        Analytics.shared.track(.onboardingStepCompleted, properties: ["step": "ai_consent"])
+    }
+
     private func advanceToAIGreeting() {
         withAnimation {
             currentStep = .aiGreeting
@@ -88,7 +98,7 @@ struct OnboardingFlow: View {
             currentStep = .buddyInvite
         }
         Analytics.shared.track(.onboardingStepCompleted, properties: [
-            "step": "ai_greeting"
+            "step": "welcome_chat"
         ])
     }
 
@@ -199,7 +209,7 @@ struct OnboardingQuizView: View {
                     }
                     .disabled(selectedFocus == nil)
                     .accessibilityLabel("Continue")
-                    .accessibilityHint(selectedFocus != nil ? "Proceed to AI greeting" : "Select a focus area first")
+                    .accessibilityHint(selectedFocus != nil ? "Proceed to welcome chat" : "Select a focus area first")
 
                     Button("Skip for now", action: onSkip)
                         .font(.subheadline)
@@ -400,7 +410,7 @@ struct OnboardingAIGreetingView: View {
         }
 
         Analytics.shared.track(.onboardingStepCompleted, properties: [
-            "step": "ai_greeting",
+            "step": "welcome_chat",
             "message_count": userMessageCount
         ])
     }
