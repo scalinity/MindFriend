@@ -237,7 +237,7 @@ struct DebtScore: Identifiable, Codable, Equatable {
 struct CrashEvent: Codable, Equatable {
     let date: String
     let debtAtCrash: Decimal
-    let moodScore: Int
+    let moodScore: Int?
 
     enum CodingKeys: String, CodingKey {
         case date
@@ -290,11 +290,45 @@ struct WellbeingDebtProfile: Identifiable, Codable, Equatable {
     enum CodingKeys: String, CodingKey {
         case id
         case userId = "user_id"
-        case personalThreshold = "personal_threshold"
+        case personalThreshold = "learned_threshold"
         case crashHistory = "crash_history"
         case topDrains = "top_drains"
         case topDeposits = "top_deposits"
         case updatedAt = "updated_at"
+    }
+}
+
+extension CrashHistory {
+    init(from decoder: Decoder) throws {
+        let single = try decoder.singleValueContainer()
+        if let events = try? single.decode([CrashEvent].self) {
+            self.init(crashes: events, lastUpdated: nil)
+        } else {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            self.init(crashes: try values.decode([CrashEvent].self, forKey: .crashes),
+                lastUpdated: try values.decodeIfPresent(String.self, forKey: .lastUpdated))
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.singleValueContainer()
+        try values.encode(crashes)
+    }
+}
+
+extension WellbeingDebtProfile {
+    private enum LegacyCodingKeys: String, CodingKey { case personalThreshold = "personal_threshold" }
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        let legacy = try decoder.container(keyedBy: LegacyCodingKeys.self)
+        self.init(id: try values.decodeIfPresent(UUID.self, forKey: .id),
+            userId: try values.decode(String.self, forKey: .userId),
+            personalThreshold: try values.decodeIfPresent(Decimal.self, forKey: .personalThreshold) ??
+                legacy.decodeIfPresent(Decimal.self, forKey: .personalThreshold),
+            crashHistory: try values.decodeIfPresent(CrashHistory.self, forKey: .crashHistory) ?? CrashHistory(crashes: [], lastUpdated: nil),
+            topDrains: try values.decode(TopCategories.self, forKey: .topDrains),
+            topDeposits: try values.decode(TopCategories.self, forKey: .topDeposits),
+            updatedAt: try values.decodeIfPresent(Date.self, forKey: .updatedAt))
     }
 }
 
