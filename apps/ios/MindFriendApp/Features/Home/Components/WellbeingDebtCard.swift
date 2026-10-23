@@ -47,6 +47,12 @@ struct WellbeingDebtCard: View {
         .task(id: appState.currentUser?.id) {
             await loadDebtScore()
         }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            Task { await loadDebtScore() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .wellbeingDebtSourcesDidChange).debounce(for: .seconds(1), scheduler: RunLoop.main)) { _ in
+            Task { await loadDebtScore() }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .wellbeingDebtDidRecalculate)) { _ in
             Task {
                 await loadDebtScore()
@@ -166,7 +172,8 @@ struct WellbeingDebtCard: View {
             Image(systemName: "exclamationmark.circle")
                 .font(.title2)
                 .foregroundStyle(.secondary)
-            Text("Unable to load debt data")
+            Text("Couldn’t refresh your debt score. Check your connection and tap Retry.")
+            Button("Retry") { Task { await loadDebtScore() } }
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
@@ -211,7 +218,7 @@ struct WellbeingDebtCard: View {
         defer { if loadID == requestID { isLoading = false } }
         do {
             let owner = try await service.transactionOwnerID()
-            let score = try await service.fetchLatestDebtScore()
+            let score = try await service.refreshDebtScoreIfNeeded()
             let activeOwner = try await service.transactionOwnerID()
             guard loadID == requestID, !Task.isCancelled, owner == activeOwner else { return }
             latestScore = score?.userId.lowercased() == owner.lowercased() &&

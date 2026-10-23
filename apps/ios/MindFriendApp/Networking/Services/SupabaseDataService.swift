@@ -146,6 +146,7 @@ final class SupabaseDataService: ObservableObject {
             .upsert(dbMood, onConflict: "user_id,local_date")
             .execute()
 
+        DebtSourceChanges.saved(date: mood.localDate)
         Analytics.shared.track(.moodLogged, properties: [
             "mood_score": mood.moodScore,
             "has_note": mood.note != nil
@@ -363,6 +364,7 @@ final class SupabaseDataService: ObservableObject {
             .eq("user_id", value: try userId)
             .execute()
 
+        DebtSourceChanges.saved()
         // Note: Stats/streak updates are handled by database trigger (trg_quest_completed_stats)
 
         Analytics.shared.track(.questCompleted, properties: [
@@ -382,6 +384,7 @@ final class SupabaseDataService: ObservableObject {
             .eq("user_id", value: try userId)
             .execute()
 
+        DebtSourceChanges.saved()
         Analytics.shared.track(.questSkipped, properties: ["quest_id": id])
     }
 

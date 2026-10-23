@@ -143,6 +143,12 @@ struct WellbeingDebtDashboardView: View {
                 recalculation.cancel()
                 await loadData()
             }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                Task { await loadData() }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .wellbeingDebtSourcesDidChange).debounce(for: .seconds(1), scheduler: RunLoop.main)) { _ in
+                Task { await loadData() }
+            }
             .onDisappear { recalculation.cancel() }
             .safeAreaInset(edge: .bottom) {
                 if recalculation.isRunning {
@@ -567,10 +573,11 @@ struct WellbeingDebtDashboardView: View {
         do {
             let owner = try await service.transactionOwnerID()
             guard loadID == requestID, !Task.isCancelled else { return }
-            async let scoreTask = service.fetchLatestDebtScore()
-            async let profileTask = service.fetchProfile()
             async let recoveryTask = service.fetchActiveRecoveryProgram()
-            let (score, loadedProfile, recovery) = try await (scoreTask, profileTask, recoveryTask)
+            let score = try await service.refreshDebtScoreIfNeeded()
+            guard loadID == requestID, !Task.isCancelled else { return }
+            let loadedProfile = try await service.fetchProfile()
+            let recovery = try await recoveryTask
             let activeOwner = try await service.transactionOwnerID()
             guard loadID == requestID, !Task.isCancelled, activeOwner == owner else { return }
             if let score, score.userId.lowercased() == owner.lowercased() {

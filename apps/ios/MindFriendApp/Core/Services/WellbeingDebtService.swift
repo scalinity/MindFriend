@@ -16,10 +16,15 @@ protocol WellbeingTransactionReading: Sendable {
 
 protocol WellbeingDebtReading: WellbeingTransactionReading {
     func fetchLatestDebtScore() async throws -> DebtScore?
+    func refreshDebtScoreIfNeeded() async throws -> DebtScore?
     func fetchProfile() async throws -> WellbeingDebtProfile?
     func fetchActiveRecoveryProgram() async throws -> RecoveryProgram?
     func calculateDebtScore(for date: String?) async throws -> DebtScore
     func backfillTransactions(days: Int) async throws -> Int
+}
+
+extension WellbeingDebtReading {
+    func refreshDebtScoreIfNeeded() async throws -> DebtScore? { try await fetchLatestDebtScore() }
 }
 
 /// Service for managing wellbeing debt tracking and recovery
@@ -27,6 +32,7 @@ actor WellbeingDebtService: WellbeingDebtReading {
     // MARK: - Properties
 
     private let supabase: SupabaseClient
+    private let refresh = DebtScoreRefresh()
 
     // MARK: - Initialization
 
@@ -50,6 +56,18 @@ actor WellbeingDebtService: WellbeingDebtReading {
             .value
 
         return response.first
+    }
+
+    /// Called only by visible debt UI. Signal monitoring remains a saved-score read.
+    func refreshDebtScoreIfNeeded() async throws -> DebtScore? {
+        let owner = try await getCurrentUserId()
+        let date = DebtTransactionWindow(days: 1).end
+        let key = owner.lowercased() + date + String(DebtSourceChanges.revision)
+        let score = try await refresh.value(key: key) { [self] in
+            return try await requestCalculation(owner: owner, date: date)
+        }
+        guard try await getCurrentUserId() == owner else { throw CancellationError() }
+        return score
     }
 
     /// Fetch debt scores for a specific date range
@@ -167,6 +185,7 @@ actor WellbeingDebtService: WellbeingDebtReading {
             .execute()
             .value
 
+        DebtSourceChanges.saved(date: date)
         return response
     }
 
@@ -335,24 +354,27 @@ actor WellbeingDebtService: WellbeingDebtReading {
     /// - Parameter date: Optional date (defaults to yesterday)
     /// - Returns: Calculated debt score
     func calculateDebtScore(for date: String? = nil) async throws -> DebtScore {
-        struct CalculateRequest: Encodable {
-            let date: String?
+        let owner = try await getCurrentUserId()
+        let target = date ?? DebtTransactionWindow(days: 1).end
+        let score = try await refresh.value(key: owner.lowercased() + target + String(DebtSourceChanges.revision), force: true, cancelsSharedWork: true) { [self] in
+            try await requestCalculation(owner: owner, date: target)
         }
-
-        let response: CalculateResponse = try await supabase.functions
-            .invoke(
-                "calculate-debt-score",
-                options: FunctionInvokeOptions(body: CalculateRequest(date: date))
-            )
-
-        guard response.success else {
-            throw WellbeingDebtError.generationFailed("Failed to calculate debt score")
-        }
-        guard let score = response.score else {
+        guard try await getCurrentUserId() == owner else { throw CancellationError() }
+        guard let score else {
             throw WellbeingDebtError.needsMoreData("No recorded sleep, activities or logged events in the last 30 complete days. Missing records do not establish wellbeing debt.")
         }
-        let owner = try await getCurrentUserId()
-        guard score.userId.lowercased() == owner.lowercased(), score.isSourceCalculation(for: date ?? DebtTransactionWindow(days: 1).end, requireSnapshot: true) else {
+        return score
+    }
+
+    private func requestCalculation(owner: String, date: String) async throws -> DebtScore? {
+        struct CalculateRequest: Encodable { let user_id: String; let date: String }
+        let response: CalculateResponse = try await supabase.functions.invoke(
+            "calculate-debt-score", options: .init(body: CalculateRequest(user_id: owner, date: date)))
+        guard response.success else { throw WellbeingDebtError.generationFailed("Failed to calculate debt score") }
+        guard try await getCurrentUserId() == owner else { throw CancellationError() }
+        guard let score = response.score else { return nil }
+        guard score.userId.lowercased() == owner.lowercased(),
+              score.isSourceCalculation(for: date, requireSnapshot: true) else {
             throw WellbeingDebtError.needsMoreData("This calculation is out of date. Try calculating again after the service update is available.")
         }
         return score
@@ -487,5 +509,91 @@ struct GenerateRecoveryRequest: Codable {
     enum CodingKeys: String, CodingKey {
         case startDate
         case intensity
+    }
+}
+
+/// A local invalidation counter; no wellness values or identifiers leave the process.
+final class DebtSourceChanges: @unchecked Sendable {
+    private static let lock = NSLock()
+    private static var version = 0
+    static var revision: Int { lock.lock(); defer { lock.unlock() }; return version }
+    static func saved(date: String? = nil) {
+        if let date {
+            let window = DebtTransactionWindow(days: 30)
+            guard date >= window.start && date <= window.end else { return }
+        }
+        lock.lock(); version += 1; lock.unlock()
+        NotificationCenter.default.post(name: .wellbeingDebtSourcesDidChange, object: nil)
+    }
+}
+
+extension Notification.Name {
+    static let wellbeingDebtSourcesDidChange = Notification.Name("wellbeingDebtSourcesDidChange")
+}
+
+/// Coalesces visible consumers, including empty results. A changed source key cancels stale work.
+actor DebtScoreRefresh {
+    private var running: (id: UUID, key: String, task: Task<DebtScore?, Error>)?
+    private var cached: (key: String, score: DebtScore?, date: Date)?
+    private let maximumAge: TimeInterval
+    private let timeout: Duration
+    init(maximumAge: TimeInterval = 300, timeout: Duration = .seconds(25)) {
+        self.maximumAge = maximumAge; self.timeout = timeout
+    }
+    func value(key: String, force: Bool = false, cancelsSharedWork: Bool = false,
+               operation: @escaping @Sendable () async throws -> DebtScore?) async throws -> DebtScore? {
+        try Task.checkCancellation()
+        if let active = running {
+            if active.key == key {
+                let score = try await wait(active.task, cancelsSharedWork: cancelsSharedWork)
+                try Task.checkCancellation()
+                return score
+            }
+            active.task.cancel()
+            _ = try? await active.task.value
+            // Another waiting consumer may already have started the current key.
+            if running?.id != active.id { return try await value(key: key, force: force, cancelsSharedWork: cancelsSharedWork, operation: operation) }
+            running = nil
+        }
+        try Task.checkCancellation()
+        if !force, let cached, cached.key == key, Date().timeIntervalSince(cached.date) < maximumAge {
+            return cached.score
+        }
+        let id = UUID()
+        let task = Task {
+            let score = try await operation()
+            try Task.checkCancellation()
+            return score
+        }
+        running = (id, key, task)
+        let deadline = Task { [timeout] in
+            do { try await Task.sleep(for: timeout) } catch { return }
+            if !Task.isCancelled { task.cancel() }
+        }
+        defer { deadline.cancel() }
+        do {
+            let score = try await wait(task, cancelsSharedWork: cancelsSharedWork)
+            if running?.id == id {
+                cached = (key, score, Date()); running = nil
+            }
+            try Task.checkCancellation()
+            return score
+        } catch {
+            if running?.id == id { running = nil }
+            if error is CancellationError && !Task.isCancelled { throw URLError(.timedOut) }
+            throw error
+        }
+    }
+    private func wait(_ task: Task<DebtScore?, Error>, cancelsSharedWork: Bool) async throws -> DebtScore? {
+        do {
+            if cancelsSharedWork {
+                return try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
+            }
+            // A disappearing automatic consumer must not cancel another visible consumer.
+            return try await task.value
+        } catch {
+            if error is CancellationError && !Task.isCancelled { throw URLError(.timedOut) }
+            throw error
+        }
     }
 }

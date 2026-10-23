@@ -636,6 +636,54 @@ final class DebtRecalculationRegressionTests: XCTestCase {
         XCTAssertNotNil(findElement("14-Day Debt Score", in: host.view.window ?? host.view))
     }
 
+    func testAutomaticRefreshRendersWithoutManualAnalyze() async throws {
+        let reader = fixture()
+        await reader.enableAutomaticRefresh()
+        let defaults = UserDefaults.standard
+        let saved = defaults.object(forKey: "wellbeing_debt_tutorial_completed")
+        defaults.set(true, forKey: "wellbeing_debt_tutorial_completed")
+        defer { if let saved { defaults.set(saved, forKey: "wellbeing_debt_tutorial_completed") } else { defaults.removeObject(forKey: "wellbeing_debt_tutorial_completed") } }
+        let host = UIHostingController(rootView: WellbeingDebtDashboardView(reader: reader)
+            .environmentObject(DependencyContainer.preview).environmentObject(AppState()).preferredColorScheme(.dark))
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 393, height: 852))
+        window.rootViewController = host; window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        for _ in 0..<200 {
+            if await reader.calls > 0 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try await Task.sleep(for: .milliseconds(200))
+        capture(host, name: "Issue23-automatic-score-without-analyze")
+        XCTAssertNotNil(findElement("14-Day Debt Score", in: window))
+        let calls = await reader.calls; XCTAssertEqual(calls, 1)
+        NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+        for _ in 0..<200 {
+            if await reader.calls > calls { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let foregroundCalls = await reader.calls
+        XCTAssertEqual(foregroundCalls, 2, "Foreground should request freshness without a manual action")
+    }
+
+    func testAutomaticFailureShowsWorkingRetryOnHomeCard() async throws {
+        let reader = fixture(behavior: .offline)
+        await reader.enableAutomaticRefresh()
+        let host = UIHostingController(rootView: WellbeingDebtCard(reader: reader)
+            .environmentObject(DependencyContainer.preview).environmentObject(AppState()).preferredColorScheme(.dark))
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 393, height: 852))
+        window.rootViewController = host; window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        for _ in 0..<200 { if await reader.calls > 0 { break }; try await Task.sleep(for: .milliseconds(10)) }
+        try await Task.sleep(for: .milliseconds(200))
+        capture(host, name: "Issue23-automatic-failure-retry")
+        await reader.setBehavior(.success)
+        XCTAssertTrue(activate("Retry", in: window))
+        for _ in 0..<200 { if await reader.calls > 1 { break }; try await Task.sleep(for: .milliseconds(10)) }
+        try await Task.sleep(for: .milliseconds(200))
+        capture(host, name: "Issue23-home-recovered-score")
+        XCTAssertNotNil(findElement("Wellbeing Balance", in: window))
+    }
+
     private func findElement(_ label: String, in root: NSObject) -> NSObject? {
         var visited = Set<ObjectIdentifier>()
         var description: [String] = []
@@ -688,6 +736,11 @@ private actor DebtRefreshFixture: WellbeingDebtReading {
     var behavior: Behavior
     var currentOwner: String
     func setOwner(_ owner: String) { currentOwner = owner }
+    private var automatic = false
+    func enableAutomaticRefresh() { automatic = true }
+    func refreshDebtScoreIfNeeded() async throws -> DebtScore? {
+        automatic ? try await calculateDebtScore(for: nil) : nil
+    }
     var ownerReads = 0
     var calls = 0
     var backfills = 0
@@ -699,7 +752,13 @@ private actor DebtRefreshFixture: WellbeingDebtReading {
     func setBehavior(_ behavior: Behavior) { self.behavior = behavior }
     func transactionOwnerID() async throws -> String { ownerReads += 1; return currentOwner }
     func fetchLatestDebtScore() async throws -> DebtScore? { nil }
-    func fetchProfile() async throws -> WellbeingDebtProfile? { nil }
+    func fetchProfile() async throws -> WellbeingDebtProfile? {
+        if automatic {
+            XCTAssertGreaterThan(calls, 0, "Profile details must follow an actual calculation")
+            XCTAssertEqual(active, 0, "Profile details must be read after the new calculation is persisted")
+        }
+        return nil
+    }
     func fetchActiveRecoveryProgram() async throws -> RecoveryProgram? { nil }
     func backfillTransactions(days: Int) async throws -> Int { backfills += 1; return 0 }
     func fetchTransactions(from: String, to: String) async throws -> [WellbeingTransaction] { score.calculationTransactions ?? [] }
@@ -752,4 +811,123 @@ private actor DebtHeldLoadFixture: WellbeingDebtReading {
     func calculateDebtScore(for date: String?) async throws -> DebtScore { score }
     func backfillTransactions(days: Int) async throws -> Int { XCTFail("No historical fan-out"); return 0 }
     func fetchTransactions(from: String, to: String) async throws -> [WellbeingTransaction] { score.calculationTransactions ?? [] }
+}
+
+final class DebtAutomaticRefreshTests: XCTestCase {
+    func testConcurrentConsumersCacheEmptyResultsAndInvalidateOnSourceOrOwnerKey() async throws {
+        let refresh = DebtScoreRefresh()
+        let fixture = DebtAutomaticWork()
+        let started = ContinuousClock.now
+        let results = try await withThrowingTaskGroup(of: Bool.self) { group in
+            for _ in 0..<20 { group.addTask { try await refresh.value(key: "ownerA-date-revision0") { try await fixture.run() } == nil } }
+            var values: [Bool] = []; for try await value in group { values.append(value) }; return values
+        }
+        XCTAssertEqual(results, Array(repeating: true, count: 20))
+        _ = try await refresh.value(key: "ownerA-date-revision0") { try await fixture.run() }
+        var calls = await fixture.calls; XCTAssertEqual(calls, 1)
+        _ = try await refresh.value(key: "ownerA-date-revision1") { try await fixture.run() }
+        _ = try await refresh.value(key: "ownerB-date-revision1") { try await fixture.run() }
+        calls = await fixture.calls; XCTAssertEqual(calls, 3)
+        let maximum = await fixture.maximum; XCTAssertEqual(maximum, 1)
+        let attachment = XCTAttachment(string: "20 concurrent consumers + cached read: one invocation; source/owner invalidation: two further invocations; total synthetic duration \(started.duration(to: .now))")
+        attachment.lifetime = .keepAlways; add(attachment)
+    }
+    func testAutomaticTimeoutFailureAndManualRetryDoNotCacheErrors() async throws {
+        let refresh = DebtScoreRefresh(timeout: .milliseconds(30))
+        let fixture = DebtAutomaticWork()
+        do { _ = try await refresh.value(key: "owner-date") { try await fixture.run(delay: .seconds(2)) }; XCTFail("Must time out") }
+        catch { XCTAssertEqual((error as? URLError)?.code, .timedOut) }
+        _ = try await refresh.value(key: "owner-date") { try await fixture.run() }
+        _ = try await refresh.value(key: "owner-date", force: true) { try await fixture.run() }
+        let calls = await fixture.calls; XCTAssertEqual(calls, 3)
+        let maximum = await fixture.maximum; XCTAssertEqual(maximum, 1)
+    }
+    func testLeavingOneAutomaticConsumerPreservesSharedWorkForAnother() async throws {
+        let refresh = DebtScoreRefresh()
+        let fixture = DebtAutomaticWork()
+        let first = Task { try await refresh.value(key: "owner-date") { try await fixture.run(delay: .milliseconds(80)) } }
+        while await fixture.calls == 0 { await Task.yield() }
+        let second = Task { try await refresh.value(key: "owner-date") { try await fixture.run() } }
+        first.cancel()
+        _ = try await second.value
+        do { _ = try await first.value; XCTFail("Canceled consumer cannot publish") } catch { XCTAssertTrue(error is CancellationError) }
+        _ = try await refresh.value(key: "owner-date") { try await fixture.run() }
+        let calls = await fixture.calls; XCTAssertEqual(calls, 1)
+    }
+    func testControlledBeforeAfterLatencyAndCacheExpiry() async throws {
+        let fixture = DebtAutomaticWork()
+        let before = ContinuousClock.now
+        for _ in 0..<30 { _ = try await fixture.run(delay: .milliseconds(5)) }
+        let priorDuration = before.duration(to: .now)
+        let refresh = DebtScoreRefresh(maximumAge: 0)
+        let after = ContinuousClock.now
+        _ = try await refresh.value(key: "owner-date") { try await fixture.run(delay: .milliseconds(5)) }
+        let currentDuration = after.duration(to: .now)
+        _ = try await refresh.value(key: "owner-date") { try await fixture.run() }
+        let calls = await fixture.calls; XCTAssertEqual(calls, 32)
+        let attachment = XCTAttachment(string: "Controlled synthetic5ms/request: prior30 detector requests \(priorDuration); replacement1 request \(currentDuration). This is a local scheduling/call-count comparison, not hosted Nano latency. Zero TTL rechecks once after expiration.")
+        attachment.lifetime = .keepAlways; add(attachment)
+    }
+    func testAlreadyCanceledCallerCannotCancelCurrentOwnerWork() async throws {
+        let refresh = DebtScoreRefresh()
+        let fixture = DebtAutomaticWork()
+        let current = Task { try await refresh.value(key: "currentOwner") { try await fixture.run(delay: .milliseconds(80)) } }
+        while await fixture.calls == 0 { await Task.yield() }
+        let stale = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await refresh.value(key: "oldOwner") { try await fixture.run() }
+        }
+        do { _ = try await stale.value; XCTFail("Canceled caller must fail before touching active work") } catch { XCTAssertTrue(error is CancellationError) }
+        _ = try await current.value
+        let calls = await fixture.calls; XCTAssertEqual(calls, 1)
+    }
+    func testSharedTimeoutHasTheSameActionableErrorForEveryConsumer() async throws {
+        let refresh = DebtScoreRefresh(timeout: .milliseconds(30))
+        let fixture = DebtAutomaticWork()
+        let first = Task { try await refresh.value(key: "owner") { try await fixture.run(delay: .seconds(2)) } }
+        while await fixture.calls == 0 { await Task.yield() }
+        let manual = Task { try await refresh.value(key: "owner", force: true, cancelsSharedWork: true) { try await fixture.run() } }
+        for task in [first, manual] {
+            do { _ = try await task.value; XCTFail("Must report timeout") } catch { XCTAssertEqual((error as? URLError)?.code, .timedOut) }
+        }
+    }
+    func testManualCancellationAlsoCancelsAJoinedRequest() async throws {
+        let refresh = DebtScoreRefresh()
+        let fixture = DebtAutomaticWork()
+        let first = Task { try await refresh.value(key: "owner") { try await fixture.run(delay: .seconds(2)) } }
+        while await fixture.calls == 0 { await Task.yield() }
+        let manual = Task { try await refresh.value(key: "owner", force: true, cancelsSharedWork: true) { try await fixture.run() } }
+        try await Task.sleep(for: .milliseconds(10)); manual.cancel()
+        do { _ = try await manual.value; XCTFail("Canceled manual consumer cannot publish") } catch { XCTAssertTrue(error is CancellationError) }
+        _ = try? await first.value
+        _ = try await refresh.value(key: "owner", force: true) { try await fixture.run() }
+        let maximum = await fixture.maximum; XCTAssertEqual(maximum, 1)
+    }
+    func testSourceInvalidationOnlyIncludesTheCompleteDateWindow() {
+        let initial = DebtSourceChanges.revision
+        DebtSourceChanges.saved(date: "1900-01-01")
+        DebtSourceChanges.saved(date: "2999-01-01")
+        XCTAssertEqual(DebtSourceChanges.revision, initial)
+        DebtSourceChanges.saved(date: DebtTransactionWindow(days: 1).end)
+        XCTAssertEqual(DebtSourceChanges.revision, initial + 1)
+    }
+    func testChangedSourceCancelsOldWorkBeforeRecalculation() async throws {
+        let refresh = DebtScoreRefresh()
+        let fixture = DebtAutomaticWork()
+        let old = Task { try await refresh.value(key: "owner-date-revision0") { try await fixture.run(delay: .seconds(2)) } }
+        while await fixture.calls == 0 { await Task.yield() }
+        _ = try await refresh.value(key: "owner-date-revision1") { try await fixture.run() }
+        _ = try? await old.value
+        let maximum = await fixture.maximum; XCTAssertEqual(maximum, 1)
+        let calls = await fixture.calls; XCTAssertEqual(calls, 2)
+    }
+}
+private actor DebtAutomaticWork {
+    var calls = 0; var active = 0; var maximum = 0
+    func run(delay: Duration = .milliseconds(10)) async throws -> DebtScore? {
+        calls += 1; active += 1; maximum = max(maximum, active)
+        defer { active -= 1 }
+        try await Task.sleep(for: delay)
+        return nil
+    }
 }
