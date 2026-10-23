@@ -18,6 +18,11 @@ extension Notification.Name {
 /// Taps navigate to WellbeingDebtDashboardView
 struct WellbeingDebtCard: View {
     @EnvironmentObject var container: DependencyContainer
+    @EnvironmentObject private var appState: AppState
+    @State private var loadID = UUID()
+    private let reader: (any WellbeingDebtReading)?
+    init(reader: (any WellbeingDebtReading)? = nil) { self.reader = reader }
+    private var service: any WellbeingDebtReading { reader ?? container.wellbeingDebtService }
 
     @State private var latestScore: DebtScore?
     @State private var isLoading = true
@@ -39,10 +44,8 @@ struct WellbeingDebtCard: View {
         .padding()
         .background(Color(uiColor: .secondarySystemBackground))
         .cornerRadius(16)
-        .onAppear {
-            Task {
-                await loadDebtScore()
-            }
+        .task(id: appState.currentUser?.id) {
+            await loadDebtScore()
         }
         .onReceive(NotificationCenter.default.publisher(for: .wellbeingDebtDidRecalculate)) { _ in
             Task {
@@ -60,7 +63,7 @@ struct WellbeingDebtCard: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
                     Circle()
-                        .fill(severityColor(score.thresholdStatus.severity))
+                        .fill(score.thresholdStatus.confidence > 0 ? severityColor(score.thresholdStatus.severity) : .secondary)
                         .frame(width: 10, height: 10)
 
                     Text("Wellbeing Balance")
@@ -74,7 +77,7 @@ struct WellbeingDebtCard: View {
                 HStack(spacing: 4) {
                     Image(systemName: trendIcon(score.trend.direction))
                         .font(.caption)
-                    Text(trendLabel(score.trend.direction))
+                    Text(score.trend.available == true ? trendLabel(score.trend.direction) : "Trend unavailable")
                         .font(.subheadline)
                 }
                 .foregroundStyle(trendColor(score.trend.direction))
@@ -93,7 +96,7 @@ struct WellbeingDebtCard: View {
 
                 // Velocity info
                 let velocityValue = NSDecimalNumber(decimal: score.trend.velocity).doubleValue
-                if abs(velocityValue) >= 0.5 {
+                if score.trend.available == true && abs(velocityValue) >= 0.5 {
                     Text("\(velocityValue >= 0 ? "+" : "")\(String(format: "%.1f", velocityValue)) pts/day")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -104,11 +107,13 @@ struct WellbeingDebtCard: View {
 
             // Score ring
             DebtScoreRing(
-                score: NSDecimalNumber(decimal: score.rollingDebt14Day).intValue,
-                severity: score.thresholdStatus.severity,
+                score: score.rollingDebt14Day,
+                severity: score.thresholdStatus.confidence > 0 ? score.thresholdStatus.severity : nil,
                 size: 90
             )
         }
+
+        Text("Through \(score.date) UTC").font(.caption2).foregroundStyle(.secondary)
 
         // Quick stats row
         HStack(spacing: 16) {
@@ -135,10 +140,10 @@ struct WellbeingDebtCard: View {
             Text(label)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-            Text("\(NSDecimalNumber(decimal: value).intValue)")
+            Text(value.formatted())
                 .font(.subheadline)
                 .fontWeight(.semibold)
-                .foregroundStyle(value < 0 ? .red : value > 0 ? .green : .primary)
+                .foregroundStyle(.primary)
         }
         .frame(maxWidth: .infinity)
     }
@@ -198,12 +203,22 @@ struct WellbeingDebtCard: View {
     // MARK: - Helpers
 
     private func loadDebtScore() async {
+        let requestID = UUID()
+        loadID = requestID
+        latestScore = nil
+        errorMessage = nil
+        isLoading = true
+        defer { if loadID == requestID { isLoading = false } }
         do {
-            latestScore = try await container.wellbeingDebtService.fetchLatestDebtScore()
-            isLoading = false
+            let owner = try await service.transactionOwnerID()
+            let score = try await service.fetchLatestDebtScore()
+            let activeOwner = try await service.transactionOwnerID()
+            guard loadID == requestID, !Task.isCancelled, owner == activeOwner else { return }
+            latestScore = score?.userId.lowercased() == owner.lowercased() &&
+                score?.isCurrentSourceCalculation(requireSnapshot: true) == true ? score : nil
         } catch {
+            guard loadID == requestID, !Task.isCancelled else { return }
             errorMessage = "Failed to load"
-            isLoading = false
         }
     }
 
@@ -244,8 +259,8 @@ struct WellbeingDebtCard: View {
 
 /// Circular ring showing debt score with severity coloring
 struct DebtScoreRing: View {
-    let score: Int
-    let severity: ThresholdSeverity
+    let score: Decimal
+    let severity: ThresholdSeverity?
     let size: CGFloat
 
     @State private var animatedProgress: Double = 0
@@ -256,7 +271,7 @@ struct DebtScoreRing: View {
         // 0 debt = empty ring (healthy)
         // 50 debt = half ring (at threshold)
         // 100+ debt = full ring (severe)
-        return min(1.0, max(0, Double(score) / 100.0))
+        return min(1.0, max(0, NSDecimalNumber(decimal: score).doubleValue / 100.0))
     }
 
     private var ringColor: Color {
@@ -264,6 +279,7 @@ struct DebtScoreRing: View {
         case .safe: return .green
         case .warning: return .orange
         case .danger: return .red
+        case nil: return .secondary
         }
     }
 
@@ -287,7 +303,7 @@ struct DebtScoreRing: View {
 
             // Score text
             VStack(spacing: 2) {
-                Text("\(score > 0 ? "+" : "")\(score)")
+                Text(score.formatted())
                     .font(.system(size: size * 0.3, weight: .bold, design: .rounded))
                     .foregroundStyle(.primary)
 

@@ -14,8 +14,16 @@ protocol WellbeingTransactionReading: Sendable {
     func fetchTransactions(from startDate: String, to endDate: String) async throws -> [WellbeingTransaction]
 }
 
+protocol WellbeingDebtReading: WellbeingTransactionReading {
+    func fetchLatestDebtScore() async throws -> DebtScore?
+    func fetchProfile() async throws -> WellbeingDebtProfile?
+    func fetchActiveRecoveryProgram() async throws -> RecoveryProgram?
+    func calculateDebtScore(for date: String?) async throws -> DebtScore
+    func backfillTransactions(days: Int) async throws -> Int
+}
+
 /// Service for managing wellbeing debt tracking and recovery
-actor WellbeingDebtService: WellbeingTransactionReading {
+actor WellbeingDebtService: WellbeingDebtReading {
     // MARK: - Properties
 
     private let supabase: SupabaseClient
@@ -31,9 +39,11 @@ actor WellbeingDebtService: WellbeingTransactionReading {
     /// Fetch the most recent debt score for the current user
     /// - Returns: Latest debt score, or nil if none exists
     func fetchLatestDebtScore() async throws -> DebtScore? {
+        let userId = try await getCurrentUserId()
         let response: [DebtScore] = try await supabase
             .from("wellbeing_debt_scores")
             .select()
+            .eq("user_id", value: userId)
             .order("date", ascending: false)
             .limit(1)
             .execute()
@@ -48,9 +58,11 @@ actor WellbeingDebtService: WellbeingTransactionReading {
     ///   - endDate: End date in YYYY-MM-DD format
     /// - Returns: Array of debt scores within the range
     func fetchDebtScores(from startDate: String, to endDate: String) async throws -> [DebtScore] {
+        let userId = try await getCurrentUserId()
         let response: [DebtScore] = try await supabase
             .from("wellbeing_debt_scores")
             .select()
+            .eq("user_id", value: userId)
             .gte("date", value: startDate)
             .lte("date", value: endDate)
             .order("date", ascending: true)
@@ -64,9 +76,11 @@ actor WellbeingDebtService: WellbeingTransactionReading {
     /// - Parameter date: Date in YYYY-MM-DD format
     /// - Returns: Debt score for the date, or nil if none exists
     func fetchDebtScore(for date: String) async throws -> DebtScore? {
+        let userId = try await getCurrentUserId()
         let response: [DebtScore] = try await supabase
             .from("wellbeing_debt_scores")
             .select()
+            .eq("user_id", value: userId)
             .eq("date", value: date)
             .execute()
             .value
@@ -161,9 +175,11 @@ actor WellbeingDebtService: WellbeingTransactionReading {
     /// Fetch the user's wellbeing debt profile
     /// - Returns: User profile, or nil if none exists yet
     func fetchProfile() async throws -> WellbeingDebtProfile? {
+        let userId = try await getCurrentUserId()
         let response: [WellbeingDebtProfile] = try await supabase
             .from("wellbeing_debt_profiles")
             .select()
+            .eq("user_id", value: userId)
             .execute()
             .value
 
@@ -329,10 +345,16 @@ actor WellbeingDebtService: WellbeingTransactionReading {
                 options: FunctionInvokeOptions(body: CalculateRequest(date: date))
             )
 
-        guard response.success, let score = response.score else {
+        guard response.success else {
             throw WellbeingDebtError.generationFailed("Failed to calculate debt score")
         }
-
+        guard let score = response.score else {
+            throw WellbeingDebtError.needsMoreData("No recorded sleep, activities or logged events in the last 30 complete days. Missing records do not establish wellbeing debt.")
+        }
+        let owner = try await getCurrentUserId()
+        guard score.userId.lowercased() == owner.lowercased(), score.isSourceCalculation(for: date ?? DebtTransactionWindow(days: 1).end, requireSnapshot: true) else {
+            throw WellbeingDebtError.needsMoreData("This calculation is out of date. Try calculating again after the service update is available.")
+        }
         return score
     }
 

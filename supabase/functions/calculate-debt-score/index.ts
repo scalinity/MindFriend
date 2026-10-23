@@ -4,21 +4,34 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import {
+  currentSourceTransactions,
+  ledgerDate,
+} from "./source-transactions.ts";
 import type {
-  Transaction,
-  DebtScore,
-  UserProfile,
-  TrendData,
-  ThresholdStatus,
-  CrashEvent,
   CategoryStats,
+  CrashEvent,
+  DebtScore,
+  ThresholdStatus,
+  Transaction,
+  TrendData,
+  UserProfile,
 } from "../_shared/wellbeing-debt-types.ts";
 import {
-  getYesterdayISO,
-  getDateNDaysAgo,
-  calculateSlope,
   calculatePercentile10,
+  getYesterdayISO,
 } from "../_shared/wellbeing-debt-utils.ts";
+
+type CurrentTrend = TrendData & {
+  available: boolean;
+  observed_days: number;
+  accounting_version: number;
+  calculated_at: string;
+};
+type CurrentDebtScore = DebtScore & {
+  trend: CurrentTrend;
+  source_transactions: Transaction[];
+};
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -72,6 +85,8 @@ serve(async (req) => {
 
     // Manual trigger: calculate for specific user and date
     const { user_id, date } = await req.json();
+    const targetDate = date ??
+      ledgerDate(new Date().toISOString().slice(0, 10), -1);
 
     // Authorization check: user can only trigger for themselves
     if (user_id && user_id !== user.id) {
@@ -84,14 +99,38 @@ serve(async (req) => {
     const score = await calculateUserDebtScore(
       supabase,
       user_id || user.id,
-      date || getYesterdayISO(),
+      targetDate,
     );
-    await insertDebtScore(supabase, score);
-    await updateUserProfile(
-      supabase,
-      user_id || user.id,
-      date || getYesterdayISO(),
-    );
+    if (score) {
+      await updateUserProfile(
+        supabase,
+        user.id,
+        score.date,
+        score.source_transactions,
+      );
+      score.threshold_status = calculateThresholdStatus(
+        score.rolling_debt_14day,
+        score.trend,
+        await getUserProfile(supabase, user.id),
+      );
+      await insertDebtScore(supabase, score);
+    } else {
+      // Preserve the old derived amount as history, but never serve it as a current calculation.
+      const { error } = await supabase.from("wellbeing_debt_scores").update({
+        trend: {
+          direction: "stable",
+          velocity: 0,
+          projection_7day: 0,
+          available: false,
+          observed_days: 0,
+          accounting_version: 0,
+          calculated_at: new Date().toISOString(),
+          source_transactions: [],
+        },
+      }).eq("user_id", user.id).eq("date", targetDate);
+      if (error) throw new Error("Empty calculation could not be saved");
+      await updateUserProfile(supabase, user.id, targetDate, []);
+    }
 
     return new Response(
       JSON.stringify({
@@ -128,7 +167,9 @@ async function calculateDebtScoresForAllUsers(supabase: any) {
 
   // Deduplicate user IDs
   const uniqueUserIds = [
-    ...new Set(usersWithTransactions.map((t) => t.user_id)),
+    ...new Set<string>(
+      usersWithTransactions.map((t: { user_id: string }) => t.user_id),
+    ),
   ];
 
   console.log(
@@ -137,10 +178,22 @@ async function calculateDebtScoresForAllUsers(supabase: any) {
 
   for (const userId of uniqueUserIds) {
     try {
-      const score = await calculateUserDebtScore(supabase, userId, yesterday);
-      await insertDebtScore(supabase, score);
-      await updateUserProfile(supabase, userId, yesterday);
-      console.log(`User ${userId}: Debt score calculated and profile updated`);
+      // Retain the existing scheduled ledger workload; fresh source scans are owner-requested only.
+      const score = await calculateUserDebtScore(
+        supabase,
+        userId,
+        yesterday,
+        false,
+      );
+      if (score && await insertDebtScore(supabase, score)) {
+        await updateUserProfile(
+          supabase,
+          userId,
+          yesterday,
+          score.source_transactions,
+        );
+      }
+      console.log(`User ${userId}: Debt score processing completed`);
     } catch (error) {
       console.error(`Error processing user ${userId}:`, error);
       // Continue with other users
@@ -148,24 +201,30 @@ async function calculateDebtScoresForAllUsers(supabase: any) {
   }
 }
 
-async function calculateUserDebtScore(
+export async function calculateUserDebtScore(
   supabase: any,
   userId: string,
   date: string,
-): Promise<DebtScore> {
-  // 1. Get transactions for past 30 days (to calculate all rolling windows)
-  const startDate = getDateNDaysAgo(date, 29); // 30 days including date
-  const { data: transactions, error } = await supabase
-    .from("wellbeing_transactions")
-    .select("*")
-    .eq("user_id", userId)
-    .gte("date", startDate)
-    .lte("date", date)
-    .order("date", { ascending: true });
-
-  if (error) {
-    throw new Error(`Error fetching transactions: ${error.message}`);
+  currentSources = true,
+): Promise<CurrentDebtScore | null> {
+  ledgerDate(date); // Reject invalid date labels before queries or writes.
+  let transactions: Transaction[];
+  if (currentSources) {
+    transactions = await currentSourceTransactions(supabase, userId, date);
+  } else {
+    const { data, error } = await supabase.from("wellbeing_transactions")
+      .select("*").eq("user_id", userId)
+      .gte("date", ledgerDate(date, -29)).lte("date", date).order("date", {
+        ascending: true,
+      });
+    if (error || !data) throw new Error("Ledger unavailable");
+    transactions = data;
   }
+  transactions = transactions.filter((t) =>
+    t.user_id === userId &&
+    !(t.category === "social_isolation" && t.source === "inferred")
+  );
+  if (transactions.length === 0) return null;
 
   // 2. Calculate daily balance for target date
   const dailyBalance = calculateDailyBalance(transactions, date);
@@ -176,7 +235,7 @@ async function calculateUserDebtScore(
   const rolling30Day = calculateRollingDebt(transactions, date, 30);
 
   // 4. Calculate trend
-  const trend = calculateTrend(transactions, date);
+  const trend = calculateTrend(transactions, date, currentSources ? 2 : 1);
 
   // 5. Get user profile for threshold
   const profile = await getUserProfile(supabase, userId);
@@ -197,6 +256,7 @@ async function calculateUserDebtScore(
     rolling_debt_30day: rolling30Day,
     trend,
     threshold_status: thresholdStatus,
+    source_transactions: transactions,
   };
 }
 
@@ -204,7 +264,7 @@ async function calculateUserDebtScore(
 // DEBT CALCULATION
 // =============================================================================
 
-function calculateDailyBalance(
+export function calculateDailyBalance(
   transactions: Transaction[],
   date: string,
 ): number {
@@ -220,15 +280,15 @@ function calculateDailyBalance(
 
   // Clamp between -100 and +100 (Assumption #8)
   const balance = deposits - withdrawals;
-  return Math.max(-100, Math.min(100, balance));
+  return Math.round(Math.max(-100, Math.min(100, balance)) * 100) / 100;
 }
 
-function calculateRollingDebt(
+export function calculateRollingDebt(
   transactions: Transaction[],
   endDate: string,
   days: number,
 ): number {
-  const startDate = getDateNDaysAgo(endDate, days - 1);
+  const startDate = ledgerDate(endDate, -(days - 1));
 
   const relevantTransactions = transactions.filter((t) => {
     return t.date >= startDate && t.date <= endDate;
@@ -245,59 +305,75 @@ function calculateRollingDebt(
   const net = deposits - withdrawals;
 
   // Only negative balances are "debt" (Assumption #8: zero state)
-  return net < 0 ? Math.abs(net) : 0;
+  return net < 0 ? Math.round(Math.abs(net) * 100) / 100 : 0;
 }
 
-function calculateTrend(
+export function calculateTrend(
   transactions: Transaction[],
   endDate: string,
-): TrendData {
-  // Get last 7 days of daily balances
-  const debts: number[] = [];
-  for (let i = 6; i >= 0; i--) {
-    const date = getDateNDaysAgo(endDate, i);
-    const balance = calculateDailyBalance(transactions, date);
-    debts.push(balance);
+  version = 2,
+): CurrentTrend {
+  const firstDate = ledgerDate(endDate, -6);
+  const dates = [
+    ...new Set(
+      transactions.filter((t) => t.date >= firstDate && t.date <= endDate).map(
+        (t) => t.date,
+      ),
+    ),
+  ].sort();
+  const currentDebt = calculateRollingDebt(transactions, endDate, 14);
+  const base = {
+    available: dates.length >= 2,
+    observed_days: dates.length,
+    accounting_version: version,
+    calculated_at: new Date().toISOString(),
+  };
+  if (dates.length < 2) {
+    return {
+      direction: "stable",
+      velocity: 0,
+      projection_7day: currentDebt,
+      ...base,
+    };
   }
-
-  // Linear regression for trend velocity
-  const slope = calculateSlope(debts);
-
-  // Determine direction
-  let direction: "improving" | "worsening" | "stable";
-  if (slope > 1) {
-    direction = "improving"; // Positive velocity = more deposits
-  } else if (slope < -1) {
-    direction = "worsening"; // Negative velocity = more withdrawals
-  } else {
-    direction = "stable";
-  }
-
-  // Project 7 days forward
-  const currentDebt = debts[debts.length - 1];
-  const projection7Day = currentDebt + slope * 7;
-
+  const xs = dates.map((date) =>
+    (Date.parse(date) - Date.parse(dates[0])) / 86_400_000
+  );
+  const ys = dates.map((date) => calculateRollingDebt(transactions, date, 14));
+  const meanX = xs.reduce((a, b) => a + b, 0) / xs.length;
+  const meanY = ys.reduce((a, b) => a + b, 0) / ys.length;
+  const numerator = xs.reduce(
+    (sum, x, i) => sum + (x - meanX) * (ys[i] - meanY),
+    0,
+  );
+  const denominator = xs.reduce((sum, x) => sum + (x - meanX) ** 2, 0);
+  const velocity = numerator / denominator;
+  if (!Number.isFinite(velocity)) throw new Error("Invalid trend inputs");
+  // Rolling debt is the non-negative unpaid deficit; a falling estimate reaches zero.
   return {
-    direction,
-    velocity: slope,
-    projection_7day: projection7Day,
+    direction: velocity > 1
+      ? "worsening"
+      : velocity < -1
+      ? "improving"
+      : "stable",
+    velocity,
+    projection_7day: Math.max(0, currentDebt + velocity * 7),
+    ...base,
   };
 }
 
-function calculateThresholdStatus(
+export function calculateThresholdStatus(
   currentDebt: number,
-  trend: TrendData,
+  trend: CurrentTrend,
   profile: UserProfile,
 ): ThresholdStatus {
-  const threshold = profile.personal_threshold || -75; // Default -75 (increased from -50 for more forgiving economy)
+  const threshold = profile.personal_threshold ?? -75; // Default -75 (increased from -50 for more forgiving economy)
 
-  // Guard: Prevent division by zero
   const absThreshold = Math.abs(threshold);
-  if (absThreshold < 1e-10) {
-    // Threshold is effectively zero - default to safe
+  if (!Number.isFinite(absThreshold) || absThreshold === 0) {
     return {
       current_debt: currentDebt,
-      threshold,
+      threshold: null,
       severity: "safe",
       days_until_crash: null,
       confidence: 0,
@@ -321,7 +397,7 @@ function calculateThresholdStatus(
   let daysUntilCrash: number | null = null;
   if (
     trend.direction === "worsening" &&
-    trend.velocity < 0 &&
+    trend.available && trend.velocity > 0 &&
     currentDebt < absThreshold
   ) {
     const debtRemaining = absThreshold - currentDebt;
@@ -329,7 +405,8 @@ function calculateThresholdStatus(
   }
 
   // Confidence: 0 if <3 crashes, scale to 1.0 at 10+ crashes (Assumption #3: min 3 crashes)
-  const crashCount = profile.crash_history.crashes.length;
+  const crashCount =
+    new Set(profile.crash_history.crashes.map((crash) => crash.date)).size;
   const confidence = crashCount < 3 ? 0 : Math.min(1.0, crashCount / 10);
 
   return {
@@ -353,9 +430,10 @@ async function getUserProfile(
     .from("wellbeing_debt_profiles")
     .select("*")
     .eq("user_id", userId)
-    .single();
+    .maybeSingle();
 
-  if (error || !profile) {
+  if (error) throw new Error("Debt profile unavailable");
+  if (!profile) {
     // Create default profile with rebalanced threshold
     const defaultProfile: UserProfile = {
       user_id: userId,
@@ -365,137 +443,83 @@ async function getUserProfile(
       top_deposits: { categories: [], last_updated: null },
     };
 
-    await supabase
-      .from("wellbeing_debt_profiles")
-      .insert(defaultProfile)
-      .single();
-
+    const { error: insertError } = await supabase.from(
+      "wellbeing_debt_profiles",
+    ).insert(defaultProfile);
+    if (insertError) {
+      if (insertError.code === "23505") {
+        return await getUserProfile(supabase, userId);
+      }
+      throw new Error("Debt profile could not be saved");
+    }
     return defaultProfile;
   }
 
   return profile;
 }
 
-async function updateUserProfile(supabase: any, userId: string, date: string) {
-  // 1. Detect if today is a crash day
-  const isCrash = await detectCrash(supabase, userId, date);
-
-  if (isCrash) {
-    await handleCrashDetection(supabase, userId, date);
-  }
-
-  // 2. Update top drains/deposits (monthly)
-  await updateTopCategories(supabase, userId, date);
-}
-
-async function detectCrash(
+async function updateUserProfile(
   supabase: any,
   userId: string,
   date: string,
-): Promise<boolean> {
-  // Assumption #1: Crash = mood ≤2 within 48 hours
-  const startDate = date;
-  const endDate = new Date(date);
-  endDate.setDate(endDate.getDate() + 2); // Check next 48 hours
-  const endDateStr = endDate.toISOString().split("T")[0];
-
-  const { data: moods, error } = await supabase
-    .from("moods")
-    .select("mood_score")
-    .eq("user_id", userId)
-    .gte("created_at", `${startDate}T00:00:00Z`)
-    .lt("created_at", `${endDateStr}T23:59:59Z`);
-
-  if (error || !moods) {
-    return false;
-  }
-
-  return moods.some((m) => m.mood_score <= 2);
-}
-
-async function handleCrashDetection(
-  supabase: any,
-  userId: string,
-  date: string,
+  transactions: Transaction[],
 ) {
-  // Get current profile
+  await reconcileCrashDetection(supabase, userId, date, transactions);
+  await updateTopCategories(supabase, userId, date, transactions);
+}
+
+async function reconcileCrashDetection(
+  supabase: any,
+  userId: string,
+  date: string,
+  transactions: Transaction[],
+) {
   const profile = await getUserProfile(supabase, userId);
-
-  // Get debt at crash (7-day rolling debt from yesterday)
-  const yesterday = getDateNDaysAgo(date, 1);
-  const { data: scoreAtCrash, error } = await supabase
-    .from("wellbeing_debt_scores")
-    .select("rolling_debt_7day")
-    .eq("user_id", userId)
-    .eq("date", yesterday)
-    .single();
-
-  const debtAtCrash = scoreAtCrash?.rolling_debt_7day || 0;
-
-  // Get mood score that triggered crash
-  const { data: crashMood } = await supabase
-    .from("moods")
-    .select("mood_score")
-    .eq("user_id", userId)
+  const { data: moods, error: moodError } = await supabase.from("moods")
+    .select("mood_score").eq("user_id", userId)
     .gte("created_at", `${date}T00:00:00Z`)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .single();
-
-  const moodScore = crashMood?.mood_score || 1;
-
-  // Add to crash history
-  const newCrash: CrashEvent = {
-    date,
-    debt_at_crash: debtAtCrash,
-    mood_score: moodScore,
-  };
-
-  const updatedCrashes = [...profile.crash_history.crashes, newCrash];
-
-  // Recalculate threshold if ≥3 crashes (Assumption #3)
-  let newThreshold = profile.personal_threshold || -75;
-  if (updatedCrashes.length >= 3) {
-    const crashDebts = updatedCrashes.map((c) => c.debt_at_crash);
-    newThreshold = calculatePercentile10(crashDebts);
-  }
-
-  // Update profile
-  await supabase
-    .from("wellbeing_debt_profiles")
-    .update({
-      personal_threshold: newThreshold,
-      crash_history: {
-        crashes: updatedCrashes,
-        last_updated: new Date().toISOString(),
-      },
-      updated_at: new Date().toISOString(),
-    })
-    .eq("user_id", userId);
-
-  console.log(
-    `Crash detected for user ${userId}: debt=${debtAtCrash}, mood=${moodScore}, new_threshold=${newThreshold}`,
+    .lt("created_at", `${ledgerDate(date, 2)}T00:00:00Z`);
+  if (moodError || !moods) throw new Error("Threshold source unavailable");
+  const lowMoods = moods.filter((m: { mood_score: number }) =>
+    Number.isFinite(m.mood_score) && m.mood_score >= 1 && m.mood_score <= 2
   );
+  // Replace the recalculated day's derived entry; a corrected/deleted trigger removes it.
+  const crashes: CrashEvent[] = profile.crash_history.crashes.filter((crash) =>
+    crash.date !== date
+  );
+  if (lowMoods.length > 0 && transactions.length > 0) {
+    crashes.push({
+      date,
+      debt_at_crash: calculateRollingDebt(
+        transactions,
+        ledgerDate(date, -1),
+        7,
+      ),
+      mood_score: Math.min(
+        ...lowMoods.map((m: { mood_score: number }) => m.mood_score),
+      ),
+    });
+  }
+  const unique = [
+    ...new Map(crashes.map((crash) => [crash.date, crash])).values(),
+  ];
+  const learned = unique.length >= 3
+    ? calculatePercentile10(unique.map((crash) => crash.debt_at_crash))
+    : 0;
+  const { error } = await supabase.from("wellbeing_debt_profiles").update({
+    personal_threshold: learned > 0 ? learned : -75,
+    crash_history: { crashes: unique, last_updated: new Date().toISOString() },
+    updated_at: new Date().toISOString(),
+  }).eq("user_id", userId);
+  if (error) throw new Error("Debt profile could not be saved");
 }
 
 async function updateTopCategories(
   supabase: any,
   userId: string,
   date: string,
+  transactions: Transaction[],
 ) {
-  // Get transactions for last 30 days
-  const startDate = getDateNDaysAgo(date, 29);
-  const { data: transactions, error } = await supabase
-    .from("wellbeing_transactions")
-    .select("type, category, amount")
-    .eq("user_id", userId)
-    .gte("date", startDate)
-    .lte("date", date);
-
-  if (error || !transactions) {
-    return;
-  }
-
   // Aggregate by category and type
   const categoryMap = new Map<string, { total: number; count: number }>();
 
@@ -503,7 +527,7 @@ async function updateTopCategories(
     const key = t.category;
     const existing = categoryMap.get(key) || { total: 0, count: 0 };
     categoryMap.set(key, {
-      total: existing.total + t.amount,
+      total: existing.total + (t.type === "withdrawal" ? -t.amount : t.amount),
       count: existing.count + 1,
     });
   }
@@ -536,7 +560,7 @@ async function updateTopCategories(
     .slice(0, 3);
 
   // Update profile
-  await supabase
+  const { error: updateError } = await supabase
     .from("wellbeing_debt_profiles")
     .update({
       top_drains: {
@@ -550,19 +574,47 @@ async function updateTopCategories(
       updated_at: new Date().toISOString(),
     })
     .eq("user_id", userId);
+  if (updateError) throw new Error("Debt categories could not be saved");
 }
 
 // =============================================================================
 // PERSISTENCE
 // =============================================================================
 
-async function insertDebtScore(supabase: any, score: DebtScore) {
-  const { error } = await supabase
+async function insertDebtScore(supabase: any, score: CurrentDebtScore) {
+  const { source_transactions: _snapshot, ...storedScore } = score;
+  const { data, error } = await supabase
     .from("wellbeing_debt_scores")
-    .upsert(score, { onConflict: "user_id,date" });
+    .upsert({
+      ...storedScore,
+      trend: {
+        ...storedScore.trend,
+        // Retain only the amounts/provenance needed to reload this calculation. No private source notes.
+        source_transactions: _snapshot.map((
+          { id, user_id, date, type, category, amount, source, metadata },
+        ) => ({
+          id,
+          user_id,
+          date,
+          type,
+          category,
+          amount,
+          source,
+          metadata: {
+            source_ids: metadata?.source_ids ?? [],
+            accounting: "current_source_records",
+          },
+        })),
+      },
+    }, {
+      onConflict: "user_id,date",
+      // A scheduled legacy-ledger result must not replace a current-source calculation.
+      ignoreDuplicates: score.trend.accounting_version !== 2,
+    }).select("id");
 
   if (error) {
     console.error("Error inserting debt score:", error);
     throw error;
   }
+  return Array.isArray(data) && data.length > 0;
 }

@@ -1,0 +1,7 @@
+{
+  "extends": "../deno.json",
+  "lock": "./deno.test.lock",
+  "imports": {
+    "https://deno.land/std@0.168.0/http/server.ts": "../detect-transactions/test-server.ts"
+  }
+}
