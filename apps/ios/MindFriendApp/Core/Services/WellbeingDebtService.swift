@@ -9,8 +9,13 @@
 import Foundation
 import Supabase
 
+protocol WellbeingTransactionReading: Sendable {
+    func transactionOwnerID() async throws -> String
+    func fetchTransactions(from startDate: String, to endDate: String) async throws -> [WellbeingTransaction]
+}
+
 /// Service for managing wellbeing debt tracking and recovery
-actor WellbeingDebtService {
+actor WellbeingDebtService: WellbeingTransactionReading {
     // MARK: - Properties
 
     private let supabase: SupabaseClient
@@ -71,37 +76,45 @@ actor WellbeingDebtService {
 
     // MARK: - Transaction Operations
 
+    func transactionOwnerID() async throws -> String {
+        try await getCurrentUserId()
+    }
+
     /// Fetch transactions for a specific date range
     /// - Parameters:
     ///   - startDate: Start date in YYYY-MM-DD format
     ///   - endDate: End date in YYYY-MM-DD format
     /// - Returns: Array of transactions within the range
     func fetchTransactions(from startDate: String, to endDate: String) async throws -> [WellbeingTransaction] {
+        let userId = try await getCurrentUserId()
         let response: [WellbeingTransaction] = try await supabase
             .from("wellbeing_transactions")
             .select()
+            .eq("user_id", value: userId)
             .gte("date", value: startDate)
             .lte("date", value: endDate)
             .order("date", ascending: false)
             .execute()
             .value
 
-        return response
+        return response.filter(\.isSupportedForAccounting)
     }
 
     /// Fetch transactions for a specific date
     /// - Parameter date: Date in YYYY-MM-DD format
     /// - Returns: Array of transactions for the date
     func fetchTransactions(for date: String) async throws -> [WellbeingTransaction] {
+        let userId = try await getCurrentUserId()
         let response: [WellbeingTransaction] = try await supabase
             .from("wellbeing_transactions")
             .select()
+            .eq("user_id", value: userId)
             .eq("date", value: date)
             .order("created_at", ascending: false)
             .execute()
             .value
 
-        return response
+        return response.filter(\.isSupportedForAccounting)
     }
 
     /// Manually log a user-created transaction

@@ -4,22 +4,22 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { formatInTimeZone, fromZonedTime } from "npm:date-fns-tz@3.2.0";
 import type {
-  Transaction,
+  CircadianData,
+  CirclePost,
+  ExerciseSession,
   HealthKitSleepData,
   MoodEntry,
-  ExerciseSession,
-  CirclePost,
   Quest,
-  CircadianData,
+  Transaction,
 } from "../_shared/wellbeing-debt-types.ts";
 import {
-  getYesterdayISO,
-  getDateNDaysAgo,
-  getDaysSince,
-  calculateSleepQuality,
-  calculateSleepDeposit,
   calculatePoorSleepWithdrawal,
+  calculateSleepDeposit,
+  calculateSleepQuality,
+  getDaysSince,
+  getYesterdayISO,
 } from "../_shared/wellbeing-debt-utils.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -86,7 +86,7 @@ serve(async (req) => {
     const transactions = await detectUserTransactions(
       supabase,
       user_id || user.id,
-      date || getYesterdayISO(),
+      date,
     );
     await upsertTransactions(supabase, transactions);
 
@@ -133,7 +133,7 @@ async function detectTransactionsForAllUsers(supabase: any) {
       const transactions = await detectUserTransactions(
         supabase,
         user.id,
-        yesterday,
+        undefined,
       );
       await upsertTransactions(supabase, transactions);
       console.log(
@@ -146,28 +146,36 @@ async function detectTransactionsForAllUsers(supabase: any) {
   }
 }
 
-async function detectUserTransactions(
+export async function detectUserTransactions(
   supabase: any,
   userId: string,
-  date: string,
+  requestedDate?: string,
 ): Promise<Transaction[]> {
   const transactions: Transaction[] = [];
 
   // Fetch profile once for grace period calculation
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("created_at")
     .eq("id", userId)
     .single();
 
-  const daysSinceCreation = profile?.created_at
-    ? getDaysSince(profile.created_at, date)
-    : 999; // Default to no grace period if profile not found
+  if (profileError || !profile?.created_at) {
+    throw new Error("Profile unavailable");
+  }
+  const date = requestedDate ?? lastCompleteTransactionDate();
+  const bounds = transactionDayBounds(date);
+
+  const daysSinceCreation = getDaysSince(profile.created_at, date);
 
   // DEPOSITS - Always allowed (no grace period)
   transactions.push(...(await detectSleepDeposits(supabase, userId, date)));
-  transactions.push(...(await detectExerciseDeposits(supabase, userId, date)));
-  transactions.push(...(await detectSocialDeposits(supabase, userId, date)));
+  transactions.push(
+    ...(await detectExerciseDeposits(supabase, userId, date, bounds)),
+  );
+  transactions.push(
+    ...(await detectSocialDeposits(supabase, userId, date, bounds)),
+  );
   transactions.push(...(await detectQuestDeposits(supabase, userId, date)));
 
   // WITHDRAWALS - Apply grace periods for new users
@@ -179,11 +187,8 @@ async function detectUserTransactions(
     transactions.push(...(await detectMoodWithdrawals(supabase, userId, date)));
   }
 
-  // 7-day grace period for social isolation and circadian disruption
+  // 7-day grace period for measured circadian disruption
   if (daysSinceCreation >= 7) {
-    transactions.push(
-      ...(await detectSocialWithdrawals(supabase, userId, date)),
-    );
     transactions.push(
       ...(await detectCircadianWithdrawals(supabase, userId, date)),
     );
@@ -254,14 +259,15 @@ async function detectExerciseDeposits(
   supabase: any,
   userId: string,
   date: string,
+  bounds: { start: string; end: string },
 ): Promise<Transaction[]> {
   try {
     const { data: sessions, error } = await supabase
       .from("exercise_sessions")
       .select("id, exercise_id")
       .eq("user_id", userId)
-      .gte("completed_at", `${date}T00:00:00Z`)
-      .lt("completed_at", `${date}T23:59:59Z`);
+      .gte("completed_at", bounds.start)
+      .lt("completed_at", bounds.end);
 
     if (error || !sessions || sessions.length === 0) {
       return [];
@@ -278,8 +284,14 @@ async function detectExerciseDeposits(
         category: "exercise_completion",
         amount,
         source: "exercise_sessions",
-        description: `${sessionCount} exercise session${sessionCount > 1 ? "s" : ""} completed`,
-        metadata: { session_count: sessionCount },
+        description: `${sessionCount} exercise session${
+          sessionCount > 1 ? "s" : ""
+        } completed`,
+        metadata: {
+          session_count: sessionCount,
+          source_ids: sessions.map((session: { id: string }) => session.id),
+          ...bounds,
+        },
       },
     ];
   } catch (error) {
@@ -295,6 +307,7 @@ async function detectSocialDeposits(
   supabase: any,
   userId: string,
   date: string,
+  bounds: { start: string; end: string },
 ): Promise<Transaction[]> {
   try {
     // Assumption #6: Use circle_posts table only
@@ -302,8 +315,8 @@ async function detectSocialDeposits(
       .from("circle_posts")
       .select("id")
       .eq("user_id", userId)
-      .gte("created_at", `${date}T00:00:00Z`)
-      .lt("created_at", `${date}T23:59:59Z`);
+      .gte("created_at", bounds.start)
+      .lt("created_at", bounds.end);
 
     if (error || !posts || posts.length === 0) {
       return [];
@@ -321,7 +334,11 @@ async function detectSocialDeposits(
         amount,
         source: "circle_posts",
         description: `${postCount} circle post${postCount > 1 ? "s" : ""}`,
-        metadata: { post_count: postCount },
+        metadata: {
+          post_count: postCount,
+          source_ids: posts.map((post: { id: string }) => post.id),
+          ...bounds,
+        },
       },
     ];
   } catch (error) {
@@ -358,7 +375,9 @@ async function detectQuestDeposits(
         category: "quest_completion",
         amount,
         source: "quests",
-        description: `${questCount} quest${questCount > 1 ? "s" : ""} completed`,
+        description: `${questCount} quest${
+          questCount > 1 ? "s" : ""
+        } completed`,
         metadata: { quest_count: questCount },
       },
     ];
@@ -427,9 +446,10 @@ async function detectMoodWithdrawals(
     // This matches the user's local date when they logged the mood
     const { data: moods, error } = await supabase
       .from("moods")
-      .select("mood_score, local_date")
+      .select("id, mood_score, local_date")
       .eq("user_id", userId)
-      .eq("local_date", date);
+      .eq("local_date", date)
+      .order("id", { ascending: true });
 
     if (error || !moods || moods.length === 0) {
       return [];
@@ -444,125 +464,27 @@ async function detectMoodWithdrawals(
       return [];
     }
 
-    // CAP at 2 per day (max -4 total) to not punish honest self-reporting
+    // One aggregate matches the database's per-day/source/category uniqueness key.
     const cappedMoods = negativeMoods.slice(0, 2);
-
-    return cappedMoods.map((mood: { mood_score: number }, idx: number) => ({
+    return [{
       user_id: userId,
       date,
       type: "withdrawal",
       category: "negative_mood",
-      amount: 2, // Reduced from -3, max -4/day with cap
+      amount: cappedMoods.length * 2,
       source: "mood_log",
-      description: `Mood score: ${mood.mood_score}/5`,
+      description: `${cappedMoods.length} low mood check-in${
+        cappedMoods.length === 1 ? "" : "s"
+      }`,
       metadata: {
-        mood_score: mood.mood_score,
-        entry_index: idx,
+        source_ids: cappedMoods.map((mood: { id: string }) => mood.id),
         total_negative_moods: negativeMoods.length,
         capped: negativeMoods.length > 2,
       },
-    }));
+    }];
   } catch (error) {
     console.error(
       `Error detecting mood withdrawals for user ${userId}:`,
-      error,
-    );
-    return [];
-  }
-}
-
-async function detectSocialWithdrawals(
-  supabase: any,
-  userId: string,
-  date: string,
-): Promise<Transaction[]> {
-  try {
-    // STEP 1: Check if user has EVER joined a circle
-    // Users who haven't joined circles should NOT be penalized for "isolation"
-    const { data: memberships, error: membershipError } = await supabase
-      .from("circle_members")
-      .select("id")
-      .eq("user_id", userId)
-      .limit(1);
-
-    if (membershipError) {
-      console.error(
-        `Error checking circle membership for user ${userId}:`,
-        membershipError,
-      );
-      return [];
-    }
-
-    // No circle membership = no isolation penalty
-    if (!memberships || memberships.length === 0) {
-      return [];
-    }
-
-    // STEP 2: Check if we already recorded isolation recently (one-time event)
-    // This prevents daily stacking - isolation is recorded ONCE when it starts
-    const threeDaysAgo = getDateNDaysAgo(date, 3);
-    const { data: existingIsolation, error: isolationError } = await supabase
-      .from("wellbeing_transactions")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("category", "social_isolation")
-      .gte("date", threeDaysAgo)
-      .limit(1);
-
-    if (isolationError) {
-      console.error(
-        `Error checking existing isolation for user ${userId}:`,
-        isolationError,
-      );
-      return [];
-    }
-
-    // Already recorded isolation in last 3 days - don't stack
-    if (existingIsolation && existingIsolation.length > 0) {
-      return [];
-    }
-
-    // STEP 3: Check for 3+ days without circle activity
-    const { data: recentPosts, error: postsError } = await supabase
-      .from("circle_posts")
-      .select("id")
-      .eq("user_id", userId)
-      .gte("created_at", `${threeDaysAgo}T00:00:00Z`)
-      .lt("created_at", `${date}T23:59:59Z`);
-
-    if (postsError) {
-      console.error(
-        `Error checking social activity for user ${userId}:`,
-        postsError,
-      );
-      return [];
-    }
-
-    // Has activity in last 3 days - no isolation
-    if (recentPosts && recentPosts.length > 0) {
-      return [];
-    }
-
-    // STEP 4: Record ONE-TIME isolation event
-    return [
-      {
-        user_id: userId,
-        date,
-        type: "withdrawal",
-        category: "social_isolation",
-        amount: 4, // Reduced from 5, and now one-time not daily
-        source: "inferred",
-        description:
-          "Social isolation started (3+ days without circle activity)",
-        metadata: {
-          days_isolated: 3,
-          isolation_type: "onset", // Marks this as start of isolation, not ongoing
-        },
-      },
-    ];
-  } catch (error) {
-    console.error(
-      `Error detecting social withdrawals for user ${userId}:`,
       error,
     );
     return [];
@@ -619,7 +541,10 @@ async function detectCircadianWithdrawals(
 // TRANSACTION PERSISTENCE
 // =============================================================================
 
-async function upsertTransactions(supabase: any, transactions: Transaction[]) {
+export async function upsertTransactions(
+  supabase: any,
+  transactions: Transaction[],
+) {
   if (transactions.length === 0) return;
 
   const { error } = await supabase
@@ -633,4 +558,26 @@ async function upsertTransactions(supabase: any, transactions: Transaction[]) {
     console.error("Error upserting transactions:", error);
     throw error;
   }
+}
+
+/** Keep the existing UTC ledger day; include the final fractional second. */
+export function transactionDayBounds(
+  date: string,
+): { start: string; end: string } {
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+    new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date
+  ) {
+    throw new Error("Invalid transaction date");
+  }
+  const start = new Date(`${date}T00:00:00Z`);
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 1);
+  return { start: start.toISOString(), end: end.toISOString() };
+}
+
+export function lastCompleteTransactionDate(now = new Date()): string {
+  const date = new Date(now);
+  date.setUTCDate(date.getUTCDate() - 1);
+  return date.toISOString().slice(0, 10);
 }

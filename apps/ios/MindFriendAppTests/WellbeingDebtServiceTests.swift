@@ -11,6 +11,7 @@
 //  The working tests for DebtScore, Transaction, and enums are kept.
 
 import XCTest
+import SwiftUI
 @testable import MindFriendApp
 
 final class WellbeingDebtServiceTests: XCTestCase {
@@ -151,5 +152,95 @@ final class WellbeingDebtServiceTests: XCTestCase {
 
         let generationError = WellbeingDebtError.generationFailed("API timeout")
         XCTAssertTrue(generationError.errorDescription?.contains("API timeout") ?? false)
+    }
+}
+
+@MainActor
+final class DebtBreakdownRegressionTests: XCTestCase {
+    private let owner = "11111111-1111-4111-8111-111111111111"
+
+    func testWindowsContainExactlySevenFourteenAndThirtyCompleteUTCDays() {
+        let now = ISO8601DateFormatter().date(from: "2026-10-23T18:00:00Z")!
+        for (days, start) in [(7, "2026-10-16"), (14, "2026-10-09"), (30, "2026-09-23")] {
+            let window = DebtTransactionWindow(days: days, now: now)
+            XCTAssertEqual(window.start, start)
+            XCTAssertEqual(window.end, "2026-10-22")
+        }
+        let nearMidnight = ISO8601DateFormatter().date(from: "2026-03-09T03:30:00Z")!
+        XCTAssertEqual(DebtTransactionWindow(days: 7, now: nearMidnight).end, "2026-03-08")
+    }
+
+    func testAccountingExcludesOldFutureOtherOwnerAndUnsupportedIsolationButKeepsExplicitLogs() {
+        let now = ISO8601DateFormatter().date(from: "2026-10-23T18:00:00Z")!
+        let window = DebtTransactionWindow(days: 14, now: now)
+        let records = [
+            transaction(date: "2026-10-09", amount: Decimal(string: "1.5")!),
+            transaction(date: "2026-10-22", type: .withdrawal, amount: Decimal(string: "0.25")!),
+            transaction(date: "2026-10-22", type: .withdrawal, category: .socialIsolation, amount: 5, source: .inferred),
+            transaction(date: "2026-01-29", amount: 100),
+            transaction(date: "2026-10-23", amount: 100),
+            transaction(date: "2026-10-22", amount: 100, user: "other"),
+        ]
+        let accounted = window.accounted(records, owner: owner)
+        XCTAssertEqual(accounted.count, 2)
+        let balance = accounted.reduce(Decimal.zero) { $0 + ($1.type == .deposit ? $1.amount : -$1.amount) }
+        XCTAssertEqual(balance, Decimal(string: "1.25")!)
+        XCTAssertTrue(transaction(date: "2026-10-22", category: .socialIsolation, amount: 2).isSupportedForAccounting)
+    }
+
+    func testRenderCurrentWindowAndExactDecimalSumsWithStaleScore() async throws {
+        let window = DebtTransactionWindow(days: 7)
+        let fixture = DebtTransactionFixture(owner: owner, records: [
+            transaction(date: window.end, amount: Decimal(string: "1.5")!),
+            transaction(date: window.end, type: .withdrawal, amount: Decimal(string: "0.25")!),
+            transaction(date: window.end, type: .withdrawal, category: .socialIsolation, amount: 5, source: .inferred),
+            transaction(date: "2026-01-29", amount: 100),
+        ])
+        let score = DebtScore(id: nil, userId: owner, date: "2026-01-29", dailyBalance: 0,
+            rollingDebt7Day: 22, rollingDebt14Day: 22, rollingDebt30Day: 22,
+            trend: TrendData(direction: .stable, velocity: 0, projection7Day: 22),
+            thresholdStatus: ThresholdStatus(currentDebt: 22, threshold: nil, severity: .safe, daysUntilCrash: nil, confidence: 0), createdAt: nil)
+        let host = UIHostingController(rootView: DebtBreakdownView(debtScore: score, transactionReader: fixture)
+            .environmentObject(DependencyContainer.preview).environmentObject(AppState()).preferredColorScheme(.dark))
+        let windowUI = UIWindow(frame: CGRect(x: 0, y: 0, width: 393, height: 852))
+        windowUI.rootViewController = host
+        windowUI.makeKeyAndVisible()
+        defer { windowUI.isHidden = true }
+        for _ in 0..<50 {
+            if await fixture.ownerReads >= 2 { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let ownerReads = await fixture.ownerReads
+        XCTAssertGreaterThanOrEqual(ownerReads, 2, "Wait for the post-read account check before capturing the completed UI")
+        try await Task.sleep(for: .milliseconds(300))
+        host.view.layoutIfNeeded()
+        let renderer = UIGraphicsImageRenderer(bounds: host.view.bounds)
+        let attachment = XCTAttachment(image: renderer.image { _ in host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true) })
+        attachment.name = "Issue21-current-window-reconciled-decimals"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        let request = await fixture.request
+        XCTAssertEqual(request?.0, window.start)
+        XCTAssertEqual(request?.1, window.end)
+    }
+
+    private func transaction(date: String, type: TransactionType = .deposit,
+        category: TransactionCategory = .positiveEvent, amount: Decimal,
+        source: TransactionSource = .userLogged, user: String? = nil) -> WellbeingTransaction {
+        WellbeingTransaction(id: UUID(), userId: user ?? owner, date: date, type: type,
+            category: category, amount: amount, source: source, description: "Synthetic check-in", metadata: nil, createdAt: nil)
+    }
+}
+
+private actor DebtTransactionFixture: WellbeingTransactionReading {
+    let owner: String
+    let records: [WellbeingTransaction]
+    var request: (String, String)?
+    var ownerReads = 0
+    init(owner: String, records: [WellbeingTransaction]) { self.owner = owner; self.records = records }
+    func transactionOwnerID() async throws -> String { ownerReads += 1; return owner }
+    func fetchTransactions(from: String, to: String) async throws -> [WellbeingTransaction] {
+        request = (from, to)
+        return records
     }
 }

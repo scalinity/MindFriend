@@ -59,6 +59,10 @@ struct WellbeingTransaction: Identifiable, Codable, Equatable {
     let metadata: [String: WellbeingAnyCodable]?
     let createdAt: Date?
 
+    var isSupportedForAccounting: Bool {
+        !(category == .socialIsolation && source == .inferred)
+    }
+
     enum CodingKeys: String, CodingKey {
         case id
         case userId = "user_id"
@@ -74,6 +78,34 @@ struct WellbeingTransaction: Identifiable, Codable, Equatable {
 }
 
 // MARK: - Debt Score Models
+
+/// The selected number of complete UTC days in the existing debt ledger.
+struct DebtTransactionWindow {
+    let start: String
+    let end: String
+    let timezone = "UTC"
+
+    init(days: Int, now: Date = Date()) {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let endDate = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: now))!
+        let startDate = calendar.date(byAdding: .day, value: -(days - 1), to: endDate)!
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        start = formatter.string(from: startDate)
+        end = formatter.string(from: endDate)
+    }
+
+    func accounted(_ records: [WellbeingTransaction], owner: String) -> [WellbeingTransaction] {
+        records.filter {
+            $0.userId.lowercased() == owner.lowercased() && $0.date >= start && $0.date <= end &&
+            $0.isSupportedForAccounting
+        }
+    }
+}
 
 enum DebtTrendDirection: String, Codable {
     case improving

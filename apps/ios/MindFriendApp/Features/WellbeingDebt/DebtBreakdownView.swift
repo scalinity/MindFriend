@@ -10,14 +10,23 @@ import SwiftUI
 
 struct DebtBreakdownView: View {
     @EnvironmentObject var container: DependencyContainer
+    @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) var dismiss
 
     let debtScore: DebtScore
+    private let transactionReader: (any WellbeingTransactionReading)?
 
     @State private var transactions: [WellbeingTransaction] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var selectedDateRange: DateRange = .week
+    @State private var displayedWindow: DebtTransactionWindow?
+    @State private var loadID = UUID()
+
+    init(debtScore: DebtScore, transactionReader: (any WellbeingTransactionReading)? = nil) {
+        self.debtScore = debtScore
+        self.transactionReader = transactionReader
+    }
 
     enum DateRange: String, CaseIterable {
         case week = "7 Days"
@@ -44,10 +53,11 @@ struct DebtBreakdownView: View {
                 }
                 .pickerStyle(.segmented)
                 .padding()
-                .onChange(of: selectedDateRange) { _, _ in
-                    Task {
-                        await loadTransactions()
-                    }
+                if let window = displayedWindow {
+                    Text("\(window.start) – \(window.end) · \(window.timezone)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal)
                 }
 
                 if isLoading {
@@ -70,7 +80,7 @@ struct DebtBreakdownView: View {
                     }
                 }
             }
-            .task {
+            .task(id: "\(selectedDateRange.days)-\(appState.currentUser?.id.uuidString ?? "signed-out")") {
                 await loadTransactions()
             }
         }
@@ -81,6 +91,11 @@ struct DebtBreakdownView: View {
     @ViewBuilder
     private var transactionsList: some View {
         List {
+            Section {
+                Text("Missing circle activity is not treated as social isolation. Historical inferred penalties are excluded.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             // Summary section
             Section {
                 summaryStats
@@ -122,7 +137,7 @@ struct DebtBreakdownView: View {
 
                 Spacer()
 
-                Text("\(netBalance > 0 ? "+" : "")\(Int(truncating: netBalance as NSDecimalNumber))")
+                Text("\(netBalance > 0 ? "+" : "")\(NSDecimalNumber(decimal: netBalance).stringValue)")
                     .font(.title2.bold())
                     .foregroundStyle(netBalance >= 0 ? .green : .red)
             }
@@ -136,7 +151,7 @@ struct DebtBreakdownView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Text("\(value > 0 ? "+" : "")\(Int(truncating: value as NSDecimalNumber))")
+            Text("\(value > 0 ? "+" : "")\(NSDecimalNumber(decimal: value).stringValue)")
                 .font(.title3.bold())
                 .foregroundStyle(color)
         }
@@ -173,7 +188,7 @@ struct DebtBreakdownView: View {
             Spacer()
 
             // Amount
-            Text("\(transaction.type == .deposit ? "+" : "-")\(Int(truncating: transaction.amount as NSDecimalNumber))")
+            Text("\(transaction.type == .deposit ? "+" : "-")\(NSDecimalNumber(decimal: transaction.amount).stringValue)")
                 .font(.subheadline.bold())
                 .foregroundStyle(transaction.type == .deposit ? .green : .red)
         }
@@ -251,35 +266,29 @@ struct DebtBreakdownView: View {
     // MARK: - Helper Methods
 
     private func loadTransactions() async {
+        let requestID = UUID()
+        loadID = requestID
         isLoading = true
+        transactions = []
         errorMessage = nil
+        defer { if loadID == requestID { isLoading = false } }
 
         do {
-            let endDate = debtScore.date
-            let startDate = calculateStartDate(from: endDate, daysBack: selectedDateRange.days)
-
-            transactions = try await container.wellbeingDebtService.fetchTransactions(
-                from: startDate,
-                to: endDate
+            let reader = transactionReader ?? container.wellbeingDebtService
+            let owner = try await reader.transactionOwnerID()
+            let window = DebtTransactionWindow(days: selectedDateRange.days)
+            displayedWindow = window
+            let loaded = try await reader.fetchTransactions(
+                from: window.start,
+                to: window.end
             )
-
-            isLoading = false
+            let activeOwner = try await reader.transactionOwnerID()
+            guard loadID == requestID, !Task.isCancelled, activeOwner == owner else { return }
+            transactions = window.accounted(loaded, owner: owner)
         } catch {
+            guard loadID == requestID, !Task.isCancelled else { return }
             errorMessage = error.localizedDescription
-            isLoading = false
         }
-    }
-
-    private func calculateStartDate(from endDate: String, daysBack: Int) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withFullDate]
-
-        guard let date = formatter.date(from: endDate) else {
-            return endDate
-        }
-
-        let startDate = Calendar.current.date(byAdding: .day, value: -daysBack, to: date) ?? date
-        return formatter.string(from: startDate)
     }
 
     private func formatCategory(_ category: TransactionCategory) -> String {
