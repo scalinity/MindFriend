@@ -434,7 +434,7 @@ async function getUserProfile(
     const profile = {
       user_id: userId,
       learned_threshold: null,
-      crash_history: [],
+      crash_history: { crashes: [], last_updated: null },
       top_drains: { categories: [] },
       top_deposits: { categories: [] },
     };
@@ -524,7 +524,8 @@ async function reconcileCrashDetection(
   const { error } = await supabase.from("wellbeing_debt_profiles").update({
     learned_threshold: learned > 0 ? learned : null,
     last_crash_date: unique.map((crash) => crash.date).sort().at(-1) ?? null,
-    crash_history: unique,
+    // Released iOS clients decode this wrapped shape; reads also accept database-default arrays.
+    crash_history: { crashes: unique, last_updated: new Date().toISOString() },
     updated_at: new Date().toISOString(),
   }).eq("user_id", userId);
   if (error) throw new Error("Debt profile could not be saved");
