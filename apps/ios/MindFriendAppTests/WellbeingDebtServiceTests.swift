@@ -412,3 +412,344 @@ private actor DebtCalculationFixture: WellbeingDebtReading {
     func backfillTransactions(days: Int) async throws -> Int { XCTFail("Reading a score must not start historical reprocessing"); return 0 }
     func fetchTransactions(from: String, to: String) async throws -> [WellbeingTransaction] { score.sourceTransactions ?? [] }
 }
+
+@MainActor
+final class DebtRecalculationRegressionTests: XCTestCase {
+    private func fixture(behavior: DebtRefreshFixture.Behavior = .success, large: Bool = false) -> DebtRefreshFixture {
+        let owner = "11111111-1111-4111-8111-111111111111"
+        let date = DebtTransactionWindow(days: 1).end
+        let categories: [TransactionCategory] = [.workStress, .conflict, .negativeMood, .healthIssue, .missedSleep, .socialIsolation]
+        let formatter = ISO8601DateFormatter(); formatter.formatOptions = [.withFullDate]
+        let end = formatter.date(from: date)!
+        let records = (0..<(large ? 180 : 1)).map { index in
+            WellbeingTransaction(id: UUID(), userId: owner,
+                date: formatter.string(from: end.addingTimeInterval(-Double(index / categories.count) * 86_400)),
+                type: .withdrawal, category: categories[index % categories.count],
+                amount: 1, source: .userLogged, description: "Synthetic event", metadata: nil, createdAt: nil)
+        }
+        func value(_ days: Int) -> Decimal {
+            let window = DebtTransactionWindow(days: days)
+            return records.filter { $0.date >= window.start && $0.date <= window.end }.reduce(0) { $0 + $1.amount }
+        }
+        let score = DebtScore(id: nil, userId: owner, date: date, dailyBalance: -(large ? 6 : 1), rollingDebt7Day: value(7),
+            rollingDebt14Day: value(14), rollingDebt30Day: value(30),
+            trend: TrendData(direction: .stable, velocity: 0, projection7Day: value(14), available: large,
+                observedDays: large ? 7 : 1, accountingVersion: 2, calculatedAt: "2026-10-23T21:00:00Z"),
+            thresholdStatus: ThresholdStatus(currentDebt: value(14), threshold: -75, severity: large ? .danger : .safe, daysUntilCrash: nil, confidence: 0),
+            createdAt: nil, sourceTransactions: records)
+        return DebtRefreshFixture(score: score, behavior: behavior)
+    }
+
+    func testOneCalculationWithoutBackfillAndMeasuredStagesForLargeResponse() async throws {
+        let reader = fixture(large: true)
+        let operation = DebtRecalculation(timeout: .seconds(2))
+        operation.start(using: reader)
+        operation.start(using: reader)
+        try await finish(operation)
+        XCTAssertNotNil(operation.result)
+        XCTAssertNil(operation.errorMessage)
+        let calls = await reader.calls
+        let backfills = await reader.backfills
+        XCTAssertEqual(calls, 1)
+        XCTAssertEqual(backfills, 0)
+        XCTAssertNotNil(operation.stageMilliseconds["calculation"])
+        XCTAssertNotNil(operation.stageMilliseconds["details"])
+        let attachment = XCTAttachment(string: String(describing: operation.stageMilliseconds))
+        attachment.name = "Issue22-synthetic-stage-milliseconds-large-response"
+        attachment.lifetime = .keepAlways; add(attachment)
+    }
+
+    func testTimeoutCancelsAndRetryDoesNotOverlap() async throws {
+        let reader = fixture(behavior: .slow)
+        let operation = DebtRecalculation(timeout: .milliseconds(60))
+        operation.start(using: reader)
+        try await finish(operation)
+        XCTAssertNil(operation.result)
+        XCTAssertTrue(operation.errorMessage?.contains("too long") == true)
+        XCTAssertLessThan(operation.stageMilliseconds["total"] ?? 10_000, 1_000)
+        await reader.setBehavior(.success)
+        operation.start(using: reader)
+        try await finish(operation)
+        XCTAssertNotNil(operation.result)
+        let maximum = await reader.maximumActive
+        XCTAssertEqual(maximum, 1)
+    }
+
+    func testEmptyOfflineAndBackendFailureAllowRetryWithoutFabricatingScore() async throws {
+        for behavior in [DebtRefreshFixture.Behavior.empty, .offline, .backend] {
+            let reader = fixture(behavior: behavior)
+            let operation = DebtRecalculation(timeout: .seconds(2))
+            operation.start(using: reader)
+            try await finish(operation)
+            XCTAssertNil(operation.result)
+            XCTAssertNotNil(operation.errorMessage)
+            await reader.setBehavior(.success)
+            operation.start(using: reader)
+            try await finish(operation)
+            XCTAssertNotNil(operation.result)
+        }
+    }
+
+    func testCancellationWaitsForCleanupBeforeRetry() async throws {
+        let reader = fixture(behavior: .slow)
+        let operation = DebtRecalculation(timeout: .seconds(2))
+        operation.start(using: reader)
+        for _ in 0..<100 {
+            if await reader.calls > 0 { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        operation.cancel()
+        operation.start(using: reader)
+        try await finish(operation)
+        XCTAssertNil(operation.result)
+        XCTAssertNil(operation.errorMessage)
+        let calls = await reader.calls
+        XCTAssertEqual(calls, 1, "Retry must wait for the canceled work to finish")
+        await reader.setBehavior(.success)
+        operation.start(using: reader)
+        try await finish(operation)
+        XCTAssertNotNil(operation.result)
+    }
+
+    func testRenderNonblockingProgressAndTimeoutRecovery() async throws {
+        let defaults = UserDefaults.standard
+        let saved = defaults.object(forKey: "wellbeing_debt_tutorial_completed")
+        defaults.set(true, forKey: "wellbeing_debt_tutorial_completed")
+        defer { if let saved { defaults.set(saved, forKey: "wellbeing_debt_tutorial_completed") } else { defaults.removeObject(forKey: "wellbeing_debt_tutorial_completed") } }
+        let reader = fixture(behavior: .slow)
+        let operation = DebtRecalculation(timeout: .seconds(3))
+        let host = UIHostingController(rootView: WellbeingDebtDashboardView(reader: reader, recalculation: operation)
+            .environmentObject(DependencyContainer.preview).environmentObject(AppState()).preferredColorScheme(.dark))
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 393, height: 852))
+        window.rootViewController = host; window.makeKeyAndVisible()
+        defer { operation.cancel(); window.isHidden = true }
+        for _ in 0..<200 {
+            if await reader.ownerReads >= 2 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let initialReads = await reader.ownerReads
+        XCTAssertGreaterThanOrEqual(initialReads, 2, "Wait for the hosted dashboard read to complete")
+        try await Task.sleep(for: .milliseconds(100))
+        capture(host, name: "Issue22-ready-before-analysis")
+        XCTAssertTrue(activate("Analyze History", in: host.view.window ?? host.view), "Start through the rendered analysis button")
+        try await Task.sleep(for: .milliseconds(200))
+        capture(host, name: "Issue22-inline-progress-with-cancel")
+        XCTAssertTrue(operation.isRunning, "Activate Cancel before the injected test deadline")
+        XCTAssertTrue(activate("Cancel", in: host.view.window ?? host.view), "Cancel through the rendered inline control")
+        try await finish(operation)
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertNil(operation.result)
+        XCTAssertTrue(activate("Analyze History", in: host.view.window ?? host.view), "The screen must be usable again after cancellation")
+        try await finish(operation)
+        try await Task.sleep(for: .milliseconds(200))
+        capture(host, name: "Issue22-timeout-with-retry")
+        await reader.setBehavior(.success)
+        XCTAssertTrue(activate("Retry", in: host.view.window ?? host.view), "Activate the rendered recovery control")
+        try await finish(operation)
+        XCTAssertNotNil(operation.result)
+        try await Task.sleep(for: .milliseconds(200))
+        capture(host, name: "Issue22-retry-control-completed")
+    }
+
+    func testLifecycleCancellationClearsCompletedAccountSnapshot() async throws {
+        let reader = fixture()
+        let operation = DebtRecalculation(timeout: .seconds(1))
+        operation.start(using: reader)
+        try await finish(operation)
+        XCTAssertNotNil(operation.result)
+        operation.cancel()
+        XCTAssertNil(operation.result)
+        XCTAssertNil(operation.errorMessage)
+        XCTAssertTrue(operation.canStart)
+    }
+
+    func testAccountChangeRejectsLateCalculation() async throws {
+        let reader = fixture(behavior: .delayedSuccess)
+        let operation = DebtRecalculation(timeout: .seconds(1))
+        operation.start(using: reader)
+        for _ in 0..<100 {
+            if await reader.calls > 0 { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        await reader.setOwner("22222222-2222-4222-8222-222222222222")
+        try await finish(operation)
+        XCTAssertNil(operation.result)
+        XCTAssertNil(operation.errorMessage)
+    }
+
+    func testDefaultDeadlineCancelsNativeURLSessionRequest() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [DebtStalledURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let reader = fixture(behavior: .transport)
+        await reader.setTransport(session)
+        let initialStops = DebtStalledURLProtocol.events.stopped
+        let operation = DebtRecalculation()
+        operation.start(using: reader)
+        for _ in 0..<3_000 {
+            if operation.canStart { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(operation.canStart)
+        XCTAssertTrue(operation.errorMessage?.contains("too long") == true)
+        XCTAssertGreaterThan(DebtStalledURLProtocol.events.stopped, initialStops)
+        let elapsed = operation.stageMilliseconds["total"] ?? 0
+        XCTAssertGreaterThanOrEqual(elapsed, 24_000)
+        XCTAssertLessThan(elapsed, 30_000)
+        let attachment = XCTAttachment(string: "Default deadline canceled native URLSession at \(elapsed)ms")
+        attachment.name = "Issue22-native-URLSession-default-deadline"
+        attachment.lifetime = .keepAlways; add(attachment)
+    }
+
+    func testLateInitialLoadCannotReplaceSuccessfulRecalculation() async throws {
+        let score = await fixture().score
+        let reader = DebtHeldLoadFixture(score: score)
+        let operation = DebtRecalculation(timeout: .seconds(2))
+        let defaults = UserDefaults.standard
+        let saved = defaults.object(forKey: "wellbeing_debt_tutorial_completed")
+        defaults.set(true, forKey: "wellbeing_debt_tutorial_completed")
+        defer { if let saved { defaults.set(saved, forKey: "wellbeing_debt_tutorial_completed") } else { defaults.removeObject(forKey: "wellbeing_debt_tutorial_completed") } }
+        let host = UIHostingController(rootView: WellbeingDebtDashboardView(reader: reader, recalculation: operation)
+            .environmentObject(DependencyContainer.preview).environmentObject(AppState()).preferredColorScheme(.dark))
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 393, height: 852))
+        window.rootViewController = host; window.makeKeyAndVisible()
+        defer { operation.cancel(); window.isHidden = true }
+        for _ in 0..<200 {
+            if await reader.isHeld { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let held = await reader.isHeld
+        XCTAssertTrue(held)
+        operation.start(using: reader)
+        try await finish(operation)
+        XCTAssertNotNil(operation.result)
+        await reader.release()
+        for _ in 0..<200 {
+            if await reader.ownerReads >= 4 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let reads = await reader.ownerReads
+        XCTAssertGreaterThanOrEqual(reads, 4, "The older read must reach its final publication check")
+        try await Task.sleep(for: .milliseconds(200))
+        capture(host, name: "Issue22-recalculated-score-survives-late-load")
+        XCTAssertNotNil(findElement("14-Day Debt Score", in: host.view.window ?? host.view))
+    }
+
+    private func findElement(_ label: String, in root: NSObject) -> NSObject? {
+        var visited = Set<ObjectIdentifier>()
+        var description: [String] = []
+        func find(_ item: NSObject) -> NSObject? {
+            guard visited.insert(ObjectIdentifier(item)).inserted else { return nil }
+            let count = item.accessibilityElementCount()
+            description.append("\(type(of: item)) count=\(count) label=\(item.accessibilityLabel ?? "nil")")
+            if item.accessibilityLabel == label { return item }
+            if count > 0 && count < 256 {
+                for index in 0..<count {
+                    if let child = item.accessibilityElement(at: index) as? NSObject,
+                       let found = find(child) { return found }
+                }
+            }
+            if let view = item as? UIView {
+                for child in view.subviews { if let found = find(child) { return found } }
+            }
+            return nil
+        }
+        let target = find(root)
+        let details = XCTAttachment(string: "target=\(String(describing: target.map { type(of: $0) }))\n" + description.joined(separator: "\n"))
+        details.name = "Issue22-accessibility-\(label)"
+        details.lifetime = .keepAlways; add(details)
+        return target
+    }
+
+    private func activate(_ label: String, in root: NSObject) -> Bool {
+        findElement(label, in: root)?.accessibilityActivate() ?? false
+    }
+
+    private func finish(_ operation: DebtRecalculation) async throws {
+        for _ in 0..<600 {
+            if operation.canStart { return }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTFail("Calculation controls must recover within the bounded test interval")
+        operation.cancel()
+    }
+    private func capture(_ host: UIHostingController<some View>, name: String) {
+        host.view.layoutIfNeeded()
+        let attachment = XCTAttachment(image: UIGraphicsImageRenderer(bounds: host.view.bounds).image { _ in
+            host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
+        })
+        attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
+    }
+}
+private actor DebtRefreshFixture: WellbeingDebtReading {
+    enum Behavior { case success, slow, empty, offline, backend, transport, delayedSuccess }
+    let score: DebtScore
+    var behavior: Behavior
+    var currentOwner: String
+    func setOwner(_ owner: String) { currentOwner = owner }
+    var ownerReads = 0
+    var calls = 0
+    var backfills = 0
+    var active = 0
+    var maximumActive = 0
+    var transport: URLSession?
+    func setTransport(_ session: URLSession) { transport = session }
+    init(score: DebtScore, behavior: Behavior) { self.score = score; self.behavior = behavior; self.currentOwner = score.userId }
+    func setBehavior(_ behavior: Behavior) { self.behavior = behavior }
+    func transactionOwnerID() async throws -> String { ownerReads += 1; return currentOwner }
+    func fetchLatestDebtScore() async throws -> DebtScore? { nil }
+    func fetchProfile() async throws -> WellbeingDebtProfile? { nil }
+    func fetchActiveRecoveryProgram() async throws -> RecoveryProgram? { nil }
+    func backfillTransactions(days: Int) async throws -> Int { backfills += 1; return 0 }
+    func fetchTransactions(from: String, to: String) async throws -> [WellbeingTransaction] { score.calculationTransactions ?? [] }
+    func calculateDebtScore(for date: String?) async throws -> DebtScore {
+        calls += 1; active += 1; maximumActive = max(maximumActive, active)
+        defer { active -= 1 }
+        switch behavior {
+        case .success: try await Task.sleep(for: .milliseconds(25)); return score
+        case .slow: try await Task.sleep(for: .seconds(20)); return score
+        case .delayedSuccess: try await Task.sleep(for: .milliseconds(80)); return score
+        case .empty: throw WellbeingDebtError.needsMoreData("No recorded events in this window.")
+        case .offline: throw URLError(.notConnectedToInternet)
+        case .backend: throw URLError(.badServerResponse)
+        case .transport:
+            guard let transport else { throw URLError(.badURL) }
+            _ = try await transport.data(from: URL(string: "https://debt.synthetic.invalid/stall")!)
+            return score
+        }
+    }
+}
+
+private final class DebtStalledURLProtocol: URLProtocol {
+    static let events = DebtURLProtocolEvents()
+    override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "debt.synthetic.invalid" }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {}
+    override func stopLoading() { Self.events.recordStop() }
+}
+// URLSession invokes protocol callbacks off the main actor; all counter access is locked.
+private final class DebtURLProtocolEvents: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    var stopped: Int { lock.lock(); defer { lock.unlock() }; return count }
+    func recordStop() { lock.lock(); count += 1; lock.unlock() }
+}
+
+private actor DebtHeldLoadFixture: WellbeingDebtReading {
+    let score: DebtScore
+    var ownerReads = 0
+    var isHeld = false
+    private var continuation: CheckedContinuation<RecoveryProgram?, Never>?
+    init(score: DebtScore) { self.score = score }
+    func transactionOwnerID() async throws -> String { ownerReads += 1; return score.userId }
+    func fetchLatestDebtScore() async throws -> DebtScore? { nil }
+    func fetchProfile() async throws -> WellbeingDebtProfile? { nil }
+    func fetchActiveRecoveryProgram() async throws -> RecoveryProgram? {
+        await withCheckedContinuation { continuation in self.continuation = continuation; isHeld = true }
+    }
+    func release() { continuation?.resume(returning: nil); continuation = nil }
+    func calculateDebtScore(for date: String?) async throws -> DebtScore { score }
+    func backfillTransactions(days: Int) async throws -> Int { XCTFail("No historical fan-out"); return 0 }
+    func fetchTransactions(from: String, to: String) async throws -> [WellbeingTransaction] { score.calculationTransactions ?? [] }
+}
