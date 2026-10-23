@@ -15,7 +15,13 @@ struct WellbeingDebtDashboardView: View {
     @State private var loadID = UUID()
     @State private var needsRefresh = false
 
-    init(reader: (any WellbeingDebtReading)? = nil) { self.reader = reader }
+    @StateObject private var recalculation: DebtRecalculation
+    @State private var failedCalculation = false
+
+    init(reader: (any WellbeingDebtReading)? = nil, recalculation: DebtRecalculation? = nil) {
+        self.reader = reader
+        _recalculation = StateObject(wrappedValue: recalculation ?? DebtRecalculation())
+    }
     private var service: any WellbeingDebtReading { reader ?? container.wellbeingDebtService }
     @Environment(\.dismiss) var dismiss
 
@@ -26,10 +32,6 @@ struct WellbeingDebtDashboardView: View {
     @State private var showingBreakdown = false
     @State private var showingRecoveryProgram = false
     @State private var hasActiveRecoveryProgram = false
-    @State private var isCalculating = false
-    @State private var calculationProgress: String?
-    @State private var isRecalculating = false
-    @State private var recalculationProgress: String?
 
     // Tutorial state
     @AppStorage("wellbeing_debt_tutorial_completed") private var tutorialCompleted = false
@@ -86,17 +88,17 @@ struct WellbeingDebtDashboardView: View {
                         } label: {
                             Label("Refresh", systemImage: "arrow.clockwise")
                         }
+                        .disabled(!recalculation.canStart)
 
                         Divider()
 
                         Button {
-                            Task {
-                                await recalculateFromHistory()
-                            }
+                            errorMessage = nil
+                            beginCalculation()
                         } label: {
                             Label("Recalculate from History", systemImage: "arrow.counterclockwise.circle")
                         }
-                        .disabled(isRecalculating)
+                        .disabled(!recalculation.canStart)
 
                         Divider()
 
@@ -138,11 +140,40 @@ struct WellbeingDebtDashboardView: View {
                     .environmentObject(container)
             }
             .task(id: appState.currentUser?.id) {
+                recalculation.cancel()
                 await loadData()
             }
-            .overlay {
-                if isRecalculating {
-                    recalculatingOverlay
+            .onDisappear { recalculation.cancel() }
+            .safeAreaInset(edge: .bottom) {
+                if recalculation.isRunning {
+                    HStack(spacing: 12) {
+                        ProgressView()
+                        Text(recalculation.progress ?? "Calculating recorded history…")
+                            .font(.subheadline)
+                        Spacer()
+                        Button("Cancel") { recalculation.cancel() }
+                    }
+                    .padding()
+                    .background(.regularMaterial)
+                }
+            }
+            .onReceive(recalculation.$result) { result in
+                guard let result else { return }
+                if let visibleOwner = appState.currentUser?.id,
+                   String(describing: visibleOwner).lowercased() != result.score.userId.lowercased() { return }
+                loadID = UUID()
+                isLoading = false
+                latestScore = result.score
+                profile = result.profile
+                needsRefresh = false
+                errorMessage = nil
+                failedCalculation = false
+                NotificationCenter.default.post(name: .wellbeingDebtDidRecalculate, object: nil)
+            }
+            .onReceive(recalculation.$errorMessage) { message in
+                if let message {
+                    failedCalculation = true
+                    errorMessage = message
                 }
             }
             .onAppear {
@@ -158,35 +189,6 @@ struct WellbeingDebtDashboardView: View {
                 })
                 .environmentObject(container)
             }
-        }
-    }
-
-    // MARK: - Recalculating Overlay
-
-    @ViewBuilder
-    private var recalculatingOverlay: some View {
-        ZStack {
-            Color.black.opacity(0.4)
-                .ignoresSafeArea()
-
-            VStack(spacing: 20) {
-                ProgressView()
-                    .scaleEffect(1.5)
-                    .tint(.white)
-
-                Text("Recalculating")
-                    .font(.headline)
-                    .foregroundStyle(.white)
-
-                if let progress = recalculationProgress {
-                    Text(progress)
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.8))
-                        .multilineTextAlignment(.center)
-                }
-            }
-            .padding(32)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
         }
     }
 
@@ -482,19 +484,11 @@ struct WellbeingDebtDashboardView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
 
-            if let progress = calculationProgress {
-                Text(progress)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 4)
-            }
-
             Button {
-                Task {
-                    await calculateNow()
-                }
+                errorMessage = nil
+                beginCalculation()
             } label: {
-                if isCalculating {
+                if recalculation.isRunning {
                     HStack(spacing: 8) {
                         ProgressView()
                             .frame(width: 16, height: 16)
@@ -505,83 +499,19 @@ struct WellbeingDebtDashboardView: View {
                 }
             }
             .buttonStyle(.borderedProminent)
-            .disabled(isCalculating)
+            .disabled(!recalculation.canStart)
             .padding(.top, 8)
         }
         .padding(.top, 100)
     }
 
-    private func calculateNow() async {
-        isCalculating = true
-        let requestID = UUID()
-        loadID = requestID
+    private func beginCalculation() {
+        guard recalculation.canStart else { return }
+        loadID = UUID()
+        isLoading = false
         errorMessage = nil
-        calculationProgress = nil
-
-        defer { isCalculating = false; calculationProgress = nil }
-        do {
-            // Step 1: Backfill transactions from historical data
-            calculationProgress = "Detecting transactions from mood history..."
-            let transactionCount = try await service.backfillTransactions(days: 30)
-
-            // Step 2: Calculate debt score
-            calculationProgress = "Found \(transactionCount) transactions. Calculating score..."
-            let score = try await service.calculateDebtScore(for: nil)
-
-            // Step 3: Fetch profile
-            let loadedProfile = try await service.fetchProfile()
-            let owner = try await service.transactionOwnerID()
-            guard loadID == requestID, !Task.isCancelled, score.userId.lowercased() == owner.lowercased() else { return }
-            latestScore = score
-            profile = loadedProfile
-            needsRefresh = false
-            calculationProgress = nil
-
-            // Notify WellbeingDebtCard to refresh
-            NotificationCenter.default.post(name: .wellbeingDebtDidRecalculate, object: nil)
-        } catch {
-            guard loadID == requestID, !Task.isCancelled else { return }
-            errorMessage = error.localizedDescription
-            calculationProgress = nil
-        }
-
-        isCalculating = false
-    }
-
-    private func recalculateFromHistory() async {
-        isRecalculating = true
-        recalculationProgress = "Scanning mood history..."
-        let requestID = UUID()
-        loadID = requestID
-        errorMessage = nil
-
-        defer { isRecalculating = false; recalculationProgress = nil }
-        do {
-            // Step 1: Backfill transactions from historical data (past 30 days)
-            let transactionCount = try await service.backfillTransactions(days: 30)
-
-            // Step 2: Calculate debt score
-            recalculationProgress = "Found \(transactionCount) transactions.\nCalculating debt score..."
-            let score = try await service.calculateDebtScore(for: nil)
-
-            // Step 3: Fetch profile
-            recalculationProgress = "Updating profile..."
-            let loadedProfile = try await service.fetchProfile()
-            let owner = try await service.transactionOwnerID()
-            guard loadID == requestID, !Task.isCancelled, score.userId.lowercased() == owner.lowercased() else { return }
-            latestScore = score
-            profile = loadedProfile
-            needsRefresh = false
-
-            // Notify WellbeingDebtCard to refresh
-            NotificationCenter.default.post(name: .wellbeingDebtDidRecalculate, object: nil)
-        } catch {
-            guard loadID == requestID, !Task.isCancelled else { return }
-            errorMessage = error.localizedDescription
-        }
-
-        isRecalculating = false
-        recalculationProgress = nil
+        failedCalculation = false
+        recalculation.start(using: service)
     }
 
     @ViewBuilder
@@ -591,7 +521,7 @@ struct WellbeingDebtDashboardView: View {
                 .font(.system(size: 60))
                 .foregroundStyle(.red)
 
-            Text("Error Loading Data")
+            Text(failedCalculation ? "Calculation Didn’t Finish" : "Error Loading Data")
                 .font(.title2.bold())
 
             Text(error)
@@ -600,12 +530,16 @@ struct WellbeingDebtDashboardView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
 
-            Button("Retry") {
-                Task {
-                    await loadData()
+            Button(recalculation.isStopping ? "Finishing cancellation…" : "Retry") {
+                if failedCalculation {
+                    errorMessage = nil
+                    beginCalculation()
+                } else {
+                    Task { await loadData() }
                 }
             }
             .buttonStyle(.bordered)
+            .disabled(!recalculation.canStart)
         }
         .padding(.top, 100)
     }
@@ -628,9 +562,11 @@ struct WellbeingDebtDashboardView: View {
         latestScore = nil
         profile = nil
         needsRefresh = false
+        failedCalculation = false
         defer { if loadID == requestID { isLoading = false } }
         do {
             let owner = try await service.transactionOwnerID()
+            guard loadID == requestID, !Task.isCancelled else { return }
             async let scoreTask = service.fetchLatestDebtScore()
             async let profileTask = service.fetchProfile()
             async let recoveryTask = service.fetchActiveRecoveryProgram()
@@ -649,6 +585,117 @@ struct WellbeingDebtDashboardView: View {
         }
     }
 
+}
+
+struct DebtRecalculationResult {
+    let score: DebtScore
+    let profile: WellbeingDebtProfile?
+}
+
+/// One cancelable, bounded owner calculation. Canceled work must finish before retry.
+@MainActor
+final class DebtRecalculation: ObservableObject {
+    @Published private(set) var isRunning = false
+    @Published private(set) var isStopping = false
+    @Published private(set) var progress: String?
+    @Published private(set) var errorMessage: String?
+    @Published private(set) var result: DebtRecalculationResult?
+    private(set) var stageMilliseconds: [String: Double] = [:]
+    var canStart: Bool { task == nil }
+
+    private let timeout: Duration
+    private var task: Task<Void, Never>?
+    private var deadlineTask: Task<Void, Never>?
+    private var timedOut = false
+
+    init(timeout: Duration = .seconds(25)) { self.timeout = timeout }
+
+    func start(using reader: any WellbeingDebtReading) {
+        guard canStart else { return }
+        isRunning = true
+        isStopping = false
+        timedOut = false
+        errorMessage = nil
+        result = nil
+        stageMilliseconds = [:]
+        progress = "Checking account…"
+        let started = ContinuousClock.now
+        task = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                stageMilliseconds["total"] = Self.milliseconds(since: started)
+                deadlineTask?.cancel()
+                deadlineTask = nil
+                task = nil
+                isRunning = false
+                isStopping = false
+                progress = nil
+            }
+            do {
+                let owner = try await reader.transactionOwnerID()
+                try Task.checkCancellation()
+                stageMilliseconds["account"] = Self.milliseconds(since: started)
+                progress = "Calculating recorded history…"
+                let calculationStarted = ContinuousClock.now
+                let score = try await reader.calculateDebtScore(for: nil)
+                try Task.checkCancellation()
+                stageMilliseconds["calculation"] = Self.milliseconds(since: calculationStarted)
+                progress = "Loading calculation details…"
+                let detailsStarted = ContinuousClock.now
+                let profile = try await reader.fetchProfile()
+                let activeOwner = try await reader.transactionOwnerID()
+                try Task.checkCancellation()
+                guard owner.lowercased() == activeOwner.lowercased(),
+                      score.userId.lowercased() == owner.lowercased() else { throw CancellationError() }
+                guard score.isCurrentSourceCalculation(requireSnapshot: true) else {
+                    throw WellbeingDebtError.needsMoreData("The calculation is out of date. Tap Retry to calculate the current window.")
+                }
+                stageMilliseconds["details"] = Self.milliseconds(since: detailsStarted)
+                result = DebtRecalculationResult(score: score,
+                    profile: profile?.userId.lowercased() == owner.lowercased() ? profile : nil)
+            } catch {
+                if !Task.isCancelled && !(error is CancellationError) && !timedOut {
+                    if (error as? URLError)?.code == .notConnectedToInternet {
+                        errorMessage = "You’re offline. Reconnect and tap Retry to calculate your recorded history."
+                    } else if (error as? URLError)?.code == .timedOut {
+                        errorMessage = "The calculation took too long. Check your connection and tap Retry."
+                    } else if case WellbeingDebtError.needsMoreData(let message) = error {
+                        errorMessage = message
+                    } else {
+                        errorMessage = "The calculation couldn’t finish. Tap Retry to try again."
+                    }
+                }
+            }
+        }
+        deadlineTask = Task { [weak self, timeout] in
+            do { try await Task.sleep(for: timeout) } catch { return }
+            guard !Task.isCancelled, let self, task != nil else { return }
+            timedOut = true
+            errorMessage = "The calculation took too long. Check your connection and tap Retry."
+            stopRequest()
+        }
+    }
+
+    func cancel() {
+        result = nil
+        errorMessage = nil
+        stopRequest()
+    }
+
+    private func stopRequest() {
+        guard task != nil else { return }
+        deadlineTask?.cancel()
+        deadlineTask = nil
+        isRunning = false
+        isStopping = true
+        progress = nil
+        task?.cancel()
+    }
+
+    private static func milliseconds(since start: ContinuousClock.Instant) -> Double {
+        let duration = start.duration(to: .now).components
+        return Double(duration.seconds) * 1_000 + Double(duration.attoseconds) / 1e15
+    }
 }
 
 #Preview {
