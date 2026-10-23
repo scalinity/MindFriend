@@ -58,7 +58,7 @@ export interface DebtScore {
 
 export interface TrendData {
   direction: "improving" | "worsening" | "stable";
-  velocity: number; // Points per day (negative = worsening)
+  velocity: number; // Rolling debt points per day (positive = increasing debt)
   projection_7day: number; // Projected debt in 7 days
 }
 
@@ -88,7 +88,7 @@ export interface CrashHistory {
 export interface CrashEvent {
   date: string;
   debt_at_crash: number;
-  mood_score: number;
+  mood_score?: number; // Older stored crash entries do not include a mood score.
 }
 
 export interface TopCategories {

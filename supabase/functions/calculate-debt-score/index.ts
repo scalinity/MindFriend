@@ -425,37 +425,52 @@ export function calculateThresholdStatus(
 async function getUserProfile(
   supabase: any,
   userId: string,
+  canRetryCreation = true,
 ): Promise<UserProfile> {
-  const { data: profile, error } = await supabase
-    .from("wellbeing_debt_profiles")
-    .select("*")
-    .eq("user_id", userId)
-    .maybeSingle();
-
+  const { data: stored, error } = await supabase.from("wellbeing_debt_profiles")
+    .select("*").eq("user_id", userId).maybeSingle();
   if (error) throw new Error("Debt profile unavailable");
-  if (!profile) {
-    // Create default profile with rebalanced threshold
-    const defaultProfile: UserProfile = {
+  if (!stored) {
+    const profile = {
       user_id: userId,
-      personal_threshold: -75, // Increased from -50 for more forgiving economy
+      learned_threshold: null,
+      crash_history: [],
+      top_drains: { categories: [] },
+      top_deposits: { categories: [] },
+    };
+    const { error: insertError } = await supabase.from(
+      "wellbeing_debt_profiles",
+    ).insert(profile);
+    if (insertError) {
+      if (insertError.code === "23505" && canRetryCreation) {
+        return await getUserProfile(supabase, userId, false);
+      }
+      throw new Error("Debt profile could not be saved");
+    }
+    return {
+      user_id: userId,
+      personal_threshold: null,
       crash_history: { crashes: [], last_updated: null },
       top_drains: { categories: [], last_updated: null },
       top_deposits: { categories: [], last_updated: null },
     };
-
-    const { error: insertError } = await supabase.from(
-      "wellbeing_debt_profiles",
-    ).insert(defaultProfile);
-    if (insertError) {
-      if (insertError.code === "23505") {
-        return await getUserProfile(supabase, userId);
-      }
-      throw new Error("Debt profile could not be saved");
-    }
-    return defaultProfile;
   }
-
-  return profile;
+  const history = stored.crash_history;
+  const crashes = Array.isArray(history) ? history : history?.crashes ?? [];
+  if (!Array.isArray(crashes)) throw new Error("Invalid debt history");
+  // Normalize the canonical database contract while reading existing wrapped histories too.
+  return {
+    ...stored,
+    personal_threshold: Object.hasOwn(stored, "learned_threshold")
+      ? stored.learned_threshold
+      : stored.personal_threshold ?? null,
+    crash_history: {
+      crashes,
+      last_updated: Array.isArray(history)
+        ? null
+        : history?.last_updated ?? null,
+    },
+  };
 }
 
 async function updateUserProfile(
@@ -507,8 +522,9 @@ async function reconcileCrashDetection(
     ? calculatePercentile10(unique.map((crash) => crash.debt_at_crash))
     : 0;
   const { error } = await supabase.from("wellbeing_debt_profiles").update({
-    personal_threshold: learned > 0 ? learned : -75,
-    crash_history: { crashes: unique, last_updated: new Date().toISOString() },
+    learned_threshold: learned > 0 ? learned : null,
+    last_crash_date: unique.map((crash) => crash.date).sort().at(-1) ?? null,
+    crash_history: unique,
     updated_at: new Date().toISOString(),
   }).eq("user_id", userId);
   if (error) throw new Error("Debt profile could not be saved");

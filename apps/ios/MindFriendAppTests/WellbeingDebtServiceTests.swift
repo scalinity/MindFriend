@@ -140,6 +140,30 @@ final class WellbeingDebtServiceTests: XCTestCase {
     // FIXME: Re-enable when WellbeingDebtProfile API is updated
     // WellbeingDebtProfile has different structure than expected (no learnedThreshold, lastCrashDate, crashHistory members)
 
+    func testCanonicalProfileAndLegacyHistoryDecodingWithoutFabricatedMood() throws {
+        let canonical = """
+        {"user_id":"11111111-1111-4111-8111-111111111111","learned_threshold":12.5,
+         "crash_history":[{"date":"2026-10-20","debt_at_crash":5}],
+         "top_drains":{"categories":[]},"top_deposits":{"categories":[]}}
+        """.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(WellbeingDebtProfile.self, from: canonical)
+        XCTAssertEqual(decoded.personalThreshold, 12.5)
+        XCTAssertEqual(decoded.crashHistory.crashes.count, 1)
+        XCTAssertNil(decoded.crashHistory.crashes[0].moodScore)
+        let encoded = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(decoded)) as? [String: Any])
+        XCTAssertNotNil(encoded["learned_threshold"])
+        XCTAssertNil(encoded["personal_threshold"])
+        XCTAssertNotNil(encoded["crash_history"] as? [[String: Any]])
+        let legacy = """
+        {"user_id":"11111111-1111-4111-8111-111111111111","personal_threshold":-75,
+         "crash_history":{"crashes":[],"last_updated":null},
+         "top_drains":{"categories":[]},"top_deposits":{"categories":[]}}
+        """.data(using: .utf8)!
+        let old = try JSONDecoder().decode(WellbeingDebtProfile.self, from: legacy)
+        XCTAssertEqual(old.personalThreshold, -75)
+        XCTAssertTrue(old.crashHistory.crashes.isEmpty)
+    }
+
     // MARK: - Error Handling Tests
 
     func testWellbeingDebtErrorDescriptions() {
@@ -341,12 +365,20 @@ final class DebtCalculationRegressionTests: XCTestCase {
         attachment.name = "Issue20-home-card-reloaded-decimals"
         attachment.lifetime = .keepAlways; add(attachment)
     }
-    private func render(score: DebtScore, name: String) async throws {
+    func testRenderCanonicalProfileWithCurrentScore() async throws {
+        let json = """
+        {"user_id":"11111111-1111-4111-8111-111111111111","learned_threshold":null,
+         "crash_history":[],"top_drains":{"categories":[]},"top_deposits":{"categories":[]}}
+        """.data(using: .utf8)!
+        let profile = try JSONDecoder().decode(WellbeingDebtProfile.self, from: json)
+        try await render(score: score(current: true), name: "Issue20-canonical-profile-current-dashboard", profile: profile)
+    }
+    private func render(score: DebtScore, name: String, profile: WellbeingDebtProfile? = nil) async throws {
         let defaults = UserDefaults.standard
         let saved = defaults.object(forKey: "wellbeing_debt_tutorial_completed")
         defaults.set(true, forKey: "wellbeing_debt_tutorial_completed")
         defer { if let saved { defaults.set(saved, forKey: "wellbeing_debt_tutorial_completed") } else { defaults.removeObject(forKey: "wellbeing_debt_tutorial_completed") } }
-        let fixture = DebtCalculationFixture(owner: owner, score: score)
+        let fixture = DebtCalculationFixture(owner: owner, score: score, profile: profile)
         let host = UIHostingController(rootView: WellbeingDebtDashboardView(reader: fixture)
             .environmentObject(DependencyContainer.preview).environmentObject(AppState()).preferredColorScheme(.dark))
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 393, height: 852))
@@ -369,11 +401,12 @@ final class DebtCalculationRegressionTests: XCTestCase {
 private actor DebtCalculationFixture: WellbeingDebtReading {
     let owner: String
     let score: DebtScore
+    let profile: WellbeingDebtProfile?
     var ownerReads = 0
-    init(owner: String, score: DebtScore) { self.owner = owner; self.score = score }
+    init(owner: String, score: DebtScore, profile: WellbeingDebtProfile? = nil) { self.owner = owner; self.score = score; self.profile = profile }
     func transactionOwnerID() async throws -> String { ownerReads += 1; return owner }
     func fetchLatestDebtScore() async throws -> DebtScore? { score }
-    func fetchProfile() async throws -> WellbeingDebtProfile? { nil }
+    func fetchProfile() async throws -> WellbeingDebtProfile? { profile }
     func fetchActiveRecoveryProgram() async throws -> RecoveryProgram? { nil }
     func calculateDebtScore(for date: String?) async throws -> DebtScore { score }
     func backfillTransactions(days: Int) async throws -> Int { XCTFail("Reading a score must not start historical reprocessing"); return 0 }

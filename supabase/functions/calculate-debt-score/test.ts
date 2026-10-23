@@ -52,10 +52,35 @@ function transaction(
     source: "user_logged",
   };
 }
+// Canonical deployed schema: migration 20260124030001 and fresh information_schema metadata.
+const profileColumns = new Set([
+  "user_id",
+  "learned_threshold",
+  "last_crash_date",
+  "crash_history",
+  "top_drains",
+  "top_deposits",
+  "created_at",
+  "updated_at",
+  "last_isolation_date",
+]);
+function wireProfile(): Row {
+  return {
+    user_id: owner,
+    learned_threshold: null,
+    last_crash_date: null,
+    crash_history: [],
+    top_drains: { categories: [] },
+    top_deposits: { categories: [] },
+  };
+}
+function validProfileWrite(row: Row): boolean {
+  return Object.keys(row).every((key) => profileColumns.has(key));
+}
 class Fixture {
   tables: Record<string, Row[]> = {
     profiles: [{ id: owner, created_at: "2025-01-01T00:00:00Z" }],
-    wellbeing_debt_profiles: [profile],
+    wellbeing_debt_profiles: [wireProfile()],
   };
   failedTable: string | null = null;
   reads: {
@@ -69,6 +94,16 @@ class Fixture {
     this.reads.push(read);
     let one = false, start = 0, end = Infinity;
     const q: any = {
+      insert: (row: Row) => {
+        assertEquals(table, "wellbeing_debt_profiles");
+        assertEquals(
+          validProfileWrite(row),
+          true,
+          "Profile writes must match the actual deployed column names",
+        );
+        this.tables[table].push(structuredClone(row));
+        return Promise.resolve({ error: null });
+      },
       select: (columns: string) => {
         read.columns = columns;
         return q;
@@ -359,7 +394,7 @@ Deno.test("HTTP owner response and persistence share one current snapshot; faile
   const end = "2026-10-22";
   const tables: Record<string, Row[]> = {
     profiles: [{ id: owner, created_at: "2025-01-01T00:00:00Z" }],
-    wellbeing_debt_profiles: [structuredClone(profile)],
+    wellbeing_debt_profiles: [],
     wellbeing_transactions: [
       transaction("2026-10-21", "withdrawal", 20),
       transaction(end, "deposit", 2),
@@ -387,12 +422,31 @@ Deno.test("HTTP owner response and persistence share one current snapshot; faile
           stored
         ) {
           scheduledInsertPreservedCurrent = true;
+          return json([], 201);
         } else stored = incoming;
+        return json([{ id: "11111111-1111-4111-8111-111111111119" }], 201);
+      }
+      if (req.method === "POST" && table === "wellbeing_debt_profiles") {
+        const row = await req.json();
+        if (!validProfileWrite(row)) {
+          return json(
+            { code: "PGRST204", message: "Unknown profile column" },
+            400,
+          );
+        }
+        tables.wellbeing_debt_profiles.push(row);
         return json(null, 201);
       }
       if (req.method === "PATCH" && table === "wellbeing_debt_profiles") {
+        const row = await req.json();
+        if (!validProfileWrite(row)) {
+          return json(
+            { code: "PGRST204", message: "Unknown profile column" },
+            400,
+          );
+        }
         profileWrites++;
-        Object.assign(tables.wellbeing_debt_profiles[0], await req.json());
+        Object.assign(tables.wellbeing_debt_profiles[0], row);
         return json(null);
       }
       if (req.method === "PATCH" && table === "wellbeing_debt_scores") {
@@ -469,9 +523,9 @@ Deno.test("HTTP owner response and persistence share one current snapshot; faile
     failSave = false;
     assertEquals((await handler(request())).status, 200);
     assertEquals(saves, 3);
-    assertEquals(tables.wellbeing_debt_profiles[0].crash_history.crashes, []);
+    assertEquals(tables.wellbeing_debt_profiles[0].crash_history, []);
     // Correct the triggering mood and preceding source, then remove it; threshold history must follow.
-    tables.wellbeing_debt_profiles[0].crash_history.crashes = [
+    tables.wellbeing_debt_profiles[0].crash_history = [
       { date: "2026-10-18", debt_at_crash: 30, mood_score: 2 },
       { date: "2026-10-19", debt_at_crash: 30, mood_score: 2 },
       { date: end, debt_at_crash: 100, mood_score: 2 },
@@ -488,7 +542,7 @@ Deno.test("HTTP owner response and persistence share one current snapshot; faile
     const correctedBody = await corrected.json();
     assertEquals(correctedBody.score.threshold_status.threshold, 6.8);
     assertEquals(
-      tables.wellbeing_debt_profiles[0].crash_history.crashes.find((c: Row) =>
+      tables.wellbeing_debt_profiles[0].crash_history.find((c: Row) =>
         c.date === end
       ).debt_at_crash,
       1,
@@ -496,7 +550,7 @@ Deno.test("HTTP owner response and persistence share one current snapshot; faile
     tables.moods = [];
     assertEquals((await handler(request())).status, 200);
     assertEquals(
-      tables.wellbeing_debt_profiles[0].crash_history.crashes.some((c: Row) =>
+      tables.wellbeing_debt_profiles[0].crash_history.some((c: Row) =>
         c.date === end
       ),
       false,
@@ -514,4 +568,26 @@ Deno.test("HTTP owner response and persistence share one current snapshot; faile
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+Deno.test("new profile writes match deployed columns and reads accept canonical or legacy history", async () => {
+  const fixture = new Fixture();
+  fixture.tables.wellbeing_debt_profiles = [];
+  fixture.tables.wellbeing_transactions = [
+    transaction("2026-10-22", "withdrawal", 2),
+  ];
+  const score = await calculateUserDebtScore(fixture, owner, "2026-10-22");
+  assertEquals(score?.rolling_debt_14day, 2);
+  assertEquals(fixture.tables.wellbeing_debt_profiles.length, 1);
+  const saved = fixture.tables.wellbeing_debt_profiles[0];
+  assertEquals(saved.learned_threshold, null);
+  assertEquals(saved.crash_history, []);
+  assertEquals("personal_threshold" in saved, false);
+  saved.learned_threshold = 12.5;
+  saved.crash_history = {
+    crashes: [{ date: "2026-10-20", debt_at_crash: 5 }],
+    last_updated: null,
+  };
+  const existing = await calculateUserDebtScore(fixture, owner, "2026-10-22");
+  assertEquals(existing?.threshold_status.threshold, 12.5);
 });
