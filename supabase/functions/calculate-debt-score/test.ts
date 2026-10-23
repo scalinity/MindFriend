@@ -523,7 +523,11 @@ Deno.test("HTTP owner response and persistence share one current snapshot; faile
     failSave = false;
     assertEquals((await handler(request())).status, 200);
     assertEquals(saves, 3);
-    assertEquals(tables.wellbeing_debt_profiles[0].crash_history, []);
+    assertEquals(tables.wellbeing_debt_profiles[0].crash_history.crashes, []);
+    assertEquals(
+      typeof tables.wellbeing_debt_profiles[0].crash_history.last_updated,
+      "string",
+    );
     // Correct the triggering mood and preceding source, then remove it; threshold history must follow.
     tables.wellbeing_debt_profiles[0].crash_history = [
       { date: "2026-10-18", debt_at_crash: 30, mood_score: 2 },
@@ -542,7 +546,7 @@ Deno.test("HTTP owner response and persistence share one current snapshot; faile
     const correctedBody = await corrected.json();
     assertEquals(correctedBody.score.threshold_status.threshold, 6.8);
     assertEquals(
-      tables.wellbeing_debt_profiles[0].crash_history.find((c: Row) =>
+      tables.wellbeing_debt_profiles[0].crash_history.crashes.find((c: Row) =>
         c.date === end
       ).debt_at_crash,
       1,
@@ -550,7 +554,7 @@ Deno.test("HTTP owner response and persistence share one current snapshot; faile
     tables.moods = [];
     assertEquals((await handler(request())).status, 200);
     assertEquals(
-      tables.wellbeing_debt_profiles[0].crash_history.some((c: Row) =>
+      tables.wellbeing_debt_profiles[0].crash_history.crashes.some((c: Row) =>
         c.date === end
       ),
       false,
@@ -581,7 +585,7 @@ Deno.test("new profile writes match deployed columns and reads accept canonical 
   assertEquals(fixture.tables.wellbeing_debt_profiles.length, 1);
   const saved = fixture.tables.wellbeing_debt_profiles[0];
   assertEquals(saved.learned_threshold, null);
-  assertEquals(saved.crash_history, []);
+  assertEquals(saved.crash_history, { crashes: [], last_updated: null });
   assertEquals("personal_threshold" in saved, false);
   saved.learned_threshold = 12.5;
   saved.crash_history = {
