@@ -3,10 +3,13 @@ import SwiftUI
 /// Main sleep tracking dashboard showing recent sleep, trends, and quick actions
 struct SleepDashboardView: View {
     @EnvironmentObject private var dependencies: DependencyContainer
+    @EnvironmentObject private var appState: AppState
     @StateObject private var viewModel: SleepDashboardViewModel
     @State private var showManualEntry = false
+    private let trackingReader: (any SleepTrackingReading)?
 
-    init() {
+    init(trackingReader: (any SleepTrackingReading)? = nil) {
+        self.trackingReader = trackingReader
         _viewModel = StateObject(wrappedValue: SleepDashboardViewModel())
     }
 
@@ -14,6 +17,9 @@ struct SleepDashboardView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
+                    if let error = viewModel.errorMessage {
+                        Text(error).foregroundStyle(.secondary)
+                    }
                     // Last Night's Sleep Summary
                     if let lastEntry = viewModel.lastSleepEntry {
                         lastNightSection(lastEntry)
@@ -64,15 +70,15 @@ struct SleepDashboardView: View {
                     // Refresh data after save
                     Task {
                         await viewModel.loadData(
-                            trackingService: dependencies.sleepTrackingService,
+                            trackingService: trackingReader ?? dependencies.sleepTrackingService,
                             healthKitManager: dependencies.sleepHealthKitManager
                         )
                     }
                 }
             }
-            .task {
+            .task(id: appState.currentUser?.id) {
                 await viewModel.loadData(
-                    trackingService: dependencies.sleepTrackingService,
+                    trackingService: trackingReader ?? dependencies.sleepTrackingService,
                     healthKitManager: dependencies.sleepHealthKitManager
                 )
             }
@@ -94,20 +100,26 @@ struct SleepDashboardView: View {
                 .font(.headline)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
+            Text("\(entry.wakeTime.formatted(date: .abbreviated, time: .omitted)) · \(entry.source.displayName)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
             HStack(spacing: 20) {
                 // Sleep Score Ring
-                SleepScoreRing(score: entry.sleepScore ?? 0, size: 120)
+                if let score = entry.displayableScore {
+                    SleepScoreRing(score: score, size: 120)
+                }
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text(entry.durationFormatted)
                         .font(.title2)
                         .fontWeight(.semibold)
 
-                    Text(entry.qualityLabel)
+                    Text(entry.displayableScore == nil ? "Score unavailable — missing measurements" : entry.qualityLabel)
                         .font(.subheadline)
                         .foregroundColor(.secondary)
 
-                    if let breakdown = entry.scoreBreakdown {
+                    if entry.displayableScore != nil, let breakdown = entry.scoreBreakdown {
                         Text("Weakest: \(breakdown.primaryFactor)")
                             .font(.caption)
                             .foregroundColor(.orange)
@@ -131,7 +143,7 @@ struct SleepDashboardView: View {
             .cornerRadius(12)
 
             // Score Breakdown
-            if let breakdown = entry.scoreBreakdown {
+            if entry.displayableScore != nil, let breakdown = entry.scoreBreakdown {
                 scoreBreakdownView(breakdown)
             }
         }
@@ -348,7 +360,7 @@ struct SleepDashboardView: View {
                     .font(.title3)
                     .fontWeight(.semibold)
 
-                Text("We couldn't find any sleep data in HealthKit. Make sure you have sleep data recorded in the Health app, or add a manual entry.")
+                Text(viewModel.errorMessage ?? "No sleep record is available for last night. Health may have no samples or read access may be off. Check access in Health, or log sleep manually.")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -430,31 +442,50 @@ final class SleepDashboardViewModel: ObservableObject {
     @Published var weekEntries: [SleepEntry] = []
     @Published var insights: [SleepInsight] = []
     @Published var isLoading = false
+    @Published var errorMessage: String?
+    private var loadID = UUID()
     @Published var showMorningCheckIn = false
     @Published var showSettings = false
     @Published var showWindDown = false
 
     var weeklyAverageScore: Int? {
-        let scores = weekEntries.compactMap { $0.sleepScore }
+        let scores = weekEntries.compactMap { $0.displayableScore }
         guard !scores.isEmpty else { return nil }
         return scores.reduce(0, +) / scores.count
     }
 
-    func loadData(trackingService: SleepTrackingService, healthKitManager: SleepHealthKitManager) async {
+    func loadData(trackingService: any SleepTrackingReading, healthKitManager: SleepHealthKitManager? = nil) async {
+        let requestID = UUID()
+        loadID = requestID
+        lastSleepEntry = nil
+        weekEntries = []
+        insights = []
+        showMorningCheckIn = false
+        errorMessage = nil
         isLoading = true
-        defer { isLoading = false }
+        defer { if loadID == requestID { isLoading = false } }
 
         do {
-            // Fetch latest entry
-            lastSleepEntry = try await trackingService.fetchLatestEntry()
-
+            let userID = try await trackingService.currentUserID()
             // Fetch last 7 days
             let endDate = Date()
             let startDate = Calendar.current.date(byAdding: .day, value: -7, to: endDate)!
-            weekEntries = try await trackingService.fetchEntries(from: startDate, to: endDate)
+            let entries = try await trackingService.fetchEntries(from: startDate, to: endDate)
+
+            let loadedInsights = try await trackingService.fetchInsights()
+            let activeUserID = try await trackingService.currentUserID()
+            guard loadID == requestID, !Task.isCancelled, activeUserID == userID else { return }
+            let calculator = SleepScoreCalculator()
+            weekEntries = entries.filter {
+                $0.userId == userID && calculator.isValidForScoring(entry: $0) &&
+                $0.wakeTime >= startDate && $0.wakeTime <= endDate
+            }.sorted { $0.wakeTime > $1.wakeTime }
+            lastSleepEntry = weekEntries.first {
+                Calendar.current.isDate($0.wakeTime, inSameDayAs: endDate)
+            }
 
             // Fetch insights
-            insights = try await trackingService.fetchInsights()
+            insights = weekEntries.isEmpty ? [] : loadedInsights
 
             // Check if should show morning check-in
             if let last = lastSleepEntry,
@@ -463,7 +494,11 @@ final class SleepDashboardViewModel: ObservableObject {
                 showMorningCheckIn = true
             }
         } catch {
-            print("Failed to load sleep data: \(error)")
+            guard loadID == requestID else { return }
+            lastSleepEntry = nil
+            weekEntries = []
+            insights = []
+            errorMessage = "Sleep records couldn't be loaded. Pull to refresh or try again."
         }
     }
 

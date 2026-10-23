@@ -7,8 +7,8 @@ struct SleepTrendGraph: View {
 
     private var chartData: [(date: Date, score: Int)] {
         entries.compactMap { entry in
-            guard let score = entry.sleepScore else { return nil }
-            return (entry.date, score)
+            guard let score = entry.displayableScore else { return nil }
+            return (entry.wakeTime, score)
         }
         .sorted { $0.date < $1.date }
     }

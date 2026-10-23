@@ -122,6 +122,7 @@ final class SleepHealthKitManager: ObservableObject {
 
     /// Sync sleep data from a specific start date
     func syncSleepData(from startDate: Date) async throws -> [SleepEntry] {
+        let userId = try await sleepTrackingService.currentUserID()
         print("[SleepHealthKit] syncSleepData starting from: \(startDate)")
         
         // If not authorized yet, request authorization first
@@ -157,6 +158,7 @@ final class SleepHealthKitManager: ObservableObject {
         // Fetch user's sleep goals for score calculation
         print("[SleepHealthKit] Fetching sleep goals...")
         let goals = try await sleepTrackingService.fetchGoals()
+        guard goals.userId == userId else { throw SleepTrackingError.invalidEntry }
         print("[SleepHealthKit] Got goals, processing sleep entries...")
 
         // Process each night's sleep
@@ -252,6 +254,7 @@ final class SleepHealthKitManager: ObservableObject {
 
         // Total asleep time
         let timeAsleep = deepSleep + remSleep + lightSleep
+        guard timeAsleep > 0, timeInBed > 0, timeAsleep <= timeInBed else { return nil }
 
         // Calculate efficiency
         let efficiency = timeAsleep > 0 ? (Double(timeAsleep) / Double(timeInBed)) * 100 : nil
@@ -270,7 +273,7 @@ final class SleepHealthKitManager: ObservableObject {
         // Create sleep entry
         let entry = SleepEntry(
             id: UUID(),
-            userId: UUID(), // Will be set by service/RLS
+            userId: goals.userId,
             date: date,
             source: source,
             bedtime: bedtime,

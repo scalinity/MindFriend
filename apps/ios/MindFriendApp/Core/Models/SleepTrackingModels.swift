@@ -37,6 +37,19 @@ struct SleepEntry: Codable, Identifiable, Equatable {
     var sleepScore: Int? // 0-100
     var scoreBreakdown: SleepScoreBreakdown?
 
+    /// A full score needs measured stages and wake time; a manual duration is self-reported.
+    var hasCompleteScoreData: Bool {
+        source != .manual && timeInBedMinutes > 0 &&
+        (timeAsleepMinutes ?? 0) > 0 && deepSleepMinutes != nil &&
+        remSleepMinutes != nil && awakeMinutes != nil
+    }
+
+    var displayableScore: Int? {
+        guard hasCompleteScoreData, let sleepScore, let scoreBreakdown,
+              (0...100).contains(sleepScore), scoreBreakdown.total == sleepScore else { return nil }
+        return sleepScore
+    }
+
     let createdAt: Date
     var updatedAt: Date
 

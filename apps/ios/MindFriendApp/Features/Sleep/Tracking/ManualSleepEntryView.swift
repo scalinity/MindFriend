@@ -164,7 +164,7 @@ struct ManualSleepEntryView: View {
                 remSleepMinutes: nil,
                 lightSleepMinutes: nil,
                 awakeMinutes: nil,
-                sleepEfficiency: 100.0, // Manual entries don't have this data
+                sleepEfficiency: nil,
                 heartRateAvg: nil,
                 heartRateMin: nil,
                 hrvAvg: nil,
