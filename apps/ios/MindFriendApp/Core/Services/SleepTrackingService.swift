@@ -86,6 +86,7 @@ final class SleepTrackingService: ObservableObject, SleepTrackingReading {
             .execute()
             .value
 
+        DebtSourceChanges.saved(date: String(response.wakeTime.ISO8601Format().prefix(10)))
         return response
     }
 
@@ -145,6 +146,7 @@ final class SleepTrackingService: ObservableObject, SleepTrackingReading {
             .delete()
             .eq("id", value: id.uuidString)
             .execute()
+        DebtSourceChanges.saved()
     }
 
     // MARK: - Sleep Goals
