@@ -1,9 +1,17 @@
 import Foundation
 import Supabase
 
+@MainActor
+protocol SleepTrackingReading {
+    func currentUserID() async throws -> UUID
+    func fetchEntries(from startDate: Date, to endDate: Date) async throws -> [SleepEntry]
+    func fetchLatestEntry() async throws -> SleepEntry?
+    func fetchInsights() async throws -> [SleepInsight]
+}
+
 /// Service for managing sleep tracking data (entries, goals, insights)
 @MainActor
-final class SleepTrackingService: ObservableObject {
+final class SleepTrackingService: ObservableObject, SleepTrackingReading {
 
     // MARK: - Properties
 
@@ -20,17 +28,29 @@ final class SleepTrackingService: ObservableObject {
 
     // MARK: - Sleep Entries
 
+    func currentUserID() async throws -> UUID {
+        try await supabase.auth.session.user.id
+    }
+
     /// Create a new sleep entry with calculated score
     func createEntry(_ entry: SleepEntry, goals: SleepGoals) async throws -> SleepEntry {
         // Get the authenticated user's ID
         let session = try await supabase.auth.session
         let userId = session.user.id
+        guard entry.userId == userId, calculator.isValidForScoring(entry: entry) else {
+            throw SleepTrackingError.invalidEntry
+        }
         
         // Calculate sleep score
         var mutableEntry = entry
-        let scoreBreakdown = calculator.calculateScore(entry: entry, goals: goals)
-        mutableEntry.sleepScore = scoreBreakdown.total
-        mutableEntry.scoreBreakdown = scoreBreakdown
+        if entry.hasCompleteScoreData, goals.userId == userId, goals.targetBedtime != nil {
+            let scoreBreakdown = calculator.calculateScore(entry: entry, goals: goals)
+            mutableEntry.sleepScore = scoreBreakdown.total
+            mutableEntry.scoreBreakdown = scoreBreakdown
+        } else {
+            mutableEntry.sleepScore = nil
+            mutableEntry.scoreBreakdown = nil
+        }
 
         // Prepare DTO
         let dto = CreateSleepEntryDTO(
@@ -71,9 +91,11 @@ final class SleepTrackingService: ObservableObject {
 
     /// Fetch sleep entries for a date range
     func fetchEntries(from startDate: Date, to endDate: Date) async throws -> [SleepEntry] {
+        let userId = try await currentUserID()
         let response: [SleepEntry] = try await supabase
             .from("sleep_entries")
             .select()
+            .eq("user_id", value: userId.uuidString)
             .gte("date", value: formatDate(startDate))
             .lte("date", value: formatDate(endDate))
             .order("date", ascending: false)
@@ -85,10 +107,15 @@ final class SleepTrackingService: ObservableObject {
 
     /// Fetch the most recent sleep entry
     func fetchLatestEntry() async throws -> SleepEntry? {
+        let userId = try await currentUserID()
+        let now = Date()
         let response: [SleepEntry] = try await supabase
             .from("sleep_entries")
             .select()
-            .order("date", ascending: false)
+            .eq("user_id", value: userId.uuidString)
+            .gte("wake_time", value: Calendar.current.startOfDay(for: now).ISO8601Format())
+            .lte("wake_time", value: now.ISO8601Format())
+            .order("wake_time", ascending: false)
             .limit(1)
             .execute()
             .value
@@ -124,9 +151,11 @@ final class SleepTrackingService: ObservableObject {
 
     /// Fetch user's sleep goals (creates default if none exist)
     func fetchGoals() async throws -> SleepGoals {
+        let userId = try await currentUserID()
         let response: [SleepGoals] = try await supabase
             .from("sleep_goals")
             .select()
+            .eq("user_id", value: userId.uuidString)
             .execute()
             .value
 
@@ -208,11 +237,13 @@ final class SleepTrackingService: ObservableObject {
 
     /// Fetch valid sleep insights (not expired, ordered by recency)
     func fetchInsights() async throws -> [SleepInsight] {
+        let userId = try await currentUserID()
         let now = Date()
 
         let response: [SleepInsight] = try await supabase
             .from("sleep_insights")
             .select()
+            .eq("user_id", value: userId.uuidString)
             .gte("valid_until", value: now.ISO8601Format())
             .order("generated_at", ascending: false)
             .execute()
@@ -391,6 +422,7 @@ struct SleepPattern: Codable {
 // MARK: - Errors
 
 enum SleepTrackingError: Error, LocalizedError {
+    case invalidEntry
     case windDownGenerationFailed
     case sessionNotFound
     case invalidRating
@@ -398,6 +430,8 @@ enum SleepTrackingError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
+        case .invalidEntry:
+            return "This sleep entry is incomplete or belongs to a different account. Please reload and try again."
         case .windDownGenerationFailed:
             return "Failed to generate wind-down routine. Please try again."
         case .sessionNotFound:
