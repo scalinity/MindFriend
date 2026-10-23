@@ -10,6 +10,13 @@ import SwiftUI
 
 struct WellbeingDebtDashboardView: View {
     @EnvironmentObject var container: DependencyContainer
+    @EnvironmentObject private var appState: AppState
+    private let reader: (any WellbeingDebtReading)?
+    @State private var loadID = UUID()
+    @State private var needsRefresh = false
+
+    init(reader: (any WellbeingDebtReading)? = nil) { self.reader = reader }
+    private var service: any WellbeingDebtReading { reader ?? container.wellbeingDebtService }
     @Environment(\.dismiss) var dismiss
 
     @State private var latestScore: DebtScore?
@@ -130,7 +137,7 @@ struct WellbeingDebtDashboardView: View {
                 RecoveryProgramView()
                     .environmentObject(container)
             }
-            .task {
+            .task(id: appState.currentUser?.id) {
                 await loadData()
             }
             .overlay {
@@ -191,26 +198,26 @@ struct WellbeingDebtDashboardView: View {
             // Severity indicator
             HStack {
                 Circle()
-                    .fill(severityColor(score.thresholdStatus.severity))
+                    .fill(score.thresholdStatus.confidence > 0 ? severityColor(score.thresholdStatus.severity) : .secondary)
                     .frame(width: 12, height: 12)
 
-                Text(score.thresholdStatus.severity.displayName)
+                Text(score.thresholdStatus.confidence > 0 ? score.thresholdStatus.severity.displayName : "Reference threshold · limited history")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundStyle(severityColor(score.thresholdStatus.severity))
+                    .foregroundStyle(score.thresholdStatus.confidence > 0 ? severityColor(score.thresholdStatus.severity) : .primary)
 
                 Spacer()
 
-                Text(score.date)
+                Text("Through \(score.date) UTC")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             // Main debt indicator
             VStack(spacing: 8) {
-                Text("\(Int(truncating: score.rollingDebt14Day as NSDecimalNumber))")
+                Text(score.rollingDebt14Day.formatted())
                     .font(.system(size: 56, weight: .bold, design: .rounded))
-                    .foregroundStyle(severityColor(score.thresholdStatus.severity))
+                    .foregroundStyle(score.thresholdStatus.confidence > 0 ? severityColor(score.thresholdStatus.severity) : .primary)
 
                 Text("14-Day Debt Score")
                     .font(.headline)
@@ -218,7 +225,7 @@ struct WellbeingDebtDashboardView: View {
             }
 
             // Threshold progress bar
-            if let threshold = score.thresholdStatus.threshold {
+            if let threshold = score.thresholdStatus.threshold, threshold != 0 {
                 thresholdProgressBar(
                     current: score.thresholdStatus.currentDebt,
                     threshold: threshold
@@ -236,7 +243,7 @@ struct WellbeingDebtDashboardView: View {
 
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Threshold Progress")
+                Text("Reference Threshold")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -279,21 +286,30 @@ struct WellbeingDebtDashboardView: View {
     @ViewBuilder
     private func trendCard(_ trend: TrendData) -> some View {
         HStack(spacing: 16) {
-            Image(systemName: trendIcon(trend.direction))
+            Image(systemName: trend.available == true ? trendIcon(trend.direction) : "clock")
                 .font(.title2)
-                .foregroundStyle(trendColor(trend.direction))
+                .foregroundStyle(trend.available == true ? trendColor(trend.direction) : .secondary)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("Trend: \(trend.direction.rawValue.capitalized)")
-                    .font(.headline)
+                if trend.available == true {
+                    Text("Trend: \(trend.direction.rawValue.capitalized)")
+                        .font(.headline)
 
-                Text("Velocity: \(String(format: "%.1f", Double(truncating: trend.velocity as NSDecimalNumber))) pts/day")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    Text("Velocity: \(String(format: "%.1f", Double(truncating: trend.velocity as NSDecimalNumber))) pts/day")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
 
-                Text("7-day projection: \(Int(truncating: trend.projection7Day as NSDecimalNumber))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    Text("7-day trend estimate: \(trend.projection7Day.formatted())")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("Based on \(trend.observedDays ?? 0) recorded days; an estimate, not a forecast of your health.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Trend unavailable").font(.headline)
+                    Text("Record activity on at least two days to estimate a trend.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
 
             Spacer()
@@ -334,7 +350,7 @@ struct WellbeingDebtDashboardView: View {
             }
 
             if let days = status.daysUntilCrash, days > 0 {
-                Text("At current pace, you may experience a crash in \(days) \(days == 1 ? "day" : "days").")
+                Text("If this recorded trend continues, the reference threshold may be reached in \(days) \(days == 1 ? "day" : "days"). This is an estimate.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -379,7 +395,7 @@ struct WellbeingDebtDashboardView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Text("\(Int(truncating: value as NSDecimalNumber))")
+            Text(value.formatted())
                 .font(.title3.bold())
                 .foregroundStyle(.primary)
         }
@@ -457,10 +473,10 @@ struct WellbeingDebtDashboardView: View {
                 .font(.system(size: 60))
                 .foregroundStyle(.secondary)
 
-            Text("No Debt Data Yet")
+            Text(needsRefresh ? "Calculation Needs Updating" : "No Debt Data Yet")
                 .font(.title2.bold())
 
-            Text("Analyze your mood history to calculate your wellbeing debt score.")
+            Text("Calculate from recorded sleep, completed activities and logged events for the last 30 complete UTC days. Missing data adds no event.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -497,26 +513,34 @@ struct WellbeingDebtDashboardView: View {
 
     private func calculateNow() async {
         isCalculating = true
+        let requestID = UUID()
+        loadID = requestID
         errorMessage = nil
         calculationProgress = nil
 
+        defer { isCalculating = false; calculationProgress = nil }
         do {
             // Step 1: Backfill transactions from historical data
             calculationProgress = "Detecting transactions from mood history..."
-            let transactionCount = try await container.wellbeingDebtService.backfillTransactions(days: 30)
+            let transactionCount = try await service.backfillTransactions(days: 30)
 
             // Step 2: Calculate debt score
             calculationProgress = "Found \(transactionCount) transactions. Calculating score..."
-            let score = try await container.wellbeingDebtService.calculateDebtScore()
-            latestScore = score
+            let score = try await service.calculateDebtScore(for: nil)
 
             // Step 3: Fetch profile
-            profile = try await container.wellbeingDebtService.fetchProfile()
+            let loadedProfile = try await service.fetchProfile()
+            let owner = try await service.transactionOwnerID()
+            guard loadID == requestID, !Task.isCancelled, score.userId.lowercased() == owner.lowercased() else { return }
+            latestScore = score
+            profile = loadedProfile
+            needsRefresh = false
             calculationProgress = nil
 
             // Notify WellbeingDebtCard to refresh
             NotificationCenter.default.post(name: .wellbeingDebtDidRecalculate, object: nil)
         } catch {
+            guard loadID == requestID, !Task.isCancelled else { return }
             errorMessage = error.localizedDescription
             calculationProgress = nil
         }
@@ -527,24 +551,32 @@ struct WellbeingDebtDashboardView: View {
     private func recalculateFromHistory() async {
         isRecalculating = true
         recalculationProgress = "Scanning mood history..."
+        let requestID = UUID()
+        loadID = requestID
         errorMessage = nil
 
+        defer { isRecalculating = false; recalculationProgress = nil }
         do {
             // Step 1: Backfill transactions from historical data (past 30 days)
-            let transactionCount = try await container.wellbeingDebtService.backfillTransactions(days: 30)
+            let transactionCount = try await service.backfillTransactions(days: 30)
 
             // Step 2: Calculate debt score
             recalculationProgress = "Found \(transactionCount) transactions.\nCalculating debt score..."
-            let score = try await container.wellbeingDebtService.calculateDebtScore()
-            latestScore = score
+            let score = try await service.calculateDebtScore(for: nil)
 
             // Step 3: Fetch profile
             recalculationProgress = "Updating profile..."
-            profile = try await container.wellbeingDebtService.fetchProfile()
+            let loadedProfile = try await service.fetchProfile()
+            let owner = try await service.transactionOwnerID()
+            guard loadID == requestID, !Task.isCancelled, score.userId.lowercased() == owner.lowercased() else { return }
+            latestScore = score
+            profile = loadedProfile
+            needsRefresh = false
 
             // Notify WellbeingDebtCard to refresh
             NotificationCenter.default.post(name: .wellbeingDebtDidRecalculate, object: nil)
         } catch {
+            guard loadID == requestID, !Task.isCancelled else { return }
             errorMessage = error.localizedDescription
         }
 
@@ -589,29 +621,39 @@ struct WellbeingDebtDashboardView: View {
     }
 
     private func loadData() async {
+        let requestID = UUID()
+        loadID = requestID
         isLoading = true
         errorMessage = nil
-
+        latestScore = nil
+        profile = nil
+        needsRefresh = false
+        defer { if loadID == requestID { isLoading = false } }
         do {
-            async let scoreTask = container.wellbeingDebtService.fetchLatestDebtScore()
-            async let profileTask = container.wellbeingDebtService.fetchProfile()
-            async let recoveryTask = container.wellbeingDebtService.fetchActiveRecoveryProgram()
-
-            latestScore = try await scoreTask
-            profile = try await profileTask
-            hasActiveRecoveryProgram = try await recoveryTask != nil
-
-            isLoading = false
+            let owner = try await service.transactionOwnerID()
+            async let scoreTask = service.fetchLatestDebtScore()
+            async let profileTask = service.fetchProfile()
+            async let recoveryTask = service.fetchActiveRecoveryProgram()
+            let (score, loadedProfile, recovery) = try await (scoreTask, profileTask, recoveryTask)
+            let activeOwner = try await service.transactionOwnerID()
+            guard loadID == requestID, !Task.isCancelled, activeOwner == owner else { return }
+            if let score, score.userId.lowercased() == owner.lowercased() {
+                needsRefresh = !score.isCurrentSourceCalculation(requireSnapshot: true)
+                latestScore = needsRefresh ? nil : score
+            }
+            profile = loadedProfile?.userId.lowercased() == owner.lowercased() ? loadedProfile : nil
+            hasActiveRecoveryProgram = recovery?.userId.lowercased() == owner.lowercased()
         } catch {
+            guard loadID == requestID, !Task.isCancelled else { return }
             errorMessage = error.localizedDescription
-            isLoading = false
         }
     }
+
 }
 
 #Preview {
     NavigationStack {
         WellbeingDebtDashboardView()
-            .environmentObject(DependencyContainer())
+            .environmentObject(DependencyContainer()).environmentObject(AppState())
     }
 }

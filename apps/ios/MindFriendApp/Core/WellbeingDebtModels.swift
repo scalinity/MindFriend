@@ -116,12 +116,22 @@ enum DebtTrendDirection: String, Codable {
 struct TrendData: Codable, Equatable {
     let direction: DebtTrendDirection
     let velocity: Decimal // Points per day
-    let projection7Day: Decimal // Projected debt in 7 days
+    let projection7Day: Decimal // Non-negative estimated rolling debt in 7 days
+    var available: Bool? = nil
+    var observedDays: Int? = nil
+    var accountingVersion: Int? = nil
+    var calculatedAt: String? = nil
+    var sourceTransactions: [WellbeingTransaction]? = nil
 
     enum CodingKeys: String, CodingKey {
         case direction
         case velocity
         case projection7Day = "projection_7day"
+        case available
+        case observedDays = "observed_days"
+        case accountingVersion = "accounting_version"
+        case calculatedAt = "calculated_at"
+        case sourceTransactions = "source_transactions"
     }
 }
 
@@ -174,6 +184,38 @@ struct DebtScore: Identifiable, Codable, Equatable {
     let trend: TrendData
     let thresholdStatus: ThresholdStatus
     let createdAt: Date?
+    var sourceTransactions: [WellbeingTransaction]? = nil
+
+    var calculationTransactions: [WellbeingTransaction]? { sourceTransactions ?? trend.sourceTransactions }
+
+    func isCurrentSourceCalculation(now: Date = Date(), requireSnapshot: Bool = false) -> Bool {
+        isSourceCalculation(for: DebtTransactionWindow(days: 1, now: now).end, requireSnapshot: requireSnapshot)
+    }
+
+    func isSourceCalculation(for expectedDate: String, requireSnapshot: Bool) -> Bool {
+        guard date == expectedDate, trend.accountingVersion == 2, trend.calculatedAt != nil,
+              rollingDebt7Day >= 0, rollingDebt14Day >= 0, rollingDebt30Day >= 0,
+              trend.projection7Day >= 0, thresholdStatus.currentDebt == rollingDebt14Day else { return false }
+        guard requireSnapshot else { return true }
+        guard let records = calculationTransactions, !records.isEmpty else { return false }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withFullDate]
+        guard let end = formatter.date(from: date) else { return false }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let start = formatter.string(from: calendar.date(byAdding: .day, value: -29, to: end)!)
+        guard records.allSatisfy({ $0.userId.lowercased() == userId.lowercased() &&
+            $0.date >= start && $0.date <= date && $0.isSupportedForAccounting && !$0.amount.isNaN && $0.amount >= 0
+        }) else { return false }
+        for (days, value) in [(7, rollingDebt7Day), (14, rollingDebt14Day), (30, rollingDebt30Day)] {
+            let first = formatter.string(from: calendar.date(byAdding: .day, value: -(days - 1), to: end)!)
+            let debt = records.filter { $0.date >= first }.reduce(Decimal.zero) {
+                $0 + ($1.type == .withdrawal ? $1.amount : -$1.amount)
+            }
+            if max(0, debt) != value { return false }
+        }
+        return true
+    }
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -186,6 +228,7 @@ struct DebtScore: Identifiable, Codable, Equatable {
         case trend
         case thresholdStatus = "threshold_status"
         case createdAt = "created_at"
+        case sourceTransactions = "source_transactions"
     }
 }
 

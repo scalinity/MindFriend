@@ -278,10 +278,15 @@ struct DebtBreakdownView: View {
             let owner = try await reader.transactionOwnerID()
             let window = DebtTransactionWindow(days: selectedDateRange.days)
             displayedWindow = window
-            let loaded = try await reader.fetchTransactions(
-                from: window.start,
-                to: window.end
-            )
+            let loaded: [WellbeingTransaction]
+            if let snapshot = debtScore.calculationTransactions {
+                guard debtScore.date == window.end, debtScore.userId.lowercased() == owner.lowercased() else {
+                    throw WellbeingDebtError.needsMoreData("This calculation is out of date. Refresh the debt dashboard to view a current breakdown.")
+                }
+                loaded = snapshot
+            } else {
+                loaded = try await reader.fetchTransactions(from: window.start, to: window.end)
+            }
             let activeOwner = try await reader.transactionOwnerID()
             guard loadID == requestID, !Task.isCancelled, activeOwner == owner else { return }
             transactions = window.accounted(loaded, owner: owner)
@@ -323,5 +328,5 @@ struct DebtBreakdownView: View {
             createdAt: Date()
         )
     )
-    .environmentObject(DependencyContainer())
+    .environmentObject(DependencyContainer()).environmentObject(AppState())
 }

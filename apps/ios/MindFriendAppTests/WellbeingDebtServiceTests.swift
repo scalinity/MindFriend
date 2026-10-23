@@ -244,3 +244,138 @@ private actor DebtTransactionFixture: WellbeingTransactionReading {
         return records
     }
 }
+
+@MainActor
+final class DebtCalculationRegressionTests: XCTestCase {
+    private let owner = "11111111-1111-4111-8111-111111111111"
+    private func score(current: Bool, available: Bool = true) -> DebtScore {
+        let date = DebtTransactionWindow(days: 1).end
+        return DebtScore(id: nil, userId: owner, date: current ? date : "2026-01-29", dailyBalance: -3.25,
+            rollingDebt7Day: 3.25, rollingDebt14Day: 3.25, rollingDebt30Day: 3.25,
+            trend: TrendData(direction: .worsening, velocity: 2, projection7Day: 17.25,
+                available: available, observedDays: available ? 3 : 1, accountingVersion: current ? 2 : nil,
+                calculatedAt: "2026-10-23T20:00:00.123Z"),
+            thresholdStatus: ThresholdStatus(currentDebt: 3.25, threshold: -75, severity: .safe, daysUntilCrash: nil, confidence: 0), createdAt: nil,
+            sourceTransactions: [WellbeingTransaction(id: UUID(), userId: owner, date: date, type: .withdrawal,
+                category: .workStress, amount: 3.25, source: .userLogged, description: "Synthetic logged event", metadata: nil, createdAt: nil)])
+    }
+    func testFreshnessRequiresCurrentDateVersionValidDomainAndMatchingSummary() throws {
+        let current = score(current: true)
+        XCTAssertTrue(current.isCurrentSourceCalculation(requireSnapshot: true))
+        XCTAssertFalse(score(current: false).isCurrentSourceCalculation())
+        var persisted = current
+        persisted.sourceTransactions = nil
+        XCTAssertFalse(persisted.isCurrentSourceCalculation(requireSnapshot: true))
+        persisted = try restoredFromPersistence(current)
+        XCTAssertNil(persisted.sourceTransactions)
+        XCTAssertTrue(persisted.isCurrentSourceCalculation(requireSnapshot: true))
+        let encoder = JSONEncoder()
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: encoder.encode(current)) as? [String: Any])
+        json["rolling_debt_14day"] = -3.25
+        let invalid = try JSONDecoder().decode(DebtScore.self, from: JSONSerialization.data(withJSONObject: json))
+        XCTAssertFalse(invalid.isCurrentSourceCalculation())
+    }
+    private func restoredFromPersistence(_ score: DebtScore) throws -> DebtScore {
+        let encoded = try JSONEncoder().encode(score)
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        var trend = try XCTUnwrap(json["trend"] as? [String: Any])
+        trend["source_transactions"] = json.removeValue(forKey: "source_transactions")
+        json["trend"] = trend
+        return try JSONDecoder().decode(DebtScore.self, from: JSONSerialization.data(withJSONObject: json))
+    }
+    func testRenderSavedCalculationAfterReloadWithMatchingBreakdownSnapshot() async throws {
+        try await render(score: restoredFromPersistence(score(current: true)), name: "Issue20-saved-calculation-reloaded")
+    }
+    func testRenderStaleCalculationWithoutSafeStatusOrProjection() async throws {
+        try await render(score: score(current: false), name: "Issue20-stale-calculation-needs-updating")
+    }
+    func testRenderCurrentDecimalCalculationAndUnavailableTrend() async throws {
+        try await render(score: score(current: true, available: false), name: "Issue20-current-decimal-limited-history")
+    }
+    func testRenderCurrentTrendWithConsistentDebtEstimate() async throws {
+        try await render(score: score(current: true), name: "Issue20-current-debt-trend-estimate")
+    }
+    func testBreakdownUsesCalculationSnapshotRatherThanStaleLedger() async throws {
+        let current = score(current: true)
+        let fixture = DebtTransactionFixture(owner: owner, records: [])
+        let host = UIHostingController(rootView: DebtBreakdownView(debtScore: current, transactionReader: fixture)
+            .environmentObject(DependencyContainer.preview).environmentObject(AppState()).preferredColorScheme(.dark))
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 393, height: 852))
+        window.rootViewController = host; window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        for _ in 0..<100 {
+            if await fixture.ownerReads >= 2 { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let request = await fixture.request
+        let reads = await fixture.ownerReads
+        XCTAssertGreaterThanOrEqual(reads, 2)
+        XCTAssertNil(request, "The matching response snapshot must reconcile the visible score without reading stale derived rows")
+        try await Task.sleep(for: .milliseconds(300))
+        host.view.layoutIfNeeded()
+        let attachment = XCTAttachment(image: UIGraphicsImageRenderer(bounds: host.view.bounds).image { _ in
+            host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
+        })
+        attachment.name = "Issue20-breakdown-current-source-snapshot"
+        attachment.lifetime = .keepAlways; add(attachment)
+    }
+    func testRenderHomeCardWithReloadedDecimalScore() async throws {
+        let current = try restoredFromPersistence(score(current: true))
+        let fixture = DebtCalculationFixture(owner: owner, score: current)
+        let host = UIHostingController(rootView: WellbeingDebtCard(reader: fixture)
+            .environmentObject(DependencyContainer.preview).environmentObject(AppState()).preferredColorScheme(.dark))
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 393, height: 852))
+        window.rootViewController = host; window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        for _ in 0..<100 {
+            if await fixture.ownerReads >= 2 { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let reads = await fixture.ownerReads
+        XCTAssertGreaterThanOrEqual(reads, 2)
+        try await Task.sleep(for: .milliseconds(900))
+        host.view.layoutIfNeeded()
+        let attachment = XCTAttachment(image: UIGraphicsImageRenderer(bounds: host.view.bounds).image { _ in
+            host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
+        })
+        attachment.name = "Issue20-home-card-reloaded-decimals"
+        attachment.lifetime = .keepAlways; add(attachment)
+    }
+    private func render(score: DebtScore, name: String) async throws {
+        let defaults = UserDefaults.standard
+        let saved = defaults.object(forKey: "wellbeing_debt_tutorial_completed")
+        defaults.set(true, forKey: "wellbeing_debt_tutorial_completed")
+        defer { if let saved { defaults.set(saved, forKey: "wellbeing_debt_tutorial_completed") } else { defaults.removeObject(forKey: "wellbeing_debt_tutorial_completed") } }
+        let fixture = DebtCalculationFixture(owner: owner, score: score)
+        let host = UIHostingController(rootView: WellbeingDebtDashboardView(reader: fixture)
+            .environmentObject(DependencyContainer.preview).environmentObject(AppState()).preferredColorScheme(.dark))
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 393, height: 852))
+        window.rootViewController = host; window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        for _ in 0..<100 {
+            if await fixture.ownerReads >= 2 { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let reads = await fixture.ownerReads
+        XCTAssertGreaterThanOrEqual(reads, 2)
+        try await Task.sleep(for: .milliseconds(300))
+        host.view.layoutIfNeeded()
+        let attachment = XCTAttachment(image: UIGraphicsImageRenderer(bounds: host.view.bounds).image { _ in
+            host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
+        })
+        attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
+    }
+}
+private actor DebtCalculationFixture: WellbeingDebtReading {
+    let owner: String
+    let score: DebtScore
+    var ownerReads = 0
+    init(owner: String, score: DebtScore) { self.owner = owner; self.score = score }
+    func transactionOwnerID() async throws -> String { ownerReads += 1; return owner }
+    func fetchLatestDebtScore() async throws -> DebtScore? { score }
+    func fetchProfile() async throws -> WellbeingDebtProfile? { nil }
+    func fetchActiveRecoveryProgram() async throws -> RecoveryProgram? { nil }
+    func calculateDebtScore(for date: String?) async throws -> DebtScore { score }
+    func backfillTransactions(days: Int) async throws -> Int { XCTFail("Reading a score must not start historical reprocessing"); return 0 }
+    func fetchTransactions(from: String, to: String) async throws -> [WellbeingTransaction] { score.sourceTransactions ?? [] }
+}
