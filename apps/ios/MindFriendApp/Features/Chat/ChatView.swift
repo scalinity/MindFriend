@@ -4,7 +4,19 @@ import OSLog
 struct ChatView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
+    @Environment(\.dismiss) private var dismiss
     let conversation: Conversation
+    typealias SendOperation = @MainActor (String, UUID, Bool, @escaping (String) -> Void) async throws -> SendMessageResponse
+    private let sendOperation: SendOperation?
+    private let loadOperation: (@MainActor () async throws -> [Message])?
+    private let recordMessage: (@MainActor () async -> Void)?
+    private struct PendingSend {
+        let id: UUID
+        let content: String
+        var messageId: String { id.uuidString.lowercased() }
+    }
+    @State private var pendingSend: PendingSend?
+    @State private var sendFailure: ChatRequestFailure?
 
     @State private var messages: [Message] = []
     @State private var inputText = ""
@@ -13,6 +25,11 @@ struct ChatView: View {
     @State private var showQuotaWarning = false
     @State private var displayTitle: String = "Chat"
     @State private var sendTask: Task<Void, Never>?
+    @State private var reconciliationTask: Task<Void, Never>?
+    @State private var viewGeneration = UUID()
+    @State private var messageLoadGeneration = UUID()
+    @State private var isVisible = false
+    @State private var streamingText = ""
     @FocusState private var isInputFocused: Bool
     @State private var showVoiceMode = false
     @State private var latestCoachData: CoachData?
@@ -20,8 +37,10 @@ struct ChatView: View {
 
     private let quotaWarningThreshold = 3
     
-    init(conversation: Conversation) {
+    init(conversation: Conversation, initialDraft: String = "", send: SendOperation? = nil, load: (@MainActor () async throws -> [Message])? = nil, recordMessage: (@MainActor () async -> Void)? = nil) {
         self.conversation = conversation
+        self.sendOperation = send; self.loadOperation = load; self.recordMessage = recordMessage
+        _inputText = State(initialValue: initialDraft)
         // Initialize CoachViewModel - will be injected via container in body
         _coachViewModel = StateObject(wrappedValue: CoachViewModel(
             coachService: DependencyContainer.shared.coachService
@@ -35,8 +54,16 @@ struct ChatView: View {
                 ScrollView {
                     LazyVStack(spacing: 12) {
                         ForEach(messages) { message in
-                            MessageBubble(message: message)
-                                .id(message.id)
+                            VStack(spacing: 4) {
+                                MessageBubble(message: message)
+                                    .accessibilityIdentifier("chat-message-\(message.id.lowercased())")
+                                if pendingSend?.messageId == message.id.lowercased(), let failure = sendFailure {
+                                    Text(failure.messageSaved == true ? "Reply unavailable" : "Send not confirmed")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .id(message.id)
                         }
 
                         // Coach card - show after assistant's latest message
@@ -83,9 +110,16 @@ struct ChatView: View {
                             .accessibilityLabel("Coach error: \(error)")
                         }
 
-                        if isSending {
+                        if isSending && !streamingText.isEmpty {
+                            MessageBubble(message: Message(id: "streaming", role: .assistant, content: streamingText, createdAt: Date(), blocked: false))
+                                .id("streaming")
+                        }
+                        if isSending && streamingText.isEmpty {
                             TypingIndicator()
                                 .id("typing-indicator")
+                        }
+                        if let failure = sendFailure {
+                            failureBanner(failure).id("send-error")
                         }
                     }
                     .padding()
@@ -95,6 +129,9 @@ struct ChatView: View {
                     withAnimation {
                         proxy.scrollTo(messages.last?.id, anchor: .bottom)
                     }
+                }
+                .onChange(of: sendFailure?.kind) { _, value in
+                    if value != nil { proxy.scrollTo("send-error", anchor: .bottom) }
                 }
                 .onChange(of: isSending) { _, newValue in
                     if newValue {
@@ -106,12 +143,16 @@ struct ChatView: View {
             }
 
             // Quota warning - tappable to show paywall
-            if showQuotaWarning {
+            if showQuotaWarning && sendFailure == nil {
                 QuotaWarningBanner(remaining: appState.entitlements.remaining) {
                     appState.showPaywall = true
                 }
             }
 
+            if isSending {
+                Button("Stop response") { sendTask?.cancel() }
+                    .accessibilityHint("Stops generation. Reload history to see messages already saved.")
+            }
             Divider()
 
             // Input
@@ -154,84 +195,192 @@ struct ChatView: View {
         }
         .fullScreenCover(isPresented: $showVoiceMode, onDismiss: {
             isInputFocused = true
-            Task {
-                await loadMessages()
-            }
+            reconcileMessages(generation: viewGeneration)
         }) {
             VoiceChatView(supabase: container.supabaseClient, conversationId: conversation.id)
         }
-        // Note: We intentionally do NOT cancel sendTask on disappear.
-        // The server will complete the request and save the message.
-        // When the user returns, they'll see the completed response.
+        .onChange(of: appState.currentUser?.id) { previous, current in
+            if let previous, previous != current {
+                messages = []; pendingSend = nil; sendFailure = nil
+                isVisible = false; viewGeneration = UUID()
+                sendTask?.cancel(); reconciliationTask?.cancel()
+                dismiss()
+            }
+        }
+        .onDisappear {
+            isVisible = false
+            viewGeneration = UUID()
+            sendTask?.cancel()
+            reconciliationTask?.cancel()
+            sendTask = nil
+            reconciliationTask = nil
+            isSending = false
+            streamingText = ""
+        }
         // Load messages on appearance
-        .task {
+        .task(id: conversation.id) {
+            viewGeneration = UUID()
+            isVisible = true
+            sendTask?.cancel()
+            reconciliationTask?.cancel()
+            messages = []
+            pendingSend = nil
+            sendFailure = nil
+            isSending = false
+            streamingText = ""
+            displayTitle = conversation.title ?? "Chat"
             await loadMessages()
         }
     }
 
     private func loadMessages() async {
+        let generation = viewGeneration
+        let request = UUID()
+        messageLoadGeneration = request
         isLoading = true
-        defer { isLoading = false }
+        defer {
+            if viewGeneration == generation && messageLoadGeneration == request { isLoading = false }
+        }
 
         do {
-            messages = try await container.chatService.getMessages(
-                conversationId: conversation.id
-            )
+            let loaded: [Message]
+            if let loadOperation { loaded = try await loadOperation() }
+            else { loaded = try await container.chatService.getMessages(conversationId: conversation.id) }
+            guard !Task.isCancelled, isVisible, viewGeneration == generation,
+                  messageLoadGeneration == request else { return }
+            messages = loaded
+            // An unconfirmed send may have failed before a user row existed.
+            // Keep the exact draft visible without inventing a saved message ID.
+            if let pendingSend, sendFailure != nil, inputText.isEmpty,
+               !loaded.contains(where: { $0.id.lowercased() == pendingSend.messageId }) {
+                inputText = pendingSend.content
+            }
+            if pendingSend == nil { sendFailure = nil }
         } catch {
-            appState.showError(.apiError(error.localizedDescription))
+            guard !Task.isCancelled, !(error is CancellationError),
+                  (error as? URLError)?.code != .cancelled, isVisible,
+                  viewGeneration == generation, messageLoadGeneration == request else { return }
+            if sendFailure == nil { sendFailure = ChatRequestFailure(kind: .network) }
         }
+    }
+
+    private func reconcileMessages(generation: UUID) {
+        guard isVisible, viewGeneration == generation else { return }
+        reconciliationTask?.cancel()
+        // A fresh task does not inherit the cancelled send task's cancellation state.
+        reconciliationTask = Task { @MainActor in
+            guard !Task.isCancelled, isVisible, viewGeneration == generation else { return }
+            await loadMessages()
+        }
+    }
+
+    private func failureBanner(_ failure: ChatRequestFailure) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(failure.title).font(.headline)
+            Text(failure.localizedDescription).font(.subheadline)
+            if let used = failure.quotaUsed, let limit = failure.quotaLimit, used >= 0, limit > 0 {
+                Text("\(used) of \(limit) daily messages used").font(.caption)
+            }
+            if let reset = failure.resetAt {
+                Text("Allowance resets \(reset, style: .relative)").font(.caption)
+            } else if let retryAt = failure.retryAt {
+                Text("Retry \(retryAt, style: .relative)").font(.caption)
+            }
+            if pendingSend != nil, failure.canRetryRequest {
+                Button(failure.kind == .pending ? "Check response" : failure.kind == .signIn ? "Retry after sign-in" : "Retry message") {
+                    retryMessage()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isSending)
+            }
+            Button("Reload history") { reconcileMessages(generation: viewGeneration) }
+                .buttonStyle(.bordered)
+            if failure.kind == .quota, appState.entitlements.tier != .premium {
+                Button("View plans") { appState.showPaywall = true }
+                    .buttonStyle(.bordered)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
+        .padding()
+        .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityIdentifier("chat-send-feedback")
     }
 
     private func sendMessage() {
         let content = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !content.isEmpty else { return }
-
-        // Check quota
-        if appState.entitlements.isQuotaExceeded {
-            appState.showPaywall = true
+        guard !content.isEmpty, !isSending else { return }
+        if let pendingSend, sendFailure != nil, content == pendingSend.content {
+            retryMessage()
             return
         }
-
-        // Create optimistic user message
-        let tempMessageId = UUID().uuidString
-        let tempUserMessage = Message(
-            id: tempMessageId,
-            role: .user,
-            content: content,
-            createdAt: Date(),
-            blocked: false
-        )
-
-        // Add user message immediately (optimistic UI)
-        messages.append(tempUserMessage)
+        let pending = PendingSend(id: UUID(), content: content)
+        pendingSend = pending
         inputText = ""
+        startSend(pending, retryFailed: false)
+    }
+
+    private func retryMessage() {
+        guard !isSending, let pendingSend, let failure = sendFailure,
+              failure.canRetryRequest else { return }
+        if inputText.trimmingCharacters(in: .whitespacesAndNewlines) == pendingSend.content { inputText = "" }
+        startSend(pendingSend, retryFailed: failure.retryable)
+    }
+
+    private func startSend(_ pending: PendingSend, retryFailed: Bool) {
+        guard !isSending else { return }
+        let tempMessageId = pending.messageId
+        let content = pending.content
+        if !messages.contains(where: { $0.id.lowercased() == tempMessageId }) {
+            messages.append(Message(id: tempMessageId, role: .user, content: content, createdAt: Date(), blocked: false))
+        }
         isSending = true
+        sendFailure = nil
+        streamingText = ""
+        let generation = viewGeneration
+        messageLoadGeneration = UUID()
+        reconciliationTask?.cancel()
 
         // Store task reference for cancellation on view disappear
         sendTask = Task { @MainActor in
-            defer { isSending = false }
+            defer {
+                if viewGeneration == generation {
+                    isSending = false
+                    streamingText = ""
+                    sendTask = nil
+                }
+            }
 
             do {
                 // Check for cancellation before making network call
                 try Task.checkCancellation()
 
-                let response = try await container.chatService.sendMessage(
-                    conversationId: conversation.id,
-                    content: content
-                )
+                let operation = sendOperation ?? { content, id, retry, delta in
+                    try await container.chatService.sendMessage(conversationId: conversation.id, content: content,
+                        requestId: id, retryFailed: retry, onDelta: delta)
+                }
+                let response = try await operation(content, pending.id, retryFailed) {
+                    if isVisible && viewGeneration == generation { streamingText += $0 }
+                }
 
                 // Check for cancellation after network call
                 try Task.checkCancellation()
+                guard isVisible, viewGeneration == generation else { return }
 
                 // Use removeAll(where:) for atomic removal (prevents race condition)
-                messages.removeAll { $0.id == tempMessageId }
-                messages.append(response.userMessage)
-                messages.append(response.assistantMessage)
+                messages.removeAll { $0.id.lowercased() == tempMessageId }
+                for saved in [response.userMessage, response.assistantMessage] {
+                    if let index = messages.firstIndex(where: { $0.id.lowercased() == saved.id.lowercased() }) { messages[index] = saved }
+                    else { messages.append(saved) }
+                }
+                pendingSend = nil
+                sendFailure = nil
 
                 // Update quota tracking from server (authoritative source)
                 if appState.entitlements.tier != .premium, let serverUsed = response.quotaUsed {
                     // Sync from server-provided value (not local increment)
-                    appState.entitlements.dailyAiUsed = serverUsed
+                    let limit = response.quotaLimit.flatMap { $0 > 0 ? $0 : nil } ?? appState.entitlements.dailyAiQuota
+                    appState.entitlements = Entitlements(tier: appState.entitlements.tier, dailyAiQuota: limit, dailyAiUsed: serverUsed)
                     // Only show warning if not unlimited (Int.max) and near limit
                     showQuotaWarning = response.quotaRemaining < Int.max && response.quotaRemaining <= quotaWarningThreshold
                 } else {
@@ -239,7 +388,9 @@ struct ChatView: View {
                 }
 
                 // Record first chat message for progressive disclosure activation
-                try? await container.activationService.recordChatMessage()
+                if let recordMessage { await recordMessage() }
+                else { try? await container.activationService.recordChatMessage() }
+                guard !Task.isCancelled, isVisible, viewGeneration == generation else { return }
 
                 // Update title if generated
                 if let newTitle = response.conversationTitle {
@@ -262,22 +413,25 @@ struct ChatView: View {
                     }
                 }
             } catch is CancellationError {
-                // Task was cancelled - don't show error, message will complete on server
-                // User will see the response when they return to the chat
-                Log.chat.debug("Send task cancelled, server will complete request")
-            } catch let urlError as URLError where urlError.code == .cancelled {
-                // URL request was cancelled - same handling as CancellationError
-                Log.chat.debug("URL request cancelled, server will complete request")
-            } catch let error as APIError {
-                if case .quotaExceeded = error {
-                    appState.showPaywall = true
-                } else {
-                    appState.showError(.apiError(error.localizedDescription))
-                }
-                // Keep the user message visible on error so user can see what they typed
+                if isVisible, viewGeneration == generation { sendFailure = ChatRequestFailure(kind: .unconfirmed) }
+                reconcileMessages(generation: generation)
+            } catch let error as URLError where error.code == .cancelled {
+                if isVisible, viewGeneration == generation { sendFailure = ChatRequestFailure(kind: .unconfirmed) }
+                reconcileMessages(generation: generation)
             } catch {
-                appState.showError(.apiError(error.localizedDescription))
-                // Keep the user message visible on error
+                guard !Task.isCancelled, isVisible, viewGeneration == generation else { return }
+                let failure = error as? ChatRequestFailure ?? ChatRequestFailure(kind: .unconfirmed)
+                sendFailure = failure
+                let used = failure.quotaUsed.flatMap { $0 >= 0 ? $0 : nil } ?? appState.entitlements.dailyAiUsed
+                let limit = failure.quotaLimit.flatMap { $0 > 0 ? $0 : nil } ?? appState.entitlements.dailyAiQuota
+                appState.entitlements = Entitlements(tier: appState.entitlements.tier, dailyAiQuota: limit, dailyAiUsed: used)
+                if failure.messageSaved == false {
+                    messages.removeAll { $0.id.lowercased() == tempMessageId }
+                    if inputText.isEmpty { inputText = content }
+                } else if failure.kind == .signIn, inputText.isEmpty {
+                    inputText = content
+                }
+                reconcileMessages(generation: generation)
             }
         }
     }

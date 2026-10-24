@@ -1,7 +1,7 @@
 // Rate limiting using Supabase database
 // Uses sliding window approach with PostgreSQL
 
-import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 
 interface RateLimitResult {
   allowed: boolean;
@@ -57,9 +57,10 @@ export async function checkRateLimit(
   const result = data?.[0];
   if (!result) {
     return {
-      allowed: true,
-      remaining: config.maxRequests,
+      allowed: false,
+      remaining: 0,
       resetAt: new Date(now.getTime() + config.windowMs),
+      retryAfter: Math.ceil(config.windowMs / 1000),
     };
   }
 

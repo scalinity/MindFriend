@@ -616,3 +616,122 @@ private final class AvatarFixtureHTTP: @unchecked Sendable {
         return (status, (try? JSONSerialization.data(withJSONObject: body)) ?? Data())
     }
 }
+
+extension SupabaseDataServiceTests {
+    func testChatWireResponsePreservesServerMessageAndUnixTimestamp() throws {
+        let fixture = Data("""
+        {"userMessage":{"id":"server-user-message","role":"user","content":"Synthetic fixture","createdAt":1710000000,"blocked":false},"message":{"id":"server-assistant-message","role":"assistant","content":"Fixture response","createdAt":1710000001,"blocked":false},"quotaUsed":1,"quotaLimit":5}
+        """.utf8)
+        let response = try ChatFunctionResponse.decode(fixture)
+        XCTAssertEqual(response.userMessage?.id, "server-user-message")
+        XCTAssertEqual(response.message.createdAt.timeIntervalSince1970, 1710000001)
+    }
+
+    func testChatWireResponseAcceptsInstalledBackendWithoutUserMessage() throws {
+        let fixture = Data("""
+        {"message":{"id":"legacy-assistant","role":"assistant","content":"Fixture","createdAt":1710000001,"blocked":false}}
+        """.utf8)
+        let response = try ChatFunctionResponse.decode(fixture)
+        XCTAssertNil(response.userMessage)
+        XCTAssertEqual(response.message.id, "legacy-assistant")
+    }
+}
+
+final class ChatRequestTransportTests: XCTestCase {
+    private func request() -> URLRequest { URLRequest(url: URL(string: "https://chat-fixture.invalid/chat")!) }
+    private func session(status: Int = 200, mime: String = "application/json", chunks: [Data], failure: URLError? = nil, keepOpen: Bool = false) -> URLSession {
+        ChatTransportURLProtocol.fixture.prepare(status: status, mime: mime, chunks: chunks, failure: failure, keepOpen: keepOpen)
+        let config = URLSessionConfiguration.ephemeral;config.protocolClasses = [ChatTransportURLProtocol.self]
+        return URLSession(configuration: config)
+    }
+    private func json(_ fields: [String:Any]) throws -> Data { try JSONSerialization.data(withJSONObject: fields) }
+    private func wire() -> [String:Any] {
+        ["userMessage":["id":"11111111-1111-4111-8111-111111111115","role":"user","content":"Synthetic question","createdAt":1_700_000_000,"blocked":false],
+         "message":["id":"22222222-2222-4222-8222-222222222225","role":"assistant","content":"Synthetic reply","createdAt":1_700_000_001,"blocked":false],"quotaUsed":2,"quotaLimit":5]
+    }
+    @MainActor func testJSONAndStreamSuccessPreserveServerIdentityAndQuota() async throws {
+        let data=try json(wire());let s=session(chunks:[data]);defer{s.invalidateAndCancel()}
+        let result=try await SupabaseDataService.chatResponse(for:request(),session:s)
+        XCTAssertEqual(result.userMessage?.id,"11111111-1111-4111-8111-111111111115");XCTAssertEqual(result.quotaUsed,2);XCTAssertEqual(result.quotaLimit,5)
+        let event=try json(["type":"result","data":wire()]);let delta=try json(["type":"delta","text":"Synthetic "])
+        let stream=session(mime:"text/event-stream",chunks:[Data("data:".utf8),delta,Data("\r\n\r\ndata:".utf8),event,Data("\r\n\r\n".utf8)],keepOpen:true);defer{stream.invalidateAndCancel()}
+        var text="";let completed=try await SupabaseDataService.chatResponse(for:request(),session:stream,onDelta:{text += $0})
+        XCTAssertEqual(text,"Synthetic ");XCTAssertEqual(completed.message.id,result.message.id)
+    }
+    @MainActor func testHTTPFailureKindsAndActualMetadata() async throws {
+        for (status,body,kind) in [
+            (429,["error":"AI_QUOTA_EXCEEDED","quotaUsed":5,"quotaLimit":5,"messageSaved":false],ChatRequestFailure.Kind.quota),
+            (503,["error":"AI_MONTHLY_BUDGET_REACHED","retryable":true,"messageSaved":false],.sharedBudget),
+            (429,["error":"Too many requests","retryAfter":9],.rateLimited),
+            (503,["code":"chat_provider_unavailable","retryable":true,"messageSaved":true],.provider),
+            (409,["error":"Request outcome pending. Reload history before sending again."],.pending),
+            (401,["error":"Unauthorized"],.signIn),
+            (500,["error":"Unknown service failure"],.unconfirmed)
+        ] as [(Int,[String:Any],ChatRequestFailure.Kind)] {
+            let s=session(status:status,chunks:[try json(body)]);defer{s.invalidateAndCancel()}
+            do { _=try await SupabaseDataService.chatResponse(for:request(),session:s);XCTFail("Failure must not become success") }
+            catch let failure as ChatRequestFailure {
+                XCTAssertEqual(failure.kind,kind)
+                if kind == .quota { XCTAssertEqual(failure.quotaUsed,5);XCTAssertEqual(failure.quotaLimit,5);XCTAssertEqual(failure.messageSaved,false);XCTAssertNil(failure.resetAt) }
+                if kind == .rateLimited { XCTAssertNotNil(failure.retryAt) }
+                if kind == .pending || kind == .unconfirmed { XCTAssertFalse(failure.retryable) }
+            }
+        }
+    }
+    @MainActor func testStreamErrorAfterDeltaKeepsProviderFailureDistinctFromQuota() async throws {
+        let event=try json(["type":"error","status":503,"data":["code":"chat_provider_unavailable","retryable":true,"messageSaved":true]])
+        let s=session(mime:"text/event-stream",chunks:[Data("data:{\"type\":\"delta\",\"text\":\"Synthetic\"}\n\ndata:".utf8),event,Data("\n\n".utf8)]);defer{s.invalidateAndCancel()}
+        var delta=""
+        do { _=try await SupabaseDataService.chatResponse(for:request(),session:s,onDelta:{delta += $0});XCTFail("Must fail") }
+        catch let failure as ChatRequestFailure { XCTAssertEqual(failure.kind,.provider);XCTAssertTrue(failure.retryable);XCTAssertEqual(failure.messageSaved,true) }
+        XCTAssertEqual(delta,"Synthetic")
+    }
+    @MainActor func testOfflineAndMissingFinalRemainExplicitFailures() async throws {
+        let offline=session(chunks:[],failure:URLError(.notConnectedToInternet));defer{offline.invalidateAndCancel()}
+        do { _=try await SupabaseDataService.chatResponse(for:request(),session:offline);XCTFail("Must fail") }
+        catch let failure as ChatRequestFailure { XCTAssertEqual(failure.kind,.network);XCTAssertTrue(failure.retryable) }
+        let unfinished=session(mime:"text/event-stream",chunks:[Data("data:{\"type\":\"delta\",\"text\":\"Preview only\"}\n\n".utf8)]);defer{unfinished.invalidateAndCancel()}
+        do { _=try await SupabaseDataService.chatResponse(for:request(),session:unfinished);XCTFail("No final result") }
+        catch let failure as ChatRequestFailure { XCTAssertEqual(failure.kind,.network) }
+    }
+    func testMonthlyBudgetRecoveryTextAndActualRetryMetadata() throws {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let exhausted = ChatRequestFailure.response(status: 503, data: try json(["error":"AI_MONTHLY_BUDGET_REACHED"]), now: now)
+        XCTAssertEqual(exhausted.kind, .sharedBudget)
+        XCTAssertTrue(exhausted.localizedDescription.contains("next month"))
+        XCTAssertNil(exhausted.resetAt)
+        let unavailable = ChatRequestFailure.response(status: 503, data: try json(["code":"chat_shared_budget_unavailable"]), now: now)
+        XCTAssertFalse(unavailable.localizedDescription.contains("next month"))
+        let rate = ChatRequestFailure.response(status: 429, data: try json(["code":"chat_rate_limited","retryAfter":17]), now: now)
+        XCTAssertEqual(rate.retryAt, now.addingTimeInterval(17))
+        let auth = ChatRequestFailure.response(status:401,data:Data())
+        XCTAssertNil(auth.messageSaved)
+        XCTAssertTrue(auth.canRetryRequest)
+        XCTAssertFalse(auth.retryable)
+    }
+    @MainActor func testCancellationStopsNativeChatTransport() async throws {
+        let s=session(mime:"text/event-stream",chunks:[Data("data:{\"type\":\"delta\",\"text\":\"Synthetic\"}\n\n".utf8)],keepOpen:true);defer{s.invalidateAndCancel()}
+        let task=Task { try await SupabaseDataService.chatResponse(for:request(),session:s) }
+        try await Task.sleep(for:.milliseconds(100));task.cancel()
+        do { _=try await task.value;XCTFail("Cancellation must not succeed") } catch is CancellationError {}
+    }
+}
+private final class ChatTransportURLProtocol: URLProtocol {
+    static let fixture=ChatTransportFixture()
+    override class func canInit(with request:URLRequest)->Bool {request.url?.host=="chat-fixture.invalid"}
+    override class func canonicalRequest(for request:URLRequest)->URLRequest {request}
+    override func startLoading() {
+        let f=Self.fixture.snapshot()
+        if let failure=f.failure {client?.urlProtocol(self,didFailWithError:failure);return}
+        client?.urlProtocol(self,didReceive:HTTPURLResponse(url:request.url!,statusCode:f.status,httpVersion:nil,headerFields:["Content-Type":f.mime])!,cacheStoragePolicy:.notAllowed)
+        for chunk in f.chunks {client?.urlProtocol(self,didLoad:chunk)}
+        if !f.keepOpen {client?.urlProtocolDidFinishLoading(self)}
+    }
+    override func stopLoading() {}
+}
+private final class ChatTransportFixture: @unchecked Sendable {
+    struct Value {let status:Int;let mime:String;let chunks:[Data];let failure:URLError?;let keepOpen:Bool}
+    private let lock=NSLock();private var value=Value(status:200,mime:"application/json",chunks:[],failure:nil,keepOpen:false)
+    func prepare(status:Int,mime:String,chunks:[Data],failure:URLError?,keepOpen:Bool) {lock.lock();defer{lock.unlock()};value=Value(status:status,mime:mime,chunks:chunks,failure:failure,keepOpen:keepOpen)}
+    func snapshot()->Value {lock.lock();defer{lock.unlock()};return value}
+}

@@ -4,7 +4,7 @@
  * Selects and populates reframe templates with context from user messages
  */
 
-import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 
 export interface ReframeResult {
   reframeText: string;
