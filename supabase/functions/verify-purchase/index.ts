@@ -3,28 +3,20 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import { createRemoteJWKSet, jwtVerify } from "npm:jose@5.2.4";
+import {
+  TransactionVerificationError,
+  type VerifiedAppleTransaction,
+  verifyAppleTransaction,
+} from "./apple-transaction.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { createLogger } from "../_shared/logger.ts";
 import {
+  generateInviteCode,
   getPlanDetails,
   isFamilyPlan,
-  calculateExpiryDate,
-  generateInviteCode,
-  isValidProductId,
 } from "../_shared/billing-types.ts";
 
 const log = createLogger("verify-purchase");
-
-// SECURITY FIX #003: Apple's canonical StoreKit JWS verification endpoints
-const STOREKIT_JWKS = {
-  production: "https://api.storekit.itunes.apple.com/inApps/v1/jwsPublicKeys",
-  sandbox:
-    "https://api.storekit-sandbox.itunes.apple.com/inApps/v1/jwsPublicKeys",
-} as const;
-
-// Expected bundle ID for validation
-const EXPECTED_BUNDLE_ID = "com.mindfriend.app";
 
 interface VerifyRequest {
   signedTransaction: string; // StoreKit 2 JWS from Transaction.jwsRepresentation
@@ -32,31 +24,6 @@ interface VerifyRequest {
   // Legacy fields for backward compatibility during transition (will be removed)
   originalTransactionId?: string;
   productId?: string;
-}
-
-// Apple's StoreKit 2 transaction payload structure
-interface AppleTransactionPayload {
-  transactionId: string;
-  originalTransactionId: string;
-  bundleId: string;
-  productId: string;
-  purchaseDate: number; // milliseconds since epoch
-  originalPurchaseDate: number;
-  expiresDate?: number;
-  quantity: number;
-  type:
-    | "Auto-Renewable Subscription"
-    | "Non-Consumable"
-    | "Consumable"
-    | "Non-Renewing Subscription";
-  inAppOwnershipType: "PURCHASED" | "FAMILY_SHARED";
-  signedDate: number;
-  environment: "Production" | "Sandbox";
-  transactionReason?: "PURCHASE" | "RENEWAL";
-  storefront: string;
-  storefrontId: string;
-  price?: number;
-  currency?: string;
 }
 
 interface VerifyResponse {
@@ -107,7 +74,7 @@ serve(async (req) => {
     }
 
     const requestBody: VerifyRequest = await req.json();
-    const { signedTransaction, environment = "production" } = requestBody;
+    const { signedTransaction } = requestBody;
 
     // Require signedTransaction for proper JWS verification
     if (!signedTransaction) {
@@ -125,100 +92,36 @@ serve(async (req) => {
       );
     }
 
-    // SECURITY FIX #003: Two-pass JWS verification - try production first, then sandbox
-    // This removes the need to trust client-provided environment
-    async function verifyJWSWithEnv(
-      signed: string,
-      env: keyof typeof STOREKIT_JWKS,
-    ): Promise<AppleTransactionPayload> {
-      const jwks = createRemoteJWKSet(new URL(STOREKIT_JWKS[env]));
-      const { payload } = await jwtVerify(signed, jwks, {
-        // Apple's StoreKit JWS doesn't have standard issuer/audience claims
-        // The signature verification itself is the key security check
-      });
-      return payload as unknown as AppleTransactionPayload;
-    }
-
-    let transactionPayload: AppleTransactionPayload;
-    let verifiedEnvironment: "production" | "sandbox" = "production";
-
+    let transactionPayload: VerifiedAppleTransaction;
     try {
-      // Try production keys first
-      transactionPayload = await verifyJWSWithEnv(
+      transactionPayload = await verifyAppleTransaction(
         signedTransaction,
-        "production",
+        user.id,
       );
-    } catch (prodError) {
-      // Fall back to sandbox keys
-      try {
-        transactionPayload = await verifyJWSWithEnv(
-          signedTransaction,
-          "sandbox",
-        );
-        verifiedEnvironment = "sandbox";
-        log.info("Transaction verified against sandbox keys");
-      } catch (sandboxError) {
-        log.error("JWS verification failed for both environments", {
-          prodError: String(prodError),
-          sandboxError: String(sandboxError),
-        });
-        return new Response(
-          JSON.stringify({
-            error: "Invalid transaction signature",
-            code: "JWS_VERIFICATION_FAILED",
-            valid: false,
-          }),
-          {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          },
-        );
-      }
+    } catch (error) {
+      if (!(error instanceof TransactionVerificationError)) throw error;
+      log.warn("Transaction verification rejected", { code: error.code });
+      return new Response(
+        JSON.stringify({
+          error: error.message,
+          code: error.code,
+          valid: false,
+        }),
+        {
+          status: error.code === "VERIFICATION_UNAVAILABLE" ? 503 : error.code === "APP_ACCOUNT_TOKEN_MISMATCH" ? 403 : 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     log.info("JWS verification successful", {
       transactionId: transactionPayload.transactionId,
       productId: transactionPayload.productId,
       environment: transactionPayload.environment,
-      verifiedAgainst: verifiedEnvironment,
     });
 
-    // Validate bundle ID to prevent cross-app attacks
-    if (transactionPayload.bundleId !== EXPECTED_BUNDLE_ID) {
-      log.warn("Bundle ID mismatch", {
-        expected: EXPECTED_BUNDLE_ID,
-        received: transactionPayload.bundleId,
-      });
-      return new Response(
-        JSON.stringify({
-          error: "Invalid bundle ID",
-          code: "BUNDLE_ID_MISMATCH",
-          valid: false,
-        }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    // Extract verified transaction data
     const { productId, originalTransactionId, expiresDate } =
       transactionPayload;
-
-    // Validate product ID from verified payload
-    if (!productId || !isValidProductId(productId)) {
-      return new Response(
-        JSON.stringify({
-          error: "Invalid product ID in transaction",
-          code: "INVALID_PRODUCT_ID",
-        }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
 
     // SECURITY FIX #003: Use maybeSingle to handle missing/duplicate gracefully
     const { data: existingSubscription, error: lookupError } =
@@ -229,7 +132,7 @@ serve(async (req) => {
         .maybeSingle();
 
     if (lookupError) {
-      log.error("Subscription lookup failed", { code: lookupError.code });
+      log.error("Subscription lookup failed", undefined, { code: lookupError.code });
       return new Response(
         JSON.stringify({ valid: false, error: "Lookup failed" }),
         {
@@ -284,11 +187,7 @@ serve(async (req) => {
 
       // Renewal - same original transaction but new transaction ID
       // Update expiry and transaction ID
-      const newExpiresAt = expiresDate
-        ? new Date(expiresDate)
-        : calculateExpiryDate(
-            getPlanDetails(existingSubscription.product_id).billingPeriod,
-          );
+      const newExpiresAt = new Date(expiresDate);
 
       const { error: renewalError } = await supabaseAdmin
         .from("subscriptions")
@@ -301,7 +200,7 @@ serve(async (req) => {
         .eq("id", existingSubscription.id);
 
       if (renewalError) {
-        log.error("Renewal update failed", { error: renewalError.message });
+        log.error("Renewal update failed", undefined, { error: renewalError.message });
       } else {
         log.info("Subscription renewed", {
           userId: user.id,
@@ -330,10 +229,8 @@ serve(async (req) => {
     // Get plan details from verified product ID
     const planDetails = getPlanDetails(productId);
 
-    // Use expiry from Apple's verified payload, or calculate if not present
-    const expiresAt = expiresDate
-      ? new Date(expiresDate)
-      : calculateExpiryDate(planDetails.billingPeriod);
+    // Use only the expiry from Apple's verified subscription payload.
+    const expiresAt = new Date(expiresDate);
 
     let familyId: string | undefined;
     let circleId: string | undefined;
@@ -372,7 +269,7 @@ serve(async (req) => {
           .single();
 
         if (circleError) {
-          log.error("Error creating family circle", {
+          log.error("Error creating family circle", undefined, {
             error: circleError.message,
           });
           // Continue without circle, not a blocking error
@@ -400,7 +297,7 @@ serve(async (req) => {
           .single();
 
         if (groupError) {
-          log.error("Error creating family group", {
+          log.error("Error creating family group", undefined, {
             error: groupError.message,
           });
           return new Response(
@@ -469,7 +366,7 @@ serve(async (req) => {
       });
 
     if (subError) {
-      log.error("Error upserting subscription", { error: subError.message });
+      log.error("Error upserting subscription", undefined, { error: subError.message });
     }
 
     // Award premium badge
@@ -528,7 +425,7 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
-    log.error("Verify purchase error", { error: String(error) });
+    log.error("Verify purchase error", undefined, { error: String(error) });
     return new Response(
       JSON.stringify({ error: "Internal server error", valid: false }),
       {
