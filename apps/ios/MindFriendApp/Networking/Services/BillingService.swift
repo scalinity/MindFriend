@@ -9,6 +9,8 @@ final class BillingService: ObservableObject {
     private let authService: SupabaseAuthService
 
     @Published private(set) var products: [Product] = []
+    @Published private(set) var isLoadingProducts = false
+    @Published private(set) var productLoadError: String?
     @Published private(set) var isPurchasing = false
     @Published private(set) var entitlements: Entitlements = .free
     @Published private(set) var subscription: Subscription?
@@ -31,6 +33,9 @@ final class BillingService: ObservableObject {
     // P3-P6: Cache products to avoid redundant StoreKit requests
     private var productsLoaded = false
     private var productsLoadTask: Task<Void, Never>?
+    private let productLoader: @Sendable ([String]) async throws -> [Product]
+    private let transactionVerifier: (@MainActor (Transaction, String, String?) async throws -> Entitlements)?
+    enum PurchaseOutcome: Equatable { case completed, pending }
 
     // All available product IDs for premium subscriptions
     static let productIds = [
@@ -65,13 +70,16 @@ final class BillingService: ObservableObject {
         "com.mindfriend.family.annual": .yearly
     ]
 
-    init(authService: SupabaseAuthService) {
+    init(authService: SupabaseAuthService,
+         productLoader: @escaping @Sendable ([String]) async throws -> [Product] = { try await Product.products(for: $0) },
+         transactionVerifier: (@MainActor (Transaction, String, String?) async throws -> Entitlements)? = nil,
+         observeTransactions: Bool = true) {
         self.authService = authService
-        startTransactionListener()
-        // Apple requires checking currentEntitlements at launch to catch
-        // transactions granted outside the app (renewals, family sharing, promos)
-        Task { [weak self] in
-            await self?.syncCurrentEntitlements()
+        self.productLoader = productLoader
+        self.transactionVerifier = transactionVerifier
+        if observeTransactions {
+            startTransactionListener()
+            Task { [weak self] in await self?.syncCurrentEntitlements() }
         }
     }
 
@@ -93,16 +101,23 @@ final class BillingService: ObservableObject {
         }
 
         // Start new load task
+        isLoadingProducts = true
+        productLoadError = nil
         productsLoadTask = Task {
+            defer { isLoadingProducts = false; productsLoadTask = nil }
             do {
-                let loadedProducts = try await Product.products(for: Self.productIds)
+                let loadedProducts = try await productLoader(Self.productIds)
                     .sorted { $0.price < $1.price }
                 products = loadedProducts
-                productsLoaded = true
+                // An empty or partial response must remain retryable.
+                productsLoaded = Set(loadedProducts.map(\.id)).isSuperset(of: Self.productIds)
+                if loadedProducts.isEmpty {
+                    productLoadError = "Subscriptions are unavailable from the App Store right now. Try loading plans again."
+                }
             } catch {
+                productLoadError = "Couldn’t load subscription plans. Check your connection and try again."
                 Log.billing.error("Failed to load products: \(error)")
             }
-            productsLoadTask = nil
         }
 
         await productsLoadTask?.value
@@ -206,21 +221,26 @@ final class BillingService: ObservableObject {
 
     // MARK: - Purchase
 
-    func purchase(_ product: Product, promoCode: String? = nil) async throws {
+    @discardableResult
+    func purchase(_ product: Product, promoCode: String? = nil) async throws -> PurchaseOutcome {
+        guard !isPurchasing else { throw BillingError.purchaseInProgress }
         isPurchasing = true
         defer { isPurchasing = false }
 
-        let result = try await product.purchase()
+        let options: Set<Product.PurchaseOption> = authService.userId.map { [.appAccountToken($0)] } ?? []
+        let result: Product.PurchaseResult
+        do { result = try await product.purchase(options: options) }
+        catch StoreKitError.userCancelled { throw BillingError.cancelled }
 
         switch result {
         case .success(let verification):
             let transaction = try checkVerified(verification)
             try await submitTransaction(transaction, jwsRepresentation: verification.jwsRepresentation, promoCode: promoCode)
             await transaction.finish()
+            return .completed
 
         case .pending:
-            // Transaction is pending approval
-            break
+            return .pending
 
         case .userCancelled:
             throw BillingError.cancelled
@@ -238,11 +258,12 @@ final class BillingService: ObservableObject {
         for await result in Transaction.currentEntitlements {
             if let transaction = try? checkVerified(result) {
                 try await submitTransaction(transaction, jwsRepresentation: result.jwsRepresentation)
+                await transaction.finish()
             }
         }
 
-        // Refresh entitlements
-        try await refreshEntitlements()
+        // The injected verifier returns refreshed entitlements; production reads the owned profile.
+        if transactionVerifier == nil { try await refreshEntitlements() }
     }
 
     // MARK: - Entitlements
@@ -796,7 +817,20 @@ final class BillingService: ObservableObject {
         }
     }
 
+    static func verificationError(status: Int, data: Data) -> BillingError {
+        let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let code = body?["code"] as? String
+        if code == "TRANSACTION_ALREADY_CLAIMED" || code == "APP_ACCOUNT_TOKEN_MISMATCH" { return .purchaseAccountMismatch }
+        if status == 401 { return .purchaseSignInRequired }
+        if status >= 500 || code == "VERIFICATION_UNAVAILABLE" { return .purchaseVerificationUnavailable }
+        return .invalidTransaction
+    }
+
     private func submitTransaction(_ transaction: Transaction, jwsRepresentation: String, promoCode: String? = nil) async throws {
+        if let transactionVerifier {
+            entitlements = try await transactionVerifier(transaction, jwsRepresentation, promoCode)
+            return
+        }
         // Use the JWS representation from VerificationResult for server-side verification
         struct VerifyPurchaseRequest: Encodable {
             let signedTransaction: String
@@ -810,17 +844,27 @@ final class BillingService: ObservableObject {
             }
         }
 
-        let _: VerifyPurchaseResponse = try await supabase.functions.invoke(
-            "verify-purchase",
-            options: .init(body: VerifyPurchaseRequest(
-                signedTransaction: jwsRepresentation,
-                environment: transaction.environment == .sandbox ? "sandbox" : "production",
-                promoCode: promoCode
-            ))
-        )
-
+        let verification: VerifyPurchaseResponse
+        do {
+            verification = try await supabase.functions.invoke(
+                "verify-purchase",
+                options: .init(body: VerifyPurchaseRequest(
+                    signedTransaction: jwsRepresentation,
+                    environment: transaction.environment == .sandbox ? "sandbox" : "production",
+                    promoCode: promoCode
+                ))
+            )
+        } catch FunctionsError.httpError(let status, let data) {
+            throw Self.verificationError(status: status, data: data)
+        } catch {
+            throw BillingError.purchaseVerificationUnavailable
+        }
+        guard verification.valid, verification.productId == transaction.productID else {
+            throw BillingError.invalidTransaction
+        }
         // Refresh entitlements after successful transaction
         try await refreshEntitlements()
+        guard entitlements.tier == .premium else { throw BillingError.entitlementPending }
     }
 }
 
@@ -854,15 +898,20 @@ enum BillingError: Error, LocalizedError, Equatable {
     case hsaReceiptGenerationFailed
     case lomnGenerationFailed
     case productNotFound
+    case purchaseInProgress
+    case entitlementPending
+    case purchaseVerificationUnavailable
+    case purchaseAccountMismatch
+    case purchaseSignInRequired
 
     var errorDescription: String? {
         switch self {
         case .cancelled:
             return "Purchase was cancelled"
         case .verificationFailed:
-            return "Transaction verification failed"
+            return "The App Store couldn’t verify this purchase. Try Restore Purchases."
         case .invalidTransaction:
-            return "Invalid transaction"
+            return "The purchase could not be verified. Try Restore Purchases."
         case .unknown:
             return "An unknown error occurred"
         case .noFamilyGroup:
@@ -888,7 +937,17 @@ enum BillingError: Error, LocalizedError, Equatable {
         case .lomnGenerationFailed:
             return "Failed to generate Letter of Medical Necessity"
         case .productNotFound:
-            return "Product not found in the App Store"
+            return "This subscription is unavailable from the App Store. Try loading plans again."
+        case .purchaseInProgress:
+            return "A purchase is already in progress. Please wait for it to finish."
+        case .entitlementPending:
+            return "Your purchase was received, but access hasn’t updated yet. Try Restore Purchases."
+        case .purchaseVerificationUnavailable:
+            return "Purchase verification is temporarily unavailable. Try Restore Purchases in a moment."
+        case .purchaseAccountMismatch:
+            return "This purchase belongs to another MindFriend account. Sign in to that account to restore it."
+        case .purchaseSignInRequired:
+            return "Sign in to MindFriend again, then try Restore Purchases."
         }
     }
 }
