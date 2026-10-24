@@ -1,11 +1,10 @@
 // MindFriend Chat Edge Function
 // Handles AI conversation with quota enforcement and crisis detection
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import {
   createClient,
   SupabaseClient,
-} from "https://esm.sh/@supabase/supabase-js@2.49.1";
+} from "https://esm.sh/@supabase/supabase-js@2.118.0";
 
 // Type alias for untyped Supabase client (no generated database types)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -20,6 +19,12 @@ import { CRISIS_RESPONSE } from "../_shared/crisis.ts"; // Keep response templat
 import { checkRateLimit, getRateLimitHeaders } from "../_shared/ratelimit.ts";
 import { sanitizeErrorMessage } from "../_shared/security.ts";
 import { sanitizeForPrompt } from "../_shared/sanitize.ts";
+import { generateChatText, trimChatContext } from "../_shared/openai-chat.ts";
+import { openAIBudgetReservation } from "../_shared/openai-budget.ts";
+import {
+  MonthlyAIBudgetExhaustedError,
+  MonthlyAIBudgetUnavailableError,
+} from "../_shared/monthly-ai-budget.ts";
 // Cognitive Bias Coach imports
 import {
   detectDistortion,
@@ -31,6 +36,11 @@ import { getReframe } from "../_shared/reframe-templates.ts";
 const MAX_MESSAGE_LENGTH = 4000; // ~1000 tokens
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function retainBackground(task: Promise<unknown>): void {
+  const runtime = (globalThis as typeof globalThis & { EdgeRuntime?: { waitUntil(task: Promise<unknown>): void } }).EdgeRuntime;
+  runtime?.waitUntil(task);
+}
 
 // Coach settings cache (5-minute TTL)
 const coachSettingsCache = new Map<
@@ -74,7 +84,7 @@ async function getCachedCoachSettings(
   return coachSettings;
 }
 
-const XAI_API_URL = "https://api.x.ai/v1/chat/completions";
+
 const SYSTEM_PROMPT = `You are MindFriend, a supportive and empathetic AI companion focused on mental wellness. Your role is to:
 
 1. Listen actively and validate feelings
@@ -94,6 +104,8 @@ Guidelines:
 interface ChatRequest {
   conversationId: string;
   content: string;
+  requestId?: string;
+  retryFailed?: boolean;
 }
 
 interface Message {
@@ -101,13 +113,35 @@ interface Message {
   content: string;
 }
 
-serve(async (req) => {
+interface ChatExecution {
+  receipt?: { userId: string; requestId: string };
+  userMessageId?: string;
+  messageSaved?: boolean | null;
+}
+
+function failedChatResponse(data: Record<string, unknown>, execution: ChatExecution): Record<string, unknown> {
+  const userMessageId = execution.userMessageId ?? data.userMessageId;
+  const messageSaved = execution.userMessageId ? true
+    : execution.messageSaved !== undefined ? execution.messageSaved
+    : typeof data.messageSaved === "boolean" ? data.messageSaved : null;
+  return {
+    ...data,
+    code: data.code ?? "chat_request_unconfirmed",
+    retryable: data.retryable === true,
+    ...(execution.receipt ? { requestId: execution.receipt.requestId, failureId: crypto.randomUUID() } : {}),
+    messageSaved,
+    ...(messageSaved && userMessageId ? { userMessageId } : {}),
+  };
+}
+
+async function handleChat(req: Request, execution: ChatExecution, onDelta?: (text: string) => void): Promise<Response> {
   console.log("======== CHAT FUNCTION START ========");
   console.log("[1] Method:", req.method);
 
   // Get origin first for consistent CORS handling
   const origin = req.headers.get("Origin");
   const baseCorsHeaders = getCorsHeaders(origin);
+  let knownProviderFailure = false;
 
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
@@ -121,13 +155,13 @@ serve(async (req) => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const XAI_API_KEY = Deno.env.get("XAI_API_KEY");
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 
     if (
       !SUPABASE_URL ||
       !SUPABASE_ANON_KEY ||
       !SUPABASE_SERVICE_ROLE_KEY ||
-      !XAI_API_KEY
+      !OPENAI_API_KEY
     ) {
       console.error("CRITICAL: Missing required environment variables");
       return new Response(
@@ -164,9 +198,10 @@ serve(async (req) => {
     // Get authenticated user with timeout
     let user;
     let userAuthError;
+    let authTimeout: ReturnType<typeof setTimeout> | undefined;
     try {
-      const authTimeoutPromise = new Promise((_resolve, reject) =>
-        setTimeout(() => reject(new Error("Auth timeout")), 5000),
+      const authTimeoutPromise = new Promise<never>((_resolve, reject) =>
+        authTimeout = setTimeout(() => reject(new Error("Auth timeout")), 5000),
       );
 
       const authPromise = (async () => {
@@ -185,6 +220,8 @@ serve(async (req) => {
         status: 401,
         headers: baseCorsHeaders,
       });
+    } finally {
+      clearTimeout(authTimeout);
     }
 
     if (userAuthError || !user) {
@@ -209,7 +246,7 @@ serve(async (req) => {
       );
     }
 
-    console.log("[3] Auth successful, user:", user.id);
+    console.log("Authentication succeeded");
 
     // Rate limiting check (10 requests per minute)
     console.log("[4] Checking rate limit...");
@@ -226,6 +263,8 @@ serve(async (req) => {
           error: "Too many requests",
           message: "Please wait a moment before sending more messages.",
           retryAfter: rateLimitResult.retryAfter,
+          code: "chat_rate_limited",
+          retryable: true,
         }),
         {
           status: 429,
@@ -256,7 +295,14 @@ serve(async (req) => {
       });
     }
 
-    const { conversationId, content } = requestBody;
+    let { conversationId, requestId } = requestBody;
+    const { content, retryFailed = false } = requestBody;
+    if (typeof retryFailed !== "boolean" || (retryFailed && !requestId)) {
+      return new Response(JSON.stringify({ error: "Invalid retry request" }), { status: 400, headers: responseHeaders });
+    }
+    if (requestId !== undefined && (typeof requestId !== "string" || !UUID_REGEX.test(requestId))) {
+      return new Response(JSON.stringify({ error: "Invalid request identifier" }), { status: 400, headers: responseHeaders });
+    }
 
     // Input validation - presence
     if (!conversationId || !content) {
@@ -282,6 +328,10 @@ serve(async (req) => {
       );
     }
 
+    // PostgreSQL renders UUIDs in lowercase; retries must compare canonical IDs.
+    conversationId = conversationId.toLowerCase();
+    requestId = requestId?.toLowerCase();
+
     // Input validation - content length
     const trimmedContent = content.trim();
     if (trimmedContent.length === 0) {
@@ -302,7 +352,7 @@ serve(async (req) => {
     }
 
     // Verify conversation ownership - SECURITY CRITICAL
-    console.log("[5] Verifying conversation ownership:", conversationId);
+    console.log("Verifying conversation ownership");
     const { data: conversation, error: convError } = await supabaseAdmin
       .from("conversations")
       .select("id, user_id")
@@ -323,20 +373,83 @@ serve(async (req) => {
 
     if (conversation.user_id !== user.id) {
       // Log potential attack attempt (without PII)
-      console.error("Unauthorized conversation access attempt", {
-        attemptedConversationId: conversationId,
-        userId: user.id,
-      });
+      console.error("Conversation ownership rejected");
       return new Response(JSON.stringify({ error: "Access denied" }), {
         status: 403,
         headers: responseHeaders,
       });
     }
 
+    let userMessage: { id: string; created_at: string | null } | null = null;
+    // Claim before quota/provider work. A lost response never authorizes replay.
+    if (requestId) {
+      const hash = Array.from(new Uint8Array(await crypto.subtle.digest(
+        "SHA-256", new TextEncoder().encode(trimmedContent),
+      ))).map((b) => b.toString(16).padStart(2, "0")).join("");
+      const { error: claimError } = await supabaseAdmin.from("chat_requests").insert({
+        user_id: user.id, request_id: requestId, conversation_id: conversationId, content_hash: hash,
+      });
+      if (claimError) {
+        if (claimError.code !== "23505") {
+          return new Response(JSON.stringify({ error: "Unable to start request" }), { status: 503, headers: responseHeaders });
+        }
+        const { data: receipt } = await supabaseAdmin.from("chat_requests")
+          .select("conversation_id, content_hash, response, response_status")
+          .eq("user_id", user.id).eq("request_id", requestId).single();
+        if (!receipt || receipt.conversation_id !== conversationId || receipt.content_hash !== hash) {
+          return new Response(JSON.stringify({ error: "Request identifier already used" }), { status: 409, headers: responseHeaders });
+        }
+        if (receipt.response) {
+          const previous = receipt.response;
+          if (!(retryFailed && receipt.response_status >= 400 && receipt.response_status <= 599 &&
+            previous.retryable === true && previous.requestId === requestId)) {
+            return new Response(JSON.stringify(previous), { status: receipt.response_status, headers: responseHeaders });
+          }
+          // Only one explicit retry may promote a tagged failed receipt to pending.
+          let retryClaim = supabaseAdmin.from("chat_requests")
+            .update({ response: null, response_status: null })
+            .eq("user_id", user.id).eq("request_id", requestId)
+            .eq("response_status", receipt.response_status).not("response", "is", null);
+          // Also match this failure, so a delayed competitor cannot claim a newer
+          // failure with the same HTTP status after the first retry has finished.
+          retryClaim = typeof previous.failureId === "string"
+            ? retryClaim.eq("response->>failureId", previous.failureId)
+            : retryClaim.is("response->>failureId", null);
+          const { data: claimed, error: retryError } = await retryClaim.select("request_id").maybeSingle();
+          if (retryError) {
+            return new Response(JSON.stringify({ error: "Unable to confirm retry claim" }), { status: 503, headers: responseHeaders });
+          }
+          if (!claimed) {
+            return new Response(JSON.stringify({ error: "Request outcome pending. Reload history before sending again." }), { status: 409, headers: responseHeaders });
+          }
+          execution.receipt = { userId: user.id, requestId };
+          execution.messageSaved = previous.messageSaved === false ? false : null;
+          if (previous.messageSaved === true) {
+            if (previous.userMessageId !== requestId) throw new Error("RETRY_MESSAGE_UNCONFIRMED");
+            // Messages have no user_id: ownership comes from the checked conversation.
+            const { data: saved, error: savedError } = await supabaseAdmin.from("messages")
+              .select("id, conversation_id, role, content, created_at")
+              .eq("id", requestId).eq("conversation_id", conversationId).eq("role", "user").single();
+            if (savedError || !saved || saved.content !== trimmedContent) throw new Error("RETRY_MESSAGE_UNCONFIRMED");
+            userMessage = saved;
+            execution.userMessageId = saved.id;
+          } else if (previous.messageSaved !== false || previous.userMessageId != null) {
+            throw new Error("RETRY_MESSAGE_UNCONFIRMED");
+          }
+        } else {
+          return new Response(JSON.stringify({ error: "Request outcome pending. Reload history before sending again." }), { status: 409, headers: responseHeaders });
+        }
+      }
+      if (!claimError) execution.messageSaved = false;
+      execution.receipt = { userId: user.id, requestId };
+    } else {
+      execution.messageSaved = false;
+    }
+
     // Get user profile to check subscription tier
     const { data: profile, error: profileError } = await supabaseAdmin
       .from("profiles")
-      .select("subscription_tier")
+      .select("subscription_tier, preferred_language")
       .eq("id", user.id)
       .single();
 
@@ -349,12 +462,18 @@ serve(async (req) => {
       );
     }
 
-    // Fetch user settings for privacy_mode, ai_tone, and language
-    const { data: userSettings } = await supabaseAdmin
+    // Privacy settings must be available before any history reaches a provider.
+    const { data: userSettings, error: settingsError } = await supabaseAdmin
       .from("user_settings")
-      .select("privacy_mode, ai_tone, language")
+      .select("privacy_mode, ai_tone")
       .eq("user_id", user.id)
       .maybeSingle();
+    if (settingsError || !userSettings) {
+      return new Response(JSON.stringify({ error: "Unable to load privacy settings" }), {
+        status: 503,
+        headers: responseHeaders,
+      });
+    }
 
     // PRIVACY FIX #005: Schema uses TEXT ('standard' | 'enhanced'), not boolean
     const privacyMode = (userSettings?.privacy_mode || "standard") as
@@ -372,56 +491,20 @@ serve(async (req) => {
           : aiToneRaw; // gentle and motivational map directly
 
     const now = new Date();
-    const isPremium = profile.subscription_tier === "premium";
-
-    // Atomically check and increment quota (prevents race conditions)
-    console.log("[6] Checking AI quota, isPremium:", isPremium);
-    const { data: quotaResult, error: quotaError } = await supabaseAdmin.rpc(
-      "check_and_increment_ai_quota",
-      {
-        p_user_id: user.id,
-        p_is_premium: isPremium,
-      },
-    );
-    console.log(
-      "[6] Quota result:",
-      JSON.stringify(quotaResult),
-      quotaError?.message || "",
-    );
-
-    if (quotaError) {
-      console.error("Quota check failed:", quotaError.code);
-      return new Response(
-        JSON.stringify({ error: "Unable to process request" }),
-        { status: 500, headers: responseHeaders },
-      );
+    const { data: sponsoredAccess, error: sponsoredError } = await supabaseAdmin
+      .rpc("refresh_sponsored_entitlement", { p_user_id: user.id });
+    if (sponsoredError || typeof sponsoredAccess !== "boolean") {
+      return new Response(JSON.stringify({ error: "Unable to verify access" }), {
+        status: 503,
+        headers: responseHeaders,
+      });
     }
-
-    // Handle both TABLE (array) and JSON (object) return types
-    const quotaData = Array.isArray(quotaResult)
-      ? quotaResult?.[0]
-      : quotaResult;
-    if (!quotaData?.allowed) {
-      return new Response(
-        JSON.stringify({
-          error: "AI_QUOTA_EXCEEDED",
-          message:
-            "You've reached your daily AI chat limit. Upgrade to Premium for unlimited chats!",
-          quotaUsed: quotaData?.quota_used || 0,
-          quotaLimit: quotaData?.quota_limit || 0,
-        }),
-        { status: 429, headers: responseHeaders },
-      );
-    }
-
-    // Store quota info for response
-    const quotaUsed = quotaData.quota_used;
-    const quotaLimit = quotaData.quota_limit;
+    const isPremium = profile.subscription_tier === "premium" || sponsoredAccess;
 
     // Crisis detection - SAFETY CRITICAL
     // SEC-CRIT-007: Use multi-language crisis detection with English fallback
     // Language preference already fetched above in userSettings query
-    const userLanguage = userSettings?.language || "en";
+    const userLanguage = profile.preferred_language || "en";
 
     if (detectCrisisMultiLang(trimmedContent, userLanguage)) {
       // Log crisis event WITHOUT storing user's actual content (PII protection)
@@ -460,13 +543,13 @@ serve(async (req) => {
         if (connections && connections.length > 0) {
           // Get client name for notification
           const clientName =
-            connections[0]?.profiles?.display_name || "A client";
+            (Array.isArray(connections[0]?.profiles) ? connections[0]?.profiles[0] : connections[0]?.profiles)?.display_name || "A client";
 
           // Send notification to each connected therapist
           for (const connection of connections) {
             const therapistUserId = Array.isArray(connection.therapist_accounts)
               ? connection.therapist_accounts[0]?.user_id
-              : connection.therapist_accounts?.user_id;
+              : (connection.therapist_accounts as { user_id?: string } | null)?.user_id;
 
             if (therapistUserId) {
               // Send push notification
@@ -500,19 +583,26 @@ serve(async (req) => {
         console.error("Failed to send therapist crisis alerts:", alertError);
       }
 
-      // Save user message with full select to get all fields
-      const { data: crisisUserMessage } = await supabaseAdmin
-        .from("messages")
-        .insert({
-          conversation_id: conversationId,
-          role: "user",
-          content: trimmedContent,
-        })
-        .select()
-        .single();
+      let crisisUserMessage = userMessage;
+      if (!crisisUserMessage) {
+        // A lost insert response cannot establish whether the row was saved.
+        execution.messageSaved = null;
+        const { data: saved, error: saveError } = await supabaseAdmin
+          .from("messages")
+          .insert({
+            ...(requestId ? { id: requestId } : {}),
+            conversation_id: conversationId,
+            role: "user",
+            content: trimmedContent,
+          }).select().single();
+        if (saveError || !saved) throw new Error("USER_MESSAGE_NOT_SAVED");
+        crisisUserMessage = saved;
+      }
+      if (!crisisUserMessage) throw new Error("USER_MESSAGE_NOT_SAVED");
+      execution.userMessageId = crisisUserMessage.id;
 
       // Save crisis response
-      const { data: crisisMessage } = await supabaseAdmin
+      const { data: crisisMessage, error: crisisMessageError } = await supabaseAdmin
         .from("messages")
         .insert({
           conversation_id: conversationId,
@@ -521,6 +611,7 @@ serve(async (req) => {
         })
         .select()
         .single();
+      if (crisisMessageError || !crisisMessage) throw new Error("ASSISTANT_MESSAGE_NOT_SAVED");
 
       // Update conversation timestamp
       await supabaseAdmin
@@ -566,12 +657,16 @@ serve(async (req) => {
     }
 
     // Get conversation history for context
-    const { data: messages } = await supabaseAdmin
+    const { data: history } = await supabaseAdmin
       .from("messages")
-      .select("role, content")
+      .select("id, role, content")
       .eq("conversation_id", conversationId)
-      .order("created_at", { ascending: true })
-      .limit(20); // Last 20 messages for context
+      .order("created_at", { ascending: false })
+      .limit(20); // Fetch the newest context, then put it in chronological order.
+    // A retry appends the current user input below, so omit its saved copy here.
+    const messages = (history as (Message & { id: string })[] | null)
+      ?.filter((message) => message.id !== userMessage?.id);
+    messages?.reverse();
 
     // Fetch relevant memories for context injection ONLY if privacy mode is OFF
     let memoryContext = "";
@@ -813,7 +908,7 @@ serve(async (req) => {
     const sanitizedContent = sanitizeForPrompt(trimmedContent);
 
     // Build message history for AI
-    const messageHistory: Message[] = [
+    const messageHistory: Message[] = trimChatContext([
       { role: "system", content: enhancedSystemPrompt },
       ...(messages || []).map((m) => ({
         role: m.role as "user" | "assistant",
@@ -821,64 +916,93 @@ serve(async (req) => {
         content: m.role === "user" ? sanitizeForPrompt(m.content) : m.content,
       })),
       { role: "user", content: sanitizedContent },
-    ];
+    ]);
 
-    // Save user message first and capture all fields for response
-    const { data: userMessage } = await supabaseAdmin
-      .from("messages")
-      .insert({
-        conversation_id: conversationId,
-        role: "user",
-        content: trimmedContent,
-      })
-      .select()
-      .single();
+    req.signal.throwIfAborted();
+    let quotaUsed = 0;
+    let quotaLimit = 0;
+    const assistantContent = await generateChatText(messageHistory, {
+      apiKey: OPENAI_API_KEY,
+      reserveBudget: openAIBudgetReservation(supabaseAdmin, user.id, "chat.response", req.signal),
+      maxOutputTokens: 500,
+      onDelta,
+      signal: req.signal,
+      beforeProvider: async () => {
+        // Atomically check and increment quota (prevents race conditions)
+        console.log("[6] Checking AI quota, isPremium:", isPremium);
+        const { data: quotaResult, error: quotaError } = await supabaseAdmin.rpc(
+          "check_and_increment_ai_quota",
+          {
+            p_user_id: user.id,
+            p_is_premium: isPremium,
+          },
+        );
+        console.log(
+          "[6] Quota result:",
+          JSON.stringify(quotaResult),
+          quotaError?.message || "",
+        );
 
-    // Call xAI (Grok)
-    console.log("[7] Calling xAI API...");
-    const xaiKey = Deno.env.get("XAI_API_KEY");
-    if (!xaiKey) {
-      console.error("[7] XAI_API_KEY not configured");
-      return new Response(
-        JSON.stringify({ error: "Service temporarily unavailable" }),
-        { status: 503, headers: responseHeaders },
-      );
-    }
-    console.log("[7] XAI_API_KEY present, making request to:", XAI_API_URL);
+        if (quotaError) {
+          console.error("Quota check failed:", quotaError.code);
+          throw new Response(
+            JSON.stringify({ error: "Unable to process request" }),
+            { status: 500, headers: responseHeaders },
+          );
+        }
 
-    const aiResponse = await fetch(XAI_API_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${xaiKey}`,
-        "Content-Type": "application/json",
+        // Handle both TABLE (array) and JSON (object) return types
+        const quotaData = Array.isArray(quotaResult)
+          ? quotaResult?.[0]
+          : quotaResult;
+        if (!quotaData || typeof quotaData.allowed !== "boolean" ||
+          !Number.isInteger(quotaData.quota_used) || quotaData.quota_used < 0 ||
+          !Number.isInteger(quotaData.quota_limit) ||
+          (quotaData.quota_limit < 0 && !(isPremium && quotaData.quota_limit === -1))) {
+          throw new Error("QUOTA_ADMISSION_UNCONFIRMED");
+        }
+        if (!quotaData.allowed) {
+          throw new Response(
+            JSON.stringify({
+              error: "AI_QUOTA_EXCEEDED",
+              message:
+                "You've reached your daily AI chat allowance.",
+              quotaUsed: quotaData.quota_used,
+              quotaLimit: quotaData.quota_limit,
+              code: "chat_quota_exhausted",
+              retryable: true,
+            }),
+            { status: 429, headers: responseHeaders },
+          );
+        }
+
+        quotaUsed = quotaData.quota_used;
+        quotaLimit = quotaData.quota_limit;
+        req.signal.throwIfAborted();
+        // Save only after both spending and atomic user-quota admission succeed.
+        if (!userMessage) {
+          execution.messageSaved = null;
+          const { data: saved, error: saveError } = await supabaseAdmin.from("messages")
+            .insert({
+              ...(requestId ? { id: requestId } : {}),
+              conversation_id: conversationId,
+              role: "user",
+              content: trimmedContent,
+            }).select().single();
+          if (saveError || !saved) throw new Error("USER_MESSAGE_NOT_SAVED");
+          userMessage = saved;
+          execution.userMessageId = saved.id;
+        }
       },
-      body: JSON.stringify({
-        model: "grok-4-1-fast-reasoning",
-        messages: messageHistory,
-        max_tokens: 500,
-        temperature: 0.7,
-      }),
+    }).catch((error: unknown) => {
+      knownProviderFailure = error instanceof Error &&
+        (/^AI_HTTP_\d{3}$/.test(error.message) || ["AI_EMPTY_RESPONSE", "AI_TERMINAL_FAILED", "AI_STREAM_FAILED"].includes(error.message));
+      throw error;
     });
-
-    console.log("[7] xAI API response status:", aiResponse.status);
-    if (!aiResponse.ok) {
-      // Log error code and body for debugging
-      const errorBody = await aiResponse.text();
-      console.error("[7] xAI API error:", aiResponse.status, errorBody);
-      return new Response(
-        JSON.stringify({ error: "AI service temporarily unavailable" }),
-        { status: 502, headers: responseHeaders },
-      );
-    }
-
-    const aiData = await aiResponse.json();
-    console.log("[7] xAI response received, has choices:", !!aiData.choices);
-    const assistantContent =
-      aiData.choices?.[0]?.message?.content ||
-      "I'm sorry, I couldn't generate a response. Please try again.";
+    req.signal.throwIfAborted();
 
     // Save assistant message
-    const { data: assistantMessage } = await supabaseAdmin
+    const { data: assistantMessage, error: assistantSaveError } = await supabaseAdmin
       .from("messages")
       .insert({
         conversation_id: conversationId,
@@ -887,6 +1011,8 @@ serve(async (req) => {
       })
       .select()
       .single();
+
+    if (assistantSaveError || !assistantMessage) throw new Error("ASSISTANT_MESSAGE_NOT_SAVED");
 
     // Update conversation timestamp
     await supabaseAdmin
@@ -996,7 +1122,7 @@ serve(async (req) => {
 
                 if (reframe) {
                   // Log encounter using atomic RPC function
-                  const { data: encounterResult, error: encounterError } =
+                  const { data: rawEncounterResult, error: encounterError } =
                     await supabaseAdmin
                       .rpc("log_coach_encounter", {
                         p_user_id: user.id,
@@ -1012,6 +1138,7 @@ serve(async (req) => {
                       })
                       .single();
 
+                  const encounterResult = rawEncounterResult as { success?: boolean; error_message?: string; encounter_id?: string } | null;
                   if (encounterError || !encounterResult?.success) {
                     console.error(
                       "Failed to log encounter:",
@@ -1047,27 +1174,28 @@ serve(async (req) => {
 
     if (isFirstMessage) {
       // Generate title in background (fire-and-forget)
-      generateConversationTitle(
-        supabaseAdmin,
-        conversationId,
-        trimmedContent,
-        assistantContent,
-        xaiKey,
-      ).catch((err) => console.error("Title generation failed:", err));
-    }
-
-    // Note: Quota was already incremented atomically at the start of the function
-
-    // Extract memories in background ONLY if privacy mode is OFF
-    if (!privacyModeEnabled) {
-      extractMemories(
+      retainBackground(generateConversationTitle(
         supabaseAdmin,
         user.id,
         conversationId,
         trimmedContent,
         assistantContent,
-        xaiKey,
-      ).catch((err) => console.error("Memory extraction failed:", err));
+        OPENAI_API_KEY,
+      ).catch(() => console.error("Title generation failed")));
+    }
+
+    // Quota was incremented atomically immediately before the provider request.
+
+    // Extract memories in background ONLY if privacy mode is OFF
+    if (!privacyModeEnabled) {
+      retainBackground(extractMemories(
+        supabaseAdmin,
+        user.id,
+        conversationId,
+        trimmedContent,
+        assistantContent,
+        OPENAI_API_KEY,
+      ).catch(() => console.error("Memory extraction failed")));
     }
 
     // Update companion memory usage stats (fire-and-forget with error logging)
@@ -1078,7 +1206,7 @@ serve(async (req) => {
           used_at: now.toISOString(),
           for_user_id: user.id, // Pass user ID for ownership validation
         })
-        .then(({ error }) => {
+        .then(({ error }: { error: unknown }) => {
           if (error) {
             console.error("Failed to update companion memory usage:", error);
           } else {
@@ -1134,6 +1262,16 @@ serve(async (req) => {
       { headers: responseHeaders },
     );
   } catch (error) {
+    if (error instanceof Response) return error;
+    if (!req.signal.aborted && error instanceof MonthlyAIBudgetExhaustedError) {
+      return new Response(JSON.stringify({ error: "AI_MONTHLY_BUDGET_REACHED", message: "The shared monthly AI spending allowance is exhausted.", code: "chat_shared_budget_exhausted", retryable: true }), { status: 503, headers: { ...baseCorsHeaders, "Content-Type": "application/json" } });
+    }
+    if (!req.signal.aborted && error instanceof MonthlyAIBudgetUnavailableError) {
+      return new Response(JSON.stringify({ error: "AI_MONTHLY_BUDGET_UNAVAILABLE", message: "AI spending approval is temporarily unavailable. Please try again later.", code: "chat_shared_budget_unavailable", retryable: true }), { status: 503, headers: { ...baseCorsHeaders, "Content-Type": "application/json" } });
+    }
+    if (!req.signal.aborted && knownProviderFailure) {
+      return new Response(JSON.stringify({ error: "AI provider unavailable", message: "The AI response could not be completed. You can explicitly retry this message.", code: "chat_provider_unavailable", retryable: true }), { status: 503, headers: { ...baseCorsHeaders, "Content-Type": "application/json" } });
+    }
     // Log full error for debugging
     console.error("======== CHAT FUNCTION ERROR ========");
     console.error("Error type:", typeof error);
@@ -1148,51 +1286,83 @@ serve(async (req) => {
       { status: 500, headers: baseCorsHeaders },
     );
   }
+}
+
+// Keep the JSON contract for installed releases. SSE is opt-in for the new client.
+Deno.serve(async (request: Request) => {
+  if (request.method === "OPTIONS") return handleChat(request, {});
+  if (request.method !== "POST") return new Response(JSON.stringify(failedChatResponse({ error: "Method not allowed" }, {})), { status: 405, headers: { ...getCorsHeaders(request.headers.get("Origin")), "Content-Type": "application/json", Allow: "POST, OPTIONS" } });
+  const execution: ChatExecution = {};
+  const wantsStream = request.headers.get("Accept")?.includes("text/event-stream") && request.method === "POST";
+  const abort = new AbortController();
+  const req = new Request(request, { signal: AbortSignal.any([request.signal, abort.signal]) });
+  let controller: ReadableStreamDefaultController<Uint8Array>;
+  let started = false;
+  let closed = false;
+  let startStream: () => void;
+  const ready = new Promise<void>((resolve) => { startStream = resolve; });
+  const encoder = new TextEncoder();
+  const emit = (event: unknown) => {
+    if (!closed) controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+  };
+  const stream = new ReadableStream<Uint8Array>({
+    start(value) { controller = value; },
+    cancel() { closed = true; abort.abort(); },
+  });
+  const result = handleChat(req, execution, wantsStream ? (text) => {
+    if (!started) { started = true; startStream(); }
+    emit({ type: "delta", text });
+  } : undefined).then(async (response) => {
+    let data = await response.json();
+    if (!response.ok) data = failedChatResponse(data, execution);
+    if (execution.receipt) {
+      try {
+        const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+        const { data: persisted, error } = await admin.from("chat_requests").update({ response: data, response_status: response.status })
+          .eq("user_id", execution.receipt.userId).eq("request_id", execution.receipt.requestId)
+          .select("request_id").maybeSingle();
+        if (error || !persisted) throw new Error("RECEIPT_NOT_SAVED");
+      } catch {
+        // Keep the claim on any persistence ambiguity; it cannot authorize replay.
+        console.error("Chat receipt persistence failed");
+        data = failedChatResponse({ error: "Request outcome unconfirmed. Reload history before sending again." }, execution);
+        response = new Response(null, { status: 503, headers: response.headers });
+      }
+    }
+    response = new Response(JSON.stringify(data), { status: response.status, headers: response.headers });
+    if (started) {
+      emit({ type: response.ok ? "result" : "error", status: response.status, data });
+      if (!closed) { closed = true; controller.close(); }
+    }
+    return response;
+  });
+  if (!wantsStream) return await result;
+  const first = await Promise.race([
+    result.then((response) => ({ response })),
+    ready.then(() => ({ response: null })),
+  ]);
+  if (first.response) return first.response; // Auth/ownership/errors retain their HTTP status.
+  return new Response(stream, {
+    headers: { ...getCorsHeaders(request.headers.get("Origin")), "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
+  });
 });
 
 // Title generation function - runs in background, non-blocking
 async function generateConversationTitle(
   supabaseAdmin: UntypedSupabaseClient,
+  userId: string,
   conversationId: string,
   userMessage: string,
   assistantMessage: string,
-  xaiKey: string,
+  openaiKey: string,
 ): Promise<void> {
   try {
-    // Use a fast model for title generation
-    const response = await fetch("https://api.x.ai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${xaiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "grok-3-mini",
-        messages: [
-          {
-            role: "system",
-            content: `Generate a short, descriptive title (3-6 words) for this conversation.
-The title should capture the main topic or theme.
-Return ONLY the title text, no quotes or punctuation at the end.
-Examples: "Anxiety About Work Presentation", "Morning Meditation Practice", "Dealing With Family Stress"`,
-          },
-          {
-            role: "user",
-            content: `User: ${userMessage.slice(0, 200)}${userMessage.length > 200 ? "..." : ""}\n\nAssistant: ${assistantMessage.slice(0, 200)}${assistantMessage.length > 200 ? "..." : ""}`,
-          },
-        ],
-        max_tokens: 30,
-        temperature: 0.3,
-      }),
-    });
-
-    if (!response.ok) {
-      console.error("Title generation API error:", response.status);
-      return;
-    }
-
-    const data = await response.json();
-    const title = data.choices?.[0]?.message?.content?.trim();
+    // Committed chat work may finish after the response, with its own bound.
+    const signal = AbortSignal.timeout(45_000);
+    const title = (await generateChatText([
+      { role: "system", content: "Generate a concise 3-6 word conversation title. Return only the title." },
+      { role: "user", content: `User: ${userMessage.slice(0, 200)}\nAssistant: ${assistantMessage.slice(0, 200)}` },
+    ], { apiKey: openaiKey, reserveBudget: openAIBudgetReservation(supabaseAdmin, userId, "chat.title", signal), maxOutputTokens: 30, signal })).trim();
 
     if (title && title.length > 0 && title.length <= 100) {
       const { error } = await supabaseAdmin
@@ -1203,13 +1373,11 @@ Examples: "Anxiety About Work Presentation", "Morning Meditation Practice", "Dea
       if (error) {
         console.error("Failed to update conversation title:", error);
       } else {
-        console.log(
-          `Generated title for conversation ${conversationId}: "${title}"`,
-        );
+        console.log("Conversation title saved");
       }
     }
   } catch (err) {
-    console.error("Title generation error:", err);
+    console.error("Title generation error:", err instanceof Error ? err.message : "Unknown");
   }
 }
 
@@ -1332,7 +1500,7 @@ async function extractMemories(
   conversationId: string,
   userMessage: string,
   _assistantMessage: string,
-  xaiKey: string,
+  openaiKey: string,
 ): Promise<void> {
   // Sanitize user input to prevent prompt injection
   const sanitizedMessage = sanitizeForPrompt(userMessage);
@@ -1365,35 +1533,11 @@ ${sanitizedMessage}
 Return ONLY valid JSON array, no explanation. Example: [{"type": "person", "key": "sister_name", "value": "Emma"}, {"type": "event", "key": "job_interview", "value": "Job Interview", "time_expression": "next Monday at 10am"}]`;
 
   try {
-    const response = await fetch(XAI_API_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${xaiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "grok-4-1-fast-reasoning", // Same model as main chat - confirmed working
-        messages: [
-          {
-            role: "system",
-            content:
-              "You extract structured personal facts from conversations. Return only valid JSON arrays.",
-          },
-          { role: "user", content: extractionPrompt },
-        ],
-        max_tokens: 500,
-        temperature: 0.1,
-      }),
-    });
-
-    if (!response.ok) {
-      console.error("Memory extraction API error:", response.status);
-      return;
-    }
-
-    const data = await response.json();
-    const extracted = data.choices?.[0]?.message?.content;
-    if (!extracted) return;
+    const signal = AbortSignal.timeout(45_000);
+    const extracted = await generateChatText([
+      { role: "system", content: "Extract structured personal facts. Return only a valid JSON array." },
+      { role: "user", content: extractionPrompt },
+    ], { apiKey: openaiKey, reserveBudget: openAIBudgetReservation(supabaseAdmin, userId, "chat.memory", signal), maxOutputTokens: 500, signal });
 
     // Parse JSON response
     let memories: Array<{
@@ -1407,7 +1551,7 @@ Return ONLY valid JSON array, no explanation. Example: [{"type": "person", "key"
       const cleaned = extracted.replace(/```json\n?|\n?```/g, "").trim();
       memories = JSON.parse(cleaned);
     } catch {
-      console.error("Memory extraction JSON parse failed:", extracted);
+      console.error("Memory extraction JSON parse failed");
       return;
     }
 

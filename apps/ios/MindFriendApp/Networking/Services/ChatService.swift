@@ -26,15 +26,18 @@ final class ChatService: ObservableObject {
     }
 
     /// Send a message and get AI response via Edge Function
-    func sendMessage(conversationId: String, content: String) async throws -> SendMessageResponse {
+    func sendMessage(conversationId: String, content: String, requestId: UUID = UUID(), retryFailed: Bool = false, onDelta: ((String) -> Void)? = nil) async throws -> SendMessageResponse {
         // Call Edge Function which saves both messages and returns AI response
         let response = try await dataService.sendMessage(
             conversationId: conversationId,
-            content: content
+            content: content,
+            requestId: requestId,
+            retryFailed: retryFailed,
+            onDelta: onDelta
         )
 
         // Create user message (server saves it, we create local representation)
-        let userMessage = Message(
+        let userMessage = response.userMessage ?? Message(
             id: UUID().uuidString,
             role: .user,
             content: content,

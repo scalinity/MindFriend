@@ -28,6 +28,75 @@ enum APIError: LocalizedError {
     }
 }
 
+/// The server decides quota and admission; a retry retains the original request ID.
+struct ChatRequestFailure: LocalizedError {
+    enum Kind: Equatable { case quota, sharedBudget, rateLimited, provider, network, pending, unconfirmed, signIn }
+    let kind: Kind
+    let code: String?
+    let retryable: Bool
+    let quotaUsed: Int?
+    let quotaLimit: Int?
+    let retryAt: Date?
+    let resetAt: Date?
+    let messageSaved: Bool?
+    let userMessageId: String?
+
+    init(kind: Kind, code: String? = nil, retryable: Bool = false, quotaUsed: Int? = nil, quotaLimit: Int? = nil, retryAt: Date? = nil, resetAt: Date? = nil, messageSaved: Bool? = nil, userMessageId: String? = nil) {
+        self.kind = kind; self.code = code; self.retryable = retryable; self.quotaUsed = quotaUsed; self.quotaLimit = quotaLimit
+        self.retryAt = retryAt; self.resetAt = resetAt; self.messageSaved = messageSaved; self.userMessageId = userMessageId
+    }
+    var canRetryRequest: Bool {
+        retryable || kind == .pending || kind == .signIn
+    }
+    var title: String {
+        switch kind {
+        case .quota: return "Daily message allowance reached"
+        case .sharedBudget: return "Shared AI allowance unavailable"
+        case .rateLimited: return "Please wait before sending again"
+        case .provider: return "A reply couldn’t be completed"
+        case .network: return "Connection interrupted"
+        case .pending: return "Your request is still being checked"
+        case .unconfirmed: return "The reply wasn’t confirmed"
+        case .signIn: return "Sign in again to continue"
+        }
+    }
+    var errorDescription: String? {
+        switch kind {
+        case .quota: return "Your daily message allowance is used. Try again after it resets, or view the available plans."
+        case .sharedBudget:
+            if code == "AI_MONTHLY_BUDGET_REACHED" || code == "chat_shared_budget_exhausted" {
+                return "The shared monthly AI allowance is used up. Try again next month. Changing your plan won’t resolve this."
+            }
+            return "The shared AI allowance is temporarily unavailable. Changing your plan won’t resolve this. Try again later."
+        case .rateLimited: return "Messages are arriving too quickly. Wait before retrying this request."
+        case .provider: return "The chat provider couldn’t finish a reply. Your message is kept; you can explicitly retry."
+        case .network: return "Check your connection, then retry the same request. A saved reply will be recovered without sending it twice."
+        case .pending: return "The earlier request has not returned a confirmed result. Check its response or reload history before sending it again."
+        case .unconfirmed: return "Reload history to check what was saved before sending this message again."
+        case .signIn: return "Your draft is kept. Sign in before sending another request."
+        }
+    }
+    static func response(status: Int, data: Data, retryAfter: String? = nil, now: Date = Date()) -> Self {
+        let body = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+        let code = body["code"] as? String ?? body["error"] as? String
+        let kind: Kind
+        switch code {
+        case "chat_quota_exhausted", "AI_QUOTA_EXCEEDED": kind = .quota
+        case "chat_shared_budget_exhausted", "chat_shared_budget_unavailable", "AI_MONTHLY_BUDGET_REACHED", "AI_MONTHLY_BUDGET_UNAVAILABLE": kind = .sharedBudget
+        case "chat_rate_limited", "Too many requests": kind = .rateLimited
+        case "chat_provider_unavailable": kind = .provider
+        case "chat_request_pending", "Request outcome pending. Reload history before sending again.": kind = .pending
+        default: kind = status == 401 ? .signIn : status == 429 ? .rateLimited : .unconfirmed
+        }
+        let seconds = (body["retryAfter"] as? NSNumber)?.doubleValue ?? retryAfter.flatMap(Double.init)
+        let retryAt = seconds.flatMap { $0.isFinite && $0 >= 0 ? now.addingTimeInterval($0) : nil }
+        let reset = (body["resetAt"] as? String).flatMap { ISO8601DateFormatter().date(from: $0) }
+        let mayRetry = body["retryable"] as? Bool ?? (kind == .quota || kind == .sharedBudget || kind == .rateLimited)
+        return .init(kind: kind, code: code, retryable: mayRetry, quotaUsed: body["quotaUsed"] as? Int, quotaLimit: body["quotaLimit"] as? Int,
+                     retryAt: retryAt, resetAt: reset, messageSaved: body["messageSaved"] as? Bool, userMessageId: body["userMessageId"] as? String)
+    }
+}
+
 // MARK: - Data Service Errors
 
 enum DataError: LocalizedError {
@@ -68,6 +137,7 @@ enum DataError: LocalizedError {
 // MARK: - Chat Response Types
 
 struct ChatResponse: Codable {
+    var userMessage: Message? = nil
     let message: Message
     let isCrisisResponse: Bool
     let quotaUsed: Int?
@@ -77,12 +147,19 @@ struct ChatResponse: Codable {
 }
 
 struct ChatFunctionResponse: Codable {
+    let userMessage: Message?
     let message: Message
     let isCrisisResponse: Bool?
     let quotaUsed: Int?
     let quotaLimit: Int?
     let conversationTitle: String?
     let coachData: CoachData?
+
+    static func decode(_ data: Data) throws -> ChatFunctionResponse {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        return try decoder.decode(ChatFunctionResponse.self, from: data)
+    }
 }
 
 // MARK: - Private DB Types for Credibility
@@ -971,14 +1048,14 @@ final class SupabaseDataService: ObservableObject {
             .from(Tables.messages)
             .select()
             .eq("conversation_id", value: convId)
-            .order("created_at", ascending: true)
+            .order("created_at", ascending: false)
             .limit(limit)
             .execute()
             .value
 
-        return messages.map { msg in
+        return messages.reversed().map { msg in
             Message(
-                id: msg.id?.uuidString ?? "",
+                id: msg.id?.uuidString.lowercased() ?? "",
                 role: MessageRole(rawValue: msg.role) ?? .user,
                 content: msg.content,
                 createdAt: msg.createdAt ?? Date(),
@@ -989,7 +1066,7 @@ final class SupabaseDataService: ObservableObject {
 
     /// Send a message and get AI response via Edge Function
     /// Returns the assistant's response message
-    func sendMessage(conversationId: String, content: String) async throws -> ChatResponse {
+    func sendMessage(conversationId: String, content: String, requestId: UUID = UUID(), retryFailed: Bool = false, onDelta: ((String) -> Void)? = nil) async throws -> ChatResponse {
         Log.data.debug("[Data] Invoking chat function for conversation: \(conversationId)")
 
         // Validate conversation ID
@@ -1001,7 +1078,7 @@ final class SupabaseDataService: ObservableObject {
         // Ensure we have a valid session before calling Edge Function
         guard let _ = authService.session?.accessToken else {
             Log.data.warning("[Data] No access token available")
-            throw APIError.badRequest("Not signed in. Please sign in again.")
+            throw ChatRequestFailure(kind: .signIn)
         }
 
         // Refresh token to ensure it's valid
@@ -1009,37 +1086,34 @@ final class SupabaseDataService: ObservableObject {
             try await authService.ensureValidSession()
         } catch {
             Log.data.warning("[Data] Session validation failed: \(error)")
-            throw APIError.badRequest("Session expired. Please sign in again.")
+            if error is URLError {
+                throw ChatRequestFailure(kind: .network, retryable: true)
+            }
+            throw ChatRequestFailure(kind: .signIn)
         }
 
         // Get the refreshed access token
         guard let refreshedToken = authService.session?.accessToken else {
             Log.data.warning("[Data] No access token after refresh")
-            throw APIError.badRequest("Session expired. Please sign in again.")
+            throw ChatRequestFailure(kind: .signIn)
         }
 
         // SECURITY FIX #008: Don't log access token content - even partial tokens are secrets
         Log.data.debug("[Data] Using valid access token for chat request")
 
-        // Call the chat Edge Function with explicit auth header
-        let chatResponse: ChatFunctionResponse
-        do {
-            chatResponse = try await supabase.functions.invoke(
-                "chat",
-                options: .init(
-                    headers: ["Authorization": "Bearer \(refreshedToken)"],
-                    body: [
-                        "conversationId": conversationId,
-                        "content": content
-                    ]
-                )
-            )
-            Log.data.debug("[Data] Chat function returned successfully")
-            Log.data.debug("[Data] Response: quotaUsed=\(chatResponse.quotaUsed ?? -1), quotaLimit=\(chatResponse.quotaLimit ?? -1)")
-        } catch {
-            Log.data.error("[Data] Chat function error: \(error)")
-            throw error
-        }
+        // The view retains this identifier across explicit retries. Never retry automatically.
+        let requestId = requestId.uuidString.lowercased()
+        var request = URLRequest(url: SupabaseConfig.projectURL.appendingPathComponent("functions/v1/chat"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = 90
+        request.setValue("Bearer \(refreshedToken)", forHTTPHeaderField: "Authorization")
+        request.setValue(SupabaseConfig.anonKey, forHTTPHeaderField: "apikey")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        request.setValue(requestId, forHTTPHeaderField: "X-Request-ID")
+        struct ChatBody: Encodable { let conversationId: String; let content: String; let requestId: String; let retryFailed: Bool }
+        request.httpBody = try JSONEncoder().encode(ChatBody(conversationId: conversationId, content: content, requestId: requestId, retryFailed: retryFailed))
+        let chatResponse = try await Self.chatResponse(for: request, onDelta: onDelta)
 
         Analytics.shared.track(.chatMessageSent)
 
@@ -1048,6 +1122,7 @@ final class SupabaseDataService: ObservableObject {
         }
 
         return ChatResponse(
+            userMessage: chatResponse.userMessage,
             message: Message(
                 id: chatResponse.message.id,
                 role: .assistant,
@@ -1061,6 +1136,56 @@ final class SupabaseDataService: ObservableObject {
             conversationTitle: chatResponse.conversationTitle,
             coachData: chatResponse.coachData
         )
+    }
+
+    /// Read one confirmed chat result or a typed failure; always close its URLSession task.
+    static func chatResponse(for request: URLRequest, session: URLSession = .shared, onDelta: ((String) -> Void)? = nil) async throws -> ChatFunctionResponse {
+        do {
+            let (bytes, response) = try await session.bytes(for: request)
+            defer { bytes.task.cancel() }
+            guard let http = response as? HTTPURLResponse else { throw ChatRequestFailure(kind: .network, retryable: true) }
+            if !(200...299).contains(http.statusCode) {
+                var data = Data()
+                for try await byte in bytes {
+                    try Task.checkCancellation()
+                    guard data.count < 65_536 else { break }
+                    data.append(byte)
+                }
+                throw ChatRequestFailure.response(status: http.statusCode, data: data, retryAfter: http.value(forHTTPHeaderField: "Retry-After"))
+            }
+            if http.value(forHTTPHeaderField: "Content-Type")?.contains("text/event-stream") == true {
+                var receivedBytes = 0
+                for try await line in bytes.lines {
+                    try Task.checkCancellation()
+                    receivedBytes += line.utf8.count
+                    guard receivedBytes <= 1_048_576 else { throw ChatRequestFailure(kind: .unconfirmed) }
+                    guard line.hasPrefix("data:"), let data = String(line.dropFirst(5)).data(using: .utf8),
+                          let event = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+                    switch event["type"] as? String {
+                    case "delta": if let text = event["text"] as? String { onDelta?(text) }
+                    case "result":
+                        let payload = try JSONSerialization.data(withJSONObject: event["data"] ?? [:])
+                        return try ChatFunctionResponse.decode(payload)
+                    case "error":
+                        let payload = try JSONSerialization.data(withJSONObject: event["data"] ?? [:])
+                        throw ChatRequestFailure.response(status: event["status"] as? Int ?? 500, data: payload)
+                    default: break
+                    }
+                }
+                throw ChatRequestFailure(kind: .network, retryable: true)
+            }
+            var data = Data()
+            for try await byte in bytes {
+                try Task.checkCancellation()
+                guard data.count < 1_048_576 else { throw ChatRequestFailure(kind: .unconfirmed) }
+                data.append(byte)
+            }
+            return try ChatFunctionResponse.decode(data)
+        } catch is CancellationError { throw CancellationError() }
+        catch let error as URLError where error.code == .cancelled { throw CancellationError() }
+        catch let error as ChatRequestFailure { throw error }
+        catch is URLError { throw ChatRequestFailure(kind: .network, retryable: true) }
+        catch { throw ChatRequestFailure(kind: .unconfirmed) }
     }
 
     /// Direct message insertion (without AI response)
