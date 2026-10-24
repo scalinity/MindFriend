@@ -1,0 +1,15 @@
+{
+	admin off
+	servers {
+		protocols h1 h2
+	}
+}
+
+getmindfriend.app {
+	root * /srv/mindfriend-site/current
+	file_server
+}
+
+www.getmindfriend.app {
+	redir https://getmindfriend.app{uri} 308
+}
