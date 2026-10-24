@@ -8,6 +8,13 @@ struct AIProfileGeneratorView: View {
     let userId: UUID
     let onAvatarUpdated: (() -> Void)?
 
+    typealias Generation = @MainActor (String, @escaping (Data, Int) -> Void) async throws -> SupabaseDataService.GenerateProfilePictureResponse
+    private let generation: Generation?
+    init(userId: UUID, onAvatarUpdated: (() -> Void)? = nil, initialPrompt: String = "", generation: Generation? = nil) {
+        self.userId = userId; self.onAvatarUpdated = onAvatarUpdated; self.generation = generation
+        _prompt = State(initialValue: initialPrompt)
+    }
+
     @State private var prompt = ""
     @State private var generatedImage: UIImage?
     @State private var partialImage: UIImage?  // For streaming progressive updates
@@ -16,6 +23,7 @@ struct AIProfileGeneratorView: View {
     @State private var quotaRemaining: Int?
     @State private var showPaywall = false
     @State private var generationTask: Task<Void, Never>?
+    @State private var activeGeneration: UUID?
 
     var body: some View {
         NavigationStack {
@@ -154,13 +162,13 @@ struct AIProfileGeneratorView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
+                        cancelGeneration()
                         dismiss()
                     }
                 }
             }
             .onDisappear {
-                generationTask?.cancel()
-                generationTask = nil
+                cancelGeneration()
             }
             .sheet(isPresented: $showPaywall) {
                 PaywallView()
@@ -171,10 +179,10 @@ struct AIProfileGeneratorView: View {
     }
 
     private func generateImage() {
-        guard prompt.count >= 3, prompt.count <= 200 else { return }
-
-        // Cancel any existing task
-        generationTask?.cancel()
+        guard !isGenerating, prompt.count >= 3, prompt.count <= 200 else { return }
+        let requestId = UUID()
+        let requestedPrompt = prompt
+        activeGeneration = requestId
 
         isGenerating = true
         errorMessage = nil
@@ -182,46 +190,36 @@ struct AIProfileGeneratorView: View {
 
         generationTask = Task {
             do {
-                // Try streaming API first for progressive image updates, fall back to non-streaming
-                let response: SupabaseDataService.GenerateProfilePictureResponse
-                do {
-                    response = try await container.supabaseDataService.generateProfilePictureStreaming(
-                        prompt: prompt,
-                        onPartialImage: { imageData, index in
-                            Task { @MainActor in
-                                guard !Task.isCancelled else { return }
-                                if let image = UIImage(data: imageData) {
-                                    self.partialImage = image
-                                }
-                            }
-                        }
-                    )
-                } catch {
-                    // If streaming fails, fall back to non-streaming
-                    guard !Task.isCancelled else { return }
-                    print("[AIProfileGenerator] Streaming failed (\(error.localizedDescription)), falling back to non-streaming")
-                    await MainActor.run { partialImage = nil }
-                    response = try await container.supabaseDataService.generateProfilePicture(prompt: prompt)
+                // One explicit action creates one request; failed streams never fall back to another paid call.
+                let operation = generation ?? { prompt, partial in
+                    try await container.supabaseDataService.generateProfilePictureStreaming(prompt: prompt, onPartialImage: partial)
+                }
+                let response = try await operation(requestedPrompt) { imageData, _ in
+                    Task { @MainActor in
+                        guard activeGeneration == requestId, isGenerating else { return }
+                        partialImage = UIImage(data: imageData)
+                    }
                 }
 
                 // Check for cancellation before UI update
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, activeGeneration == requestId else { return }
 
                 // Decode base64 to UIImage
                 guard let imageData = Data(base64Encoded: response.imageBase64),
                       let image = UIImage(data: imageData) else {
-                    guard !Task.isCancelled else { return }
+                    guard !Task.isCancelled, activeGeneration == requestId else { return }
                     throw NSError(domain: "ImageError", code: -3, userInfo: [NSLocalizedDescriptionKey: "Failed to decode generated image"])
                 }
 
                 await MainActor.run {
+                    activeGeneration = nil
                     generatedImage = image
                     partialImage = nil
                     quotaRemaining = response.quotaRemaining
                     isGenerating = false
                 }
             } catch let error as SupabaseDataService.GenerateProfilePictureError {
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, activeGeneration == requestId else { return }
                 await MainActor.run {
                     switch error {
                     case .quotaExceeded:
@@ -240,11 +238,12 @@ struct AIProfileGeneratorView: View {
                             errorMessage = message
                         }
                     }
+                    activeGeneration = nil
                     partialImage = nil
                     isGenerating = false
                 }
             } catch {
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, activeGeneration == requestId else { return }
                 await MainActor.run {
                     // Check if error message indicates quota exceeded (fallback)
                     let errorString = error.localizedDescription.lowercased()
@@ -253,11 +252,20 @@ struct AIProfileGeneratorView: View {
                     } else {
                         errorMessage = "Failed to generate image. Please try again."
                     }
+                    activeGeneration = nil
                     partialImage = nil
                     isGenerating = false
                 }
             }
         }
+    }
+
+    private func cancelGeneration() {
+        activeGeneration = nil
+        generationTask?.cancel()
+        generationTask = nil
+        partialImage = nil
+        isGenerating = false
     }
 
     private func regenerateImage() {

@@ -5224,20 +5224,22 @@ final class SupabaseDataService: ObservableObject {
     /// - Throws: GenerateProfilePictureError for various failure modes
     func generateProfilePictureStreaming(
         prompt: String,
-        onPartialImage: @escaping (Data, Int) -> Void
+        onPartialImage: @escaping (Data, Int) -> Void,
+        events: AsyncThrowingStream<ImageStreamEvent, Error>? = nil
     ) async throws -> GenerateProfilePictureResponse {
         print("[Debug] generateProfilePictureStreaming: Starting streaming request")
 
         var finalImageData: Data?
         var finalMetadata: [String: Any]?
 
-        let stream = SSEStreamingHelper.streamImageGeneration(
+        let stream = events ?? SSEStreamingHelper.streamImageGeneration(
             functionName: "generate-profile-picture",
             body: ["prompt": prompt]
         )
 
         do {
             for try await event in stream {
+                try Task.checkCancellation()
                 switch event {
                 case .partial(let index, let imageData):
                     print("[Debug] generateProfilePictureStreaming: Partial image \(index)")
@@ -5247,9 +5249,6 @@ final class SupabaseDataService: ObservableObject {
                     print("[Debug] generateProfilePictureStreaming: Complete image received")
                     finalImageData = imageData
                     finalMetadata = metadata
-                    if let imageUrl = metadata?["imageUrl"] as? String {
-                        print("[Debug] generateProfilePictureStreaming: imageUrl = \(imageUrl)")
-                    }
                     if let quotaRemaining = metadata?["quotaRemaining"] as? Int {
                         print("[Debug] generateProfilePictureStreaming: quotaRemaining = \(quotaRemaining)")
                     }
@@ -5265,6 +5264,7 @@ final class SupabaseDataService: ObservableObject {
                 }
             }
 
+            try Task.checkCancellation()
             guard let imageData = finalImageData else {
                 throw GenerateProfilePictureError.apiError("No image generated")
             }

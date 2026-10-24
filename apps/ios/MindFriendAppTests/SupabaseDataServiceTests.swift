@@ -245,3 +245,175 @@ extension SupabaseDataServiceTests {
         XCTAssertTrue(true, "Debouncing documented in NotificationSettingsView.saveSettings()")
     }
 }
+
+// #12: the production URLSession delegate receives synthetic bytes; no provider or backend calls.
+import SwiftUI
+
+@MainActor
+final class ProfileImageStreamTests: XCTestCase {
+    private var image: Data {
+        UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).pngData { context in
+            UIColor.systemBlue.setFill(); context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+        }
+    }
+    private func event(_ fields: [String: Any], separator: String = "\n", space: Bool = true) throws -> Data {
+        let json = String(data: try JSONSerialization.data(withJSONObject: fields), encoding: .utf8)!
+        return Data(("data:" + (space ? " " : "") + json + separator + separator).utf8)
+    }
+    private func stream(_ chunks: [Data], keepOpen: Bool = false) -> AsyncThrowingStream<ImageStreamEvent, Error> {
+        ProfileImageURLProtocol.fixture.prepare(chunks, keepOpen: keepOpen)
+        let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [ProfileImageURLProtocol.self]
+        return SSEStreamingHelper.streamImageGeneration(request: URLRequest(url: URL(string: "https://profile-fixture.invalid/image")!), configuration: config)
+    }
+    private func partial() throws -> Data { try event(["type": "partial", "index": 0, "imageBase64": image.base64EncodedString()]) }
+    private func complete(separator: String = "\n") throws -> Data {
+        try event(["type": "complete", "success": true, "imageBase64": image.base64EncodedString(),
+                   "generationId": "synthetic-12", "storagePath": "synthetic-owner/generated/12.png", "quotaRemaining": 0], separator: separator, space: false)
+    }
+    func testEveryByteFragmentAndAllLineEndingsPreserveFinalMetadata() async throws {
+        for separator in ["\n", "\r\n", "\r"] {
+            let data = try partial() + complete(separator: separator)
+            var previews = 0, finals = 0
+            for try await result in stream(data.map { Data([$0]) }) {
+                switch result {
+                case .partial: previews += 1
+                case .complete(let bytes, let metadata):
+                    finals += 1; XCTAssertEqual(bytes, image)
+                    XCTAssertEqual(metadata?["generationId"] as? String, "synthetic-12")
+                    XCTAssertEqual(metadata?["storagePath"] as? String, "synthetic-owner/generated/12.png")
+                    XCTAssertEqual(metadata?["quotaRemaining"] as? Int, 0)
+                case .error: XCTFail("Unexpected error event")
+                }
+            }
+            XCTAssertEqual(previews, 1); XCTAssertEqual(finals, 1)
+            XCTAssertEqual(ProfileImageURLProtocol.fixture.requests, 1)
+        }
+    }
+    func testMultilineUTF8AndCommentsAtByteBoundaries() throws {
+        let wire = Data(":keep-alive\r\ndata:{\"type\":\"error\",\r\ndata: \"error\":\"Try again 🌙\"}\r\n\r\n".utf8)
+        var decoder = ImageSSEDecoder(); var payloads: [String] = []
+        for byte in wire { payloads += try decoder.consume(Data([byte])) }
+        XCTAssertEqual(payloads.count, 1)
+        guard case .error(let error) = try SSEStreamingHelper.parseImageEvent(payloads[0]) else { return XCTFail("Expected error") }
+        XCTAssertEqual(error.localizedDescription, "Try again 🌙")
+    }
+    func testPartialThenMissingFinalFailsWithoutRetry() async throws {
+        var previews = 0
+        do {
+            for try await result in stream([try partial()]) {
+                if case .partial = result { previews += 1 }
+                if case .complete = result { XCTFail("A preview must not become a final image") }
+            }
+            XCTFail("Missing final must fail")
+        } catch let error as SSEStreamError {
+            guard case .noData = error else { return XCTFail("\(error)") }
+            XCTAssertTrue(error.localizedDescription.contains("prompt is saved"))
+        }
+        XCTAssertEqual(previews, 1); XCTAssertEqual(ProfileImageURLProtocol.fixture.requests, 1)
+    }
+    func testInvalidAndUnterminatedFinalCannotComplete() async throws {
+        for final in [try event(["type": "complete", "imageBase64": "not-base64"]),
+                      try event(["type": "complete", "imageBase64": Data("not an image".utf8).base64EncodedString()]),
+                      Data(("data:{\"type\":\"complete\",\"imageBase64\":\"" + image.base64EncodedString() + "\"}").utf8)] {
+            do {
+                for try await value in stream([try partial(), final]) { if case .complete = value { XCTFail("Invalid final") } }
+                XCTFail("Must fail")
+            } catch { XCTAssertTrue(error is SSEStreamError) }
+        }
+    }
+    func testTruncatedPNGHeaderCannotComplete() async throws {
+        let truncated = try event(["type": "complete", "imageBase64": image.prefix(30).base64EncodedString()])
+        do {
+            for try await value in stream([truncated]) { if case .complete = value { XCTFail("Header is not a decoded image") } }
+            XCTFail("Truncated PNG must fail")
+        } catch { XCTAssertTrue(error is SSEStreamError) }
+    }
+    func testTerminalFramePrecedesMalformedTailInSameChunk() async throws {
+        var finals = 0
+        let wire = try complete() + Data([0xFF, 0x0A])
+        for try await value in stream([wire], keepOpen: true) { if case .complete = value { finals += 1 } }
+        XCTAssertEqual(finals, 1)
+        var errors = 0
+        let failure = try event(["type": "error", "error": "Synthetic failure"]) + Data([0xFF, 0x0A])
+        for try await value in stream([failure], keepOpen: true) { if case .error = value { errors += 1 } }
+        XCTAssertEqual(errors, 1)
+    }
+    func testCompleteDoesNotWaitForConnectionClose() async throws {
+        let start = Date(); var finals = 0
+        for try await result in stream([try partial(), try complete()], keepOpen: true) {
+            if case .complete = result { finals += 1 }
+        }
+        XCTAssertEqual(finals, 1); XCTAssertLessThan(Date().timeIntervalSince(start), 2)
+        XCTAssertEqual(ProfileImageURLProtocol.fixture.requests, 1)
+    }
+    func testServerErrorRemainsServerErrorAfterPreview() async throws {
+        var errors = 0
+        for try await result in stream([try partial(), try event(["type": "error", "error": "Failed to store image"])], keepOpen: true) {
+            if case .complete = result { XCTFail("Failed storage cannot complete") }
+            if case .error(let error) = result {
+                errors += 1
+                guard case .serverError = error as? SSEStreamError else { return XCTFail("Not a server error") }
+                XCTAssertEqual(error.localizedDescription, "Failed to store image")
+            }
+        }
+        XCTAssertEqual(errors, 1)
+    }
+    func testCancellationStopsTheSingleNativeRequest() async throws {
+        let events = stream([try partial()], keepOpen: true)
+        let received = expectation(description: "preview")
+        let task = Task {
+            for try await event in events { if case .partial = event { received.fulfill() } }
+        }
+        await fulfillment(of: [received], timeout: 2)
+        task.cancel(); _ = try await task.value
+        for _ in 0..<100 { if ProfileImageURLProtocol.fixture.stops > 0 { break }; try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertGreaterThan(ProfileImageURLProtocol.fixture.stops, 0)
+        XCTAssertEqual(ProfileImageURLProtocol.fixture.requests, 1)
+    }
+    func testOversizedUnterminatedEventIsBounded() throws {
+        var decoder = ImageSSEDecoder()
+        do {
+            _ = try decoder.consume(Data(repeating: 65, count: ImageSSEDecoder.maxEventBytes + 1))
+            XCTFail("Oversized event must fail")
+        } catch { XCTAssertTrue(error is SSEStreamError) }
+    }
+    func testProfileWrapperRejectsPreviewOnlyAndPreservesFinalMetadata() async throws {
+        let service = SupabaseDataService(authService: DependencyContainer.preview.supabaseAuthService)
+        var previews = 0
+        do {
+            _ = try await service.generateProfilePictureStreaming(prompt: "An astronaut", onPartialImage: { _, _ in previews += 1 }, events: stream([try partial()]))
+            XCTFail("A partial image cannot return a successful response")
+        } catch { XCTAssertEqual(ProfileImageURLProtocol.fixture.requests, 1) }
+        XCTAssertEqual(previews, 1)
+        let response = try await service.generateProfilePictureStreaming(prompt: "An astronaut", onPartialImage: { _, _ in previews += 1 }, events: stream([try partial(), try complete()]))
+        XCTAssertTrue(response.success); XCTAssertEqual(response.generationId, "synthetic-12")
+        XCTAssertEqual(response.storagePath, "synthetic-owner/generated/12.png"); XCTAssertEqual(response.quotaRemaining, 0)
+        XCTAssertEqual(previews, 2)
+        XCTAssertEqual(ProfileImageURLProtocol.fixture.requests, 1)
+    }
+
+}
+private final class ProfileImageURLProtocol: URLProtocol {
+    static let fixture = ProfileImageWireFixture()
+    override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "profile-fixture.invalid" }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let (chunks, keepOpen) = Self.fixture.start()
+        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "text/event-stream"])!, cacheStoragePolicy: .notAllowed)
+        for chunk in chunks { client?.urlProtocol(self, didLoad: chunk) }
+        if !keepOpen { client?.urlProtocolDidFinishLoading(self) }
+    }
+    override func stopLoading() { Self.fixture.stop() }
+}
+private final class ProfileImageWireFixture: @unchecked Sendable {
+    private let lock = NSLock()
+    private var chunks: [Data] = []; private var keepOpen = false
+    private var requestCount = 0; private var stopCount = 0
+    var requests: Int { lock.lock(); defer { lock.unlock() }; return requestCount }
+    var stops: Int { lock.lock(); defer { lock.unlock() }; return stopCount }
+    func prepare(_ chunks: [Data], keepOpen: Bool) {
+        lock.lock(); defer { lock.unlock() }; self.chunks = chunks; self.keepOpen = keepOpen; requestCount = 0; stopCount = 0
+    }
+    func start() -> ([Data], Bool) { lock.lock(); defer { lock.unlock() }; requestCount += 1; return (chunks, keepOpen) }
+    func stop() { lock.lock(); defer { lock.unlock() }; stopCount += 1 }
+}
