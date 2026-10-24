@@ -149,10 +149,6 @@ struct ChatView: View {
                 }
             }
 
-            if isSending {
-                Button("Stop response") { sendTask?.cancel() }
-                    .accessibilityHint("Stops generation. Reload history to see messages already saved.")
-            }
             Divider()
 
             // Input
