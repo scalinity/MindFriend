@@ -1,0 +1,10 @@
+{
+  "app_screenshot": {
+    "url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource211/v4/bc/5e/3a/bc5e3ac6-fb8a-e938-781e-02a249f4fb6e/Apple_iPhone_16_Pro_Max_Screenshot_1.png/320x480bb.jpg",
+    "sha256": "b6fca7817ef383bce48de6898eb36eae3b0e3643c35413365006fa2c959af4cd"
+  },
+  "logo": {
+    "source": "Existing MindFriend landing-page logo",
+    "sha256": "1a4e969849cde147eee9107c5da138ad916f082cda71a8503c1eb293b1ac25d3"
+  }
+}

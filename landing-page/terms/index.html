@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Terms of Service — MindFriend</title>
+  <meta name="description" content="The MindFriend Terms of Service: the agreement governing your use of our wellness app.">
+  <link rel="canonical" href="https://getmindfriend.app/terms/">
+
+  <!-- Open Graph / social -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Terms of Service — MindFriend">
+  <meta property="og:description" content="The MindFriend Terms of Service: the agreement governing your use of our wellness app.">
+  <meta property="og:url" content="https://getmindfriend.app/terms/">
+  <meta property="og:image" content="https://getmindfriend.app/assets/logo.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Terms of Service — MindFriend">
+  <meta name="twitter:description" content="The MindFriend Terms of Service: the agreement governing your use of our wellness app.">
+  <meta name="twitter:image" content="https://getmindfriend.app/assets/logo.png">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#6366f1">
+  <meta name="apple-itunes-app" content="app-id=6758198271">
+  <link rel="icon" type="image/png" href="/assets/logo.png?v=2">
+  <link rel="apple-touch-icon" href="/assets/logo.png?v=2">
+
+  <!-- Fonts: Inter for body, Fraunces for editorial display -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- Preload the font CSS so the variable-font woff2 inside it gets fetched earlier -->
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700;800&display=swap">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Built from the existing Tailwind 3 theme; content does not require JavaScript. -->
+  <link rel="stylesheet" href="/css/legal.css">
+
+  <style>
+    :root {
+      --bg: #faf9f5;
+      --bg-card: #ffffff;
+      --ink: #1a1a2e;
+      --ink-soft: #4b5563;
+      --ink-faint: #9ca3af;
+      --rule: #e5e7eb;
+      --violet: #6366f1;
+      --fuchsia: #ec4899;
+    }
+    html { scroll-behavior: smooth; }
+    body { background: var(--bg); overflow-x: hidden; }
+    main, header, footer, nav { min-width: 0; }
+
+    /* Project-coherent focus ring — applies to anything focusable */
+    :focus-visible {
+      outline: 2px solid var(--violet);
+      outline-offset: 3px;
+      border-radius: 4px;
+    }
+    /* TOC links use an inline border, so make focus ring inset */
+    .toc-link:focus-visible {
+      outline: none;
+      border-left-color: var(--violet);
+      background: rgba(99, 102, 241, 0.06);
+      box-shadow: inset 2px 0 0 var(--violet);
+    }
+    /* Inline prose links already have an underline; soften focus ring */
+    .prose a:focus-visible {
+      outline-offset: 2px;
+    }
+    /* Skip-to-content: visually hidden until keyboard-focused */
+    .skip-link {
+      position: absolute;
+      top: -48px;
+      left: 12px;
+      z-index: 100;
+      background: var(--ink);
+      color: #fff;
+      padding: 9px 14px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: top 0.15s ease;
+    }
+    .skip-link:focus { top: 12px; outline-offset: 2px; }
+    .glass {
+      background: rgba(250, 249, 245, 0.85);
+      backdrop-filter: saturate(140%) blur(12px);
+      -webkit-backdrop-filter: saturate(140%) blur(12px);
+    }
+    /* Reading progress bar — width updated via rAF, no CSS transition */
+    .scroll-progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 3px;
+      width: 0;
+      background: linear-gradient(90deg, #6366f1, #ec4899, #6366f1);
+      background-size: 200% 100%;
+      z-index: 9999;
+      animation: gradient-shift 3s ease infinite;
+      pointer-events: none;
+      will-change: width;
+    }
+    @keyframes gradient-shift {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    .gradient-text {
+      background: linear-gradient(135deg, #6366f1 0%, #ec4899 55%, #6366f1 100%);
+      background-size: 200% auto;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: gradient-shift 12s ease infinite;
+    }
+    /* SVG used for the italic gradient word in the H1 hero. Chrome's
+       -webkit-background-clip: text clips the gradient at the regular-glyph
+       boundary so italic Fraunces descenders ('y' on Policy) get cut. SVG
+       <text fill="url(#g)"> doesn't have that limitation. The SVG is sized
+       to scale with the parent font-size; vertical-align is tuned so the
+       SVG's internal baseline (y=100 in a 130-unit-tall viewBox) aligns
+       with the surrounding text baseline. */
+    .gradient-word {
+      display: inline-block;
+      height: 1.3em;
+      width: auto;
+      vertical-align: -0.3em;
+      overflow: visible;
+    }
+    /* Hero orbs */
+    .orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(80px);
+      pointer-events: none;
+      opacity: 0.5;
+    }
+    .orb-violet {
+      width: 380px; height: 380px;
+      background: rgba(99, 102, 241, 0.30);
+      top: -80px; right: -60px;
+    }
+    .orb-fuchsia {
+      width: 280px; height: 280px;
+      background: rgba(236, 72, 153, 0.18);
+      top: 80px; right: 220px;
+    }
+
+    /* TOC */
+    .toc-link {
+      position: relative;
+      display: block;
+      padding: 6px 0 6px 16px;
+      font-size: 13.5px;
+      line-height: 1.45;
+      color: var(--ink-soft);
+      border-left: 2px solid transparent;
+      transition: color .18s ease, border-color .18s ease;
+    }
+    .toc-link:hover { color: var(--ink); border-color: var(--rule); }
+    .toc-link.active {
+      color: var(--ink);
+      border-color: var(--violet);
+      font-weight: 500;
+    }
+    .toc-num {
+      display: inline-block;
+      width: 1.6em;
+      color: var(--ink-faint);
+      font-variant-numeric: tabular-nums;
+      font-size: 12px;
+    }
+    .toc-link.active .toc-num { color: var(--violet); }
+
+    /* Doc layout: ensure mobile cannot overflow */
+    .doc-grid { width: 100%; box-sizing: border-box; }
+    .doc-toc { min-width: 0; max-width: 100%; }
+    @media (min-width: 1024px) {
+      .doc-toc { padding-bottom: 3rem; } /* breathing room when sidebar scrolls */
+    }
+
+    /* ===== Prose styling for the legal document ===== */
+    .prose {
+      font-family: 'Inter', -apple-system, sans-serif;
+      color: var(--ink-soft);
+      font-size: 16.5px;
+      line-height: 1.78;
+      width: 100%;
+      max-width: 70ch;
+      min-width: 0;
+      box-sizing: border-box;
+      letter-spacing: 0.005em;
+    }
+    @media (max-width: 1023px) {
+      .prose { max-width: 100%; }
+    }
+    .prose > h2 {
+      font-family: 'Inter', sans-serif;
+      font-size: clamp(1.5rem, 1.1rem + 1.4vw, 2rem);
+      font-weight: 700;
+      letter-spacing: -0.018em;
+      line-height: 1.2;
+      color: var(--ink);
+      margin-top: 5rem;
+      margin-bottom: 1.25rem;
+      padding-top: 2.5rem;
+      position: relative;
+      scroll-margin-top: 6rem;
+    }
+    .prose > h2::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 64px;
+      height: 1px;
+      background: linear-gradient(90deg, var(--violet), var(--fuchsia));
+    }
+    .prose > h3 {
+      font-family: 'Inter', sans-serif;
+      font-size: 1.05rem;
+      font-weight: 600;
+      letter-spacing: -0.005em;
+      color: var(--ink);
+      margin-top: 2.25rem;
+      margin-bottom: 0.6rem;
+      scroll-margin-top: 6rem;
+    }
+    .prose p {
+      margin: 0 0 1.1em 0;
+    }
+    .prose ul, .prose ol {
+      margin: 0 0 1.25em 0;
+      padding-left: 1.4em;
+    }
+    .prose li {
+      margin-bottom: 0.45em;
+      padding-left: 0.25em;
+    }
+    .prose ul > li {
+      list-style: none;
+      position: relative;
+    }
+    .prose ul > li::before {
+      content: "";
+      position: absolute;
+      left: -1em;
+      top: 0.65em;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--violet), var(--fuchsia));
+      opacity: 0.55;
+    }
+    .prose ol {
+      list-style: decimal;
+      font-variant-numeric: tabular-nums;
+    }
+    .prose ol > li::marker {
+      color: var(--ink-faint);
+      font-weight: 500;
+      font-size: 0.92em;
+    }
+    .prose strong {
+      color: var(--ink);
+      font-weight: 600;
+    }
+    .prose em { font-style: italic; }
+    .prose a {
+      color: var(--violet);
+      text-decoration: underline;
+      text-decoration-color: rgba(99, 102, 241, 0.35);
+      text-underline-offset: 3px;
+      transition: text-decoration-color .15s ease, color .15s ease;
+    }
+    .prose a:hover {
+      color: var(--fuchsia);
+      text-decoration-color: rgba(236, 72, 153, 0.7);
+    }
+    .prose a {
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    .prose blockquote {
+      margin: 1.6em 0;
+      padding: 1em 1.25em;
+      background: linear-gradient(135deg, rgba(99,102,241,0.05), rgba(236,72,153,0.04));
+      border-left: 3px solid;
+      border-image: linear-gradient(180deg, var(--violet), var(--fuchsia)) 1;
+      border-radius: 0 12px 12px 0;
+    }
+    .prose blockquote p {
+      margin-bottom: 0.6em;
+      color: var(--ink);
+      font-size: 0.97em;
+    }
+    .prose blockquote p:last-child { margin-bottom: 0; }
+    /* Hide existing <hr> separators — we use h2 spacing for rhythm */
+    .prose hr { display: none; }
+    /* Tables */
+    .prose table {
+      width: 100%;
+      margin: 1.5em 0 2em;
+      border-collapse: collapse;
+      font-size: 0.92em;
+      background: #fff;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid var(--rule);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .prose thead {
+      background: linear-gradient(135deg, rgba(99,102,241,0.06), rgba(236,72,153,0.05));
+    }
+    .prose th {
+      text-align: left;
+      padding: 0.85em 1em;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--ink);
+      border-bottom: 1px solid var(--rule);
+    }
+    .prose td {
+      padding: 0.85em 1em;
+      vertical-align: top;
+      border-bottom: 1px solid #f1f3f7;
+      color: var(--ink-soft);
+    }
+    .prose tbody tr:last-child td { border-bottom: none; }
+    .prose tbody tr:hover { background: rgba(99,102,241,0.025); }
+    /* Allow tables to scroll horizontally on small viewports without breaking layout */
+    @media (max-width: 768px) {
+      .prose table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      .prose th, .prose td { white-space: nowrap; }
+    }
+
+    /* Anchor link reveal on h2/h3 hover */
+    .prose h2, .prose h3 { position: relative; }
+    .prose h2 .anchor, .prose h3 .anchor {
+      position: absolute;
+      left: -1.4em;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--ink-faint);
+      opacity: 0;
+      transition: opacity .15s ease, color .15s ease;
+      font-weight: 400;
+      text-decoration: none;
+      padding: 0 .25em;
+    }
+    .prose h2:hover .anchor, .prose h3:hover .anchor {
+      opacity: 1;
+    }
+    .prose h2 .anchor:hover, .prose h3 .anchor:hover { color: var(--violet); }
+
+    /* Important notice callout */
+    .notice {
+      position: relative;
+      padding: 1.5rem 1.75rem;
+      margin-bottom: 2rem;
+      background: var(--bg-card);
+      border: 1px solid var(--rule);
+      border-radius: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    }
+    .notice::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 24px;
+      right: 24px;
+      height: 2px;
+      background: linear-gradient(90deg, var(--violet), var(--fuchsia));
+      border-radius: 0 0 2px 2px;
+    }
+    .notice p {
+      margin: 0 0 0.75em 0;
+      color: var(--ink-soft);
+      font-size: 14.5px;
+      line-height: 1.7;
+    }
+    .notice p:last-child { margin: 0; }
+    .notice strong { color: var(--ink); }
+
+    /* Back to top */
+    .back-to-top {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: var(--ink);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 12px 30px -10px rgba(0,0,0,0.35);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .25s ease, transform .25s ease;
+      z-index: 40;
+      border: none;
+      cursor: pointer;
+    }
+    .back-to-top.visible { opacity: 1; pointer-events: auto; }
+    .back-to-top:hover { transform: translateY(-2px); }
+
+    /* Print: strip chrome, just show document */
+    @media print {
+      .scroll-progress, .site-nav, .doc-toc, .back-to-top, .site-footer,
+      .hero-orbs, .anchor { display: none !important; }
+      body { background: white; }
+      main { max-width: 100%; padding: 0 !important; }
+      .doc-grid { display: block !important; }
+      .prose { max-width: 100%; font-size: 11pt; }
+      .prose h2 { page-break-after: avoid; margin-top: 2rem; padding-top: 1rem; }
+      .prose h3 { page-break-after: avoid; }
+      .prose blockquote, .prose table { page-break-inside: avoid; }
+      /* Make the gradient hairline visible in B&W print */
+      .prose > h2::before {
+        background: #999 !important;
+      }
+      a { color: black; }
+      a[href^="http"]::after, a[href^="mailto"]::after {
+        content: " (" attr(href) ")";
+        font-size: 0.85em;
+        color: #666;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+      html { scroll-behavior: auto; }
+    }
+  </style>
+</head>
+<body class="text-gray-900 antialiased">
+  <!-- Skip-to-content link for keyboard users (visually hidden until focused) -->
+  <a href="#doc-content" class="skip-link">Skip to content</a>
+
+  <!-- Reading progress bar -->
+  <div class="scroll-progress" id="scrollProgress"></div>
+
+  <!-- Top nav -->
+  <nav class="site-nav fixed top-0 left-0 right-0 z-50 glass border-b border-gray-100/70">
+    <div class="max-w-7xl mx-auto px-6 py-3.5 flex items-center justify-between">
+      <a href="/" class="flex items-center gap-2.5 group">
+        <img src="/assets/logo.png?v=2" alt="MindFriend" class="w-9 h-9 rounded-xl">
+        <span class="font-bold text-base tracking-tight text-gray-900">MindFriend</span>
+      </a>
+      <div class="flex items-center gap-5">
+        <a href="/" class="text-sm text-gray-600 hover:text-gray-900 transition-colors hidden sm:flex items-center gap-1.5">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+          Back to home
+        </a>
+        <a href="https://apps.apple.com/us/app/mindfriend-ai-wellness/id6758198271" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-gray-900 hover:bg-black text-white text-xs font-semibold rounded-full transition-colors">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg>
+          Download
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <header class="relative pt-32 pb-10 px-6 overflow-hidden hero-orbs">
+    <div class="orb orb-violet"></div>
+    <div class="orb orb-fuchsia"></div>
+    <div class="relative max-w-7xl mx-auto">
+      <p class="text-[11px] uppercase tracking-[0.22em] text-gray-400 font-semibold mb-5">Legal · Terms</p>
+      <h1 class="font-display font-medium tracking-[-0.02em] leading-[1.08] text-[36px] sm:text-[52px] md:text-[64px] lg:text-[76px] text-gray-900 mb-7 max-w-4xl break-words">
+        Terms of <svg class="gradient-word" viewBox="0 0 289 130" preserveAspectRatio="xMinYMid meet" aria-hidden="true"><defs><linearGradient id="g-service" x1="0%" y1="0%" x2="100%" y2="50%"><stop offset="0%" stop-color="#6366f1"><animate attributeName="stop-color" values="#6366f1;#ec4899;#6366f1" dur="12s" repeatCount="indefinite"/></stop><stop offset="55%" stop-color="#ec4899"><animate attributeName="stop-color" values="#ec4899;#6366f1;#ec4899" dur="12s" repeatCount="indefinite"/></stop><stop offset="100%" stop-color="#6366f1"><animate attributeName="stop-color" values="#6366f1;#ec4899;#6366f1" dur="12s" repeatCount="indefinite"/></stop></linearGradient></defs><text x="3" y="100" font-family="Fraunces, Georgia, serif" font-style="italic" font-weight="500" font-size="100" letter-spacing="-2" fill="url(#g-service)">Service</text></svg>
+      </h1>
+      <div class="flex flex-wrap items-center gap-3">
+        <span class="inline-flex items-center gap-2 px-3 py-1.5 bg-white shadow-sm border border-gray-100 rounded-full text-xs font-medium text-gray-700">
+          <span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+          Effective January 14, 2026
+        </span>
+        <span class="text-xs text-gray-400">Last updated January 14, 2026</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Document body -->
+  <main class="relative max-w-7xl mx-auto px-6 pb-16">
+    <div class="doc-grid lg:grid lg:grid-cols-[240px,1fr] lg:gap-16 xl:gap-24">
+
+      <!-- TOC: collapsible on mobile, sticky sidebar on desktop -->
+      <aside class="doc-toc lg:sticky lg:top-24 lg:self-start lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto mb-10 lg:mb-0 pt-2">
+        <details class="lg:hidden bg-white rounded-2xl border border-gray-100 px-5 py-4 mb-2">
+          <summary class="cursor-pointer text-sm font-semibold text-gray-900 flex items-center justify-between">
+            <span>Contents</span>
+            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+          </summary>
+          <div class="mt-4">
+            <nav aria-label="Table of contents">
+  <p class="text-[11px] uppercase tracking-[0.2em] text-gray-400 font-semibold mb-4">Contents</p>
+  <ol class="space-y-0.5 list-none p-0">
+    <li><a class="toc-link" href="#acceptance"><span class="toc-num">01</span>Acceptance of Terms</a></li>
+    <li><a class="toc-link" href="#definitions"><span class="toc-num">02</span>Definitions</a></li>
+    <li><a class="toc-link" href="#eligibility"><span class="toc-num">03</span>Eligibility & Accounts</a></li>
+    <li><a class="toc-link" href="#wellness-disclaimer"><span class="toc-num">04</span>Wellness Disclaimer</a></li>
+    <li><a class="toc-link" href="#license"><span class="toc-num">05</span>License to Use</a></li>
+    <li><a class="toc-link" href="#user-content"><span class="toc-num">06</span>User Content</a></li>
+    <li><a class="toc-link" href="#prohibited"><span class="toc-num">07</span>Prohibited Uses</a></li>
+    <li><a class="toc-link" href="#intellectual-property"><span class="toc-num">08</span>Intellectual Property</a></li>
+    <li><a class="toc-link" href="#privacy"><span class="toc-num">09</span>Privacy & Data</a></li>
+    <li><a class="toc-link" href="#payments"><span class="toc-num">10</span>Payments & Subscriptions</a></li>
+    <li><a class="toc-link" href="#third-party"><span class="toc-num">11</span>Third-Party Services</a></li>
+    <li><a class="toc-link" href="#disclaimers"><span class="toc-num">12</span>Disclaimers</a></li>
+    <li><a class="toc-link" href="#liability"><span class="toc-num">13</span>Limitation of Liability</a></li>
+    <li><a class="toc-link" href="#indemnification"><span class="toc-num">14</span>Indemnification</a></li>
+    <li><a class="toc-link" href="#termination"><span class="toc-num">15</span>Suspension & Termination</a></li>
+    <li><a class="toc-link" href="#disputes"><span class="toc-num">16</span>Dispute Resolution</a></li>
+    <li><a class="toc-link" href="#miscellaneous"><span class="toc-num">17</span>Miscellaneous</a></li>
+  </ol>
+</nav>
+          </div>
+        </details>
+        <div class="hidden lg:block">
+          <nav aria-label="Table of contents">
+  <p class="text-[11px] uppercase tracking-[0.2em] text-gray-400 font-semibold mb-4">Contents</p>
+  <ol class="space-y-0.5 list-none p-0">
+    <li><a class="toc-link" href="#acceptance"><span class="toc-num">01</span>Acceptance of Terms</a></li>
+    <li><a class="toc-link" href="#definitions"><span class="toc-num">02</span>Definitions</a></li>
+    <li><a class="toc-link" href="#eligibility"><span class="toc-num">03</span>Eligibility & Accounts</a></li>
+    <li><a class="toc-link" href="#wellness-disclaimer"><span class="toc-num">04</span>Wellness Disclaimer</a></li>
+    <li><a class="toc-link" href="#license"><span class="toc-num">05</span>License to Use</a></li>
+    <li><a class="toc-link" href="#user-content"><span class="toc-num">06</span>User Content</a></li>
+    <li><a class="toc-link" href="#prohibited"><span class="toc-num">07</span>Prohibited Uses</a></li>
+    <li><a class="toc-link" href="#intellectual-property"><span class="toc-num">08</span>Intellectual Property</a></li>
+    <li><a class="toc-link" href="#privacy"><span class="toc-num">09</span>Privacy & Data</a></li>
+    <li><a class="toc-link" href="#payments"><span class="toc-num">10</span>Payments & Subscriptions</a></li>
+    <li><a class="toc-link" href="#third-party"><span class="toc-num">11</span>Third-Party Services</a></li>
+    <li><a class="toc-link" href="#disclaimers"><span class="toc-num">12</span>Disclaimers</a></li>
+    <li><a class="toc-link" href="#liability"><span class="toc-num">13</span>Limitation of Liability</a></li>
+    <li><a class="toc-link" href="#indemnification"><span class="toc-num">14</span>Indemnification</a></li>
+    <li><a class="toc-link" href="#termination"><span class="toc-num">15</span>Suspension & Termination</a></li>
+    <li><a class="toc-link" href="#disputes"><span class="toc-num">16</span>Dispute Resolution</a></li>
+    <li><a class="toc-link" href="#miscellaneous"><span class="toc-num">17</span>Miscellaneous</a></li>
+  </ol>
+</nav>
+        </div>
+      </aside>
+
+      <!-- Article -->
+      <article id="doc-content" class="prose" tabindex="-1">
+      <div class="notice">
+        <p><strong>Important.</strong> The Service provides <strong>mental health and wellness support tools</strong>. It is <strong>not medical care</strong>, not a substitute for professional advice, and <strong>not for emergencies</strong>. See Section 4 for details.</p>
+      </div>
+
+      <div class="rounded-2xl bg-white border border-gray-100 px-7 py-6 mb-10 shadow-sm">
+        <p class="text-gray-600 leading-relaxed text-[15.5px]">These Terms of Service (the "<strong>Terms</strong>" or "<strong>Agreement</strong>") are a legally binding contract between you ("<strong>you</strong>" or "<strong>User</strong>") and <strong>Daniel Escalante</strong> ("<strong>MindFriend</strong>," "<strong>we</strong>," "<strong>us</strong>," or "<strong>our</strong>") governing your access to and use of <strong>MindFriend</strong> (the "<strong>Service</strong>"), including the MindFriend mobile application (the "<strong>App</strong>"), related websites, features, content, and subscriptions.</p>
+      </div>
+<h2 id="acceptance"><span aria-hidden="true" class="text-gray-400 font-normal mr-3 tabular-nums">01</span>Acceptance of These Terms</h2>
+
+      <h3>1.1 Agreement to Terms</h3>
+      <p>By downloading, accessing, or using the Service, you:</p>
+      <ul>
+        <li>Confirm that you have read and understood these Terms, and</li>
+        <li>Agree to be bound by them.</li>
+      </ul>
+      <p>If you do not agree, do not use the Service.</p>
+
+      <h3>1.2 Additional Terms and Policies</h3>
+      <p>These Terms incorporate by reference:</p>
+      <ul>
+        <li>Our <strong>Privacy Policy</strong>: <a href="https://getmindfriend.app/privacy">https://getmindfriend.app/privacy</a></li>
+        <li>Any in-app policies, community guidelines, or supplemental terms presented to you for specific features (collectively, "Supplemental Terms")</li>
+      </ul>
+      <p>If Supplemental Terms conflict with these Terms, the Supplemental Terms will control <strong>only</strong> for the specific feature they govern.</p>
+
+      <h3>1.3 Changes to These Terms</h3>
+      <p>We may update these Terms from time to time. If we make material changes, we will provide notice through the App or other reasonable means. Your continued use of the Service after the updated Terms take effect constitutes acceptance to the extent permitted by law.</p>
+      <p>If you do not agree to updated Terms, you must stop using the Service and may delete your account.</p>
+
+      <hr>
+
+      <h2 id="definitions"><span aria-hidden="true" class="text-gray-400 font-normal mr-3 tabular-nums">02</span>Definitions</h2>
+      <p>For clarity, the following definitions apply:</p>
+      <ul>
+        <li><strong>"AI Companion"</strong> means the AI-powered conversational feature of the Service that generates responses to your messages.</li>
+        <li><strong>"Content"</strong> means text, images, audio, video, and other materials made available through the Service, including our materials and User Content.</li>
+        <li><strong>"User Content"</strong> means any content you submit, store, transmit, publish, or otherwise make available through the Service (e.g., mood notes, Circle check-ins, chat messages).</li>
+        <li><strong>"Circle"</strong> means a private group feature within the Service where members can share check-ins and related content.</li>
+        <li><strong>"Subscription"</strong> means a paid recurring plan or in-app purchase that unlocks premium features.</li>
+        <li><strong>"Third-Party Services"</strong> means services provided by third parties (e.g., Apple App Store, analytics providers, cloud hosting).</li>
+        <li><strong>"Device"</strong> means the mobile device you use to access the Service.</li>
+        <li><strong>"Applicable Law"</strong> means laws and regulations that apply based on your location, including consumer protection and privacy laws.</li>
+      </ul>
+
+      <hr>
+
+      <h2 id="eligibility"><span aria-hidden="true" class="text-gray-400 font-normal mr-3 tabular-nums">03</span>Eligibility, Accounts, and User Responsibilities</h2>
+
+      <h3>3.1 Eligibility and Age Requirements</h3>
+      <p>You must be at least <strong>13 years old</strong> to use the Service. If you are under the age of majority where you live, you represent that you have permission from a parent or legal guardian to use the Service.</p>
+      <p>We do not knowingly allow children under 13 to use the Service. If we learn that a user is under 13, we may delete the account and associated data.</p>
+
+      <h3>3.2 Account Registration and Accuracy</h3>
+      <p>You may need an account to use certain features. When creating an account, you agree to:</p>
+      <ul>
+        <li>Provide accurate information where requested</li>
+        <li>Keep your account information up to date</li>
+        <li>Maintain the confidentiality of your login credentials</li>
+      </ul>
+
+      <h3>3.3 Account Security</h3>
+      <p>You are responsible for all activity that occurs under your account, including activity by anyone who gains access to your account due to your actions or failure to secure credentials.</p>
+      <p>Notify us promptly at <a href="mailto:support@mindfriend.app">support@mindfriend.app</a> if you suspect unauthorized access.</p>
+
+      <h3>3.4 Acceptable Use Responsibility</h3>
+      <p>You agree to use the Service:</p>
+      <ul>
+        <li>In a respectful and lawful manner</li>
+        <li>Consistently with these Terms</li>
+        <li>Without harming others or misusing the AI Companion</li>
+      </ul>
+
+      <h3>3.5 Device and Connectivity</h3>
+      <p>Use of the Service may require:</p>
+      <ul>
+        <li>A compatible Device and operating system</li>
+        <li>Internet access (fees may apply from your carrier)</li>
+        <li>Enabling certain permissions (e.g., notifications)</li>
+      </ul>
+      <p>We are not responsible for outages or connectivity issues outside our control.</p>
+
+      <hr>
+
+      <h2 id="wellness-disclaimer"><span aria-hidden="true" class="text-gray-400 font-normal mr-3 tabular-nums">04</span>Wellness Disclaimer and Safety Notice</h2>
+
+      <h3>4.1 Not Medical Advice; No Clinical Relationship</h3>
+      <p>The Service is provided for <strong>general wellness and informational purposes only</strong>. The Service and AI Companion:</p>
+      <ul>
+        <li>Do not provide medical diagnosis, treatment, or psychotherapy</li>
+        <li>Are not a substitute for professional medical or mental health advice</li>
+        <li>Do not create a clinician–patient relationship</li>
+      </ul>
+      <p>If you have questions about a medical condition or mental health symptoms, seek advice from a qualified professional.</p>
+
+      <h3>4.2 Not for Emergencies</h3>
+      <blockquote>
+        <p>If you are experiencing an emergency or are at risk of harming yourself or others:<br>
+        <strong>Call your local emergency number immediately.</strong><br>
+        Seek immediate help from qualified professionals.</p>
+      </blockquote>
+      <p>The Service may provide crisis resources, but it is not an emergency service and cannot guarantee real-time intervention.</p>
+
+      <h3>4.3 AI Limitations</h3>
+      <p>The AI Companion generates responses based on patterns in data and may:</p>
+      <ul>
+        <li>Make mistakes</li>
+        <li>Provide incomplete information</li>
+        <li>Misinterpret context</li>
+      </ul>
+      <p>You agree not to rely on AI Companion outputs as professional advice. You are solely responsible for decisions you make based on information from the Service.</p>
+
+      <h3>4.4 User Responsibility for Health and Safety</h3>
+      <p>You are responsible for:</p>
+      <ul>
+        <li>Your own health choices</li>
+        <li>Using the Service in a manner appropriate to your condition</li>
+        <li>Stopping use of any exercise or recommendation that causes discomfort and seeking professional guidance as needed</li>
+      </ul>
+
+      <hr>
+
+      <h2 id="license"><span aria-hidden="true" class="text-gray-400 font-normal mr-3 tabular-nums">05</span>License to Use the Service</h2>
+
+      <h3>5.1 Limited License</h3>
+      <p>Subject to these Terms, we grant you a limited, non-exclusive, non-transferable, revocable license to download and use the App and Service for your personal, non-commercial use.</p>
+
+      <h3>5.2 Restrictions</h3>
+      <p>Except as permitted by Applicable Law, you may not:</p>
+      <ol>
+        <li>Copy, modify, or create derivative works of the Service or Content</li>
+        <li>Reverse engineer, decompile, or attempt to extract source code (except where legally permitted)</li>
+        <li>Circumvent access controls, quotas, or security measures</li>
+        <li>Use the Service to build a competing product</li>
+        <li>Use automated means (bots, scrapers) to access the Service without our written permission</li>
+      </ol>
+
+      <h3>5.3 Availability and Changes</h3>
+      <p>We may modify, suspend, or discontinue the Service (in whole or in part), including any feature, content, or availability, at any time. Where required by law, we will provide reasonable notice for material changes that affect paid subscribers.</p>
+
+      <hr>
+
+      <h2 id="user-content"><span aria-hidden="true" class="text-gray-400 font-normal mr-3 tabular-nums">06</span>User Content and Community Features</h2>
+
+      <h3>6.1 Ownership of User Content</h3>
+      <p>You retain ownership of your User Content as between you and us, subject to the license you grant below.</p>
+
+      <h3>6.2 License You Grant to Us</h3>
+      <p>To operate the Service, you grant MindFriend a worldwide, non-exclusive, royalty-free license to:</p>
+      <ul>
+        <li>Host, store, reproduce, process, adapt, and display your User Content</li>
+        <li>Use your User Content to provide features you request (e.g., generating an AI response, showing your check-in to your Circle)</li>
+        <li>Use de-identified and aggregated versions of User Content for analytics and improvement (as described in the Privacy Policy)</li>
+      </ul>
+      <p>This license ends when your User Content is deleted from our systems, except that:</p>
+      <ul>
+        <li>Copies may remain in backups for a limited time, and</li>
+        <li>We may retain de-identified/aggregated data that cannot reasonably identify you.</li>
+      </ul>
+
+      <h3>6.3 Circles and Sharing</h3>
+      <p>If you post in a Circle, other Circle members may view your Circle posts. You understand that:</p>
+      <ul>
+        <li>Circle content is intended to be private to that Circle</li>
+        <li>We cannot control what other users do with content once they see it (e.g., screenshots)</li>
+        <li>You are responsible for what you choose to share</li>
+      </ul>
+
+      <h3>6.4 Content Standards</h3>
+      <p>You agree that you will not submit User Content that is:</p>
+      <ul>
+        <li>Illegal, defamatory, harassing, or hateful</li>
+        <li>Sexually explicit or exploitative, especially involving minors</li>
+        <li>Encouraging self-harm or violence</li>
+        <li>Infringing intellectual property rights or privacy rights</li>
+        <li>Malware, spam, or deceptive content</li>
+      </ul>
+
+      <h3>6.5 Moderation and Enforcement</h3>
+      <p>We may, but are not required to:</p>
+      <ul>
+        <li>Remove or restrict User Content</li>
+        <li>Suspend or terminate accounts for violations</li>
+        <li>Use automated systems (including AI) and human review to detect abuse and enforce rules</li>
+      </ul>
+      <p>We do not guarantee that we will review all User Content.</p>
+
+      <hr>
+
+      <h2 id="prohibited"><span aria-hidden="true" class="text-gray-400 font-normal mr-3 tabular-nums">07</span>Prohibited Uses and Conduct</h2>
+      <p>You agree not to:</p>
+      <ol>
+        <li>Use the Service for unlawful purposes or in violation of Applicable Law</li>
+        <li>Harass, threaten, stalk, or harm other users</li>
+        <li>Attempt to gain unauthorized access to accounts, systems, or data</li>
+        <li>Interfere with or disrupt the Service (e.g., DDoS, abuse of APIs, flooding chats)</li>
+        <li>Exploit or abuse the AI Companion, including:
+          <ul>
+            <li>Attempts to generate instructions for wrongdoing or self-harm</li>
+            <li>Prompt injection or attempts to bypass safety policies</li>
+            <li>Using the AI Companion to generate content that violates these Terms</li>
+          </ul>
+        </li>
+        <li>Post content in Circles that violates Section 6.4</li>
+        <li>Impersonate others or misrepresent your affiliation</li>
+        <li>Use the Service to collect information about other users without permission</li>
+        <li>Resell, rent, or sublicense access to the Service</li>
+      </ol>
+      <p>Violation may result in suspension or termination (see Section 15).</p>
+
+      <hr>
+
+      <h2 id="intellectual-property"><span aria-hidden="true" class="text-gray-400 font-normal mr-3 tabular-nums">08</span>Intellectual Property</h2>
+
+      <h3>8.1 Our Intellectual Property</h3>
+      <p>The Service, including software, design, user interface, trademarks, logos, and all Content provided by us, is owned by or licensed to MindFriend and protected by intellectual property laws.</p>
+      <p>Except for the license granted in Section 5, we reserve all rights not expressly granted.</p>
+
+      <h3>8.2 Feedback</h3>
+      <p>If you submit feedback, ideas, or suggestions ("Feedback"), you agree we may use it without restriction or compensation. You grant us a perpetual, irrevocable, worldwide license to use and incorporate Feedback into the Service.</p>
+
+      <h3>8.3 Copyright Complaints (DMCA or Similar Laws)</h3>
+      <p>If you believe content on the Service infringes your copyright, contact us at <a href="mailto:support@mindfriend.app">support@mindfriend.app</a> with:</p>
+      <ul>
+        <li>A description of the copyrighted work</li>
+        <li>Identification of the allegedly infringing material and its location</li>
+        <li>Your contact information</li>
+        <li>A statement of good faith belief</li>
+        <li>A statement under penalty of perjury that your notice is accurate and you are authorized to act</li>
+      </ul>
+      <p>We will respond consistent with Applicable Law.</p>
+
+      <hr>
+
+      <h2 id="privacy"><span aria-hidden="true" class="text-gray-400 font-normal mr-3 tabular-nums">09</span>Privacy and Data Handling</h2>
+
+      <h3>9.1 Privacy Policy</h3>
+      <p>Our collection and use of personal information are described in our Privacy Policy: <a href="https://getmindfriend.app/privacy">https://getmindfriend.app/privacy</a>. By using the Service, you consent to our data practices as described there.</p>
+
+      <h3>9.2 Sensitive Information and Wellness Data</h3>
+      <p>You understand that the Service may process sensitive wellness-related information you submit (e.g., mood check-ins, AI chats). You can limit what you share and may delete your account subject to the Privacy Policy.</p>
+
+      <h3>9.3 Data Processing and Service Providers</h3>
+      <p>We use service providers to operate the Service (e.g., hosting, analytics, AI processing). See the Privacy Policy for details.</p>
+
+      <hr>
+
+      <h2 id="payments"><span aria-hidden="true" class="text-gray-400 font-normal mr-3 tabular-nums">10</span>Payments, Subscriptions, and Billing</h2>
+
+      <h3>10.1 Paid Features</h3>
+      <p>Some features may require payment (e.g., premium AI usage limits, content packs). We will clearly disclose paid features before you purchase.</p>
+
+      <h3>10.2 App Store Purchases</h3>
+      <p>If you purchase a Subscription through the Apple App Store:</p>
+      <ul>
+        <li>Your purchase is subject to Apple's terms and conditions</li>
+        <li>Apple may handle billing, payment processing, and refunds</li>
+        <li>We may receive information from Apple about your subscription status to provide entitlements</li>
+      </ul>
+
+      <h3>10.3 Auto-Renewal and Cancellation</h3>
+      <p>Unless you cancel, Subscriptions may automatically renew. You can manage and cancel subscriptions through your Apple ID account settings.</p>
+      <p>Cancellation takes effect at the end of the then-current billing period. You will retain access to premium features until the end of that period.</p>
+
+      <h3>10.4 Trials and Promotional Offers</h3>
+      <p>If you receive a free trial or promotion:</p>
+      <ul>
+        <li>It may convert into a paid Subscription unless canceled before the trial ends</li>
+        <li>Terms of the offer will be shown at sign-up</li>
+      </ul>
+
+      <h3>10.5 Price Changes</h3>
+      <p>We may change subscription pricing or plans. For App Store subscriptions, Apple's rules govern price change notifications and consent requirements.</p>
+
+      <h3>10.6 Taxes</h3>
+      <p>Where applicable, taxes may be added based on your location and Apple's billing policies.</p>
+
+      <h3>10.7 Refunds</h3>
+      <p>Refund policies for App Store purchases are determined by Apple. We cannot guarantee refunds and generally do not process them directly, but we may assist with support requests.</p>
+
+      <hr>
+
+      <h2 id="third-party"><span aria-hidden="true" class="text-gray-400 font-normal mr-3 tabular-nums">11</span>Third-Party Services and Links</h2>
+
+      <h3>11.1 Third-Party Services</h3>
+      <p>The Service may integrate with Third-Party Services (e.g., Apple authentication, Apple billing, cloud services, analytics, AI providers). These services have their own terms and privacy practices. We are not responsible for Third-Party Services.</p>
+
+      <h3>11.2 Third-Party Content</h3>
+      <p>The Service may include links to third-party websites or content. We provide these links for convenience and do not endorse them.</p>
+
+      <hr>
+
+      <h2 id="disclaimers"><span aria-hidden="true" class="text-gray-400 font-normal mr-3 tabular-nums">12</span>Disclaimers</h2>
+
+      <h3>12.1 Service Provided "As Is"</h3>
+      <p>To the maximum extent permitted by Applicable Law, the Service is provided <strong>"AS IS"</strong> and <strong>"AS AVAILABLE."</strong> We disclaim all warranties, express or implied, including implied warranties of merchantability, fitness for a particular purpose, and non-infringement.</p>
+
+      <h3>12.2 No Guaranteed Outcomes</h3>
+      <p>We do not guarantee that:</p>
+      <ul>
+        <li>The Service will improve your wellbeing</li>
+        <li>The Service will be uninterrupted, timely, secure, or error-free</li>
+        <li>The AI Companion will be accurate or appropriate for your situation</li>
+      </ul>
+
+      <h3>12.3 User Interactions</h3>
+      <p>We are not responsible for interactions between users, including in Circles. You are responsible for your communications and what you share.</p>
+
+      <h3>12.4 Platform Disclaimers (Apple)</h3>
+      <p>Apple is not responsible for providing the Service, handling support, or maintaining the App, except as required by Apple's own terms. This Agreement is between you and MindFriend, not Apple.</p>
+
+      <hr>
+
+      <h2 id="liability"><span aria-hidden="true" class="text-gray-400 font-normal mr-3 tabular-nums">13</span>Limitation of Liability</h2>
+
+      <h3>13.1 Limitation</h3>
+      <p>To the maximum extent permitted by Applicable Law, MindFriend and its affiliates, directors, officers, employees, contractors, and agents will not be liable for any indirect, incidental, special, consequential, or punitive damages, including loss of profits, data, goodwill, or other intangible losses, arising out of or related to your use of (or inability to use) the Service.</p>
+
+      <h3>13.2 Liability Cap</h3>
+      <p>To the maximum extent permitted by Applicable Law, our total liability for all claims related to the Service will not exceed the greater of:</p>
+      <ul>
+        <li>The amount you paid to us (if any) for the Service in the <strong>12 months</strong> prior to the event giving rise to the claim, or</li>
+        <li><strong>USD $100</strong>.</li>
+      </ul>
+      <p>Some jurisdictions do not allow certain limitations. In those jurisdictions, our liability will be limited to the maximum extent permitted by law.</p>
+
+      <h3>13.3 Basis of the Bargain</h3>
+      <p>You acknowledge that the limitations in this Section are a fundamental part of these Terms and apply even if a remedy fails of its essential purpose.</p>
+
+      <hr>
+
+      <h2 id="indemnification"><span aria-hidden="true" class="text-gray-400 font-normal mr-3 tabular-nums">14</span>Indemnification</h2>
+      <p>You agree to indemnify, defend, and hold harmless MindFriend, its affiliates, and their respective officers, directors, employees, contractors, and agents from and against any claims, liabilities, damages, losses, and expenses (including reasonable attorneys' fees) arising out of or related to:</p>
+      <ol>
+        <li>Your use of the Service</li>
+        <li>Your User Content</li>
+        <li>Your violation of these Terms</li>
+        <li>Your violation of any law or the rights of any third party</li>
+      </ol>
+      <p>We may assume control of the defense of any matter subject to indemnification, and you agree to cooperate.</p>
+
+      <hr>
+
+      <h2 id="termination"><span aria-hidden="true" class="text-gray-400 font-normal mr-3 tabular-nums">15</span>Suspension and Termination</h2>
+
+      <h3>15.1 Termination by You</h3>
+      <p>You may stop using the Service at any time. You may delete your account through the App or by contacting support at <a href="mailto:support@mindfriend.app">support@mindfriend.app</a> (see Privacy Policy for data deletion terms).</p>
+
+      <h3>15.2 Suspension or Termination by Us</h3>
+      <p>We may suspend or terminate your access if we reasonably believe you:</p>
+      <ul>
+        <li>Violated these Terms</li>
+        <li>Misused the Service (including abusive or harmful AI use)</li>
+        <li>Created risk or possible legal exposure for us or other users</li>
+      </ul>
+      <p>We may also suspend or terminate for non-payment (where applicable) or to comply with law.</p>
+
+      <h3>15.3 Effect of Termination</h3>
+      <p>Upon termination:</p>
+      <ul>
+        <li>Your license to use the Service ends</li>
+        <li>We may delete or disable access to your account and User Content, subject to the Privacy Policy and legal requirements</li>
+        <li>Subscription access generally continues until the end of the billing period unless otherwise required by platform policy</li>
+      </ul>
+      <p>Sections that by their nature should survive will survive (including Sections 8, 12–16).</p>
+
+      <hr>
+
+      <h2 id="disputes"><span aria-hidden="true" class="text-gray-400 font-normal mr-3 tabular-nums">16</span>Dispute Resolution and Governing Law</h2>
+
+      <h3>16.1 Informal Resolution First</h3>
+      <p>Before filing a claim, you agree to contact us at <a href="mailto:support@mindfriend.app">support@mindfriend.app</a> and try to resolve the dispute informally. Include:</p>
+      <ul>
+        <li>Your name and account email/handle</li>
+        <li>A description of the issue</li>
+        <li>The relief you seek</li>
+      </ul>
+      <p>We will respond within a reasonable time.</p>
+
+      <h3>16.2 Governing Law</h3>
+      <p>These Terms are governed by the laws of the <strong>State of Florida, USA</strong>, excluding conflict-of-law rules, except where Applicable Law requires otherwise.</p>
+
+      <h3>16.3 Venue</h3>
+      <p>Disputes will be brought in the courts located in the <strong>State of Florida</strong>, unless Applicable Law requires a different venue.</p>
+
+      <h3>16.4 Consumer Rights</h3>
+      <p>Nothing in these Terms limits any consumer rights you may have under Applicable Law that cannot be waived.</p>
+
+      <hr>
+
+      <h2 id="miscellaneous"><span aria-hidden="true" class="text-gray-400 font-normal mr-3 tabular-nums">17</span>Miscellaneous Terms</h2>
+
+      <h3>17.1 Severability</h3>
+      <p>If any provision of these Terms is held invalid or unenforceable, the remaining provisions will remain in full force and effect.</p>
+
+      <h3>17.2 Assignment</h3>
+      <p>You may not assign these Terms without our prior written consent. We may assign these Terms in connection with a merger, acquisition, reorganization, or sale of assets.</p>
+
+      <h3>17.3 Entire Agreement</h3>
+      <p>These Terms and the Privacy Policy constitute the entire agreement between you and MindFriend regarding the Service and supersede any prior agreements.</p>
+
+      <h3>17.4 No Waiver</h3>
+      <p>Our failure to enforce any provision is not a waiver of our right to enforce it later.</p>
+
+      <h3>17.5 Contact Information</h3>
+      <p>Questions about these Terms should be sent to:</p>
+      <p><strong>Email:</strong> <a href="mailto:support@mindfriend.app">support@mindfriend.app</a></p>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="site-footer mt-24 py-14 px-6 bg-white border-t border-gray-100">
+    <div class="max-w-7xl mx-auto">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6 mb-10">
+        <a href="/" class="flex items-center gap-3">
+          <img src="/assets/logo.png?v=2" alt="MindFriend" class="w-10 h-10 rounded-xl">
+          <span class="font-bold text-xl">MindFriend</span>
+        </a>
+        <div class="flex items-center gap-7 text-sm text-gray-600">
+          <a href="/privacy" class="hover:text-gray-900 transition-colors">Privacy Policy</a>
+        <a href="/support/" class="hover:text-gray-900 transition-colors">Support</a>
+        <a href="/accessibility/" class="hover:text-gray-900 transition-colors">Accessibility</a>
+          <a href="/terms" class="hover:text-gray-900 transition-colors">Terms of Service</a>
+          <a href="mailto:support@mindfriend.app" class="hover:text-gray-900 transition-colors">Contact</a>
+        </div>
+      </div>
+      <div class="pt-8 border-t border-gray-100 text-center">
+        <p class="text-gray-500 text-sm mb-3">
+          MindFriend is not a medical provider or licensed therapist.<br>
+          If you're in crisis, please contact emergency services or a crisis hotline.
+        </p>
+        <p class="text-gray-400 text-sm">
+          &copy; 2026 MindFriend. All rights reserved.
+        </p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Back to top -->
+  <button class="back-to-top" id="backToTop" aria-label="Back to top">
+    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 10l7-7m0 0l7 7m-7-7v18"></path></svg>
+  </button>
+
+  <script>
+    // Reading progress bar — coalesced through rAF (no CSS transition)
+    const progressBar = document.getElementById('scrollProgress');
+    let progressFrame = null;
+    function scheduleProgress() {
+      if (progressFrame) return;
+      progressFrame = requestAnimationFrame(() => {
+        progressFrame = null;
+        const top = document.documentElement.scrollTop;
+        const height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+        progressBar.style.width = `${Math.min(100, (top / Math.max(height, 1)) * 100)}%`;
+      });
+    }
+    window.addEventListener('scroll', scheduleProgress, { passive: true });
+    scheduleProgress();
+
+    // Move keyboard focus into the section after smooth-scrolling to it.
+    // We make the target programmatically focusable (tabindex=-1), then focus,
+    // then clean up tabindex on blur so the section isn't permanently focusable.
+    function focusSection(target) {
+      if (!target) return;
+      const hadTabindex = target.hasAttribute('tabindex');
+      if (!hadTabindex) target.setAttribute('tabindex', '-1');
+      target.focus({ preventScroll: true });
+      if (!hadTabindex) {
+        target.addEventListener('blur', () => target.removeAttribute('tabindex'), { once: true });
+      }
+    }
+
+    // Smooth-scroll for in-page anchors + push history + move focus
+    document.querySelectorAll('a[href^="#"]').forEach(a => {
+      a.addEventListener('click', e => {
+        const href = a.getAttribute('href');
+        if (href === '#' || !href) return;
+        const target = document.querySelector(href);
+        if (target) {
+          e.preventDefault();
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          history.pushState(null, '', href);
+          // Defer focus until after the smooth scroll has actually settled
+          setTimeout(() => focusSection(target), 350);
+        }
+      });
+    });
+
+    // Active TOC link via IntersectionObserver — mirrors visual + aria-current
+    const tocLinks = document.querySelectorAll('.toc-link');
+    const sectionMap = new Map();
+    tocLinks.forEach(link => {
+      const id = link.getAttribute('href').slice(1);
+      const section = document.getElementById(id);
+      if (section) sectionMap.set(section, link);
+    });
+    function setActive(link) {
+      tocLinks.forEach(l => {
+        l.classList.remove('active');
+        l.removeAttribute('aria-current');
+      });
+      link.classList.add('active');
+      link.setAttribute('aria-current', 'location');
+    }
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        const link = sectionMap.get(entry.target);
+        if (!link) return;
+        if (entry.isIntersecting) setActive(link);
+      });
+    }, { rootMargin: '-15% 0px -65% 0px', threshold: 0 });
+    sectionMap.forEach((_link, section) => observer.observe(section));
+
+    // Anchor-link reveal: inject # links into h2/h3 with id (decorative for AT)
+    document.querySelectorAll('.prose h2[id], .prose h3[id]').forEach(h => {
+      const a = document.createElement('a');
+      a.className = 'anchor';
+      a.href = `#${h.id}`;
+      a.textContent = '#';
+      a.setAttribute('aria-hidden', 'true');
+      a.setAttribute('tabindex', '-1');
+      h.appendChild(a);
+    });
+
+    // Back-to-top
+    const btt = document.getElementById('backToTop');
+    function updateBtt() {
+      if (window.scrollY > 600) btt.classList.add('visible');
+      else btt.classList.remove('visible');
+    }
+    window.addEventListener('scroll', updateBtt, { passive: true });
+    btt.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  </script>
+</body>
+</html>
