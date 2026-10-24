@@ -9,9 +9,11 @@ struct AIProfileGeneratorView: View {
     let onAvatarUpdated: (() -> Void)?
 
     typealias Generation = @MainActor (String, @escaping (Data, Int) -> Void) async throws -> SupabaseDataService.GenerateProfilePictureResponse
+    typealias Save = @MainActor (UIImage, UUID) async throws -> String
     private let generation: Generation?
-    init(userId: UUID, onAvatarUpdated: (() -> Void)? = nil, initialPrompt: String = "", generation: Generation? = nil) {
-        self.userId = userId; self.onAvatarUpdated = onAvatarUpdated; self.generation = generation
+    private let save: Save?
+    init(userId: UUID, onAvatarUpdated: (() -> Void)? = nil, initialPrompt: String = "", generation: Generation? = nil, save: Save? = nil) {
+        self.userId = userId; self.onAvatarUpdated = onAvatarUpdated; self.generation = generation; self.save = save
         _prompt = State(initialValue: initialPrompt)
     }
 
@@ -57,6 +59,7 @@ struct AIProfileGeneratorView: View {
                                 .buttonStyle(.bordered)
                             }
                             .padding(.horizontal)
+                            .disabled(isGenerating)
                         }
                     } else {
                         // Prompt input
@@ -170,6 +173,9 @@ struct AIProfileGeneratorView: View {
             .onDisappear {
                 cancelGeneration()
             }
+            .onChange(of: appState.currentUser?.id) { _, currentId in
+                if currentId != userId { cancelGeneration(); dismiss() }
+            }
             .sheet(isPresented: $showPaywall) {
                 PaywallView()
                     .environmentObject(appState)
@@ -230,13 +236,7 @@ struct AIProfileGeneratorView: View {
                     case .networkError:
                         errorMessage = "Network error. Please check your connection and try again."
                     case .apiError(let message):
-                        // Check if error message indicates quota exceeded (fallback)
-                        let lowercaseMessage = message.lowercased()
-                        if lowercaseMessage.contains("429") || lowercaseMessage.contains("quota") || lowercaseMessage.contains("limit") {
-                            showPaywall = true
-                        } else {
-                            errorMessage = message
-                        }
+                        errorMessage = message
                     }
                     activeGeneration = nil
                     partialImage = nil
@@ -245,13 +245,7 @@ struct AIProfileGeneratorView: View {
             } catch {
                 guard !Task.isCancelled, activeGeneration == requestId else { return }
                 await MainActor.run {
-                    // Check if error message indicates quota exceeded (fallback)
-                    let errorString = error.localizedDescription.lowercased()
-                    if errorString.contains("429") || errorString.contains("quota") || errorString.contains("limit") {
-                        showPaywall = true
-                    } else {
-                        errorMessage = "Failed to generate image. Please try again."
-                    }
+                    errorMessage = "Failed to generate image. Please try again."
                     activeGeneration = nil
                     partialImage = nil
                     isGenerating = false
@@ -275,41 +269,34 @@ struct AIProfileGeneratorView: View {
     }
 
     private func confirmGeneratedImage() {
-        guard let generatedImage else { return }
+        guard !isGenerating, let generatedImage else { return }
 
         isGenerating = true
         errorMessage = nil
 
-        Task {
+        generationTask = Task {
             do {
                 // Validate generated image before upload
                 try generatedImage.validateForAvatar()
                 
                 // Use shared upload pipeline with AI source tag
-                let publicUrl = try await container.supabaseDataService.uploadAndSetAvatar(generatedImage, userId: userId, source: "ai_generated")
+                let operation = save ?? { image, owner in
+                    try await container.supabaseDataService.uploadAndSetAvatar(image, userId: owner, source: "ai_generated")
+                }
+                let publicUrl = try await operation(generatedImage, userId)
 
-                // Update AppState with new UserProfile instance
+                try Task.checkCancellation()
+                // Only the account that confirmed the save may receive the local update.
                 await MainActor.run {
-                    if let user = appState.currentUser {
-                        appState.currentUser = UserProfile(
-                            id: user.id,
-                            handle: user.handle,
-                            displayName: user.displayName,
-                            email: user.email,
-                            avatarUrl: publicUrl,
-                            timezone: user.timezone,
-                            createdAt: user.createdAt,
-                            onboardingCompletedAt: user.onboardingCompletedAt,
-                            stats: user.stats,
-                            settings: user.settings,
-                            entitlements: user.entitlements,
-                            badges: user.badges
-                        )
-                    }
+                    guard let user = appState.currentUser, user.id == userId else { return }
+                    var updatedUser = user
+                    updatedUser.avatarUrl = publicUrl
+                    appState.currentUser = updatedUser
                     onAvatarUpdated?()
                     dismiss()
                 }
             } catch {
+                guard !Task.isCancelled else { return }
                 await MainActor.run {
                     errorMessage = error.localizedDescription
                     isGenerating = false

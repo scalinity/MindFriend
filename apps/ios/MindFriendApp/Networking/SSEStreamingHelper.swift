@@ -12,20 +12,20 @@ enum ImageStreamEvent {
 enum SSEStreamError: LocalizedError {
     case noSession
     case invalidURL
-    case httpError(Int, String?)
+    case httpError(Int, String?, code: String? = nil)
     case noData
     case decodingError(String)
-    case serverError(String)
+    case serverError(String, code: String? = nil)
     case timeout
 
     var errorDescription: String? {
         switch self {
         case .noSession: return "Sign in again before generating an image."
         case .invalidURL: return "The image service is unavailable. Try again later."
-        case .httpError(let code, let message): return message ?? "Image request failed (\(code)). Try again later."
+        case .httpError(let code, let message, _): return message ?? "Image request failed (\(code)). Try again later."
         case .noData: return "The stream ended before a complete image arrived. Your prompt is saved. Try again when you’re ready."
         case .decodingError: return "The image response was incomplete or invalid. Your prompt is saved. Try again when you’re ready."
-        case .serverError(let message): return message
+        case .serverError(let message, _): return message
         case .timeout: return "Image generation timed out. Your prompt is saved. Try again when you’re ready."
         }
     }
@@ -134,7 +134,8 @@ private final class SSESessionDelegate: NSObject, URLSessionDataDelegate {
             finish((error as? URLError)?.code == .timedOut ? SSEStreamError.timeout : error)
         } else if let status, status != 200 {
             let body = (try? JSONSerialization.jsonObject(with: errorBody)) as? [String: Any]
-            finish(SSEStreamError.httpError(status, body?["error"] as? String ?? body?["message"] as? String))
+            let code = body?["code"] as? String ?? ((body?["quotaExceeded"] as? Bool) == true ? "image_quota_exhausted" : nil)
+            finish(SSEStreamError.httpError(status, body?["message"] as? String ?? body?["error"] as? String, code: code))
         } else {
             finish(SSEStreamError.noData)
         }
@@ -222,7 +223,7 @@ final class SSEStreamingHelper {
                 throw SSEStreamError.decodingError("Invalid final image")
             }
             return .complete(imageData: image, metadata: json)
-        case "error": return .error(SSEStreamError.serverError(json["error"] as? String ?? "Image generation failed. Try again later."))
+        case "error": return .error(SSEStreamError.serverError(json["message"] as? String ?? json["error"] as? String ?? "Image generation failed. Try again later.", code: json["code"] as? String))
         default: return nil
         }
     }

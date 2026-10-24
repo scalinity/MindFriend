@@ -260,8 +260,8 @@ final class ProfileImageStreamTests: XCTestCase {
         let json = String(data: try JSONSerialization.data(withJSONObject: fields), encoding: .utf8)!
         return Data(("data:" + (space ? " " : "") + json + separator + separator).utf8)
     }
-    private func stream(_ chunks: [Data], keepOpen: Bool = false) -> AsyncThrowingStream<ImageStreamEvent, Error> {
-        ProfileImageURLProtocol.fixture.prepare(chunks, keepOpen: keepOpen)
+    private func stream(_ chunks: [Data], keepOpen: Bool = false, status: Int = 200) -> AsyncThrowingStream<ImageStreamEvent, Error> {
+        ProfileImageURLProtocol.fixture.prepare(chunks, keepOpen: keepOpen, status: status)
         let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [ProfileImageURLProtocol.self]
         return SSEStreamingHelper.streamImageGeneration(request: URLRequest(url: URL(string: "https://profile-fixture.invalid/image")!), configuration: config)
     }
@@ -377,6 +377,31 @@ final class ProfileImageStreamTests: XCTestCase {
             XCTFail("Oversized event must fail")
         } catch { XCTAssertTrue(error is SSEStreamError) }
     }
+    func testStructuredImageErrorsDistinguishPersonalQuotaFromStorageAndSharedBudget() async throws {
+        let service = SupabaseDataService(authService: DependencyContainer.preview.supabaseAuthService)
+        for (status, fields, quota) in [
+            (429, ["code": "monthly_ai_budget_exhausted", "error": "Monthly AI budget reached"] as [String: Any], false),
+            (429, ["code": "image_quota_exhausted", "error": "Daily allowance reached"], true),
+            (429, ["quotaExceeded": true, "error": "Daily limit reached"], true),
+            (429, ["error": "Gateway limit reached"], false),
+            (422, ["code": "image_too_large", "error": "Image exceeds size limit"], false)
+        ] {
+            do {
+                _ = try await service.generateProfilePictureStreaming(prompt: "An astronaut", onPartialImage: { _, _ in }, events: stream([try JSONSerialization.data(withJSONObject: fields)], status: status))
+                XCTFail("Must return an error")
+            } catch let error as SupabaseDataService.GenerateProfilePictureError {
+                if quota { guard case .quotaExceeded = error else { return XCTFail("Expected personal quota") } }
+                else { guard case .apiError = error else { return XCTFail("Storage or shared budget must not be a personal quota") } }
+            }
+        }
+        do {
+            _ = try await service.generateProfilePictureStreaming(prompt: "An astronaut", onPartialImage: { _, _ in }, events: stream([try event(["type": "error", "code": "provider_response_too_large", "error": "Image exceeds size limit"])]))
+            XCTFail("SSE failure")
+        } catch let error as SupabaseDataService.GenerateProfilePictureError {
+            guard case .apiError(let message) = error else { return XCTFail("Size error must not open paywall") }
+            XCTAssertTrue(message.contains("size limit"))
+        }
+    }
     func testProfileWrapperRejectsPreviewOnlyAndPreservesFinalMetadata() async throws {
         let service = SupabaseDataService(authService: DependencyContainer.preview.supabaseAuthService)
         var previews = 0
@@ -398,8 +423,8 @@ private final class ProfileImageURLProtocol: URLProtocol {
     override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "profile-fixture.invalid" }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
-        let (chunks, keepOpen) = Self.fixture.start()
-        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "text/event-stream"])!, cacheStoragePolicy: .notAllowed)
+        let (chunks, keepOpen, status) = Self.fixture.start()
+        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: ["Content-Type": status == 200 ? "text/event-stream" : "application/json"])!, cacheStoragePolicy: .notAllowed)
         for chunk in chunks { client?.urlProtocol(self, didLoad: chunk) }
         if !keepOpen { client?.urlProtocolDidFinishLoading(self) }
     }
@@ -407,13 +432,187 @@ private final class ProfileImageURLProtocol: URLProtocol {
 }
 private final class ProfileImageWireFixture: @unchecked Sendable {
     private let lock = NSLock()
-    private var chunks: [Data] = []; private var keepOpen = false
+    private var chunks: [Data] = []; private var keepOpen = false; private var status = 200
     private var requestCount = 0; private var stopCount = 0
     var requests: Int { lock.lock(); defer { lock.unlock() }; return requestCount }
     var stops: Int { lock.lock(); defer { lock.unlock() }; return stopCount }
-    func prepare(_ chunks: [Data], keepOpen: Bool) {
-        lock.lock(); defer { lock.unlock() }; self.chunks = chunks; self.keepOpen = keepOpen; requestCount = 0; stopCount = 0
+    func prepare(_ chunks: [Data], keepOpen: Bool, status: Int) {
+        lock.lock(); defer { lock.unlock() }; self.chunks = chunks; self.keepOpen = keepOpen; self.status = status; requestCount = 0; stopCount = 0
     }
-    func start() -> ([Data], Bool) { lock.lock(); defer { lock.unlock() }; requestCount += 1; return (chunks, keepOpen) }
+    func start() -> ([Data], Bool, Int) { lock.lock(); defer { lock.unlock() }; requestCount += 1; return (chunks, keepOpen, status) }
     func stop() { lock.lock(); defer { lock.unlock() }; stopCount += 1 }
+}
+
+import Supabase
+
+@MainActor
+final class AvatarPersistenceTests: XCTestCase {
+    private let owner = UUID(uuidString: "11111111-1111-4111-8111-111111111113")!
+    private var image: UIImage {
+        UIGraphicsImageRenderer(size: CGSize(width: 512, height: 512)).image { context in
+            UIColor.systemTeal.setFill(); context.fill(CGRect(x: 0, y: 0, width: 512, height: 512))
+        }
+    }
+    private func service(_ ownerProvider: (() throws -> UUID)? = nil) -> SupabaseDataService {
+        let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [AvatarFixtureURLProtocol.self]
+        let client = SupabaseClient(supabaseURL: URL(string: "https://avatar-fixture.invalid")!, supabaseKey: "synthetic-anon",
+            options: .init(auth: .init(storage: AvatarFixtureAuthStorage(), autoRefreshToken: false), global: .init(session: URLSession(configuration: config))))
+        return SupabaseDataService(authService: DependencyContainer.preview.supabaseAuthService, avatarClient: client, avatarUserId: ownerProvider ?? { self.owner })
+    }
+    private func prepare(_ mode: AvatarFixtureHTTP.Mode = .success, afterResponse: (() -> Void)? = nil) {
+        AvatarFixtureURLProtocol.fixture.prepare(owner: owner, mode: mode, afterResponse: afterResponse)
+    }
+    func testOwnedUploadAndProfileSaveReturnOnlyConfirmedURLAndUniquePaths() async throws {
+        prepare(); let service = service()
+        let first = try await service.uploadAndSetAvatar(image, userId: owner, source: "ai_generated")
+        let second = try await service.uploadAndSetAvatar(image, userId: owner, source: "ai_generated")
+        XCTAssertNotEqual(first, second)
+        let requests = AvatarFixtureURLProtocol.fixture.requests
+        let uploads = requests.filter { $0.url!.path.contains("/storage/v1/object/profile-pictures/") }
+        XCTAssertEqual(uploads.count, 2)
+        for upload in uploads {
+            XCTAssertTrue(upload.url!.path.contains(owner.uuidString.lowercased()))
+            XCTAssertEqual(upload.value(forHTTPHeaderField: "x-upsert"), "false")
+            // Storage sends multipart; its file part must carry the JPEG MIME type.
+            let bytes = try requestBody(upload)
+            XCTAssertTrue(String(decoding: bytes.prefix(1024), as: UTF8.self).contains("image/jpeg"))
+            XCTAssertLessThan(bytes.count, 524288)
+        }
+        let patches = requests.filter { $0.httpMethod == "PATCH" }
+        XCTAssertEqual(patches.count, 2)
+        XCTAssertTrue(patches.allSatisfy { $0.url!.query!.lowercased().contains(owner.uuidString.lowercased()) })
+        XCTAssertTrue(patches.allSatisfy { $0.value(forHTTPHeaderField: "Prefer")?.contains("return=representation") == true })
+        XCTAssertEqual(AvatarFixtureURLProtocol.fixture.savedURL, second)
+    }
+    func testZeroRowsWrongOwnerAndWrongSavedURLNeverReportSuccess() async throws {
+        for mode in [AvatarFixtureHTTP.Mode.emptyRows, .wrongOwner, .wrongURL] {
+            prepare(mode)
+            do { try await service().updateAvatarUrl("https://avatar-fixture.invalid/new.jpg", userId: owner); XCTFail("Unconfirmed update must fail") }
+            catch { XCTAssertTrue(error.localizedDescription.contains("saved")) }
+        }
+    }
+    func testAnonymousAndCrossOwnerWritesNeverReachNetwork() async throws {
+        prepare()
+        let anonymous = service { throw DataError.notAuthenticated }
+        do { try await anonymous.updateAvatarUrl("new", userId: owner); XCTFail("Anonymous update") } catch {}
+        let other = UUID()
+        do { try await service().updateAvatarUrl("new", userId: other); XCTFail("Cross-owner profile") } catch {}
+        do { try await service().uploadProfilePicture(data: image.jpegData(compressionQuality: 0.8)!, path: "\(other)/new.jpg", userId: owner); XCTFail("Cross-owner upload") } catch {}
+        do { try await service().deleteProfilePicture(path: "\(other)/old.jpg"); XCTFail("Cross-owner deletion") } catch {}
+        XCTAssertTrue(AvatarFixtureURLProtocol.fixture.requests.isEmpty)
+    }
+    func testUpload403415And503CannotAdvanceToProfileMutation() async throws {
+        for status in [403, 415, 503] {
+            prepare(.uploadFailure(status))
+            do { _ = try await service().uploadAndSetAvatar(image, userId: owner); XCTFail("Upload failure") } catch {}
+            XCTAssertFalse(AvatarFixtureURLProtocol.fixture.requests.contains { $0.httpMethod == "PATCH" })
+            XCTAssertNil(AvatarFixtureURLProtocol.fixture.savedURL)
+        }
+    }
+    func testFailedProfileResponseRetainsUploadedObjectAndReturnsRecoveryError() async throws {
+        for status in [403, 500] {
+            prepare(.profileFailure(status))
+            do { _ = try await service().uploadAndSetAvatar(image, userId: owner); XCTFail("Profile failure") }
+            catch { XCTAssertTrue(error.localizedDescription.contains("Check your connection")) }
+            XCTAssertFalse(AvatarFixtureURLProtocol.fixture.requests.contains { $0.httpMethod == "DELETE" }, "An uncertain committed profile may already refer to the new upload")
+        }
+    }
+    func testCommittedProfileWithLostConnectionKeepsReferencedUpload() async throws {
+        prepare(.profileDisconnected)
+        do { _ = try await service().uploadAndSetAvatar(image, userId: owner); XCTFail("Lost response cannot confirm success") }
+        catch { XCTAssertTrue(error.localizedDescription.contains("Check your connection")) }
+        XCTAssertNotNil(AvatarFixtureURLProtocol.fixture.savedURL, "Fixture committed the owned profile before dropping the response")
+        XCTAssertFalse(AvatarFixtureURLProtocol.fixture.requests.contains { $0.httpMethod == "DELETE" })
+    }
+    func testAccountChangeAfterUploadCannotPatchEitherProfile() async throws {
+        var current = owner
+        prepare(.success, afterResponse: { current = UUID() })
+        do { _ = try await service({ current }).uploadAndSetAvatar(image, userId: owner); XCTFail("Account changed") } catch {}
+        XCTAssertFalse(AvatarFixtureURLProtocol.fixture.requests.contains { $0.httpMethod == "PATCH" })
+    }
+    func testInvalidJPEGAndOversizedPayloadFailBeforeUpload() async throws {
+        for data in [Data("png is not JPEG".utf8), Data([0xFF, 0xD8, 0xFF]) + Data(repeating: 1, count: 500000) + Data([0xFF, 0xD9])] {
+            prepare()
+            do { try await service().uploadProfilePicture(data: data, path: "\(owner)/new.jpg", userId: owner); XCTFail("Invalid upload") } catch {}
+            XCTAssertTrue(AvatarFixtureURLProtocol.fixture.requests.isEmpty)
+        }
+    }
+    func testRemovingAvatarWritesAndConfirmsExplicitNull() async throws {
+        prepare(); try await service().updateAvatarUrl("", userId: owner)
+        let request = try XCTUnwrap(AvatarFixtureURLProtocol.fixture.requests.first)
+        let fields = try JSONSerialization.jsonObject(with: requestBody(request)) as? [String: Any]
+        XCTAssertTrue(fields?["avatar_url"] is NSNull)
+    }
+    func testHistoryFromAnotherOwnerCannotBeApplied() async throws {
+        prepare()
+        let entry = SupabaseDataService.ProfilePictureHistoryEntry(id: UUID(), userId: UUID(), storagePath: "other/old.jpg", publicUrl: "https://avatar-fixture.invalid/other.jpg", source: "upload", createdAt: Date())
+        do { try await service().setAvatarFromHistory(historyEntry: entry); XCTFail("Other owner's history") } catch {}
+        XCTAssertTrue(AvatarFixtureURLProtocol.fixture.requests.isEmpty)
+    }
+    private func requestBody(_ request: URLRequest) throws -> Data {
+        if let data = request.httpBody { return data }
+        guard let stream = request.httpBodyStream else { return Data() }
+        stream.open(); defer { stream.close() }; var data = Data(); var bytes = [UInt8](repeating: 0, count: 4096)
+        while stream.hasBytesAvailable { let n = stream.read(&bytes, maxLength: bytes.count); if n <= 0 { break }; data.append(contentsOf: bytes.prefix(n)) }
+        return data
+    }
+}
+private struct AvatarFixtureAuthStorage: AuthLocalStorage {
+    func store(key: String, value: Data) throws {}
+    func retrieve(key: String) throws -> Data? { nil }
+    func remove(key: String) throws {}
+}
+private final class AvatarFixtureURLProtocol: URLProtocol {
+    static let fixture = AvatarFixtureHTTP()
+    override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "avatar-fixture.invalid" }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let (status, body) = Self.fixture.respond(request)
+        if status == 0 { client?.urlProtocol(self, didFailWithError: URLError(.networkConnectionLost)); return }
+        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: body); client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+private final class AvatarFixtureHTTP: @unchecked Sendable {
+    enum Mode { case success, emptyRows, wrongOwner, wrongURL, uploadFailure(Int), profileFailure(Int), profileDisconnected }
+    private let lock = NSLock(); private var owner = UUID(); private var mode: Mode = .success
+    private var recorded: [URLRequest] = []; private var saved: String?
+    private var afterResponse: (() -> Void)?
+    var requests: [URLRequest] { lock.lock(); defer { lock.unlock() }; return recorded }
+    var savedURL: String? { lock.lock(); defer { lock.unlock() }; return saved }
+    func prepare(owner: UUID, mode: Mode, afterResponse: (() -> Void)?) {
+        lock.lock(); defer { lock.unlock() }; self.owner = owner; self.mode = mode; self.afterResponse = afterResponse; recorded = []; saved = nil
+    }
+    func respond(_ original: URLRequest) -> (Int, Data) {
+        var request = original
+        if request.httpBody == nil, let stream = request.httpBodyStream {
+            stream.open(); defer { stream.close() }
+            var data = Data(); var buffer = [UInt8](repeating: 0, count: 4096)
+            while stream.hasBytesAvailable {
+                let count = stream.read(&buffer, maxLength: buffer.count)
+                if count <= 0 { break }
+                data.append(contentsOf: buffer.prefix(count))
+            }
+            request.httpBody = data
+        }
+        lock.lock(); defer { lock.unlock() }; recorded.append(request)
+        var status = 200; var body: Any = [:]
+        if request.url!.path.contains("/storage/v1/object/") {
+            if case .uploadFailure(let code) = mode { status = code; body = ["statusCode": "\(code)", "error": "Synthetic upload failure", "message": "Synthetic upload failure"] }
+            else { body = ["Key": request.url!.path.components(separatedBy: "/object/").last!, "Id": UUID().uuidString]; afterResponse?(); afterResponse = nil }
+        } else if request.httpMethod == "PATCH" {
+            let value = (try? JSONSerialization.jsonObject(with: request.httpBody ?? Data())) as? [String: Any]
+            let url = value?["avatar_url"] as? String
+            switch mode {
+            case .emptyRows: body = []
+            case .wrongOwner: body = ["id": UUID().uuidString, "avatar_url": url ?? ""]
+            case .wrongURL: body = ["id": owner.uuidString, "avatar_url": "https://avatar-fixture.invalid/other.jpg"]
+            case .profileFailure(let code): status = code; body = ["code": "42501", "message": "Synthetic denial", "details": "", "hint": ""]
+            case .profileDisconnected: saved = url; status = 0
+            default: saved = url; body = ["id": owner.uuidString, "avatar_url": value?["avatar_url"] ?? NSNull()]
+            }
+        } else if request.url!.path.contains("/profiles") { body = ["avatar_url": "https://avatar-fixture.invalid/old.jpg"] }
+        return (status, (try? JSONSerialization.data(withJSONObject: body)) ?? Data())
+    }
 }

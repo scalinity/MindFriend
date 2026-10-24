@@ -1,372 +1,399 @@
 // MindFriend Generate Profile Picture Edge Function
 // Supports streaming partial images for interactive UX with full persistence
 
-import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2.49.1";
-import { getCorsHeaders } from "../_shared/cors.ts";
+import { createClient } from "jsr:@supabase/supabase-js@2.49.1";
+import {
+  MonthlyAIBudgetExhaustedError,
+  reserveMonthlyAIBudget,
+} from "../_shared/monthly-ai-budget.ts";
+
+import {
+  AvatarError,
+  decodeBase64,
+  decodeJPEG,
+  failure,
+  MAX_PROVIDER_BYTES,
+  readProviderEvents,
+  readProviderJSON,
+} from "./image.ts";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
 
 
-// Helper: Convert base64 string to Uint8Array
-function base64ToUint8Array(base64: string): Uint8Array {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
-
-Deno.serve(async (req) => {
-  const origin = req.headers.get("origin") ?? "";
-  const corsHeaders = getCorsHeaders(origin);
-
-  const requestId = crypto.randomUUID().slice(0, 8);
-  console.log(`[${requestId}] Function started`);
-
-  // Handle CORS preflight
+export async function handler(req: Request): Promise<Response> {
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  const providerAbort = new AbortController();
+  const signal = AbortSignal.any([req.signal, providerAbort.signal]);
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  let streaming = false;
+  const cleanup = () => {
+    clearTimeout(timeout);
+    providerAbort.abort();
+  };
+  const errorBody = (error: AvatarError) => ({
+    error: error.message,
+    message: error.message,
+    code: error.code,
+  });
+
   try {
-    console.log(`[${requestId}] Initializing Supabase`);
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-
-    if (!supabaseUrl || !supabaseServiceKey) {
-      console.error(`[${requestId}] Missing Supabase env vars`);
-      return new Response(
-        JSON.stringify({ error: "Server configuration error" }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
+    if (!supabaseUrl || !supabaseServiceKey || !anonKey) {
+      return json({
+        error: "Server configuration error",
+        code: "server_configuration_error",
+      }, 500);
+    }
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+    const authHeader = req.headers.get("Authorization");
+    const token = authHeader?.match(/^Bearer\s+(\S+)$/i)?.[1];
+    if (!token) {
+      return json(
+        { error: "Missing authorization", code: "unauthorized" },
+        401,
       );
     }
-
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
-
-    // Authenticate
-    console.log(`[${requestId}] Authenticating user`);
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Missing authorization" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-    const {
-      data: { user },
-      error: authError,
-    } = await supabaseAdmin.auth.getUser(token);
-
+    const { data: { user }, error: authError } = await supabaseAdmin.auth
+      .getUser(token);
     if (authError || !user) {
-      console.error(`[${requestId}] Auth failed:`, authError?.message);
-      return new Response(JSON.stringify({ error: "Invalid token" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ error: "Invalid token", code: "unauthorized" }, 401);
+    }
+    if (user.is_anonymous) {
+      return json({
+        error: "Sign in to generate an avatar.",
+        code: "sign_in_required",
+      }, 403);
     }
 
-    console.log(`[${requestId}] User authenticated:`, user.id);
-
-    // Create user-scoped client for quota RPCs
-    const supabaseUser = createClient(supabaseUrl, anonKey!, {
-      global: { headers: { Authorization: authHeader } },
-    });
-
-    // Parse request
     let body;
     try {
       body = await req.json();
     } catch {
-      return new Response(JSON.stringify({ error: "Invalid JSON" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ error: "Invalid JSON", code: "invalid_request" }, 400);
     }
-
-    const prompt = body?.prompt?.trim();
+    const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
     const enableStreaming = body?.stream === true;
-
-    if (!prompt || prompt.length < 3) {
-      return new Response(
-        JSON.stringify({ error: "Prompt must be at least 3 characters" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+    const promptLength =
+      [...new Intl.Segmenter("en", { granularity: "grapheme" }).segment(prompt)]
+        .length;
+    if (promptLength < 3 || promptLength > 200) {
+      return json({
+        error: "Prompt must be between 3 and 200 characters",
+        code: "invalid_prompt",
+      }, 400);
     }
-
-    console.log(`[${requestId}] Prompt: ${prompt.slice(0, 50)}..., Streaming: ${enableStreaming}`);
-
-    // Check OpenAI API key
+    for (const field of ["userId", "user_id", "ownerId", "owner_id", "owner"]) {
+      if (body[field] !== undefined && body[field] !== user.id) {
+        return json({
+          error: "An avatar can only be generated for the signed-in account.",
+          code: "owner_mismatch",
+        }, 403);
+      }
+    }
     const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
     if (!openaiApiKey) {
-      console.error(`[${requestId}] Missing OPENAI_API_KEY`);
-      return new Response(JSON.stringify({ error: "AI not configured" }), {
-        status: 503,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ error: "AI not configured", code: "ai_unavailable" }, 503);
     }
 
-    // Check quota (reuse creative quota system)
-    console.log(`[${requestId}] Checking creative quota...`);
-    const { data: quotaData, error: quotaError } = await supabaseUser.rpc("get_creative_quota");
-
+    // Storage and read-only quota calls carry the verified caller's JWT and obey RLS.
+    const supabaseUser = createClient(supabaseUrl, anonKey, {
+      global: {
+        headers: { Authorization: authHeader! },
+        fetch: (input, init) =>
+          fetch(input, {
+            ...init,
+            signal: init?.signal
+              ? AbortSignal.any([signal, init.signal])
+              : signal,
+          }),
+      },
+    });
+    const { data: quotaData, error: quotaError } = await supabaseUser.rpc(
+      "get_creative_quota",
+    );
     if (quotaError) {
-      console.error(`[${requestId}] Quota check error:`, quotaError);
-      return new Response(
-        JSON.stringify({ error: "Failed to check quota", details: quotaError.message }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+      return json({
+        error: "Failed to check quota",
+        code: "image_quota_unavailable",
+      }, 503);
     }
-
     const quota = quotaData?.[0];
-    console.log(`[${requestId}] Quota - count: ${quota?.ai_art_count}, limit: ${quota?.ai_art_limit}, premium: ${quota?.is_premium}`);
-
     if (quota && quota.ai_art_count >= quota.ai_art_limit) {
-      console.log(`[${requestId}] Quota exceeded`);
-      return new Response(
-        JSON.stringify({
-          error: "Daily limit reached",
-          message: quota.is_premium
-            ? "You've used all of today's AI generations."
-            : "You've used your free daily AI generation. Upgrade to MindFriend Premium for more!",
-          quotaExceeded: true,
-        }),
-        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      return json({
+        error: "Daily limit reached",
+        message: quota.is_premium
+          ? "You've used all of today's AI generations."
+          : "You've used your free daily AI generation. Upgrade to MindFriend Premium for more!",
+        quotaExceeded: true,
+      }, 429);
+    }
+
+    const enhancedPrompt =
+      `A friendly profile picture: ${prompt}. Style: warm, approachable, suitable for all ages.`;
+    // One 1024-square image, no image inputs.
+    // High bounds omitted quality ($0.036); each partial adds 100 output tokens.
+    // UTF-8 prompt bytes bound $2/M text tokens plus 1024 framing tokens.
+    const providerBody = JSON.stringify({
+      model: "gpt-image-1-mini",
+      prompt: enhancedPrompt,
+      n: 1,
+      size: "1024x1024",
+      output_format: "jpeg",
+      output_compression: 80,
+      ...(enableStreaming ? { stream: true, partial_images: 2 } : {}),
+    });
+    try {
+      await reserveMonthlyAIBudget(supabaseAdmin, {
+        requestId: crypto.randomUUID(),
+        userId: user.id,
+        feature: "profile.image",
+        reserveMicrodollars: Math.ceil(
+          (new TextEncoder().encode(JSON.stringify(enhancedPrompt)).length +
+                1024) *
+              2 + 36_000 + (enableStreaming ? 2 * 800 : 0),
+        ),
+      }, req.signal);
+    } catch (error) {
+      const exhausted = error instanceof MonthlyAIBudgetExhaustedError;
+      return json({
+        error: exhausted
+          ? "Monthly AI budget reached"
+          : "AI budget unavailable",
+        code: exhausted
+          ? "monthly_ai_budget_exhausted"
+          : "monthly_ai_budget_unavailable",
+      }, exhausted ? 429 : 503);
+    }
+    const { data: reserved, error: reservationError } = await supabaseAdmin.rpc(
+      "reserve_ai_image_quota",
+      { p_user_id: user.id },
+    );
+    if (reservationError || reserved !== true) {
+      return json({
+        error: reservationError || reserved !== false
+          ? "Image quota unavailable"
+          : "Daily image allowance reached",
+        code: reservationError || reserved !== false
+          ? "image_quota_unavailable"
+          : "image_quota_exhausted",
+        quotaExceeded: !reservationError && reserved === false,
+      }, reservationError || reserved !== false ? 503 : 429);
+    }
+
+    signal.throwIfAborted();
+    const generationId = crypto.randomUUID();
+    timeout = setTimeout(() =>
+      providerAbort.abort(
+        new AvatarError(
+          "generation_timeout",
+          "Avatar generation timed out. Please try again later.",
+          504,
+        ),
+      ), 120_000);
+    // There is one provider attempt. A reservation remains spent on unknown outcomes.
+    const openaiResponse = await fetch(
+      "https://api.openai.com/v1/images/generations",
+      {
+        method: "POST",
+        signal,
+        headers: {
+          Authorization: `Bearer ${openaiApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: providerBody,
+      },
+    );
+    if (!openaiResponse.ok) {
+      await openaiResponse.body?.cancel();
+      throw new AvatarError(
+        "provider_failed",
+        "The image provider could not generate an avatar. Please try again later.",
       );
     }
 
-    const enhancedPrompt = `A friendly profile picture: ${prompt}. Style: warm, approachable, suitable for all ages.`;
-
-    // Generate unique ID for this generation
-    const generationId = crypto.randomUUID();
-
-    // Streaming mode - return SSE stream with partial images
-    if (enableStreaming) {
-      console.log(`[${requestId}] Starting streaming generation`);
-
-      const openaiResponse = await fetch(
-        "https://api.openai.com/v1/images/generations",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${openaiApiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "gpt-image-1-mini",
-            prompt: enhancedPrompt,
-            n: 1,
-            size: "1024x1024",
-            output_format: "png",
-            stream: true,
-            partial_images: 2,
-          }),
-        },
-      );
-
-      if (!openaiResponse.ok) {
-        const errorText = await openaiResponse.text();
-        console.error(`[${requestId}] OpenAI streaming error:`, openaiResponse.status, errorText);
-        return new Response(
-          JSON.stringify({
-            error: "Image generation failed",
-            details: errorText,
-          }),
-          {
-            status: 500,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          },
+    const storeImage = async (imageBase64: unknown) => {
+      signal.throwIfAborted();
+      const image = decodeJPEG(imageBase64);
+      const storagePath = `${user!.id}/generated/${generationId}.jpg`;
+      let uploadError;
+      try {
+        ({ error: uploadError } = await supabaseUser.storage.from(
+          "profile-pictures",
+        ).upload(
+          storagePath,
+          image,
+          { contentType: "image/jpeg", upsert: false },
+        ));
+      } catch {
+        signal.throwIfAborted();
+        throw new AvatarError(
+          "avatar_upload_failed",
+          "Unable to save the generated avatar. Please try again later.",
+          503,
         );
       }
-
-      // Create a TransformStream to proxy the SSE from OpenAI to the client
-      const { readable, writable } = new TransformStream();
-      const writer = writable.getWriter();
-      const encoder = new TextEncoder();
-
-      // Process the OpenAI SSE stream in the background
-      (async () => {
-        const reader = openaiResponse.body?.getReader();
-        if (!reader) {
-          await writer.write(
-            encoder.encode(
-              `data: ${JSON.stringify({ type: "error", error: "No response body" })}\n\n`,
-            ),
+      signal.throwIfAborted();
+      if (uploadError) {
+        const storageError = uploadError as {
+          statusCode?: string | number;
+          status?: number;
+        };
+        const status = String(
+          storageError.status ?? storageError.statusCode ?? "",
+        );
+        if (status === "403") {
+          throw new AvatarError(
+            "avatar_upload_denied",
+            "Avatar storage denied permission. Sign in again before generating another avatar.",
+            403,
           );
-          await writer.close();
-          return;
         }
+        if (status === "415" || status === "413") {
+          throw new AvatarError(
+            "avatar_upload_rejected",
+            "Avatar storage rejected the JPEG or its size. Try uploading a smaller JPEG photo.",
+          );
+        }
+        throw new AvatarError(
+          "avatar_upload_failed",
+          "Unable to save the generated avatar. Please try again later.",
+          503,
+        );
+      }
+      const { data: publicUrlData } = supabaseUser.storage.from(
+        "profile-pictures",
+      ).getPublicUrl(storagePath);
+      let quotaRemaining: number | null = null;
+      try {
+        const { data: updatedQuota } = await supabaseUser.rpc(
+          "get_creative_quota",
+        );
+        const row = updatedQuota?.[0];
+        if (
+          row && Number.isFinite(row.ai_art_limit) &&
+          Number.isFinite(row.ai_art_count)
+        ) {
+          quotaRemaining = Math.max(0, row.ai_art_limit - row.ai_art_count);
+        }
+      } catch { /* Quota metadata is optional after a successful upload. */ }
+      signal.throwIfAborted();
+      // Generating stores a candidate only. Applying it is the client's separate confirmation.
+      return {
+        success: true,
+        imageBase64,
+        imageUrl: publicUrlData.publicUrl,
+        generationId,
+        storagePath,
+        quotaRemaining,
+      };
+    };
 
-        const decoder = new TextDecoder();
-        let buffer = "";
-        let finalImageBase64: string | null = null;
-        let partialCount = 0;
-
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) {
-              console.log(`[${requestId}] Stream done, final image: ${finalImageBase64 ? "received" : "missing"}`);
-              break;
+    if (enableStreaming) {
+      streaming = true;
+      let cancelled = false;
+      const encoder = new TextEncoder();
+      // Provider bytes (8 MiB total) and partial count bound this queue. Direct enqueue
+      // avoids a stalled writer preventing cancellation when a client stops reading.
+      const readable = new ReadableStream<Uint8Array>({
+        start(controller) {
+          const send = (event: unknown) => {
+            if (!cancelled) {
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify(event)}\n\n`),
+              );
             }
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() || "";
-
-            for (const line of lines) {
-              if (line.startsWith("data: ")) {
-                const data = line.slice(6);
-                if (data === "[DONE]") {
-                  console.log(`[${requestId}] Received [DONE] marker`);
-                  continue;
+          };
+          void (async () => {
+            let finalImageBase64: unknown;
+            let finalReceived = false;
+            let partialCount = 0;
+            try {
+              for await (
+                const event of readProviderEvents(openaiResponse, signal)
+              ) {
+                if (event.type === "done") break;
+                if (
+                  event.error || event.type === "error" ||
+                  event.type === "image_generation.failed"
+                ) {
+                  throw new AvatarError(
+                    "provider_failed",
+                    "The image provider could not finish the avatar. Please try again later.",
+                  );
                 }
-
-                try {
-                  const event = JSON.parse(data);
-
-                  // Handle partial image events
-                  if (event.type === "image_generation.partial_image") {
-                    partialCount++;
-                    console.log(`[${requestId}] Partial image ${partialCount} received`);
-                    await writer.write(
-                      encoder.encode(
-                        `data: ${JSON.stringify({
-                          type: "partial",
-                          index: event.partial_image_index,
-                          imageBase64: event.b64_json,
-                          generationId: generationId,
-                        })}\n\n`,
-                      ),
+                if (event.type === "image_generation.partial_image") {
+                  if (
+                    ++partialCount > 2 ||
+                    !Number.isInteger(event.partial_image_index)
+                  ) {
+                    throw new AvatarError(
+                      "provider_response_invalid",
+                      "The image provider returned an invalid preview event.",
                     );
                   }
-
-                  // Handle completion event
-                  if (event.type === "image_generation.completed") {
-                    console.log(`[${requestId}] Completion event received`);
-                    finalImageBase64 = event.b64_json;
+                  decodeBase64(event.b64_json, MAX_PROVIDER_BYTES);
+                  send({
+                    type: "partial",
+                    index: event.partial_image_index,
+                    imageBase64: event.b64_json,
+                    generationId,
+                  });
+                }
+                if (
+                  event.type === "image_generation.completed" ||
+                  event.data?.[0]?.b64_json
+                ) {
+                  if (finalReceived) {
+                    throw new AvatarError(
+                      "provider_response_invalid",
+                      "The image provider returned multiple final images.",
+                    );
                   }
-
-                  // Handle result event (final image for some API versions)
-                  if (event.data?.[0]?.b64_json) {
-                    console.log(`[${requestId}] Data array completion received`);
-                    finalImageBase64 = event.data[0].b64_json;
-                  }
-                } catch {
-                  // Skip non-JSON lines
+                  finalReceived = true;
+                  finalImageBase64 = event.b64_json ??
+                    event.data?.[0]?.b64_json;
+                  // One image was requested. The terminal result need not wait for a keep-alive close.
+                  break;
                 }
               }
+              if (!finalReceived) {
+                throw new AvatarError(
+                  "image_missing",
+                  "The image provider did not return a final image. Please try again later.",
+                );
+              }
+              const metadata = await storeImage(finalImageBase64);
+              send({ type: "complete", ...metadata });
+            } catch (error) {
+              const problem = failure(error, signal);
+              console.error("[generate-profile-picture]", problem.code);
+              send({ type: "error", ...errorBody(problem), generationId });
+            } finally {
+              cleanup();
+              if (!cancelled) controller.close();
             }
-          }
-
-          // After streaming completes, save the final image
-          if (finalImageBase64) {
-            console.log(`[${requestId}] Processing final image (length: ${finalImageBase64.length})...`);
-            const imageBuffer = base64ToUint8Array(finalImageBase64);
-            const storagePath = `${user.id}/generated/${generationId}.png`;
-
-            console.log(`[${requestId}] Uploading to storage: ${storagePath}`);
-            const { error: uploadError } = await supabaseAdmin.storage
-              .from("profile-pictures")
-              .upload(storagePath, imageBuffer, {
-                contentType: "image/png",
-                upsert: true,
-              });
-
-            if (uploadError) {
-              console.error(`[${requestId}] Upload error:`, uploadError);
-              await writer.write(
-                encoder.encode(
-                  `data: ${JSON.stringify({ 
-                    type: "error", 
-                    error: "Failed to store image",
-                    generationId: generationId 
-                  })}\n\n`,
-                ),
-              );
-            } else {
-              console.log(`[${requestId}] Upload successful`);
-              const { data: publicUrlData } = supabaseAdmin.storage
-                .from("profile-pictures")
-                .getPublicUrl(storagePath);
-
-              const finalImageUrl = publicUrlData.publicUrl;
-              console.log(`[${requestId}] Public URL: ${finalImageUrl}`);
-
-              // Increment quota
-              console.log(`[${requestId}] Incrementing quota...`);
-              await supabaseUser.rpc("increment_ai_art_quota");
-
-              // Get updated quota
-              const { data: updatedQuota } = await supabaseUser.rpc("get_creative_quota");
-              const remainingQuota = updatedQuota?.[0] 
-                ? updatedQuota[0].ai_art_limit - updatedQuota[0].ai_art_count 
-                : null;
-
-              // Send complete event with full metadata
-              await writer.write(
-                encoder.encode(
-                  `data: ${JSON.stringify({
-                    type: "complete",
-                    success: true,
-                    generationId: generationId,
-                    imageUrl: finalImageUrl,
-                    imageBase64: finalImageBase64,
-                    storagePath: storagePath,
-                    quotaRemaining: remainingQuota,
-                  })}\n\n`,
-                ),
-              );
-              console.log(`[${requestId}] Complete event sent`);
-            }
-          } else {
-            console.error(`[${requestId}] No final image received from stream`);
-            await writer.write(
-              encoder.encode(
-                `data: ${JSON.stringify({ 
-                  type: "error", 
-                  error: "No image generated",
-                  generationId: generationId 
-                })}\n\n`,
-              ),
-            );
-          }
-        } catch (error) {
-          console.error(`[${requestId}] Stream processing error:`, error);
-          try {
-            await writer.write(
-              encoder.encode(
-                `data: ${JSON.stringify({
-                  type: "error",
-                  error: error instanceof Error ? error.message : "Stream error",
-                  generationId: generationId,
-                })}\n\n`,
-              ),
-            );
-          } catch (e) {
-            console.error(`[${requestId}] Failed to write error to stream:`, e);
-          }
-        } finally {
-          try {
-            await writer.close();
-          } catch {
-            /* already closed */
-          }
-        }
-      })().catch((err) => {
-        console.error(`[${requestId}] [FATAL] Stream IIFE crash:`, err);
+          })();
+        },
+        cancel() {
+          cancelled = true;
+          cleanup();
+        },
       });
-
       return new Response(readable, {
         headers: {
           ...corsHeaders,
@@ -377,115 +404,28 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Non-streaming mode (backward compatible)
-    console.log(`[${requestId}] Calling OpenAI API (non-streaming)`);
-
-    const openaiResponse = await fetch(
-      "https://api.openai.com/v1/images/generations",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${openaiApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "gpt-image-1-mini",
-          prompt: enhancedPrompt,
-          n: 1,
-          size: "1024x1024",
-          output_format: "png",
-        }),
-      },
-    );
-
-    console.log(`[${requestId}] OpenAI response status:`, openaiResponse.status);
-
-    if (!openaiResponse.ok) {
-      const errorText = await openaiResponse.text();
-      console.error(`[${requestId}] OpenAI error:`, openaiResponse.status, errorText);
-      return new Response(
-        JSON.stringify({
-          error: "Image generation failed",
-          details: errorText,
-        }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
+    const openaiData = await readProviderJSON(openaiResponse, signal);
+    if (openaiData?.error) {
+      throw new AvatarError(
+        "provider_failed",
+        "The image provider could not generate an avatar. Please try again later.",
       );
     }
-
-    const openaiData = await openaiResponse.json();
-    const imageBase64 = openaiData.data?.[0]?.b64_json;
-
+    const imageBase64 = openaiData?.data?.[0]?.b64_json;
     if (!imageBase64) {
-      console.error(`[${requestId}] No image in response`);
-      return new Response(JSON.stringify({ error: "No image generated" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      throw new AvatarError(
+        "image_missing",
+        "The image provider did not return a final image. Please try again later.",
+      );
     }
-
-    console.log(`[${requestId}] Success! Image size: ${imageBase64.length}`);
-
-    // Upload to storage
-    const imageBuffer = base64ToUint8Array(imageBase64);
-    const storagePath = `${user.id}/generated/${generationId}.png`;
-
-    console.log(`[${requestId}] Uploading to storage: ${storagePath}`);
-    const { error: uploadError } = await supabaseAdmin.storage
-      .from("profile-pictures")
-      .upload(storagePath, imageBuffer, {
-        contentType: "image/png",
-        upsert: true,
-      });
-
-    if (uploadError) {
-      console.error(`[${requestId}] Upload error:`, uploadError);
-      // Still return the base64 even if storage fails
-    }
-
-    const { data: publicUrlData } = supabaseAdmin.storage
-      .from("profile-pictures")
-      .getPublicUrl(storagePath);
-
-    const finalImageUrl = publicUrlData.publicUrl;
-
-    // Increment quota
-    console.log(`[${requestId}] Incrementing quota...`);
-    await supabaseUser.rpc("increment_ai_art_quota");
-
-    // Get updated quota
-    const { data: updatedQuota } = await supabaseUser.rpc("get_creative_quota");
-    const remainingQuota = updatedQuota?.[0] 
-      ? updatedQuota[0].ai_art_limit - updatedQuota[0].ai_art_count 
-      : null;
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        imageBase64,
-        imageUrl: finalImageUrl,
-        generationId: generationId,
-        storagePath: storagePath,
-        quotaRemaining: remainingQuota,
-      }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
+    return json(await storeImage(imageBase64));
   } catch (error) {
-    console.error(`[${requestId}] Unhandled:`, error);
-    return new Response(
-      JSON.stringify({
-        error: "Internal server error",
-        message: error instanceof Error ? error.message : "Unknown error",
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
+    const problem = failure(error, signal);
+    console.error("[generate-profile-picture]", problem.code);
+    return json(errorBody(problem), problem.status);
+  } finally {
+    if (!streaming) cleanup();
   }
-});
+}
+
+Deno.serve(handler);

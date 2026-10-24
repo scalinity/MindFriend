@@ -1,0 +1,8 @@
+{
+  "extends": "../deno.json",
+  "lock": false,
+  "imports": {
+    "jsr:@supabase/supabase-js@2.118.0": "./test-supabase.ts",
+    "jsr:@supabase/supabase-js@2.49.1": "./test-supabase.ts"
+  }
+}
