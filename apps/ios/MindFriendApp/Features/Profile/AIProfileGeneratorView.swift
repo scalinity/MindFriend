@@ -20,7 +20,29 @@ struct AIProfileGeneratorView: View {
     @State private var prompt = ""
     @State private var generatedImage: UIImage?
     @State private var partialImage: UIImage?  // For streaming progressive updates
-    @State private var isGenerating = false
+    private enum Phase {
+        case preparing, generating, refining, saving
+        var title: String {
+            switch self {
+            case .preparing: return "Preparing your request"
+            case .generating: return "Creating your picture"
+            case .refining: return "Refining your picture"
+            case .saving: return "Saving your picture"
+            }
+        }
+        var detail: String {
+            switch self {
+            case .preparing: return "Getting your description ready."
+            case .generating: return "Creating an image from your description."
+            case .refining: return "This is a preview. Waiting for the finished image."
+            case .saving: return "Updating your profile with your choice."
+            }
+        }
+    }
+    @State private var phase: Phase?
+    private var isGenerating: Bool { phase != nil }
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .body) private var statusHeight: CGFloat = 96
     @State private var errorMessage: String?
     @State private var quotaRemaining: Int?
     @State private var showPaywall = false
@@ -31,132 +53,88 @@ struct AIProfileGeneratorView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
-                    if let generatedImage {
-                        // Final generated image preview
-                        VStack(spacing: 16) {
-                            Image(uiImage: generatedImage)
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: 300, height: 300)
-                                .clipShape(Circle())
-                                .accessibilityLabel("Generated profile picture preview")
-
-                            HStack(spacing: 16) {
-                                Button {
-                                    confirmGeneratedImage()
-                                } label: {
-                                    Label("Use This", systemImage: "checkmark")
-                                        .frame(maxWidth: .infinity)
-                                }
-                                .buttonStyle(.borderedProminent)
-
-                                Button {
-                                    regenerateImage()
-                                } label: {
-                                    Label("Regenerate", systemImage: "arrow.clockwise")
-                                        .frame(maxWidth: .infinity)
-                                }
-                                .buttonStyle(.bordered)
+                    VStack(spacing: 16) {
+                        ZStack {
+                            Circle().fill(Color.secondary.opacity(0.1))
+                            if let image = generatedImage ?? partialImage {
+                                Image(uiImage: image)
+                                    .resizable()
+                                    .scaledToFill()
+                            } else {
+                                Image(systemName: "person.crop.circle")
+                                    .font(.system(size: 80, weight: .ultraLight))
+                                    .foregroundStyle(Color.accentColor)
                             }
-                            .padding(.horizontal)
-                            .disabled(isGenerating)
                         }
-                    } else {
-                        // Prompt input
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Describe your ideal profile picture")
-                                .font(.headline)
-                                .accessibilityAddTraits(.isHeader)
+                        .aspectRatio(1, contentMode: .fit)
+                        .frame(maxWidth: 280)
+                        .clipShape(Circle())
+                        .accessibilityLabel(generatedImage != nil ? "Generated profile picture preview" : partialImage != nil ? "Unfinished profile picture preview" : "Profile picture placeholder")
 
-                            TextField("e.g., A calm ocean sunset with palm trees", text: $prompt, axis: .vertical)
-                                .textFieldStyle(.roundedBorder)
-                                .lineLimit(3...5)
-                                .disabled(isGenerating)
-                                .accessibilityLabel("Profile picture description")
-                                .accessibilityHint("Enter a description of the profile picture you want to generate, between 3 and 200 characters")
-                                .accessibilityValue(prompt.isEmpty ? "Empty" : "\(prompt.count) characters entered")
-
-                            HStack {
-                                Spacer()
-                                Text("\(prompt.count)/200")
-                                    .font(.caption)
-                                    .foregroundStyle(prompt.count > 200 ? .red : .secondary)
-                                    .accessibilityLabel("Character count")
-                                    .accessibilityValue("\(prompt.count) of 200 characters")
+                        VStack(spacing: 8) {
+                            HStack(spacing: 8) {
+                                if isGenerating { ProgressView().accessibilityHidden(true) }
+                                Text(phase?.title ?? (generatedImage != nil ? "Your picture is ready" : "Create your profile picture"))
+                                    .font(.headline)
                             }
-
-                            if let quotaRemaining {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "sparkles")
-                                        .font(.caption)
-                                    Text("\(quotaRemaining) generations remaining today")
-                                        .font(.caption)
-                                }
+                            Text(phase?.detail ?? (generatedImage != nil ? "Choose Use This to save it to your profile." : "Describe a picture that feels like you."))
+                                .font(.subheadline)
                                 .foregroundStyle(.secondary)
-                                .accessibilityElement(children: .combine)
-                                .accessibilityLabel("Quota status")
-                                .accessibilityValue("\(quotaRemaining) AI profile picture generations remaining today")
-                            }
                         }
-                        .padding(.horizontal)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, minHeight: statusHeight)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("avatar-status")
+                    }
 
-                        if isGenerating {
-                            VStack(spacing: 12) {
-                                // Show partial image if available during streaming
-                                if let partialImage {
-                                    ZStack {
-                                        Image(uiImage: partialImage)
-                                            .resizable()
-                                            .aspectRatio(contentMode: .fill)
-                                            .frame(width: 250, height: 250)
-                                            .clipShape(Circle())
-                                            .opacity(0.7)
-                                            .blur(radius: 1)
-
-                                        ProgressView()
-                                            .scaleEffect(1.5)
-                                            .tint(.white)
-                                    }
-                                    .accessibilityLabel("Generating profile picture")
-                                    .accessibilityValue("Preview showing, refining details")
-                                } else {
-                                    ProgressView()
-                                        .scaleEffect(1.2)
-                                }
-                                Text(partialImage != nil ? "Refining your image..." : "Generating your profile picture...")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .padding()
-                            .accessibilityElement(children: .combine)
-                            .accessibilityLabel("Generating")
-                            .accessibilityValue("Please wait while your profile picture is being generated")
-                        } else {
-                            Button {
-                                generateImage()
-                            } label: {
-                                Label("Generate", systemImage: "sparkles")
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(prompt.count < 3 || prompt.count > 200)
-                            .padding(.horizontal)
-                            .accessibilityLabel("Generate profile picture")
-                            .accessibilityHint(prompt.count < 3 ? "Enter at least 3 characters first" : 
-                                             prompt.count > 200 ? "Reduce description to 200 characters or less" :
-                                             "Double tap to generate a profile picture using AI")
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Describe your ideal profile picture")
+                            .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
+                        TextField("e.g., A calm ocean sunset with palm trees", text: $prompt, axis: .vertical)
+                            .textFieldStyle(.roundedBorder)
+                            .lineLimit(3...5)
+                            .disabled(isGenerating)
+                            .accessibilityLabel("Profile picture description")
+                            .accessibilityHint("Enter between 3 and 200 characters")
+                        Text("\(prompt.count)/200")
+                            .font(.caption)
+                            .foregroundStyle(prompt.count > 200 ? .red : .secondary)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                            .accessibilityLabel("\(prompt.count) of 200 characters")
+                        if let quotaRemaining {
+                            Label("\(quotaRemaining) generations remaining today", systemImage: "sparkles")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
 
                     if let error = errorMessage {
-                        Text(error)
-                            .font(.caption)
+                        Label(error, systemImage: "exclamationmark.circle")
+                            .font(.subheadline)
                             .foregroundStyle(.red)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
-                    Spacer(minLength: 40)
+                    if generatedImage != nil {
+                        ViewThatFits(in: .horizontal) {
+                            if !dynamicTypeSize.isAccessibilitySize {
+                                HStack(spacing: 16) { imageActions }
+                            }
+                            VStack(spacing: 12) { imageActions }
+                        }
+                        .disabled(isGenerating)
+                    } else {
+                        Button(action: generateImage) {
+                            Label(errorMessage == nil ? "Generate" : "Try Again", systemImage: "sparkles")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(isGenerating || prompt.count < 3 || prompt.count > 200)
+                        .accessibilityLabel(errorMessage == nil ? "Generate profile picture" : "Try generating again")
+                    }
                 }
                 .padding()
             }
@@ -184,18 +162,32 @@ struct AIProfileGeneratorView: View {
         }
     }
 
+    @ViewBuilder private var imageActions: some View {
+        Button(action: confirmGeneratedImage) {
+            Label("Use This", systemImage: "checkmark").frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        Button(action: regenerateImage) {
+            Label("Regenerate", systemImage: "arrow.clockwise").frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .disabled(prompt.count < 3 || prompt.count > 200)
+    }
+
     private func generateImage() {
         guard !isGenerating, prompt.count >= 3, prompt.count <= 200 else { return }
         let requestId = UUID()
         let requestedPrompt = prompt
         activeGeneration = requestId
 
-        isGenerating = true
+        phase = .preparing
         errorMessage = nil
         partialImage = nil
 
         generationTask = Task {
             do {
+                try Task.checkCancellation()
+                phase = .generating
                 // One explicit action creates one request; failed streams never fall back to another paid call.
                 let operation = generation ?? { prompt, partial in
                     try await container.supabaseDataService.generateProfilePictureStreaming(prompt: prompt, onPartialImage: partial)
@@ -203,7 +195,10 @@ struct AIProfileGeneratorView: View {
                 let response = try await operation(requestedPrompt) { imageData, _ in
                     Task { @MainActor in
                         guard activeGeneration == requestId, isGenerating else { return }
-                        partialImage = UIImage(data: imageData)
+                        if let image = UIImage(data: imageData) {
+                            partialImage = image
+                            phase = .refining
+                        }
                     }
                 }
 
@@ -222,7 +217,7 @@ struct AIProfileGeneratorView: View {
                     generatedImage = image
                     partialImage = nil
                     quotaRemaining = response.quotaRemaining
-                    isGenerating = false
+                    phase = nil
                 }
             } catch let error as SupabaseDataService.GenerateProfilePictureError {
                 guard !Task.isCancelled, activeGeneration == requestId else { return }
@@ -240,7 +235,7 @@ struct AIProfileGeneratorView: View {
                     }
                     activeGeneration = nil
                     partialImage = nil
-                    isGenerating = false
+                    phase = nil
                 }
             } catch {
                 guard !Task.isCancelled, activeGeneration == requestId else { return }
@@ -248,7 +243,7 @@ struct AIProfileGeneratorView: View {
                     errorMessage = "Failed to generate image. Please try again."
                     activeGeneration = nil
                     partialImage = nil
-                    isGenerating = false
+                    phase = nil
                 }
             }
         }
@@ -259,10 +254,11 @@ struct AIProfileGeneratorView: View {
         generationTask?.cancel()
         generationTask = nil
         partialImage = nil
-        isGenerating = false
+        phase = nil
     }
 
     private func regenerateImage() {
+        guard !isGenerating, prompt.count >= 3, prompt.count <= 200 else { return }
         generatedImage = nil
         partialImage = nil
         generateImage()
@@ -271,7 +267,7 @@ struct AIProfileGeneratorView: View {
     private func confirmGeneratedImage() {
         guard !isGenerating, let generatedImage else { return }
 
-        isGenerating = true
+        phase = .saving
         errorMessage = nil
 
         generationTask = Task {
@@ -299,7 +295,7 @@ struct AIProfileGeneratorView: View {
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
                     errorMessage = error.localizedDescription
-                    isGenerating = false
+                    phase = nil
                 }
             }
         }
