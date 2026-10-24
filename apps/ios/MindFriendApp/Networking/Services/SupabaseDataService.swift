@@ -98,12 +98,19 @@ private struct DBMethodologyInfo: Codable {
 @MainActor
 final class SupabaseDataService: ObservableObject {
     private let authService: SupabaseAuthService
+    private let avatarClient: SupabaseClient
+    private let avatarUserId: () throws -> UUID
 
     /// In-memory cache for methodology info (static reference data)
     private var methodologyCache: [String: MethodologyInfo] = [:]
 
-    init(authService: SupabaseAuthService) {
+    init(authService: SupabaseAuthService, avatarClient: SupabaseClient? = nil, avatarUserId: (() throws -> UUID)? = nil) {
         self.authService = authService
+        self.avatarClient = avatarClient ?? supabase
+        self.avatarUserId = avatarUserId ?? {
+            guard let id = authService.userId else { throw DataError.notAuthenticated }
+            return id
+        }
     }
 
     private var userId: UUID {
@@ -4892,14 +4899,23 @@ final class SupabaseDataService: ObservableObject {
     ///   - path: Storage path (format: {user_id}/avatar_{timestamp}.jpg)
     ///   - userId: User ID for validation
     func uploadProfilePicture(data: Data, path: String, userId: UUID) async throws {
-        try await supabase.storage
+        let owner = try avatarUserId()
+        let parts = path.split(separator: "/", omittingEmptySubsequences: false)
+        guard userId == owner, parts.count >= 2, UUID(uuidString: String(parts[0])) == owner,
+              parts.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }) else { throw DataError.notAuthenticated }
+        guard data.count <= ImageProcessingConstants.maxFileSize,
+              data.starts(with: [0xFF, 0xD8, 0xFF]), data.suffix(2) == Data([0xFF, 0xD9]) else {
+            throw DataError.operationFailed("The avatar must be a JPEG under 500 KB. Choose another image.")
+        }
+        try Task.checkCancellation()
+        try await avatarClient.storage
             .from("profile-pictures")
-            .upload(path, data: data, options: FileOptions(contentType: "image/jpeg", upsert: true))
+            .upload(path, data: data, options: FileOptions(contentType: "image/jpeg", upsert: false))
     }
 
     /// Get public URL for uploaded file
     func getPublicUrl(bucket: String, path: String) throws -> String {
-        let response = try supabase.storage
+        let response = try avatarClient.storage
             .from(bucket)
             .getPublicURL(path: path)  // Fixed: getPublicUrl -> getPublicURL
         return response.absoluteString
@@ -4910,24 +4926,38 @@ final class SupabaseDataService: ObservableObject {
     ///   - url: New avatar URL (empty string to remove)
     ///   - userId: User ID
     func updateAvatarUrl(_ url: String, userId: UUID) async throws {
-        // Fixed: Use Encodable struct instead of [String: Any]
-        struct AvatarUpdate: Encodable {
-            let avatar_url: String?
+        let owner = try avatarUserId()
+        guard userId == owner else { throw DataError.notAuthenticated }
+        struct SavedAvatar: Decodable { let id: UUID; let avatar_url: String? }
+        let expected = url.isEmpty ? nil : url
+        // Dictionary encoding preserves an explicit JSON null when removing an avatar.
+        let updates: [String: String?] = ["avatar_url": expected]
+        try Task.checkCancellation()
+        let saved: SavedAvatar
+        do {
+            saved = try await avatarClient
+                .from("profiles")
+                .update(updates)
+                .eq("id", value: owner.uuidString)
+                .select("id,avatar_url")
+                .single()
+                .execute().value
+        } catch {
+            // A lost response may follow a committed update. Keep its uploaded file.
+            throw DataError.operationFailed("Couldn’t confirm your profile picture was saved. Check your connection and try again.")
         }
-        
-        let updates = AvatarUpdate(avatar_url: url.isEmpty ? nil : url)
-        try await supabase
-            .from("profiles")
-            .update(updates)
-            .eq("id", value: userId.uuidString)
-            .execute()
+        guard saved.id == owner, saved.avatar_url == expected, try avatarUserId() == owner else {
+            throw DataError.operationFailed("Your profile picture was not confirmed as saved. Try again.")
+        }
     }
 
     /// Delete profile picture from Storage
     func deleteProfilePicture(path: String) async throws {
-        try await supabase.storage
-            .from("profile-pictures")
-            .remove(paths: [path])
+        let owner = try avatarUserId()
+        let parts = path.split(separator: "/", omittingEmptySubsequences: false)
+        guard parts.count >= 2, UUID(uuidString: String(parts[0])) == owner,
+              parts.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }) else { throw DataError.notAuthenticated }
+        try await avatarClient.storage.from("profile-pictures").remove(paths: [path])
     }
     
     /// Shared pipeline for uploading and setting avatar (used by both upload and AI generation)
@@ -4940,7 +4970,7 @@ final class SupabaseDataService: ObservableObject {
     func uploadAndSetAvatar(_ image: UIImage, userId: UUID, source: String = "upload") async throws -> String {
         // SECURITY: Use authenticated user ID from Supabase auth to ensure RLS policies work correctly
         // The storage RLS policy checks: (storage.foldername(name))[1] = auth.uid()::text
-        let authenticatedUserId = try self.userId
+        let authenticatedUserId = try avatarUserId()
         
         // Validate that the passed userId matches the authenticated user (prevents IDOR)
         guard userId == authenticatedUserId else {
@@ -4962,7 +4992,7 @@ final class SupabaseDataService: ObservableObject {
         // Get current avatar URL to clean up old file
         var oldAvatarUrl: String?
         do {
-            let profileData: [String: String?] = try await supabase
+            let profileData: [String: String?] = try await avatarClient
                 .from("profiles")
                 .select("avatar_url")
                 .eq("id", value: authenticatedUserId.uuidString)
@@ -4996,7 +5026,7 @@ final class SupabaseDataService: ObservableObject {
         
         // Upload to Storage - use authenticated user ID for path to match RLS policy
         // Use lowercased UUID to match Supabase's auth.uid()::text format
-        let path = "\(authenticatedUserId.uuidString.lowercased())/avatar_\(Int(Date().timeIntervalSince1970)).jpg"
+        let path = "\(authenticatedUserId.uuidString.lowercased())/avatar_\(UUID().uuidString.lowercased()).jpg"
         Log.data.debug("[Data] uploadAndSetAvatar: Uploading to path \(path)")
         try await uploadProfilePicture(data: jpegData, path: path, userId: authenticatedUserId)
         Log.data.debug("[Data] uploadAndSetAvatar: Upload successful")
@@ -5005,6 +5035,7 @@ final class SupabaseDataService: ObservableObject {
         let publicUrl = try getPublicUrl(bucket: "profile-pictures", path: path)
         Log.data.debug("[Data] uploadAndSetAvatar: Got public URL")
         
+        try Task.checkCancellation()
         try await updateAvatarUrl(publicUrl, userId: authenticatedUserId)
         Log.data.debug("[Data] uploadAndSetAvatar: Database updated with new avatar URL")
         
@@ -5058,9 +5089,9 @@ final class SupabaseDataService: ObservableObject {
     
     /// Fetch profile picture history for current user
     func getProfilePictureHistory() async throws -> [ProfilePictureHistoryEntry] {
-        let currentUserId = try userId
+        let currentUserId = try avatarUserId()
         
-        let history: [ProfilePictureHistoryEntry] = try await supabase
+        let history: [ProfilePictureHistoryEntry] = try await avatarClient
             .from("profile_picture_history")
             .select()
             .eq("user_id", value: currentUserId.uuidString)
@@ -5078,7 +5109,7 @@ final class SupabaseDataService: ObservableObject {
     ///   - publicUrl: Public URL of the picture
     ///   - source: Source of the picture ("upload" or "ai_generated")
     func saveProfilePictureToHistory(storagePath: String, publicUrl: String, source: String) async throws {
-        let currentUserId = try userId
+        let currentUserId = try avatarUserId()
         
         struct HistoryInsert: Encodable {
             let user_id: UUID
@@ -5095,7 +5126,7 @@ final class SupabaseDataService: ObservableObject {
         )
         
         // Use upsert to avoid duplicates
-        try await supabase
+        try await avatarClient
             .from("profile_picture_history")
             .upsert(entry, onConflict: "user_id,storage_path")
             .execute()
@@ -5103,9 +5134,9 @@ final class SupabaseDataService: ObservableObject {
     
     /// Delete a profile picture from history
     func deleteProfilePictureFromHistory(id: UUID) async throws {
-        let currentUserId = try userId
+        let currentUserId = try avatarUserId()
         
-        try await supabase
+        try await avatarClient
             .from("profile_picture_history")
             .delete()
             .eq("id", value: id.uuidString)
@@ -5115,9 +5146,9 @@ final class SupabaseDataService: ObservableObject {
     
     /// Set avatar from a history entry (reuse existing picture)
     func setAvatarFromHistory(historyEntry: ProfilePictureHistoryEntry) async throws {
-        let currentUserId = try userId
+        let currentUserId = try avatarUserId()
         
-        // Just update the avatar_url in profiles
+        guard historyEntry.userId == currentUserId else { throw DataError.notAuthenticated }
         try await updateAvatarUrl(historyEntry.publicUrl, userId: currentUserId)
     }
 
@@ -5159,159 +5190,69 @@ final class SupabaseDataService: ObservableObject {
     /// - Returns: Response containing base64 image and quota info
     /// - Throws: GenerateProfilePictureError for various failure modes
     func generateProfilePicture(prompt: String) async throws -> GenerateProfilePictureResponse {
-        Log.data.debug("[ProfilePicture] Starting request, prompt length: \(prompt.count)")
-
-        // Get current session token
-        guard let session = try? await supabase.auth.session else {
-            Log.data.debug("[ProfilePicture] No active session")
-            throw GenerateProfilePictureError.networkError
-        }
-
-        Log.data.debug("[ProfilePicture] Session acquired")
-
+        guard let session = try? await supabase.auth.session else { throw GenerateProfilePictureError.apiError(SSEStreamError.noSession.localizedDescription) }
         do {
-            let requestBody = ["prompt": prompt]
-
             let result: GenerateProfilePictureResponse = try await supabase.functions.invoke(
                 "generate-profile-picture",
-                options: .init(
-                    headers: ["Authorization": "Bearer \(session.accessToken)"],
-                    body: requestBody
-                )
+                options: .init(headers: ["Authorization": "Bearer \(session.accessToken)"], body: ["prompt": prompt])
             )
-
-            print("[Debug] generateProfilePicture: Success, quota remaining = \(result.quotaRemaining ?? -1)")
+            guard result.success else { throw GenerateProfilePictureError.apiError("The generated image was not confirmed as saved. Try again later.") }
             return result
-        } catch let error as FunctionsError {
-            Log.data.error("[Data] generateProfilePicture: FunctionsError - \(error)")
-
-            // Check for specific error types
-            let errorString = String(describing: error).lowercased()
-
-            if errorString.contains("429") || errorString.contains("quota") || errorString.contains("limit") {
-                Log.data.warning("[Data] generateProfilePicture: Quota exceeded (429)")
-                throw GenerateProfilePictureError.quotaExceeded
-            }
-            if errorString.contains("inappropriate") {
-                Log.data.warning("[Data] generateProfilePicture: Inappropriate content detected")
-                throw GenerateProfilePictureError.inappropriateContent
-            }
-
-            throw GenerateProfilePictureError.apiError(String(describing: error))
-        } catch {
-            Log.data.error("[Data] generateProfilePicture: Failed - \(error.localizedDescription)")
-
-            let errorString = String(describing: error).lowercased()
-
-            if errorString.contains("429") || errorString.contains("quota") || errorString.contains("limit") {
-                Log.data.warning("[Data] generateProfilePicture: Quota exceeded (429)")
-                throw GenerateProfilePictureError.quotaExceeded
-            }
-            if errorString.contains("inappropriate") {
-                Log.data.warning("[Data] generateProfilePicture: Inappropriate content detected")
-                throw GenerateProfilePictureError.inappropriateContent
-            }
-
-            throw GenerateProfilePictureError.apiError(String(describing: error))
-        }
+        } catch FunctionsError.httpError(let status, let data) {
+            let body = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            let code = body?["code"] as? String ?? ((body?["quotaExceeded"] as? Bool) == true ? "image_quota_exhausted" : nil)
+            throw Self.profilePictureFailure(status: status, code: code, message: body?["message"] as? String ?? body?["error"] as? String ?? "Image generation failed. Try again later.")
+        } catch let error as GenerateProfilePictureError { throw error }
+        catch is CancellationError { throw CancellationError() }
+        catch is URLError { throw GenerateProfilePictureError.networkError }
+        catch { throw GenerateProfilePictureError.apiError("Image generation could not complete. Try again later.") }
     }
 
-    /// Generate profile picture with streaming for progressive image updates
-    /// - Parameters:
-    ///   - prompt: User's prompt for image generation (3-200 chars)
-    ///   - onPartialImage: Callback for partial image updates during generation
-    /// - Returns: Final GenerateProfilePictureResponse
-    /// - Throws: GenerateProfilePictureError for various failure modes
+    /// Complete only from the final saved-image event. Previews are never a result.
     func generateProfilePictureStreaming(
         prompt: String,
         onPartialImage: @escaping (Data, Int) -> Void,
         events: AsyncThrowingStream<ImageStreamEvent, Error>? = nil
     ) async throws -> GenerateProfilePictureResponse {
-        print("[Debug] generateProfilePictureStreaming: Starting streaming request")
-
-        var finalImageData: Data?
-        var finalMetadata: [String: Any]?
-
-        let stream = events ?? SSEStreamingHelper.streamImageGeneration(
-            functionName: "generate-profile-picture",
-            body: ["prompt": prompt]
-        )
-
+        let stream = events ?? SSEStreamingHelper.streamImageGeneration(functionName: "generate-profile-picture", body: ["prompt": prompt])
+        var response: GenerateProfilePictureResponse?
         do {
             for try await event in stream {
                 try Task.checkCancellation()
                 switch event {
-                case .partial(let index, let imageData):
-                    print("[Debug] generateProfilePictureStreaming: Partial image \(index)")
-                    onPartialImage(imageData, index)
-
-                case .complete(let imageData, let metadata):
-                    print("[Debug] generateProfilePictureStreaming: Complete image received")
-                    finalImageData = imageData
-                    finalMetadata = metadata
-                    if let quotaRemaining = metadata?["quotaRemaining"] as? Int {
-                        print("[Debug] generateProfilePictureStreaming: quotaRemaining = \(quotaRemaining)")
+                case .partial(let index, let image): onPartialImage(image, index)
+                case .complete(let image, let metadata):
+                    guard !image.isEmpty, metadata?["success"] as? Bool != false else {
+                        throw SSEStreamError.noData
                     }
-
-                case .error(let error):
-                    print("[Debug] generateProfilePictureStreaming: Error - \(error)")
-                    // Check for quota exceeded in error message
-                    let errorString = error.localizedDescription.lowercased()
-                    if errorString.contains("429") || errorString.contains("quota") || errorString.contains("limit") {
-                        throw GenerateProfilePictureError.quotaExceeded
-                    }
-                    throw GenerateProfilePictureError.apiError(error.localizedDescription)
+                    response = GenerateProfilePictureResponse(success: true, imageBase64: image.base64EncodedString(),
+                        imageUrl: metadata?["imageUrl"] as? String, generationId: metadata?["generationId"] as? String,
+                        storagePath: metadata?["storagePath"] as? String, quotaRemaining: metadata?["quotaRemaining"] as? Int)
+                case .error(let error): throw error
                 }
             }
-
             try Task.checkCancellation()
-            guard let imageData = finalImageData else {
-                throw GenerateProfilePictureError.apiError("No image generated")
-            }
-
-            // Extract metadata from SSE complete event
-            let imageUrl = finalMetadata?["imageUrl"] as? String
-            let generationId = finalMetadata?["generationId"] as? String
-            let storagePath = finalMetadata?["storagePath"] as? String
-            let quotaRemaining = finalMetadata?["quotaRemaining"] as? Int
-
-            return GenerateProfilePictureResponse(
-                success: true,
-                imageBase64: imageData.base64EncodedString(),
-                imageUrl: imageUrl,
-                generationId: generationId,
-                storagePath: storagePath,
-                quotaRemaining: quotaRemaining
-            )
-        } catch let error as GenerateProfilePictureError {
-            throw error
-        } catch let error as SSEStreamError {
-            // Check for 429 status code
-            if case .httpError(let statusCode, _) = error, statusCode == 429 {
-                print("[Debug] generateProfilePictureStreaming: 429 quota exceeded")
-                throw GenerateProfilePictureError.quotaExceeded
-            }
-            // Also check error message for quota indicators
-            let errorString = error.localizedDescription.lowercased()
-            if errorString.contains("429") || errorString.contains("quota") || errorString.contains("limit") {
-                print("[Debug] generateProfilePictureStreaming: Quota exceeded from error message")
-                throw GenerateProfilePictureError.quotaExceeded
-            }
+            guard let response else { throw SSEStreamError.noData }
+            return response
+        } catch let error as GenerateProfilePictureError { throw error }
+        catch is CancellationError { throw CancellationError() }
+        catch let error as SSEStreamError {
             switch error {
-            case .noSession:
-                throw GenerateProfilePictureError.networkError
-            default:
-                throw GenerateProfilePictureError.apiError(error.localizedDescription)
+            case .httpError(let status, let message, let code):
+                throw Self.profilePictureFailure(status: status, code: code, message: message ?? error.localizedDescription)
+            case .serverError(let message, let code):
+                throw Self.profilePictureFailure(code: code, message: message)
+            default: throw GenerateProfilePictureError.apiError(error.localizedDescription)
             }
-        } catch {
-            // Check generic errors for quota indicators
-            let errorString = error.localizedDescription.lowercased()
-            if errorString.contains("429") || errorString.contains("quota") || errorString.contains("limit") {
-                print("[Debug] generateProfilePictureStreaming: Quota exceeded from generic error")
-                throw GenerateProfilePictureError.quotaExceeded
-            }
-            throw GenerateProfilePictureError.apiError(error.localizedDescription)
-        }
+        } catch is URLError { throw GenerateProfilePictureError.networkError }
+        catch { throw GenerateProfilePictureError.apiError("Image generation was interrupted. Your prompt is saved; try again when you’re ready.") }
+    }
+
+    private static func profilePictureFailure(status: Int? = nil, code: String?, message: String) -> GenerateProfilePictureError {
+        if code == "image_quota_exhausted" { return .quotaExceeded }
+        if code == "inappropriate_content" { return .inappropriateContent }
+        if status == 401 { return .apiError("Sign in again before generating an image.") }
+        return .apiError(message)
     }
 
     // MARK: - Generated Content (Exercise Management)

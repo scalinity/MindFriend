@@ -95,7 +95,7 @@ public struct UserProfile: Codable, Identifiable, Equatable, Sendable {
     public let handle: String?
     public let displayName: String?
     public let email: String?
-    public let avatarUrl: String?
+    public var avatarUrl: String?
     public let timezone: String?
     public let createdAt: Date?
     public let onboardingCompletedAt: Date?

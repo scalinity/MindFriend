@@ -190,7 +190,7 @@ final class CreativeExpressionService: ObservableObject {
             }
         } catch let error as SSEStreamError {
             // Check for 429 status code indicating quota exceeded
-            if case .httpError(let statusCode, _) = error, statusCode == 429 {
+            if case .httpError(let statusCode, _, _) = error, statusCode == 429 {
                 print("[ArtGen] Detected 429 quota exceeded from SSE error")
                 throw CreativeError.quotaExceeded
             }
