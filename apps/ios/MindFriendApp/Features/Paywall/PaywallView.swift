@@ -2,8 +2,13 @@ import SwiftUI
 import StoreKit
 
 struct PaywallView: View {
-    @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
+    var body: some View { PaywallContent(billingService: container.billingService) }
+}
+
+struct PaywallContent: View {
+    @ObservedObject var billingService: BillingService
+    @EnvironmentObject var appState: AppState
     @Environment(\.dismiss) var dismiss
     
     @State private var selectedPlanType: PlanType = .individual
@@ -14,9 +19,7 @@ struct PaywallView: View {
     @State private var showGiftSheet = false
     @State private var showEnterpriseInquiry = false
     
-    private var billingService: BillingService {
-        container.billingService
-    }
+    @State private var purchaseMessage: String?
 
     var selectedPlan: SubscriptionPlan {
         switch selectedBillingPeriod {
@@ -41,6 +44,16 @@ struct PaywallView: View {
 
                     benefitsSection
                     subscribeButton
+                    if let purchaseMessage { Text(purchaseMessage).font(.subheadline).accessibilityAddTraits(.updatesFrequently) }
+                    if selectedPlanType != .enterprise && selectedPlanType != .gift {
+                        if billingService.isLoadingProducts {
+                            ProgressView("Loading App Store plans…")
+                        } else if billingService.product(for: selectedPlanType, billingPeriod: selectedBillingPeriod) == nil {
+                            Text(billingService.productLoadError ?? "This plan is currently unavailable from the App Store.")
+                                .font(.subheadline)
+                            Button("Reload Plans") { Task { await billingService.refreshProducts() } }
+                        }
+                    }
 
                     if selectedPlanType != .enterprise && selectedPlanType != .gift {
                         restoreButton
@@ -214,6 +227,8 @@ struct PaywallView: View {
         Button {
             if selectedPlanType == .enterprise {
                 showEnterpriseInquiry = true
+            } else if selectedPlanType == .gift {
+                showGiftSheet = true
             } else {
                 purchase()
             }
@@ -225,7 +240,9 @@ struct PaywallView: View {
                 Text("Contact Sales")
                     .fontWeight(.semibold)
             } else {
-                Text("Subscribe to \(selectedPlan.displayPrice)/\(selectedBillingPeriod == .monthly ? "month" : "year")")
+                Text(billingService.product(for: selectedPlanType, billingPeriod: selectedBillingPeriod).map {
+                    "Subscribe for \($0.displayPrice)/\(selectedBillingPeriod == .monthly ? "month" : "year")"
+                } ?? (selectedPlanType == .gift ? "Give a Subscription" : "Subscription Unavailable"))
                     .fontWeight(.semibold)
             }
         }
@@ -235,7 +252,9 @@ struct PaywallView: View {
         .background(Color.accentColor)
         .foregroundStyle(.white)
         .cornerRadius(12)
-        .disabled(isPurchasing && selectedPlanType != .enterprise)
+        .disabled(isPurchasing || billingService.isPurchasing || billingService.isLoadingProducts ||
+            (selectedPlanType != .enterprise && selectedPlanType != .gift &&
+             billingService.product(for: selectedPlanType, billingPeriod: selectedBillingPeriod) == nil))
     }
     
     private var restoreButton: some View {
@@ -244,6 +263,7 @@ struct PaywallView: View {
         }
         .font(.subheadline)
         .foregroundStyle(.secondary)
+        .disabled(isPurchasing || billingService.isPurchasing)
     }
     
     private var termsSection: some View {
@@ -275,57 +295,41 @@ struct PaywallView: View {
             return product.displayPrice
         }
 
-        // Fall back to static plan prices (for simulator/development)
-        let plan: SubscriptionPlan? = selectedBillingPeriod == .monthly
-            ? SubscriptionPlan.monthlyPlan(for: planType)
-            : SubscriptionPlan.annualPlan(for: planType)
-
-        return plan?.displayPrice
+        return nil
     }
-    
+
     private func purchase() {
+        guard !isPurchasing, !billingService.isPurchasing,
+              let storeProduct = billingService.product(for: selectedPlanType, billingPeriod: selectedBillingPeriod) else { return }
         isPurchasing = true
+        purchaseMessage = nil
         Task {
+            defer { isPurchasing = false }
             do {
-                // In real implementation, load actual StoreKit product
-                // For now, using mock plan
-                guard let storeProduct = await loadStoreKitProduct(for: selectedPlan) else {
-                    throw BillingError.productNotFound
-                }
-                
-                try await container.billingService.purchase(storeProduct, promoCode: nil)
-                await MainActor.run {
-                    appState.updateEntitlements(.premium)
+                switch try await billingService.purchase(storeProduct) {
+                case .completed:
+                    appState.updateEntitlements(billingService.entitlements)
                     dismiss()
+                case .pending:
+                    purchaseMessage = "Awaiting App Store approval. Your access will update after the purchase is approved."
                 }
-            } catch let error as BillingError {
-                if error != .cancelled {
-                    self.error = error
-                    showError = true
-                }
+            } catch let error as BillingError where error == .cancelled {
+                // Cancellation leaves the current entitlement unchanged.
             } catch {
                 self.error = error
                 showError = true
             }
-            isPurchasing = false
         }
     }
-    
-    private func loadStoreKitProduct(for plan: SubscriptionPlan) async -> Product? {
-        guard let productId = plan.appStoreProductId else { return nil }
-        // Load actual StoreKit product
-        // This is a placeholder - in real implementation, use StoreKit 2
-        return container.billingService.products.first { $0.id == productId }
-    }
-    
+
     private func restorePurchases() {
         isPurchasing = true
         Task {
             do {
-                try await container.billingService.restorePurchases()
-                if container.billingService.entitlements.tier == .premium {
+                try await billingService.restorePurchases()
+                if billingService.entitlements.tier == .premium {
                     await MainActor.run {
-                        appState.updateEntitlements(.premium)
+                        appState.updateEntitlements(billingService.entitlements)
                         dismiss()
                     }
                 }
