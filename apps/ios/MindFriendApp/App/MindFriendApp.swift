@@ -26,6 +26,8 @@ struct MindFriendApp: App {
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--subscription-ui-test") {
             SubscriptionCatalogUITestView()
+        } else if ProcessInfo.processInfo.arguments.contains("--sleep-ui-test") {
+            SleepDashboardUITestView()
         } else {
             RootView()
         }
@@ -50,7 +52,8 @@ struct MindFriendApp: App {
                 .environment(\.layoutDirection, localizationService.isRTL ? .rightToLeft : .leftToRight)
                 .task {
                     #if DEBUG
-                    if ProcessInfo.processInfo.arguments.contains("--subscription-ui-test") { return }
+                    if ProcessInfo.processInfo.arguments.contains("--subscription-ui-test") ||
+                       ProcessInfo.processInfo.arguments.contains("--sleep-ui-test") { return }
                     #endif
                     // DEBUG: Log calendar permission status and Info.plist keys at app launch
                     #if DEBUG

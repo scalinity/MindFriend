@@ -185,3 +185,29 @@ final class SubscriptionCatalogUITests: XCTestCase {
         XCTAssertTrue(store.allTransactions().isEmpty, "Catalog recovery must not purchase anything")
     }
 }
+
+@MainActor
+final class SleepDashboardUITests: XCTestCase {
+    func testLoadFailureRetriesAndDisplaysDecodedHealthKitNight() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--sleep-ui-test"]
+        app.launch()
+        defer { app.terminate() }
+        XCTAssertTrue(app.staticTexts["Sleep Records Unavailable"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.staticTexts["No Sleep Data Yet"].exists)
+        let retry = app.buttons["sleep.retry"]
+        XCTAssertTrue(retry.isHittable)
+        retry.tap()
+        XCTAssertTrue(app.staticTexts["Last Night"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Last Night"].isHittable)
+        XCTAssertTrue(app.staticTexts["sleep.source"].label.contains("Health App"))
+        XCTAssertFalse(app.staticTexts["Sleep Records Unavailable"].exists)
+        XCTAssertFalse(retry.exists)
+        XCTAssertTrue(app.staticTexts["Score unavailable — missing measurements"].exists)
+        let capture = XCTAttachment(screenshot: app.screenshot())
+        capture.name = "Issue19-decoded-HealthKit-night"
+        capture.lifetime = .keepAlways
+        add(capture)
+    }
+}

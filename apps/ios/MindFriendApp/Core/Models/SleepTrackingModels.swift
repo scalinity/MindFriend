@@ -300,18 +300,15 @@ struct SleepEntry: Codable, Identifiable, Equatable {
             }
         }
 
-        // Rule 2: Sleep stages sum <= timeAsleepMinutes (or timeInBedMinutes if asleep is nil)
-        let maxStageTime = timeAsleepMinutes ?? timeInBedMinutes
-        let stageSum = [deepSleepMinutes, remSleepMinutes, lightSleepMinutes, awakeMinutes]
-            .compactMap { $0 }
-            .reduce(0, +)
-
-        if stageSum > 0 {
-            guard stageSum <= maxStageTime else {
-                throw ValidationError.invalidCrossFieldConstraint(
-                    "Sleep stages (\(stageSum)m) cannot exceed total time (\(maxStageTime)m)"
-                )
-            }
+        // Awake time is part of time in bed, not time asleep.
+        let asleepStages = [deepSleepMinutes, remSleepMinutes, lightSleepMinutes]
+            .compactMap { $0 }.reduce(0, +)
+        let maxAsleepTime = timeAsleepMinutes ?? timeInBedMinutes
+        guard asleepStages <= maxAsleepTime else {
+            throw ValidationError.invalidCrossFieldConstraint("Sleep stages cannot exceed time asleep")
+        }
+        guard (timeAsleepMinutes ?? asleepStages) + (awakeMinutes ?? 0) <= timeInBedMinutes else {
+            throw ValidationError.invalidCrossFieldConstraint("Sleep and awake time cannot exceed time in bed")
         }
     }
 
