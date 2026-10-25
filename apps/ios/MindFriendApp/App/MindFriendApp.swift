@@ -21,9 +21,22 @@ struct MindFriendApp: App {
     @State private var showBuddyAcceptedAlert = false
     @State private var buddyAcceptedMessage = ""
 
+    @ViewBuilder
+    private var launchContent: some View {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--subscription-ui-test") {
+            SubscriptionCatalogUITestView()
+        } else {
+            RootView()
+        }
+        #else
+        RootView()
+        #endif
+    }
+
     var body: some Scene {
         WindowGroup {
-            RootView()
+            launchContent
                 .environmentObject(appState)
                 .environmentObject(container)
                 .environmentObject(notificationManager)
@@ -36,6 +49,9 @@ struct MindFriendApp: App {
                 .environment(\.locale, Locale(identifier: localizationService.currentLanguage))
                 .environment(\.layoutDirection, localizationService.isRTL ? .rightToLeft : .leftToRight)
                 .task {
+                    #if DEBUG
+                    if ProcessInfo.processInfo.arguments.contains("--subscription-ui-test") { return }
+                    #endif
                     // DEBUG: Log calendar permission status and Info.plist keys at app launch
                     #if DEBUG
                     // Check if calendar Info.plist keys exist in bundle
