@@ -2,8 +2,16 @@ import SwiftUI
 import StoreKit
 
 struct SubscriptionView: View {
-    @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
+
+    var body: some View {
+        SubscriptionContent(billingService: container.billingService)
+    }
+}
+
+struct SubscriptionContent: View {
+    @ObservedObject var billingService: BillingService
+    @EnvironmentObject var appState: AppState
     @Environment(\.dismiss) var dismiss
 
     @State private var selectedPlanType: PlanType = .individual
@@ -15,28 +23,14 @@ struct SubscriptionView: View {
     @State private var showInviteCode = false
     @State private var showEnterpriseInquiry = false
     @State private var showGiftSheet = false
-
-    private var billingService: BillingService {
-        container.billingService
-    }
+    @State private var purchaseMessage: String?
 
     private var selectedProduct: Product? {
         billingService.product(for: selectedPlanType, billingPeriod: selectedBillingPeriod)
     }
 
-    /// Fallback plan when StoreKit products aren't available
-    private var selectedFallbackPlan: SubscriptionPlan? {
-        selectedBillingPeriod == .monthly
-            ? SubscriptionPlan.monthlyPlan(for: selectedPlanType)
-            : SubscriptionPlan.annualPlan(for: selectedPlanType)
-    }
-
-    /// Display price - from StoreKit or fallback
     private var selectedDisplayPrice: String? {
-        if let product = selectedProduct {
-            return product.displayPrice
-        }
-        return selectedFallbackPlan?.displayPrice
+        selectedProduct?.displayPrice
     }
 
     private var hasActiveSubscription: Bool {
@@ -69,6 +63,23 @@ struct SubscriptionView: View {
 
                         // Subscribe Button
                         subscribeButton
+
+                        if let purchaseMessage {
+                            Text(purchaseMessage).font(.subheadline)
+                        }
+                        if !isSpecialPlanType {
+                            if billingService.isLoadingProducts {
+                                ProgressView("Loading App Store plans…")
+                            } else if selectedProduct == nil {
+                                Text(billingService.productLoadError ?? "This plan is currently unavailable from the App Store.")
+                                    .font(.subheadline)
+                                    .accessibilityIdentifier("subscription.catalogError")
+                                Button("Reload Plans") {
+                                    Task { await billingService.refreshProducts() }
+                                }
+                                .accessibilityIdentifier("subscription.reload")
+                            }
+                        }
 
                         // Restore (hidden for enterprise and gift)
                         if selectedPlanType != .enterprise && selectedPlanType != .gift {
@@ -233,17 +244,7 @@ struct SubscriptionView: View {
             return nil
         }
 
-        // Try StoreKit product first
-        if let product = billingService.product(for: planType, billingPeriod: selectedBillingPeriod) {
-            return product.displayPrice
-        }
-
-        // Fall back to static plan prices (for simulator/development)
-        let plan: SubscriptionPlan? = selectedBillingPeriod == .monthly
-            ? SubscriptionPlan.monthlyPlan(for: planType)
-            : SubscriptionPlan.annualPlan(for: planType)
-
-        return plan?.displayPrice
+        return billingService.product(for: planType, billingPeriod: selectedBillingPeriod)?.displayPrice
     }
 
     // MARK: - Billing Period
@@ -258,7 +259,7 @@ struct SubscriptionView: View {
                     BillingPeriodCard(
                         period: period,
                         isSelected: selectedBillingPeriod == period,
-                        showSavings: period == .yearly,
+                        showSavings: period == .yearly && billingService.product(for: selectedPlanType, billingPeriod: .yearly) != nil,
                         onSelect: { selectedBillingPeriod = period }
                     )
                 }
@@ -293,17 +294,16 @@ struct SubscriptionView: View {
                                     Text(monthlyEquivalent(for: product))
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
-                                } else if let plan = selectedFallbackPlan {
-                                    Text(plan.pricePerMonth ?? "")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
                                 }
                             }
                         }
+                    } else {
+                        Text(billingService.isLoadingProducts ? "Loading…" : "Unavailable")
+                            .foregroundStyle(.secondary)
                     }
                 }
 
-                if selectedBillingPeriod == .yearly {
+                if selectedBillingPeriod == .yearly && selectedProduct != nil {
                     HStack {
                         Image(systemName: "tag.fill")
                             .foregroundStyle(.green)
@@ -332,9 +332,8 @@ struct SubscriptionView: View {
 
     // MARK: - Subscribe Button
 
-    /// Whether we can attempt a purchase (have StoreKit product or fallback)
     private var canPurchase: Bool {
-        selectedProduct != nil || selectedFallbackPlan != nil
+        selectedProduct != nil
     }
 
     private var subscribeButton: some View {
@@ -358,7 +357,7 @@ struct SubscriptionView: View {
                     Text("Give as Gift")
                         .fontWeight(.semibold)
                 } else {
-                    Text("Subscribe Now")
+                    Text(billingService.isLoadingProducts ? "Loading Plans…" : canPurchase ? "Subscribe Now" : "Plan Unavailable")
                         .fontWeight(.semibold)
                 }
             }
@@ -368,7 +367,8 @@ struct SubscriptionView: View {
             .foregroundStyle(.white)
             .cornerRadius(12)
         }
-        .disabled(!isSpecialPlanType && (!canPurchase || isPurchasing))
+        .disabled(!isSpecialPlanType && (!canPurchase || billingService.isLoadingProducts || isPurchasing || billingService.isPurchasing))
+        .accessibilityIdentifier("subscription.subscribe")
     }
 
     private var isSpecialPlanType: Bool {
@@ -384,6 +384,7 @@ struct SubscriptionView: View {
             }
             .font(.subheadline)
             .foregroundStyle(.secondary)
+            .disabled(isPurchasing || billingService.isPurchasing)
 
             Button("Have an invite code?") {
                 showInviteCode = true
@@ -502,19 +503,18 @@ struct SubscriptionView: View {
     }
 
     private func purchase() {
-        guard let product = selectedProduct else {
-            // StoreKit products not available - show error
-            self.error = BillingError.productNotFound
-            showError = true
-            return
-        }
+        guard !isPurchasing, !billingService.isPurchasing, let product = selectedProduct else { return }
 
         isPurchasing = true
+        purchaseMessage = nil
         Task {
+            defer { isPurchasing = false }
             do {
-                try await billingService.purchase(product)
-                await MainActor.run {
-                    appState.updateEntitlements(.premium)
+                switch try await billingService.purchase(product) {
+                case .completed:
+                    appState.updateEntitlements(billingService.entitlements)
+                case .pending:
+                    purchaseMessage = "Awaiting App Store approval. Your access will update after the purchase is approved."
                 }
             } catch let error as BillingError {
                 if error != .cancelled {
@@ -525,7 +525,6 @@ struct SubscriptionView: View {
                 self.error = error
                 showError = true
             }
-            isPurchasing = false
         }
     }
 
@@ -536,7 +535,7 @@ struct SubscriptionView: View {
                 try await billingService.restorePurchases()
                 if billingService.entitlements.tier == .premium {
                     await MainActor.run {
-                        appState.updateEntitlements(.premium)
+                        appState.updateEntitlements(billingService.entitlements)
                     }
                 }
             } catch {
@@ -849,3 +848,38 @@ extension PlanType {
         .environmentObject(AppState())
         .environmentObject(DependencyContainer())
 }
+
+#if DEBUG
+/// Local StoreKit catalog fixture. This route skips normal app startup and never purchases.
+struct SubscriptionCatalogUITestView: View {
+    @StateObject private var billingService: BillingService
+
+    init() {
+        let loader = SubscriptionCatalogUITestLoader()
+        _billingService = StateObject(wrappedValue: BillingService(
+            authService: SupabaseAuthService(),
+            productLoader: { try await loader.load($0) },
+            observeTransactions: false))
+    }
+
+    var body: some View {
+        SubscriptionContent(billingService: billingService)
+    }
+}
+
+private actor SubscriptionCatalogUITestLoader {
+    private var calls = 0
+
+    func load(_ ids: [String]) async throws -> [Product] {
+        calls += 1
+        if calls == 1 { return [] }
+        if calls == 2 { throw URLError(.notConnectedToInternet) }
+        let products = try await Product.products(for: ids)
+        guard products.count == ids.count,
+              products.allSatisfy({ $0.description == "Synthetic StoreKit UI test" }) else {
+            throw URLError(.badServerResponse)
+        }
+        return products
+    }
+}
+#endif

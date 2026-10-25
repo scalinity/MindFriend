@@ -1,4 +1,5 @@
 import XCTest
+import StoreKitTest
 
 final class MindFriendAppUITests: XCTestCase {
 
@@ -117,5 +118,70 @@ final class MindFriendAppLaunchTests: XCTestCase {
                 XCUIApplication().launch()
             }
         }
+    }
+}
+
+@MainActor
+final class SubscriptionCatalogUITests: XCTestCase {
+    func testUnavailableCatalogReloadsAfterNetworkFailure() throws {
+        continueAfterFailure = false
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("MindFriend-UI-\(UUID()).storekit")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let ids = ["com.mindfriend.premium.monthly", "com.mindfriend.premium.yearly",
+                   "com.mindfriend.couples.monthly", "com.mindfriend.couples.annual",
+                   "com.mindfriend.family.monthly", "com.mindfriend.family.annual"]
+        let group = "10000017"
+        let subscriptions: [[String: Any]] = ids.enumerated().map { index, id in
+            ["adHocOffers": [], "codeOffers": [], "displayPrice": "12.99",
+             "familyShareable": false, "groupNumber": index + 1, "internalID": UUID().uuidString,
+             "localizations": [["description": "Synthetic StoreKit UI test", "displayName": id, "locale": "en_US"]],
+             "productID": id, "recurringSubscriptionPeriod": index % 2 == 0 ? "P1M" : "P1Y",
+             "referenceName": id, "subscriptionGroupID": group, "type": "RecurringSubscription", "winBackOffers": []]
+        }
+        let configuration: [String: Any] = ["identifier": UUID().uuidString, "nonRenewingSubscriptions": [], "products": [],
+            "settings": ["_applicationInternalID": "6758198271", "_failTransactionsEnabled": false,
+                         "_locale": "en_US", "_storefront": "USA", "_storeKitErrors": []],
+            "subscriptionGroups": [["id": group, "name": "MindFriend UI Test", "localizations": [], "subscriptions": subscriptions]],
+            "version": ["major": 3, "minor": 0]]
+        try JSONSerialization.data(withJSONObject: configuration).write(to: url)
+        let store = try SKTestSession(contentsOf: url)
+        store.resetToDefaultState()
+        store.disableDialogs = true
+        store.clearTransactions()
+
+        let app = XCUIApplication()
+        app.launchArguments = ["--subscription-ui-test"]
+        app.launch()
+        defer { app.terminate() }
+        let subscribe = app.buttons["subscription.subscribe"]
+        let reload = app.buttons["subscription.reload"]
+        let error = app.staticTexts["subscription.catalogError"]
+        XCTAssertTrue(reload.waitForExistence(timeout: 15))
+        XCTAssertTrue(subscribe.exists)
+        XCTAssertFalse(subscribe.isEnabled)
+        for _ in 0..<5 {
+            if reload.isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(reload.isHittable)
+        reload.tap()
+        XCTAssertTrue(error.waitForExistence(timeout: 5))
+        XCTAssertTrue(error.label.contains("Check your connection"))
+        XCTAssertFalse(subscribe.isEnabled)
+        XCTAssertTrue(reload.isEnabled)
+        let unavailable = XCTAttachment(screenshot: app.screenshot())
+        unavailable.name = "Issue17-subscription-network-failure"
+        unavailable.lifetime = .keepAlways
+        add(unavailable)
+
+        reload.tap()
+        XCTAssertTrue(reload.waitForNonExistence(timeout: 15))
+        XCTAssertTrue(subscribe.isEnabled)
+        XCTAssertEqual(subscribe.label, "Subscribe Now")
+        let available = XCTAttachment(screenshot: app.screenshot())
+        available.name = "Issue17-subscription-recovered"
+        available.lifetime = .keepAlways
+        add(available)
+        XCTAssertTrue(store.allTransactions().isEmpty, "Catalog recovery must not purchase anything")
     }
 }
