@@ -7,6 +7,7 @@
 
 import XCTest
 import SwiftUI
+import Supabase
 @testable import MindFriendApp
 
 final class SleepScoreCalculatorTests: XCTestCase {
@@ -472,5 +473,45 @@ private final class SleepDashboardFixture: SleepTrackingReading {
     func fetchInsights() async throws -> [SleepInsight] {
         if switchAccountAfterRead { owner = UUID() }
         return []
+    }
+}
+
+@MainActor
+final class SleepEntryDecodingRegressionTests: XCTestCase {
+    private let owner = UUID(uuidString: "11111111-1111-4111-8111-111111111111")!
+    private func decode(asleep: Int? = 450, deep: Int = 90, awake: Int = 30) throws -> SleepEntry {
+        let wake = Date()
+        var record: [String: Any] = ["id": UUID().uuidString, "user_id": owner.uuidString,
+            "date": String(wake.ISO8601Format().prefix(10)), "source": "healthkit",
+            "bedtime": wake.addingTimeInterval(-8 * 3600).ISO8601Format(), "wake_time": wake.ISO8601Format(),
+            "time_in_bed_minutes": 480, "deep_sleep_minutes": deep, "rem_sleep_minutes": 100,
+            "light_sleep_minutes": 260, "awake_minutes": awake,
+            "created_at": wake.ISO8601Format(), "updated_at": wake.ISO8601Format()]
+        record["time_asleep_minutes"] = asleep
+        return try PostgrestClient.Configuration.jsonDecoder.decode(SleepEntry.self, from: JSONSerialization.data(withJSONObject: record))
+    }
+    func testHealthKitNightWithAwakeTimeDecodesAndLoads() async throws {
+        let entry = try decode()
+        XCTAssertEqual(entry.timeAsleepMinutes, 450)
+        XCTAssertEqual(entry.awakeMinutes, 30)
+        XCTAssertNil(entry.displayableScore, "Missing stored score must stay unavailable")
+        let reader = SleepDashboardFixture(owner: owner)
+        reader.entries = [entry]
+        let model = SleepDashboardViewModel()
+        await model.loadData(trackingService: reader)
+        XCTAssertEqual(model.weekEntries.first?.id, entry.id)
+        XCTAssertNil(model.errorMessage)
+    }
+    func testAsleepStagesCannotExceedTimeAsleep() async {
+        await XCTAssertThrowsError(try decode(deep: 91))
+    }
+    func testSleepAndAwakeCannotExceedTimeInBed() async {
+        await XCTAssertThrowsError(try decode(awake: 31))
+    }
+    func testPartialSleepTotalsStillValidateAgainstTimeInBed() async throws {
+        let entry = try decode(asleep: nil)
+        XCTAssertNil(entry.timeAsleepMinutes)
+        XCTAssertNil(entry.displayableScore)
+        await XCTAssertThrowsError(try decode(asleep: nil, awake: 31))
     }
 }

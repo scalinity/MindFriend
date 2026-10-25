@@ -17,9 +17,6 @@ struct SleepDashboardView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
-                    if let error = viewModel.errorMessage {
-                        Text(error).foregroundStyle(.secondary)
-                    }
                     // Last Night's Sleep Summary
                     if let lastEntry = viewModel.lastSleepEntry {
                         lastNightSection(lastEntry)
@@ -103,6 +100,7 @@ struct SleepDashboardView: View {
             Text("\(entry.wakeTime.formatted(date: .abbreviated, time: .omitted)) · \(entry.source.displayName)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .accessibilityIdentifier("sleep.source")
 
             HStack(spacing: 20) {
                 // Sleep Score Ring
@@ -354,13 +352,25 @@ struct SleepDashboardView: View {
                 .font(.system(size: 60))
                 .foregroundColor(.secondary)
 
-            if dependencies.sleepHealthKitManager.isAuthorized {
+            if let error = viewModel.errorMessage {
+                Text("Sleep Records Unavailable")
+                    .font(.title3).fontWeight(.semibold)
+                Text(error)
+                    .font(.subheadline).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Button("Try Again") {
+                    Task {
+                        await viewModel.loadData(trackingService: trackingReader ?? dependencies.sleepTrackingService)
+                    }
+                }
+                .accessibilityIdentifier("sleep.retry")
+            } else if dependencies.sleepHealthKitManager.isAuthorized {
                 // HealthKit is connected but no sleep data found
                 Text("No Sleep Data Yet")
                     .font(.title3)
                     .fontWeight(.semibold)
 
-                Text(viewModel.errorMessage ?? "No sleep record is available for last night. Health may have no samples or read access may be off. Check access in Health, or log sleep manually.")
+                Text("No sleep record is available for last night. Health may have no samples or read access may be off. Check access in Health, or log sleep manually.")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -544,3 +554,33 @@ final class SleepDashboardViewModel: ObservableObject {
     SleepDashboardView()
         .environmentObject(DependencyContainer.preview)
 }
+
+#if DEBUG
+/// Synthetic data only; no HealthKit queries, authentication or wellness writes.
+@MainActor
+final class SleepDashboardUITestReader: SleepTrackingReading {
+    private let owner = UUID(uuidString: "11111111-1111-4111-8111-111111111111")!
+    private var failedOnce = false
+    func currentUserID() async throws -> UUID { owner }
+    func fetchLatestEntry() async throws -> SleepEntry? { nil }
+    func fetchInsights() async throws -> [SleepInsight] { [] }
+    func fetchEntries(from startDate: Date, to endDate: Date) async throws -> [SleepEntry] {
+        if !failedOnce { failedOnce = true; throw URLError(.notConnectedToInternet) }
+        let wake = endDate
+        let record: [String: Any] = ["id": UUID().uuidString, "user_id": owner.uuidString,
+            "date": String(wake.ISO8601Format().prefix(10)), "source": "healthkit",
+            "bedtime": wake.addingTimeInterval(-8 * 3600).ISO8601Format(), "wake_time": wake.ISO8601Format(),
+            "time_in_bed_minutes": 480, "time_asleep_minutes": 450, "deep_sleep_minutes": 90,
+            "rem_sleep_minutes": 100, "light_sleep_minutes": 260, "awake_minutes": 30, "user_rating": 4,
+            "created_at": wake.ISO8601Format(), "updated_at": wake.ISO8601Format()]
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return [try decoder.decode(SleepEntry.self, from: JSONSerialization.data(withJSONObject: record))]
+    }
+}
+
+struct SleepDashboardUITestView: View {
+    @State private var reader = SleepDashboardUITestReader()
+    var body: some View { SleepDashboardView(trackingReader: reader) }
+}
+#endif
