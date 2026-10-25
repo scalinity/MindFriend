@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "strict": true
+  },
+  "imports": {
+    "./apple-roots.ts": "./test-apple-roots.ts",
+    "https://esm.sh/@supabase/supabase-js@2.118.0": "./test-supabase.ts",
+    "https://esm.sh/@supabase/supabase-js@2.49.1": "./test-supabase.ts",
+    "npm:node-fetch@2.7.0": "./test-ocsp.ts",
+    "https://deno.land/std@0.168.0/http/server.ts": "./test-serve.ts"
+  },
+  "lock": "./deno.test.lock"
+}
