@@ -497,6 +497,148 @@ final class SleepDashboardRegressionTests: XCTestCase {
         XCTAssertNil(model.errorMessage)
     }
 
+    func testSkipSurvivesRefreshAndModelRecreationForOnlyThatOwnerAndEntry() async {
+        let suite = "sleep-skip-test-" + UUID().uuidString
+        let preferences = UserDefaults(suiteName: suite)!
+        defer { preferences.removePersistentDomain(forName: suite) }
+        let reader = SleepDashboardFixture(owner: owner)
+        let record = entry(owner: owner)
+        reader.entries = [record]
+        let model = SleepDashboardViewModel(preferences: preferences)
+        await model.loadData(trackingService: reader)
+        XCTAssertTrue(model.showMorningCheckIn)
+        model.skipMorningCheckIn(for: record)
+        await model.refresh(trackingService: reader) { }
+        XCTAssertFalse(model.showMorningCheckIn)
+        let reopened = SleepDashboardViewModel(preferences: preferences)
+        await reopened.loadData(trackingService: reader)
+        XCTAssertFalse(reopened.showMorningCheckIn)
+        reader.entries = [entry(owner: owner)]
+        await reopened.loadData(trackingService: reader)
+        XCTAssertTrue(reopened.showMorningCheckIn, "A different sleep entry remains eligible")
+        let otherOwner = UUID()
+        let otherReader = SleepDashboardFixture(owner: otherOwner)
+        otherReader.entries = [entry(owner: otherOwner)]
+        await reopened.loadData(trackingService: otherReader)
+        XCTAssertTrue(reopened.showMorningCheckIn, "Skip does not carry between owners")
+    }
+
+    func testRecentRefreshReturnsWhileHistoryRunsAndFailureAllowsRetry() async {
+        let reader = SleepDashboardFixture(owner: owner)
+        reader.entries = [entry(owner: owner)]
+        let model = SleepDashboardViewModel()
+        let gate = SleepRefreshGate()
+        let returned = expectation(description: "Recent refresh returns before old history finishes")
+        let pull = Task {
+            await model.refresh(trackingService: reader, sync: { }, history: { started in
+                started()
+                await gate.wait()
+                throw URLError(.notConnectedToInternet)
+            })
+            returned.fulfill()
+        }
+        await gate.waitUntilStarted()
+        await fulfillment(of: [returned], timeout: 2)
+        XCTAssertEqual(model.lastSleepEntry?.id, reader.entries.first?.id)
+        XCTAssertTrue(model.isImportingHistory)
+        // Another foreground must still refresh recent records during a long history import.
+        var recentSyncs = 0
+        await model.refresh(trackingService: reader, sync: { recentSyncs += 1 }, history: { _ in
+            XCTFail("History must remain coalesced")
+        })
+        XCTAssertEqual(recentSyncs, 1)
+        gate.open()
+        await pull.value
+        for _ in 0..<1000 { if model.syncErrorMessage != nil { break }; await Task.yield() }
+        XCTAssertNotNil(model.syncErrorMessage)
+        XCTAssertFalse(model.isImportingHistory)
+        XCTAssertEqual(model.lastSleepEntry?.id, reader.entries.first?.id)
+        await model.refresh(trackingService: reader, sync: { }, history: { _ in })
+        XCTAssertNil(model.syncErrorMessage)
+        XCTAssertFalse(model.isImportingHistory, "No batches means no importing row")
+        model.cancelRefresh()
+    }
+
+    func testLeavingDuringHistoryStopsItsPublicationAndClearsProgress() async {
+        let reader = SleepDashboardFixture(owner: owner)
+        let model = SleepDashboardViewModel()
+        let gate = SleepRefreshGate()
+        await model.refresh(trackingService: reader, sync: { }, history: { started in
+            started()
+            await gate.wait()
+            try Task.checkCancellation()
+        })
+        await gate.waitUntilStarted()
+        model.cancelRefresh()
+        gate.open()
+        for _ in 0..<10 { await Task.yield() }
+        XCTAssertFalse(model.isImportingHistory)
+        XCTAssertNil(model.syncErrorMessage)
+        XCTAssertTrue(model.isLoading, "Returning without records must start with loading rather than an empty flash")
+    }
+
+    func testAccountResetClearsResultsBeforeAutomaticSyncCanSuspend() async {
+        let reader = SleepDashboardFixture(owner: owner)
+        reader.entries = [entry(owner: owner)]
+        let model = SleepDashboardViewModel()
+        await model.loadData(trackingService: reader)
+        XCTAssertNotNil(model.lastSleepEntry)
+        XCTAssertTrue(model.showMorningCheckIn)
+        model.prepareForOwner(UUID())
+        XCTAssertNil(model.lastSleepEntry)
+        XCTAssertTrue(model.weekEntries.isEmpty)
+        XCTAssertTrue(model.insights.isEmpty)
+        XCTAssertFalse(model.showMorningCheckIn)
+        XCTAssertTrue(model.isLoading)
+        let gate = SleepRefreshGate()
+        let refresh = Task { await model.refresh(trackingService: reader, sync: { await gate.wait() }) }
+        await gate.waitUntilStarted()
+        XCTAssertNil(model.lastSleepEntry, "Previous results must not remain during the new owner's Health query")
+        model.cancelRefresh()
+        gate.open()
+        await refresh.value
+    }
+
+    func testSameOwnerReentryRetainsContentAndAFormOpenedDuringReadKeepsItsDraft() async {
+        let reader = SleepDashboardFixture(owner: owner)
+        let original = entry(owner: owner)
+        reader.entries = [original]
+        let model = SleepDashboardViewModel()
+        await model.loadData(trackingService: reader)
+        model.skipMorningCheckIn(for: original)
+        model.prepareForOwner(owner)
+        XCTAssertEqual(model.lastSleepEntry?.id, original.id)
+        XCTAssertEqual(model.weekEntries.count, 1)
+        let gate = SleepRefreshGate()
+        reader.beforeEntriesRead = { await gate.wait() }
+        let refresh = Task { await model.refresh(trackingService: reader, sync: { }) }
+        await gate.waitUntilStarted()
+        XCTAssertEqual(model.lastSleepEntry?.id, original.id, "Re-entry must not blank the known current-owner record")
+        model.showMorningCheckIn = true
+        gate.open()
+        await refresh.value
+        XCTAssertTrue(model.showMorningCheckIn, "A form opened during the read must not be force-dismissed")
+        XCTAssertEqual(model.lastSleepEntry?.id, original.id)
+        reader.beforeEntriesRead = nil
+        reader.fail = true
+        await model.refresh(trackingService: reader, sync: { })
+        XCTAssertTrue(model.showMorningCheckIn, "A failed read must not discard the open draft either")
+        XCTAssertEqual(model.lastSleepEntry?.id, original.id)
+        XCTAssertNotNil(model.errorMessage)
+        model.cancelRefresh()
+    }
+
+    func testRecentDateConflictStillAllowsOlderHistoryAndShowsSpecificFeedback() async {
+        let reader = SleepDashboardFixture(owner: owner)
+        let model = SleepDashboardViewModel()
+        let imported = expectation(description: "Older history remains reachable")
+        await model.refresh(trackingService: reader, sync: { throw SleepTrackingError.importDateConflict },
+            history: { _ in imported.fulfill() })
+        await fulfillment(of: [imported], timeout: 2)
+        XCTAssertEqual(model.syncErrorMessage, SleepTrackingError.importDateConflict.localizedDescription)
+        model.cancelRefresh()
+    }
+
     func testEmptyDeletedAndFailedReloadNeverKeepPersonalResults() async {
         let reader = SleepDashboardFixture(owner: owner)
         let model = SleepDashboardViewModel()
@@ -599,7 +741,7 @@ final class SleepDashboardRegressionTests: XCTestCase {
     }
 
     private func entry(owner: UUID, daysAgo: Int = 0) -> SleepEntry {
-        let wake = Calendar.current.date(byAdding: .day, value: -daysAgo, to: Date().addingTimeInterval(-60))!
+        let wake = Calendar.current.date(byAdding: .day, value: -daysAgo, to: Date())!
         return SleepEntry(id: UUID(), userId: owner, date: wake, source: .healthkit,
             bedtime: wake.addingTimeInterval(-8 * 3600), wakeTime: wake,
             timeInBedMinutes: 480, timeAsleepMinutes: 450, deepSleepMinutes: nil,
@@ -976,5 +1118,160 @@ private final class SleepImportHTTP: @unchecked Sendable {
         }
         if request.httpMethod == "GET" { return (200, Data("[".utf8) + row + Data("]".utf8)) }
         return (200, row)
+    }
+}
+
+@MainActor
+final class SleepHistoryImportRegressionTests: XCTestCase {
+    private var calendar: Calendar {
+        var result = Calendar(identifier: .gregorian)
+        result.timeZone = TimeZone(identifier: "America/New_York")!
+        return result
+    }
+    private func date(_ year: Int, _ month: Int, _ day: Int) -> Date {
+        calendar.date(from: DateComponents(year: year, month: month, day: day))!
+    }
+    func testAllAvailableHistoryUsesContiguousBoundedCalendarBatchesAcrossDST() async throws {
+        let earliest = date(2020, 1, 1), recent = date(2026, 11, 5)
+        var batches: [(Date, Date)] = []
+        var checkpoints: [Date] = []
+        try await SleepHealthKitManager.importHistory(from: earliest, before: recent, checkpoint: nil,
+            calendar: calendar, importBatch: { batches.append(($0, $1)) }, saveCheckpoint: { checkpoints.append($0) })
+        XCTAssertGreaterThan(batches.count, 80)
+        XCTAssertEqual(batches.first?.1.timeIntervalSinceReferenceDate.nextUp, recent.timeIntervalSinceReferenceDate)
+        XCTAssertEqual(batches.last?.0, earliest)
+        XCTAssertEqual(checkpoints, batches.map(\.0))
+        for (index, batch) in batches.enumerated() {
+            let end = Date(timeIntervalSinceReferenceDate: batch.1.timeIntervalSinceReferenceDate.nextUp)
+            XCTAssertGreaterThan(end, batch.0)
+            XCTAssertLessThanOrEqual(calendar.dateComponents([.day], from: batch.0, to: end).day!, 30)
+            XCTAssertEqual(calendar.startOfDay(for: batch.0), batch.0)
+            if index > 0 { XCTAssertEqual(end, batches[index - 1].0) }
+        }
+    }
+    func testFailedBatchDoesNotAdvanceCheckpointAndRetryResumesThere() async throws {
+        let earliest = date(2026, 1, 1), recent = date(2026, 10, 1)
+        var checkpoint: Date?
+        var calls = 0
+        do {
+            try await SleepHealthKitManager.importHistory(from: earliest, before: recent, checkpoint: nil,
+                calendar: calendar, importBatch: { _, _ in
+                    calls += 1
+                    if calls == 3 { throw URLError(.notConnectedToInternet) }
+                }, saveCheckpoint: { checkpoint = $0 })
+            XCTFail("Expected batch failure")
+        } catch { XCTAssertEqual((error as? URLError)?.code, .notConnectedToInternet) }
+        XCTAssertEqual(calls, 3)
+        let saved = try XCTUnwrap(checkpoint)
+        XCTAssertEqual(saved, calendar.date(byAdding: .day, value: -60, to: recent))
+        var firstRetryEnd: Date?
+        try await SleepHealthKitManager.importHistory(from: earliest, before: recent, checkpoint: checkpoint,
+            calendar: calendar, importBatch: { _, end in if firstRetryEnd == nil { firstRetryEnd = end } },
+            saveCheckpoint: { checkpoint = $0 })
+        XCTAssertEqual(firstRetryEnd?.timeIntervalSinceReferenceDate.nextUp, saved.timeIntervalSinceReferenceDate)
+        XCTAssertEqual(checkpoint, earliest)
+    }
+    func testCancellationDoesNotCheckpointTheIncompleteBatch() async {
+        let gate = SleepRefreshGate()
+        var checkpoint: Date?
+        let task = Task {
+            try await SleepHealthKitManager.importHistory(from: date(2025, 1, 1), before: date(2026, 1, 1),
+                checkpoint: nil, calendar: calendar, importBatch: { _, _ in await gate.wait() },
+                saveCheckpoint: { checkpoint = $0 })
+        }
+        await gate.waitUntilStarted()
+        task.cancel()
+        gate.open()
+        do { try await task.value; XCTFail("Expected cancellation") } catch { XCTAssertTrue(error is CancellationError) }
+        XCTAssertNil(checkpoint)
+    }
+    func testConflictingBatchIsRecordedBeforeCheckpointAndDoesNotBlockOlderHistory() async throws {
+        let earliest = date(2026, 1, 1), recent = date(2026, 4, 1)
+        var events: [String] = []
+        var batches = 0
+        var checkpoint: Date?
+        var failed: [(Date, Date)] = []
+        do {
+            try await SleepHealthKitManager.importHistory(from: earliest, before: recent, checkpoint: nil,
+                calendar: calendar, importBatch: { _, _ in
+                    batches += 1
+                    if batches == 1 { throw SleepTrackingError.importDateConflict }
+                }, saveCheckpoint: { checkpoint = $0; events.append("checkpoint") }, saveConflict: {
+                    failed.append(($0, $1)); events.append("conflict")
+                })
+            XCTFail("The incomplete range must still be reported")
+        } catch { XCTAssertTrue(error is SleepTrackingError) }
+        XCTAssertEqual(batches, 3, "A conflicting night cannot strand older batches")
+        XCTAssertEqual(failed.count, 1)
+        XCTAssertEqual(events.first, "conflict", "Persist the retry range before advancing")
+        XCTAssertEqual(checkpoint, earliest)
+        XCTAssertEqual(failed.first?.1.timeIntervalSinceReferenceDate.nextUp, recent.timeIntervalSinceReferenceDate)
+    }
+    func testConflictCannotAdvanceWithoutADurableRetryRecorder() async {
+        var checkpoint: Date?
+        do {
+            try await SleepHealthKitManager.importHistory(from: date(2026, 1, 1), before: date(2026, 4, 1),
+                checkpoint: nil, calendar: calendar, importBatch: { _, _ in throw SleepTrackingError.importDateConflict },
+                saveCheckpoint: { checkpoint = $0 })
+            XCTFail("Expected conflict")
+        } catch { XCTAssertTrue(error is SleepTrackingError) }
+        XCTAssertNil(checkpoint)
+    }
+    func testReturningAfterSeveralWeeksImportsTheGapWithoutReplayingOlderHistory() async throws {
+        let earliest = date(2020, 1, 1), previousRecent = date(2026, 8, 1), recent = date(2026, 10, 1)
+        var batches: [(Date, Date)] = []
+        var covered = previousRecent
+        try await SleepHealthKitManager.importHistory(from: earliest, before: recent, checkpoint: earliest,
+            coveredUntil: covered, calendar: calendar, importBatch: { batches.append(($0, $1)) },
+            saveCheckpoint: { _ in XCTFail("Older history was already complete") }, saveCoveredUntil: { covered = $0 })
+        XCTAssertEqual(batches.count, 3)
+        XCTAssertEqual(batches.last?.0, previousRecent)
+        XCTAssertEqual(batches.first?.1.timeIntervalSinceReferenceDate.nextUp, recent.timeIntervalSinceReferenceDate)
+        XCTAssertEqual(covered, recent)
+    }
+    func testFailedCatchUpKeepsBothCoverageAndOlderCheckpointForRetry() async throws {
+        let earliest = date(2020, 1, 1), previousRecent = date(2026, 8, 1), recent = date(2026, 10, 1)
+        var covered = previousRecent
+        var checkpoint = date(2025, 1, 1)
+        do {
+            try await SleepHealthKitManager.importHistory(from: earliest, before: recent, checkpoint: checkpoint,
+                coveredUntil: covered, calendar: calendar, importBatch: { _, _ in throw URLError(.notConnectedToInternet) },
+                saveCheckpoint: { checkpoint = $0 }, saveCoveredUntil: { covered = $0 })
+            XCTFail("Expected catch-up failure")
+        } catch { XCTAssertEqual((error as? URLError)?.code, .notConnectedToInternet) }
+        XCTAssertEqual(covered, previousRecent)
+        XCTAssertEqual(checkpoint, date(2025, 1, 1))
+    }
+    func testBatchBoundaryReadsTheCompleteSessionBeforeSelectingItsWakeDay() throws {
+        let midnight = date(2026, 10, 1)
+        let type = HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!
+        let samples = [(-2.0, -1.0), (-1.0, -0.00000005), (0.00000005, 4.0), (4.0, 7.0)].map { start, end in
+            HKCategorySample(type: type, value: HKCategoryValueSleepAnalysis.asleepCore.rawValue,
+                start: midnight.addingTimeInterval(start * 3600), end: midnight.addingTimeInterval(end * 3600))
+        }
+        let end = Date(timeIntervalSinceReferenceDate: midnight.timeIntervalSinceReferenceDate.nextDown)
+        let window = SleepHealthKitManager.sampleQueryWindow(wakingFrom: date(2026, 9, 1), through: end,
+            now: date(2026, 10, 3))
+        let queried = samples.filter { $0.startDate < window.end && $0.endDate > window.start }
+        XCTAssertEqual(queried.count, samples.count)
+        XCTAssertTrue(SleepHealthKitManager.mainSleepSessions(from: queried, wakingFrom: date(2026, 9, 1),
+            through: end, calendar: calendar).isEmpty, "A batch must not save a clipped start-date fragment")
+        let following = SleepHealthKitManager.mainSleepSessions(from: queried, wakingFrom: midnight,
+            through: date(2026, 10, 2), calendar: calendar)
+        XCTAssertEqual(following.count, 1)
+        XCTAssertEqual(SleepHealthKitManager.sleepDurations(try XCTUnwrap(following.values.first)).asleep, 9 * 3600 - 0.00036, accuracy: 0.00001)
+    }
+    func testCompletedHistoryDoesNotReprocessAndNewlyAvailableOlderHistoryCanImport() async throws {
+        let earliest = date(2025, 1, 1), recent = date(2026, 1, 1)
+        var calls = 0
+        try await SleepHealthKitManager.importHistory(from: earliest, before: recent, checkpoint: earliest,
+            calendar: calendar, importBatch: { _, _ in calls += 1 }, saveCheckpoint: { _ in XCTFail("Already complete") })
+        XCTAssertEqual(calls, 0)
+        var finalCheckpoint: Date?
+        let older = date(2024, 12, 1)
+        try await SleepHealthKitManager.importHistory(from: older, before: recent, checkpoint: earliest,
+            calendar: calendar, importBatch: { _, _ in calls += 1 }, saveCheckpoint: { finalCheckpoint = $0 })
+        XCTAssertEqual(calls, 2)
+        XCTAssertEqual(finalCheckpoint, older)
     }
 }
