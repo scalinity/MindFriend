@@ -5,8 +5,10 @@ struct MorningCheckInView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var dependencies: DependencyContainer
     @StateObject private var viewModel: MorningCheckInViewModel
+    private let onSkip: () -> Void
 
-    init(entry: SleepEntry) {
+    init(entry: SleepEntry, onSkip: @escaping () -> Void = {}) {
+        self.onSkip = onSkip
         _viewModel = StateObject(wrappedValue: MorningCheckInViewModel(entry: entry))
     }
 
@@ -39,6 +41,7 @@ struct MorningCheckInView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Skip") {
+                        onSkip()
                         dismiss()
                     }
                 }

@@ -57,7 +57,7 @@ final class SleepHealthKitManager: ObservableObject {
     }
     
     /// Async method to check authorization status using the proper API
-    private func updateAuthorizationStatus() async {
+    func updateAuthorizationStatus() async {
         do {
             let status = try await healthStore.statusForAuthorizationRequest(
                 toShare: [],
@@ -102,8 +102,8 @@ final class SleepHealthKitManager: ObservableObject {
 
     // MARK: - Sync
 
-    /// Sync sessions waking yesterday or today, including their complete intervals.
-    func syncRecentSleep() async throws -> SleepEntry? {
+    /// Sync the visible week, including complete sessions and every available wake day.
+    func syncRecentSleep(visibleWeek: Bool = true) async throws -> SleepEntry? {
         // If not authorized yet, request authorization first
         if !isAuthorized {
             try await requestAuthorization()
@@ -112,17 +112,103 @@ final class SleepHealthKitManager: ObservableObject {
         isSyncing = true
         defer { isSyncing = false }
 
-        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Calendar.current.startOfDay(for: Date()))!
-
-        let entries = try await syncSleepData(from: yesterday, latestOnly: true)
+        let start = Calendar.current.date(byAdding: .day, value: visibleWeek ? -6 : -1, to: Calendar.current.startOfDay(for: Date()))!
+        let entries = try await syncSleepData(from: start, latestOnly: !visibleWeek)
         lastSyncDate = Date()
 
         return entries.first
     }
 
+    /// Import older available records in resumable device-owned batches after the recent week.
+    func syncAvailableHistory(retryConflicts: Bool = true, onBatchStart: @escaping @MainActor () -> Void = {}) async throws {
+        let owner = try await sleepTrackingService.currentUserID()
+        try Task.checkCancellation()
+        guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
+            throw SleepHealthKitError.invalidDataType
+        }
+        let now = Date()
+        let predicate = HKQuery.predicateForSamples(withStart: nil, end: now, options: [])
+        let query = HKSampleQueryDescriptor(predicates: [.categorySample(type: sleepType, predicate: predicate)],
+            sortDescriptors: [SortDescriptor(\.startDate, order: .forward)], limit: 1)
+        guard let earliest = try await query.result(for: healthStore).first else { return }
+        let calendar = Calendar.current
+        let recentStart = calendar.date(byAdding: .day, value: -6, to: calendar.startOfDay(for: now))!
+        let key = "sleep.history.oldestImported." + owner.uuidString.lowercased()
+        let checkpoint = UserDefaults.standard.object(forKey: key) as? Date
+        let coveredKey = "sleep.history.coveredUntil." + owner.uuidString.lowercased()
+        let coveredUntil = UserDefaults.standard.object(forKey: coveredKey) as? Date
+        let conflictKey = "sleep.history.conflicts." + owner.uuidString.lowercased()
+        var conflicts = (UserDefaults.standard.array(forKey: conflictKey) as? [[Date]] ?? []).filter { $0.count == 2 }
+        let importBatch: (Date, Date) async throws -> Void = { start, end in
+            guard try await self.sleepTrackingService.currentUserID() == owner else { throw CancellationError() }
+            try Task.checkCancellation()
+            onBatchStart()
+            _ = try await self.syncSleepData(from: start, through: end)
+            guard try await self.sleepTrackingService.currentUserID() == owner else { throw CancellationError() }
+            try Task.checkCancellation()
+        }
+        // Retry only the recorded conflicting batches; never discard their saved feedback.
+        for range in retryConflicts ? conflicts : [] {
+            do {
+                try await importBatch(range[0], range[1])
+                conflicts.removeAll { $0 == range }
+                UserDefaults.standard.set(conflicts, forKey: conflictKey)
+            } catch SleepTrackingError.importDateConflict { continue }
+        }
+        try await Self.importHistory(from: calendar.startOfDay(for: earliest.startDate), before: recentStart,
+            checkpoint: checkpoint, coveredUntil: coveredUntil, calendar: calendar, importBatch: importBatch,
+            saveCheckpoint: { UserDefaults.standard.set($0, forKey: key) },
+            saveCoveredUntil: { UserDefaults.standard.set($0, forKey: coveredKey) },
+            saveConflict: { start, end in
+                let range = [start, end]
+                if !conflicts.contains(range) { conflicts.append(range) }
+                UserDefaults.standard.set(conflicts, forKey: conflictKey)
+            })
+        if !conflicts.isEmpty { throw SleepTrackingError.importDateConflict }
+    }
+
+    static func importHistory(from earliest: Date, before recentStart: Date, checkpoint: Date?,
+                              coveredUntil: Date? = nil, calendar: Calendar = .current,
+                              importBatch: (Date, Date) async throws -> Void,
+                              saveCheckpoint: (Date) -> Void,
+                              saveCoveredUntil: (Date) -> Void = { _ in },
+                              saveConflict: ((Date, Date) -> Void)? = nil) async throws {
+        var hadConflict = false
+        // Fill the gap left when the app was not opened for more than the recent week.
+        // Keep the older-history checkpoint separate so a failed catch-up cannot skip it.
+        if let coveredUntil, coveredUntil < recentStart {
+            do {
+                try await importHistory(from: max(earliest, coveredUntil), before: recentStart,
+                    checkpoint: nil, calendar: calendar, importBatch: importBatch, saveCheckpoint: { _ in },
+                    saveConflict: saveConflict)
+            } catch SleepTrackingError.importDateConflict where saveConflict != nil { hadConflict = true }
+        }
+        try Task.checkCancellation()
+        saveCoveredUntil(recentStart)
+        var end = min(checkpoint ?? recentStart, recentStart)
+        while end > earliest {
+            try Task.checkCancellation()
+            let start = max(earliest, calendar.date(byAdding: .day, value: -30, to: end)!)
+            // Adjacent batches own separate wake instants. Fetching still includes whole overlapping intervals.
+            let inclusiveEnd = Date(timeIntervalSinceReferenceDate: end.timeIntervalSinceReferenceDate.nextDown)
+            do { try await importBatch(start, inclusiveEnd) }
+            catch SleepTrackingError.importDateConflict {
+                try Task.checkCancellation()
+                guard let saveConflict else { throw SleepTrackingError.importDateConflict }
+                saveConflict(start, inclusiveEnd)
+                hadConflict = true
+            }
+            try Task.checkCancellation()
+            saveCheckpoint(start)
+            end = start
+        }
+        if hadConflict { throw SleepTrackingError.importDateConflict }
+    }
+
     /// Sync sleep data from a specific start date
-    func syncSleepData(from startDate: Date, latestOnly: Bool = false) async throws -> [SleepEntry] {
+    func syncSleepData(from startDate: Date, through endDate: Date = Date(), latestOnly: Bool = false) async throws -> [SleepEntry] {
         let userId = try await sleepTrackingService.currentUserID()
+        try Task.checkCancellation()
         print("[SleepHealthKit] syncSleepData starting from: \(startDate)")
         
         // If not authorized yet, request authorization first
@@ -138,7 +224,8 @@ final class SleepHealthKitManager: ObservableObject {
         print("[SleepHealthKit] Querying HealthKit for sleep samples...")
         // Read a full supported session before the requested wake-day range.
         // A rolling 24-hour cutoff can remove the beginning of a long sleep.
-        let sleepSamples = try await querySleepAnalysis(from: startDate.addingTimeInterval(-24 * 3600))
+        let window = Self.sampleQueryWindow(wakingFrom: startDate, through: endDate)
+        let sleepSamples = try await querySleepAnalysis(from: window.start, through: window.end)
         print("[SleepHealthKit] Found \(sleepSamples.count) sleep samples from HealthKit")
 
         if sleepSamples.isEmpty {
@@ -149,7 +236,7 @@ final class SleepHealthKitManager: ObservableObject {
             return []
         }
 
-        let groupedSamples = Self.mainSleepSessions(from: sleepSamples, wakingFrom: startDate, through: Date())
+        let groupedSamples = Self.mainSleepSessions(from: sleepSamples, wakingFrom: startDate, through: endDate)
         print("[SleepHealthKit] Grouped into \(groupedSamples.count) nights")
 
         var entries: [SleepEntry] = []
@@ -163,6 +250,9 @@ final class SleepHealthKitManager: ObservableObject {
 
         // Process each night's sleep
         for date in groupedSamples.keys.sorted(by: >).prefix(latestOnly ? 1 : groupedSamples.count) {
+            try Task.checkCancellation()
+            guard try await sleepTrackingService.currentUserID() == userId else { throw CancellationError() }
+            try Task.checkCancellation()
             let samples = groupedSamples[date]!
             guard let entry = try await processSleepSamples(samples, for: date, goals: goals) else {
                 print("[SleepHealthKit] Failed to process samples for \(date)")
@@ -212,15 +302,20 @@ final class SleepHealthKitManager: ObservableObject {
         return existing
     }
 
+    /// Include both sides of a supported session before selecting its actual wake time.
+    static func sampleQueryWindow(wakingFrom start: Date, through end: Date, now: Date = Date()) -> DateInterval {
+        DateInterval(start: start.addingTimeInterval(-24 * 3600), end: min(now, end.addingTimeInterval(24 * 3600)))
+    }
+
     /// Query sleep analysis samples from HealthKit
-    private func querySleepAnalysis(from startDate: Date) async throws -> [HKCategorySample] {
+    private func querySleepAnalysis(from startDate: Date, through endDate: Date = Date()) async throws -> [HKCategorySample] {
         guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
             throw SleepHealthKitError.invalidDataType
         }
 
         let predicate = HKQuery.predicateForSamples(
             withStart: startDate,
-            end: Date(),
+            end: endDate,
             options: []
         )
 
@@ -473,7 +568,7 @@ final class SleepHealthKitManager: ObservableObject {
 
             Task { @MainActor [weak self] in
                 do {
-                    _ = try await self?.syncRecentSleep()
+                    _ = try await self?.syncRecentSleep(visibleWeek: false)
                 } catch {
                     print("Failed to sync sleep in background: \(error)")
                 }

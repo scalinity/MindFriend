@@ -188,6 +188,84 @@ final class SubscriptionCatalogUITests: XCTestCase {
 
 @MainActor
 final class SleepDashboardUITests: XCTestCase {
+    func testConnectedSleepSyncsOnEntryAndForegroundWithoutManualAction() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--sleep-ui-test", "--sleep-auto-sync"]
+        app.launch()
+        defer { app.terminate() }
+        XCTAssertTrue(app.staticTexts["Loading sleep…"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["No Sleep Data Yet"].exists)
+        XCTAssertTrue(app.staticTexts["18h 0m"].waitForExistence(timeout: 15))
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        XCTAssertTrue(app.staticTexts["19h 0m"].waitForExistence(timeout: 15), "Returning to the visible screen must sync newer records")
+        XCTAssertFalse(app.staticTexts["Sleep Records Unavailable"].exists)
+    }
+
+    func testForegroundPreservesAnOpenSleepRatingDraft() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--sleep-ui-test", "--sleep-checkin-skip", "--sleep-auto-sync",
+            "--sleep-test-suite", "sleep.ui." + UUID().uuidString]
+        app.launch()
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["Skip"].waitForExistence(timeout: 15))
+        let notes = app.textViews.firstMatch
+        XCTAssertTrue(notes.exists)
+        notes.tap()
+        notes.typeText("Synthetic unfinished sleep note")
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        XCTAssertTrue(app.buttons["Skip"].waitForExistence(timeout: 5))
+        XCTAssertTrue((notes.value as? String)?.contains("Synthetic unfinished sleep note") == true)
+        app.buttons["Skip"].tap()
+    }
+
+    func testSwipeDismissalIsRememberedBeforeDeferredRefresh() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--sleep-ui-test", "--sleep-checkin-skip", "--sleep-test-suite", "sleep.ui." + UUID().uuidString]
+        app.launch()
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["Skip"].waitForExistence(timeout: 15))
+        let bar = app.navigationBars["Morning Check-In"]
+        XCTAssertTrue(bar.exists)
+        bar.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0)).press(forDuration: 0.1,
+            thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85)))
+        XCTAssertTrue(app.buttons["Skip"].waitForNonExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Rate Sleep"].isHittable)
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["Rate Sleep"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.buttons["Skip"].exists)
+    }
+
+    func testSkipDoesNotReopenOnRefreshOrRelaunchAndManualRatingRemainsAvailable() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--sleep-ui-test", "--sleep-checkin-skip", "--sleep-test-suite", "sleep.ui." + UUID().uuidString]
+        app.launch()
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["Skip"].waitForExistence(timeout: 15))
+        app.buttons["Skip"].tap()
+        let rate = app.buttons["Rate Sleep"]
+        XCTAssertTrue(rate.waitForExistence(timeout: 5))
+        let scroll = app.scrollViews.firstMatch
+        scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2)).press(forDuration: 0.1,
+            thenDragTo: scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85)))
+        XCTAssertTrue(rate.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Skip"].waitForNonExistence(timeout: 3))
+        XCTAssertTrue(rate.isHittable)
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(rate.waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["Skip"].waitForNonExistence(timeout: 3))
+        XCTAssertTrue(rate.isHittable)
+        rate.tap()
+        XCTAssertTrue(app.buttons["Skip"].waitForExistence(timeout: 5))
+    }
+
     func testPullToRefreshActuallySyncsBeforeReloadingSavedSleep() {
         continueAfterFailure = false
         let app = XCUIApplication()
