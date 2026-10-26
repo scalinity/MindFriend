@@ -238,7 +238,9 @@ final class SleepHealthKitManager: ObservableObject {
         var sessions: [[HKCategorySample]] = []
         var end: Date?
         for sample in ordered {
-            if let lastEnd = end, sample.startDate <= lastEnd {
+            // Allow at most a millisecond between Health stage handoffs for timestamp rounding.
+            // Joining that boundary does not add the gap to the measured asleep duration.
+            if let lastEnd = end, sample.startDate.timeIntervalSince(lastEnd) <= 0.001 {
                 sessions[sessions.count - 1].append(sample)
                 end = max(lastEnd, sample.endDate)
             } else {
