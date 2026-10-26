@@ -11,9 +11,11 @@ struct SleepDashboardView: View {
     @StateObject private var viewModel: SleepDashboardViewModel
     @State private var showManualEntry = false
     private let trackingReader: (any SleepTrackingReading)?
+    private let syncSleep: (() async throws -> Void)?
 
-    init(trackingReader: (any SleepTrackingReading)? = nil) {
+    init(trackingReader: (any SleepTrackingReading)? = nil, syncSleep: (() async throws -> Void)? = nil) {
         self.trackingReader = trackingReader
+        self.syncSleep = syncSleep
         _viewModel = StateObject(wrappedValue: SleepDashboardViewModel())
     }
 
@@ -87,17 +89,21 @@ struct SleepDashboardView: View {
                     }
                 }
             }
+            .onDisappear { viewModel.cancelRefresh() }
             .task(id: appState.currentUser?.id) {
+                viewModel.cancelRefresh()
                 await viewModel.loadData(
                     trackingService: trackingReader ?? dependencies.sleepTrackingService,
                     healthKitManager: dependencies.sleepHealthKitManager
                 )
             }
             .refreshable {
-                await viewModel.refresh(
-                    trackingService: dependencies.sleepTrackingService,
-                    healthKitManager: dependencies.sleepHealthKitManager
-                )
+                if let syncSleep {
+                    await viewModel.refresh(trackingService: trackingReader ?? dependencies.sleepTrackingService, sync: syncSleep)
+                } else {
+                    await viewModel.refresh(trackingService: dependencies.sleepTrackingService,
+                        healthKitManager: dependencies.sleepHealthKitManager)
+                }
             }
         }
     }
@@ -482,6 +488,7 @@ final class SleepDashboardViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var syncErrorMessage: String?
     private var loadID = UUID()
+    private var refreshTask: (id: UUID, task: Task<Void, Never>)?
     @Published var showMorningCheckIn = false
     @Published var showSettings = false
     @Published var showWindDown = false
@@ -493,6 +500,7 @@ final class SleepDashboardViewModel: ObservableObject {
     }
 
     func loadData(trackingService: any SleepTrackingReading, healthKitManager: SleepHealthKitManager? = nil) async {
+        guard !Task.isCancelled else { return }
         let requestID = UUID()
         loadID = requestID
         lastSleepEntry = nil
@@ -532,7 +540,7 @@ final class SleepDashboardViewModel: ObservableObject {
                 showMorningCheckIn = true
             }
         } catch {
-            guard loadID == requestID else { return }
+            guard loadID == requestID, !Task.isCancelled else { return }
             lastSleepEntry = nil
             weekEntries = []
             insights = []
@@ -544,20 +552,44 @@ final class SleepDashboardViewModel: ObservableObject {
         await refresh(trackingService: trackingService) { _ = try await healthKitManager.syncRecentSleep() }
     }
 
-    func refresh(trackingService: any SleepTrackingReading, sync: () async throws -> Void) async {
-        let owner = try? await trackingService.currentUserID()
-        syncErrorMessage = nil
-        var failure: Error?
-        do { try await sync() } catch { failure = error }
-        await loadData(trackingService: trackingService)
-        guard let owner, (try? await trackingService.currentUserID()) == owner, !Task.isCancelled else { return }
-        if let failure {
-            if case SleepTrackingError.importDateConflict = failure {
-                syncErrorMessage = failure.localizedDescription
-            } else {
-                syncErrorMessage = "Health sleep couldn't be synced. Saved records may be out of date. Try syncing again."
+    func refresh(trackingService: any SleepTrackingReading, sync: @escaping @MainActor () async throws -> Void) async {
+        if let refreshTask { await refreshTask.task.value; return }
+        let id = UUID()
+        // SwiftUI may cancel the pull action during a view update. Keep one screen-owned
+        // operation alive until it finishes, the screen disappears, or the account changes.
+        let task = Task { @MainActor in
+            self.syncErrorMessage = nil
+            let owner = try? await trackingService.currentUserID()
+            guard !Task.isCancelled else { return }
+            guard let owner else {
+                await self.loadData(trackingService: trackingService)
+                return
+            }
+            var failure: Error?
+            do { try await sync() } catch { failure = error }
+            let activeOwner = try? await trackingService.currentUserID()
+            guard !Task.isCancelled, activeOwner == owner else { return }
+            await self.loadData(trackingService: trackingService)
+            let finalOwner = try? await trackingService.currentUserID()
+            guard !Task.isCancelled, finalOwner == owner else { return }
+            if let failure {
+                if case SleepTrackingError.importDateConflict = failure {
+                    self.syncErrorMessage = failure.localizedDescription
+                } else {
+                    self.syncErrorMessage = "Health sleep couldn't be synced. Saved records may be out of date. Try syncing again."
+                }
             }
         }
+        refreshTask = (id, task)
+        await task.value
+        if refreshTask?.id == id { refreshTask = nil }
+    }
+
+    func cancelRefresh() {
+        refreshTask?.task.cancel()
+        refreshTask = nil
+        loadID = UUID()
+        isLoading = false
     }
 
     func requestHealthKitAuth(healthKitManager: SleepHealthKitManager, trackingService: SleepTrackingService) async {
@@ -585,12 +617,19 @@ final class SleepDashboardViewModel: ObservableObject {
 final class SleepDashboardUITestReader: SleepTrackingReading {
     private let owner = UUID(uuidString: "11111111-1111-4111-8111-111111111111")!
     private var failedOnce = false
+    private var synced = false
+    func syncSleep() async throws {
+        try await Task.sleep(for: .seconds(2))
+        synced = true
+    }
     func currentUserID() async throws -> UUID { owner }
     func fetchLatestEntry() async throws -> SleepEntry? { nil }
     func fetchInsights() async throws -> [SleepInsight] { [] }
     func fetchEntries(from startDate: Date, to endDate: Date) async throws -> [SleepEntry] {
-        if !failedOnce { failedOnce = true; throw URLError(.notConnectedToInternet) }
-        if ProcessInfo.processInfo.arguments.contains("--sleep-session-accuracy") {
+        let pullFixture = ProcessInfo.processInfo.arguments.contains("--sleep-pull-sync")
+        if pullFixture { try await Task.sleep(for: .milliseconds(200)) }
+        if !failedOnce && !pullFixture { failedOnce = true; throw URLError(.notConnectedToInternet) }
+        if ProcessInfo.processInfo.arguments.contains("--sleep-session-accuracy") || (pullFixture && synced) {
             let wake = endDate
             let start = wake.addingTimeInterval(-1080 * 60)
             let type = HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!
@@ -622,6 +661,7 @@ final class SleepDashboardUITestReader: SleepTrackingReading {
 
 struct SleepDashboardUITestView: View {
     @State private var reader = SleepDashboardUITestReader()
-    var body: some View { SleepDashboardView(trackingReader: reader) }
+    var body: some View { SleepDashboardView(trackingReader: reader, syncSleep: { try await reader.syncSleep() }) }
 }
+
 #endif
