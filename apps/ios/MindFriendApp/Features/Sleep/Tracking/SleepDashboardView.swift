@@ -160,7 +160,7 @@ struct SleepDashboardView: View {
     @ViewBuilder
     private func lastNightSection(_ entry: SleepEntry) -> some View {
         VStack(spacing: 16) {
-            Text("Last Night")
+            Text("Today's Sleep")
                 .font(.headline)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -206,6 +206,22 @@ struct SleepDashboardView: View {
             .padding()
             .background(Color(.systemGray6))
             .cornerRadius(12)
+
+            if let periods = entry.validatedRecordedPeriods {
+                DisclosureGroup("Recorded periods") {
+                    ForEach(Array(periods.enumerated()), id: \.offset) { _, period in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("\(period.start.formatted(date: .abbreviated, time: .shortened)) – \(period.end.formatted(date: .abbreviated, time: .shortened))")
+                            let minutes = Int(period.asleepSeconds / 60)
+                            Text("\(minutes / 60)h \(minutes % 60)m asleep").foregroundStyle(.secondary)
+                        }
+                        .font(.caption)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("sleep.recordedPeriod")
+                    }
+                }
+            }
 
             if !entry.previousImportFeedback.isEmpty {
                 DisclosureGroup("Saved feedback from earlier imports") {
@@ -754,6 +770,19 @@ final class SleepDashboardUITestReader: SleepTrackingReading {
     func fetchEntries(from startDate: Date, to endDate: Date) async throws -> [SleepEntry] {
         let automatic = ProcessInfo.processInfo.arguments.contains("--sleep-auto-sync")
         let checkIn = ProcessInfo.processInfo.arguments.contains("--sleep-checkin-skip")
+        if ProcessInfo.processInfo.arguments.contains("--sleep-daily-periods") {
+            let day = Calendar.current.startOfDay(for: endDate)
+            let elapsed = endDate.timeIntervalSince(day)
+            let type = HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!
+            let first = HKCategorySample(type: type, value: HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue,
+                start: day.addingTimeInterval(-7 * 3600), end: day)
+            let second = HKCategorySample(type: type, value: HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue,
+                start: max(day.addingTimeInterval(elapsed / 2), endDate.addingTimeInterval(-1800)), end: endDate)
+            var daily = SleepHealthKitManager.sleepEntry(from: [first, second], for: day, owner: owner)!
+            daily.userRating = 4
+            return try PostgrestClient.Configuration.jsonDecoder.decode([SleepEntry].self,
+                from: PostgrestClient.Configuration.jsonEncoder.encode([daily]))
+        }
         let pullFixture = ProcessInfo.processInfo.arguments.contains("--sleep-pull-sync") || automatic
         if pullFixture { try await Task.sleep(for: .milliseconds(200)) }
         if !failedOnce && !pullFixture && !checkIn { failedOnce = true; throw URLError(.notConnectedToInternet) }

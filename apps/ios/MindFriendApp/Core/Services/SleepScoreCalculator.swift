@@ -207,7 +207,7 @@ struct SleepScoreCalculator {
     /// Validate that a sleep entry has valid data for scoring
     func isValidForScoring(entry: SleepEntry) -> Bool {
         // Must have basic timing data
-        guard entry.timeInBedMinutes >= 60, entry.timeInBedMinutes <= 1440 else {
+        guard entry.timeInBedMinutes >= (entry.source == .manual ? 60 : 1), entry.timeInBedMinutes <= 1440 else {
             return false
         }
 

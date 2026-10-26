@@ -133,11 +133,11 @@ final class SleepHealthKitManager: ObservableObject {
         guard let earliest = try await query.result(for: healthStore).first else { return }
         let calendar = Calendar.current
         let recentStart = calendar.date(byAdding: .day, value: -6, to: calendar.startOfDay(for: now))!
-        let key = "sleep.history.oldestImported." + owner.uuidString.lowercased()
+        let key = "sleep.history.allPeriods.oldestImported." + owner.uuidString.lowercased()
         let checkpoint = UserDefaults.standard.object(forKey: key) as? Date
-        let coveredKey = "sleep.history.coveredUntil." + owner.uuidString.lowercased()
+        let coveredKey = "sleep.history.allPeriods.coveredUntil." + owner.uuidString.lowercased()
         let coveredUntil = UserDefaults.standard.object(forKey: coveredKey) as? Date
-        let conflictKey = "sleep.history.conflicts." + owner.uuidString.lowercased()
+        let conflictKey = "sleep.history.allPeriods.conflicts." + owner.uuidString.lowercased()
         var conflicts = (UserDefaults.standard.array(forKey: conflictKey) as? [[Date]] ?? []).filter { $0.count == 2 }
         let importBatch: (Date, Date) async throws -> Void = { start, end in
             guard try await self.sleepTrackingService.currentUserID() == owner else { throw CancellationError() }
@@ -236,7 +236,7 @@ final class SleepHealthKitManager: ObservableObject {
             return []
         }
 
-        let groupedSamples = Self.mainSleepSessions(from: sleepSamples, wakingFrom: startDate, through: endDate)
+        let groupedSamples = Self.dailySleepSamples(from: sleepSamples, wakingFrom: startDate, through: endDate)
         print("[SleepHealthKit] Grouped into \(groupedSamples.count) nights")
 
         var entries: [SleepEntry] = []
@@ -268,9 +268,11 @@ final class SleepHealthKitManager: ObservableObject {
                 if canonical == nil {
                     // Rekey an old contained import when the wake-date slot is free; keep its ID/feedback.
                     let previous = try await sleepTrackingService.fetchEntries(from: entry.bedtime, to: entry.wakeTime)
-                    canonical = previous.filter {
-                        $0.source != .manual && $0.userId == userId &&
-                        $0.bedtime >= entry.bedtime && $0.wakeTime <= entry.wakeTime
+                    canonical = previous.filter { candidate in
+                        candidate.source != .manual && candidate.userId == userId &&
+                        (candidate.storedCoverage?.allSatisfy { old in
+                            entry.storedCoverage?.contains { $0.start <= old.start && $0.end >= old.end } == true
+                        } == true)
                     }.sorted { first, second in
                         let firstHasFeedback = first.userRating != nil || first.dreamNotes != nil || first.notes != nil
                         let secondHasFeedback = second.userRating != nil || second.dreamNotes != nil || second.notes != nil
@@ -296,7 +298,8 @@ final class SleepHealthKitManager: ObservableObject {
     static func matchingImport(for entry: SleepEntry, occupying rows: [SleepEntry]) throws -> SleepEntry? {
         guard let existing = rows.first else { return nil }
         guard existing.userId == entry.userId, existing.source != .manual,
-              existing.bedtime < entry.wakeTime, existing.wakeTime > entry.bedtime else {
+              let old = existing.measuredCoverage, let proposed = entry.measuredCoverage,
+              old.allSatisfy({ prior in proposed.contains { $0.start < prior.end && $0.end > prior.start } }) else {
             throw SleepTrackingError.importDateConflict
         }
         return existing
@@ -346,23 +349,20 @@ final class SleepHealthKitManager: ObservableObject {
         return sessions
     }
 
-    static func mainSleepSessions(from samples: [HKCategorySample], wakingFrom start: Date,
+    /// A daily log includes every measured period ending on that local day, including naps.
+    static func dailySleepSamples(from samples: [HKCategorySample], wakingFrom start: Date,
                                   through end: Date, calendar: Calendar = .current) -> [Date: [HKCategorySample]] {
         let sessions = sleepSessions(from: samples).filter {
             guard let bed = $0.map(\.startDate).min(), let wake = $0.map(\.endDate).max() else { return false }
-            return wake >= start && wake <= end && wake.timeIntervalSince(bed) <= 24 * 3600
+            return wake >= start && wake <= end && wake.timeIntervalSince(bed) <= 24 * 3600 &&
+                sleepDurations($0).asleep > 0
         }
         return Dictionary(grouping: sessions) { calendar.startOfDay(for: $0.map(\.endDate).max()!) }
-            .mapValues { candidates in
-                candidates.max {
-                    let first = sleepDurations($0).asleep
-                    let second = sleepDurations($1).asleep
-                    return first == second ? $0.map(\.endDate).max()! < $1.map(\.endDate).max()! : first < second
-                }!
-            }
+            .mapValues { $0.flatMap { $0 } }
     }
 
     struct SleepDurations {
+        let inBed: TimeInterval
         let asleep: TimeInterval
         let deep: TimeInterval
         let rem: TimeInterval
@@ -401,7 +401,7 @@ final class SleepHealthKitManager: ObservableObject {
         let completeStages = total > 0 && abs(seconds(stages) - total) < 0.001 &&
             abs(deep + rem + core - total) < 0.001
         let nonoverlappingAwake = abs(seconds(asleep + awake) - total - awakeSeconds) < 0.001
-        return SleepDurations(asleep: total, deep: deep, rem: rem, core: core, awake: awakeSeconds,
+        return SleepDurations(inBed: seconds(samples), asleep: total, deep: deep, rem: rem, core: core, awake: awakeSeconds,
             hasCompleteStages: completeStages, hasAwakeData: !awake.isEmpty && nonoverlappingAwake)
     }
 
@@ -413,17 +413,17 @@ final class SleepHealthKitManager: ObservableObject {
     ) async throws -> SleepEntry? {
         guard !samples.isEmpty else { return nil }
 
-        // Find overall bedtime and wake time
-        guard let bedtime = samples.map({ $0.startDate }).min(),
-              let wakeTime = samples.map({ $0.endDate }).max() else {
-            return nil
+        let periods = Self.sleepSessions(from: samples).compactMap { period -> DateInterval? in
+            guard let start = period.map(\.startDate).min(), let end = period.map(\.endDate).max() else { return nil }
+            return DateInterval(start: start, end: end)
         }
+        guard !periods.isEmpty else { return nil }
 
         // Query heart rate data for this sleep period
-        let (avgHR, minHR, avgHRV) = try await queryHeartMetrics(from: bedtime, to: wakeTime)
+        let (avgHR, minHR, avgHRV) = try await queryHeartMetrics(during: periods)
 
         // Query respiratory rate
-        let respRate = try await queryRespiratoryRate(from: bedtime, to: wakeTime)
+        let respRate = try await queryRespiratoryRate(during: periods)
 
         return Self.sleepEntry(from: samples, for: date, owner: goals.userId,
             heartRate: (avgHR, minHR, avgHRV), respiratoryRate: respRate)
@@ -435,10 +435,12 @@ final class SleepHealthKitManager: ObservableObject {
         guard let bedtime = samples.map(\.startDate).min(),
               let wakeTime = samples.map(\.endDate).max() else { return nil }
         let durations = sleepDurations(samples)
-        let timeInBed = Int(wakeTime.timeIntervalSince(bedtime) / 60)
+        let timeInBed = Int(durations.inBed / 60)
         let timeAsleep = Int(durations.asleep / 60)
-        guard timeAsleep > 0, timeInBed >= 60, timeInBed <= 1440,
-              wakeTime.timeIntervalSince(bedtime) <= 24 * 3600,
+        guard timeAsleep > 0, timeInBed >= 1, timeInBed <= 1440,
+              sleepSessions(from: samples).allSatisfy({ period in
+                  period.map(\.endDate).max()!.timeIntervalSince(period.map(\.startDate).min()!) <= 24 * 3600
+              }),
               timeAsleep <= timeInBed else { return nil }
         let efficiency = Double(timeAsleep) / Double(timeInBed) * 100
 
@@ -448,7 +450,7 @@ final class SleepHealthKitManager: ObservableObject {
             : .healthkit
 
         // Create sleep entry
-        let entry = SleepEntry(
+        var entry = SleepEntry(
             id: UUID(),
             userId: owner,
             date: date,
@@ -474,17 +476,23 @@ final class SleepHealthKitManager: ObservableObject {
             createdAt: Date(),
             updatedAt: Date()
         )
+        entry.recordedPeriods = sleepSessions(from: samples).compactMap { period in
+            let measured = sleepDurations(period)
+            guard measured.asleep > 0 else { return nil }
+            return SleepRecordedPeriod(start: period.map(\.startDate).min()!, end: period.map(\.endDate).max()!,
+                inBedSeconds: measured.inBed, asleepSeconds: measured.asleep)
+        }
 
         return entry
     }
 
     /// Query heart rate metrics during sleep
-    private func queryHeartMetrics(from start: Date, to end: Date) async throws -> (avg: Int?, min: Int?, hrv: Double?) {
+    private func queryHeartMetrics(during periods: [DateInterval]) async throws -> (avg: Int?, min: Int?, hrv: Double?) {
         guard let hrType = HKQuantityType.quantityType(forIdentifier: .heartRate) else {
             return (nil, nil, nil)
         }
 
-        let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: .strictStartDate)
+        let predicate = Self.metricsPredicate(during: periods)
 
         let descriptor = HKSampleQueryDescriptor(
             predicates: [.quantitySample(type: hrType, predicate: predicate)],
@@ -501,18 +509,18 @@ final class SleepHealthKitManager: ObservableObject {
         let minHR = Int(hrValues.min() ?? 0)
 
         // Query HRV
-        let avgHRV = try await queryHRV(from: start, to: end)
+        let avgHRV = try await queryHRV(during: periods)
 
         return (avgHR, minHR, avgHRV)
     }
 
     /// Query heart rate variability
-    private func queryHRV(from start: Date, to end: Date) async throws -> Double? {
+    private func queryHRV(during periods: [DateInterval]) async throws -> Double? {
         guard let hrvType = HKQuantityType.quantityType(forIdentifier: .heartRateVariabilitySDNN) else {
             return nil
         }
 
-        let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: .strictStartDate)
+        let predicate = Self.metricsPredicate(during: periods)
 
         let descriptor = HKSampleQueryDescriptor(
             predicates: [.quantitySample(type: hrvType, predicate: predicate)],
@@ -529,12 +537,12 @@ final class SleepHealthKitManager: ObservableObject {
     }
 
     /// Query respiratory rate during sleep
-    private func queryRespiratoryRate(from start: Date, to end: Date) async throws -> Double? {
+    private func queryRespiratoryRate(during periods: [DateInterval]) async throws -> Double? {
         guard let respType = HKQuantityType.quantityType(forIdentifier: .respiratoryRate) else {
             return nil
         }
 
-        let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: .strictStartDate)
+        let predicate = Self.metricsPredicate(during: periods)
 
         let descriptor = HKSampleQueryDescriptor(
             predicates: [.quantitySample(type: respType, predicate: predicate)],
@@ -548,6 +556,14 @@ final class SleepHealthKitManager: ObservableObject {
         let respValues = samples.map { $0.quantity.doubleValue(for: HKUnit(from: "count/min")) }
 
         return respValues.reduce(0, +) / Double(respValues.count)
+    }
+
+    /// Exclude daytime gaps when a daily log contains separate sleep periods.
+    static func metricsPredicate(during periods: [DateInterval]) -> NSPredicate {
+        NSCompoundPredicate(orPredicateWithSubpredicates: periods.map {
+            HKQuery.predicateForSamples(withStart: $0.start, end: $0.end,
+                options: [.strictStartDate, .strictEndDate])
+        })
     }
 
     // MARK: - Background Sync
