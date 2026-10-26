@@ -187,17 +187,17 @@ final class DebtBreakdownRegressionTests: XCTestCase {
     func testWindowsContainExactlySevenFourteenAndThirtyCompleteUTCDays() {
         let now = ISO8601DateFormatter().date(from: "2026-10-23T18:00:00Z")!
         for (days, start) in [(7, "2026-10-16"), (14, "2026-10-09"), (30, "2026-09-23")] {
-            let window = DebtTransactionWindow(days: days, now: now)
+            let window = DebtTransactionWindow(days: days, now: now, timeZone: TimeZone(secondsFromGMT: 0)!)
             XCTAssertEqual(window.start, start)
             XCTAssertEqual(window.end, "2026-10-22")
         }
         let nearMidnight = ISO8601DateFormatter().date(from: "2026-03-09T03:30:00Z")!
-        XCTAssertEqual(DebtTransactionWindow(days: 7, now: nearMidnight).end, "2026-03-08")
+        XCTAssertEqual(DebtTransactionWindow(days: 7, now: nearMidnight, timeZone: TimeZone(secondsFromGMT: 0)!).end, "2026-03-08")
     }
 
     func testAccountingExcludesOldFutureOtherOwnerAndUnsupportedIsolationButKeepsExplicitLogs() {
         let now = ISO8601DateFormatter().date(from: "2026-10-23T18:00:00Z")!
-        let window = DebtTransactionWindow(days: 14, now: now)
+        let window = DebtTransactionWindow(days: 14, now: now, timeZone: TimeZone(secondsFromGMT: 0)!)
         let records = [
             transaction(date: "2026-10-09", amount: Decimal(string: "1.5")!),
             transaction(date: "2026-10-22", type: .withdrawal, amount: Decimal(string: "0.25")!),
@@ -279,7 +279,7 @@ final class DebtCalculationRegressionTests: XCTestCase {
             rollingDebt7Day: 3.25, rollingDebt14Day: 3.25, rollingDebt30Day: 3.25,
             trend: TrendData(direction: .worsening, velocity: 2, projection7Day: 17.25,
                 available: available, observedDays: available ? 3 : 1, accountingVersion: current ? 2 : nil,
-                calculatedAt: "2026-10-23T20:00:00.123Z"),
+                calculatedAt: "2026-10-23T20:00:00.123Z", timeZone: TimeZone.autoupdatingCurrent.identifier),
             thresholdStatus: ThresholdStatus(currentDebt: 3.25, threshold: -75, severity: .safe, daysUntilCrash: nil, confidence: 0), createdAt: nil,
             sourceTransactions: [WellbeingTransaction(id: UUID(), userId: owner, date: date, type: .withdrawal,
                 category: .workStress, amount: 3.25, source: .userLogged, description: "Synthetic logged event", metadata: nil, createdAt: nil)])
@@ -435,7 +435,7 @@ final class DebtRecalculationRegressionTests: XCTestCase {
         let score = DebtScore(id: nil, userId: owner, date: date, dailyBalance: -(large ? 6 : 1), rollingDebt7Day: value(7),
             rollingDebt14Day: value(14), rollingDebt30Day: value(30),
             trend: TrendData(direction: .stable, velocity: 0, projection7Day: value(14), available: large,
-                observedDays: large ? 7 : 1, accountingVersion: 2, calculatedAt: "2026-10-23T21:00:00Z"),
+                observedDays: large ? 7 : 1, accountingVersion: 2, calculatedAt: "2026-10-23T21:00:00Z", timeZone: TimeZone.autoupdatingCurrent.identifier),
             thresholdStatus: ThresholdStatus(currentDebt: value(14), threshold: -75, severity: large ? .danger : .safe, daysUntilCrash: nil, confidence: 0),
             createdAt: nil, sourceTransactions: records)
         return DebtRefreshFixture(score: score, behavior: behavior)
@@ -934,7 +934,7 @@ private actor DebtAutomaticWork {
 }
 
 final class DebtOwnerWireRegressionTests: XCTestCase {
-    private func service(failFirst: Bool = false) async throws -> WellbeingDebtService {
+    private func service(failFirst: Bool = false, timeZone: @escaping @Sendable () -> TimeZone = { .autoupdatingCurrent }) async throws -> WellbeingDebtService {
         DebtOwnerURLProtocol.fixture.reset(failFirst: failFirst)
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [DebtOwnerURLProtocol.self]
@@ -942,7 +942,7 @@ final class DebtOwnerWireRegressionTests: XCTestCase {
             options: .init(auth: .init(storage: DebtOwnerAuthStorage(), autoRefreshToken: false),
                            global: .init(session: URLSession(configuration: configuration))))
         _ = try await client.auth.signIn(email: "qa@example.invalid", password: "synthetic-offline")
-        return WellbeingDebtService(supabase: client)
+        return WellbeingDebtService(supabase: client, timeZone: timeZone)
     }
     func testUUIDOwnerIsCanonicalOnActualSDKFunctionRequestAndCoalescedReload() async throws {
         let service = try await service()
@@ -953,6 +953,15 @@ final class DebtOwnerWireRegressionTests: XCTestCase {
         XCTAssertNil(first)
         XCTAssertNil(second)
         XCTAssertEqual(DebtOwnerURLProtocol.fixture.owners, [DebtOwnerHTTP.owner])
+    }
+    func testChangedTimeZoneInvalidatesCoalescedEmptyResultAndIsSentOnActualSDKWire() async throws {
+        let clock = DebtTimeZoneFixture()
+        let service = try await service(timeZone: { clock.value })
+        _ = try await service.refreshDebtScoreIfNeeded()
+        clock.useToronto()
+        _ = try await service.refreshDebtScoreIfNeeded()
+        XCTAssertEqual(DebtOwnerURLProtocol.fixture.timeZones, ["America/New_York", "America/Toronto"])
+        XCTAssertEqual(DebtOwnerURLProtocol.fixture.owners.count, 2)
     }
     func testFailedRequestCanRetryWithTheSameCanonicalOwner() async throws {
         let service = try await service(failFirst: true)
@@ -987,9 +996,11 @@ private final class DebtOwnerHTTP: @unchecked Sendable {
     static let owner = "aabbccdd-1111-4111-8111-aabbccddeeff"
     private let lock = NSLock()
     private var recorded: [String] = []
+    private var recordedTimeZones: [String] = []
+    var timeZones: [String] { lock.lock(); defer { lock.unlock() }; return recordedTimeZones }
     private var failFirst = false
     var owners: [String] { lock.lock(); defer { lock.unlock() }; return recorded }
-    func reset(failFirst: Bool) { lock.lock(); defer { lock.unlock() }; recorded = []; self.failFirst = failFirst }
+    func reset(failFirst: Bool) { lock.lock(); defer { lock.unlock() }; recorded = []; recordedTimeZones = []; self.failFirst = failFirst }
     func respond(_ request: URLRequest) -> (Int, Data) {
         lock.lock(); defer { lock.unlock() }
         if request.url?.path == "/auth/v1/token" {
@@ -1013,9 +1024,62 @@ private final class DebtOwnerHTTP: @unchecked Sendable {
         let body = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         let owner = body?["user_id"] as? String ?? "missing"
         recorded.append(owner)
+        recordedTimeZones.append(body?["time_zone"] as? String ?? "missing")
         // Match the deployed server's strict owner guard without weakening ownership.
         guard owner == Self.owner else { return (403, Data(#"{"error":"Forbidden"}"#.utf8)) }
         if failFirst && recorded.count == 1 { return (503, Data(#"{"error":"Synthetic unavailable"}"#.utf8)) }
         return (200, Data(#"{"success":true,"score":null}"#.utf8))
     }
+}
+
+
+final class DebtLocalCalendarRegressionTests: XCTestCase {
+    private func instant(_ text: String) -> Date { ISO8601DateFormatter().date(from: text)! }
+    func testEveningInEasternUsesThePreviousCompletedLocalDay() {
+        let now = instant("2026-10-26T00:30:00Z")
+        let eastern = DebtTransactionWindow(days: 7, now: now, timeZone: TimeZone(identifier: "America/New_York")!)
+        let utc = DebtTransactionWindow(days: 7, now: now, timeZone: TimeZone(secondsFromGMT: 0)!)
+        XCTAssertEqual(eastern.start, "2026-10-18"); XCTAssertEqual(eastern.end, "2026-10-24")
+        XCTAssertEqual(eastern.timezone, "America/New_York"); XCTAssertEqual(utc.end, "2026-10-25")
+    }
+    func testDaylightSavingAndExtremeOffsetsUseCalendarDays() {
+        let zone = TimeZone(identifier: "America/New_York")!
+        let spring = DebtTransactionWindow(days: 7, now: instant("2026-03-09T04:30:00Z"), timeZone: zone)
+        XCTAssertEqual(spring.start, "2026-03-02"); XCTAssertEqual(spring.end, "2026-03-08")
+        let autumn = DebtTransactionWindow(days: 7, now: instant("2026-11-02T05:30:00Z"), timeZone: zone)
+        XCTAssertEqual(autumn.start, "2026-10-26"); XCTAssertEqual(autumn.end, "2026-11-01")
+        let now = instant("2026-10-26T11:00:00Z")
+        XCTAssertEqual(DebtTransactionWindow(days: 1, now: now, timeZone: TimeZone(identifier: "Pacific/Kiritimati")!).end, "2026-10-26")
+        XCTAssertEqual(DebtTransactionWindow(days: 1, now: now, timeZone: TimeZone(identifier: "Etc/GMT+12")!).end, "2026-10-24")
+    }
+    func testSleepAndManualTimestampNotificationsUseLocalDateLabels() {
+        let now = instant("2026-10-26T00:30:00Z")
+        XCTAssertEqual(DebtTransactionWindow.dateString(now, timeZone: TimeZone(identifier: "America/New_York")!), "2026-10-25")
+        XCTAssertEqual(DebtTransactionWindow.dateString(now, timeZone: TimeZone(secondsFromGMT: 0)!), "2026-10-26")
+    }
+    func testCalculatedZeroIsValidWithOwnedDepositsAndMatchingTimeZone() throws {
+        let owner = "11111111-1111-4111-8111-111111111111", date = "2026-10-24"
+        let records = [WellbeingTransaction(id: UUID(), userId: owner, date: date, type: .deposit,
+            category: .positiveEvent, amount: 8, source: .userLogged, description: nil, metadata: nil, createdAt: nil)]
+        let score = DebtScore(id: nil, userId: owner, date: date, dailyBalance: 8, rollingDebt7Day: 0,
+            rollingDebt14Day: 0, rollingDebt30Day: 0,
+            trend: TrendData(direction: .stable, velocity: 0, projection7Day: 0, available: false, observedDays: 1,
+                accountingVersion: 2, calculatedAt: "2026-10-25T12:00:00Z", timeZone: "America/New_York"),
+            thresholdStatus: ThresholdStatus(currentDebt: 0, threshold: nil, severity: .safe, daysUntilCrash: nil, confidence: 0),
+            createdAt: nil, sourceTransactions: records)
+        XCTAssertTrue(score.isSourceCalculation(for: date, requireSnapshot: true, timeZone: "America/New_York"))
+        XCTAssertFalse(score.isSourceCalculation(for: date, requireSnapshot: true, timeZone: "UTC"))
+        var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(score)) as! [String: Any]
+        var trend = json["trend"] as! [String: Any]; trend.removeValue(forKey: "time_zone"); json["trend"] = trend
+        let legacy = try JSONDecoder().decode(DebtScore.self, from: JSONSerialization.data(withJSONObject: json))
+        XCTAssertTrue(legacy.isSourceCalculation(for: date, requireSnapshot: true))
+        XCTAssertFalse(legacy.isSourceCalculation(for: date, requireSnapshot: true, timeZone: "America/New_York"))
+    }
+}
+
+private final class DebtTimeZoneFixture: @unchecked Sendable {
+    private let lock = NSLock()
+    private var identifier = "America/New_York"
+    var value: TimeZone { lock.lock(); defer { lock.unlock() }; return TimeZone(identifier: identifier)! }
+    func useToronto() { lock.lock(); defer { lock.unlock() }; identifier = "America/Toronto" }
 }

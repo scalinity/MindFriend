@@ -114,7 +114,7 @@ struct WellbeingDebtDashboardView: View {
             }
             .sheet(isPresented: $showingBreakdown) {
                 if let score = latestScore {
-                    DebtBreakdownView(debtScore: score)
+                    DebtBreakdownView(debtScore: score, transactionReader: reader)
                         .environmentObject(container)
                 } else {
                     VStack(spacing: 16) {
@@ -142,6 +142,10 @@ struct WellbeingDebtDashboardView: View {
             .task(id: appState.currentUser?.id) {
                 recalculation.cancel()
                 await loadData()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)
+                .merge(with: NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification))) { _ in
+                Task { await loadData() }
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
                 Task { await loadData() }
@@ -216,7 +220,7 @@ struct WellbeingDebtDashboardView: View {
 
                 Spacer()
 
-                Text("Through \(score.date) UTC")
+                Text(score.date).accessibilityIdentifier("debt.dashboard.date")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -484,7 +488,7 @@ struct WellbeingDebtDashboardView: View {
             Text(needsRefresh ? "Calculation Needs Updating" : "No Debt Data Yet")
                 .font(.title2.bold())
 
-            Text("Calculate from recorded sleep, completed activities and logged events for the last 30 complete UTC days. Missing data adds no event.")
+            Text("Calculate from recorded sleep, completed activities and logged events for the last 30 complete days. Missing data adds no event.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -711,3 +715,42 @@ final class DebtRecalculation: ObservableObject {
             .environmentObject(DependencyContainer()).environmentObject(AppState())
     }
 }
+
+
+#if DEBUG
+/// Synthetic calendar UI only; no authentication, wellness queries or provider calls.
+struct DebtCalendarUITestView: View {
+    private let reader = DebtCalendarUITestReader()
+    var body: some View {
+        NavigationStack {
+            VStack {
+                WellbeingDebtCard(reader: reader)
+                NavigationLink("Open Debt Dashboard") { WellbeingDebtDashboardView(reader: reader) }
+            }
+            .padding()
+        }
+    }
+}
+private actor DebtCalendarUITestReader: WellbeingDebtReading {
+    private let owner = "11111111-1111-4111-8111-111111111111"
+    private func score() -> DebtScore {
+        let window = DebtTransactionWindow(days: 1)
+        let records = [WellbeingTransaction(id: UUID(), userId: owner, date: window.end, type: .deposit,
+            category: .positiveEvent, amount: 8, source: .userLogged, description: "Synthetic recorded event", metadata: nil, createdAt: nil)]
+        return DebtScore(id: nil, userId: owner, date: window.end, dailyBalance: 8,
+            rollingDebt7Day: 0, rollingDebt14Day: 0, rollingDebt30Day: 0,
+            trend: TrendData(direction: .stable, velocity: 0, projection7Day: 0, available: false, observedDays: 1,
+                accountingVersion: 2, calculatedAt: Date().ISO8601Format(), timeZone: window.timezone),
+            thresholdStatus: ThresholdStatus(currentDebt: 0, threshold: nil, severity: .safe, daysUntilCrash: nil, confidence: 0),
+            createdAt: nil, sourceTransactions: records)
+    }
+    func transactionOwnerID() async throws -> String { owner }
+    func fetchTransactions(from: String, to: String) async throws -> [WellbeingTransaction] { [] }
+    func fetchLatestDebtScore() async throws -> DebtScore? { score() }
+    func refreshDebtScoreIfNeeded() async throws -> DebtScore? { score() }
+    func fetchProfile() async throws -> WellbeingDebtProfile? { nil }
+    func fetchActiveRecoveryProgram() async throws -> RecoveryProgram? { nil }
+    func calculateDebtScore(for date: String?) async throws -> DebtScore { score() }
+    func backfillTransactions(days: Int) async throws -> Int { 0 }
+}
+#endif

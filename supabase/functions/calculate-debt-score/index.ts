@@ -22,11 +22,14 @@ import {
   getYesterdayISO,
 } from "../_shared/wellbeing-debt-utils.ts";
 
+import { checkedTimeZone, localDate, localDayStart } from "./calendar.ts";
+
 type CurrentTrend = TrendData & {
   available: boolean;
   observed_days: number;
   accounting_version: number;
   calculated_at: string;
+  time_zone?: string;
 };
 type CurrentDebtScore = DebtScore & {
   trend: CurrentTrend;
@@ -84,9 +87,7 @@ serve(async (req) => {
     }
 
     // Manual trigger: calculate for specific user and date
-    const { user_id, date } = await req.json();
-    const targetDate = date ??
-      ledgerDate(new Date().toISOString().slice(0, 10), -1);
+    const { user_id, date, time_zone } = await req.json();
 
     // Authorization check: user can only trigger for themselves
     if (user_id && user_id !== user.id) {
@@ -96,10 +97,22 @@ serve(async (req) => {
       });
     }
 
+    let timeZone: string, targetDate: string;
+    try {
+      timeZone = checkedTimeZone(time_zone === undefined ? "UTC" : time_zone);
+      targetDate = date ?? ledgerDate(localDate(new Date(), timeZone), -1);
+      ledgerDate(targetDate);
+    } catch {
+      return new Response(JSON.stringify({ error: "Invalid date or time zone" }), {
+        status: 400, headers: { "Content-Type": "application/json" },
+      });
+    }
     const score = await calculateUserDebtScore(
       supabase,
       user_id || user.id,
       targetDate,
+      true,
+      timeZone,
     );
     if (score) {
       await updateUserProfile(
@@ -107,6 +120,7 @@ serve(async (req) => {
         user.id,
         score.date,
         score.source_transactions,
+        timeZone,
       );
       score.threshold_status = calculateThresholdStatus(
         score.rolling_debt_14day,
@@ -129,7 +143,7 @@ serve(async (req) => {
         },
       }).eq("user_id", user.id).eq("date", targetDate);
       if (error) throw new Error("Empty calculation could not be saved");
-      await updateUserProfile(supabase, user.id, targetDate, []);
+      await updateUserProfile(supabase, user.id, targetDate, [], timeZone);
     }
 
     return new Response(
@@ -206,11 +220,12 @@ export async function calculateUserDebtScore(
   userId: string,
   date: string,
   currentSources = true,
+  timeZone = "UTC",
 ): Promise<CurrentDebtScore | null> {
   ledgerDate(date); // Reject invalid date labels before queries or writes.
   let transactions: Transaction[];
   if (currentSources) {
-    transactions = await currentSourceTransactions(supabase, userId, date);
+    transactions = await currentSourceTransactions(supabase, userId, date, timeZone);
   } else {
     const { data, error } = await supabase.from("wellbeing_transactions")
       .select("*").eq("user_id", userId)
@@ -235,7 +250,7 @@ export async function calculateUserDebtScore(
   const rolling30Day = calculateRollingDebt(transactions, date, 30);
 
   // 4. Calculate trend
-  const trend = calculateTrend(transactions, date, currentSources ? 2 : 1);
+  const trend = { ...calculateTrend(transactions, date, currentSources ? 2 : 1), time_zone: currentSources ? timeZone : "UTC" };
 
   // 5. Get user profile for threshold
   const profile = await getUserProfile(supabase, userId);
@@ -478,8 +493,9 @@ async function updateUserProfile(
   userId: string,
   date: string,
   transactions: Transaction[],
+  timeZone = "UTC",
 ) {
-  await reconcileCrashDetection(supabase, userId, date, transactions);
+  await reconcileCrashDetection(supabase, userId, date, transactions, timeZone);
   await updateTopCategories(supabase, userId, date, transactions);
 }
 
@@ -488,12 +504,13 @@ async function reconcileCrashDetection(
   userId: string,
   date: string,
   transactions: Transaction[],
+  timeZone = "UTC",
 ) {
   const profile = await getUserProfile(supabase, userId);
   const { data: moods, error: moodError } = await supabase.from("moods")
     .select("mood_score").eq("user_id", userId)
-    .gte("created_at", `${date}T00:00:00Z`)
-    .lt("created_at", `${ledgerDate(date, 2)}T00:00:00Z`);
+    .gte("created_at", localDayStart(date, timeZone))
+    .lt("created_at", localDayStart(ledgerDate(date, 2), timeZone));
   if (moodError || !moods) throw new Error("Threshold source unavailable");
   const lowMoods = moods.filter((m: { mood_score: number }) =>
     Number.isFinite(m.mood_score) && m.mood_score >= 1 && m.mood_score <= 2

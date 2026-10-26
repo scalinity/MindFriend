@@ -107,7 +107,7 @@ final class SleepTrackingService: ObservableObject, SleepTrackingReading {
             throw SleepTrackingError.invalidEntry
         }
 
-        DebtSourceChanges.saved(date: String(response.wakeTime.ISO8601Format().prefix(10)))
+        DebtSourceChanges.saved(date: DebtTransactionWindow.dateString(response.wakeTime))
         return response
     }
 
