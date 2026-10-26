@@ -41,7 +41,7 @@ struct SleepScoreRing: View {
                 Text("\(score)")
                     .font(.system(size: size / 3, weight: .bold))
 
-                Text("Score")
+                Text("MindFriend")
                     .font(.system(size: size / 10))
                     .foregroundColor(.secondary)
             }

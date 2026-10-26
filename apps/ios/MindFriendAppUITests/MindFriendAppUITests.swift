@@ -188,6 +188,26 @@ final class SubscriptionCatalogUITests: XCTestCase {
 
 @MainActor
 final class SleepDashboardUITests: XCTestCase {
+    func testFullImportedSessionDisplaysDurationAndRetainsEarlierFeedback() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--sleep-ui-test", "--sleep-session-accuracy"]
+        app.launch()
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["sleep.retry"].waitForExistence(timeout: 15))
+        app.buttons["sleep.retry"].tap()
+        XCTAssertTrue(app.staticTexts["18h 0m"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["4h 0m"].exists)
+        XCTAssertTrue(app.staticTexts["Score unavailable — missing measurements"].exists)
+        let feedback = app.buttons["Saved feedback from earlier imports"]
+        XCTAssertTrue(feedback.exists)
+        feedback.tap()
+        XCTAssertTrue(app.staticTexts["Synthetic earlier feedback"].waitForExistence(timeout: 3))
+        let capture = XCTAttachment(screenshot: app.screenshot())
+        capture.name = "Issue19-full-synthetic-session-and-retained-feedback"
+        capture.lifetime = .keepAlways
+        add(capture)
+    }
     func testLoadFailureRetriesAndDisplaysDecodedHealthKitNight() {
         continueAfterFailure = false
         let app = XCUIApplication()

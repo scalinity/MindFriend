@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { corsHeaders } from "../_shared/cors.ts";
+import { withoutContainedSleepImports } from "../_shared/sleep-session-records.ts";
 import {
   calculateAverageBedtime,
   calculateAverageDuration,
@@ -77,7 +78,7 @@ serve(async (req) => {
     const fourteenDaysAgo = new Date();
     fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
 
-    const { data: entries, error: entriesError } = await supabase
+    const { data: storedEntries, error: entriesError } = await supabase
       .from("sleep_entries")
       .select("*")
       .eq("user_id", user.id)
@@ -87,6 +88,8 @@ serve(async (req) => {
     if (entriesError) {
       throw entriesError;
     }
+
+    const entries = withoutContainedSleepImports(storedEntries ?? []);
 
     // Check if we have enough data (at least 7 days)
     if (!entries || entries.length < 7) {

@@ -36,6 +36,8 @@ struct SleepEntry: Codable, Identifiable, Equatable {
     // Calculated
     var sleepScore: Int? // 0-100
     var scoreBreakdown: SleepScoreBreakdown?
+    // Derived read metadata only; excluded from persistence CodingKeys.
+    var previousImportFeedback: [SleepEntry] = []
 
     /// A full score needs measured stages and wake time; a manual duration is self-reported.
     var hasCompleteScoreData: Bool {
@@ -80,6 +82,32 @@ struct SleepEntry: Codable, Identifiable, Equatable {
         case updatedAt = "updated_at"
     }
 
+    /// Retain stored history while excluding old imported fragments contained by a refreshed session.
+    static func withoutContainedHealthImports(_ entries: [SleepEntry]) -> [SleepEntry] {
+        func supersedes(_ other: SleepEntry, _ entry: SleepEntry) -> Bool {
+            guard other.id != entry.id, other.userId == entry.userId,
+                  other.source != .manual, entry.source != .manual,
+                  other.timeInBedMinutes >= 60, other.timeInBedMinutes <= 1440,
+                  other.wakeTime > other.bedtime, (other.timeAsleepMinutes ?? 0) > 0,
+                  other.bedtime <= entry.bedtime, other.wakeTime >= entry.wakeTime,
+                  other.wakeTime.timeIntervalSince(other.bedtime) <= 24 * 3600 else { return false }
+            if other.bedtime < entry.bedtime || other.wakeTime > entry.wakeTime { return true }
+            return other.updatedAt > entry.updatedAt ||
+                (other.updatedAt == entry.updatedAt && other.id.uuidString < entry.id.uuidString)
+        }
+        let survivors = entries.filter { entry in !entries.contains { supersedes($0, entry) } }
+        return survivors.map { entry in
+            var result = entry
+            let feedback = entries.filter {
+                supersedes(entry, $0) && ($0.userRating != nil || $0.dreamNotes != nil || $0.notes != nil)
+            }
+            result.previousImportFeedback += feedback.filter { fragment in
+                !result.previousImportFeedback.contains { $0.id == fragment.id }
+            }
+            return result
+        }
+    }
+
     // MARK: - Date Format Helpers
 
     /// Formatter for PostgreSQL DATE type (YYYY-MM-DD)
@@ -87,7 +115,7 @@ struct SleepEntry: Codable, Identifiable, Equatable {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(secondsFromGMT: 0) // UTC for date-only values
+        formatter.timeZone = .autoupdatingCurrent // A date label represents the local wake day.
         return formatter
     }()
 
@@ -1035,6 +1063,32 @@ struct CreateSleepEntryDTO: Encodable {
         case notes
         case sleepScore = "sleep_score"
         case scoreBreakdown = "score_breakdown"
+    }
+}
+
+/// Explicit nulls clear stale measured/calculated fields; user feedback is never part of a resync PATCH.
+struct ImportedSleepUpdateDTO: Encodable {
+    let measurements: CreateSleepEntryDTO
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CreateSleepEntryDTO.CodingKeys.self)
+        let m = measurements
+        try c.encode(m.date, forKey: .date)
+        try c.encode(m.source, forKey: .source)
+        try c.encode(m.bedtime, forKey: .bedtime)
+        try c.encode(m.wakeTime, forKey: .wakeTime)
+        try c.encode(m.timeInBedMinutes, forKey: .timeInBedMinutes)
+        try c.encode(m.timeAsleepMinutes, forKey: .timeAsleepMinutes)
+        try c.encode(m.deepSleepMinutes, forKey: .deepSleepMinutes)
+        try c.encode(m.remSleepMinutes, forKey: .remSleepMinutes)
+        try c.encode(m.lightSleepMinutes, forKey: .lightSleepMinutes)
+        try c.encode(m.awakeMinutes, forKey: .awakeMinutes)
+        try c.encode(m.sleepEfficiency, forKey: .sleepEfficiency)
+        try c.encode(m.heartRateAvg, forKey: .heartRateAvg)
+        try c.encode(m.heartRateMin, forKey: .heartRateMin)
+        try c.encode(m.hrvAvg, forKey: .hrvAvg)
+        try c.encode(m.respiratoryRate, forKey: .respiratoryRate)
+        try c.encode(m.sleepScore, forKey: .sleepScore)
+        try c.encode(m.scoreBreakdown, forKey: .scoreBreakdown)
     }
 }
 

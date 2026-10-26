@@ -33,7 +33,7 @@ final class SleepTrackingService: ObservableObject, SleepTrackingReading {
     }
 
     /// Create a new sleep entry with calculated score
-    func createEntry(_ entry: SleepEntry, goals: SleepGoals) async throws -> SleepEntry {
+    func createEntry(_ entry: SleepEntry, goals: SleepGoals, replacing existing: SleepEntry? = nil, retryOnConflict: Bool = true) async throws -> SleepEntry {
         // Get the authenticated user's ID
         let session = try await supabase.auth.session
         let userId = session.user.id
@@ -41,6 +41,12 @@ final class SleepTrackingService: ObservableObject, SleepTrackingReading {
             throw SleepTrackingError.invalidEntry
         }
         
+        if let existing {
+            guard existing.userId == userId, existing.source != .manual, entry.source != .manual else {
+                throw SleepTrackingError.invalidEntry
+            }
+        }
+
         // Calculate sleep score
         var mutableEntry = entry
         if entry.hasCompleteScoreData, goals.userId == userId, goals.targetBedtime != nil {
@@ -77,14 +83,29 @@ final class SleepTrackingService: ObservableObject, SleepTrackingReading {
             scoreBreakdown: mutableEntry.scoreBreakdown
         )
 
-        // Insert into database
-        let response: SleepEntry = try await supabase
-            .from("sleep_entries")
-            .insert(dto)
-            .select()
-            .single()
-            .execute()
-            .value
+        let response: SleepEntry
+        do {
+            if let existing {
+                // Update only measurements. Feedback/notes may have changed since the read.
+                response = try await supabase.from("sleep_entries")
+                    .update(ImportedSleepUpdateDTO(measurements: dto))
+                    .eq("id", value: existing.id.uuidString)
+                    .eq("user_id", value: userId.uuidString)
+                    .neq("source", value: SleepSource.manual.rawValue)
+                    .select().single().execute().value
+            } else {
+                response = try await supabase.from("sleep_entries")
+                    .insert(dto).select().single().execute().value
+            }
+        } catch let error as PostgrestError where error.code == "23505" && retryOnConflict && entry.source != .manual {
+            // Another owned sync may have occupied the canonical wake date; retry only once.
+            let current = try await fetchEntries(from: entry.date, to: entry.date)
+            guard let canonical = try SleepHealthKitManager.matchingImport(for: entry, occupying: current) else { throw error }
+            return try await createEntry(entry, goals: goals, replacing: canonical, retryOnConflict: false)
+        }
+        guard response.userId == userId, try await currentUserID() == userId else {
+            throw SleepTrackingError.invalidEntry
+        }
 
         DebtSourceChanges.saved(date: String(response.wakeTime.ISO8601Format().prefix(10)))
         return response
@@ -103,7 +124,7 @@ final class SleepTrackingService: ObservableObject, SleepTrackingReading {
             .execute()
             .value
 
-        return response
+        return SleepEntry.withoutContainedHealthImports(response)
     }
 
     /// Fetch the most recent sleep entry
@@ -372,6 +393,8 @@ final class SleepTrackingService: ObservableObject, SleepTrackingReading {
     private func formatDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .autoupdatingCurrent
         return formatter.string(from: date)
     }
 }
@@ -425,6 +448,7 @@ struct SleepPattern: Codable {
 
 enum SleepTrackingError: Error, LocalizedError {
     case invalidEntry
+    case importDateConflict
     case windDownGenerationFailed
     case sessionNotFound
     case invalidRating
@@ -432,6 +456,8 @@ enum SleepTrackingError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
+        case .importDateConflict:
+            return "A saved Health session for another night uses this date. Its measurements and feedback were kept."
         case .invalidEntry:
             return "This sleep entry is incomplete or belongs to a different account. Please reload and try again."
         case .windDownGenerationFailed:
