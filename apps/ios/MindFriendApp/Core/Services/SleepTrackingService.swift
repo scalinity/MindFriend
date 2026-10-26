@@ -80,7 +80,8 @@ final class SleepTrackingService: ObservableObject, SleepTrackingReading {
             dreamNotes: mutableEntry.dreamNotes,
             notes: mutableEntry.notes,
             sleepScore: mutableEntry.sleepScore,
-            scoreBreakdown: mutableEntry.scoreBreakdown
+            scoreBreakdown: mutableEntry.scoreBreakdown,
+            recordedPeriods: mutableEntry.validatedRecordedPeriods
         )
 
         let response: SleepEntry

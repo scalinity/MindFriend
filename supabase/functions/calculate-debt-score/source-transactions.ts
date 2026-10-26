@@ -75,7 +75,7 @@ export async function currentSourceTransactions(
     ),
     read(
       "sleep_entries",
-      "id,user_id,date,source,bedtime,wake_time,time_in_bed_minutes,time_asleep_minutes,deep_sleep_minutes,rem_sleep_minutes,light_sleep_minutes,awake_minutes,updated_at",
+      "id,user_id,date,source,bedtime,wake_time,time_in_bed_minutes,time_asleep_minutes,deep_sleep_minutes,rem_sleep_minutes,light_sleep_minutes,awake_minutes,updated_at,recorded_periods",
       "wake_time",
       true,
       true,

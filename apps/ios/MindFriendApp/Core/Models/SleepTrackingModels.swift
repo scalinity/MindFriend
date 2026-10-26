@@ -14,6 +14,51 @@ struct SleepEntry: Codable, Identifiable, Equatable {
     let wakeTime: Date
     let timeInBedMinutes: Int
     let timeAsleepMinutes: Int?
+    var recordedPeriods: [SleepRecordedPeriod]? = nil
+
+    /// Old clients may update measurements without this newer metadata. Ignore a stale snapshot.
+    var validatedRecordedPeriods: [SleepRecordedPeriod]? {
+        guard source != .manual, let periods = recordedPeriods, !periods.isEmpty else { return nil }
+        let sorted = periods.sorted { $0.start < $1.start }
+        var previousEnd: Date?
+        for period in sorted {
+            let span = period.end.timeIntervalSince(period.start)
+            guard span > 0, span <= 86400,
+                  period.inBedSeconds.isFinite, period.asleepSeconds.isFinite,
+                  period.inBedSeconds > 0, period.inBedSeconds <= span + 0.001,
+                  period.asleepSeconds > 0, period.asleepSeconds <= period.inBedSeconds,
+                  previousEnd.map({ $0 <= period.start }) ?? true else { return nil }
+            previousEnd = period.end
+        }
+        guard abs(sorted[0].start.timeIntervalSince(bedtime)) < 1,
+              abs(sorted[sorted.count - 1].end.timeIntervalSince(wakeTime)) < 1,
+              let asleep = timeAsleepMinutes else { return nil }
+        func matches(_ seconds: Double, _ minutes: Int) -> Bool {
+            seconds >= Double(minutes * 60) - 0.001 && seconds < Double((minutes + 1) * 60) + 0.001
+        }
+        guard matches(sorted.reduce(0) { $0 + $1.inBedSeconds }, timeInBedMinutes),
+              matches(sorted.reduce(0) { $0 + $1.asleepSeconds }, asleep) else { return nil }
+        return sorted
+    }
+
+    var measuredCoverage: [DateInterval]? {
+        if let periods = validatedRecordedPeriods {
+            return periods.map { DateInterval(start: $0.start, end: $0.end) }
+        }
+        guard recordedPeriods == nil, wakeTime > bedtime,
+              wakeTime.timeIntervalSince(bedtime) <= 86400 else { return nil }
+        return [DateInterval(start: bedtime, end: wakeTime)]
+    }
+
+    /// Reconcile identity at the outer DTO's whole-second precision, without altering measured totals.
+    var storedCoverage: [DateInterval]? {
+        measuredCoverage?.map { Self.storedInterval(start: $0.start, end: $0.end) }
+    }
+
+    private static func storedInterval(start: Date, end: Date) -> DateInterval {
+        DateInterval(start: Date(timeIntervalSince1970: floor(start.timeIntervalSince1970)),
+            end: Date(timeIntervalSince1970: floor(end.timeIntervalSince1970)))
+    }
 
     // Sleep Stages (from wearables)
     let deepSleepMinutes: Int?
@@ -64,6 +109,7 @@ struct SleepEntry: Codable, Identifiable, Equatable {
         case wakeTime = "wake_time"
         case timeInBedMinutes = "time_in_bed_minutes"
         case timeAsleepMinutes = "time_asleep_minutes"
+        case recordedPeriods = "recorded_periods"
         case deepSleepMinutes = "deep_sleep_minutes"
         case remSleepMinutes = "rem_sleep_minutes"
         case lightSleepMinutes = "light_sleep_minutes"
@@ -84,16 +130,27 @@ struct SleepEntry: Codable, Identifiable, Equatable {
 
     /// Retain stored history while excluding old imported fragments contained by a refreshed session.
     static func withoutContainedHealthImports(_ entries: [SleepEntry]) -> [SleepEntry] {
+        func covers(_ outer: SleepEntry, _ inner: SleepEntry) -> Bool {
+            guard let coverage = outer.storedCoverage, inner.wakeTime > inner.bedtime else { return false }
+            let contained = inner.storedCoverage ?? [Self.storedInterval(start: inner.bedtime, end: inner.wakeTime)]
+            return contained.allSatisfy { interval in
+                coverage.contains { $0.start <= interval.start && $0.end >= interval.end }
+            }
+        }
         func supersedes(_ other: SleepEntry, _ entry: SleepEntry) -> Bool {
             guard other.id != entry.id, other.userId == entry.userId,
                   other.source != .manual, entry.source != .manual,
-                  other.timeInBedMinutes >= 60, other.timeInBedMinutes <= 1440,
+                  other.timeInBedMinutes >= 1, other.timeInBedMinutes <= 1440,
                   other.wakeTime > other.bedtime, (other.timeAsleepMinutes ?? 0) > 0,
-                  other.bedtime <= entry.bedtime, other.wakeTime >= entry.wakeTime,
-                  other.wakeTime.timeIntervalSince(other.bedtime) <= 24 * 3600 else { return false }
-            if other.bedtime < entry.bedtime || other.wakeTime > entry.wakeTime { return true }
-            return other.updatedAt > entry.updatedAt ||
-                (other.updatedAt == entry.updatedAt && other.id.uuidString < entry.id.uuidString)
+                  covers(other, entry) else { return false }
+            if covers(entry, other) {
+                let otherMeasured = other.validatedRecordedPeriods != nil
+                let entryMeasured = entry.validatedRecordedPeriods != nil
+                if otherMeasured != entryMeasured { return otherMeasured }
+                return other.updatedAt > entry.updatedAt ||
+                    (other.updatedAt == entry.updatedAt && other.id.uuidString < entry.id.uuidString)
+            }
+            return true
         }
         let survivors = entries.filter { entry in !entries.contains { supersedes($0, entry) } }
         return survivors.map { entry in
@@ -258,6 +315,9 @@ struct SleepEntry: Codable, Identifiable, Equatable {
 
         // Validate cross-field constraints
         try validateCrossFieldConstraints()
+        if container.contains(.recordedPeriods), (try? container.decodeNil(forKey: .recordedPeriods)) == false {
+            recordedPeriods = (try? container.decode([SleepRecordedPeriod].self, forKey: .recordedPeriods)) ?? []
+        }
     }
 
     // MARK: - Validation Helpers
@@ -368,6 +428,7 @@ struct SleepEntry: Codable, Identifiable, Equatable {
         try container.encode(wakeTime, forKey: .wakeTime)
         try container.encode(timeInBedMinutes, forKey: .timeInBedMinutes)
         try container.encodeIfPresent(timeAsleepMinutes, forKey: .timeAsleepMinutes)
+        try container.encodeIfPresent(validatedRecordedPeriods, forKey: .recordedPeriods)
         try container.encodeIfPresent(deepSleepMinutes, forKey: .deepSleepMinutes)
         try container.encodeIfPresent(remSleepMinutes, forKey: .remSleepMinutes)
         try container.encodeIfPresent(lightSleepMinutes, forKey: .lightSleepMinutes)
@@ -495,6 +556,19 @@ struct SleepEntry: Codable, Identifiable, Equatable {
         case 55..<70: return "Fair"
         default: return "Poor"
         }
+    }
+}
+
+/// Measured coverage for one connected Health period; gaps between periods are excluded.
+struct SleepRecordedPeriod: Codable, Equatable {
+    let start: Date
+    let end: Date
+    let inBedSeconds: Double
+    let asleepSeconds: Double
+    enum CodingKeys: String, CodingKey {
+        case start, end
+        case inBedSeconds = "in_bed_seconds"
+        case asleepSeconds = "asleep_seconds"
     }
 }
 
@@ -1042,6 +1116,7 @@ struct CreateSleepEntryDTO: Encodable {
     let notes: String?
     let sleepScore: Int?
     let scoreBreakdown: SleepScoreBreakdown?
+    var recordedPeriods: [SleepRecordedPeriod]? = nil
 
     enum CodingKeys: String, CodingKey {
         case userId = "user_id"
@@ -1063,6 +1138,7 @@ struct CreateSleepEntryDTO: Encodable {
         case notes
         case sleepScore = "sleep_score"
         case scoreBreakdown = "score_breakdown"
+        case recordedPeriods = "recorded_periods"
     }
 }
 
@@ -1089,6 +1165,7 @@ struct ImportedSleepUpdateDTO: Encodable {
         try c.encode(m.respiratoryRate, forKey: .respiratoryRate)
         try c.encode(m.sleepScore, forKey: .sleepScore)
         try c.encode(m.scoreBreakdown, forKey: .scoreBreakdown)
+        try c.encode(m.recordedPeriods, forKey: .recordedPeriods)
     }
 }
 

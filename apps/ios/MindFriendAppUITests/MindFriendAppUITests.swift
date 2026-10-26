@@ -299,6 +299,25 @@ final class SleepDashboardUITests: XCTestCase {
         capture.lifetime = .keepAlways
         add(capture)
     }
+    func testDailySleepShowsTheMeasuredPeriodsWithoutUTCLabels() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--sleep-ui-test", "--sleep-daily-periods"]
+        app.launch()
+        defer { app.terminate() }
+        XCTAssertTrue(app.staticTexts["Today's Sleep"].waitForExistence(timeout: 15))
+        let periods = app.buttons["Recorded periods"]
+        XCTAssertTrue(periods.isHittable)
+        periods.tap()
+        let rows = app.descendants(matching: .any).matching(identifier: "sleep.recordedPeriod")
+        XCTAssertEqual(rows.count, 2)
+        XCTAssertFalse(rows.element(boundBy: 0).label.contains("UTC"))
+        XCTAssertFalse(rows.element(boundBy: 1).label.contains("UTC"))
+        let image = XCTAttachment(screenshot: app.screenshot())
+        image.name = "Issue19-synthetic-daily-periods-local-dates"
+        image.lifetime = .keepAlways
+        add(image)
+    }
     func testLoadFailureRetriesAndDisplaysDecodedHealthKitNight() {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -310,8 +329,8 @@ final class SleepDashboardUITests: XCTestCase {
         let retry = app.buttons["sleep.retry"]
         XCTAssertTrue(retry.isHittable)
         retry.tap()
-        XCTAssertTrue(app.staticTexts["Last Night"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Last Night"].isHittable)
+        XCTAssertTrue(app.staticTexts["Today's Sleep"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Today's Sleep"].isHittable)
         XCTAssertTrue(app.staticTexts["sleep.source"].label.contains("Health App"))
         XCTAssertFalse(app.staticTexts["Sleep Records Unavailable"].exists)
         XCTAssertFalse(retry.exists)

@@ -869,7 +869,7 @@ final class SleepHealthImportRegressionTests: XCTestCase {
             sample(start.addingTimeInterval(400*60), 250, .asleepDeep),
             sample(start.addingTimeInterval(650*60), 430, .asleepREM)]
         var calendar = Calendar(identifier: .gregorian); calendar.timeZone = TimeZone(identifier: "America/New_York")!
-        let sessions = SleepHealthKitManager.mainSleepSessions(from: samples,
+        let sessions = SleepHealthKitManager.dailySleepSamples(from: samples,
             wakingFrom: date("2026-10-25T00:00:00-04:00"), through: date("2026-10-25T20:00:00-04:00"), calendar: calendar)
         XCTAssertEqual(sessions.count, 1)
         let day = try XCTUnwrap(sessions.keys.first)
@@ -886,14 +886,22 @@ final class SleepHealthImportRegressionTests: XCTestCase {
         XCTAssertEqual(SleepHealthKitManager.sleepSessions(from: samples).count, 1)
         XCTAssertEqual(SleepHealthKitManager.sleepDurations(samples).asleep, 960*60)
     }
-    func testUncoveredGapsRemainSeparateAndMainSessionSelectionIsStable() throws {
+    func testDailyLogRetainsBothPeriodsWithoutCountingTheGap() throws {
         let start = date("2026-10-25T00:00:00-04:00")
         let samples = [sample(start, 360), sample(start.addingTimeInterval(12*3600), 90)]
         XCTAssertEqual(SleepHealthKitManager.sleepSessions(from: samples).count, 2)
-        let first = SleepHealthKitManager.mainSleepSessions(from: samples, wakingFrom: start, through: start.addingTimeInterval(24*3600))
-        let reversed = SleepHealthKitManager.mainSleepSessions(from: samples.reversed(), wakingFrom: start, through: start.addingTimeInterval(24*3600))
+        let first = SleepHealthKitManager.dailySleepSamples(from: samples, wakingFrom: start, through: start.addingTimeInterval(24*3600))
+        let reversed = SleepHealthKitManager.dailySleepSamples(from: samples.reversed(), wakingFrom: start, through: start.addingTimeInterval(24*3600))
         XCTAssertEqual(first.values.first?.first?.startDate, start)
         XCTAssertEqual(first.values.first?.first?.startDate, reversed.values.first?.first?.startDate)
+        let day = try XCTUnwrap(first.keys.first)
+        let daily = try XCTUnwrap(SleepHealthKitManager.sleepEntry(from: first[day]!, for: day, owner: owner))
+        XCTAssertEqual(daily.timeAsleepMinutes, 450, "Retain the 90-minute second period")
+        XCTAssertEqual(daily.timeInBedMinutes, 450, "The six-hour gap is not time in bed")
+        XCTAssertEqual(daily.sleepEfficiency, 100)
+        let reversedDaily = try XCTUnwrap(SleepHealthKitManager.sleepEntry(from: reversed[day]!, for: day, owner: owner))
+        XCTAssertEqual(reversedDaily.timeAsleepMinutes, daily.timeAsleepMinutes)
+        XCTAssertEqual(reversedDaily.timeInBedMinutes, daily.timeInBedMinutes)
     }
     func testOverlappingStagesAndAwakeDoNotManufactureMeasuredComponents() {
         let start = Date()
@@ -902,6 +910,156 @@ final class SleepHealthImportRegressionTests: XCTestCase {
         XCTAssertEqual(data.asleep, 7200)
         XCTAssertFalse(data.hasCompleteStages)
         XCTAssertFalse(data.hasAwakeData)
+    }
+    func testLaterSleepRetainsTheEarlierNapAndItsSavedIdentity() throws {
+        let start = date("2026-10-25T22:00:00-04:00")
+        let nap = sample(start, 120)
+        let night = sample(date("2026-10-26T04:00:00-04:00"), 420)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/New_York")!
+        let day = calendar.startOfDay(for: night.endDate)
+        let samples = SleepHealthKitManager.dailySleepSamples(from: [night, nap], wakingFrom: day,
+            through: day.addingTimeInterval(86400), calendar: calendar)
+        let combined = try XCTUnwrap(SleepHealthKitManager.sleepEntry(from: samples[day]!, for: day, owner: owner))
+        var savedNap = try XCTUnwrap(SleepHealthKitManager.sleepEntry(from: [nap], for: day, owner: owner))
+        savedNap.notes = "Synthetic nap feedback"
+        XCTAssertEqual(combined.timeAsleepMinutes, 540)
+        XCTAssertEqual(combined.timeInBedMinutes, 540)
+        XCTAssertEqual(try SleepHealthKitManager.matchingImport(for: combined, occupying: [savedNap])?.id, savedNap.id)
+        XCTAssertEqual(savedNap.notes, "Synthetic nap feedback")
+        let decoded = try JSONDecoder().decode(SleepEntry.self, from: JSONEncoder().encode(combined))
+        XCTAssertEqual(decoded.timeAsleepMinutes, 540)
+        XCTAssertEqual(decoded.timeInBedMinutes, 540)
+    }
+    func testMeasuredInBedStillCoversAnAwakeGap() throws {
+        let start = date("2026-10-25T00:00:00-04:00")
+        let samples = [sample(start, 300, .inBed), sample(start, 120),
+            sample(start.addingTimeInterval(180 * 60), 120)]
+        let entry = try XCTUnwrap(SleepHealthKitManager.sleepEntry(from: samples, for: start, owner: owner))
+        XCTAssertEqual(entry.timeAsleepMinutes, 240)
+        XCTAssertEqual(entry.timeInBedMinutes, 300)
+        XCTAssertEqual(entry.sleepEfficiency, 80)
+    }
+    func testOvernightSleepAndLateNapCanHaveAnEnvelopeOver24Hours() throws {
+        let first = sample(date("2026-10-25T22:00:00-04:00"), 540)
+        let second = sample(date("2026-10-26T23:00:00-04:00"), 30)
+        let day = date("2026-10-26T00:00:00-04:00")
+        let daily = try XCTUnwrap(SleepHealthKitManager.sleepEntry(from: [first, second], for: day, owner: owner))
+        XCTAssertEqual(daily.timeAsleepMinutes, 570)
+        XCTAssertEqual(daily.timeInBedMinutes, 570)
+        XCTAssertEqual(daily.validatedRecordedPeriods?.count, 2)
+        XCTAssertTrue(SleepScoreCalculator().isValidForScoring(entry: daily))
+        var fragment = try XCTUnwrap(SleepHealthKitManager.sleepEntry(from: [first], for: day, owner: owner))
+        fragment.notes = "Synthetic saved night feedback"
+        let rows = SleepEntry.withoutContainedHealthImports([fragment, daily])
+        XCTAssertEqual(rows.map(\.id), [daily.id])
+        XCTAssertEqual(rows.first?.previousImportFeedback.first?.notes, fragment.notes)
+        let gap = entry(date("2026-10-26T12:00:00-04:00"), 90)
+        XCTAssertEqual(SleepEntry.withoutContainedHealthImports([gap, daily]).count, 2,
+            "An unmeasured gap cannot establish that another record was superseded")
+        do {
+            _ = try SleepHealthKitManager.matchingImport(for: daily, occupying: [gap])
+            XCTFail("An unmeasured gap cannot repurpose another record's ID or feedback")
+        } catch SleepTrackingError.importDateConflict { }
+    }
+    func testShortNapImportsAndInBedOnlyDaysDoNotEnterTheDailyBatch() throws {
+        let start = date("2026-10-25T01:00:00-04:00")
+        let nap = sample(start, 30)
+        let imported = try XCTUnwrap(SleepHealthKitManager.sleepEntry(from: [nap], for: start, owner: owner))
+        XCTAssertEqual(imported.timeAsleepMinutes, 30)
+        XCTAssertTrue(SleepScoreCalculator().isValidForScoring(entry: imported))
+        let groups = SleepHealthKitManager.dailySleepSamples(from: [sample(start, 60, .inBed),
+            sample(start.addingTimeInterval(-86400), 480)], wakingFrom: start.addingTimeInterval(-86400),
+            through: start.addingTimeInterval(86400))
+        XCTAssertEqual(groups.count, 1, "A newer day without measured sleep must not block the older night")
+    }
+    func testLegacyWholeSecondFragmentMatchesFractionalMeasuredCoverage() throws {
+        let start = date("2026-10-25T22:00:00-04:00").addingTimeInterval(0.123)
+        let first = sample(start, 540)
+        let last = sample(date("2026-10-26T23:00:00-04:00").addingTimeInterval(0.123), 30)
+        let day = date("2026-10-26T00:00:00-04:00")
+        let aggregate = try XCTUnwrap(SleepHealthKitManager.sleepEntry(from: [first, last], for: day, owner: owner))
+        let original = try XCTUnwrap(SleepHealthKitManager.sleepEntry(from: [first], for: day, owner: owner))
+        var json = try JSONSerialization.jsonObject(with: PostgrestClient.Configuration.jsonEncoder.encode(original)) as! [String: Any]
+        json["bedtime"] = original.bedtime.ISO8601Format()
+        json["wake_time"] = original.wakeTime.ISO8601Format()
+        json["recorded_periods"] = NSNull()
+        json["notes"] = "Synthetic legacy feedback"
+        let legacy = try PostgrestClient.Configuration.jsonDecoder.decode(SleepEntry.self, from: JSONSerialization.data(withJSONObject: json))
+        let rows = SleepEntry.withoutContainedHealthImports([legacy, aggregate])
+        XCTAssertEqual(rows.map(\.id), [aggregate.id])
+        XCTAssertEqual(rows.first?.previousImportFeedback.first?.notes, "Synthetic legacy feedback")
+        let gap = entry(date("2026-10-26T12:00:00-04:00"), 60)
+        XCTAssertEqual(SleepEntry.withoutContainedHealthImports([gap, aggregate]).count, 2)
+    }
+    func testNearbyLegacyRowsNeverRemoveEachOtherAndMeasuredCoverageWinsMutualContainment() throws {
+        let start = date("2026-10-25T22:00:00-04:00")
+        var a = entry(start, 480); a.recordedPeriods = nil
+        var b = entry(start.addingTimeInterval(1), 480); b.recordedPeriods = nil
+        XCTAssertEqual(SleepEntry.withoutContainedHealthImports([a, b]).count, 2)
+        XCTAssertEqual(SleepEntry.withoutContainedHealthImports([b, a]).count, 2)
+        let measured = entry(start.addingTimeInterval(0.123), 480)
+        var json = try JSONSerialization.jsonObject(with: PostgrestClient.Configuration.jsonEncoder.encode(a)) as! [String: Any]
+        json["wake_time"] = a.wakeTime.ISO8601Format()
+        json["updated_at"] = a.updatedAt.addingTimeInterval(3600).ISO8601Format()
+        json["notes"] = "Synthetic precision feedback"
+        let legacy = try PostgrestClient.Configuration.jsonDecoder.decode(SleepEntry.self, from: JSONSerialization.data(withJSONObject: json))
+        for rows in [[legacy, measured], [measured, legacy]] {
+            let result = SleepEntry.withoutContainedHealthImports(rows)
+            XCTAssertEqual(result.map(\.id), [measured.id])
+            XCTAssertEqual(result.first?.previousImportFeedback.first?.notes, "Synthetic precision feedback")
+        }
+    }
+    func testMixedFourRowCoverageCannotFormADominanceCycle() throws {
+        let start = date("2026-10-26T01:00:00-04:00")
+        func row(_ offset: Double, _ seconds: Double, legacy: Bool) throws -> SleepEntry {
+            var result = try XCTUnwrap(SleepHealthKitManager.sleepEntry(from:
+                [sample(start.addingTimeInterval(offset), seconds / 60)], for: start, owner: owner))
+            if legacy { result.recordedPeriods = nil }
+            return result
+        }
+        let a = try row(0, 100, legacy: false), b = try row(-1, 102, legacy: true)
+        let c = try row(-1, 100, legacy: false), d = try row(-2, 102, legacy: true)
+        for input in [[a,b,c,d], [d,c,b,a], [b,d,a,c], [c,a,d,b]] {
+            let result = SleepEntry.withoutContainedHealthImports(input)
+            XCTAssertEqual(Set(result.map(\.id)), Set([b.id, d.id]))
+        }
+    }
+    func testOldClientMeasurementUpdatesInvalidateStalePeriodMetadata() throws {
+        var imported = try XCTUnwrap(SleepHealthKitManager.sleepEntry(from:
+            [sample(date("2026-10-26T01:00:00-04:00"), 90)], for: date("2026-10-26T00:00:00-04:00"), owner: owner))
+        let period = try XCTUnwrap(imported.recordedPeriods?.first)
+        imported.recordedPeriods = [SleepRecordedPeriod(start: period.start, end: period.end,
+            inBedSeconds: period.inBedSeconds, asleepSeconds: 1)]
+        XCTAssertNil(imported.validatedRecordedPeriods)
+        let decoded = try JSONDecoder().decode(SleepEntry.self, from: JSONEncoder().encode(imported))
+        XCTAssertNil(decoded.recordedPeriods)
+        XCTAssertEqual(decoded.timeAsleepMinutes, 90)
+        let fragment = entry(period.start.addingTimeInterval(60), 60)
+        XCTAssertEqual(SleepEntry.withoutContainedHealthImports([fragment, imported]).count, 2,
+            "Stale metadata must not be treated as a legacy continuous coverage range")
+        var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(imported)) as! [String: Any]
+        json["recorded_periods"] = [NSNull()]
+        let malformed = try JSONDecoder().decode(SleepEntry.self, from: JSONSerialization.data(withJSONObject: json))
+        XCTAssertNil(malformed.validatedRecordedPeriods)
+        XCTAssertEqual(SleepEntry.withoutContainedHealthImports([fragment, malformed]).count, 2)
+    }
+    func testMetricQueryExcludesTheGapAndSamplesOutsideMeasuredPeriods() throws {
+        let start = date("2026-10-25T00:00:00-04:00")
+        let periods = [DateInterval(start: start, duration: 120 * 60),
+            DateInterval(start: start.addingTimeInterval(6 * 3600), duration: 120 * 60)]
+        let predicate = SleepHealthKitManager.metricsPredicate(during: periods)
+        let type = HKQuantityType.quantityType(forIdentifier: .heartRate)!
+        func metric(at minutes: Double, duration: Double = 1) -> HKQuantitySample {
+            let date = start.addingTimeInterval(minutes * 60)
+            return HKQuantitySample(type: type, quantity: HKQuantity(unit: .count().unitDivided(by: .minute()), doubleValue: 60),
+                start: date, end: date.addingTimeInterval(duration * 60))
+        }
+        XCTAssertTrue(predicate.evaluate(with: metric(at: 30)))
+        XCTAssertTrue(predicate.evaluate(with: metric(at: 390)))
+        XCTAssertFalse(predicate.evaluate(with: metric(at: 240)))
+        XCTAssertFalse(predicate.evaluate(with: metric(at: -1)))
+        XCTAssertFalse(predicate.evaluate(with: metric(at: 119, duration: 2)))
     }
     func testMeasuredZeroStagesRemainDistinctFromMissingStages() throws {
         let start = Date()
@@ -947,8 +1105,8 @@ final class SleepHealthImportRegressionTests: XCTestCase {
         let start = Date()
         XCTAssertNil(SleepHealthKitManager.sleepEntry(from: [sample(start, 1441)], for: start, owner: owner))
         XCTAssertNil(SleepHealthKitManager.sleepEntry(from: [], for: start, owner: owner))
-        XCTAssertNil(SleepHealthKitManager.sleepEntry(from: [sample(start, 30)], for: start, owner: owner))
-        XCTAssertTrue(SleepHealthKitManager.mainSleepSessions(from: [sample(start, 1441)], wakingFrom: start,
+        XCTAssertEqual(SleepHealthKitManager.sleepEntry(from: [sample(start, 30)], for: start, owner: owner)?.timeAsleepMinutes, 30)
+        XCTAssertTrue(SleepHealthKitManager.dailySleepSamples(from: [sample(start, 1441)], wakingFrom: start,
             through: start.addingTimeInterval(2*86400)).isEmpty)
     }
     func testContainedImportsAreExcludedWhileFeedbackIsStillVisible() {
@@ -1056,6 +1214,26 @@ final class SleepImportPersistenceRegressionTests: XCTestCase {
         XCTAssertEqual(saved.id, record.id)
         XCTAssertEqual(SleepImportURLProtocol.fixture.requests.map(\.httpMethod), ["POST", "GET", "PATCH"])
     }
+    func testImportedPeriodsPersistAndReloadThroughRealSDK() async throws {
+        let type = HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!
+        let wake = Date()
+        let samples = [HKCategorySample(type: type, value: HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue,
+            start: wake.addingTimeInterval(-25.5 * 3600), end: wake.addingTimeInterval(-16.5 * 3600)),
+            HKCategorySample(type: type, value: HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue,
+            start: wake.addingTimeInterval(-1800), end: wake)]
+        record = try XCTUnwrap(SleepHealthKitManager.sleepEntry(from: samples, for: wake, owner: record.userId))
+        SleepImportURLProtocol.fixture.reset(record: record)
+        let saved = try await service.createEntry(record, goals: goals, replacing: record)
+        let reloaded = try await service.fetchEntries(from: record.date, to: record.date)
+        XCTAssertEqual(saved.validatedRecordedPeriods?.count, 2)
+        XCTAssertEqual(reloaded.first?.validatedRecordedPeriods, saved.validatedRecordedPeriods)
+        let patch = try XCTUnwrap(SleepImportURLProtocol.fixture.requests.first { $0.httpMethod == "PATCH" })
+        let body = try JSONSerialization.jsonObject(with: SleepImportHTTP.body(patch)) as! [String: Any]
+        let periods = try XCTUnwrap(body["recorded_periods"] as? [[String: Any]])
+        XCTAssertEqual(periods.count, 2)
+        XCTAssertTrue(periods.allSatisfy { $0["start"] is String && $0["end"] is String })
+        XCTAssertEqual(periods.reduce(0) { $0 + ($1["asleep_seconds"] as! Double) }, 570 * 60)
+    }
     func testManualAndCrossOwnerReplacementAreRejectedBeforeAnyWrite() async throws {
         var json = try JSONSerialization.jsonObject(with: PostgrestClient.Configuration.jsonEncoder.encode(record)) as! [String: Any]
         json["source"] = "manual"
@@ -1117,6 +1295,12 @@ private final class SleepImportHTTP: @unchecked Sendable {
             failInsertOnce = false; return (409, Data(#"{"code":"23505","message":"synthetic unique date collision"}"#.utf8))
         }
         if request.httpMethod == "GET" { return (200, Data("[".utf8) + row + Data("]".utf8)) }
+        if request.httpMethod == "PATCH" || request.httpMethod == "POST",
+           var stored = try? JSONSerialization.jsonObject(with: row) as? [String: Any],
+           let fields = try? JSONSerialization.jsonObject(with: copy.httpBody ?? Data()) as? [String: Any] {
+            for (key, value) in fields { stored[key] = value }
+            row = try! JSONSerialization.data(withJSONObject: stored)
+        }
         return (200, row)
     }
 }
@@ -1254,9 +1438,9 @@ final class SleepHistoryImportRegressionTests: XCTestCase {
             now: date(2026, 10, 3))
         let queried = samples.filter { $0.startDate < window.end && $0.endDate > window.start }
         XCTAssertEqual(queried.count, samples.count)
-        XCTAssertTrue(SleepHealthKitManager.mainSleepSessions(from: queried, wakingFrom: date(2026, 9, 1),
+        XCTAssertTrue(SleepHealthKitManager.dailySleepSamples(from: queried, wakingFrom: date(2026, 9, 1),
             through: end, calendar: calendar).isEmpty, "A batch must not save a clipped start-date fragment")
-        let following = SleepHealthKitManager.mainSleepSessions(from: queried, wakingFrom: midnight,
+        let following = SleepHealthKitManager.dailySleepSamples(from: queried, wakingFrom: midnight,
             through: date(2026, 10, 2), calendar: calendar)
         XCTAssertEqual(following.count, 1)
         XCTAssertEqual(SleepHealthKitManager.sleepDurations(try XCTUnwrap(following.values.first)).asleep, 9 * 3600 - 0.00036, accuracy: 0.00001)
