@@ -579,6 +579,26 @@ final class SleepHealthImportRegressionTests: XCTestCase {
         XCTAssertEqual(imported.awakeMinutes, 10)
         XCTAssertTrue(imported.hasCompleteScoreData)
     }
+    func testSubmillisecondStageHandoffsKeepOneSessionWithoutAddingSleepTime() throws {
+        let start = date("2026-01-04T20:00:00Z")
+        let first = sample(start, 90, .asleepCore)
+        for gap in [0.00000025, 0.0005] {
+            let second = sample(first.endDate.addingTimeInterval(gap), 180, .asleepREM)
+            let samples = [first, second]
+            XCTAssertEqual(SleepHealthKitManager.sleepSessions(from: samples).count, 1)
+            XCTAssertEqual(SleepHealthKitManager.sleepDurations(samples).asleep, 270 * 60)
+            XCTAssertEqual(try XCTUnwrap(SleepHealthKitManager.sleepEntry(from: samples, for: start, owner: owner)).timeAsleepMinutes, 270)
+        }
+    }
+    func testActualRecordingGapsRemainSeparate() {
+        let start = date("2026-01-04T20:00:00Z")
+        let first = sample(start, 90)
+        for gap in [0.002, 1.0] {
+            let second = sample(first.endDate.addingTimeInterval(gap), 180)
+            XCTAssertEqual(SleepHealthKitManager.sleepSessions(from: [first, second]).count, 2)
+            XCTAssertEqual(SleepHealthKitManager.sleepDurations([first, second]).asleep, 270 * 60)
+        }
+    }
     func testSubminuteIntervalsAreUnionedBeforeRounding() {
         let start = Date()
         let samples = (0..<200).map { sample(start.addingTimeInterval(Double($0)*30), 0.5) }
