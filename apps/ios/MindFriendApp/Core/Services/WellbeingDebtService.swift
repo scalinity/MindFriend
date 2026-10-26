@@ -346,7 +346,7 @@ actor WellbeingDebtService: WellbeingDebtReading {
     /// Get the current authenticated user ID
     /// - Returns: User ID
     private func getCurrentUserId() async throws -> String {
-        let userId = try await supabase.auth.session.user.id.uuidString
+        let userId = try await supabase.auth.session.user.id.uuidString.lowercased()
         return userId
     }
 
