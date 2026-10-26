@@ -188,6 +188,19 @@ final class SubscriptionCatalogUITests: XCTestCase {
 
 @MainActor
 final class SleepDashboardUITests: XCTestCase {
+    func testPullToRefreshActuallySyncsBeforeReloadingSavedSleep() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--sleep-ui-test", "--sleep-pull-sync"]
+        app.launch()
+        defer { app.terminate() }
+        XCTAssertTrue(app.staticTexts["7h 30m"].waitForExistence(timeout: 15))
+        let scroll = app.scrollViews.firstMatch
+        scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2)).press(forDuration: 0.1,
+            thenDragTo: scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85)))
+        XCTAssertTrue(app.staticTexts["18h 0m"].waitForExistence(timeout: 10), "A pull must invoke Health sync, then show its updated entry")
+        XCTAssertFalse(app.staticTexts["Sleep Records Unavailable"].exists)
+    }
     func testFullImportedSessionDisplaysDurationAndRetainsEarlierFeedback() {
         continueAfterFailure = false
         let app = XCUIApplication()

@@ -337,6 +337,166 @@ final class SleepScoreCalculatorTests: XCTestCase {
 final class SleepDashboardRegressionTests: XCTestCase {
     private let owner = UUID(uuidString: "11111111-1111-4111-8111-111111111111")!
 
+    func testCancelledPullStillCompletesTheScreenOwnedRefresh() async {
+        let reader = SleepDashboardFixture(owner: owner)
+        reader.entries = [entry(owner: owner)]
+        let model = SleepDashboardViewModel()
+        let gate = SleepRefreshGate()
+        let pull = Task { await model.refresh(trackingService: reader) {
+            await gate.wait()
+            try Task.checkCancellation()
+        } }
+        await gate.waitUntilStarted()
+        pull.cancel()
+        gate.open()
+        await pull.value
+        XCTAssertEqual(model.lastSleepEntry?.id, reader.entries.first?.id)
+        XCTAssertNil(model.errorMessage)
+        XCTAssertNil(model.syncErrorMessage)
+        XCTAssertEqual(reader.readCount, 1)
+    }
+
+    func testOverlappingPullsUseOneSyncAndOneReload() async {
+        let reader = SleepDashboardFixture(owner: owner)
+        reader.entries = [entry(owner: owner)]
+        let model = SleepDashboardViewModel()
+        let gate = SleepRefreshGate()
+        var syncCount = 0
+        let first = Task { await model.refresh(trackingService: reader) {
+            syncCount += 1
+            await gate.wait()
+        } }
+        await gate.waitUntilStarted()
+        let joinedStarted = SleepRefreshGate()
+        let joined = Task {
+            joinedStarted.signalStart()
+            await model.refresh(trackingService: reader) { syncCount += 1 }
+        }
+        await joinedStarted.waitUntilStarted()
+        first.cancel()
+        gate.open()
+        await first.value
+        await joined.value
+        XCTAssertEqual(syncCount, 1)
+        XCTAssertEqual(reader.readCount, 1)
+        XCTAssertEqual(model.lastSleepEntry?.id, reader.entries.first?.id)
+    }
+
+    func testLeavingScreenCancelsRefreshAndAllowsANewAttempt() async {
+        let reader = SleepDashboardFixture(owner: owner)
+        reader.entries = [entry(owner: owner)]
+        let model = SleepDashboardViewModel()
+        let gate = SleepRefreshGate()
+        let first = Task { await model.refresh(trackingService: reader) { await gate.wait() } }
+        await gate.waitUntilStarted()
+        model.cancelRefresh()
+        await model.refresh(trackingService: reader) { }
+        let currentID = model.lastSleepEntry?.id
+        gate.open()
+        await first.value
+        XCTAssertEqual(currentID, reader.entries.first?.id)
+        XCTAssertEqual(model.lastSleepEntry?.id, currentID)
+        XCTAssertEqual(reader.readCount, 1, "The cancelled operation must not reload after returning")
+        XCTAssertNil(model.errorMessage)
+        XCTAssertNil(model.syncErrorMessage)
+    }
+
+    func testCancelledOldCompletionDoesNotClearTheNewRefresh() async {
+        let reader = SleepDashboardFixture(owner: owner)
+        reader.entries = [entry(owner: owner)]
+        let model = SleepDashboardViewModel()
+        let oldGate = SleepRefreshGate(), newGate = SleepRefreshGate(), joinedStarted = SleepRefreshGate()
+        var syncCount = 0
+        let old = Task { await model.refresh(trackingService: reader) {
+            syncCount += 1
+            await oldGate.wait()
+        } }
+        await oldGate.waitUntilStarted()
+        model.cancelRefresh()
+        let current = Task { await model.refresh(trackingService: reader) {
+            syncCount += 1
+            await newGate.wait()
+        } }
+        await newGate.waitUntilStarted()
+        oldGate.open()
+        await old.value
+        let joined = Task {
+            joinedStarted.signalStart()
+            await model.refresh(trackingService: reader) { syncCount += 1 }
+        }
+        await joinedStarted.waitUntilStarted()
+        newGate.open()
+        await current.value
+        await joined.value
+        XCTAssertEqual(syncCount, 2, "The third pull must join the active replacement")
+        XCTAssertEqual(reader.readCount, 1)
+        XCTAssertEqual(model.lastSleepEntry?.id, reader.entries.first?.id)
+    }
+
+    func testCancellationDuringOwnerRecheckCannotOverwriteANewerLoad() async {
+        let reader = SleepDashboardFixture(owner: owner)
+        let gate = SleepRefreshGate()
+        reader.beforeOwnerRead = { count in if count == 2 { await gate.wait() } }
+        let model = SleepDashboardViewModel()
+        let pull = Task { await model.refresh(trackingService: reader) { } }
+        await gate.waitUntilStarted()
+        model.cancelRefresh()
+        let current = entry(owner: owner)
+        reader.entries = [current]
+        await model.loadData(trackingService: reader)
+        reader.entries = []
+        gate.open()
+        await pull.value
+        XCTAssertEqual(model.lastSleepEntry?.id, current.id)
+        XCTAssertEqual(reader.readCount, 1)
+        XCTAssertNil(model.errorMessage)
+    }
+
+    func testOwnerLookupFailureStillShowsActionableLoadFailure() async {
+        let reader = SleepDashboardFixture(owner: owner)
+        reader.beforeOwnerRead = { _ in throw URLError(.userAuthenticationRequired) }
+        let model = SleepDashboardViewModel()
+        var didSync = false
+        await model.refresh(trackingService: reader) { didSync = true }
+        XCTAssertFalse(didSync)
+        XCTAssertNotNil(model.errorMessage)
+        XCTAssertNil(model.lastSleepEntry)
+    }
+
+    func testCancellationDuringReloadCannotPublishOverANewerLoad() async {
+        let reader = SleepDashboardFixture(owner: owner)
+        let gate = SleepRefreshGate()
+        reader.beforeEntriesRead = { await gate.wait(); try Task.checkCancellation() }
+        let model = SleepDashboardViewModel()
+        let pull = Task { await model.refresh(trackingService: reader) { } }
+        await gate.waitUntilStarted()
+        model.cancelRefresh()
+        let currentReader = SleepDashboardFixture(owner: owner)
+        let current = entry(owner: owner)
+        currentReader.entries = [current]
+        await model.loadData(trackingService: currentReader)
+        gate.open()
+        await pull.value
+        XCTAssertEqual(model.lastSleepEntry?.id, current.id)
+        XCTAssertNil(model.errorMessage)
+        XCTAssertNil(model.syncErrorMessage)
+    }
+
+    func testAccountChangeDuringSyncDiscardsTheRefresh() async {
+        let reader = SleepDashboardFixture(owner: owner)
+        reader.entries = [entry(owner: owner)]
+        let model = SleepDashboardViewModel()
+        let gate = SleepRefreshGate()
+        let pull = Task { await model.refresh(trackingService: reader) { await gate.wait() } }
+        await gate.waitUntilStarted()
+        reader.owner = UUID()
+        gate.open()
+        await pull.value
+        XCTAssertEqual(reader.readCount, 0)
+        XCTAssertNil(model.lastSleepEntry)
+        XCTAssertNil(model.errorMessage)
+    }
+
     func testEmptyDeletedAndFailedReloadNeverKeepPersonalResults() async {
         let reader = SleepDashboardFixture(owner: owner)
         let model = SleepDashboardViewModel()
@@ -452,6 +612,29 @@ final class SleepDashboardRegressionTests: XCTestCase {
 }
 
 @MainActor
+private final class SleepRefreshGate {
+    private var started = false
+    private var startWaiter: CheckedContinuation<Void, Never>?
+    private var continuation: CheckedContinuation<Void, Never>?
+    func signalStart() {
+        started = true
+        startWaiter?.resume()
+        startWaiter = nil
+    }
+    func wait() async {
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+            signalStart()
+        }
+    }
+    func waitUntilStarted() async {
+        if started { return }
+        await withCheckedContinuation { startWaiter = $0 }
+    }
+    func open() { continuation?.resume(); continuation = nil }
+}
+
+@MainActor
 private final class SleepDashboardFixture: SleepTrackingReading {
     var owner: UUID
     var latest: SleepEntry?
@@ -459,8 +642,15 @@ private final class SleepDashboardFixture: SleepTrackingReading {
     var fail = false
     var switchAccountAfterRead = false
     var readCount = 0
+    private var ownerReadCount = 0
+    var beforeOwnerRead: ((Int) async throws -> Void)?
+    var beforeEntriesRead: (() async throws -> Void)?
     init(owner: UUID) { self.owner = owner }
-    func currentUserID() async throws -> UUID { owner }
+    func currentUserID() async throws -> UUID {
+        ownerReadCount += 1
+        try await beforeOwnerRead?(ownerReadCount)
+        return owner
+    }
     func fetchLatestEntry() async throws -> SleepEntry? {
         readCount += 1
         if fail { throw URLError(.notConnectedToInternet) }
@@ -468,6 +658,7 @@ private final class SleepDashboardFixture: SleepTrackingReading {
     }
     func fetchEntries(from: Date, to: Date) async throws -> [SleepEntry] {
         readCount += 1
+        try await beforeEntriesRead?()
         if fail { throw URLError(.notConnectedToInternet) }
         return entries
     }
