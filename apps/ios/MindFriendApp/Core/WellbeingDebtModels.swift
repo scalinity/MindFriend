@@ -79,15 +79,16 @@ struct WellbeingTransaction: Identifiable, Codable, Equatable {
 
 // MARK: - Debt Score Models
 
-/// The selected number of complete UTC days in the existing debt ledger.
+/// The selected number of complete calendar days in the current time zone.
 struct DebtTransactionWindow {
     let start: String
     let end: String
-    let timezone = "UTC"
+    let timezone: String
 
-    init(days: Int, now: Date = Date()) {
+    init(days: Int, now: Date = Date(), timeZone: TimeZone = .autoupdatingCurrent) {
+        timezone = timeZone.identifier
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        calendar.timeZone = timeZone
         let endDate = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: now))!
         let startDate = calendar.date(byAdding: .day, value: -(days - 1), to: endDate)!
         let formatter = DateFormatter()
@@ -97,6 +98,15 @@ struct DebtTransactionWindow {
         formatter.dateFormat = "yyyy-MM-dd"
         start = formatter.string(from: startDate)
         end = formatter.string(from: endDate)
+    }
+
+    static func dateString(_ date: Date, timeZone: TimeZone = .autoupdatingCurrent) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
     }
 
     func accounted(_ records: [WellbeingTransaction], owner: String) -> [WellbeingTransaction] {
@@ -122,6 +132,7 @@ struct TrendData: Codable, Equatable {
     var accountingVersion: Int? = nil
     var calculatedAt: String? = nil
     var sourceTransactions: [WellbeingTransaction]? = nil
+    var timeZone: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case direction
@@ -132,6 +143,7 @@ struct TrendData: Codable, Equatable {
         case accountingVersion = "accounting_version"
         case calculatedAt = "calculated_at"
         case sourceTransactions = "source_transactions"
+        case timeZone = "time_zone"
     }
 }
 
@@ -189,10 +201,11 @@ struct DebtScore: Identifiable, Codable, Equatable {
     var calculationTransactions: [WellbeingTransaction]? { sourceTransactions ?? trend.sourceTransactions }
 
     func isCurrentSourceCalculation(now: Date = Date(), requireSnapshot: Bool = false) -> Bool {
-        isSourceCalculation(for: DebtTransactionWindow(days: 1, now: now).end, requireSnapshot: requireSnapshot)
+        isSourceCalculation(for: DebtTransactionWindow(days: 1, now: now).end, requireSnapshot: requireSnapshot, timeZone: TimeZone.autoupdatingCurrent.identifier)
     }
 
-    func isSourceCalculation(for expectedDate: String, requireSnapshot: Bool) -> Bool {
+    func isSourceCalculation(for expectedDate: String, requireSnapshot: Bool, timeZone: String? = nil) -> Bool {
+        if let timeZone, trend.timeZone != timeZone { return false }
         guard date == expectedDate, trend.accountingVersion == 2, trend.calculatedAt != nil,
               rollingDebt7Day >= 0, rollingDebt14Day >= 0, rollingDebt30Day >= 0,
               trend.projection7Day >= 0, thresholdStatus.currentDebt == rollingDebt14Day else { return false }

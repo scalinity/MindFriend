@@ -140,15 +140,12 @@ class Fixture {
       },
       then: (resolve: (r: unknown) => unknown) => {
         const rows = (this.tables[table] ?? []).filter((r) =>
-          filters.every(([op, key, value]) =>
-            op === "eq"
-              ? r[key] === value
-              : op === "gte"
-              ? r[key] >= value
-              : op === "lte"
-              ? r[key] <= value
-              : r[key] < value
-          )
+          filters.every(([op, key, value]) => {
+            const timestamp = ["completed_at", "created_at", "wake_time"].includes(key);
+            const actual = timestamp ? Date.parse(r[key]) : r[key];
+            const expected = timestamp ? Date.parse(value) : value;
+            return op === "eq" ? actual === expected : op === "gte" ? actual >= expected : op === "lte" ? actual <= expected : actual < expected;
+          })
         ).slice(start, end + 1).map((row) =>
           !read.columns || read.columns === "*" ? row : Object.fromEntries(
             read.columns.split(",").map((key) => [key, row[key]]),
@@ -629,4 +626,94 @@ Deno.test("projection preserves awake and light stages so invalid enclosing next
     assertEquals(records.filter(r => r.source === "healthkit").length, 1);
     assertEquals(records.find(r => r.source === "healthkit")?.metadata?.source_ids, ["valid"]);
   }
+});
+
+Deno.test("local source accounting queries actual midnight bounds and groups timestamped events in the requested zone", async () => {
+  const f = new Fixture();
+  f.tables.exercise_sessions = [
+    { id: "before-start", user_id: owner, completed_at: "2026-02-07T04:59:59Z" },
+    { id: "at-start", user_id: owner, completed_at: "2026-02-07T05:00:00Z" },
+    { id: "late-local-day", user_id: owner, completed_at: "2026-03-09T03:59:59Z" },
+    { id: "next-day", user_id: owner, completed_at: "2026-03-09T04:00:00Z" },
+  ];
+  const records = await currentSourceTransactions(f, owner, "2026-03-08", "America/New_York");
+  assertEquals(records.length, 2);
+  assertEquals(records.map(r => r.date), ["2026-02-07", "2026-03-08"]);
+  assertEquals(records.flatMap(r => r.metadata?.source_ids), ["at-start", "late-local-day"]);
+  const query = f.reads.find(r => r.table === "exercise_sessions")!;
+  assertEquals(query.filters.find(x => x[0] === "gte")?.[2], "2026-02-07T05:00:00.000Z");
+  assertEquals(query.filters.find(x => x[0] === "lt")?.[2], "2026-03-09T04:00:00.000Z");
+  const legacy = await currentSourceTransactions(f, owner, "2026-03-08");
+  assertEquals(legacy.flatMap(r => r.metadata?.source_ids).sort(), ["at-start", "before-start"]);
+});
+
+Deno.test("HTTP timezone contract validates input, persists local provenance and retains legacy UTC defaults", async () => {
+  const originalFetch = globalThis.fetch;
+  let sourceReads = 0, writes = 0;
+  let sleepLower = "", sleepUpper = "";
+  const persisted: Row[] = [];
+  const derivedProfile = wireProfile();
+  let moodRows: Row[] = [];
+  globalThis.fetch = (async (input: Request | URL | string, init?: RequestInit) => {
+    const req = new Request(input, init), url = new URL(req.url);
+    const json = (value: unknown) => new Response(JSON.stringify(value), { headers: { "Content-Type": "application/json" } });
+    if (url.pathname.endsWith("/auth/v1/user")) return json({ id: owner, aud: "authenticated", role: "authenticated" });
+    const table = url.pathname.split("/").at(-1)!;
+    if (req.method !== "GET") {
+      writes++;
+      assertEquals(["wellbeing_debt_profiles", "wellbeing_debt_scores"].includes(table), true);
+      if (table === "wellbeing_debt_scores") persisted.push(await req.json());
+      if (table === "wellbeing_debt_profiles") Object.assign(derivedProfile, await req.json());
+      return json(table === "wellbeing_debt_scores" ? [{ id: "11111111-1111-4111-8111-111111111119" }] : null);
+    }
+    sourceReads++;
+    assertEquals(url.searchParams.get(table === "profiles" ? "id" : "user_id"), `eq.${owner}`);
+    if (table === "profiles") return json({ created_at: "2025-01-01T00:00:00Z" });
+    if (table === "wellbeing_debt_profiles") return json(derivedProfile);
+    if (table === "sleep_entries") {
+      sleepLower = url.searchParams.get("wake_time")!;
+      sleepUpper = url.searchParams.getAll("wake_time").find(x => x.startsWith("lt."))!;
+    }
+    if (table === "moods") {
+      return json(moodRows.filter(row => [...url.searchParams.entries()].every(([key, filter]) => {
+        if (["select", "order", "offset", "limit"].includes(key)) return true;
+        const [op, ...rest] = filter.split("."); const expected = rest.join(".");
+        const actual = key === "created_at" ? Date.parse(row[key]) : row[key];
+        const wanted = key === "created_at" ? Date.parse(expected) : expected;
+        return op === "eq" ? actual === wanted : op === "gte" ? actual >= wanted : op === "lte" ? actual <= wanted : actual < wanted;
+      })));
+    }
+    if (table === "wellbeing_transactions") {
+      const date = url.searchParams.getAll("date").find(x => x.startsWith("lte."))!.slice(4);
+      return json([{ ...transaction(date, "deposit", 8), source: "user_logged" }]);
+    }
+    return json([]);
+  }) as typeof fetch;
+  const request = (body: Row) => new Request("https://synthetic.invalid", { method: "POST",
+    headers: { Authorization: "Bearer synthetic", "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  try {
+    assertEquals((await handler(request({ time_zone: "Not/AZone" }))).status, 400);
+    assertEquals(sourceReads, 0); assertEquals(writes, 0);
+    assertEquals((await handler(request({ user_id: other, time_zone: "Not/AZone" }))).status, 403);
+    assertEquals(sourceReads, 0);
+    const { localDate, localDayStart } = await import("./calendar.ts");
+    const end = ledgerDate(localDate(new Date(), "America/New_York"), -1);
+    const response = await handler(request({ time_zone: "America/New_York" }));
+    assertEquals(response.status, 200);
+    const body = await response.json();
+    assertEquals(body.score.date, end); assertEquals(body.score.trend.time_zone, "America/New_York");
+    assertEquals(body.score.rolling_debt_14day, 0);
+    assertEquals(persisted[0].trend.time_zone, "America/New_York");
+    assertEquals(sleepLower, `gte.${localDayStart(ledgerDate(end, -29), "America/New_York")}`);
+    assertEquals(sleepUpper, `lt.${new Date(Date.parse(localDayStart(ledgerDate(end, 1), "America/New_York")) + 86400000).toISOString()}`);
+    const legacy = await handler(request({})); assertEquals(legacy.status, 200);
+    const oldBody = await legacy.json();
+    assertEquals(oldBody.score.date, ledgerDate(new Date().toISOString().slice(0, 10), -1));
+    assertEquals(oldBody.score.trend.time_zone, "UTC");
+    moodRows = [{ id: "synthetic-mood", user_id: owner, local_date: "2026-10-25", created_at: "2026-10-24T12:00:00Z", mood_score: 1 }];
+    const easternmost = await handler(request({ date: "2026-10-25", time_zone: "Pacific/Kiritimati" }));
+    assertEquals(easternmost.status, 200);
+    assertEquals(derivedProfile.crash_history.crashes.some((crash: Row) => crash.date === "2026-10-25" && crash.mood_score === 1), true);
+
+  } finally { globalThis.fetch = originalFetch; }
 });

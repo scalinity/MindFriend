@@ -54,7 +54,7 @@ struct DebtBreakdownView: View {
                 .pickerStyle(.segmented)
                 .padding()
                 if let window = displayedWindow {
-                    Text("\(window.start) – \(window.end) · \(window.timezone)")
+                    Text("\(window.start) – \(window.end)").accessibilityIdentifier("debt.breakdown.window")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .padding(.horizontal)
@@ -80,7 +80,7 @@ struct DebtBreakdownView: View {
                     }
                 }
             }
-            .task(id: "\(selectedDateRange.days)-\(appState.currentUser?.id.uuidString ?? "signed-out")") {
+            .task(id: "\(selectedDateRange.days)-\(appState.currentUser?.id.uuidString ?? "signed-out")-\(debtScore.date)-\(debtScore.trend.timeZone ?? "legacy")") {
                 await loadTransactions()
             }
         }
@@ -280,7 +280,8 @@ struct DebtBreakdownView: View {
             displayedWindow = window
             let loaded: [WellbeingTransaction]
             if let snapshot = debtScore.calculationTransactions {
-                guard debtScore.date == window.end, debtScore.userId.lowercased() == owner.lowercased() else {
+                guard debtScore.isSourceCalculation(for: window.end, requireSnapshot: true, timeZone: window.timezone),
+                      debtScore.userId.lowercased() == owner.lowercased() else {
                     throw WellbeingDebtError.needsMoreData("This calculation is out of date. Refresh the debt dashboard to view a current breakdown.")
                 }
                 loaded = snapshot

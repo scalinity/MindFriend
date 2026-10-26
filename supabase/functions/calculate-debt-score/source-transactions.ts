@@ -1,3 +1,4 @@
+import { checkedTimeZone, localDateFormatter, localDayStart } from "./calendar.ts";
 import { withoutContainedSleepImports } from "../_shared/sleep-session-records.ts";
 import type { Transaction } from "../_shared/wellbeing-debt-types.ts";
 import {
@@ -23,9 +24,19 @@ export async function currentSourceTransactions(
   supabase: any,
   userId: string,
   endDate: string,
+  timeZone = "UTC",
 ): Promise<Transaction[]> {
+  checkedTimeZone(timeZone);
   const startDate = ledgerDate(endDate, -29);
-  const endExclusive = `${ledgerDate(endDate, 1)}T00:00:00Z`;
+  const startInstant = localDayStart(startDate, timeZone);
+  const endExclusive = localDayStart(ledgerDate(endDate, 1), timeZone);
+  const followingSleepLimit = new Date(Date.parse(endExclusive) + dayMS).toISOString();
+  const dayOf = localDateFormatter(timeZone);
+  function eventDate(value: unknown): string | null {
+    if (typeof value !== "string") return null;
+    const milliseconds = Date.parse(value);
+    return Number.isFinite(milliseconds) ? dayOf(new Date(milliseconds)) : null;
+  }
   async function read(
     table: string,
     columns: string,
@@ -36,14 +47,16 @@ export async function currentSourceTransactions(
     const rows: SourceRow[] = [];
     for (let offset = 0;; offset += 500) {
       let query = supabase.from(table).select(columns).eq("user_id", userId)
-        .gte(dateColumn, timestamp ? `${startDate}T00:00:00Z` : startDate);
+        .gte(dateColumn, timestamp ? startInstant : startDate);
       query = timestamp
-        ? query.lt(dateColumn, includeFollowingSleepDay ? `${ledgerDate(endDate, 2)}T00:00:00Z` : endExclusive)
+        ? query.lt(dateColumn, includeFollowingSleepDay ? followingSleepLimit : endExclusive)
         : query.lte(dateColumn, endDate);
       const { data, error } = await query.order("id", { ascending: true })
         .range(offset, offset + 499);
       if (error || !data) throw new Error(`Source unavailable: ${table}`);
-      rows.push(...data.filter((row: SourceRow) => row.user_id === userId));
+      rows.push(...data.filter((row: SourceRow) => row.user_id === userId).map((row: SourceRow) =>
+        timestamp ? { ...row, accounting_date: eventDate(row[dateColumn]) } : row
+      ));
       if (data.length < 500) return rows;
     }
   }
@@ -113,7 +126,7 @@ export async function currentSourceTransactions(
         Date.parse(accountDate)) / dayMS,
     );
     const dayExercises = exercise.filter((row) =>
-      eventDate(row.completed_at) === date
+      row.accounting_date === date
     );
     append(
       date,
@@ -124,7 +137,7 @@ export async function currentSourceTransactions(
       dayExercises,
       `${dayExercises.length} completed exercises`,
     );
-    const dayPosts = posts.filter((row) => eventDate(row.created_at) === date);
+    const dayPosts = posts.filter((row) => row.accounting_date === date);
     append(
       date,
       "deposit",
@@ -163,7 +176,7 @@ export async function currentSourceTransactions(
     }
     // Only wearable/Health records supply automatic sleep measurements. Missing data adds no event.
     const daySleep = withoutContainedSleepImports(sleep).filter((row) =>
-      eventDate(row.wake_time) === date &&
+      row.accounting_date === date &&
       ["healthkit", "apple_watch"].includes(row.source) &&
       Number.isFinite(row.time_asleep_minutes) && row.time_asleep_minutes > 0 &&
       row.time_asleep_minutes <= row.time_in_bed_minutes &&
@@ -210,12 +223,4 @@ export async function currentSourceTransactions(
     }
   }
   return result.sort((a, b) => a.date.localeCompare(b.date));
-}
-
-function eventDate(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const milliseconds = Date.parse(value);
-  return Number.isFinite(milliseconds)
-    ? new Date(milliseconds).toISOString().slice(0, 10)
-    : null;
 }

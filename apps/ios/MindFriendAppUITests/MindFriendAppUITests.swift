@@ -231,3 +231,33 @@ final class SleepDashboardUITests: XCTestCase {
         add(capture)
     }
 }
+
+
+@MainActor
+final class DebtLocalCalendarUITests: XCTestCase {
+    func testHomeDashboardAndBreakdownShowDatesWithoutTimeZoneText() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--debt-calendar-ui-test", "-wellbeing_debt_tutorial_completed", "YES"]
+        app.launch()
+        defer { app.terminate() }
+        let homeDate = app.staticTexts["debt.home.date"]
+        XCTAssertTrue(homeDate.waitForExistence(timeout: 15))
+        let date = homeDate.label
+        XCTAssertTrue(date.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil)
+        XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS[c] 'UTC'")).firstMatch.exists)
+        app.buttons["Open Debt Dashboard"].tap()
+        let dashboardDate = app.staticTexts["debt.dashboard.date"]
+        XCTAssertTrue(dashboardDate.waitForExistence(timeout: 5)); XCTAssertEqual(dashboardDate.label, date)
+        let breakdown = app.buttons["View Transaction Breakdown"]
+        for _ in 0..<5 { if breakdown.isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(breakdown.isHittable); breakdown.tap()
+        let range = app.staticTexts["debt.breakdown.window"]
+        XCTAssertTrue(range.waitForExistence(timeout: 5)); XCTAssertTrue(range.label.hasSuffix(date))
+        XCTAssertTrue(app.staticTexts["Synthetic recorded event"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["Error Loading Transactions"].exists)
+        XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS[c] 'UTC'")).firstMatch.exists)
+        let capture = XCTAttachment(screenshot: app.screenshot()); capture.name = "Issue23-date-only-local-window-breakdown"
+        capture.lifetime = .keepAlways; add(capture)
+    }
+}

@@ -33,11 +33,13 @@ actor WellbeingDebtService: WellbeingDebtReading {
 
     private let supabase: SupabaseClient
     private let refresh = DebtScoreRefresh()
+    private let timeZone: @Sendable () -> TimeZone
 
     // MARK: - Initialization
 
-    init(supabase: SupabaseClient) {
+    init(supabase: SupabaseClient, timeZone: @escaping @Sendable () -> TimeZone = { .autoupdatingCurrent }) {
         self.supabase = supabase
+        self.timeZone = timeZone
     }
 
     // MARK: - Debt Score Operations
@@ -61,12 +63,13 @@ actor WellbeingDebtService: WellbeingDebtReading {
     /// Called only by visible debt UI. Signal monitoring remains a saved-score read.
     func refreshDebtScoreIfNeeded() async throws -> DebtScore? {
         let owner = try await getCurrentUserId()
-        let date = DebtTransactionWindow(days: 1).end
-        let key = owner.lowercased() + date + String(DebtSourceChanges.revision)
+        let window = DebtTransactionWindow(days: 1, timeZone: timeZone())
+        let date = window.end
+        let key = owner.lowercased() + "|" + date + "|" + window.timezone + "|" + String(DebtSourceChanges.revision)
         let score = try await refresh.value(key: key) { [self] in
-            return try await requestCalculation(owner: owner, date: date)
+            return try await requestCalculation(owner: owner, date: date, timeZone: window.timezone)
         }
-        guard try await getCurrentUserId() == owner else { throw CancellationError() }
+        guard try await getCurrentUserId() == owner, timeZone().identifier == window.timezone else { throw CancellationError() }
         return score
     }
 
@@ -355,26 +358,28 @@ actor WellbeingDebtService: WellbeingDebtReading {
     /// - Returns: Calculated debt score
     func calculateDebtScore(for date: String? = nil) async throws -> DebtScore {
         let owner = try await getCurrentUserId()
-        let target = date ?? DebtTransactionWindow(days: 1).end
-        let score = try await refresh.value(key: owner.lowercased() + target + String(DebtSourceChanges.revision), force: true, cancelsSharedWork: true) { [self] in
-            try await requestCalculation(owner: owner, date: target)
+        let window = DebtTransactionWindow(days: 1, timeZone: timeZone())
+        let target = date ?? window.end
+        let score = try await refresh.value(key: owner.lowercased() + "|" + target + "|" + window.timezone + "|" + String(DebtSourceChanges.revision), force: true, cancelsSharedWork: true) { [self] in
+            try await requestCalculation(owner: owner, date: target, timeZone: window.timezone)
         }
-        guard try await getCurrentUserId() == owner else { throw CancellationError() }
+        guard try await getCurrentUserId() == owner, timeZone().identifier == window.timezone else { throw CancellationError() }
         guard let score else {
             throw WellbeingDebtError.needsMoreData("No recorded sleep, activities or logged events in the last 30 complete days. Missing records do not establish wellbeing debt.")
         }
         return score
     }
 
-    private func requestCalculation(owner: String, date: String) async throws -> DebtScore? {
-        struct CalculateRequest: Encodable { let user_id: String; let date: String }
+    private func requestCalculation(owner: String, date: String, timeZone: String) async throws -> DebtScore? {
+        struct CalculateRequest: Encodable { let user_id: String; let date: String; let time_zone: String }
         let response: CalculateResponse = try await supabase.functions.invoke(
-            "calculate-debt-score", options: .init(body: CalculateRequest(user_id: owner, date: date)))
+            "calculate-debt-score", options: .init(body: CalculateRequest(user_id: owner, date: date, time_zone: timeZone)))
+        guard self.timeZone().identifier == timeZone else { throw CancellationError() }
         guard response.success else { throw WellbeingDebtError.generationFailed("Failed to calculate debt score") }
         guard try await getCurrentUserId() == owner else { throw CancellationError() }
         guard let score = response.score else { return nil }
         guard score.userId.lowercased() == owner.lowercased(),
-              score.isSourceCalculation(for: date, requireSnapshot: true) else {
+              score.isSourceCalculation(for: date, requireSnapshot: true, timeZone: timeZone) else {
             throw WellbeingDebtError.needsMoreData("This calculation is out of date. Try calculating again after the service update is available.")
         }
         return score

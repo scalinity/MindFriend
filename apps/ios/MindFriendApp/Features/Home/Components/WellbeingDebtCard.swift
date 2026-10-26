@@ -47,6 +47,10 @@ struct WellbeingDebtCard: View {
         .task(id: appState.currentUser?.id) {
             await loadDebtScore()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)
+            .merge(with: NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification))) { _ in
+            Task { await loadDebtScore() }
+        }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             Task { await loadDebtScore() }
         }
@@ -119,7 +123,7 @@ struct WellbeingDebtCard: View {
             )
         }
 
-        Text("Through \(score.date) UTC").font(.caption2).foregroundStyle(.secondary)
+        Text(score.date).accessibilityIdentifier("debt.home.date").font(.caption2).foregroundStyle(.secondary)
 
         // Quick stats row
         HStack(spacing: 16) {
