@@ -1,3 +1,4 @@
+import { withoutContainedSleepImports } from "../_shared/sleep-session-records.ts";
 import type { Transaction } from "../_shared/wellbeing-debt-types.ts";
 import {
   calculatePoorSleepWithdrawal,
@@ -30,13 +31,14 @@ export async function currentSourceTransactions(
     columns: string,
     dateColumn: string,
     timestamp = false,
+    includeFollowingSleepDay = false,
   ): Promise<SourceRow[]> {
     const rows: SourceRow[] = [];
     for (let offset = 0;; offset += 500) {
       let query = supabase.from(table).select(columns).eq("user_id", userId)
         .gte(dateColumn, timestamp ? `${startDate}T00:00:00Z` : startDate);
       query = timestamp
-        ? query.lt(dateColumn, endExclusive)
+        ? query.lt(dateColumn, includeFollowingSleepDay ? `${ledgerDate(endDate, 2)}T00:00:00Z` : endExclusive)
         : query.lte(dateColumn, endDate);
       const { data, error } = await query.order("id", { ascending: true })
         .range(offset, offset + 499);
@@ -60,8 +62,9 @@ export async function currentSourceTransactions(
     ),
     read(
       "sleep_entries",
-      "id,user_id,date,source,bedtime,wake_time,time_in_bed_minutes,time_asleep_minutes,deep_sleep_minutes,rem_sleep_minutes",
+      "id,user_id,date,source,bedtime,wake_time,time_in_bed_minutes,time_asleep_minutes,deep_sleep_minutes,rem_sleep_minutes,light_sleep_minutes,awake_minutes,updated_at",
       "wake_time",
+      true,
       true,
     ),
     read("exercise_sessions", "id,user_id,completed_at", "completed_at", true),
@@ -159,7 +162,7 @@ export async function currentSourceTransactions(
       );
     }
     // Only wearable/Health records supply automatic sleep measurements. Missing data adds no event.
-    const daySleep = sleep.filter((row) =>
+    const daySleep = withoutContainedSleepImports(sleep).filter((row) =>
       eventDate(row.wake_time) === date &&
       ["healthkit", "apple_watch"].includes(row.source) &&
       Number.isFinite(row.time_asleep_minutes) && row.time_asleep_minutes > 0 &&

@@ -102,7 +102,7 @@ final class SleepHealthKitManager: ObservableObject {
 
     // MARK: - Sync
 
-    /// Sync recent sleep data (last 24 hours)
+    /// Sync sessions waking yesterday or today, including their complete intervals.
     func syncRecentSleep() async throws -> SleepEntry? {
         // If not authorized yet, request authorization first
         if !isAuthorized {
@@ -112,16 +112,16 @@ final class SleepHealthKitManager: ObservableObject {
         isSyncing = true
         defer { isSyncing = false }
 
-        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
+        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Calendar.current.startOfDay(for: Date()))!
 
-        let entries = try await syncSleepData(from: yesterday)
+        let entries = try await syncSleepData(from: yesterday, latestOnly: true)
         lastSyncDate = Date()
 
         return entries.first
     }
 
     /// Sync sleep data from a specific start date
-    func syncSleepData(from startDate: Date) async throws -> [SleepEntry] {
+    func syncSleepData(from startDate: Date, latestOnly: Bool = false) async throws -> [SleepEntry] {
         let userId = try await sleepTrackingService.currentUserID()
         print("[SleepHealthKit] syncSleepData starting from: \(startDate)")
         
@@ -136,7 +136,9 @@ final class SleepHealthKitManager: ObservableObject {
 
         // Query sleep analysis data
         print("[SleepHealthKit] Querying HealthKit for sleep samples...")
-        let sleepSamples = try await querySleepAnalysis(from: startDate)
+        // Read a full supported session before the requested wake-day range.
+        // A rolling 24-hour cutoff can remove the beginning of a long sleep.
+        let sleepSamples = try await querySleepAnalysis(from: startDate.addingTimeInterval(-24 * 3600))
         print("[SleepHealthKit] Found \(sleepSamples.count) sleep samples from HealthKit")
 
         if sleepSamples.isEmpty {
@@ -147,13 +149,11 @@ final class SleepHealthKitManager: ObservableObject {
             return []
         }
 
-        // Group by date (each night is a separate entry)
-        let groupedSamples = Dictionary(grouping: sleepSamples) { sample in
-            Calendar.current.startOfDay(for: sample.startDate)
-        }
+        let groupedSamples = Self.mainSleepSessions(from: sleepSamples, wakingFrom: startDate, through: Date())
         print("[SleepHealthKit] Grouped into \(groupedSamples.count) nights")
 
         var entries: [SleepEntry] = []
+        var syncError: Error?
 
         // Fetch user's sleep goals for score calculation
         print("[SleepHealthKit] Fetching sleep goals...")
@@ -162,7 +162,8 @@ final class SleepHealthKitManager: ObservableObject {
         print("[SleepHealthKit] Got goals, processing sleep entries...")
 
         // Process each night's sleep
-        for (date, samples) in groupedSamples {
+        for date in groupedSamples.keys.sorted(by: >).prefix(latestOnly ? 1 : groupedSamples.count) {
+            let samples = groupedSamples[date]!
             guard let entry = try await processSleepSamples(samples, for: date, goals: goals) else {
                 print("[SleepHealthKit] Failed to process samples for \(date)")
                 continue
@@ -171,24 +172,44 @@ final class SleepHealthKitManager: ObservableObject {
             // Check if entry already exists (avoid duplicates)
             do {
                 let existing = try await sleepTrackingService.fetchEntries(from: date, to: date)
-                if existing.isEmpty {
-                    // Create new entry
-                    print("[SleepHealthKit] Creating new entry for \(date)...")
-                    let created = try await sleepTrackingService.createEntry(entry, goals: goals)
-                    entries.append(created)
-                    print("[SleepHealthKit] Entry created successfully")
-                } else {
-                    print("[SleepHealthKit] Entry already exists for \(date), skipping")
+                // Never replace a manually entered night. Refresh imported measurements in place.
+                if existing.contains(where: { $0.source == .manual }) { continue }
+                var canonical = try Self.matchingImport(for: entry, occupying: existing)
+                if canonical == nil {
+                    // Rekey an old contained import when the wake-date slot is free; keep its ID/feedback.
+                    let previous = try await sleepTrackingService.fetchEntries(from: entry.bedtime, to: entry.wakeTime)
+                    canonical = previous.filter {
+                        $0.source != .manual && $0.userId == userId &&
+                        $0.bedtime >= entry.bedtime && $0.wakeTime <= entry.wakeTime
+                    }.sorted { first, second in
+                        let firstHasFeedback = first.userRating != nil || first.dreamNotes != nil || first.notes != nil
+                        let secondHasFeedback = second.userRating != nil || second.dreamNotes != nil || second.notes != nil
+                        return firstHasFeedback == secondHasFeedback ? first.createdAt < second.createdAt : firstHasFeedback
+                    }.first
                 }
+                let saved = try await sleepTrackingService.createEntry(entry, goals: goals, replacing: canonical)
+                entries.append(saved)
             } catch {
                 // Failed to check/create, skip this entry
-                print("[SleepHealthKit] Failed to create sleep entry for \(date): \(error)")
+                print("[SleepHealthKit] Failed to save a sleep session")
+                syncError = syncError ?? error
             }
         }
 
+        if let syncError { throw syncError }
         lastSyncDate = Date()
 
         return entries.sorted { $0.date > $1.date }
+    }
+
+    /// A legacy start-date key can belong to the following night. Never move its feedback to an unrelated session.
+    static func matchingImport(for entry: SleepEntry, occupying rows: [SleepEntry]) throws -> SleepEntry? {
+        guard let existing = rows.first else { return nil }
+        guard existing.userId == entry.userId, existing.source != .manual,
+              existing.bedtime < entry.wakeTime, existing.wakeTime > entry.bedtime else {
+            throw SleepTrackingError.importDateConflict
+        }
+        return existing
     }
 
     /// Query sleep analysis samples from HealthKit
@@ -200,7 +221,7 @@ final class SleepHealthKitManager: ObservableObject {
         let predicate = HKQuery.predicateForSamples(
             withStart: startDate,
             end: Date(),
-            options: .strictStartDate
+            options: []
         )
 
         let descriptor = HKSampleQueryDescriptor(
@@ -209,6 +230,82 @@ final class SleepHealthKitManager: ObservableObject {
         )
 
         return try await descriptor.result(for: healthStore)
+    }
+
+    /// Connected Health intervals form a session; calendar midnight is not a sleep boundary.
+    static func sleepSessions(from samples: [HKCategorySample]) -> [[HKCategorySample]] {
+        let ordered = samples.filter { $0.endDate > $0.startDate && $0.endDate.timeIntervalSince($0.startDate) <= 24 * 3600 }.sorted { $0.startDate < $1.startDate }
+        var sessions: [[HKCategorySample]] = []
+        var end: Date?
+        for sample in ordered {
+            if let lastEnd = end, sample.startDate <= lastEnd {
+                sessions[sessions.count - 1].append(sample)
+                end = max(lastEnd, sample.endDate)
+            } else {
+                sessions.append([sample])
+                end = sample.endDate
+            }
+        }
+        return sessions
+    }
+
+    static func mainSleepSessions(from samples: [HKCategorySample], wakingFrom start: Date,
+                                  through end: Date, calendar: Calendar = .current) -> [Date: [HKCategorySample]] {
+        let sessions = sleepSessions(from: samples).filter {
+            guard let bed = $0.map(\.startDate).min(), let wake = $0.map(\.endDate).max() else { return false }
+            return wake >= start && wake <= end && wake.timeIntervalSince(bed) <= 24 * 3600
+        }
+        return Dictionary(grouping: sessions) { calendar.startOfDay(for: $0.map(\.endDate).max()!) }
+            .mapValues { candidates in
+                candidates.max {
+                    let first = sleepDurations($0).asleep
+                    let second = sleepDurations($1).asleep
+                    return first == second ? $0.map(\.endDate).max()! < $1.map(\.endDate).max()! : first < second
+                }!
+            }
+    }
+
+    struct SleepDurations {
+        let asleep: TimeInterval
+        let deep: TimeInterval
+        let rem: TimeInterval
+        let core: TimeInterval
+        let awake: TimeInterval
+        let hasCompleteStages: Bool
+        let hasAwakeData: Bool
+    }
+
+    /// Merge overlapping intervals before rounding minutes; never add duplicate source durations.
+    static func sleepDurations(_ samples: [HKCategorySample]) -> SleepDurations {
+        let asleepValues: Set<Int> = [HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue,
+            HKCategoryValueSleepAnalysis.asleepCore.rawValue, HKCategoryValueSleepAnalysis.asleepDeep.rawValue,
+            HKCategoryValueSleepAnalysis.asleepREM.rawValue]
+        let asleep = samples.filter { asleepValues.contains($0.value) }
+        let stages = asleep.filter { $0.value != HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue }
+        let awake = samples.filter { $0.value == HKCategoryValueSleepAnalysis.awake.rawValue }
+        func seconds(_ intervals: [HKCategorySample]) -> TimeInterval {
+            let sorted = intervals.filter { $0.endDate > $0.startDate }.sorted { $0.startDate < $1.startDate }
+            guard let first = sorted.first else { return 0 }
+            var start = first.startDate
+            var end = first.endDate
+            var total: TimeInterval = 0
+            for sample in sorted.dropFirst() {
+                if sample.startDate <= end { end = max(end, sample.endDate) }
+                else { total += end.timeIntervalSince(start); start = sample.startDate; end = sample.endDate }
+            }
+            return total + end.timeIntervalSince(start)
+        }
+        let total = seconds(asleep)
+        let deep = seconds(stages.filter { $0.value == HKCategoryValueSleepAnalysis.asleepDeep.rawValue })
+        let rem = seconds(stages.filter { $0.value == HKCategoryValueSleepAnalysis.asleepREM.rawValue })
+        let core = seconds(stages.filter { $0.value == HKCategoryValueSleepAnalysis.asleepCore.rawValue })
+        let awakeSeconds = seconds(awake)
+        // Ambiguous or unstaged intervals cannot establish a complete component score.
+        let completeStages = total > 0 && abs(seconds(stages) - total) < 0.001 &&
+            abs(deep + rem + core - total) < 0.001
+        let nonoverlappingAwake = abs(seconds(asleep + awake) - total - awakeSeconds) < 0.001
+        return SleepDurations(asleep: total, deep: deep, rem: rem, core: core, awake: awakeSeconds,
+            hasCompleteStages: completeStages, hasAwakeData: !awake.isEmpty && nonoverlappingAwake)
     }
 
     /// Process sleep samples for a single night
@@ -225,45 +322,28 @@ final class SleepHealthKitManager: ObservableObject {
             return nil
         }
 
-        // Calculate time in bed (minutes)
-        let timeInBed = Int(wakeTime.timeIntervalSince(bedtime) / 60)
-
-        // Calculate sleep stages
-        var deepSleep = 0
-        var remSleep = 0
-        var lightSleep = 0
-        var awakeTime = 0
-
-        for sample in samples {
-            let duration = Int(sample.endDate.timeIntervalSince(sample.startDate) / 60)
-
-            switch sample.value {
-            case HKCategoryValueSleepAnalysis.asleepDeep.rawValue:
-                deepSleep += duration
-            case HKCategoryValueSleepAnalysis.asleepREM.rawValue:
-                remSleep += duration
-            case HKCategoryValueSleepAnalysis.asleepCore.rawValue,
-                 HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue:
-                lightSleep += duration
-            case HKCategoryValueSleepAnalysis.awake.rawValue:
-                awakeTime += duration
-            default:
-                break
-            }
-        }
-
-        // Total asleep time
-        let timeAsleep = deepSleep + remSleep + lightSleep
-        guard timeAsleep > 0, timeInBed > 0, timeAsleep <= timeInBed else { return nil }
-
-        // Calculate efficiency
-        let efficiency = timeAsleep > 0 ? (Double(timeAsleep) / Double(timeInBed)) * 100 : nil
-
         // Query heart rate data for this sleep period
         let (avgHR, minHR, avgHRV) = try await queryHeartMetrics(from: bedtime, to: wakeTime)
 
         // Query respiratory rate
         let respRate = try await queryRespiratoryRate(from: bedtime, to: wakeTime)
+
+        return Self.sleepEntry(from: samples, for: date, owner: goals.userId,
+            heartRate: (avgHR, minHR, avgHRV), respiratoryRate: respRate)
+    }
+
+    static func sleepEntry(from samples: [HKCategorySample], for date: Date, owner: UUID,
+                           heartRate: (Int?, Int?, Double?) = (nil, nil, nil),
+                           respiratoryRate: Double? = nil) -> SleepEntry? {
+        guard let bedtime = samples.map(\.startDate).min(),
+              let wakeTime = samples.map(\.endDate).max() else { return nil }
+        let durations = sleepDurations(samples)
+        let timeInBed = Int(wakeTime.timeIntervalSince(bedtime) / 60)
+        let timeAsleep = Int(durations.asleep / 60)
+        guard timeAsleep > 0, timeInBed >= 60, timeInBed <= 1440,
+              wakeTime.timeIntervalSince(bedtime) <= 24 * 3600,
+              timeAsleep <= timeInBed else { return nil }
+        let efficiency = Double(timeAsleep) / Double(timeInBed) * 100
 
         // Determine source (Apple Watch vs iPhone)
         let source: SleepSource = samples.first?.sourceRevision.source.bundleIdentifier.contains("watch") == true
@@ -273,22 +353,22 @@ final class SleepHealthKitManager: ObservableObject {
         // Create sleep entry
         let entry = SleepEntry(
             id: UUID(),
-            userId: goals.userId,
+            userId: owner,
             date: date,
             source: source,
             bedtime: bedtime,
             wakeTime: wakeTime,
             timeInBedMinutes: timeInBed,
             timeAsleepMinutes: timeAsleep,
-            deepSleepMinutes: deepSleep > 0 ? deepSleep : nil,
-            remSleepMinutes: remSleep > 0 ? remSleep : nil,
-            lightSleepMinutes: lightSleep > 0 ? lightSleep : nil,
-            awakeMinutes: awakeTime > 0 ? awakeTime : nil,
+            deepSleepMinutes: durations.hasCompleteStages ? Int(durations.deep / 60) : nil,
+            remSleepMinutes: durations.hasCompleteStages ? Int(durations.rem / 60) : nil,
+            lightSleepMinutes: durations.hasCompleteStages ? Int(durations.core / 60) : nil,
+            awakeMinutes: durations.hasAwakeData ? Int(durations.awake / 60) : nil,
             sleepEfficiency: efficiency,
-            heartRateAvg: avgHR,
-            heartRateMin: minHR,
-            hrvAvg: avgHRV,
-            respiratoryRate: respRate,
+            heartRateAvg: heartRate.0,
+            heartRateMin: heartRate.1,
+            hrvAvg: heartRate.2,
+            respiratoryRate: respiratoryRate,
             userRating: nil,
             dreamNotes: nil,
             notes: nil,

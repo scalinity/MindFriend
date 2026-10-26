@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { corsHeaders } from "../_shared/cors.ts";
+import { withoutContainedSleepImports } from "../_shared/sleep-session-records.ts";
 
 interface WindDownRequest {
   targetBedtime: string; // ISO 8601 date
@@ -283,12 +284,14 @@ async function generateTips(supabase: any, userId: string): Promise<string[]> {
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-  const { data: entries } = await supabase
+  const { data: storedEntries } = await supabase
     .from("sleep_entries")
     .select("*")
     .eq("user_id", userId)
     .gte("date", sevenDaysAgo.toISOString().split("T")[0])
     .order("date", { ascending: false });
+
+  const entries = withoutContainedSleepImports(storedEntries ?? []);
 
   if (!entries || entries.length === 0) {
     tips.push("Start tracking your sleep to get personalized insights");

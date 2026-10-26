@@ -1,4 +1,8 @@
 import SwiftUI
+#if DEBUG
+import HealthKit
+import Supabase
+#endif
 
 /// Main sleep tracking dashboard showing recent sleep, trends, and quick actions
 struct SleepDashboardView: View {
@@ -17,6 +21,16 @@ struct SleepDashboardView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
+                    if let message = viewModel.syncErrorMessage {
+                        VStack(spacing: 8) {
+                            Text(message).foregroundStyle(.secondary)
+                            Button("Try Sync Again") {
+                                Task { await viewModel.refresh(trackingService: dependencies.sleepTrackingService,
+                                    healthKitManager: dependencies.sleepHealthKitManager) }
+                            }
+                        }
+                        .accessibilityIdentifier("sleep.syncError")
+                    }
                     // Last Night's Sleep Summary
                     if let lastEntry = viewModel.lastSleepEntry {
                         lastNightSection(lastEntry)
@@ -139,6 +153,19 @@ struct SleepDashboardView: View {
             .padding()
             .background(Color(.systemGray6))
             .cornerRadius(12)
+
+            if !entry.previousImportFeedback.isEmpty {
+                DisclosureGroup("Saved feedback from earlier imports") {
+                    ForEach(entry.previousImportFeedback) { fragment in
+                        VStack(alignment: .leading, spacing: 4) {
+                            if let rating = fragment.userRating { Text("Rating: \(rating)/5") }
+                            if let dreamNotes = fragment.dreamNotes { Text(dreamNotes) }
+                            if let notes = fragment.notes { Text(notes) }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
 
             // Score Breakdown
             if entry.displayableScore != nil, let breakdown = entry.scoreBreakdown {
@@ -453,6 +480,7 @@ final class SleepDashboardViewModel: ObservableObject {
     @Published var insights: [SleepInsight] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var syncErrorMessage: String?
     private var loadID = UUID()
     @Published var showMorningCheckIn = false
     @Published var showSettings = false
@@ -513,33 +541,29 @@ final class SleepDashboardViewModel: ObservableObject {
     }
 
     func refresh(trackingService: SleepTrackingService, healthKitManager: SleepHealthKitManager) async {
-        // Sync from HealthKit first
-        do {
-            _ = try await healthKitManager.syncRecentSleep()
-        } catch {
-            print("HealthKit sync failed: \(error)")
-        }
+        await refresh(trackingService: trackingService) { _ = try await healthKitManager.syncRecentSleep() }
+    }
 
-        // Reload data
-        await loadData(trackingService: trackingService, healthKitManager: healthKitManager)
+    func refresh(trackingService: any SleepTrackingReading, sync: () async throws -> Void) async {
+        let owner = try? await trackingService.currentUserID()
+        syncErrorMessage = nil
+        var failure: Error?
+        do { try await sync() } catch { failure = error }
+        await loadData(trackingService: trackingService)
+        guard let owner, (try? await trackingService.currentUserID()) == owner, !Task.isCancelled else { return }
+        if let failure {
+            if case SleepTrackingError.importDateConflict = failure {
+                syncErrorMessage = failure.localizedDescription
+            } else {
+                syncErrorMessage = "Health sleep couldn't be synced. Saved records may be out of date. Try syncing again."
+            }
+        }
     }
 
     func requestHealthKitAuth(healthKitManager: SleepHealthKitManager, trackingService: SleepTrackingService) async {
-        print("[SleepDashboard] Starting HealthKit authorization...")
-        
-        do {
+        await refresh(trackingService: trackingService) {
             try await healthKitManager.requestAuthorization()
-            print("[SleepDashboard] Authorization complete, syncing sleep data...")
-            
-            // Sync after authorization
-            let entry = try await healthKitManager.syncRecentSleep()
-            print("[SleepDashboard] Sync complete. Entry: \(entry != nil ? "found" : "none")")
-            
-            // Reload data to update the UI
-            await loadData(trackingService: trackingService, healthKitManager: healthKitManager)
-            print("[SleepDashboard] Data reloaded. Entries: \(weekEntries.count)")
-        } catch {
-            print("[SleepDashboard] HealthKit authorization/sync failed: \(error)")
+            _ = try await healthKitManager.syncRecentSleep()
         }
     }
 
@@ -566,6 +590,23 @@ final class SleepDashboardUITestReader: SleepTrackingReading {
     func fetchInsights() async throws -> [SleepInsight] { [] }
     func fetchEntries(from startDate: Date, to endDate: Date) async throws -> [SleepEntry] {
         if !failedOnce { failedOnce = true; throw URLError(.notConnectedToInternet) }
+        if ProcessInfo.processInfo.arguments.contains("--sleep-session-accuracy") {
+            let wake = endDate
+            let start = wake.addingTimeInterval(-1080 * 60)
+            let type = HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!
+            let samples = [HKCategorySample(type: type, value: HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue,
+                                            start: start, end: wake)]
+            var full = SleepHealthKitManager.sleepEntry(from: samples, for: Calendar.current.startOfDay(for: wake), owner: owner)!
+            full.userRating = 4
+            var fragment = SleepHealthKitManager.sleepEntry(from: [HKCategorySample(type: type,
+                value: HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue,
+                start: wake.addingTimeInterval(-240*60), end: wake)], for: wake, owner: owner)!
+            fragment.notes = "Synthetic earlier feedback"
+            // Exercise the same import construction, database coding and reconciliation used by a resync.
+            let encoder = PostgrestClient.Configuration.jsonEncoder
+            let records = try PostgrestClient.Configuration.jsonDecoder.decode([SleepEntry].self, from: encoder.encode([fragment, full]))
+            return SleepEntry.withoutContainedHealthImports(records)
+        }
         let wake = endDate
         let record: [String: Any] = ["id": UUID().uuidString, "user_id": owner.uuidString,
             "date": String(wake.ISO8601Format().prefix(10)), "source": "healthkit",

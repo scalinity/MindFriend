@@ -149,7 +149,11 @@ class Fixture {
               ? r[key] <= value
               : r[key] < value
           )
-        ).slice(start, end + 1);
+        ).slice(start, end + 1).map((row) =>
+          !read.columns || read.columns === "*" ? row : Object.fromEntries(
+            read.columns.split(",").map((key) => [key, row[key]]),
+          )
+        );
         return Promise.resolve({
           data: one ? rows[0] ?? null : rows,
           error: this.failedTable === table
@@ -391,12 +395,12 @@ Deno.test("HTTP owner response and persistence share one current snapshot; faile
   let saves = 0;
   let scheduledInsertPreservedCurrent = false;
   let profileWrites = 0;
-  const end = "2026-10-22";
+  const end = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
   const tables: Record<string, Row[]> = {
     profiles: [{ id: owner, created_at: "2025-01-01T00:00:00Z" }],
     wellbeing_debt_profiles: [],
     wellbeing_transactions: [
-      transaction("2026-10-21", "withdrawal", 20),
+      transaction(ledgerDate(end, -1), "withdrawal", 20),
       transaction(end, "deposit", 2),
     ],
   };
@@ -530,8 +534,8 @@ Deno.test("HTTP owner response and persistence share one current snapshot; faile
     );
     // Correct the triggering mood and preceding source, then remove it; threshold history must follow.
     tables.wellbeing_debt_profiles[0].crash_history = [
-      { date: "2026-10-18", debt_at_crash: 30, mood_score: 2 },
-      { date: "2026-10-19", debt_at_crash: 30, mood_score: 2 },
+      { date: ledgerDate(end, -4), debt_at_crash: 30, mood_score: 2 },
+      { date: ledgerDate(end, -3), debt_at_crash: 30, mood_score: 2 },
       { date: end, debt_at_crash: 100, mood_score: 2 },
     ];
     tables.moods = [{
@@ -594,4 +598,35 @@ Deno.test("new profile writes match deployed columns and reads accept canonical 
   };
   const existing = await calculateUserDebtScore(fixture, owner, "2026-10-22");
   assertEquals(existing?.threshold_status.threshold, 12.5);
+});
+
+
+Deno.test("complete sleep import replaces contained fragments in debt accounting, including the next wake day", async () => {
+  const f = new Fixture();
+  const base = { id: "full", user_id: owner, source: "healthkit", date: "2026-10-22",
+    bedtime: "2026-10-21T14:00:00Z", wake_time: "2026-10-22T09:00:00Z",
+    time_in_bed_minutes: 1140, time_asleep_minutes: 1080, deep_sleep_minutes: null, rem_sleep_minutes: null };
+  f.tables.sleep_entries = [base,
+    { ...base, id: "first-fragment", date: "2026-10-21", wake_time: "2026-10-21T23:59:00Z", time_asleep_minutes: 300 },
+    { ...base, id: "last-fragment", bedtime: "2026-10-22T04:00:00Z", time_asleep_minutes: 240 }];
+  const current = await currentSourceTransactions(f, owner, "2026-10-22");
+  const sleep = current.filter(r => r.source === "healthkit");
+  assertEquals(sleep.length, 1);
+  assertEquals(sleep[0].metadata?.source_ids, ["full"]);
+  const previousDay = await currentSourceTransactions(f, owner, "2026-10-21");
+  assertEquals(previousDay.filter(r => r.source === "healthkit").length, 0);
+});
+
+Deno.test("projection preserves awake and light stages so invalid enclosing next-day imports cannot hide a valid night", async () => {
+  const f = new Fixture();
+  const base = { id: "valid", user_id: owner, source: "healthkit", date: "2026-10-24",
+    bedtime: "2026-10-24T06:00:00Z", wake_time: "2026-10-24T22:00:00Z", time_in_bed_minutes: 960,
+    time_asleep_minutes: 900, deep_sleep_minutes: 100, rem_sleep_minutes: 100, light_sleep_minutes: 700, awake_minutes: 60 };
+  for (const invalid of [{ awake_minutes: 100 }, { light_sleep_minutes: 1100 }]) {
+    f.tables.sleep_entries = [base, { ...base, id: "invalid-enclosing", wake_time: "2026-10-25T04:30:00Z",
+      time_in_bed_minutes: 1080, time_asleep_minutes: 1000, ...invalid }];
+    const records = await currentSourceTransactions(f, owner, "2026-10-24");
+    assertEquals(records.filter(r => r.source === "healthkit").length, 1);
+    assertEquals(records.find(r => r.source === "healthkit")?.metadata?.source_ids, ["valid"]);
+  }
 });
