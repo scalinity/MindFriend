@@ -12,6 +12,7 @@
 
 import XCTest
 import SwiftUI
+import Supabase
 @testable import MindFriendApp
 
 final class WellbeingDebtServiceTests: XCTestCase {
@@ -929,5 +930,92 @@ private actor DebtAutomaticWork {
         defer { active -= 1 }
         try await Task.sleep(for: delay)
         return nil
+    }
+}
+
+final class DebtOwnerWireRegressionTests: XCTestCase {
+    private func service(failFirst: Bool = false) async throws -> WellbeingDebtService {
+        DebtOwnerURLProtocol.fixture.reset(failFirst: failFirst)
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [DebtOwnerURLProtocol.self]
+        let client = SupabaseClient(supabaseURL: URL(string: "https://debt-owner-fixture.invalid")!, supabaseKey: "synthetic-anon",
+            options: .init(auth: .init(storage: DebtOwnerAuthStorage(), autoRefreshToken: false),
+                           global: .init(session: URLSession(configuration: configuration))))
+        _ = try await client.auth.signIn(email: "qa@example.invalid", password: "synthetic-offline")
+        return WellbeingDebtService(supabase: client)
+    }
+    func testUUIDOwnerIsCanonicalOnActualSDKFunctionRequestAndCoalescedReload() async throws {
+        let service = try await service()
+        let owner = try await service.transactionOwnerID()
+        XCTAssertEqual(owner, DebtOwnerHTTP.owner)
+        let first = try await service.refreshDebtScoreIfNeeded()
+        let second = try await service.refreshDebtScoreIfNeeded()
+        XCTAssertNil(first)
+        XCTAssertNil(second)
+        XCTAssertEqual(DebtOwnerURLProtocol.fixture.owners, [DebtOwnerHTTP.owner])
+    }
+    func testFailedRequestCanRetryWithTheSameCanonicalOwner() async throws {
+        let service = try await service(failFirst: true)
+        do { _ = try await service.refreshDebtScoreIfNeeded(); XCTFail("Expected synthetic service failure") }
+        catch { }
+        let retried = try await service.refreshDebtScoreIfNeeded()
+        XCTAssertNil(retried)
+        XCTAssertEqual(DebtOwnerURLProtocol.fixture.owners, [DebtOwnerHTTP.owner, DebtOwnerHTTP.owner])
+    }
+}
+private final class DebtOwnerAuthStorage: AuthLocalStorage, @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [String: Data] = [:]
+    func store(key: String, value: Data) throws { lock.lock(); defer { lock.unlock() }; values[key] = value }
+    func retrieve(key: String) throws -> Data? { lock.lock(); defer { lock.unlock() }; return values[key] }
+    func remove(key: String) throws { lock.lock(); defer { lock.unlock() }; values[key] = nil }
+}
+private final class DebtOwnerURLProtocol: URLProtocol {
+    static let fixture = DebtOwnerHTTP()
+    override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "debt-owner-fixture.invalid" }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let (status, body) = Self.fixture.respond(request)
+        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil,
+            headerFields: ["Content-Type": "application/json"])!, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: body)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() { }
+}
+private final class DebtOwnerHTTP: @unchecked Sendable {
+    static let owner = "aabbccdd-1111-4111-8111-aabbccddeeff"
+    private let lock = NSLock()
+    private var recorded: [String] = []
+    private var failFirst = false
+    var owners: [String] { lock.lock(); defer { lock.unlock() }; return recorded }
+    func reset(failFirst: Bool) { lock.lock(); defer { lock.unlock() }; recorded = []; self.failFirst = failFirst }
+    func respond(_ request: URLRequest) -> (Int, Data) {
+        lock.lock(); defer { lock.unlock() }
+        if request.url?.path == "/auth/v1/token" {
+            let body: [String: Any] = ["access_token": "synthetic-access", "refresh_token": "synthetic-refresh", "token_type": "bearer",
+                "expires_in": 3600, "expires_at": Int(Date().timeIntervalSince1970) + 3600,
+                "user": ["id": Self.owner, "aud": "authenticated", "role": "authenticated", "app_metadata": [:], "user_metadata": [:],
+                         "created_at": "2026-10-25T00:00:00Z", "updated_at": "2026-10-25T00:00:00Z"]]
+            return (200, try! JSONSerialization.data(withJSONObject: body))
+        }
+        guard request.url?.path == "/functions/v1/calculate-debt-score" else { return (404, Data("{}".utf8)) }
+        var data = request.httpBody ?? Data()
+        if data.isEmpty, let stream = request.httpBodyStream {
+            stream.open(); defer { stream.close() }
+            var bytes = [UInt8](repeating: 0, count: 4096)
+            while stream.hasBytesAvailable && data.count < 16384 {
+                let n = stream.read(&bytes, maxLength: bytes.count)
+                if n <= 0 { break }
+                data.append(contentsOf: bytes.prefix(n))
+            }
+        }
+        let body = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        let owner = body?["user_id"] as? String ?? "missing"
+        recorded.append(owner)
+        // Match the deployed server's strict owner guard without weakening ownership.
+        guard owner == Self.owner else { return (403, Data(#"{"error":"Forbidden"}"#.utf8)) }
+        if failFirst && recorded.count == 1 { return (503, Data(#"{"error":"Synthetic unavailable"}"#.utf8)) }
+        return (200, Data(#"{"success":true,"score":null}"#.utf8))
     }
 }
