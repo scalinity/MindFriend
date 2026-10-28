@@ -202,12 +202,9 @@ final class CrashReporter {
             options.attachScreenshot = false
             options.attachViewHierarchy = false
 
-            // Environment from build config
-            #if DEBUG
-            options.environment = "development"
-            #else
-            options.environment = "production"
-            #endif
+            // Environment from how the app was installed, so builds installed from
+            // Xcode or devicectl stay out of production issues and alerts
+            options.environment = CrashReportingEnvironment.current
 
             // App version
             if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
@@ -816,5 +813,42 @@ extension Error {
         let nserror = self as NSError
         if nserror.domain == NSURLErrorDomain, nserror.code == NSURLErrorCancelled { return true }
         return false
+    }
+}
+
+// MARK: - Sentry Environment
+
+/// Sentry environment for the running install.
+///
+/// App Store and TestFlight installs are re-signed by Apple and carry no
+/// embedded.mobileprovision, while builds installed from Xcode, devicectl or an
+/// ad hoc export do. Reinstalling one of those over an open copy kills it in a
+/// way Sentry reports as a watchdog termination, so they must not count as production.
+enum CrashReportingEnvironment {
+    static let development = "development"
+    static let testFlight = "testflight"
+    static let production = "production"
+
+    static var current: String {
+        #if DEBUG
+        let isDebugBuild = true
+        #else
+        let isDebugBuild = false
+        #endif
+        return resolve(
+            isDebugBuild: isDebugBuild,
+            hasEmbeddedProvisioningProfile: Bundle.main.path(forResource: "embedded", ofType: "mobileprovision") != nil,
+            receiptFileName: Bundle.main.appStoreReceiptURL?.lastPathComponent
+        )
+    }
+
+    static func resolve(isDebugBuild: Bool, hasEmbeddedProvisioningProfile: Bool, receiptFileName: String?) -> String {
+        if isDebugBuild || hasEmbeddedProvisioningProfile {
+            return development
+        }
+        if receiptFileName == "sandboxReceipt" {
+            return testFlight
+        }
+        return production
     }
 }
