@@ -9,6 +9,15 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      # Debug.xcconfig holds real credentials and is gitignored, so CI builds
+      # against the committed sample's placeholder values.
+      - name: Create build settings from samples
+        run: |
+          cp apps/ios/Debug.xcconfig.sample apps/ios/Debug.xcconfig
+          cp apps/ios/Release.xcconfig.sample apps/ios/Release.xcconfig
+
+      # CI has no signing certificate or provisioning profiles, so compile
+      # without signing.
       - name: Build iOS app
         run: |
           xcodebuild build \
@@ -16,7 +25,10 @@ jobs:
             -scheme MindFriendApp \
             -configuration Debug \
             -destination 'generic/platform=iOS' \
-            -derivedDataPath build
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
 
   # Basic repo structure checks
   validate:
