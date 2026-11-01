@@ -29,3 +29,19 @@ $$;
 
 COMMENT ON COLUMN public.moods.source IS
   'Where the mood entry came from: manual, post_quest or post_exercise. Matches the iOS MoodSource enum.';
+
+-- Both mood RPCs used by generate-weekly-summary are SECURITY DEFINER and take
+-- any p_user_id without checking the caller, so they must stay service-role
+-- only. Once source exists, get_moods_for_pattern_analysis returns real rows;
+-- production already restricts it, but the repo's base schema grants it to
+-- anon and authenticated, and get_exercise_mood_correlation is still callable
+-- by anon in production. The only caller is the edge function's service-role
+-- client, so revoking the rest changes nothing for the app.
+REVOKE EXECUTE ON FUNCTION public.get_moods_for_pattern_analysis(uuid, integer)
+  FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.get_exercise_mood_correlation(uuid, integer)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.get_moods_for_pattern_analysis(uuid, integer)
+  TO service_role;
+GRANT EXECUTE ON FUNCTION public.get_exercise_mood_correlation(uuid, integer)
+  TO service_role;
