@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		CE6B22EDEB8F4D34A1C30011 /* PeerSupportServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE6B22EDEB8F4D34A1C30010 /* PeerSupportServiceTests.swift */; };
 		CE6B22EDEB8F4D34A1C3000F /* CompanionSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE6B22EDEB8F4D34A1C3000E /* CompanionSyncTests.swift */; };
 		CE6B22EDEB8F4D34A1C3000D /* WidgetModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FA54ACA219B3810767F79E8 /* WidgetModels.swift */; };
 		CE6B22EDEB8F4D34A1C3000C /* SharedDataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B1D0D64A2BC281EC4DED95F /* SharedDataStore.swift */; };
@@ -981,6 +982,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		CE6B22EDEB8F4D34A1C30010 /* PeerSupportServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerSupportServiceTests.swift; sourceTree = "<group>"; };
 		CE6B22EDEB8F4D34A1C3000E /* CompanionSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionSyncTests.swift; sourceTree = "<group>"; };
 		CE6B22EDEB8F4D34A1C30008 /* AuthUITestIsolationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthUITestIsolationTests.swift; sourceTree = "<group>"; };
 		CE6B22EDEB8F4D34A1C30006 /* HTMLPreviewSandbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTMLPreviewSandbox.swift; sourceTree = "<group>"; };
@@ -4524,6 +4526,7 @@
 				DE6D5639F8C3024D05B32C13 /* SupabaseDataServiceTests.swift */,
 				CE6B22EDEB8F4D34A1C30008 /* AuthUITestIsolationTests.swift */,
 				CE6B22EDEB8F4D34A1C3000E /* CompanionSyncTests.swift */,
+				CE6B22EDEB8F4D34A1C30010 /* PeerSupportServiceTests.swift */,
 				E0D13504C434AE9D622A5CD0 /* VaultEncryptionTests.swift */,
 				D014DC1E79AA55F72172CA65 /* VaultStorageTests.swift */,
 				29CA65E8C74715C00FBD479E /* VoiceEmotionIntegrationTests.swift */,
@@ -6770,6 +6773,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				CE6B22EDEB8F4D34A1C3000F /* CompanionSyncTests.swift in Sources */,
+				CE6B22EDEB8F4D34A1C30011 /* PeerSupportServiceTests.swift in Sources */,
 				CBAA1800929326D23991EB76 /* AccessibilityServiceTests.swift in Sources */,
 				EA5238A7C055484BB1E64D01 /* CoreCompletionContractTests.swift in Sources */,
 				D1E7D53B0F794FDC9A1A0001 /* DeepLinkNavigationTests.swift in Sources */,
