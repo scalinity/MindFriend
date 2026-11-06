@@ -12,6 +12,7 @@ struct MoodCheckInView: View {
     @State private var energyScore: Double = 3
     @State private var note: String = ""
     @State private var showAdvanced = false
+    @State private var includesAdvancedDetails = false
     @State private var isSaving = false
     @State private var showActionPlanSheet = false
     @State private var actionPlan: ActionPlan?
@@ -74,6 +75,7 @@ struct MoodCheckInView: View {
                     Button {
                         withAnimation {
                             showAdvanced.toggle()
+                            if showAdvanced { includesAdvancedDetails = true }
                         }
                     } label: {
                         HStack {
@@ -188,6 +190,7 @@ struct MoodCheckInView: View {
                         note = existingNote
                         showAdvanced = true
                     }
+                    includesAdvancedDetails = showAdvanced
                 }
             }
             .fullScreenCover(isPresented: $showMoodTutorial) {
@@ -213,9 +216,9 @@ struct MoodCheckInView: View {
             id: existingMood?.id ?? UUID().uuidString,
             localDate: localDate,
             moodScore: Int(moodScore),
-            anxietyScore: showAdvanced ? Int(anxietyScore) : nil,
-            energyScore: showAdvanced ? Int(energyScore) : nil,
-            note: showAdvanced && !note.isEmpty ? note : nil,
+            anxietyScore: includesAdvancedDetails ? Int(anxietyScore) : nil,
+            energyScore: includesAdvancedDetails ? Int(energyScore) : nil,
+            note: !note.isEmpty ? note : nil,
             source: .manual,
             createdAt: Date()
         )
