@@ -1,5 +1,6 @@
 // MindFriend Generate Art Edge Function
-// Handles AI art generation with quota enforcement using OpenAI gpt-image-1-mini
+// Handles AI art generation with quota enforcement using OpenAI image generation
+// (model and price in _shared/image-model.ts)
 // Supports streaming partial images for interactive UX
 
 import {
@@ -10,6 +11,11 @@ import {
   MonthlyAIBudgetExhaustedError,
   reserveMonthlyAIBudget,
 } from "../_shared/monthly-ai-budget.ts";
+import {
+  IMAGE_MODEL,
+  IMAGE_QUALITY,
+  imageReserveMicrodollars,
+} from "../_shared/image-model.ts";
 
 // --- Inlined from _shared/cors.ts (eliminates bundler path resolution issues) ---
 
@@ -143,7 +149,7 @@ globalThis.addEventListener("error", (event) => {
   }
 });
 
-// Security constants - OpenAI gpt-image-1 supports up to 32000 chars, but we keep it reasonable
+// Security constants - OpenAI image prompts allow far more, but we keep it reasonable
 const MAX_PROMPT_LENGTH = 1000;
 const API_TIMEOUT_MS = 120000; // 120 second timeout for OpenAI API (streaming needs more time)
 
@@ -483,15 +489,14 @@ Deno.serve(async (req) => {
       }
     }
 
-    // The request is pinned to one 1024-square generation with no image inputs.
-    // Omitted quality is priced at high ($0.036); each partial adds 100 output
-    // tokens ($0.0008). UTF-8 prompt bytes bound text tokens at $2/M, with
-    // 1024 additional input tokens covering request framing conservatively.
+    // The request is pinned to one 1024-square generation with no image inputs,
+    // at a fixed quality priced in _shared/image-model.ts.
     const providerBody = JSON.stringify({
-      model: "gpt-image-1-mini",
+      model: IMAGE_MODEL,
       prompt: enhancedPrompt,
       n: 1,
       size: "1024x1024",
+      quality: IMAGE_QUALITY,
       output_format: "png",
       ...(enableStreaming ? { stream: true, partial_images: 2 } : {}),
     });
@@ -500,10 +505,9 @@ Deno.serve(async (req) => {
         requestId: crypto.randomUUID(),
         userId: user.id,
         feature: "art.image",
-        reserveMicrodollars: Math.ceil(
-          (new TextEncoder().encode(JSON.stringify(enhancedPrompt)).length +
-                1024) *
-              2 + 36_000 + (enableStreaming ? 2 * 800 : 0),
+        reserveMicrodollars: imageReserveMicrodollars(
+          enhancedPrompt,
+          enableStreaming,
         ),
       }, req.signal);
     } catch (error) {
@@ -552,7 +556,7 @@ Deno.serve(async (req) => {
           user_prompt: prompt,
           enhanced_prompt: enhancedPrompt,
           style_preset: style || null,
-          model_used: "gpt-image-1-mini",
+          model_used: IMAGE_MODEL,
           generation_status: "processing",
           is_premium_generation: quota?.is_premium || false,
         })
@@ -800,7 +804,7 @@ Deno.serve(async (req) => {
                     storage_path: storagePath,
                     generation_prompt: prompt,
                     art_style: style || null,
-                    generation_model: "gpt-image-1-mini",
+                    generation_model: IMAGE_MODEL,
                     generation_params: { enhanced_prompt: enhancedPrompt },
                     mood_score: validMoodScore,
                     mood_tags: validMoodTags,
@@ -1037,7 +1041,7 @@ Deno.serve(async (req) => {
           storage_path: storagePath,
           generation_prompt: prompt,
           art_style: style || null,
-          generation_model: "gpt-image-1-mini",
+          generation_model: IMAGE_MODEL,
           generation_params: { enhanced_prompt: enhancedPrompt },
           mood_score: validMoodScore,
           mood_tags: validMoodTags,

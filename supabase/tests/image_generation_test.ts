@@ -364,8 +364,8 @@ function assertReservedBeforeProvider(mock: MockNetwork) {
   );
   const expected =
     (new TextEncoder().encode(JSON.stringify(mock.providerBody?.prompt))
-        .length + 1024) * 2 +
-    36_000 + (mock.providerBody?.stream ? 1600 : 0);
+        .length + 1024) * 5 +
+    24_720 + (mock.providerBody?.stream ? 6000 : 0);
   assert(
     mock.monthlyReservations[0].p_reserve_microdollars === expected,
     "Wrong conservative image ceiling",
@@ -602,8 +602,8 @@ for (const endpoint of ["generate-profile-picture", "generate-art"] as const) {
           await response.text();
           assertReservedBeforeProvider(mock);
           assert(
-            mock.providerBody?.model === "gpt-image-1-mini" &&
-              mock.providerBody?.quality === undefined,
+            mock.providerBody?.model === "gpt-image-2.6-flare" &&
+              mock.providerBody?.quality === "low",
             "Client changed the priced configuration",
           );
           if (endpoint === "generate-art") {
@@ -663,7 +663,7 @@ for (const endpoint of ["generate-profile-picture", "generate-art"] as const) {
             "Successful generation skipped storage",
           );
           assert(
-            mock.providerBody?.model === "gpt-image-1-mini",
+            mock.providerBody?.model === "gpt-image-2.6-flare",
             "Unexpected image model",
           );
           if (endpoint === "generate-profile-picture") {

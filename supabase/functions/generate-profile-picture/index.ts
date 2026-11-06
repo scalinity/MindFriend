@@ -7,6 +7,11 @@ import {
   reserveMonthlyAIBudget,
 } from "../_shared/monthly-ai-budget.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import {
+  IMAGE_MODEL,
+  IMAGE_QUALITY,
+  imageReserveMicrodollars,
+} from "../_shared/image-model.ts";
 
 import {
   AvatarError,
@@ -140,13 +145,13 @@ export async function handler(req: Request): Promise<Response> {
     const enhancedPrompt =
       `A friendly profile picture: ${prompt}. Style: warm, approachable, suitable for all ages.`;
     // One 1024-square image, no image inputs.
-    // High bounds omitted quality ($0.036); each partial adds 100 output tokens.
-    // UTF-8 prompt bytes bound $2/M text tokens plus 1024 framing tokens.
+    // Fixed quality, priced in _shared/image-model.ts.
     const providerBody = JSON.stringify({
-      model: "gpt-image-1-mini",
+      model: IMAGE_MODEL,
       prompt: enhancedPrompt,
       n: 1,
       size: "1024x1024",
+      quality: IMAGE_QUALITY,
       output_format: "jpeg",
       output_compression: 80,
       ...(enableStreaming ? { stream: true, partial_images: 2 } : {}),
@@ -156,10 +161,9 @@ export async function handler(req: Request): Promise<Response> {
         requestId: crypto.randomUUID(),
         userId: user.id,
         feature: "profile.image",
-        reserveMicrodollars: Math.ceil(
-          (new TextEncoder().encode(JSON.stringify(enhancedPrompt)).length +
-                1024) *
-              2 + 36_000 + (enableStreaming ? 2 * 800 : 0),
+        reserveMicrodollars: imageReserveMicrodollars(
+          enhancedPrompt,
+          enableStreaming,
         ),
       }, req.signal);
     } catch (error) {
