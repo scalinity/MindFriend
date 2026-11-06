@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		CE6B22EDEB8F4D34A1C30005 /* MentorshipServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63346BD0781377CC6ADE3DA5 /* MentorshipServiceTests.swift */; };
 		CE6B22EDEB8F4D34A1C30003 /* CreativeWorkDeletionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE6B22EDEB8F4D34A1C30004 /* CreativeWorkDeletionTests.swift */; };
 		CE6B22EDEB8F4D34A1C30001 /* AuthUITestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE6B22EDEB8F4D34A1C30002 /* AuthUITestView.swift */; };
 		CD91A673F84E42D09B31A002 /* Watch Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CD91A673F84E42D09B31A001 /* Assets.xcassets */; };
@@ -6776,6 +6777,7 @@
 				41210604F1F2ADDF9BDAFE7C /* ChatViewModelTests.swift in Sources */,
 				BA741E5CE387938F2A213BA0 /* CoachServiceTests.swift in Sources */,
 				CE6B22EDEB8F4D34A1C30003 /* CreativeWorkDeletionTests.swift in Sources */,
+				CE6B22EDEB8F4D34A1C30005 /* MentorshipServiceTests.swift in Sources */,
 				8563F3D7F9F630DFD6A8BB24 /* CrashReporterTests.swift in Sources */,
 				7F107286ACB74F16A1872841 /* EmotionAnalyzerTests.swift in Sources */,
 				00121B35665A6BB8EB4D5423 /* FamilyServiceTests.swift in Sources */,
