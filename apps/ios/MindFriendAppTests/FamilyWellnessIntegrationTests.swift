@@ -64,19 +64,11 @@ final class FamilyWellnessIntegrationTests: XCTestCase {
     // MARK: - Age-Appropriate Content Filter Flow
 
     func testAgeFilterFlow_ChildAgeChanges_ContentAccessUpdates() {
-        // Document expected behavior:
-        // 1. Child age calculated from birth_date
-        // 2. Effective age filter determined (override or calculated)
-        // 3. Content recommendations filtered accordingly
-        // 4. When child ages up, more content becomes available
-
-        // Simulate 12-year-old child
-        let calendar = Calendar.current
-        var components = DateComponents()
-        components.year = 2013  // Age 13 in 2026
-        components.month = 1
-        components.day = 16
-        let birthDate = calendar.date(from: components)!
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/New_York")!
+        let birthDate = calendar.date(from: DateComponents(year: 2013, month: 1, day: 16))!
+        let dayBeforeBirthday = calendar.date(from: DateComponents(year: 2026, month: 1, day: 15))!
+        let thirteenthBirthday = calendar.date(from: DateComponents(year: 2026, month: 1, day: 16))!
 
         let youngChild = FamilyWellnessMember(
             id: "member1",
@@ -97,8 +89,8 @@ final class FamilyWellnessIntegrationTests: XCTestCase {
             updatedAt: Date()
         )
 
-        // Age 13 - can now access teen content
-        XCTAssertEqual(youngChild.calculatedAge, 13)
+        XCTAssertEqual(youngChild.age(on: dayBeforeBirthday, calendar: calendar), 12)
+        XCTAssertEqual(youngChild.age(on: thirteenthBirthday, calendar: calendar), 13)
 
         // Test content appropriateness
         let teenContent = ContentAgeRating(
@@ -116,7 +108,12 @@ final class FamilyWellnessIntegrationTests: XCTestCase {
             createdAt: Date()
         )
 
-        XCTAssertTrue(teenContent.isAppropriateForAge(youngChild.calculatedAge ?? 0))
+        XCTAssertFalse(teenContent.isAppropriateForAge(youngChild.age(on: dayBeforeBirthday, calendar: calendar)!))
+        XCTAssertTrue(teenContent.isAppropriateForAge(youngChild.age(on: thirteenthBirthday, calendar: calendar)!))
+
+        var memberWithoutBirthday = youngChild
+        memberWithoutBirthday.birthDate = nil
+        XCTAssertNil(memberWithoutBirthday.age(on: thirteenthBirthday, calendar: calendar))
     }
 
     // MARK: - Parental Monitoring & Alerts Flow

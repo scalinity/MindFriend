@@ -84,8 +84,12 @@ struct FamilyWellnessMember: Codable, Identifiable, Equatable {
     }
 
     var calculatedAge: Int? {
-        guard let birthDate = birthDate else { return nil }
-        return Calendar.current.dateComponents([.year], from: birthDate, to: Date()).year
+        age(on: Date(), calendar: .current)
+    }
+
+    func age(on date: Date, calendar: Calendar) -> Int? {
+        guard let birthDate else { return nil }
+        return calendar.dateComponents([.year], from: birthDate, to: date).year
     }
 
     var effectiveAgeFilter: Int {
