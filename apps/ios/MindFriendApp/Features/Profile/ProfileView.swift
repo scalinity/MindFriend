@@ -1011,7 +1011,9 @@ struct DataExportView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
     @State private var isExporting = false
-    @State private var exportData: UserDataExport?
+    @State private var exportURL: URL?
+    @State private var showingExportSheet = false
+    @State private var exportTask: Task<Void, Never>?
 
     var body: some View {
         VStack(spacing: 24) {
@@ -1041,26 +1043,74 @@ struct DataExportView: View {
             .buttonStyle(.borderedProminent)
             .disabled(isExporting)
 
+            Text("Choose Save to Files or a share destination when your JSON export is ready.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
             Spacer()
         }
         .padding()
         .navigationTitle("Export Data")
+        .sheet(isPresented: $showingExportSheet, onDismiss: removeTemporaryExport) {
+            if let exportURL {
+                ShareSheet(items: [exportURL])
+            }
+        }
+        .onDisappear {
+            exportTask?.cancel()
+            if !showingExportSheet { removeTemporaryExport() }
+        }
+        .onChange(of: appState.currentUser?.id) { _, _ in
+            exportTask?.cancel()
+            showingExportSheet = false
+            removeTemporaryExport()
+        }
     }
 
+    @MainActor
     private func performExport() {
+        guard !isExporting, let ownerId = appState.currentUser?.id else { return }
+        removeTemporaryExport()
+        guard exportURL == nil else {
+            appState.showError(.apiError("Could not remove the previous temporary export. Please try again."))
+            return
+        }
         isExporting = true
-        Task {
+        exportTask = Task { @MainActor in
+            defer { isExporting = false }
             do {
                 let data = try await container.supabaseDataService.exportUserData()
-                // In real app, would share the data file
-                Log.data.info("Exported: \(String(describing: data), privacy: .private)")
+                guard !Task.isCancelled, appState.currentUser?.id == ownerId else { return }
+                exportURL = try UserDataExportFile.write(data)
+                showingExportSheet = true
             } catch {
-                await MainActor.run {
-                    appState.showError(.apiError(error.localizedDescription))
-                }
+                guard !Task.isCancelled else { return }
+                appState.showError(.apiError(error.localizedDescription))
             }
-            isExporting = false
         }
+    }
+
+    private func removeTemporaryExport() {
+        guard let exportURL else { return }
+        do {
+            try FileManager.default.removeItem(at: exportURL)
+            self.exportURL = nil
+        } catch {
+            Log.data.error("Could not remove temporary export file")
+        }
+    }
+}
+
+private enum UserDataExportFile {
+    static func write(_ export: UserDataExport) throws -> URL {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(export)
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MindFriend-export-\(UUID().uuidString).json")
+        try data.write(to: url, options: [.atomic, .completeFileProtection])
+        return url
     }
 }
 
