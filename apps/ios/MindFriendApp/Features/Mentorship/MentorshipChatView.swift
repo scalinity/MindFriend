@@ -38,6 +38,7 @@ private struct MentorshipChatContent: View {
                         LazyVStack(spacing: 8, pinnedViews: []) {
                             ForEach(messagingService.messages) { message in
                                 MentorshipMessageBubble(message: message)
+                                    .environment(\.currentUser, service.currentUserId)
                                     .id(message.id)
                             }
                         }
@@ -163,8 +164,7 @@ struct MentorshipMessageBubble: View {
     @Environment(\.currentUser) var currentUser
 
     var isCurrentUser: Bool {
-        // Compare sender ID with current user ID
-        true  // Placeholder - would check actual user
+        currentUser == message.senderId
     }
 
     var body: some View {
