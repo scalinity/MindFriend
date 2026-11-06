@@ -1,6 +1,33 @@
 import XCTest
 @testable import MindFriendApp
 
+final class VoiceTranscriptDraftTests: XCTestCase {
+    func testEncryptedDraftRestoresStableIdentityAndRemainsAccountScoped() throws {
+        let namespace = "test.voice-draft.\(UUID().uuidString)"
+        let owner = UUID()
+        let otherOwner = UUID()
+        let storage = SecureStorage(keychainService: namespace, keyIdentifier: owner.uuidString)
+        let otherStorage = SecureStorage(keychainService: namespace, keyIdentifier: otherOwner.uuidString)
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: namespace))
+        defer {
+            defaults.removePersistentDomain(forName: namespace)
+            try? storage.deleteEncryptionKey()
+            try? otherStorage.deleteEncryptionKey()
+        }
+        let draft = VoiceTranscriptDraft(
+            ownerId: owner, conversationId: UUID(), title: "Voice conversation",
+            messages: [VoiceTranscriptMessage(id: UUID(), role: "user", content: "Keep this thought", createdAt: Date())]
+        )
+        try storage.store(draft, forKey: owner.uuidString, in: defaults)
+        let reopened = SecureStorage(keychainService: namespace, keyIdentifier: owner.uuidString)
+        let restored = try reopened.retrieve(forKey: owner.uuidString, as: VoiceTranscriptDraft.self, from: defaults)
+        XCTAssertEqual(restored, draft)
+        XCTAssertNil(try otherStorage.retrieve(forKey: otherOwner.uuidString, as: VoiceTranscriptDraft.self, from: defaults))
+        XCTAssertThrowsError(try otherStorage.retrieve(forKey: owner.uuidString, as: VoiceTranscriptDraft.self, from: defaults))
+        XCTAssertEqual(restored?.messages.first?.id, draft.messages.first?.id)
+    }
+}
+
 final class VoiceStateMachineTests: XCTestCase {
 
     // MARK: - Initial State Tests
