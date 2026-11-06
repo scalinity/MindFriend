@@ -29,22 +29,18 @@ Deno.serve(async (req) => {
     }
 
     // Initialize Supabase client with service role
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      global: {
-        headers: { Authorization: req.headers.get("Authorization")! },
-      },
-    });
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Authenticate user from JWT
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    if (!authHeader?.startsWith("Bearer ") || !authHeader.slice(7).trim()) {
       return CouplesErrors.missingAuth();
     }
 
     const {
       data: { user },
       error: authError,
-    } = await supabase.auth.getUser();
+    } = await supabase.auth.getUser(authHeader.slice(7));
 
     if (authError || !user) {
       return CouplesErrors.missingAuth();
@@ -53,13 +49,16 @@ Deno.serve(async (req) => {
     const userId = user.id;
 
     // Check if user already has active partner
-    const { data: existingPartnership } = await supabase
+    const { data: existingPartnership, error: partnershipError } = await supabase
       .from("partner_links")
       .select("id")
       .or(`user_id_1.eq.${userId},user_id_2.eq.${userId}`)
       .eq("status", "active")
       .maybeSingle();
 
+    if (partnershipError) {
+      return CouplesErrors.databaseError(partnershipError);
+    }
     if (existingPartnership) {
       return CouplesErrors.activePartnershipExists();
     }
