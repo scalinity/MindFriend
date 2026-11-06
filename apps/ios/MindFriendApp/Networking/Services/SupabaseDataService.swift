@@ -187,6 +187,24 @@ private struct MessagePageRow: Decodable {
     }
 }
 
+private struct SharedPartnerActivity: Decodable {
+    let partnerId: UUID
+    let partnerName: String
+    let partnerStreak: Int
+    let hasCompletedToday: Bool
+    let lastActive: Date
+    let isSharingMood: Bool
+    let isSharingExercises: Bool
+    let moods: [DBMood]
+    let quest: DBQuestWithTemplate?
+    enum CodingKeys: String, CodingKey {
+        case partnerId = "partner_id", partnerName = "partner_name", partnerStreak = "partner_streak"
+        case hasCompletedToday = "has_completed_today", lastActive = "last_active"
+        case isSharingMood = "is_sharing_mood", isSharingExercises = "is_sharing_exercises"
+        case moods, quest
+    }
+}
+
 struct ChatResponse: Codable {
     var userMessage: Message? = nil
     let message: Message
@@ -2461,146 +2479,48 @@ final class SupabaseDataService: ObservableObject {
             throw CouplesModeError.notPartnered
         }
 
-        let currentUserId = try userId
-        let isUser1 = link.userId1 == currentUserId
-
-        let updateData: [String: AnyEncodable] = isUser1
-            ? ["user_1_share_mood": AnyEncodable(shareMood),
-               "user_1_share_exercises": AnyEncodable(shareExercises),
-               "updated_at": AnyEncodable(Date())]
-            : ["user_2_share_mood": AnyEncodable(shareMood),
-               "user_2_share_exercises": AnyEncodable(shareExercises),
-               "updated_at": AnyEncodable(Date())]
-
-        try await supabase
-            .from("partner_links")
-            .update(updateData)
-            .eq("id", value: link.id)
-            .execute()
-    }
-
-    /// End current partnership
-    func endPartnership() async throws {
-        guard let link = try await getActivePartnerLink() else {
-            throw CouplesModeError.notPartnered
-        }
-
-        try await supabase
-            .from("partner_links")
-            .update([
-                "status": AnyEncodable("ended"),
-                "ended_at": AnyEncodable(Date())
-            ])
-            .eq("id", value: link.id)
-            .execute()
-    }
-
-    /// Get partner's mood history (respects sharing settings)
-    func getPartnerMoodHistory(partnerId: UUID) async throws -> [MoodEntry] {
-        guard let link = try await getActivePartnerLink() else {
-            throw CouplesModeError.notPartnered
-        }
-
-        let currentUserId = try userId
-        let partnerSettings = link.partnerSharingSettings(for: currentUserId)
-
-        guard partnerSettings.shareMood else {
-            throw CouplesModeError.partnerNotSharing
-        }
-
-        // Get moods from past 7 days
-        guard let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) else {
-            throw DataError.operationFailed("Failed to calculate date range")
-        }
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd"
-
-        let startDate = dateFormatter.string(from: sevenDaysAgo)
-
-        let moods: [DBMood] = try await supabase
-            .from("moods")
-            .select()
-            .eq("user_id", value: partnerId)
-            .gte("local_date", value: startDate)
-            .order("local_date", ascending: false)
-            .limit(7)
-            .execute()
-            .value
-
-        return moods.map { $0.toMoodEntry() }
-    }
-
-    /// Get partner's today's quest status (respects sharing settings)
-    func getPartnerQuestStatus(partnerId: UUID) async throws -> Quest? {
-        guard let link = try await getActivePartnerLink() else {
-            throw CouplesModeError.notPartnered
-        }
-
-        let currentUserId = try userId
-        let partnerSettings = link.partnerSharingSettings(for: currentUserId)
-
-        guard partnerSettings.shareExercises else {
-            throw CouplesModeError.partnerNotSharing
-        }
-
-        // Note: This query doesn't fetch the template, so we can't construct a full Quest object
-        // The function signature should probably return DBQuest or change to fetch with template
-        return nil
-    }
-
-    /// Get partner info for dashboard
-    func getPartnerInfo() async throws -> PartnerInfo? {
-        guard let link = try await getActivePartnerLink() else {
-            return nil
-        }
-
-        let currentUserId = try userId
-        guard let partnerId = link.partnerId(for: currentUserId) else {
-            return nil
-        }
-
-        // Get partner profile
-        let profiles: [DBProfile] = try await supabase
-            .from("profiles")
-            .select()
-            .eq("id", value: partnerId)
-            .limit(1)
-            .execute()
-            .value
-
-        guard let partnerProfile = profiles.first else {
-            return nil
-        }
-
-        // Check if partner completed quest today
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd"
-        let today = dateFormatter.string(from: Date())
-
-        let todayQuests: [DBQuest] = try await supabase
-            .from("quests")
-            .select()
-            .eq("user_id", value: partnerId)
-            .eq("local_date", value: today)
-            .eq("status", value: "completed")
-            .limit(1)
-            .execute()
-            .value
-
-        let hasCompletedToday = !todayQuests.isEmpty
-
-        // Get partner's sharing settings (what they share with us)
-        let partnerSettings = link.partnerSharingSettings(for: currentUserId)
-
-        return PartnerInfo(
-            partnerId: partnerId,
-            partnerName: partnerProfile.displayName ?? "Partner",
-            partnerStreak: partnerProfile.currentStreakDays,
-            hasCompletedToday: hasCompletedToday,
-            lastActive: partnerProfile.lastActiveAt ?? partnerProfile.createdAt,
-            isSharingMood: partnerSettings.shareMood,
-            isSharingExercises: partnerSettings.shareExercises
+        try await supabase.functions.invoke(
+            "couples-partner-links-settings/\(link.id.uuidString)/settings",
+            options: .init(method: .patch, body: ["shareMood": shareMood, "shareExercises": shareExercises])
         )
+    }
+
+    /// End current partnership through the participant-validated endpoint.
+    func endPartnership() async throws {
+        guard let link = try await getActivePartnerLink() else { throw CouplesModeError.notPartnered }
+        try await supabase.functions.invoke(
+            "couples-partner-links-delete/\(link.id.uuidString)", options: .init(method: .delete)
+        )
+    }
+
+    private func getSharedPartnerActivity(partnerId: UUID? = nil) async throws -> SharedPartnerActivity? {
+        let owner = try userId
+        let result: SharedPartnerActivity? = try await supabase.rpc("get_shared_partner_activity", params: [
+            "p_partner_id": AnyEncodable(partnerId)
+        ]).execute().value
+        guard try userId == owner else { throw DataError.notAuthenticated }
+        return result
+    }
+
+    /// Only the active partner's consented mood scores are returned by the server.
+    func getPartnerMoodHistory(partnerId: UUID) async throws -> [MoodEntry] {
+        guard let activity = try await getSharedPartnerActivity(partnerId: partnerId) else { throw CouplesModeError.notPartnered }
+        guard activity.isSharingMood else { throw CouplesModeError.partnerNotSharing }
+        return activity.moods.map { $0.toMoodEntry() }
+    }
+
+    func getPartnerQuestStatus(partnerId: UUID) async throws -> Quest? {
+        guard let activity = try await getSharedPartnerActivity(partnerId: partnerId) else { throw CouplesModeError.notPartnered }
+        guard activity.isSharingExercises else { throw CouplesModeError.partnerNotSharing }
+        return activity.quest?.toQuest()
+    }
+
+    func getPartnerInfo() async throws -> PartnerInfo? {
+        guard let activity = try await getSharedPartnerActivity() else { return nil }
+        return PartnerInfo(partnerId: activity.partnerId, partnerName: activity.partnerName,
+                           partnerStreak: activity.partnerStreak, hasCompletedToday: activity.hasCompletedToday,
+                           lastActive: activity.lastActive, isSharingMood: activity.isSharingMood,
+                           isSharingExercises: activity.isSharingExercises)
     }
 
     /// Get list of couples exercises
