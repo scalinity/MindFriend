@@ -1,5 +1,34 @@
 // Phase 2: deploy only after relay-capable clients ship. Provider secrets stay here.
+import { OPENAI_TRANSCRIPTION_MODEL, SAFETY_NOTE } from "./ai-provider.ts";
 export const PROVIDER_URL = "wss://api.x.ai/v1/realtime?model=grok-voice-3.0";
+// AI_PROVIDER=standard relays to OpenAI Realtime (see _shared/ai-provider.ts).
+export type RelayVendor = "xai" | "openai";
+export const OPENAI_REALTIME_MODEL = "gpt-realtime-2.1-mini";
+export const OPENAI_REALTIME_URL =
+  `wss://api.openai.com/v1/realtime?model=${OPENAI_REALTIME_MODEL}`;
+// Installed clients pick xAI voice names; each maps to the closest OpenAI voice.
+const OPENAI_VOICES: Record<string, string> = {
+  ara: "marin", // warm, conversational
+  rex: "cedar", // professional, clear
+  sal: "sage", // calm, balanced
+  eve: "coral", // energetic, upbeat
+  leo: "ash", // authoritative, strong
+};
+// OpenAI events the installed clients do not use. They are dropped, not relayed.
+const OPENAI_DROPPED_EVENTS = new Set([
+  "conversation.item.done",
+  "conversation.item.input_audio_transcription.delta",
+  "conversation.item.input_audio_transcription.segment",
+  "input_audio_buffer.timeout_triggered",
+  "rate_limits.updated",
+]);
+// Installed clients cancel and commit without tracking provider state. OpenAI
+// reports these as errors; xAI did not. They end nothing and are dropped.
+const OPENAI_BENIGN_ERRORS = new Set([
+  "response_cancel_not_active",
+  "input_audio_buffer_commit_empty",
+  "conversation_already_has_active_response",
+]);
 export const MAX_SECONDS = 120;
 export const MONTHLY_VOICE_RESERVE_MICRODOLLARS = 240_000;
 const MAX_FRAME = 96 * 1024;
@@ -19,6 +48,7 @@ export const realClock: Clock = {
 };
 export interface RelayDependencies {
   anonKey: string;
+  vendor?: RelayVendor;
   authenticate(jwt: string, signal: AbortSignal): Promise<string | null>;
   rpc(name: string, args: Json, signal: AbortSignal): Promise<Json>;
   issueSecret(signal: AbortSignal): Promise<string>;
@@ -45,7 +75,12 @@ function keys(value: Json, allowed: string[]) {
   }
 }
 // Reconstruct each allowed event. No tools, search, MCP, resume, model or URLs pass through.
-export function clientEvent(raw: string, premium: boolean): string {
+// Returns null for an event the provider does not accept and the relay drops.
+export function clientEvent(
+  raw: string,
+  premium: boolean,
+  vendor: RelayVendor = "xai",
+): string | null {
   const e = object(JSON.parse(raw));
   const type = text(e.type, 80);
   keys(e, [
@@ -105,13 +140,36 @@ export function clientEvent(raw: string, premium: boolean): string {
           ) throw Error("INVALID_FRAME");
         }
       }
+      const instructions = text(
+        s.instructions ?? "You are a supportive voice companion.",
+        12000,
+      );
+      if (vendor === "openai") {
+        return JSON.stringify({
+          type,
+          session: {
+            type: "realtime",
+            instructions: `${instructions}\n\n${SAFETY_NOTE}`,
+            output_modalities: ["audio"],
+            tools: [],
+            audio: {
+              input: {
+                format: { type: "audio/pcm", rate: 24000 },
+                transcription: { model: OPENAI_TRANSCRIPTION_MODEL },
+                turn_detection: vad,
+              },
+              output: {
+                format: { type: "audio/pcm", rate: 24000 },
+                voice: OPENAI_VOICES[String(voice)],
+              },
+            },
+          },
+        });
+      }
       return JSON.stringify({
         type,
         session: {
-          instructions: text(
-            s.instructions ?? "You are a supportive voice companion.",
-            12000,
-          ),
+          instructions,
           voice,
           turn_detection: vad,
           tools: [],
@@ -133,10 +191,12 @@ export function clientEvent(raw: string, premium: boolean): string {
       ) throw Error("INVALID_FRAME");
       return JSON.stringify({ type, audio });
     }
+    case "pong":
+      // OpenAI sends no pings and rejects pong.
+      return vendor === "openai" ? null : JSON.stringify({ type });
     case "input_audio_buffer.commit":
     case "input_audio_buffer.clear":
     case "response.cancel":
-    case "pong":
       return JSON.stringify({ type });
     case "response.create":
       if (e.response && Object.keys(object(e.response)).length) {
@@ -165,6 +225,7 @@ export function clientEvent(raw: string, premium: boolean): string {
 export function bridgeRelay(client: WebSocket, provider: WebSocket, options: {
   seconds: number;
   premium: boolean;
+  vendor?: RelayVendor;
   secret: string;
   clock: Clock;
   deadline: number;
@@ -296,7 +357,8 @@ export function bridgeRelay(client: WebSocket, provider: WebSocket, options: {
       if (++frames > 80 || (bytes += raw.length) > 192 * 1024) {
         throw Error("FRAME_RATE_EXCEEDED");
       }
-      const filtered = clientEvent(raw, options.premium);
+      const filtered = clientEvent(raw, options.premium, options.vendor);
+      if (filtered === null) return;
       if (filtered.startsWith('{"type":"session.update",')) configured = true;
       if (!configured && filtered !== '{"type":"pong"}') {
         throw Error("CONFIGURATION_REQUIRED");
@@ -320,6 +382,13 @@ export function bridgeRelay(client: WebSocket, provider: WebSocket, options: {
         raw.includes(options.secret)
       ) throw Error("INVALID_PROVIDER_FRAME");
       const e = object(JSON.parse(raw));
+      if (options.vendor === "openai") {
+        if (OPENAI_DROPPED_EVENTS.has(String(e.type))) return;
+        const code = e.type === "error" && e.error && typeof e.error === "object"
+          ? String((e.error as Json).code)
+          : "";
+        if (OPENAI_BENIGN_ERRORS.has(code)) return;
+      }
       if (e.type === "error") {
         stop("PROVIDER_ERROR");
         return;
@@ -532,6 +601,7 @@ export async function handleVoiceRelay(
         bridgeRelay(upgraded.socket, provider, {
           seconds,
           premium: claim.is_premium === true,
+          vendor: deps.vendor,
           secret,
           clock,
           deadline,

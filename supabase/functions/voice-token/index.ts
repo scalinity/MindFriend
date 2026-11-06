@@ -1,6 +1,13 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { handleVoiceRelay, PROVIDER_URL } from "../_shared/voice-relay.ts";
+import {
+  handleVoiceRelay,
+  OPENAI_REALTIME_MODEL,
+  OPENAI_REALTIME_URL,
+  PROVIDER_URL,
+} from "../_shared/voice-relay.ts";
+import { selectedAIProvider } from "../_shared/ai-provider.ts";
+import { openAINonImageKey } from "../_shared/openai-keys.ts";
 
 // Phase 2 release gate: deploy only after relay-capable clients are available.
 // Keep this function name: no extra deployed function is required.
@@ -20,7 +27,10 @@ Deno.serve((req) => {
   }
   // Missing local configuration cannot consume a claimed owner's allowance.
   // Capture once: issuance uses the same checked value after atomic admission.
-  const providerKey = Deno.env.get("XAI_API_KEY")?.trim();
+  const vendor = selectedAIProvider() === "standard" ? "openai" : "xai";
+  const providerKey = vendor === "openai"
+    ? openAINonImageKey()
+    : Deno.env.get("XAI_API_KEY")?.trim();
   if (req.method === "GET" && !providerKey) {
     return new Response(JSON.stringify({ code: "CONFIG_ERROR" }), {
       status: 503,
@@ -36,6 +46,7 @@ Deno.serve((req) => {
     EdgeRuntime?: { waitUntil(work: Promise<unknown>): void };
   }).EdgeRuntime;
   return handleVoiceRelay(req, {
+    vendor,
     waitUntil: runtime ? (work) => runtime.waitUntil(work) : undefined,
     anonKey,
     authenticate: async (jwt, signal) => {
@@ -64,14 +75,23 @@ Deno.serve((req) => {
     issueSecret: async (signal) => {
       if (!providerKey) throw Error("CONFIG_ERROR");
       const result = await fetch(
-        "https://api.x.ai/v1/realtime/client_secrets",
+        vendor === "openai"
+          ? "https://api.openai.com/v1/realtime/client_secrets"
+          : "https://api.x.ai/v1/realtime/client_secrets",
         {
           method: "POST",
           headers: {
             Authorization: `Bearer ${providerKey}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ expires_after: { seconds: 300 } }),
+          body: JSON.stringify(
+            vendor === "openai"
+              ? {
+                expires_after: { anchor: "created_at", seconds: 300 },
+                session: { type: "realtime", model: OPENAI_REALTIME_MODEL },
+              }
+              : { expires_after: { seconds: 300 } },
+          ),
           signal,
         },
       );
@@ -102,7 +122,12 @@ Deno.serve((req) => {
       return secret;
     },
     connect: (secret) =>
-      new WebSocket(PROVIDER_URL, ["xai-client-secret." + secret]),
+      vendor === "openai"
+        ? new WebSocket(OPENAI_REALTIME_URL, [
+          "realtime",
+          "openai-insecure-api-key." + secret,
+        ])
+        : new WebSocket(PROVIDER_URL, ["xai-client-secret." + secret]),
     upgrade: (request) => Deno.upgradeWebSocket(request),
   }, headers);
 });

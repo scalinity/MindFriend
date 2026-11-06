@@ -306,7 +306,7 @@ Deno.test("allow PCM/VAD/mute/cancel; strip custom audio URLs and refuse tools, 
       },
     }),
     false,
-  ));
+  )!);
   assert(
     update.session.audio.input.format.rate === 24000 &&
       update.session.tools.length === 0,
@@ -320,7 +320,7 @@ Deno.test("allow PCM/VAD/mute/cancel; strip custom audio URLs and refuse tools, 
     ]
   ) {
     assert(
-      JSON.parse(clientEvent(JSON.stringify({ type }), false)).type === type,
+      JSON.parse(clientEvent(JSON.stringify({ type }), false)!).type === type,
     );
   }
   for (

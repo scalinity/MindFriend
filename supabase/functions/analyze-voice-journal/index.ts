@@ -1,25 +1,30 @@
-// Transcribe owned voice journals with xAI, then analyze the real transcript.
+// Transcribe owned voice journals (xAI, or OpenAI under AI_PROVIDER=standard),
+// then analyze the real transcript.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import {
+  OPENAI_TRANSCRIPTION_MODEL,
+  selectedAIProvider,
+  textRoute,
+} from "../_shared/ai-provider.ts";
+import { openAINonImageKey } from "../_shared/openai-keys.ts";
 import { checkRateLimit, getRateLimitHeaders } from "../_shared/ratelimit.ts";
 import {
   MonthlyAIBudgetExhaustedError,
   MonthlyAIBudgetUnavailableError,
   reserveMonthlyAIBudget,
 } from "../_shared/monthly-ai-budget.ts";
-import {
-  budgetedXAIText,
-  XAI_TEXT_MODEL,
-} from "../_shared/budgeted-xai-text.ts";
+import { budgetedXAIText } from "../_shared/budgeted-xai-text.ts";
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PCM_BYTES_PER_SECOND = 16000 * 2;
 const MAX_AUDIO_BYTES = 600 * PCM_BYTES_PER_SECOND + 64 * 1024;
 const REQUEST_TIMEOUT_MS = 120_000;
-// REST transcription is $0.10/hour. Until provider billing granularity is
+// xAI REST transcription is $0.10/hour. Until provider billing granularity is
 // documented, reserve a full hour even though validated samples never exceed
 // ten minutes. This intentionally over-reserves rather than assuming rounding.
+// OpenAI gpt-transcribe is $0.0045/minute: ten minutes is $0.045, inside it.
 const STT_RESERVE_MICRODOLLARS = 100_000;
 const AUDIO_TYPES = new Set([
   "audio/wav",
@@ -331,7 +336,9 @@ Deno.serve(async (req) => {
       });
     }
     const xaiApiKey = Deno.env.get("XAI_API_KEY");
-    if (!xaiApiKey?.trim()) {
+    const standard = selectedAIProvider() === "standard";
+    const sttKey = standard ? openAINonImageKey() : xaiApiKey?.trim();
+    if (!xaiApiKey?.trim() || !sttKey) {
       throw new RequestError(503, "Analysis service unavailable");
     }
     const rate = await checkRateLimit(supabaseAdmin, user.id, "analyze-voice", {
@@ -459,22 +466,34 @@ Deno.serve(async (req) => {
 
     signal.throwIfAborted();
     const form = new FormData();
-    form.append("model", "grok-voice-transcribe-2.0");
+    form.append(
+      "model",
+      standard ? OPENAI_TRANSCRIPTION_MODEL : "grok-voice-transcribe-2.0",
+    );
+    if (standard) form.append("response_format", "json");
     // xAI requires the file field last. Never include a placeholder transcript.
     form.append("file", pcm.audio, `${creativeWorkId}.wav`);
-    const sttResponse = await boundedFetch("https://api.x.ai/v1/stt", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${xaiApiKey}` },
-      body: form,
-    });
+    const sttResponse = await boundedFetch(
+      standard
+        ? "https://api.openai.com/v1/audio/transcriptions"
+        : "https://api.x.ai/v1/stt",
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${sttKey}` },
+        body: form,
+      },
+    );
     if (!sttResponse.ok) throw new RequestError(502, "Transcription failed");
     const stt = await sttResponse.json();
     if (
       typeof stt.text !== "string" || !stt.text.trim() ||
-      typeof stt.duration !== "number" ||
-      !Number.isFinite(stt.duration) || stt.duration <= 0 ||
-      // This is a response sanity check; the PCM bytes already bound billed audio.
-      Math.abs(stt.duration - pcm.seconds) > 1
+      // OpenAI's JSON transcript carries no duration; the PCM bytes bound billed audio.
+      (!standard && (
+        typeof stt.duration !== "number" ||
+        !Number.isFinite(stt.duration) || stt.duration <= 0 ||
+        // This is a response sanity check; the PCM bytes already bound billed audio.
+        Math.abs(stt.duration - pcm.seconds) > 1
+      ))
     ) {
       throw new RequestError(502, "No valid transcription returned");
     }
@@ -571,7 +590,7 @@ Be empathetic and supportive in your analysis. Focus on understanding and valida
         reflection_prompts: analysis.reflection_prompts,
         creative_work_id: creativeWorkId,
         full_transcription: transcription,
-        analysis_model: XAI_TEXT_MODEL,
+        analysis_model: textRoute("voice_journal.analysis").model,
         processed_at: new Date().toISOString(),
       })
       .select("id").single();
