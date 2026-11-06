@@ -7,6 +7,26 @@ import MediaPlayer
 import Combine
 import Supabase
 
+/// One completion attempt per playback, with one deliberate retry at its end
+/// only when the server explicitly rejected the earlier attempt.
+struct PlaybackCompletionGate {
+    private var attempted = false
+    private var rejected = false
+    private var retryAvailable = true
+
+    mutating func claim(retryRejected: Bool = false) -> Bool {
+        if attempted {
+            guard retryRejected && rejected && retryAvailable else { return false }
+            retryAvailable = false
+        }
+        attempted = true
+        rejected = false
+        return true
+    }
+
+    mutating func markRejected() { rejected = true }
+}
+
 @MainActor
 final class AudioPlayerService: NSObject, ObservableObject {
     private let supabase: SupabaseClient
@@ -15,6 +35,9 @@ final class AudioPlayerService: NSObject, ObservableObject {
     private var timeObserver: Any?
     private var loadGeneration = UUID()
     private var loadTask: Task<URL, Error>?
+    private var playbackStartTask: Task<Void, Never>?
+    private var completionGate = PlaybackCompletionGate()
+    private var fadeTimer: Timer?
     private var wantsPlayback = false
     private var cancellables = Set<AnyCancellable>()
 
@@ -25,7 +48,7 @@ final class AudioPlayerService: NSObject, ObservableObject {
     @Published var isOfflineCached: Bool = false
     @Published var isLoopingEnabled: Bool = false
 
-    private var sleepTimerDuration: SleepTimerDuration?
+    private(set) var sleepTimerDuration: SleepTimerDuration?
     private var currentSessionId: String?
     private let cacheManager = AudioCacheManager.shared
 
@@ -110,8 +133,8 @@ final class AudioPlayerService: NSObject, ObservableObject {
         state.error = nil
 
         // Record playback start in background
-        Task {
-            await recordPlaybackStart(track, context: context)
+        playbackStartTask = Task {
+            await recordPlaybackStart(track, context: context, generation: generation)
         }
 
         // Check if offline available
@@ -191,7 +214,7 @@ final class AudioPlayerService: NSObject, ObservableObject {
                 if duration > 0,
                    time.seconds / duration > 0.95 {
                     Task {
-                        await self.recordPlaybackComplete()
+                        await self.recordPlaybackComplete(generation: generation)
                     }
                 }
             }
@@ -202,7 +225,7 @@ final class AudioPlayerService: NSObject, ObservableObject {
             .sink { [weak self] _ in
                 Task {
                     guard let self, generation == self.loadGeneration else { return }
-                    await self.handlePlaybackEnd(generation: generation)
+                    await self.handlePlaybackEnd()
                 }
             }
             .store(in: &cancellables)
@@ -248,9 +271,14 @@ final class AudioPlayerService: NSObject, ObservableObject {
     }
 
     func stop() {
+        cancelSleepTimer()
         loadGeneration = UUID()
         loadTask?.cancel()
         loadTask = nil
+        playbackStartTask?.cancel()
+        playbackStartTask = nil
+        currentSessionId = nil
+        completionGate = PlaybackCompletionGate()
         wantsPlayback = false
         player?.pause()
         if let observer = timeObserver {
@@ -274,7 +302,7 @@ final class AudioPlayerService: NSObject, ObservableObject {
     // MARK: - Sleep Timer
 
     func setSleepTimer(_ duration: SleepTimerDuration) {
-        sleepTimer?.invalidate()
+        cancelSleepTimer()
         sleepTimerDuration = duration
 
         if duration == .endOfTrack {
@@ -307,6 +335,10 @@ final class AudioPlayerService: NSObject, ObservableObject {
         sleepTimer = nil
         sleepTimerRemaining = 0
         sleepTimerDuration = nil
+        fadeTimer?.invalidate()
+        fadeTimer = nil
+        isSleepFading = false
+        player?.volume = 1.0
     }
 
     private func fadeOutAndStop() {
@@ -317,25 +349,38 @@ final class AudioPlayerService: NSObject, ObservableObject {
     /// - Parameter duration: Fade duration in seconds (default 3, sleep uses 30)
     /// - Parameter completion: Optional completion handler called when fade finishes
     func fadeOutAndStopWithDuration(_ duration: TimeInterval, completion: (() -> Void)? = nil) {
+        fadeTimer?.invalidate()
+        guard duration.isFinite, duration > 0 else {
+            stop()
+            completion?()
+            return
+        }
+        let generation = loadGeneration
+        let fadingPlayer = player
         let fadeSteps = max(20, Int(duration * 2)) // 2 steps per second for smooth fade
         let fadeInterval = duration / Double(fadeSteps)
         var currentStep = 0
 
         isSleepFading = true
 
-        Timer.scheduledTimer(withTimeInterval: fadeInterval, repeats: true) { [weak self] timer in
+        fadeTimer = Timer.scheduledTimer(withTimeInterval: fadeInterval, repeats: true) { [weak self, weak fadingPlayer] timer in
             MainActor.assumeIsolated {
+                guard let self, generation == self.loadGeneration,
+                      self.fadeTimer === timer, self.player === fadingPlayer else {
+                    timer.invalidate()
+                    return
+                }
                 currentStep += 1
                 // Use quadratic fade curve for more natural audio perception
                 let progress = Double(currentStep) / Double(fadeSteps)
                 let volume = Float(pow(1.0 - progress, 2))
-                self?.player?.volume = volume
+                fadingPlayer?.volume = volume
 
                 if currentStep >= fadeSteps {
                     timer.invalidate()
-                    self?.isSleepFading = false
-                    self?.stop()
-                    self?.player?.volume = 1.0
+                    self.fadeTimer = nil
+                    self.isSleepFading = false
+                    self.stop()
                     completion?()
                 }
             }
@@ -389,7 +434,15 @@ final class AudioPlayerService: NSObject, ObservableObject {
 
     // MARK: - Playback Recording
 
-    private func recordPlaybackStart(_ track: AudioTrack, context: String) async {
+    private struct PlaybackStartResponse: Decodable {
+        let playbackSessionId: String
+    }
+
+    struct PlaybackCompletionResponse: Decodable {
+        let success: Bool
+    }
+
+    private func recordPlaybackStart(_ track: AudioTrack, context: String, generation: UUID) async {
         // Ensure we have a valid session before making authenticated API calls
         guard let _ = try? await supabase.auth.session,
               let _ = supabase.auth.currentUser?.id else { return }
@@ -402,16 +455,22 @@ final class AudioPlayerService: NSObject, ObservableObject {
         ]
 
         do {
-            let response: [String: String] = try await supabase.functions
+            let response: PlaybackStartResponse = try await supabase.functions
                 .invoke("record-playback", options: .init(body: body))
-            currentSessionId = response["playbackSessionId"]
+            guard generation == loadGeneration else { return }
+            currentSessionId = response.playbackSessionId
         } catch {
             Log.media.error("Failed to record playback start", error: error)
         }
     }
 
-    private func recordPlaybackComplete() async {
-        guard let track = state.currentTrack else { return }
+    private func recordPlaybackComplete(generation: UUID, retryRejected: Bool = false) async {
+        guard generation == loadGeneration,
+              let track = state.currentTrack,
+              completionGate.claim(retryRejected: retryRejected) else { return }
+        let position = Int(state.currentTime)
+        await playbackStartTask?.value
+        guard generation == loadGeneration, currentSessionId != nil else { return }
         
         // Ensure we have a valid session before making authenticated API calls
         guard let _ = try? await supabase.auth.session else { return }
@@ -419,24 +478,32 @@ final class AudioPlayerService: NSObject, ObservableObject {
         let body: [String: AudioPlayerServiceAnyEncodable] = [
             "trackId": AudioPlayerServiceAnyEncodable(track.id),
             "eventType": AudioPlayerServiceAnyEncodable("complete"),
-            "positionSeconds": AudioPlayerServiceAnyEncodable(Int(state.currentTime)),
-            "durationListenedSeconds": AudioPlayerServiceAnyEncodable(Int(state.currentTime)),
+            "positionSeconds": AudioPlayerServiceAnyEncodable(position),
+            "durationListenedSeconds": AudioPlayerServiceAnyEncodable(position),
         ]
 
         do {
-            let _: [String: String] = try await supabase.functions
+            let response: PlaybackCompletionResponse = try await supabase.functions
                 .invoke("record-playback", options: .init(body: body))
+            if !response.success {
+                if generation == loadGeneration { completionGate.markRejected() }
+                Log.media.error("Playback completion was not accepted")
+            }
+        } catch FunctionsError.httpError(let status, _) where (400..<500).contains(status) {
+            if generation == loadGeneration { completionGate.markRejected() }
+            Log.media.error("Playback completion request was rejected")
         } catch {
             Log.media.error("Failed to record playback complete", error: error)
         }
     }
 
-    private func handlePlaybackEnd(generation: UUID) async {
-        await recordPlaybackComplete()
+    func handlePlaybackEnd() async {
+        let generation = loadGeneration
+        await recordPlaybackComplete(generation: generation, retryRejected: true)
         guard generation == loadGeneration else { return }
         
-        // Loop if enabled, otherwise stop
-        if isLoopingEnabled {
+        // An explicit end-of-track timer takes precedence over looping.
+        if isLoopingEnabled && sleepTimerDuration != .endOfTrack {
             seek(to: 0)
             play()
         } else {
