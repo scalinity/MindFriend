@@ -391,6 +391,7 @@ enum AssessmentScoreStatus: Equatable {
 }
 
 struct OutcomeAssessmentSubmission: Encodable {
+    let expectedUserID: UUID
     let responseID: UUID
     let templateID: UUID
     let answers: [String: Int]
@@ -398,6 +399,7 @@ struct OutcomeAssessmentSubmission: Encodable {
     let timeZone: String
 
     enum CodingKeys: String, CodingKey {
+        case expectedUserID = "p_expected_user_id"
         case responseID = "p_response_id"
         case templateID = "p_template_id"
         case answers = "p_answers"

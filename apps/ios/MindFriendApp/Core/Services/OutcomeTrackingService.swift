@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import Supabase
 import OSLog
 
@@ -8,7 +9,7 @@ import OSLog
 final class OutcomeTrackingService: ObservableObject {
 
     private let supabase: SupabaseClient
-    private let authService: SupabaseAuthService
+    private let currentUserID: @MainActor () -> UUID?
     private let logger = Logger(subsystem: "com.mindfriend", category: "OutcomeTrackingService")
 
     // MARK: - Published State
@@ -22,14 +23,18 @@ final class OutcomeTrackingService: ObservableObject {
 
     // MARK: - Initialization
 
-    init(supabase: SupabaseClient, authService: SupabaseAuthService) {
+    convenience init(supabase: SupabaseClient, authService: SupabaseAuthService) {
+        self.init(supabase: supabase, currentUserID: { authService.userId })
+    }
+
+    init(supabase: SupabaseClient, currentUserID: @escaping @MainActor () -> UUID?) {
         self.supabase = supabase
-        self.authService = authService
+        self.currentUserID = currentUserID
     }
 
     private var userId: UUID {
         get throws {
-            guard let id = authService.userId else {
+            guard let id = currentUserID() else {
                 throw OutcomeTrackingError.notAuthenticated
             }
             return id
@@ -142,26 +147,36 @@ final class OutcomeTrackingService: ObservableObject {
 
     // MARK: - Assessment Completion
 
-    /// Save one logical submission atomically. Reuse submissionId when retrying the same answers.
-    func submitAssessment(
+    /// Capture the initiating owner once; retain this entire value for every retry.
+    func makeAssessmentSubmission(
         type: AssessmentType,
         answers: [String: Int],
         notes: String? = nil,
-        submissionId: UUID = UUID(),
         timeZone: String = TimeZone.autoupdatingCurrent.identifier
-    ) async throws -> AssessmentResponse {
+    ) throws -> OutcomeAssessmentSubmission {
         let uid = try userId
         guard let template = assessmentTemplates.first(where: { $0.code == type.rawValue }) else {
             throw OutcomeTrackingError.templateNotFound
         }
         _ = try type.score(answers: answers, questions: template.questions)
-        let request = OutcomeAssessmentSubmission(responseID: submissionId, templateID: template.id,
+        return OutcomeAssessmentSubmission(expectedUserID: uid, responseID: UUID(), templateID: template.id,
             answers: answers, notes: notes, timeZone: timeZone)
+    }
+
+    /// The server repeats the owner check after the SDK obtains the request's access token.
+    func submitAssessment(_ request: OutcomeAssessmentSubmission) async throws -> AssessmentResponse {
+        let uid = try userId
+        guard request.expectedUserID == uid else { throw OutcomeTrackingError.notAuthenticated }
+        guard let template = assessmentTemplates.first(where: { $0.id == request.templateID }),
+              let type = AssessmentType(rawValue: template.code) else {
+            throw OutcomeTrackingError.templateNotFound
+        }
+        _ = try type.score(answers: request.answers, questions: template.questions)
         let result: OutcomeAssessmentSubmissionResult = try await supabase
             .rpc("submit_outcome_assessment", params: request)
             .execute().value
-        guard result.response.userId == uid, result.response.id == submissionId,
-              result.response.assessmentTemplateId == template.id, try userId == uid else {
+        guard result.response.userId == request.expectedUserID, result.response.id == request.responseID,
+              result.response.assessmentTemplateId == request.templateID, try userId == uid else {
             throw OutcomeTrackingError.notAuthenticated
         }
 

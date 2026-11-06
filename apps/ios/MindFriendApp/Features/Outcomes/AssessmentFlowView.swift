@@ -360,17 +360,13 @@ struct AssessmentFlowView: View {
         guard !isSubmitting, let type = AssessmentType(rawValue: template.code) else { return }
         isSubmitting = true
         defer { isSubmitting = false }
-        if submission == nil {
-            submission = OutcomeAssessmentSubmission(responseID: UUID(), templateID: template.id,
-                answers: answers, notes: notes.isEmpty ? nil : notes,
-                timeZone: TimeZone.autoupdatingCurrent.identifier)
-        }
-        guard let submission else { return }
         do {
-            _ = try await outcomeService.submitAssessment(
-                type: type, answers: submission.answers, notes: submission.notes,
-                submissionId: submission.responseID, timeZone: submission.timeZone
-            )
+            if submission == nil {
+                submission = try outcomeService.makeAssessmentSubmission(type: type,
+                    answers: answers, notes: notes.isEmpty ? nil : notes)
+            }
+            guard let submission else { return }
+            _ = try await outcomeService.submitAssessment(submission)
             isPresented = false
         } catch {
             submissionError = "Your answers are kept on this screen. Retry to save this assessment. Support resources remain available."

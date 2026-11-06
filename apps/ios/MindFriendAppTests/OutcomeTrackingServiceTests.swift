@@ -78,10 +78,11 @@ final class OutcomeTrackingServiceTests: XCTestCase {
     }
 
     func testSubmissionEncodesExplicitIdentityAndRawAnswers() throws {
-        let request = OutcomeAssessmentSubmission(responseID: UUID(), templateID: UUID(), answers: ["9":1],
+        let request = OutcomeAssessmentSubmission(expectedUserID: UUID(), responseID: UUID(), templateID: UUID(), answers: ["9":1],
             notes: "Fixture", timeZone: "America/New_York")
         let encoder = JSONEncoder(); encoder.outputFormatting = .sortedKeys
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoder.encode(request)) as? [String: Any])
+        XCTAssertEqual(object["p_expected_user_id"] as? String, request.expectedUserID.uuidString)
         XCTAssertEqual(object["p_response_id"] as? String, request.responseID.uuidString)
         XCTAssertEqual(object["p_template_id"] as? String, request.templateID.uuidString)
         XCTAssertEqual(object["p_answers"] as? [String:Int], ["9":1])
@@ -163,3 +164,206 @@ final class OutcomeTrackingServiceTests: XCTestCase {
     }
 
 }
+
+#if canImport(Supabase)
+import Supabase
+
+@MainActor
+final class OutcomeSubmissionOwnerTests: XCTestCase {
+    func testRetainedSubmissionRejectsDifferentOwnerBeforeSending() async throws {
+        let fixture = try await makeFixture()
+        let request = try fixture.service.makeAssessmentSubmission(type: .phq9,
+            answers: fixture.answers, notes: "Synthetic private note")
+        fixture.owner.id = fixture.otherOwner
+        do {
+            _ = try await fixture.service.submitAssessment(request)
+            XCTFail("The retained payload must not acquire the new account")
+        } catch {
+            XCTAssertTrue(error is OutcomeTrackingError)
+        }
+        XCTAssertEqual(request.expectedUserID, fixture.firstOwner)
+        XCTAssertEqual(AssessmentOwnerURLProtocol.fixture.submissions.count, 0)
+        XCTAssertEqual(AssessmentOwnerURLProtocol.fixture.savedCount, 0)
+    }
+
+    func testDelayedSDKAuthenticationKeepsOriginalOwnerAndRetryIdentity() async throws {
+        let fixture = try await makeFixture()
+        let request = try fixture.service.makeAssessmentSubmission(type: .phq9,
+            answers: fixture.answers, notes: "Synthetic private note")
+        await fixture.gate.pauseNextRequest()
+        let task = Task { try await fixture.service.submitAssessment(request) }
+        await fixture.gate.waitForRequest()
+        fixture.owner.id = fixture.otherOwner
+        await fixture.gate.release(token: fixture.otherOwner.uuidString)
+        do {
+            _ = try await task.value
+            XCTFail("The server must reject the old payload with the new bearer")
+        } catch let error as PostgrestError {
+            XCTAssertEqual(error.code, "42501")
+        }
+        var sent = AssessmentOwnerURLProtocol.fixture.submissions
+        XCTAssertEqual(sent.count, 1)
+        XCTAssertEqual(sent[0].owner, fixture.firstOwner)
+        XCTAssertEqual(sent[0].bearer, fixture.otherOwner.uuidString)
+        XCTAssertEqual(AssessmentOwnerURLProtocol.fixture.savedCount, 0)
+
+        do {
+            _ = try await fixture.service.submitAssessment(request)
+            XCTFail("A retry under the new owner must fail before sending")
+        } catch {
+            XCTAssertTrue(error is OutcomeTrackingError)
+        }
+        XCTAssertEqual(AssessmentOwnerURLProtocol.fixture.submissions.count, 1)
+
+        fixture.owner.id = fixture.firstOwner
+        await fixture.gate.release(token: fixture.firstOwner.uuidString)
+        let saved = try await fixture.service.submitAssessment(request)
+        let retried = try await fixture.service.submitAssessment(request)
+        XCTAssertEqual(saved.id, request.responseID)
+        XCTAssertEqual(retried.id, saved.id)
+        XCTAssertEqual(saved.userId, fixture.firstOwner)
+        XCTAssertEqual(AssessmentOwnerURLProtocol.fixture.savedCount, 1)
+        sent = AssessmentOwnerURLProtocol.fixture.submissions
+        XCTAssertEqual(sent.map(\.id), [request.responseID, request.responseID, request.responseID])
+        XCTAssertEqual(sent.map(\.owner), [fixture.firstOwner, fixture.firstOwner, fixture.firstOwner])
+        XCTAssertEqual(sent.map(\.answers), [fixture.answers, fixture.answers, fixture.answers])
+    }
+
+    private func makeFixture() async throws -> Fixture {
+        let a = UUID(), b = UUID(), owner = Owner()
+        owner.id = a
+        let gate = AssessmentOwnerTokenGate(token: a.uuidString)
+        let template = AssessmentTemplate(id: UUID(), code: "PHQ9", name: "Synthetic PHQ", description: nil,
+            questions: (1...9).map { AssessmentQuestion(id: String($0), number: $0, text: "Synthetic",
+                responseOptions: ["0", "1", "2", "3"], isCrisisIndicator: $0 == 9) },
+            scoringRanges: [ScoringRange(minScore: 0, maxScore: 27, severityLevel: "minimal", label: "Minimal", recommendations: [])],
+            recommendedFrequencyDays: 14, isActive: true, createdAt: nil, updatedAt: nil)
+        AssessmentOwnerURLProtocol.fixture.reset(template: template)
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [AssessmentOwnerURLProtocol.self]
+        let client = SupabaseClient(supabaseURL: URL(string: "https://assessment-owner-fixture.invalid")!,
+            supabaseKey: "synthetic-anon", options: .init(
+                auth: .init(storage: AssessmentOwnerStorage(), autoRefreshToken: false,
+                            accessToken: { await gate.nextToken() }),
+                global: .init(session: URLSession(configuration: config))))
+        let service = OutcomeTrackingService(supabase: client, currentUserID: { owner.id })
+        try await service.loadAssessmentTemplates()
+        XCTAssertEqual(service.assessmentTemplates.count, 1)
+        return Fixture(service: service, owner: owner, firstOwner: a, otherOwner: b, gate: gate,
+            answers: Dictionary(uniqueKeysWithValues: (1...9).map { (String($0), $0 == 9 ? 1 : 0) }))
+    }
+
+    private final class Owner { var id: UUID? }
+    private struct Fixture {
+        let service: OutcomeTrackingService
+        let owner: Owner
+        let firstOwner: UUID
+        let otherOwner: UUID
+        let gate: AssessmentOwnerTokenGate
+        let answers: [String: Int]
+    }
+}
+
+private actor AssessmentOwnerTokenGate {
+    private var token: String
+    private var paused = false
+    private var requested = false
+    private var waiter: CheckedContinuation<Void, Never>?
+    private var request: CheckedContinuation<String?, Never>?
+    init(token: String) { self.token = token }
+    func pauseNextRequest() { paused = true; requested = false }
+    func waitForRequest() async {
+        if requested { return }
+        await withCheckedContinuation { waiter = $0 }
+    }
+    func nextToken() async -> String? {
+        guard paused else { return token }
+        requested = true
+        waiter?.resume(); waiter = nil
+        return await withCheckedContinuation { request = $0 }
+    }
+    func release(token: String) {
+        self.token = token; paused = false
+        request?.resume(returning: token); request = nil
+    }
+}
+
+private struct AssessmentOwnerStorage: AuthLocalStorage {
+    func store(key: String, value: Data) throws {}
+    func retrieve(key: String) throws -> Data? { nil }
+    func remove(key: String) throws {}
+}
+
+private final class AssessmentOwnerHTTP: @unchecked Sendable {
+    struct Submission {
+        let owner: UUID
+        let id: UUID
+        let bearer: String
+        let answers: [String: Int]
+    }
+    private let lock = NSLock()
+    private var template: AssessmentTemplate?
+    private var attempts: [Submission] = []
+    private var saved: [UUID: AssessmentResponse] = [:]
+    var submissions: [Submission] { lock.withLock { attempts } }
+    var savedCount: Int { lock.withLock { saved.count } }
+    func reset(template: AssessmentTemplate) {
+        lock.withLock { self.template = template; attempts = []; saved = [:] }
+    }
+    func response(for request: URLRequest) throws -> (Int, Data) {
+        try lock.withLock {
+            guard let template else { throw URLError(.badServerResponse) }
+            let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
+            if request.url?.path == "/rest/v1/assessment_templates" {
+                return (200, try encoder.encode([template]))
+            }
+            guard request.url?.path == "/rest/v1/rpc/submit_outcome_assessment" else {
+                throw URLError(.unsupportedURL)
+            }
+            var body = request.httpBody ?? Data()
+            if let stream = request.httpBodyStream {
+                stream.open(); defer { stream.close() }
+                var buffer = [UInt8](repeating: 0, count: 4096)
+                while stream.hasBytesAvailable {
+                    let read = stream.read(&buffer, maxLength: buffer.count)
+                    guard read >= 0 else { throw URLError(.cannotDecodeRawData) }
+                    if read == 0 { break }; body.append(contentsOf: buffer.prefix(read))
+                }
+            }
+            let object = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            let owner = try XCTUnwrap(UUID(uuidString: try XCTUnwrap(object["p_expected_user_id"] as? String)))
+            let id = try XCTUnwrap(UUID(uuidString: try XCTUnwrap(object["p_response_id"] as? String)))
+            let answers = try XCTUnwrap(object["p_answers"] as? [String: Int])
+            let bearer = request.value(forHTTPHeaderField: "Authorization")?.replacingOccurrences(of: "Bearer ", with: "") ?? ""
+            attempts.append(Submission(owner: owner, id: id, bearer: bearer, answers: answers))
+            guard bearer == owner.uuidString else {
+                return (403, Data(#"{"code":"42501","message":"Assessment owner changed","details":null,"hint":null}"#.utf8))
+            }
+            let response = saved[id] ?? AssessmentResponse(id: id, userId: owner,
+                assessmentTemplateId: template.id, answers: answers, totalScore: 1,
+                severityLevel: "minimal", isBaseline: true, notes: object["p_notes"] as? String,
+                completedAt: Date(timeIntervalSince1970: 1000), createdAt: nil, scoringVersion: 2)
+            saved[id] = response
+            let json = try JSONSerialization.jsonObject(with: encoder.encode(response))
+            return (200, try JSONSerialization.data(withJSONObject: ["response": json, "schedule": NSNull(), "goal": NSNull()]))
+        }
+    }
+}
+
+private final class AssessmentOwnerURLProtocol: URLProtocol, @unchecked Sendable {
+    static let fixture = AssessmentOwnerHTTP()
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        do {
+            let (status, data) = try Self.fixture.response(for: request)
+            let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"])!
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        } catch { client?.urlProtocol(self, didFailWithError: error) }
+    }
+    override func stopLoading() {}
+}
+#endif
