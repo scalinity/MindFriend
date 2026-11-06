@@ -15,6 +15,7 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
+import { isAuthorizedCronRequest } from "../_shared/auth.ts";
 
 // Type definitions
 interface CirclePost {
@@ -45,6 +46,12 @@ interface AggregationResult {
 
 Deno.serve(async (req) => {
   try {
+    if (!await isAuthorizedCronRequest(
+      req.headers, Deno.env.get("CRON_SECRET") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    )) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { "Content-Type": "application/json" } });
+    }
+
     // Initialize Supabase client with service role key
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",

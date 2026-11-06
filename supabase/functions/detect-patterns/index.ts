@@ -4,6 +4,7 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
+import { isAuthorizedCronRequest } from "../_shared/auth.ts";
 import {
   getSeasonForMonth,
   processBatches,
@@ -40,6 +41,12 @@ Deno.serve(async (req) => {
   }
 
   try {
+    if (!await isAuthorizedCronRequest(
+      req.headers, Deno.env.get("CRON_SECRET") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    )) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 

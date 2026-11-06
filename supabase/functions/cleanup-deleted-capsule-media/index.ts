@@ -3,6 +3,7 @@
 // Triggered by: cron schedule (daily at 3 AM UTC)
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
+import { isAuthorizedCronRequest } from "../_shared/auth.ts";
 import { logError, createErrorResponse } from "../_shared/error-logger.ts";
 
 interface DeletedMedia {
@@ -11,8 +12,14 @@ interface DeletedMedia {
   deleted_at: string;
 }
 
-Deno.serve(async (_req) => {
+Deno.serve(async (req) => {
   try {
+    if (!await isAuthorizedCronRequest(
+      req.headers, Deno.env.get("CRON_SECRET") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    )) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { "Content-Type": "application/json" } });
+    }
+
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
