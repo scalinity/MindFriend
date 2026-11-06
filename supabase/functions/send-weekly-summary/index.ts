@@ -1,17 +1,20 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import {
   getCurrentWeekStart,
   calculateScheduledTime,
 } from "../_shared/email-utils.ts";
 import { getMoodTrendMessage } from "../_shared/notification-utils.ts";
+import { isAuthorizedCronRequest } from "../_shared/auth.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-serve(async (req: Request) => {
+Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });
+  }
+  if (!await isAuthorizedCronRequest(req.headers, Deno.env.get("CRON_SECRET") ?? "", supabaseServiceKey)) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { "Content-Type": "application/json" } });
   }
 
   try {

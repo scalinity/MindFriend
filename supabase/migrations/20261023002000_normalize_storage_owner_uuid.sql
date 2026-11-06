@@ -1,0 +1,14 @@
+-- Swift UUID strings are uppercase by default; UUID ownership is case-insensitive.
+-- Preserve each existing policy role and bucket, and match the same owner.
+ALTER POLICY "Therapists can delete own photo" ON storage.objects TO "public" USING (((bucket_id = 'therapist-photos'::text) AND (auth.uid() IS NOT NULL) AND (lower((storage.foldername(name))[1]) = (auth.uid())::text)));
+ALTER POLICY "Therapists can update own photo" ON storage.objects TO "public" USING (((bucket_id = 'therapist-photos'::text) AND (auth.uid() IS NOT NULL) AND (lower((storage.foldername(name))[1]) = (auth.uid())::text))) WITH CHECK (((bucket_id = 'therapist-photos'::text) AND (auth.uid() IS NOT NULL) AND (lower((storage.foldername(name))[1]) = (auth.uid())::text)));
+ALTER POLICY "Therapists can upload own photo" ON storage.objects TO "public" WITH CHECK (((bucket_id = 'therapist-photos'::text) AND (auth.uid() IS NOT NULL) AND (lower((storage.foldername(name))[1]) = (auth.uid())::text)));
+ALTER POLICY "Users can delete own avatars" ON storage.objects TO "public" USING (((bucket_id = 'profile-pictures'::text) AND (lower(lower((storage.foldername(name))[1])) = lower((auth.uid())::text))));
+ALTER POLICY "Users can delete own capsule media" ON storage.objects TO "authenticated" USING (((bucket_id = 'capsule-media'::text) AND (lower((storage.foldername(name))[1]) = (auth.uid())::text)));
+ALTER POLICY "Users can delete own photos" ON storage.objects TO "public" USING (((bucket_id = 'mood-photos'::text) AND ((auth.uid())::text = lower((storage.foldername(name))[1]))));
+ALTER POLICY "Users can read own capsule media" ON storage.objects TO "authenticated" USING (((bucket_id = 'capsule-media'::text) AND (lower((storage.foldername(name))[1]) = (auth.uid())::text)));
+ALTER POLICY "Users can update own avatars" ON storage.objects TO "public" USING (((bucket_id = 'profile-pictures'::text) AND (lower(lower((storage.foldername(name))[1])) = lower((auth.uid())::text)))) WITH CHECK (((bucket_id = 'profile-pictures'::text) AND (lower(lower((storage.foldername(name))[1])) = lower((auth.uid())::text))));
+ALTER POLICY "Users can upload capsule media" ON storage.objects TO "authenticated" WITH CHECK (((bucket_id = 'capsule-media'::text) AND (lower((storage.foldername(name))[1]) = (auth.uid())::text)));
+ALTER POLICY "Users can upload own avatars" ON storage.objects TO "public" WITH CHECK (((bucket_id = 'profile-pictures'::text) AND (lower(lower((storage.foldername(name))[1])) = lower((auth.uid())::text))));
+ALTER POLICY "Users can upload own photos" ON storage.objects TO "public" WITH CHECK (((bucket_id = 'mood-photos'::text) AND ((auth.uid())::text = lower((storage.foldername(name))[1]))));
+ALTER POLICY "Users can view own photos" ON storage.objects TO "public" USING (((bucket_id = 'mood-photos'::text) AND ((auth.uid())::text = lower((storage.foldername(name))[1]))));
