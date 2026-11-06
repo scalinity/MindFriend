@@ -3,19 +3,23 @@
 // Run via Supabase cron every 15 minutes
 // See: specs/04-smart-notifications.md
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { isAuthorizedCronRequest } from "../_shared/auth.ts";
 import {
-  sendAPNs,
   buildAPNsPayload,
-  isAPNsConfigured,
   getAPNsConfig,
+  isAPNsConfigured,
+  sendAPNs,
 } from "../_shared/apns.ts";
-import { isInQuietHours } from "../_shared/notification-utils.ts";
+import {
+  isInQuietHours,
+  type NotificationType,
+  RECOVERY_MODE_BLOCKED_TYPES,
+  TYPE_TO_SETTING,
+} from "../_shared/notification-utils.ts";
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 
@@ -34,7 +38,11 @@ serve(async (req) => {
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
   if (
-    !(await isAuthorizedCronRequest(req.headers, expectedCronSecret, serviceRoleKey))
+    !(await isAuthorizedCronRequest(
+      req.headers,
+      expectedCronSecret,
+      serviceRoleKey,
+    ))
   ) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
@@ -62,8 +70,7 @@ serve(async (req) => {
           body,
           deep_link,
           metadata,
-          profiles!inner(timezone),
-          user_settings!inner(quiet_hours_start_local, quiet_hours_end_local)
+          profiles!inner(timezone)
         `,
         )
         .eq("status", "pending")
@@ -99,23 +106,62 @@ serve(async (req) => {
       stillQueued: 0,
       failed: 0,
       noToken: 0,
+      skipped: 0,
     };
 
     const now = new Date();
 
-    // Batch fetch push tokens for all users
     const userIds = [...new Set(pendingNotifications.map((n) => n.user_id))];
-    const { data: allPushTokens } = await supabaseAdmin
+    // user_settings references auth.users, not notification_history/profiles;
+    // PostgREST cannot embed it through the restored schema's relationships.
+    const { data: settings, error: settingsError } = await supabaseAdmin
+      .from("user_settings")
+      .select(
+        "user_id, quiet_hours_start_local, quiet_hours_end_local, recovery_mode_active, notify_circle_activity, notify_hugs, notify_streak_risk, notify_weekly_summary, notify_challenges, reminders_enabled, proactive_enabled",
+      )
+      .in("user_id", userIds);
+    const settingsByUser = new Map((settings || []).map((s) => [s.user_id, s]));
+    if (settingsError || userIds.some((id) => !settingsByUser.has(id))) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Failed to fetch notification settings",
+        }),
+        { status: 500, headers },
+      );
+    }
+
+    // Batch fetch push tokens for all users
+    const { data: allPushTokens, error: tokenError } = await supabaseAdmin
       .from("push_tokens")
-      .select("user_id, token")
+      .select("user_id, device_token")
       .in("user_id", userIds)
       .eq("platform", "ios");
+    if (tokenError) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Failed to fetch push tokens",
+        }),
+        { status: 500, headers },
+      );
+    }
+
+    if (!isAPNsConfigured()) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Push notifications are not configured",
+        }),
+        { status: 503, headers },
+      );
+    }
 
     // Create a map of user_id -> tokens[]
     const tokensByUser = new Map<string, string[]>();
     for (const pt of allPushTokens || []) {
       const tokens = tokensByUser.get(pt.user_id) || [];
-      tokens.push(pt.token);
+      tokens.push(pt.device_token);
       tokensByUser.set(pt.user_id, tokens);
     }
 
@@ -125,30 +171,44 @@ serve(async (req) => {
       id: string;
       status: string;
       sent_at: string | null;
+      metadata?: Record<string, unknown>;
     }> = [];
     const invalidTokens: Array<{ user_id: string; token: string }> = [];
 
-    // deno-lint-ignore no-explicit-any
     type NotificationWithJoins = (typeof pendingNotifications)[0] & {
       profiles: { timezone: string };
-      user_settings: {
-        quiet_hours_start_local: string | null;
-        quiet_hours_end_local: string | null;
-      };
     };
 
-    async function processNotification(
+    const processNotification = async (
       notification: NotificationWithJoins,
     ): Promise<{
-      result: "sent" | "failed" | "queued" | "no_token";
-      invalidToken?: { user_id: string; token: string };
-    }> {
+      result: "sent" | "failed" | "queued" | "no_token" | "skipped";
+    }> => {
       // Use joined data directly (no extra queries!)
       const timezone = notification.profiles?.timezone || "America/Los_Angeles";
-      const quietStart =
-        notification.user_settings?.quiet_hours_start_local || null;
-      const quietEnd =
-        notification.user_settings?.quiet_hours_end_local || null;
+      const userSettings = settingsByUser.get(notification.user_id)!;
+      const quietStart = userSettings.quiet_hours_start_local || null;
+      const quietEnd = userSettings.quiet_hours_end_local || null;
+      const type = notification.notification_type as NotificationType;
+      const settingColumn = TYPE_TO_SETTING[type];
+      const disabled = settingColumn &&
+        (userSettings as Record<string, unknown>)[settingColumn] === false;
+      const recoveryBlocked = userSettings.recovery_mode_active === true &&
+        RECOVERY_MODE_BLOCKED_TYPES.has(type);
+      if (disabled || recoveryBlocked) {
+        notificationUpdates.push({
+          id: notification.id,
+          status: "failed",
+          sent_at: null,
+          metadata: {
+            ...notification.metadata,
+            skipped_reason: disabled
+              ? "notification_type_disabled"
+              : "recovery_mode_active",
+          },
+        });
+        return { result: "skipped" };
+      }
 
       // Get current hour in user's timezone
       const formatter = new Intl.DateTimeFormat("en-US", {
@@ -204,10 +264,6 @@ serve(async (req) => {
             invalidTokens.push({ user_id: notification.user_id, token });
           }
         }
-      } else {
-        // Mock mode
-        console.log("[MOCK QUEUE SEND]", notification.id);
-        sent = true;
       }
 
       notificationUpdates.push({
@@ -217,7 +273,7 @@ serve(async (req) => {
       });
 
       return { result: sent ? "sent" : "failed" };
-    }
+    };
 
     // Process in batches with concurrency limit
     for (let i = 0; i < pendingNotifications.length; i += CONCURRENCY) {
@@ -242,6 +298,9 @@ serve(async (req) => {
             case "no_token":
               results.noToken++;
               break;
+            case "skipped":
+              results.skipped++;
+              break;
           }
         } else {
           console.error("Notification processing error:", res.reason);
@@ -251,11 +310,19 @@ serve(async (req) => {
     }
 
     // Batch update notification statuses
+    let persistenceFailures = 0;
     for (const update of notificationUpdates) {
-      await supabaseAdmin
+      const { error: updateError } = await supabaseAdmin
         .from("notification_history")
-        .update({ status: update.status, sent_at: update.sent_at })
-        .eq("id", update.id);
+        .update({
+          status: update.status,
+          sent_at: update.sent_at,
+          ...(update.metadata ? { metadata: update.metadata } : {}),
+        })
+        .eq("id", update.id)
+        .select("id")
+        .single();
+      if (updateError) persistenceFailures++;
     }
 
     // Batch delete invalid tokens
@@ -264,7 +331,21 @@ serve(async (req) => {
         .from("push_tokens")
         .delete()
         .eq("user_id", user_id)
-        .eq("token", token);
+        .eq("device_token", token);
+    }
+
+    if (persistenceFailures) {
+      // A pending row can be retried after APNs accepted it; its existing UUID
+      // correlates attempts but does not guarantee provider deduplication.
+      return new Response(
+        JSON.stringify({
+          success: false,
+          ...results,
+          persistenceFailures,
+          error: "notification_status_persistence_failed",
+        }),
+        { status: 500, headers },
+      );
     }
 
     console.log("Queue processing complete:", results);

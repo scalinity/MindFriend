@@ -58,6 +58,17 @@ export const TYPE_TO_SETTING: Record<NotificationType, string> = {
   agent_action: "proactive_enabled",
 };
 
+// The same recovery preferences apply at admission and deferred delivery.
+export const RECOVERY_MODE_BLOCKED_TYPES: ReadonlySet<NotificationType> =
+  new Set([
+    "streak_risk",
+    "reengagement_gentle",
+    "reengagement_social",
+    "reengagement_progress",
+    "reengagement_fresh_start",
+    "weekly_summary",
+  ]);
+
 export interface NotificationContent {
   title: string;
   body: string;
@@ -134,7 +145,9 @@ export function buildNotificationContent(
       const urgency = data.urgency || 0;
       const streak = data.streak || 0;
       const messages = [
-        `You've been consistent for ${streak} days. Tomorrow is day ${streak + 1}!`,
+        `You've been consistent for ${streak} days. Tomorrow is day ${
+          streak + 1
+        }!`,
         `Your ${streak} day streak is at risk - check in to keep it going`,
       ];
       return {
@@ -147,7 +160,9 @@ export function buildNotificationContent(
     case "weekly_summary":
       return {
         title: "Your Week in Review 📊",
-        body: `${data.checkins || 0} check-ins, ${data.quests || 0} quests. ${data.moodMessage || ""}`.trim(),
+        body: `${data.checkins || 0} check-ins, ${data.quests || 0} quests. ${
+          data.moodMessage || ""
+        }`.trim(),
         deepLink: "mindfriend://insights",
       };
 
@@ -167,7 +182,8 @@ export function buildNotificationContent(
       const max = data.shieldsMax ?? 1;
       return {
         title: "🛡️ Streak Protected!",
-        body: `Your ${streak}-day streak was saved! ${remaining}/${max} shields remaining`,
+        body:
+          `Your ${streak}-day streak was saved! ${remaining}/${max} shields remaining`,
         deepLink: "mindfriend://home",
       };
     }
@@ -175,7 +191,9 @@ export function buildNotificationContent(
     case "shield_reset":
       return {
         title: "🛡️ Shields Refreshed!",
-        body: `Your streak shields have been reset. You have ${data.shieldsMax || 1} shield${(data.shieldsMax || 1) > 1 ? "s" : ""} for this week.`,
+        body: `Your streak shields have been reset. You have ${
+          data.shieldsMax || 1
+        } shield${(data.shieldsMax || 1) > 1 ? "s" : ""} for this week.`,
         deepLink: "mindfriend://home",
       };
 
@@ -183,7 +201,8 @@ export function buildNotificationContent(
       const streakToRecover = data.streakToRecover || 0;
       return {
         title: "🔄 Recover Your Streak!",
-        body: `Complete a recovery quest in the next 24h to restore your ${streakToRecover}-day streak`,
+        body:
+          `Complete a recovery quest in the next 24h to restore your ${streakToRecover}-day streak`,
         deepLink: "mindfriend://recovery",
       };
     }
@@ -220,7 +239,8 @@ export function buildNotificationContent(
       // Day 14: Progress preserved message
       return {
         title: "Your progress is safe 🌱",
-        body: "Your journey is waiting right where you left off. Come back when you're ready.",
+        body:
+          "Your journey is waiting right where you left off. Come back when you're ready.",
         deepLink: "mindfriend://home",
       };
     }
@@ -229,7 +249,8 @@ export function buildNotificationContent(
       // Day 30: Fresh start offer
       return {
         title: "A fresh start awaits ✨",
-        body: "Sometimes we all need a reset. Start fresh with a Day 2 bonus when you return.",
+        body:
+          "Sometimes we all need a reset. Start fresh with a Day 2 bonus when you return.",
         deepLink: "mindfriend://home",
       };
     }
@@ -239,7 +260,8 @@ export function buildNotificationContent(
       const name = data.displayName || "there";
       return {
         title: "Checking in 💙",
-        body: `Hey ${name}, I noticed things have been tough lately. No pressure—just wanted you to know I'm here.`,
+        body:
+          `Hey ${name}, I noticed things have been tough lately. No pressure—just wanted you to know I'm here.`,
         deepLink: "mindfriend://chat",
       };
     }
@@ -249,7 +271,8 @@ export function buildNotificationContent(
       const name = data.displayName || "there";
       return {
         title: `${streak}-day streak 🔥`,
-        body: `Hey ${name}, you're on a ${streak}-day streak! Today's quest is ready whenever you are. 💪`,
+        body:
+          `Hey ${name}, you're on a ${streak}-day streak! Today's quest is ready whenever you are. 💪`,
         deepLink: "mindfriend://quest",
       };
     }
@@ -259,7 +282,8 @@ export function buildNotificationContent(
       const name = data.displayName || "there";
       return {
         title: "Almost there! 🎉",
-        body: `${name}, you're just 1 day away from a ${milestone}-day streak! You've got this!`,
+        body:
+          `${name}, you're just 1 day away from a ${milestone}-day streak! You've got this!`,
         deepLink: "mindfriend://quest",
       };
     }
@@ -280,8 +304,7 @@ export function buildNotificationContent(
     }
 
     case "proactive_pattern_insight": {
-      const insight =
-        data.patternInsight ||
+      const insight = data.patternInsight ||
         "We've noticed an interesting pattern in your data.";
       return {
         title: "New Insight 💡",
@@ -296,7 +319,8 @@ export function buildNotificationContent(
       const days = data.daysSinceLastAssessment;
       let body = `Time for your ${assessmentName} to track your progress.`;
       if (days && days > 14) {
-        body = `It's been ${days} days since your last ${assessmentName}. Take a few minutes to check in.`;
+        body =
+          `It's been ${days} days since your last ${assessmentName}. Take a few minutes to check in.`;
       }
       return {
         title: "Wellness Check-In 📊",

@@ -2,38 +2,30 @@
 // Handles push notifications with preferences, quiet hours, and history tracking
 // See: specs/04-smart-notifications.md
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import { getCorsHeaders } from "../_shared/cors.ts";
 import {
-  sendAPNs,
+  createClient,
+  type SupabaseClient,
+} from "https://esm.sh/@supabase/supabase-js@2.118.0";
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { isAuthorizedCronRequest } from "../_shared/auth.ts";
+import {
   buildAPNsPayload,
-  isAPNsConfigured,
   getAPNsConfig,
+  isAPNsConfigured,
+  sendAPNs,
 } from "../_shared/apns.ts";
 import {
-  type NotificationType,
-  TYPE_TO_SETTING,
   buildNotificationContent,
   isInQuietHours,
+  type NotificationType,
+  RECOVERY_MODE_BLOCKED_TYPES,
+  TYPE_TO_SETTING,
 } from "../_shared/notification-utils.ts";
 
 // Rate limiting configuration
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 const RATE_LIMIT_MAX_PER_USER = 100; // Max notifications per user per hour
 const RATE_LIMIT_MAX_PER_SENDER = 50; // Max notifications a sender can trigger per hour
-
-// Recovery mode notification types that should be blocked
-// These are "pressure" notifications that could increase stress during difficult periods
-// See: kimispecs/03-recovery-mode-ux-spec.md - achieves >50% notification reduction
-const RECOVERY_MODE_BLOCKED_TYPES: Set<NotificationType> = new Set([
-  "streak_risk",
-  "reengagement_gentle",
-  "reengagement_social",
-  "reengagement_progress",
-  "reengagement_fresh_start",
-  "weekly_summary",
-]);
 
 interface NotificationRequest {
   type: NotificationType;
@@ -55,18 +47,20 @@ interface NotificationRequest {
     completedCount?: number;
     totalMembers?: number;
     challengeTitle?: string;
+    sessionId?: string;
   };
 }
 
 // Check rate limit for a recipient or sender
 async function checkRateLimit(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   userId: string,
   type: "recipient" | "sender",
 ): Promise<{ allowed: boolean; count: number; limit: number }> {
   const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MS).toISOString();
-  const limit =
-    type === "recipient" ? RATE_LIMIT_MAX_PER_USER : RATE_LIMIT_MAX_PER_SENDER;
+  const limit = type === "recipient"
+    ? RATE_LIMIT_MAX_PER_USER
+    : RATE_LIMIT_MAX_PER_SENDER;
 
   // For recipients, count notifications received
   // For senders, count notifications triggered (via metadata.senderId)
@@ -137,11 +131,14 @@ function getQuietHoursEndTime(
 
   // Create a date string in the user's timezone, then parse it
   // Format: "YYYY-MM-DDTHH:MM:SS" in the user's timezone
-  const targetDateStr = `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(targetDay).padStart(2, "0")}T${String(endHour).padStart(2, "0")}:${String(endMinute).padStart(2, "0")}:00`;
+  const targetDateStr = `${targetYear}-${
+    String(targetMonth).padStart(2, "0")
+  }-${String(targetDay).padStart(2, "0")}T${String(endHour).padStart(2, "0")}:${
+    String(endMinute).padStart(2, "0")
+  }:00`;
 
   // Use Intl to get the UTC offset for this timezone at this time
   // Then calculate the UTC equivalent
-  const tempDate = new Date(targetDateStr + "Z"); // Parse as UTC first
   const utcFormatter = new Intl.DateTimeFormat("en-US", {
     timeZone: "UTC",
     hour: "2-digit",
@@ -170,7 +167,7 @@ function getQuietHoursEndTime(
   return utcTime;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const headers = {
     ...getCorsHeaders(origin),
@@ -194,36 +191,21 @@ serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     let callerId: string | null = null;
 
-    if (authHeader) {
-      const token = authHeader.replace("Bearer ", "");
-
-      // Check if this is a service role call (Fix 3: use constant-time comparison)
-      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-
-      // Constant-time comparison to prevent timing attacks
-      const tokenBytes = new TextEncoder().encode(token);
-      const keyBytes = new TextEncoder().encode(serviceRoleKey);
-
-      let isServiceRole = tokenBytes.length === keyBytes.length;
-      if (isServiceRole) {
-        // XOR comparison - constant time regardless of where mismatch occurs
-        let diff = 0;
-        for (let i = 0; i < tokenBytes.length; i++) {
-          diff |= tokenBytes[i] ^ keyBytes[i];
-        }
-        isServiceRole = diff === 0;
-      }
-
-      if (isServiceRole) {
+    if (authHeader?.startsWith("Bearer ")) {
+      const token = authHeader.slice(7);
+      if (
+        await isAuthorizedCronRequest(
+          req.headers,
+          "",
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+        )
+      ) {
         callerId = "service_role";
-      } else {
-        // Validate user token
-        const {
-          data: { user },
-        } = await supabaseAdmin.auth.getUser(token);
-        if (user) {
-          callerId = user.id;
-        }
+      } else if (token) {
+        const { data: { user }, error } = await supabaseAdmin.auth.getUser(
+          token,
+        );
+        if (!error && user) callerId = user.id;
       }
     }
 
@@ -239,19 +221,33 @@ serve(async (req) => {
     const body: NotificationRequest = await req.json();
 
     // Default data to empty object if not provided
-    if (!body.data) {
-      body.data = {};
+    if (!body.data) body.data = {};
+    if (typeof body.data !== "object" || Array.isArray(body.data)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid notification data" }),
+        {
+          status: 400,
+          headers,
+        },
+      );
     }
 
-    if (!body.type || !body.recipientId) {
+    if (
+      !body.type || typeof body.recipientId !== "string" || !body.recipientId
+    ) {
       return new Response(
         JSON.stringify({ error: "Missing type or recipientId" }),
         { status: 400, headers },
       );
     }
 
+    // Swift UUID.uuidString is uppercase; PostgreSQL returns lowercase UUIDs.
+    body.recipientId = body.recipientId.toLowerCase();
+
     // Validate notification type
-    const validTypes: NotificationType[] = Object.keys(TYPE_TO_SETTING) as NotificationType[];
+    const validTypes: NotificationType[] = Object.keys(
+      TYPE_TO_SETTING,
+    ) as NotificationType[];
     if (!validTypes.includes(body.type)) {
       return new Response(
         JSON.stringify({ error: "Invalid notification type" }),
@@ -266,7 +262,7 @@ serve(async (req) => {
       "hug",
       "challenge",
     ];
-    // Direct user-to-user types (no circle validation needed)
+    // Direct types require their persisted buddy or couples context below.
     const DIRECT_USER_TYPES: NotificationType[] = [
       "buddy_encouragement",
       "couples_exercise_invite",
@@ -291,7 +287,10 @@ serve(async (req) => {
     }
 
     // SECURITY FIX #001: Validate circle membership for circle-scoped notifications
-    if (callerId !== "service_role" && CIRCLE_SCOPED_USER_TYPES.includes(body.type)) {
+    if (
+      callerId !== "service_role" &&
+      CIRCLE_SCOPED_USER_TYPES.includes(body.type)
+    ) {
       const circleId = body.data.circleId;
       if (!circleId) {
         return new Response(
@@ -301,17 +300,93 @@ serve(async (req) => {
       }
 
       // Verify BOTH sender and recipient are members of the circle
-      const { data: members } = await supabaseAdmin
+      const { data: members, error: membersError } = await supabaseAdmin
         .from("circle_members")
         .select("user_id")
         .eq("circle_id", circleId)
         .in("user_id", [callerId, body.recipientId]);
 
       const memberSet = new Set((members || []).map((m) => m.user_id));
-      if (!memberSet.has(callerId) || !memberSet.has(body.recipientId)) {
+      if (
+        membersError || !memberSet.has(callerId) ||
+        !memberSet.has(body.recipientId)
+      ) {
         return new Response(
           JSON.stringify({ error: "Not authorized for this circle" }),
           { status: 403, headers },
+        );
+      }
+    }
+
+    if (callerId !== "service_role" && body.type === "buddy_encouragement") {
+      // iOS persists encouragement before requesting a push. Require both the
+      // accepted relationship and the message addressed to this exact recipient.
+      const { data: relationships, error: relationshipError } =
+        await supabaseAdmin
+          .from("buddy_relationships")
+          .select("id")
+          .eq("status", "accepted")
+          .in("inviter_id", [callerId, body.recipientId])
+          .in("invitee_id", [callerId, body.recipientId]);
+      const relationshipIds = (relationships || []).map((row) => row.id);
+      let authorized = false;
+      if (
+        !relationshipError && callerId !== body.recipientId &&
+        relationshipIds.length
+      ) {
+        const { data: messages, error: messageError } = await supabaseAdmin
+          .from("buddy_encouragements")
+          .select("id")
+          .eq("sender_id", callerId)
+          .eq("recipient_id", body.recipientId)
+          .in("buddy_relationship_id", relationshipIds)
+          .limit(1);
+        authorized = !messageError && !!messages?.length;
+      }
+      if (!authorized) {
+        return new Response(
+          JSON.stringify({ error: "Not authorized for this buddy" }),
+          {
+            status: 403,
+            headers,
+          },
+        );
+      }
+    }
+
+    if (
+      callerId !== "service_role" && body.type === "couples_exercise_invite"
+    ) {
+      const { data: session, error: sessionError } = await supabaseAdmin
+        .from("couples_exercise_sessions")
+        .select("partner_link_id, user_id_1, user_id_2")
+        .eq("id", body.data.sessionId || "")
+        .eq("status", "pending")
+        .maybeSingle();
+      const isPair = (row: { user_id_1: string; user_id_2: string | null }) =>
+        callerId !== body.recipientId && (
+          (row.user_id_1 === callerId && row.user_id_2 === body.recipientId) ||
+          (row.user_id_2 === callerId && row.user_id_1 === body.recipientId)
+        );
+      let authorized = false;
+      if (!sessionError && session && isPair(session)) {
+        const { data: link, error: linkError } = await supabaseAdmin
+          .from("partner_links")
+          .select("user_id_1, user_id_2")
+          .eq("id", session.partner_link_id)
+          .eq("status", "active")
+          .maybeSingle();
+        authorized = !linkError && !!link && isPair(link);
+      }
+      if (!authorized) {
+        return new Response(
+          JSON.stringify({
+            error: "Not authorized for this exercise invitation",
+          }),
+          {
+            status: 403,
+            headers,
+          },
         );
       }
     }
@@ -359,17 +434,37 @@ serve(async (req) => {
     }
 
     // Get user's notification preferences and profile
-    const { data: settings } = await supabaseAdmin
+    const { data: settings, error: settingsError } = await supabaseAdmin
       .from("user_settings")
       .select("*")
       .eq("user_id", body.recipientId)
       .single();
 
-    const { data: profile } = await supabaseAdmin
+    if (settingsError || !settings) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "notification_settings_unavailable",
+        }),
+        { status: 503, headers },
+      );
+    }
+
+    const { data: profile, error: profileError } = await supabaseAdmin
       .from("profiles")
       .select("timezone, display_name")
       .eq("id", body.recipientId)
       .single();
+
+    if (profileError || !profile) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "notification_profile_unavailable",
+        }),
+        { status: 503, headers },
+      );
+    }
 
     // Check if this notification type is enabled
     const settingColumn = TYPE_TO_SETTING[body.type];
@@ -384,9 +479,7 @@ serve(async (req) => {
       );
     }
 
-    // Check recovery mode - block pressure notifications when user is in recovery
-    // This achieves >50% notification reduction by blocking stress-inducing types
-    // while preserving social support notifications (circle_activity, hug, challenge)
+    // Apply the current recovery preference before delivery.
     if (
       settings?.recovery_mode_active === true &&
       RECOVERY_MODE_BLOCKED_TYPES.has(body.type)
@@ -427,7 +520,9 @@ serve(async (req) => {
       const notificationId = crypto.randomUUID();
 
       // Insert as pending notification
-      await supabaseAdmin.from("notification_history").insert({
+      const { error: historyError } = await supabaseAdmin.from(
+        "notification_history",
+      ).insert({
         id: notificationId,
         user_id: body.recipientId,
         notification_type: body.type,
@@ -438,6 +533,17 @@ serve(async (req) => {
         status: "pending",
         scheduled_for: scheduledFor.toISOString(),
       });
+
+      if (historyError) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            queued: false,
+            error: "notification_history_persistence_failed",
+          }),
+          { status: 500, headers },
+        );
+      }
 
       return new Response(
         JSON.stringify({
@@ -452,11 +558,21 @@ serve(async (req) => {
     }
 
     // Get push token
-    const { data: pushTokens } = await supabaseAdmin
+    const { data: pushTokens, error: tokenError } = await supabaseAdmin
       .from("push_tokens")
-      .select("token")
+      .select("device_token")
       .eq("user_id", body.recipientId)
       .eq("platform", "ios");
+
+    if (tokenError) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Failed to fetch push tokens",
+        }),
+        { status: 500, headers },
+      );
+    }
 
     if (!pushTokens || pushTokens.length === 0) {
       return new Response(
@@ -472,6 +588,42 @@ serve(async (req) => {
     // Build notification content
     const content = buildNotificationContent(body.type, body.data);
     const notificationId = crypto.randomUUID();
+
+    if (!isAPNsConfigured()) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          sent: false,
+          error: "Push notifications are not configured",
+        }),
+        { status: 503, headers },
+      );
+    }
+
+    // Persist before sending: a rejected history row must never produce a push.
+    // No scheduled_for means this immediate attempt is not picked up by the queue.
+    const { error: historyError } = await supabaseAdmin.from(
+      "notification_history",
+    ).insert({
+      id: notificationId,
+      user_id: body.recipientId,
+      notification_type: body.type,
+      title: content.title,
+      body: content.body,
+      deep_link: content.deepLink,
+      metadata: body.data,
+      status: "pending",
+    });
+    if (historyError) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          sent: false,
+          error: "notification_history_persistence_failed",
+        }),
+        { status: 500, headers },
+      );
+    }
 
     // Try to send via APNs
     let sent = false;
@@ -489,8 +641,8 @@ serve(async (req) => {
       );
 
       // Send to all registered tokens
-      for (const { token } of pushTokens) {
-        apnsResult = await sendAPNs(token, payload, {
+      for (const { device_token } of pushTokens) {
+        apnsResult = await sendAPNs(device_token, payload, {
           bundleId: config.bundleId,
           keyId: config.keyId,
           teamId: config.teamId,
@@ -506,41 +658,44 @@ serve(async (req) => {
             .from("push_tokens")
             .delete()
             .eq("user_id", body.recipientId)
-            .eq("token", token);
+            .eq("device_token", device_token);
           console.log("Removed invalid push token for user:", body.recipientId);
         }
       }
-    } else {
-      // Mock mode - log notification
-      console.log("[MOCK NOTIFICATION]", {
-        recipientId: body.recipientId,
-        type: body.type,
-        content,
-      });
-      sent = true; // Pretend it was sent for testing
     }
 
-    // Log to notification history
-    await supabaseAdmin.from("notification_history").insert({
-      id: notificationId,
-      user_id: body.recipientId,
-      notification_type: body.type,
-      title: content.title,
-      body: content.body,
-      deep_link: content.deepLink,
-      metadata: body.data,
-      status: sent ? "sent" : "failed",
-      sent_at: sent ? now.toISOString() : null,
-    });
+    const { error: statusError } = await supabaseAdmin.from(
+      "notification_history",
+    )
+      .update({
+        status: sent ? "sent" : "failed",
+        sent_at: sent ? now.toISOString() : null,
+      })
+      .eq("id", notificationId)
+      .select("id")
+      .single();
+    if (statusError) {
+      // APNs may already have accepted this push. Retrying can send a duplicate;
+      // this request has no caller-provided durable idempotency key.
+      return new Response(
+        JSON.stringify({
+          success: false,
+          sent,
+          id: notificationId,
+          error: "notification_status_persistence_failed",
+        }),
+        { status: 500, headers },
+      );
+    }
 
     return new Response(
       JSON.stringify({
-        success: true,
+        success: sent,
         sent,
         id: notificationId,
         apnsId: apnsResult?.apnsId,
       }),
-      { status: 200, headers },
+      { status: sent ? 200 : 502, headers },
     );
   } catch (error) {
     console.error("Send notification error:", error);
