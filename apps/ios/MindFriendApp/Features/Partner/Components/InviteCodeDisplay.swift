@@ -79,7 +79,7 @@ struct InviteCodeDisplay: View {
         """
         Join me on MindFriend! Use my partner code: \(code)
 
-        Or tap this link: mindfriend://partner/accept?code=\(code)
+        Open Partner Mode in MindFriend and enter this 8-character code exactly as shown. Uppercase and lowercase letters are different.
 
         Download MindFriend: https://getmindfriend.app
         """
