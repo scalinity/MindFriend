@@ -14,6 +14,8 @@ for function in validate-invite-code join-organization b2b-stripe-webhook; do
         exit 2
     fi
 done
+OUTPUT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/mindfriend-b2b-tests.XXXXXX")"
+trap 'rm -rf "$OUTPUT_DIR"' EXIT
 
 echo "=============================================="
 echo "B2B Phase 1: Core Infrastructure Tests"
@@ -53,10 +55,10 @@ run_sql_test() {
 
     echo -n "  Running $test_name... "
 
-    if psql "$DATABASE_URL" -f "$test_file" > /tmp/test_output.txt 2>&1; then
-        if grep -q "FAIL" /tmp/test_output.txt; then
+    if psql -X -v ON_ERROR_STOP=1 "$DATABASE_URL" -f "$test_file" > "$OUTPUT_DIR/sql.txt" 2>&1; then
+        if grep -q "FAIL" "$OUTPUT_DIR/sql.txt"; then
             echo -e "${RED}FAIL${NC}"
-            grep "FAIL" /tmp/test_output.txt
+            grep "FAIL" "$OUTPUT_DIR/sql.txt"
             FAILED_SUITES=$((FAILED_SUITES + 1))
         else
             echo -e "${GREEN}PASS${NC}"
@@ -64,7 +66,7 @@ run_sql_test() {
         fi
     else
         echo -e "${RED}ERROR${NC}"
-        cat /tmp/test_output.txt
+        cat "$OUTPUT_DIR/sql.txt"
         FAILED_SUITES=$((FAILED_SUITES + 1))
     fi
 }
@@ -91,12 +93,12 @@ run_deno_test() {
 
     echo -n "  Running $test_name... "
 
-    if deno test --allow-net --allow-env "$test_file" > /tmp/deno_output.txt 2>&1; then
+    if deno test --allow-net --allow-env "$test_file" > "$OUTPUT_DIR/deno.txt" 2>&1; then
         echo -e "${GREEN}PASS${NC}"
         PASSED_SUITES=$((PASSED_SUITES + 1))
     else
         echo -e "${RED}FAIL${NC}"
-        tail -20 /tmp/deno_output.txt
+        tail -20 "$OUTPUT_DIR/deno.txt"
         FAILED_SUITES=$((FAILED_SUITES + 1))
     fi
 }
