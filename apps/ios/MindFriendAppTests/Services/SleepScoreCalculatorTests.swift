@@ -1485,3 +1485,100 @@ final class SleepHistoryImportRegressionTests: XCTestCase {
         XCTAssertEqual(finalCheckpoint, older)
     }
 }
+
+@MainActor
+final class HealthKitSleepSummaryTests: XCTestCase {
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/New_York")!
+        return calendar
+    }
+
+    func testOverlappingSourcesUseOneDurationInBiometricPayloadAndChronotype() throws {
+        let start = date("2026-11-05T22:00:00-05:00")
+        let end = date("2026-11-06T06:00:00-05:00")
+        let day = calendar.startOfDay(for: end)
+        let samples = [
+            sample(.asleepUnspecified, start, end),
+            sample(.asleepCore, start, date("2026-11-06T02:00:00-05:00")),
+            sample(.asleepDeep, date("2026-11-06T02:00:00-05:00"), date("2026-11-06T04:00:00-05:00")),
+            sample(.asleepREM, date("2026-11-06T04:00:00-05:00"), end),
+            sample(.asleepREM, date("2026-11-06T05:00:00-05:00"), date("2026-11-06T05:30:00-05:00")),
+            sample(.inBed, date("2026-11-05T21:45:00-05:00"), date("2026-11-06T06:15:00-05:00"))
+        ]
+        let measured = try XCTUnwrap(HealthKitService.measuredSleep(from: samples, wakingFrom: day,
+            before: calendar.date(byAdding: .day, value: 1, to: day)!, calendar: calendar))
+        let summary = measured.dailySummary(for: "2026-11-06", calendar: calendar)
+        let payload = BiometricSyncPayload(dailySummaries: [summary], workouts: [])
+        let decoded = try JSONDecoder().decode(BiometricSyncPayload.self, from: JSONEncoder().encode(payload)).dailySummaries[0]
+        XCTAssertEqual(decoded.sleepDurationMinutes, 480)
+        XCTAssertEqual(decoded.timeInBedMinutes, 510)
+        XCTAssertEqual(try XCTUnwrap(decoded.sleepQualityScore), 480.0 / 510.0, accuracy: 0.000001)
+        XCTAssertEqual(decoded.sleepStartTime, "22:00")
+        XCTAssertEqual(decoded.sleepEndTime, "06:00")
+        let record = measured.record(for: day, calendar: calendar)
+        XCTAssertEqual(record.date, day)
+        XCTAssertEqual(record.duration, 8 * 3600)
+        XCTAssertEqual(record.startTime, start)
+        XCTAssertEqual(record.endTime, end)
+    }
+
+    func testDailyUnionIncludesNapsWithoutCountingUncoveredGapsOrAdjacentNights() throws {
+        let day = date("2026-11-06T00:00:00-05:00")
+        let nextDay = date("2026-11-07T00:00:00-05:00")
+        let samples = [
+            sample(.asleepUnspecified, date("2026-11-04T22:00:00-05:00"), date("2026-11-05T06:00:00-05:00")),
+            sample(.asleepCore, date("2026-11-05T23:00:00-05:00"), date("2026-11-06T01:00:00-05:00")),
+            sample(.asleepDeep, date("2026-11-06T03:00:00-05:00"), date("2026-11-06T06:00:00-05:00")),
+            sample(.asleepUnspecified, date("2026-11-06T14:00:00-05:00"), date("2026-11-06T14:30:00-05:00")),
+            sample(.asleepUnspecified, date("2026-11-06T22:00:00-05:00"), date("2026-11-07T06:00:00-05:00"))
+        ]
+        let measured = try XCTUnwrap(HealthKitService.measuredSleep(from: samples, wakingFrom: day,
+            before: nextDay, calendar: calendar))
+        let summary = measured.dailySummary(for: "2026-11-06", calendar: calendar)
+        XCTAssertEqual(summary.sleepDurationMinutes, 330)
+        XCTAssertEqual(summary.timeInBedMinutes, 330)
+        XCTAssertEqual(summary.sleepEndTime, "14:30")
+        XCTAssertEqual(measured.record(for: day, calendar: calendar).duration, 330 * 60)
+        let following = try XCTUnwrap(HealthKitService.measuredSleep(from: samples, wakingFrom: nextDay,
+            before: calendar.date(byAdding: .day, value: 1, to: nextDay)!, calendar: calendar))
+        XCTAssertEqual(following.asleepSeconds, 8 * 3600)
+    }
+
+    func testChronotypePreservesAfternoonAndDaylightSavingDates() throws {
+        for (startText, endText, hours) in [
+            ("2026-11-06T14:00:00-05:00", "2026-11-06T15:00:00-05:00", 1),
+            ("2026-10-31T22:00:00-04:00", "2026-11-01T06:00:00-05:00", 9),
+            ("2026-03-07T22:00:00-05:00", "2026-03-08T06:00:00-04:00", 7)
+        ] {
+            let start = date(startText), end = date(endText)
+            let day = calendar.startOfDay(for: end)
+            let samples = [sample(.asleepUnspecified, start, end), sample(.asleepCore, start, end)]
+            let measured = try XCTUnwrap(HealthKitService.measuredSleep(from: samples, wakingFrom: day,
+                before: calendar.date(byAdding: .day, value: 1, to: day)!, calendar: calendar))
+            let record = measured.record(for: day, calendar: calendar)
+            XCTAssertEqual(record.startTime, start)
+            XCTAssertEqual(record.endTime, end)
+            XCTAssertEqual(record.duration, Double(hours * 3600))
+        }
+    }
+
+    func testEmptyAndInBedOnlySamplesDoNotCreateSleepMeasurements() {
+        let day = date("2026-11-06T00:00:00-05:00")
+        let nextDay = date("2026-11-07T00:00:00-05:00")
+        XCTAssertNil(HealthKitService.measuredSleep(from: [], wakingFrom: day, before: nextDay, calendar: calendar))
+        let inBed = sample(.inBed, day, day.addingTimeInterval(3600))
+        XCTAssertNil(HealthKitService.measuredSleep(from: [inBed], wakingFrom: day, before: nextDay, calendar: calendar))
+        let atNextMidnight = sample(.asleepUnspecified, nextDay.addingTimeInterval(-3600), nextDay)
+        XCTAssertNil(HealthKitService.measuredSleep(from: [atNextMidnight], wakingFrom: day, before: nextDay, calendar: calendar))
+        XCTAssertNotNil(HealthKitService.measuredSleep(from: [atNextMidnight], wakingFrom: nextDay,
+            before: calendar.date(byAdding: .day, value: 1, to: nextDay)!, calendar: calendar))
+    }
+
+    private func date(_ value: String) -> Date { ISO8601DateFormatter().date(from: value)! }
+
+    private func sample(_ value: HKCategoryValueSleepAnalysis, _ start: Date, _ end: Date) -> HKCategorySample {
+        HKCategorySample(type: HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!, value: value.rawValue,
+                         start: start, end: end)
+    }
+}
