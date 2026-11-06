@@ -6,6 +6,15 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FUNCTIONS_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")/functions"
+for function in validate-invite-code join-organization b2b-stripe-webhook; do
+    if [ ! -f "$FUNCTIONS_DIR/$function/test.ts" ]; then
+        echo "CONFIGURATION ERROR: missing function test $FUNCTIONS_DIR/$function/test.ts" >&2
+        exit 2
+    fi
+done
+
 echo "=============================================="
 echo "B2B Phase 1: Core Infrastructure Tests"
 echo "=============================================="
@@ -61,8 +70,6 @@ run_sql_test() {
 }
 
 # Run SQL tests
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 run_sql_test "$SCRIPT_DIR/test_organizations_schema.sql" "Schema Tests"
 run_sql_test "$SCRIPT_DIR/test_rls_forbidden_tables.sql" "RLS Policy Tests"
 run_sql_test "$SCRIPT_DIR/test_saml_replay_prevention.sql" "SAML Replay Prevention Tests"
@@ -93,8 +100,6 @@ run_deno_test() {
         FAILED_SUITES=$((FAILED_SUITES + 1))
     fi
 }
-
-FUNCTIONS_DIR="$(dirname "$SCRIPT_DIR")/functions"
 
 run_deno_test "$FUNCTIONS_DIR/validate-invite-code/test.ts" "Invite Code Validation Tests"
 run_deno_test "$FUNCTIONS_DIR/join-organization/test.ts" "Join Organization Tests"
