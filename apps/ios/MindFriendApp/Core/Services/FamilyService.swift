@@ -23,6 +23,7 @@ final class FamilyService: ObservableObject {
     // MARK: - Private Properties
 
     private let supabase: SupabaseClient
+    private let currentUserId: () -> UUID?
     private var familyChannel: RealtimeChannelV2?
     private var sessionUpdatesTask: Task<Void, Never>?
     private var sessionsSubscriptionTask: Task<Void, Never>?
@@ -30,8 +31,9 @@ final class FamilyService: ObservableObject {
 
     // MARK: - Initialization
 
-    init(supabase: SupabaseClient) {
+    init(supabase: SupabaseClient, currentUserId: (() -> UUID?)? = nil) {
         self.supabase = supabase
+        self.currentUserId = currentUserId ?? { supabase.auth.currentUser?.id }
     }
 
     deinit {
@@ -49,21 +51,22 @@ final class FamilyService: ObservableObject {
     func loadData() async {
         isLoading = true
         error = nil
+        defer { isLoading = false }
 
-        async let familyTask = fetchFamilyGroup()
+        do {
+            _ = try await fetchFamilyGroup()
+        } catch {
+            Log.family.error("Failed to fetch family group", error: error)
+            self.error = "Failed to load family group"
+            return
+        }
+
         async let membersTask = fetchFamilyMembers()
         async let challengesTask = fetchChallenges()
         async let templatesTask = fetchChallengeTemplates()
         async let sessionsTask = fetchTogetherSessions()
         async let alertsTask = fetchFamilyAlerts()
         async let consentsTask = fetchParentalConsents()
-
-        do {
-            familyGroup = try await familyTask
-        } catch {
-            Log.family.error("Failed to fetch family group", error: error)
-            self.error = "Failed to load family group"
-        }
 
         do {
             familyMembers = try await membersTask
@@ -102,24 +105,60 @@ final class FamilyService: ObservableObject {
             Log.family.error("Failed to fetch parental consents", error: error)
         }
 
-        isLoading = false
     }
 
     // MARK: - Family Group Operations
 
     /// Fetch the current user's family group
     func fetchFamilyGroup() async throws -> FamilyWellnessGroup? {
-        guard let userId = supabase.auth.currentUser?.id else { return nil }
+        guard let userId = currentUserId() else {
+            selectFamily(nil)
+            return nil
+        }
 
-        let response: [FamilyWellnessGroup] = try await supabase
-            .from("family_groups")
-            .select()
-            .eq("admin_user_id", value: userId)
+        struct Membership: Decodable {
+            let family_id: UUID
+        }
+        let memberships: [Membership] = try await supabase
+            .from("family_members")
+            .select("family_id")
+            .eq("user_id", value: userId)
+            .eq("status", value: "active")
+            .order("joined_at", ascending: false)
             .limit(1)
             .execute()
             .value
 
+        var query = supabase
+            .from("family_groups")
+            .select()
+        if let membership = memberships.first {
+            query = query.eq("id", value: membership.family_id)
+        } else {
+            query = query.eq("admin_user_id", value: userId)
+        }
+        let response: [FamilyWellnessGroup] = try await query
+            .limit(1)
+            .execute()
+            .value
+
+        guard currentUserId() == userId else {
+            throw FamilyServiceError.notAuthenticated
+        }
+        selectFamily(response.first)
         return response.first
+    }
+
+    private func selectFamily(_ family: FamilyWellnessGroup?) {
+        if family == nil || familyGroup?.id != family?.id {
+            familyMembers = []
+            challenges = []
+            togetherSessions = []
+            familyAlerts = []
+            currentSessionParticipants = []
+            parentalConsents = []
+        }
+        familyGroup = family
     }
 
     /// Create a new family group

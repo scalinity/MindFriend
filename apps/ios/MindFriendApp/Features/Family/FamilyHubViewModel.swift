@@ -21,11 +21,8 @@ final class FamilyHubViewModel: ObservableObject {
 
         do {
             // Load family group
-            if let family = try await familyService.fetchFamilyGroup() {
-                await MainActor.run {
-                    self.familyGroup = family
-                }
-            }
+            familyGroup = try await familyService.fetchFamilyGroup()
+            userRole = .child
 
             // Load family members
             let members = try await familyService.fetchFamilyMembers()
