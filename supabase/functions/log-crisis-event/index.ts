@@ -1,20 +1,19 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
+import { z } from "npm:zod@4.6.7";
 
 // SEC-CRIT-004: Zod schema for input validation
-const CrisisEventSchema = z.object({
+export const CrisisEventSchema = z.object({
   assessmentTemplateId: z.string().uuid(),
   assessmentResponseId: z.string().uuid().optional(),
   eventType: z.string().min(1).max(50),
   severity: z.enum(["low", "medium", "high", "critical"]),
-  context: z.record(z.unknown()).optional(),
+  context: z.record(z.string(), z.unknown()).optional(),
   responseAction: z.string().max(100).optional(),
 });
 
 type CrisisEventRequest = z.infer<typeof CrisisEventSchema>;
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   try {
     // Verify JWT and extract user
     const authHeader = req.headers.get("Authorization");
@@ -54,7 +53,7 @@ serve(async (req) => {
         return new Response(
           JSON.stringify({
             error: "Validation failed",
-            details: validationError.errors.map((e) => ({
+            details: validationError.issues.map((e) => ({
               field: e.path.join("."),
               message: e.message,
             })),
@@ -123,7 +122,7 @@ serve(async (req) => {
  * Future: Integration with crisis hotlines, emergency contacts
  */
 async function escalateCrisisEvent(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   userId: string,
   event: Record<string, unknown>,
 ): Promise<void> {

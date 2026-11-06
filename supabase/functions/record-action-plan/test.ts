@@ -1,4 +1,4 @@
-import { assert, assertEquals } from "https://deno.land/std@0.168.0/testing/asserts.ts";
+import { assert, assertEquals } from "jsr:@std/assert@1.0.19";
 import { UUID_REGEX, VALID_ITEM_TYPES, VALID_STATUSES } from "./index.ts";
 
 Deno.test("record-action-plan constants", () => {

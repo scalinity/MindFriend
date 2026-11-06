@@ -1,15 +1,14 @@
 // Intervention Efficacy Engine: Get Efficacy Dashboard Edge Function
 // Returns dashboard data with top exercises, recent sessions, and insights
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import {
   createLogger,
   generateRequestId,
   getUserIdFromRequest,
 } from "../_shared/logger.ts";
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const startTime = performance.now();
   const requestId = generateRequestId();
   const logger = createLogger("get-efficacy-dashboard", { requestId });
@@ -225,7 +224,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         error: "DASHBOARD_FAILED",
-        message: error.message,
+        message: (error instanceof Error ? error.message : String(error)),
       }),
       {
         status: 500,

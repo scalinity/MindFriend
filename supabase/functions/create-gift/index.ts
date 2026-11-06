@@ -1,8 +1,7 @@
 // MindFriend Create Gift Edge Function
 // Handles gift subscription creation via Stripe payment
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { createLogger } from "../_shared/logger.ts";
 import { CommonErrors, ErrorCodes } from "../_shared/errors.ts";
@@ -48,7 +47,7 @@ function generateRedemptionCode(): string {
   return code;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("origin") ?? "";
   const corsHeaders = getCorsHeaders(origin);
 

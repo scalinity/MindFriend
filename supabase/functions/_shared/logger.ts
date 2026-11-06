@@ -73,12 +73,25 @@ export class Logger {
   /**
    * Log an error message
    */
-  error(message: string, error?: Error, context?: LogContext): void {
+  error(
+    message: string,
+    errorOrContext?: Error | LogContext,
+    context?: LogContext,
+  ): void {
+    const error = errorOrContext instanceof Error ? errorOrContext : undefined;
+    const logContext = errorOrContext instanceof Error
+      ? context
+      : { ...errorOrContext, ...context };
     const logEntry: LogEntry = {
       timestamp: new Date().toISOString(),
       level: LogLevel.ERROR,
       message,
-      context: { ...this.context, ...context },
+      context: Object.fromEntries(
+        Object.entries({ ...this.context, ...logContext }).filter(([key, value]) =>
+          ["functionName", "requestId", "userId", "operation", "status", "code", "errorCode", "duration", "attempt", "count"].includes(key) &&
+          (typeof value === "string" || typeof value === "number" || typeof value === "boolean")
+        ),
+      ),
       error: error
         ? {
             name: error.name,

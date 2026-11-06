@@ -1,7 +1,6 @@
 // supabase/functions/start-insight-experiment/index.ts
 // Creates a new 7-day experiment for the authenticated user
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 const VALID_ACTION_TYPES = [
@@ -26,6 +25,17 @@ interface StartExperimentRequest {
   description: string;
 }
 
+interface InsightExperiment {
+  id: string;
+  title: string;
+  description: string;
+  action_type: string;
+  started_at: string;
+  status: string;
+  baseline_mood_avg: number | null;
+  baseline_energy_avg: number | null;
+}
+
 interface ExperimentDay {
   id: string;
   experiment_id: string;
@@ -36,7 +46,7 @@ interface ExperimentDay {
   energy_score: number | null;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const baseCorsHeaders = getCorsHeaders(origin);
 
@@ -207,7 +217,7 @@ serve(async (req) => {
     }
 
     // Create experiment and days atomically (with manual rollback on failure)
-    let experiment: { id: string; title: string; description: string; action_type: string; started_at: string; status: string; baseline_mood_avg: number | null; baseline_energy_avg: number | null } | null = null;
+    let experiment: InsightExperiment | null = null;
     
     try {
       // Create experiment
@@ -224,7 +234,7 @@ serve(async (req) => {
           baseline_energy_avg: baselineEnergyAvg,
         })
         .select()
-        .single();
+        .single<InsightExperiment>();
 
       if (experimentError || !expData) {
         console.error("Experiment creation failed:", experimentError);
@@ -244,7 +254,7 @@ serve(async (req) => {
 
       // Create 7 days
       const days = Array.from({ length: 7 }, (_, i) => ({
-        experiment_id: experiment!.id,
+        experiment_id: expData.id,
         day_index: i + 1,
         completed: false,
       }));

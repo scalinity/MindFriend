@@ -2,10 +2,10 @@
   "compilerOptions": {
     "lib": ["deno.ns", "deno.unstable", "dom", "dom.iterable", "esnext"],
     "strict": true,
-    "noImplicitAny": false
+    "noImplicitAny": true
   },
   "imports": {
-    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.49.1"
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.118.0"
   },
   "lint": {
     "rules": {

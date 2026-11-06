@@ -2,8 +2,7 @@
 // Enrolls user in a quest arc
 // See: docs/specs/quest-arcs-formal-spec.md
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import {
   getCorsHeaders,
   validateContentType,
@@ -16,7 +15,7 @@ import {
 import { checkRateLimit } from "../_shared/rate-limit.ts";
 import { validateUuid } from "../_shared/uuid-validation.ts";
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   // SECURITY: Enforce HTTPS in production
   const httpsCheck = enforceHTTPS(req);
   if (!httpsCheck.secure) {
@@ -124,6 +123,9 @@ serve(async (req) => {
       .single();
 
     if (activeArc) {
+      const arc = Array.isArray(activeArc.quest_arcs)
+        ? activeArc.quest_arcs[0]
+        : activeArc.quest_arcs;
       // Return 200 with success: false so Swift SDK can parse the response
       // (SDK throws on non-2xx before parsing body)
       return new Response(
@@ -133,7 +135,7 @@ serve(async (req) => {
           code: "ALREADY_ENROLLED",
           currentArc: {
             id: activeArc.arc_id,
-            title: (activeArc.quest_arcs as { title: string })?.title,
+            title: arc?.title,
             currentDay: activeArc.current_day,
           },
         }),

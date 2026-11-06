@@ -1,8 +1,7 @@
 // MindFriend Verify Purchase Edge Function
 // Validates StoreKit 2 transactions using Apple's JWS signature verification
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import {
   TransactionVerificationError,
   type VerifiedAppleTransaction,
@@ -37,7 +36,7 @@ interface VerifyResponse {
   message?: string;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("origin") ?? "";
   const corsHeaders = getCorsHeaders(origin);
 

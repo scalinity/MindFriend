@@ -1,8 +1,7 @@
 // MindFriend Award XP Edge Function
 // Awards XP to users and handles level-ups, multipliers, and season progress
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 interface AwardXPRequest {
@@ -68,7 +67,7 @@ function getWeekStart(): string {
   return weekStart.toISOString().split("T")[0];
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 

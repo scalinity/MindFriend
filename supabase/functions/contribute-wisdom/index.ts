@@ -10,8 +10,7 @@
  * - Context tags sanitized
  */
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { hashUserId, validateEnvironment } from "../_shared/wisdom-hash.ts";
 import {
   validateContributionSchema,
@@ -113,7 +112,7 @@ function sanitizeContextTags(tags: string[]): string[] {
     .slice(0, 20); // Max 20 tags
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });

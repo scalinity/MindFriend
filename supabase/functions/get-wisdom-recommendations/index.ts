@@ -13,8 +13,7 @@
  * - Trend insights
  */
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 
 // Rate limiting configuration
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
@@ -117,7 +116,7 @@ function sanitizeContextTags(tags: string[]): string[] {
     .slice(0, 20);
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -357,10 +356,10 @@ function buildEnrichedTags(
   }
 
   // Add goal and challenge tags
-  for (const goal of goals) {
+  for (const goal of goals || []) {
     tags.add(`goal:${goal}`);
   }
-  for (const challenge of challenges) {
+  for (const challenge of challenges || []) {
     tags.add(`challenge:${challenge}`);
   }
 
@@ -383,7 +382,7 @@ function buildEnrichedTags(
  * Fetches insights matching the user's context tags
  */
 async function fetchMatchingInsights(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   contextTags: string[],
   limit: number,
 ): Promise<
@@ -466,7 +465,7 @@ function calculateRelevance(
  * Fetches top strategies for a category
  */
 async function fetchTopStrategies(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   category: string | null,
   limit: number,
 ): Promise<
@@ -506,7 +505,7 @@ async function fetchTopStrategies(
  * Records which recommendations were shown (for feedback loop)
  */
 async function recordRecommendations(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   userId: string,
   insights: Array<{
     id: string;

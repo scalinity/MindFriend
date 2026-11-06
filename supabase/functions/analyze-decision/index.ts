@@ -4,8 +4,7 @@
  * Provides aligned/conflicting values + actionable suggestions
  */
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import {
   callGrokAPI,
   sanitizeForPrompt,
@@ -41,7 +40,7 @@ interface AnalyzeResponse {
   error?: string;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("origin") ?? "";
   const corsHeaders = getCorsHeaders(origin);
 
@@ -199,6 +198,8 @@ Analyze this decision against these values.`;
     // Call xAI Grok API
     console.log("[analyze-decision] Calling Grok API for decision analysis...");
     const aiResponse = await callGrokAPI(systemPrompt, userPrompt, {
+      budget: { admin: createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!), userId: user.id, feature: "decision.analysis" },
+      signal: req.signal,
       maxTokens: 300,
       temperature: 0.7,
       timeout: 10000,

@@ -1,8 +1,7 @@
 // Create Time Capsule Edge Function
 // Handles capsule creation with quota enforcement and snapshot capture
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { captureUserSnapshot } from "../_shared/capsule-utils.ts";
 
 interface CreateCapsuleRequest {
@@ -33,7 +32,7 @@ const VALIDATION = {
   ],
 } as const;
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   try {
     // Initialize Supabase client
     const supabase = createClient(
@@ -154,7 +153,7 @@ serve(async (req) => {
     }
 
     // Validate theme
-    if (!VALIDATION.VALID_THEMES.includes(body.theme)) {
+    if (!VALIDATION.VALID_THEMES.some((theme) => theme === body.theme)) {
       return new Response(
         JSON.stringify({
           error: "invalid_theme",
@@ -379,7 +378,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         error: "Internal server error",
-        message: error.message,
+        message: (error instanceof Error ? error.message : String(error)),
       }),
       {
         status: 500,

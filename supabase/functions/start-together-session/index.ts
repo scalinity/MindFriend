@@ -1,8 +1,7 @@
 // Spec 11: Family Wellness - Start Together Session Edge Function
 // Creates a synchronized family wellness session and notifies members
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 
 interface StartSessionRequest {
   familyId: string;
@@ -25,7 +24,7 @@ interface StartSessionResponse {
   error?: string;
 }
 
-serve(async (req: Request): Promise<Response> => {
+Deno.serve(async (req: Request): Promise<Response> => {
   // Only allow POST
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
@@ -96,7 +95,7 @@ serve(async (req: Request): Promise<Response> => {
 
     // Get template or exercise details
     let sessionTitle = title || "Family Activity";
-    let templateData = null;
+    let templateData: { minimum_age: number | null } | null = null;
 
     if (templateId) {
       const { data: template } = await supabase
@@ -145,7 +144,8 @@ serve(async (req: Request): Promise<Response> => {
     }
 
     // Filter by age if template has minimum age requirement
-    if (templateData?.minimum_age) {
+    const minimumAge = templateData?.minimum_age;
+    if (minimumAge) {
       const { data: eligibleMembers } = await supabase
         .from("family_members")
         .select("id, birth_date")
@@ -157,7 +157,7 @@ serve(async (req: Request): Promise<Response> => {
         .filter((m) => {
           if (!m.birth_date) return true;
           const age = calculateAge(new Date(m.birth_date));
-          return age >= templateData.minimum_age;
+          return age >= minimumAge;
         })
         .map((m) => m.id);
     }

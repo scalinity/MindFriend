@@ -1,5 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { errorResponse } from "../_shared/error-handler.ts";
 
 interface RecommendationRequest {
@@ -20,10 +19,17 @@ interface AudioTrackResult {
   cover_image_url: string | null;
   is_premium: boolean;
   narrator_id: string | null;
-  narrator: { id: string; name: string; avatar_url: string | null } | null;
+  play_count: number;
+  average_rating: number | null;
+  time_of_day_tags: string[] | null;
+  mood_tags: string[] | null;
+  narrator:
+    | { id: string; name: string; avatar_url: string | null }
+    | { id: string; name: string; avatar_url: string | null }[]
+    | null;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
@@ -139,7 +145,7 @@ serve(async (req) => {
 
     // Score and rank tracks
     const scoredTracks =
-      (tracks as AudioTrackResult[])?.map((track) => {
+      tracks?.map((track: AudioTrackResult) => {
         let score = 0;
 
         // Base score from popularity

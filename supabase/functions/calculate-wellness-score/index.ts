@@ -2,12 +2,11 @@
 // Triggered nightly at 3 AM UTC to calculate canonical wellness scores
 // and persist to daily_signals table
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { calculateWellnessScore } from "./algorithm.ts";
 import type { WellnessScoreInput } from "./types.ts";
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   try {
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -67,7 +66,7 @@ serve(async (req) => {
           processed++;
         }
       } catch (error) {
-        errors.push(`User ${user.id}: ${error.message}`);
+        errors.push(`User ${user.id}: ${(error instanceof Error ? error.message : String(error))}`);
       }
     }
 
@@ -138,7 +137,10 @@ async function gatherUserData(
     .lte("completed_at", endOfDay);
 
   const exerciseMinutes =
-    exercises?.reduce((sum, e) => sum + e.duration_seconds / 60, 0) || 0;
+    exercises?.reduce(
+      (sum: number, e: { duration_seconds: number }) => sum + e.duration_seconds / 60,
+      0,
+    ) || 0;
 
   // Fetch biometric data (including HRV and resting heart rate)
   const { data: biometric } = await supabase
@@ -162,7 +164,12 @@ async function gatherUserData(
     userId,
     date,
     moods:
-      moods?.map((m) => ({
+      moods?.map((m: {
+        mood_score: number;
+        anxiety_score?: number;
+        energy_score?: number;
+        timestamp: string;
+      }) => ({
         moodScore: m.mood_score,
         anxietyScore: m.anxiety_score,
         energyScore: m.energy_score,

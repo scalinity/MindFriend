@@ -7,7 +7,7 @@ import {
   assertEquals,
   assertRejects,
   assert,
-} from "https://deno.land/std@0.168.0/testing/asserts.ts";
+} from "jsr:@std/assert@1.0.19";
 import { buildSignaturePatterns, UserPattern } from "./signature-builder.ts";
 
 // Test data helpers

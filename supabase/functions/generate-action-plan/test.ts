@@ -1,4 +1,4 @@
-import { assertEquals } from "https://deno.land/std@0.168.0/testing/asserts.ts";
+import { assertEquals } from "jsr:@std/assert@1.0.19";
 import {
   buildFallbackItems,
   buildQuestItem,

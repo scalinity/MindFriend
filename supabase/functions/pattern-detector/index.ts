@@ -2,8 +2,7 @@
 // Runs daily at 3 AM via Supabase cron to detect behavioral patterns
 // See: docs/specs/01-proactive-intelligence.md
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { isAuthorizedCronRequest } from "../_shared/auth.ts";
 import {
@@ -26,7 +25,7 @@ interface EligibleUser {
   first_mood_at: string;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 
@@ -299,7 +298,7 @@ serve(async (req) => {
 });
 
 async function notifyNewPatterns(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
 ): Promise<void> {
   // Find patterns that were first detected recently and haven't been surfaced yet
   const { data: newPatterns, error } = await supabase

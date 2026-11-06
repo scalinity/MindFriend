@@ -7,7 +7,7 @@
 import {
   assertEquals,
   assertExists,
-} from "https://deno.land/std@0.168.0/testing/asserts.ts";
+} from "jsr:@std/assert@1.0.19";
 
 // Mock crypto.subtle for SHA-256 hashing
 const mockHash = async (data: string): Promise<string> => {

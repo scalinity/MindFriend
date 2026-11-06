@@ -2,11 +2,10 @@
 // Runs every 15 minutes via Supabase cron to identify users needing proactive outreach
 // See: docs/specs/01-proactive-intelligence.md
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import {
   createClient,
   SupabaseClient,
-} from "https://esm.sh/@supabase/supabase-js@2.49.1";
+} from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { isAuthorizedCronRequest } from "../_shared/auth.ts";
 import { isInQuietHours } from "../_shared/notification-utils.ts";
@@ -41,7 +40,7 @@ function validateUserIds(userIds: string[]): boolean {
   return userIds.every(isValidUUID);
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 

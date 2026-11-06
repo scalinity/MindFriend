@@ -3,6 +3,79 @@
  * Provides PII detection, input sanitization, and data validation
  */
 
+// New codes avoid ambiguous characters; validation also accepts older alphanumeric codes.
+export const INVITE_CODE_CHARSET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+type InviteCodeValidation =
+  | { valid: true; normalized: string; code?: undefined; error?: undefined }
+  | {
+    valid: false;
+    normalized: null;
+    code: "EMPTY_CODE" | "INVALID_LENGTH" | "INVALID_CHARACTERS";
+    error: string;
+  };
+
+export function validateInviteCode(
+  input: unknown,
+  { minLength = 6, maxLength = 12 }: {
+    minLength?: number;
+    maxLength?: number;
+  } = {},
+): InviteCodeValidation {
+  if (input === null || input === undefined || input === "") {
+    return {
+      valid: false,
+      normalized: null,
+      code: "EMPTY_CODE",
+      error: "Invite code is required",
+    };
+  }
+  if (typeof input !== "string") {
+    return {
+      valid: false,
+      normalized: null,
+      code: "INVALID_CHARACTERS",
+      error: "Invite code must be a string",
+    };
+  }
+  const trimmed = input.trim();
+  if (trimmed.length < minLength || trimmed.length > maxLength) {
+    return {
+      valid: false,
+      normalized: null,
+      code: "INVALID_LENGTH",
+      error: `Invite code must be ${minLength}-${maxLength} characters`,
+    };
+  }
+  if (!/^[a-z0-9]+$/i.test(trimmed)) {
+    return {
+      valid: false,
+      normalized: null,
+      code: "INVALID_CHARACTERS",
+      error: "Invite code must contain only letters and numbers",
+    };
+  }
+  return { valid: true, normalized: trimmed.toUpperCase() };
+}
+
+export function validateFamilyInviteCode(input: unknown): InviteCodeValidation {
+  return validateInviteCode(input);
+}
+
+export function validateBuddyInviteCode(input: unknown): InviteCodeValidation {
+  return validateInviteCode(input, { minLength: 6, maxLength: 6 });
+}
+
+export function validateCircleInviteCode(input: unknown): InviteCodeValidation {
+  return validateFamilyInviteCode(input);
+}
+
+export function isValidInviteCode(
+  result: InviteCodeValidation,
+): result is Extract<InviteCodeValidation, { valid: true }> {
+  return result.valid;
+}
+
 // PII Detection Patterns (per OWASP guidelines)
 const PII_PATTERNS = {
   email: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,

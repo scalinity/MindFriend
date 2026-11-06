@@ -1,8 +1,7 @@
 // MindFriend Complete Micro-Moment Edge Function
 // Records micro-moment completions and updates streaks
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 interface CompletionRequest {
@@ -27,7 +26,7 @@ interface MicroStreak {
   achievements_unlocked: string[] | null;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 

@@ -1,10 +1,9 @@
 // Spec 14: get-localized-strings Edge Function
 // Fetches localized strings with language and region fallback
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { checkRateLimit } from "../_shared/rate-limit.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import {
-  checkRateLimit,
   getRateLimitHeaders,
   getCorsHeaders,
 } from "../_shared/cors.ts";
@@ -16,7 +15,7 @@ interface LocalizedStringsRequest {
   since?: string;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 

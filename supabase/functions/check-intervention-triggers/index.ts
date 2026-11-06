@@ -1,8 +1,7 @@
 // Contextual Micro-Interventions: Trigger Evaluation and Intervention Selection
 // Evaluates trigger conditions and selects best intervention for user context
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { logSanitized, sanitizeForLogging } from "../_shared/logging-sanitization.ts";
 import { authenticateRequest, isAuthError } from "../_shared/auth.ts";
@@ -90,7 +89,7 @@ class CircuitBreaker {
   private lastFailureTime: number | null = null;
   private successCount = 0;
 
-  async execute<T>(operation: () => Promise<T>): Promise<T> {
+  async execute<T>(operation: () => PromiseLike<T>): Promise<T> {
     if (this.state === CircuitState.OPEN) {
       if (
         this.lastFailureTime &&
@@ -143,7 +142,7 @@ const circuitBreaker = new CircuitBreaker();
 
 // Retry helper with exponential backoff
 async function withRetry<T>(
-  operation: () => Promise<T>,
+  operation: () => PromiseLike<T>,
   maxRetries = RETRY_MAX_ATTEMPTS,
   baseDelay = RETRY_BASE_DELAY_MS
 ): Promise<T> {
@@ -190,7 +189,7 @@ function validateBiometrics(biometrics?: {
   }
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("origin") ?? "";
   const corsHeaders = getCorsHeaders(origin);
 
@@ -335,7 +334,7 @@ serve(async (req) => {
 });
 
 async function evaluateTriggers(
-  supabase: any,
+  supabase: SupabaseClient,
   userId: string,
   prefs: any,
   userTimezone: string,

@@ -1,7 +1,7 @@
 // Timing Optimizer for Autonomous Wellness Agent
 // Calculates optimal delivery times based on user preferences and learned patterns
 
-import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 
 export interface DeliveryWindow {
   hour: number;

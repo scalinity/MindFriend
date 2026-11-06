@@ -1,8 +1,7 @@
 // MindFriend Send Buddy Invite Edge Function
 // Creates buddy invitation and optionally sends email/SMS
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { escapeHtml, isValidEmail, sanitizeEmail } from "../_shared/utils.ts";
 
@@ -38,7 +37,7 @@ function isValidPhone(phone: string): boolean {
   return digits.length >= 10 && digits.length <= 15;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 

@@ -1,11 +1,10 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import * as jose from "https://deno.land/x/jose@v4.15.4/index.ts";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
+import * as jose from "npm:jose@6.2.13";
 
 // Apple's public key endpoint
 const APPLE_KEYS_URL = "https://appleid.apple.com/auth/keys";
 
-interface AppleNotificationPayload {
+interface AppleNotificationPayload extends jose.JWTPayload {
   iss: string;
   aud: string;
   exp: number;
@@ -72,10 +71,10 @@ async function verifyAppleJWT(
  * Handle email disabled event
  */
 async function handleEmailDisabled(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   payload: AppleNotificationPayload,
 ) {
-  const { data: user, error } = await supabase.auth.admin.getUserById(
+  const { data: { user }, error } = await supabase.auth.admin.getUserById(
     payload.sub,
   );
 
@@ -112,10 +111,10 @@ async function handleEmailDisabled(
  * Handle email enabled event
  */
 async function handleEmailEnabled(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   payload: AppleNotificationPayload,
 ) {
-  const { data: user, error } = await supabase.auth.admin.getUserById(
+  const { data: { user }, error } = await supabase.auth.admin.getUserById(
     payload.sub,
   );
 
@@ -152,10 +151,10 @@ async function handleEmailEnabled(
  * Handle consent withdrawn event
  */
 async function handleConsentWithdrawn(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   payload: AppleNotificationPayload,
 ) {
-  const { data: user, error } = await supabase.auth.admin.getUserById(
+  const { data: { user }, error } = await supabase.auth.admin.getUserById(
     payload.sub,
   );
 
@@ -192,7 +191,7 @@ async function handleConsentWithdrawn(
  * Handle account deletion
  */
 async function handleAccountDelete(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   payload: AppleNotificationPayload,
 ) {
   const userId = payload.sub;
@@ -349,7 +348,7 @@ async function handleAccountDelete(
   }
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   // Only POST requests are allowed
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {

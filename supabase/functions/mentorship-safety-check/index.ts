@@ -1,5 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { detectPII, sanitizeInput } from "../_shared/validation.ts";
 
 interface SafetyFlags {
@@ -70,7 +69,7 @@ interface FlaggedMessage {
   flagged_at: string;
 }
 
-serve(async (req: Request) => {
+Deno.serve(async (req: Request) => {
   // Only allow POST (can be triggered by cron or manual call)
   if (req.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });

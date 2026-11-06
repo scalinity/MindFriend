@@ -10,7 +10,7 @@
  * Run: deno test supabase/functions/_shared/__tests__/batch-utils.test.ts
  */
 
-import { assertEquals, assertExists, assertRejects } from "https://deno.land/std@0.208.0/assert/mod.ts";
+import { assertEquals, assertExists, assertRejects } from "jsr:@std/assert@1.0.19";
 import {
   getEngagementStatesBatch,
   updateEngagementStatesBatch,

@@ -1,11 +1,10 @@
 // supabase/functions/calculate-baseline/index.ts
 // Edge Function: Calculate biometric baseline from HealthKit data
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import {
   createClient,
   SupabaseClient,
-} from "https://esm.sh/@supabase/supabase-js@2.49.1";
+} from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 interface CalculateBaselineRequest {
@@ -27,7 +26,7 @@ interface BiometricBaseline {
 }
 
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("origin") ?? "";
   const corsHeaders = getCorsHeaders(origin);
 

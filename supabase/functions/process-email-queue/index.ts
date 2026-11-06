@@ -1,5 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 
 // Timing-safe string comparison to prevent timing attacks
 function timingSafeEqual(a: string | null, b: string | null): boolean {
@@ -31,7 +30,7 @@ const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const sendEmailUrl =
   Deno.env.get("SEND_EMAIL_URL") || `${supabaseUrl}/functions/v1/send-email`;
 
-serve(async (req: Request) => {
+Deno.serve(async (req: Request) => {
   // Only accept POST requests
   if (req.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });
@@ -114,12 +113,12 @@ serve(async (req: Request) => {
         .then((res) => res.json())
         .then((data) => ({
           queueItemId: item.id,
-          success: true,
+          success: true as const,
           data,
         }))
         .catch((error) => ({
           queueItemId: item.id,
-          success: false,
+          success: false as const,
           error: String(error),
         })),
     );

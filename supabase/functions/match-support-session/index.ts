@@ -1,14 +1,13 @@
 // Match Support Session - Connects seekers with available peer listeners
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { checkRateLimit } from "../_shared/rate-limit.ts";
 import {
   createClient,
   SupabaseClient,
-} from "https://esm.sh/@supabase/supabase-js@2.49.1";
+} from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import {
   getCorsHeaders,
   validateContentType,
   parseJsonBody,
-  checkRateLimit,
   getRateLimitHeaders,
 } from "../_shared/cors.ts";
 
@@ -35,7 +34,7 @@ interface MatchResult {
 const VALID_SESSION_TYPES = ["quick", "deep", "crisis_bridge"];
 const QUEUE_EXPIRY_MINUTES = 30;
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 

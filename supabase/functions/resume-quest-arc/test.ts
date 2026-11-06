@@ -1,5 +1,5 @@
 // Tests for resume-quest-arc Edge Function
-import { assertEquals } from "https://deno.land/std@0.168.0/testing/asserts.ts";
+import { assertEquals } from "jsr:@std/assert@1.0.19";
 
 Deno.test(
   "resume-quest-arc: should return 401 for unauthenticated request",

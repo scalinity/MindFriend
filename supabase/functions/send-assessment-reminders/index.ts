@@ -2,8 +2,7 @@
 // Runs daily via Supabase cron to send reminders for due assessments
 // Deep links to: mindfriend://assessment/{code}
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { isAuthorizedCronRequest } from "../_shared/auth.ts";
 import { isInQuietHours } from "../_shared/notification-utils.ts";
@@ -24,7 +23,7 @@ interface DueAssessment {
   device_token: string | null;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 

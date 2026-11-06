@@ -1,7 +1,6 @@
 // Monitor Session Safety - Scans peer support messages for crisis indicators
 // This function is designed to be triggered by a cron job
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 // Crisis keywords that require immediate escalation
@@ -52,7 +51,7 @@ interface ProcessingResult {
   errors: number;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 
@@ -155,11 +154,10 @@ serve(async (req) => {
     for (const message of messages) {
       try {
         const contentLower = message.content.toLowerCase();
-        const session = message.support_sessions as {
-          id: string;
-          seeker_id: string;
-          listener_id: string | null;
-        };
+        const session = Array.isArray(message.support_sessions)
+          ? message.support_sessions[0]
+          : message.support_sessions;
+        if (!session) throw new Error("Support session not found");
 
         // Check for crisis keywords
         const crisisKeyword = CRISIS_KEYWORDS.find((kw) =>

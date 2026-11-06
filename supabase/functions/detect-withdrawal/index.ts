@@ -12,8 +12,7 @@
  * 5. If severe + should_alert, call send-peer-alert function
  */
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 
 // Type definitions
 interface WithdrawalStatus {
@@ -30,7 +29,7 @@ interface DetectionResult {
   error?: string;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   try {
     // Initialize Supabase client with service role key
     const supabase = createClient(

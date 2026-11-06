@@ -1,11 +1,10 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { daysSinceDate, calculateScheduledTime } from "../_shared/email-utils.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-serve(async (req: Request) => {
+Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });
   }
@@ -80,7 +79,19 @@ serve(async (req: Request) => {
         });
 
         // Build queue entries
-        const queueEntries = [];
+        const queueEntries: {
+          user_id: string;
+          email_type: string;
+          template_version: string;
+          payload: {
+            daysSinceActive: number;
+            lastActivityDate: string;
+            topQuest: string;
+            topExercise: string;
+          };
+          status: string;
+          scheduled_for: string;
+        }[] = [];
         for (const user of inactiveUsers) {
           try {
             const prefs = prefsByUser.get(user.id);

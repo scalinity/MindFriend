@@ -3,8 +3,7 @@
 // Triggered by cron job (daily) or directly
 // See: docs/specs/04-biometric-intelligence.md
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 interface AnalysisResult {
@@ -34,7 +33,7 @@ interface GeneratedAlert {
   suggestedActionType?: string;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 
@@ -447,7 +446,9 @@ async function processUserAlerts(supabase: any, userId: string) {
 
   if (!yesterdayData) return;
 
-  const baselineMap = new Map(baselines.map((b: any) => [b.metric_type, b]));
+  const baselineMap = new Map<string, { baseline_value: number }>(
+    baselines.map((b: { metric_type: string; baseline_value: number }) => [b.metric_type, b]),
+  );
 
   // Check sleep
   const sleepBaseline = baselineMap.get("sleep_duration");

@@ -1,6 +1,5 @@
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 
 interface QuotaResponse {
   used: number;
@@ -13,7 +12,7 @@ interface QuotaResponse {
 const FREE_TIER_MONTHLY_LIMIT = 1;
 const PREMIUM_MONTHLY_LIMIT = 999; // Practical "unlimited"
 
-serve(async (req: Request): Promise<Response> => {
+Deno.serve(async (req: Request): Promise<Response> => {
   const origin = req.headers.get("origin") ?? "";
   const corsHeaders = {
     ...getCorsHeaders(origin),

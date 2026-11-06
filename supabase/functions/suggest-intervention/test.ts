@@ -1,7 +1,7 @@
 // Test file for suggest-intervention edge function
 // Run with: deno test supabase/functions/suggest-intervention/test.ts
 
-import { assertEquals } from "https://deno.land/std@0.168.0/testing/asserts.ts";
+import { assertEquals } from "jsr:@std/assert@1.0.19";
 import type { InterventionType, InterventionRequest } from "./types.ts";
 
 // Re-implement the logic here for testing without network dependencies

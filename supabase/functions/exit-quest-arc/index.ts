@@ -2,8 +2,7 @@
 // Abandons user's active or paused quest arc
 // See: docs/specs/quest-arcs-formal-spec.md
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import {
   getCorsHeaders,
   validateContentType,
@@ -15,7 +14,7 @@ import {
 } from "../_shared/https-enforcement.ts";
 import { checkRateLimit } from "../_shared/rate-limit.ts";
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   // SECURITY: Enforce HTTPS in production
   const httpsCheck = enforceHTTPS(req);
   if (!httpsCheck.secure) {

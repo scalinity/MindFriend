@@ -3,8 +3,7 @@
 // Triggered daily at 06:00 UTC (before most users wake up)
 // This ensures shields are applied even if users don't open the app
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 // Constants
@@ -44,7 +43,7 @@ function constantTimeCompare(a: string, b: string): boolean {
  * Creates a promise that rejects after the specified timeout
  */
 function withTimeout<T>(
-  promise: Promise<T>,
+  promise: PromiseLike<T>,
   timeoutMs: number,
   operation: string,
 ): Promise<T> {
@@ -55,7 +54,7 @@ function withTimeout<T>(
       );
     }, timeoutMs);
 
-    promise
+    Promise.resolve(promise)
       .then((result) => {
         clearTimeout(timeoutId);
         resolve(result);
@@ -112,7 +111,7 @@ async function processBatchesWithLimit<T>(
   await Promise.all(results);
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const headers = {
     ...getCorsHeaders(origin),
@@ -186,7 +185,7 @@ serve(async (req) => {
       )
       .gt("current_streak_days", 0)
       .eq("recovery_quest_available", false)
-      .not("last_quest_date", "is", null) as Promise<{
+      .not("last_quest_date", "is", null) as PromiseLike<{
       data: UserAtRisk[] | null;
       error: Error | null;
     }>;

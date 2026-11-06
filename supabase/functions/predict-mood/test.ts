@@ -1,7 +1,7 @@
 // Test file for predict-mood edge function
 // Run with: deno test supabase/functions/predict-mood/test.ts
 
-import { assertEquals } from "https://deno.land/std@0.168.0/testing/asserts.ts";
+import { assertEquals } from "jsr:@std/assert@1.0.19";
 import {
   calculatePrediction,
   shouldTriggerIntervention,

@@ -1,7 +1,7 @@
 // Time-based badge awarding utilities
 // Awards night_owl and early_bird badges based on activity time
 
-import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type UntypedSupabaseClient = SupabaseClient<any, "public", any>;
