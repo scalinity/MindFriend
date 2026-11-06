@@ -26,11 +26,16 @@ final class MentorshipMessagingService: ObservableObject {
 
     // MARK: - Cleanup
 
-    func cleanup() async {
+    func cleanup() async { reset() }
+
+    func reset() {
         stopAutoUpdate()
         messages = []
         unreadCount = 0
         currentMatchId = nil
+        isLoading = false
+        isSending = false
+        error = nil
     }
 
     // MARK: - Loading Messages
@@ -49,6 +54,7 @@ final class MentorshipMessagingService: ObservableObject {
             )
             updateUnreadCount(matchId: matchId)
         } catch {
+            if error is CancellationError { return }
             self.error = error
         }
 
@@ -68,6 +74,7 @@ final class MentorshipMessagingService: ObservableObject {
             )
             messages.insert(contentsOf: moreMessages, at: 0)
         } catch {
+            if error is CancellationError { return }
             self.error = error
         }
 
@@ -132,6 +139,7 @@ final class MentorshipMessagingService: ObservableObject {
             
             updateUnreadCount(matchId: matchId)
         } catch {
+            if error is CancellationError { return }
             self.error = error
         }
     }
@@ -159,6 +167,7 @@ final class MentorshipMessagingService: ObservableObject {
                 messages[index].flaggedAt = Date()
             }
         } catch {
+            if error is CancellationError { return }
             self.error = error
         }
     }

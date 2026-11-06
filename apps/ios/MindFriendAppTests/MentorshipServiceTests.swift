@@ -13,13 +13,35 @@ final class MentorshipServiceTests: XCTestCase {
         """
     }
 
-    private func service() -> MentorshipDataService {
+    private func service(ownerProvider: (@MainActor () -> UUID?)? = nil) -> MentorshipDataService {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [MentorshipFixtureURLProtocol.self]
         let client = SupabaseClient(supabaseURL: URL(string: "https://mentorship-fixture.invalid")!, supabaseKey: "synthetic-anon",
             options: .init(auth: .init(storage: MentorshipFixtureStorage(), autoRefreshToken: false),
                            global: .init(session: URLSession(configuration: configuration))))
-        return MentorshipDataService(supabase: client, userId: owner)
+        return MentorshipDataService(supabase: client, userIdProvider: ownerProvider ?? { self.owner })
+    }
+
+    func testSignedOutServiceNeverUsesRandomPrincipalOrSendsRequest() async {
+        MentorshipFixtureURLProtocol.fixture.prepare([])
+        do { _ = try await service(ownerProvider: { nil }).fetchProfile(); XCTFail("Sign-in required") }
+        catch { XCTAssertTrue(error is MentorshipError) }
+        XCTAssertTrue(MentorshipFixtureURLProtocol.fixture.requests.isEmpty)
+    }
+
+    func testAccountChangeRejectsLateProfileResponse() async throws {
+        let requested = expectation(description: "Owner A request started")
+        MentorshipFixtureURLProtocol.fixture.prepare([(200, "[\(profileJSON)]")], hold: true, onRequest: { requested.fulfill() })
+        var currentOwner: UUID? = owner
+        let data = service(ownerProvider: { currentOwner })
+        let pending = Task { try await data.fetchProfile() }
+        await fulfillment(of: [requested], timeout: 2)
+        currentOwner = UUID(uuidString: "33333333-3333-4333-8333-333333333333")!
+        data.resetForAccountChange()
+        MentorshipFixtureURLProtocol.fixture.release()
+        do { _ = try await pending.value; XCTFail("An old account result cannot reach UI state") }
+        catch { XCTAssertTrue(error is CancellationError) }
+        XCTAssertEqual(MentorshipFixtureURLProtocol.fixture.requests.count, 1)
     }
 
     func testDiscoveryIdentityComesFromMentorIdentifier() throws {
@@ -74,6 +96,7 @@ private final class MentorshipFixtureURLProtocol: URLProtocol {
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
         let (status, body) = Self.fixture.respond(to: request)
+        Self.fixture.waitIfHeld()
         client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: status,
             httpVersion: nil, headerFields: ["Content-Type": "application/json"])!, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Data(body.utf8))
@@ -91,10 +114,20 @@ private final class MentorshipHTTPFixture: @unchecked Sendable {
     private let lock = NSLock()
     private var responses: [(Int, String)] = []
     private var recorded: [Request] = []
+    private var hold = false
+    private var gate = DispatchSemaphore(value: 0)
+    private var onRequest: (() -> Void)?
     var requests: [Request] { lock.lock(); defer { lock.unlock() }; return recorded }
-    func prepare(_ responses: [(Int, String)]) {
-        lock.lock(); defer { lock.unlock() }; self.responses = responses; recorded = []
+    func prepare(_ responses: [(Int, String)], hold: Bool = false, onRequest: (() -> Void)? = nil) {
+        lock.lock(); defer { lock.unlock() }
+        self.responses = responses; recorded = []; self.hold = hold
+        self.onRequest = onRequest; gate = DispatchSemaphore(value: 0)
     }
+    func waitIfHeld() {
+        lock.lock(); let held = hold; let semaphore = gate; lock.unlock()
+        if held { _ = semaphore.wait(timeout: .now() + 3) }
+    }
+    func release() { lock.lock(); let semaphore = gate; lock.unlock(); semaphore.signal() }
     func respond(to request: URLRequest) -> (Int, String) {
         var body = request.httpBody ?? Data()
         if let stream = request.httpBodyStream {
@@ -108,6 +141,7 @@ private final class MentorshipHTTPFixture: @unchecked Sendable {
         }
         lock.lock(); defer { lock.unlock() }
         recorded.append(Request(method: request.httpMethod ?? "GET", url: request.url!, body: body))
+        onRequest?()
         return responses.isEmpty ? (400, "{\"message\":\"Unexpected fixture request\"}") : responses.removeFirst()
     }
 }

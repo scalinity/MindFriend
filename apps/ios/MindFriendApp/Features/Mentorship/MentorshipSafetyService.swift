@@ -71,6 +71,7 @@ final class MentorshipSafetyService: ObservableObject {
 
             reports.append(report)
         } catch {
+            if error is CancellationError { return }
             self.error = error
         }
 
@@ -85,6 +86,7 @@ final class MentorshipSafetyService: ObservableObject {
         do {
             reports = try await dataService.fetchReports(matchId: matchId)
         } catch {
+            if error is CancellationError { return }
             self.error = error
         }
 
@@ -109,6 +111,7 @@ final class MentorshipSafetyService: ObservableObject {
             )
             flaggedMessages.append(flaggedMsg)
         } catch {
+            if error is CancellationError { return }
             self.error = error
         }
     }
@@ -130,6 +133,7 @@ final class MentorshipSafetyService: ObservableObject {
                 print("⚠️ CRITICAL: \(response.criticalEscalations) escalations detected")
             }
         } catch {
+            if error is CancellationError { return }
             self.error = error
         }
 
