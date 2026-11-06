@@ -37,6 +37,9 @@ public final class WatchConnectivityManager: NSObject, ObservableObject {
     private var session: WCSession?
     private let store = SharedDataStore.shared
     private var pendingContext: CompanionContext?
+    #if os(watchOS)
+    private var dateObservers: [NSObjectProtocol] = []
+    #endif
     var onActionReceived: ((CompanionAction) async -> CompanionActionReceipt?)?
     var onSyncRequested: (() -> Void)?
 
@@ -47,6 +50,13 @@ public final class WatchConnectivityManager: NSObject, ObservableObject {
         if session == nil {
             session = WCSession.default
             session?.delegate = self
+            #if os(watchOS)
+            for name in [Notification.Name.NSCalendarDayChanged, .NSSystemTimeZoneDidChange] {
+                dateObservers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                    Task { @MainActor in self?.requestSyncFromPhone() }
+                })
+            }
+            #endif
         }
         if session?.activationState != .activated { session?.activate() }
         #if os(watchOS)
