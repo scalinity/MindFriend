@@ -28,6 +28,20 @@ private enum TimingConstants {
 
 @MainActor
 final class OptimalTimingAnalyzer: @preconcurrency OptimalTimingAnalyzing {
+    /// The edge response uses camelCase and does not supply an analysis timestamp.
+    private struct TimingAnalysisResponse: Decodable {
+        struct Metrics: Decodable {
+            let completionRate: Double
+            let avgRating: Double
+            let dismissRate: Double
+            let confidence: Double
+            let sampleCount: Int
+        }
+        let hourlyConfidence: [Int: Metrics]
+        let sampleCount: Int
+        let minimumDataMet: Bool
+    }
+
     // MARK: - Properties
 
     private let supabase: SupabaseClient
@@ -77,7 +91,7 @@ final class OptimalTimingAnalyzer: @preconcurrency OptimalTimingAnalyzing {
 
         // Call Edge Function to perform server-side analysis
         struct EmptyRequest: Codable {}
-        let response: TimingPreferences = try await supabase.functions.invoke(
+        let analysis: TimingAnalysisResponse = try await supabase.functions.invoke(
             "analyze-intervention-patterns",
             options: FunctionInvokeOptions(
                 headers: ["Authorization": "Bearer \(session.accessToken)"],
@@ -85,6 +99,15 @@ final class OptimalTimingAnalyzer: @preconcurrency OptimalTimingAnalyzing {
             )
         )
         guard isCurrent(owner, generation) else { throw CancellationError() }
+
+        // This is the local receipt time, not a server measurement timestamp.
+        let response = TimingPreferences(
+            hourlyConfidence: analysis.hourlyConfidence.mapValues {
+                HourlyMetrics(completionRate: $0.completionRate, avgRating: $0.avgRating,
+                              dismissRate: $0.dismissRate, confidence: $0.confidence, sampleCount: $0.sampleCount)
+            },
+            lastUpdated: Date(), sampleCount: analysis.sampleCount, minimumDataMet: analysis.minimumDataMet
+        )
 
         // Cache result
         cachedPreferences = response

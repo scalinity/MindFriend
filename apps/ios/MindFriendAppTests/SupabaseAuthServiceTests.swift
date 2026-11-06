@@ -534,17 +534,46 @@ final class AccountMonitoringLifecycleTests: XCTestCase {
         catch { XCTAssertTrue(error is AuthError) }
     }
 
+    // Captured from the actual analyze-intervention-patterns handler with two
+    // synthetic completed deliveries. The endpoint supplies no timestamp.
+    private var timingAnalysisResponseJSON: String {
+        #"{"hourlyConfidence":{"9":{"completionRate":1,"avgRating":5,"dismissRate":0,"confidence":0.47,"sampleCount":2}},"sampleCount":2,"minimumDataMet":true,"windowDays":90}"#
+    }
+
+    func testTimingAnalysisUsesEndpointPayloadAndPersistsForCurrentOwner() async throws {
+        let (client, _) = try client(owner: ownerA)
+        let analyzer = OptimalTimingAnalyzer(supabase: client)
+        MonitoringFixtureURLProtocol.fixture.prepare(body: timingAnalysisResponseJSON)
+        let beforeReceipt = Date()
+        let result = try await analyzer.analyzePatterns()
+        let afterReceipt = Date()
+        XCTAssertEqual(result.sampleCount, 2)
+        XCTAssertTrue(result.minimumDataMet)
+        XCTAssertEqual(result.hourlyConfidence[9]?.completionRate, 1)
+        XCTAssertEqual(result.hourlyConfidence[9]?.avgRating, 5)
+        XCTAssertEqual(result.hourlyConfidence[9]?.dismissRate, 0)
+        XCTAssertEqual(result.hourlyConfidence[9]?.sampleCount, 2)
+        XCTAssertEqual(analyzer.getConfidenceBoost(for: 9), 0.47, accuracy: 0.0001)
+        XCTAssertGreaterThanOrEqual(result.lastUpdated, beforeReceipt)
+        XCTAssertLessThanOrEqual(result.lastUpdated, afterReceipt)
+
+        let requests = MonitoringFixtureURLProtocol.fixture.requests
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertEqual(requests.first?.url?.path, "/functions/v1/analyze-intervention-patterns")
+        let persisted = try XCTUnwrap(requests.last)
+        XCTAssertEqual(persisted.httpMethod, "PATCH")
+        XCTAssertEqual(persisted.url?.path, "/rest/v1/intervention_preferences")
+        let query = URLComponents(url: try XCTUnwrap(persisted.url), resolvingAgainstBaseURL: false)?.queryItems
+        XCTAssertEqual(query?.first { $0.name == "user_id" }?.value?.lowercased(), "eq.\(ownerA.uuidString.lowercased())")
+        _ = try await analyzer.analyzePatterns()
+        XCTAssertEqual(MonitoringFixtureURLProtocol.fixture.requestCount, 2, "Current-owner cache should avoid another request")
+    }
+
     func testLateTimingAnalysisCannotPopulateOrPersistAfterAccountSwitch() async throws {
         let (client, storage) = try client(owner: ownerA)
         let analyzer = OptimalTimingAnalyzer(supabase: client)
         let requested = expectation(description: "A timing analysis request")
-        // FunctionsClient uses JSONDecoder's default date strategy in this fixture.
-        // Encode a valid response so the request reaches the stale-owner guard.
-        let response = TimingPreferences(
-            hourlyConfidence: [9: HourlyMetrics(completionRate: 0.9, avgRating: 4.5, dismissRate: 0.1, confidence: 0.4, sampleCount: 20)],
-            lastUpdated: Date(timeIntervalSince1970: 1_793_966_400), sampleCount: 20, minimumDataMet: true)
-        let responseJSON = String(decoding: try JSONEncoder().encode(response), as: UTF8.self)
-        MonitoringFixtureURLProtocol.fixture.prepare(body: responseJSON, hold: true) { requested.fulfill() }
+        MonitoringFixtureURLProtocol.fixture.prepare(body: timingAnalysisResponseJSON, hold: true) { requested.fulfill() }
         let pending = Task { try await analyzer.analyzePatterns() }
         await fulfillment(of: [requested], timeout: 2)
         try storage.setOwner(ownerB)
@@ -582,15 +611,19 @@ private final class MonitoringHTTPFixture: @unchecked Sendable {
     private var pending: (() -> Void)?
     private var onRequest: (() -> Void)?
     private var count = 0
+    private var observedRequests: [URLRequest] = []
     var requestCount: Int { lock.lock(); defer { lock.unlock() }; return count }
+    var requests: [URLRequest] { lock.lock(); defer { lock.unlock() }; return observedRequests }
     func prepare(body: String, status: Int = 200, hold: Bool = false, onRequest: (() -> Void)? = nil) {
         lock.lock(); defer { lock.unlock() }
         self.body = body; self.status = status; holding = hold; self.onRequest = onRequest; count = 0
+        observedRequests = []
     }
     func receive(_ connection: MonitoringFixtureURLProtocol) {
         lock.lock()
         let body = body, status = status, callback = onRequest
         count += 1
+        observedRequests.append(connection.request)
         let reply = {
             let response = HTTPURLResponse(url: connection.request.url!, statusCode: status, httpVersion: nil,
                                            headerFields: ["Content-Type": "application/json"])!
