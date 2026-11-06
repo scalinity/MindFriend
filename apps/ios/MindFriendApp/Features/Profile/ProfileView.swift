@@ -797,7 +797,7 @@ struct NotificationSettingsView: View {
                     firstChatMessageAt: current.firstChatMessageAt, unlockedFeatures: current.unlockedFeatures
                 )
             } else {
-                let refreshed = try await container.authService.fetchProfile()
+                let refreshed = try await container.supabaseAuthService.fetchProfile()
                 guard refreshed.id == ownerId, appState.currentUser?.id == ownerId else { return }
                 appState.currentUser = refreshed
             }
