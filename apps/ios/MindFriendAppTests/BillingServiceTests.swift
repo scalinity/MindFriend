@@ -119,7 +119,8 @@ final class BillingServiceTests: XCTestCase {
     }
 
     func testGenerateDisplayCodeExcludesConfusingChars() {
-        let confusingChars = "O01IL"
+        // The canonical server alphabet includes uppercase L.
+        let confusingChars = "O01I"
 
         // Generate 100 codes and check none contain confusing characters
         for _ in 0..<100 {
