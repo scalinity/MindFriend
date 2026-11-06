@@ -7,7 +7,12 @@ struct JournalEntryView: View {
 
     // Edit mode if entry provided
     var existingEntry: JournalEntry?
-    var selectedPrompt: JournalPrompt?
+    @State private var selectedPrompt: JournalPrompt?
+
+    init(existingEntry: JournalEntry? = nil, selectedPrompt: JournalPrompt? = nil) {
+        self.existingEntry = existingEntry
+        _selectedPrompt = State(initialValue: selectedPrompt)
+    }
 
     @State private var title = ""
     @State private var content = ""
@@ -142,8 +147,9 @@ struct JournalEntryView: View {
             }
             .sheet(isPresented: $showingPromptPicker) {
                 JournalPromptsView { prompt in
-                    content = "Prompt: \(prompt.promptText)\n\n"
+                    selectedPrompt = prompt
                     showingPromptPicker = false
+                    scheduleAutoSave()
                 }
                 .environmentObject(container)
                 .environmentObject(appState)
@@ -349,10 +355,6 @@ struct JournalEntryView: View {
             mood = entry.mood
             savedEntry = entry
             lastSavedContent = entry.content
-        }
-
-        if let prompt = selectedPrompt {
-            content = "Prompt: \(prompt.promptText)\n\n"
         }
 
         // Load existing draft

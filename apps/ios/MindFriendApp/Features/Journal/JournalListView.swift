@@ -9,6 +9,7 @@ struct JournalListView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var showingNewEntry = false
+    @State private var selectedPrompt: JournalPrompt?
     @State private var showingPrompts = false
     @State private var showingSettings = false
     @State private var searchText = ""
@@ -63,6 +64,7 @@ struct JournalListView: View {
                     }
 
                     Button {
+                        selectedPrompt = nil
                         showingNewEntry = true
                     } label: {
                         Image(systemName: "plus")
@@ -71,16 +73,21 @@ struct JournalListView: View {
             }
             .searchable(text: $searchText, prompt: "Search entries...")
             .sheet(isPresented: $showingNewEntry, onDismiss: {
+                selectedPrompt = nil
                 Task { await loadData() }
             }) {
-                JournalEntryView()
+                JournalEntryView(selectedPrompt: selectedPrompt)
                     .environmentObject(container)
                     .environmentObject(appState)
             }
-            .sheet(isPresented: $showingPrompts) {
-                JournalPromptsView { prompt in
-                    showingPrompts = false
+            .sheet(isPresented: $showingPrompts, onDismiss: {
+                if selectedPrompt != nil {
                     showingNewEntry = true
+                }
+            }) {
+                JournalPromptsView { prompt in
+                    selectedPrompt = prompt
+                    showingPrompts = false
                 }
                 .environmentObject(container)
                 .environmentObject(appState)
@@ -107,6 +114,7 @@ struct JournalListView: View {
         } actions: {
             VStack(spacing: 12) {
                 Button {
+                    selectedPrompt = nil
                     showingNewEntry = true
                 } label: {
                     Label("Write Now", systemImage: "pencil")
