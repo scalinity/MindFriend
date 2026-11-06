@@ -457,16 +457,13 @@ struct ProfileView: View {
 
     private func logout() {
         Task {
-            // Stop ambient theme monitoring
-            container.ambientThemeService.stop()
-            
             do {
                 try await container.supabaseAuthService.signOut()
+                container.ambientThemeService.stop()
+                appState.setUnauthenticated()
             } catch {
                 Log.auth.error("Logout error", error: error)
-            }
-            await MainActor.run {
-                appState.setUnauthenticated()
+                appState.showError(.apiError(error.localizedDescription))
             }
         }
     }
