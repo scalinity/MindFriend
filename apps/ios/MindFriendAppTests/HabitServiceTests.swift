@@ -1,11 +1,65 @@
 import XCTest
 @testable import MindFriendApp
 
-// Placeholder test - actual tests disabled due to mock inheritance issues
-final class HabitServiceTestsPlaceholder: XCTestCase {
-    func testPlaceholder() {
-        // FIXME: Re-enable HabitServiceTests when protocol-based DI is implemented
-        XCTAssertTrue(true, "HabitServiceTests disabled - cannot mock final SupabaseDataService")
+final class HabitDateTests: XCTestCase {
+    func testCompletionRoundTripUsesLocalDateLabels() throws {
+        for zone in ["America/New_York", "Asia/Tokyo"] {
+            try withTimeZone(zone) { calendar in
+                for label in ["2026-03-08", "2026-03-09", "2026-11-01", "2026-11-02"] {
+                    let day = try XCTUnwrap(HabitDateFormatter.dayOnly.date(from: label))
+                    let completion = makeCompletion(date: day)
+                    let encoded = try JSONEncoder().encode(completion)
+                    let json = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+                    XCTAssertEqual(json["completed_date"] as? String, label, zone)
+                    let reloaded = try JSONDecoder().decode(HabitCompletion.self, from: encoded)
+                    XCTAssertEqual(reloaded.completedDate, calendar.startOfDay(for: day), zone)
+                    // The duplicate query and persisted DATE must address the same day.
+                    XCTAssertEqual(HabitDateFormatter.dayOnly.string(from: reloaded.completedDate), label)
+                    let info = HabitService.streakInfo(completions: [reloaded], today: day, calendar: calendar)
+                    XCTAssertTrue(info.isCompletedToday, zone)
+                    XCTAssertEqual(info.currentStreak, 4)
+                    XCTAssertFalse(info.willResetNextDay)
+                }
+            }
+        }
+    }
+
+    func testStreakAndWeeklyStatsAcrossDaylightSavingTransitions() throws {
+        for zone in ["America/New_York", "Asia/Tokyo"] {
+            try withTimeZone(zone) { calendar in
+                for label in ["2026-03-09", "2026-11-02"] {
+                    let today = try XCTUnwrap(HabitDateFormatter.dayOnly.date(from: label))
+                    let yesterday = try XCTUnwrap(calendar.date(byAdding: .day, value: -1, to: today))
+                    let firstDay = try XCTUnwrap(calendar.date(byAdding: .day, value: -6, to: today))
+                    let completions = try [makeCompletion(date: today), makeCompletion(date: yesterday),
+                                           makeCompletion(date: firstDay)].map {
+                        try JSONDecoder().decode(HabitCompletion.self, from: JSONEncoder().encode($0))
+                    }
+                    XCTAssertEqual(HabitService.nextStreak(after: completions[1], today: today, calendar: calendar), 5)
+                    XCTAssertEqual(HabitService.weeklyStats(completions: completions, today: today, calendar: calendar),
+                                   [1, 0, 0, 0, 0, 1, 1])
+                    let skipped = makeCompletion(date: today, skipped: true)
+                    XCTAssertFalse(HabitService.streakInfo(completions: [skipped], today: today, calendar: calendar).isCompletedToday)
+                    XCTAssertEqual(HabitService.weeklyStats(completions: [skipped], today: today, calendar: calendar),
+                                   [0, 0, 0, 0, 0, 0, 0])
+                }
+            }
+        }
+    }
+
+    private func withTimeZone(_ identifier: String, body: (Calendar) throws -> Void) rethrows {
+        let previous = NSTimeZone.default
+        let zone = TimeZone(identifier: identifier)!
+        NSTimeZone.default = zone
+        defer { NSTimeZone.default = previous }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = zone
+        try body(calendar)
+    }
+
+    private func makeCompletion(date: Date, skipped: Bool = false) -> HabitCompletion {
+        HabitCompletion(id: UUID(), habitId: UUID(), userId: UUID(), completedDate: date,
+                        currentStreak: 4, skipped: skipped, skipReason: nil, createdAt: date)
     }
 }
 
