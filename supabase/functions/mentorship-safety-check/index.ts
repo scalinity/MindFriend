@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
-import { detectPII, sanitizeInput } from "../_shared/validation.ts";
+import { detectPII } from "../_shared/validation.ts";
 
 interface SafetyFlags {
   crisis_keywords: boolean;
@@ -15,8 +15,10 @@ const CRISIS_KEYWORDS = [
   "suicide",
   "suicidal",
   "kill myself",
+  "killing myself",
   "end my life",
   "hurt myself",
+  "hurting myself",
   "self harm",
   "self-harm",
   "overdose",
@@ -61,156 +63,109 @@ interface MessageToCheck {
   created_at: string;
 }
 
-interface FlaggedMessage {
-  message_id: string;
-  match_id: string;
-  sender_id: string;
-  flags: SafetyFlags;
-  flagged_at: string;
-}
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
 
-Deno.serve(async (req: Request) => {
-  // Only allow POST (can be triggered by cron or manual call)
-  if (req.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
+export async function handler(req: Request): Promise<Response> {
+  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+  const secret = Deno.env.get("MENTORSHIP_SAFETY_SECRET");
+  if (!secret) return json({ error: "Safety checks are not configured" }, 503);
+  if (req.headers.get("Authorization") !== `Bearer ${secret}`) {
+    return json({ error: "Unauthorized" }, 401);
   }
-
+  let body: { batch_size?: number; check_recent_only?: boolean };
   try {
-    // Initialize Supabase client with service role (for admin access)
+    body = await req.json();
+  } catch {
+    return json({ error: "Invalid JSON" }, 400);
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return json({ error: "Invalid request" }, 400);
+  }
+  const { batch_size = 100, check_recent_only = true } = body;
+  if (
+    !Number.isInteger(batch_size) || batch_size < 1 || batch_size > 500 ||
+    typeof check_recent_only !== "boolean"
+  ) {
+    return json({ error: "Invalid batch size or time filter" }, 400);
+  }
+  try {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      {
+        auth: { persistSession: false, autoRefreshToken: false },
+      },
     );
-
-    // Optional: Check for auth header to restrict to trusted services
-    const authHeader = req.headers.get("Authorization");
-    const validSecret = Deno.env.get("MENTORSHIP_SAFETY_SECRET");
-
-    if (authHeader && validSecret) {
-      const providedSecret = authHeader.replace("Bearer ", "");
-      if (providedSecret !== validSecret) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), {
-          status: 401,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-    }
-
-    // Parse request body
-    const body = await req.json();
-    const { batch_size = 100, check_recent_only = true } = body;
-
-    // Get unflagged messages from the last hour (if check_recent_only)
-    const hoursAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-
-    let query = supabase
-      .from("mentorship_messages")
+    let query = supabase.from("mentorship_messages")
       .select("id, sender_id, content, match_id, created_at")
-      .is("flagged_at", null)
-      .eq("is_flagged", false);
-
+      .is("safety_checked_at", null)
+      .order("created_at", { ascending: true }).order("id", {
+        ascending: true,
+      });
     if (check_recent_only) {
-      query = query.gte("created_at", hoursAgo);
-    }
-
-    const { data: messages, error: fetchError } = await query.limit(batch_size);
-
-    if (fetchError) {
-      console.error("Error fetching messages:", fetchError);
-      return new Response(
-        JSON.stringify({
-          error: "Failed to fetch messages for safety check",
-          details: fetchError.message,
-        }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
+      query = query.gte(
+        "created_at",
+        new Date(Date.now() - 60 * 60 * 1000).toISOString(),
       );
     }
+    const { data: messages, error: fetchError } = await query.limit(batch_size);
+    if (fetchError) {
+      return json({ error: "Failed to fetch messages for safety check" }, 500);
+    }
 
-    // Analyze each message
-    const flaggedMessages: FlaggedMessage[] = [];
-    const criticalEscalations: FlaggedMessage[] = [];
-
-    for (const message of messages || []) {
+    let checked = 0;
+    let critical = 0;
+    const flagged: {
+      message_id: string;
+      severity: string;
+      reasons: string[];
+    }[] = [];
+    for (const message of (messages ?? []) as MessageToCheck[]) {
       const flags = analyzeMessageSafety(message.content);
-
+      const { data: saved, error } = await supabase.rpc(
+        "record_mentorship_safety_check",
+        {
+          p_message_id: message.id,
+          p_expected_content: message.content,
+          p_reasons: flags.reasons,
+          p_severity: flags.severity,
+        },
+      );
+      if (error) return json({ error: "Failed to persist safety check" }, 500);
+      if (saved !== true) continue; // Changed or already checked; never claim an unsaved result.
+      checked++;
       if (flags.reasons.length > 0) {
-        const flaggedMessage: FlaggedMessage = {
+        flagged.push({
           message_id: message.id,
-          match_id: message.match_id,
-          sender_id: message.sender_id,
-          flags,
-          flagged_at: new Date().toISOString(),
-        };
-
-        flaggedMessages.push(flaggedMessage);
-
-        // Track critical escalations separately
-        if (flags.severity === "critical") {
-          criticalEscalations.push(flaggedMessage);
-        }
+          severity: flags.severity,
+          reasons: flags.reasons,
+        });
       }
+      if (flags.severity === "critical") critical++;
     }
-
-    // Update database with flagged messages
-    if (flaggedMessages.length > 0) {
-      const flagIds = flaggedMessages.map((fm) => fm.message_id);
-
-      const { error: updateError } = await supabase
-        .from("mentorship_messages")
-        .update({
-          is_flagged: true,
-          flagged_at: new Date().toISOString(),
-        })
-        .in("id", flagIds);
-
-      if (updateError) {
-        console.error("Error updating flagged messages:", updateError);
-      }
-    }
-
-    // Handle critical escalations
-    if (criticalEscalations.length > 0) {
-      await handleCriticalEscalations(supabase, criticalEscalations);
-    }
-
-    // Return check results
-    return new Response(
-      JSON.stringify({
-        success: true,
-        messages_checked: (messages || []).length,
-        messages_flagged: flaggedMessages.length,
-        critical_escalations: criticalEscalations.length,
-        flagged_details: flaggedMessages.map((fm) => ({
-          message_id: fm.message_id,
-          severity: fm.flags.severity,
-          reasons: fm.flags.reasons,
-        })),
-        timestamp: new Date().toISOString(),
-      }),
-      {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }
-    );
-  } catch (error) {
-    console.error("Unexpected error in mentorship-safety-check:", error);
-    return new Response(
-      JSON.stringify({
-        error: "Internal server error",
-        details: error instanceof Error ? error.message : "Unknown error",
-      }),
-      {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      }
-    );
+    return json({
+      success: true,
+      messages_checked: checked,
+      messages_flagged: flagged.length,
+      critical_escalations: critical,
+      flagged_details: flagged,
+      timestamp: new Date().toISOString(),
+    });
+  } catch {
+    return json({ error: "Internal server error" }, 500);
   }
-});
+}
+
+if (import.meta.main) Deno.serve(handler);
 
 /**
  * Analyzes message content for safety concerns
  */
-function analyzeMessageSafety(content: string): SafetyFlags {
+export function analyzeMessageSafety(content: string): SafetyFlags {
   const contentLower = content.toLowerCase();
   const reasons: string[] = [];
   let severity: "low" | "medium" | "high" | "critical" = "low";
@@ -276,63 +231,4 @@ function analyzeMessageSafety(content: string): SafetyFlags {
     severity,
     reasons,
   };
-}
-
-/**
- * Handles critical safety escalations (crisis keywords, severe violations)
- */
-async function handleCriticalEscalations(
-  supabase: any,
-  escalations: FlaggedMessage[]
-) {
-  try {
-    // Create escalation records
-    const escalationRecords = escalations.map((escalation) => ({
-      message_id: escalation.message_id,
-      match_id: escalation.match_id,
-      reporter_id: escalation.sender_id, // Auto-flagged by system
-      reason: escalation.flags.reasons.join("; "),
-      severity: escalation.flags.severity,
-      status: "pending_review",
-      created_at: new Date().toISOString(),
-    }));
-
-    const { error: escalationError } = await supabase
-      .from("mentorship_escalations")
-      .insert(escalationRecords);
-
-    if (escalationError) {
-      console.error("Error creating escalation records:", escalationError);
-    }
-
-    // Get match IDs for notification
-    const matchIds = [...new Set(escalations.map((e) => e.match_id))];
-
-    // Send crisis notifications to moderators (stored in a moderators table or via notification service)
-    for (const escalation of escalations) {
-      if (escalation.flags.crisis_keywords) {
-        // CRITICAL: Send immediate crisis notification
-        try {
-          await supabase.functions.invoke("send-notification", {
-            body: {
-              user_id: "moderator-group", // Broadcast to moderators
-              title: "CRISIS ALERT - Mentorship Message",
-              body: "Suicide-related keywords detected in mentorship conversation",
-              type: "crisis_escalation",
-              priority: "urgent",
-              data: {
-                match_id: escalation.match_id,
-                message_id: escalation.message_id,
-                severity: escalation.flags.severity,
-              },
-            },
-          });
-        } catch (notifError) {
-          console.error("Error sending crisis notification:", notifError);
-        }
-      }
-    }
-  } catch (error) {
-    console.error("Error handling critical escalations:", error);
-  }
 }

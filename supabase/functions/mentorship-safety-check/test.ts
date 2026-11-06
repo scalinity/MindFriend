@@ -1,213 +1,217 @@
-import { assertEquals, assertStringIncludes } from "jsr:@std/assert@1.0.19";
+import { assert, assertEquals } from "jsr:@std/assert@1.0.19";
+import { analyzeMessageSafety, handler } from "./index.ts";
 
-/**
- * Test suite for mentorship-safety-check Edge Function
- * Tests crisis detection, boundary violations, and message flagging
- */
+const secret = "synthetic-safety-secret";
+Deno.env.set("SUPABASE_URL", "https://mentorship-fixture.invalid");
+Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "synthetic-service-key");
+Deno.env.set("MENTORSHIP_SAFETY_SECRET", secret);
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+const request = (
+  body: unknown = {},
+  authorization: string | null = `Bearer ${secret}`,
+) =>
+  new Request("https://edge-fixture.invalid", {
+    method: "POST",
+    headers: authorization ? { Authorization: authorization } : {},
+    body: JSON.stringify(body),
+  });
+const messages = [
+  {
+    id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
+    match_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    sender_id: "11111111-1111-4111-8111-111111111111",
+    content: "I want to kill myself",
+    created_at: "2026-11-06T12:00:00Z",
+  },
+  {
+    id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2",
+    match_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    sender_id: "11111111-1111-4111-8111-111111111111",
+    content: "Please send cash",
+    created_at: "2026-11-06T12:00:01Z",
+  },
+  {
+    id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3",
+    match_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    sender_id: "22222222-2222-4222-8222-222222222222",
+    content: "The breathing exercises were helpful",
+    created_at: "2026-11-06T12:00:02Z",
+  },
+];
 
-// Test 1: Crisis keyword detection - suicide
-Deno.test("mentorship-safety-check: Detects suicide keyword", async () => {
-  const crisisKeywords = ["suicide", "suicidal", "kill myself", "end my life"];
-  const message = "I think about killing myself every day";
-  const hasCrisis = crisisKeywords.some((kw) =>
-    message.toLowerCase().includes(kw)
+Deno.test("safety checker rejects missing, incorrect and unconfigured secrets before privileged work", async () => {
+  const original = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = () => {
+    calls++;
+    throw new Error("No privileged request expected");
+  };
+  try {
+    assertEquals((await handler(request({}, null))).status, 401);
+    assertEquals((await handler(request({}, "Bearer wrong"))).status, 401);
+    Deno.env.delete("MENTORSHIP_SAFETY_SECRET");
+    assertEquals((await handler(request())).status, 503);
+    assertEquals(calls, 0);
+  } finally {
+    globalThis.fetch = original;
+    Deno.env.set("MENTORSHIP_SAFETY_SECRET", secret);
+  }
+});
+
+Deno.test("safety checker validates bounded requests before accessing messages", async () => {
+  const original = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = () => {
+    calls++;
+    throw new Error("Invalid request reached database");
+  };
+  try {
+    for (
+      const body of [null, [], { batch_size: 0 }, { batch_size: 501 }, {
+        batch_size: 1.5,
+      }, { check_recent_only: "yes" }]
+    ) {
+      assertEquals((await handler(request(body))).status, 400);
+    }
+    assertEquals(
+      (await handler(new Request("https://fixture.invalid", { method: "GET" })))
+        .status,
+      405,
+    );
+    assertEquals(calls, 0);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+Deno.test("safety checker uses actual columns and persists crisis, boundary and safe checks", async () => {
+  const original = globalThis.fetch;
+  const saved: Record<string, unknown>[] = [];
+  globalThis.fetch = async (input, init) => {
+    const req = new Request(input, init);
+    const url = new URL(req.url);
+    assertEquals(
+      req.headers.get("authorization"),
+      "Bearer synthetic-service-key",
+    );
+    if (url.pathname === "/rest/v1/mentorship_messages") {
+      assertEquals(req.method, "GET");
+      assertEquals(url.searchParams.get("safety_checked_at"), "is.null");
+      assertEquals(url.searchParams.get("order"), "created_at.asc,id.asc");
+      assertEquals(url.searchParams.get("limit"), "3");
+      assert(url.searchParams.get("created_at")?.startsWith("gte."));
+      assert(
+        !url.searchParams.has("flagged_at") &&
+          !url.searchParams.has("is_flagged"),
+      );
+      return json(messages);
+    }
+    assertEquals(url.pathname, "/rest/v1/rpc/record_mentorship_safety_check");
+    saved.push(await req.json());
+    return json(true);
+  };
+  try {
+    const response = await handler(request({ batch_size: 3 }));
+    assertEquals(response.status, 200);
+    const body = await response.json();
+    assertEquals(body.messages_checked, 3);
+    assertEquals(body.messages_flagged, 2);
+    assertEquals(body.critical_escalations, 1);
+    assertEquals(saved.map((row) => row.p_severity), [
+      "critical",
+      "high",
+      "low",
+    ]);
+    assertEquals(
+      saved.map((row) => row.p_expected_content),
+      messages.map((row) => row.content),
+    );
+    assertEquals(saved[2].p_reasons, []);
+    assertEquals(body.flagged_details.length, 2);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+Deno.test("failed database read or atomic persistence never returns successful safety results", async () => {
+  const original = globalThis.fetch;
+  try {
+    for (const failure of ["read", "persist"]) {
+      let writes = 0;
+      globalThis.fetch = async (input, init) => {
+        const url = new URL(new Request(input, init).url);
+        if (url.pathname === "/rest/v1/mentorship_messages") {
+          return failure === "read"
+            ? json({ message: "Synthetic read failure" }, 400)
+            : json([messages[0]]);
+        }
+        assertEquals(
+          url.pathname,
+          "/rest/v1/rpc/record_mentorship_safety_check",
+        );
+        writes++;
+        return json({ message: "Synthetic persistence failure" }, 400);
+      };
+      const response = await handler(request());
+      assertEquals(response.status, 500);
+      assertEquals((await response.json()).success, undefined);
+      assertEquals(writes, failure === "read" ? 0 : 1);
+    }
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+Deno.test("stale or already checked messages are not counted and backlog mode omits the time filter", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(new Request(input, init).url);
+    if (url.pathname === "/rest/v1/mentorship_messages") {
+      assert(!url.searchParams.has("created_at"));
+      return json([messages[0]]);
+    }
+    assertEquals(url.pathname, "/rest/v1/rpc/record_mentorship_safety_check");
+    return json(false);
+  };
+  try {
+    const response = await handler(request({ check_recent_only: false }));
+    assertEquals(response.status, 200);
+    const body = await response.json();
+    assertEquals(body.messages_checked, 0);
+    assertEquals(body.messages_flagged, 0);
+    assertEquals(body.critical_escalations, 0);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+Deno.test("production safety analysis detects the supported crisis, PII, boundary and spam patterns", () => {
+  for (
+    const message of [
+      "I want to kill myself",
+      "I think about killing myself",
+      "I have been hurting myself",
+      "I want to hurt myself",
+    ]
+  ) {
+    assertEquals(analyzeMessageSafety(message).severity, "critical");
+  }
+  assertEquals(
+    analyzeMessageSafety("Please send cash").boundary_violation,
+    true,
   );
-
-  assertEquals(hasCrisis, true);
-});
-
-// Test 2: Crisis keyword detection - harm
-Deno.test("mentorship-safety-check: Detects self-harm keyword", async () => {
-  const message = "I've been hurting myself to cope with the pain";
-  const harmKeywords = ["self harm", "hurt myself", "self-harm"];
-  const hasHarm = harmKeywords.some((kw) =>
-    message.toLowerCase().includes(kw)
+  assertEquals(
+    analyzeMessageSafety("Verify your password").inappropriate_request,
+    true,
   );
-
-  assertEquals(hasHarm, true);
-});
-
-// Test 3: Boundary violation - romantic context
-Deno.test("mentorship-safety-check: Detects romantic boundary violation", async () => {
-  const message = "I really like you romantically and would love to date";
-  const boundaryPattern = /\b(romantic|dating|love)\b/i;
-  const hasBoundaryViolation = boundaryPattern.test(message);
-
-  assertEquals(hasBoundaryViolation, true);
-});
-
-// Test 4: Boundary violation - physical contact
-Deno.test("mentorship-safety-check: Detects physical contact request", async () => {
-  const message = "Can we meet in person for coffee? I'd love a hug";
-  const pattern = /\b(meet in person|meet up|coffee|hug)\b/i;
-  const hasViolation = pattern.test(message);
-
-  assertEquals(hasViolation, true);
-});
-
-// Test 5: Inappropriate request - scam
-Deno.test("mentorship-safety-check: Detects scam pattern", async () => {
-  const message = "This is a get-rich-quick scheme offering cryptocurrency investment";
-  const pattern = /\b(scam|scheme|cryptocurrency|investment)\b/i;
-  const hasInappropriate = pattern.test(message);
-
-  assertEquals(hasInappropriate, true);
-});
-
-// Test 6: PII exposure - email
-Deno.test("mentorship-safety-check: Detects PII - email", async () => {
-  const message = "My email is john.doe@example.com if you want to contact me";
-  const emailPattern = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
-  const hasPII = emailPattern.test(message);
-
-  assertEquals(hasPII, true);
-});
-
-// Test 7: PII exposure - phone
-Deno.test("mentorship-safety-check: Detects PII - phone number", async () => {
-  const message = "Call me at 555-123-4567 anytime";
-  const phonePattern = /(\+?1)?[-.\s]?\(?[2-9]\d{2}\)?[-.\s]?\d{3}[-.\s]?\d{4}/;
-  const hasPII = phonePattern.test(message);
-
-  assertEquals(hasPII, true);
-});
-
-// Test 8: Severity classification - critical (crisis)
-Deno.test("mentorship-safety-check: Crisis classified as CRITICAL", async () => {
-  const message = "I'm going to kill myself tonight";
-  const severity = message.toLowerCase().includes("kill myself")
-    ? "critical"
-    : "low";
-
-  assertEquals(severity, "critical");
-});
-
-// Test 9: Severity classification - high (boundary)
-Deno.test("mentorship-safety-check: Boundary violation classified as HIGH", async () => {
-  const message = "Would you like to meet for dinner? I find you attractive";
-  const hasBoundary = /\b(meet|dinner|attractive)\b/i.test(message);
-  const severity = hasBoundary ? "high" : "low";
-
-  assertEquals(severity, "high");
-});
-
-// Test 10: Severity classification - medium (PII)
-Deno.test("mentorship-safety-check: PII exposure classified as MEDIUM", async () => {
-  const message = "My SSN is 123-45-6789";
-  const hasPII = /\b\d{3}-\d{2}-\d{4}\b/.test(message);
-  const severity = hasPII ? "medium" : "low";
-
-  assertEquals(severity, "medium");
-});
-
-// Test 11: Clean message passes all checks
-Deno.test("mentorship-safety-check: Safe message has no flags", async () => {
-  const message = "I've been practicing the breathing exercises you suggested and they really help with my anxiety";
-  const crisisKeywords = ["suicide", "kill myself", "harm"];
-  const hasCrisis = crisisKeywords.some((kw) =>
-    message.toLowerCase().includes(kw)
+  assertEquals(
+    analyzeMessageSafety("Email test@example.invalid").pii_exposure,
+    true,
   );
-  const hasBoundary = /\b(romantic|dating)\b/i.test(message);
-  const hasReasons = hasCrisis || hasBoundary;
-
-  assertEquals(hasReasons, false);
-});
-
-// Test 12: Excessive character repetition flagged (spam)
-Deno.test("mentorship-safety-check: Detects spam repetition", async () => {
-  const message = "hellooooooooooooooooooooo" + "a".repeat(20);
-  const hasRepetition = /(.)\1{19,}/.test(message);
-
-  assertEquals(hasRepetition, true);
-});
-
-// Test 13: Long message length check
-Deno.test("mentorship-safety-check: Excessive length flagged", async () => {
-  const message = "x".repeat(5001);
-  const isTooLong = message.length > 5000;
-
-  assertEquals(isTooLong, true);
-});
-
-// Test 14: Multiple issues in single message
-Deno.test("mentorship-safety-check: Multiple flags for complex message", async () => {
-  const message = "I want to hurt myself (123-45-6789). Let's meet romantically?";
-  const flags: string[] = [];
-
-  if (/\b(hurt myself|self-harm)\b/i.test(message)) flags.push("crisis");
-  if (/\b\d{3}-\d{2}-\d{4}\b/.test(message)) flags.push("pii");
-  if (/\b(romantic|dating)\b/i.test(message)) flags.push("boundary");
-
-  assertEquals(flags.length > 1, true);
-});
-
-// Test 15: Batch processing limit
-Deno.test("mentorship-safety-check: Batch size limit respected", async () => {
-  const requestBatchSize = 100;
-  const batchLimit = 100;
-  const isValid = requestBatchSize <= batchLimit;
-
-  assertEquals(isValid, true);
-});
-
-// Test 16: Flagged message update
-Deno.test("mentorship-safety-check: Flagged messages marked in database", async () => {
-  const flaggedMessage = {
-    id: "msg-uuid",
-    is_flagged: true,
-    flagged_at: new Date().toISOString(),
-  };
-
-  assertEquals(flaggedMessage.is_flagged, true);
-  assertEquals(flaggedMessage.flagged_at.length > 0, true);
-});
-
-// Test 17: Critical escalation creates record
-Deno.test("mentorship-safety-check: Critical escalation recorded", async () => {
-  const escalationRecord = {
-    message_id: "msg-uuid",
-    match_id: "match-uuid",
-    severity: "critical",
-    status: "pending_review",
-  };
-
-  assertEquals(escalationRecord.severity, "critical");
-  assertEquals(escalationRecord.status, "pending_review");
-});
-
-// Test 18: Moderator notification sent on crisis
-Deno.test("mentorship-safety-check: Crisis triggers moderator alert", async () => {
-  const notification = {
-    user_id: "moderator-group",
-    title: "CRISIS ALERT - Mentorship Message",
-    priority: "urgent",
-    type: "crisis_escalation",
-  };
-
-  assertEquals(notification.priority, "urgent");
-  assertStringIncludes(notification.title, "CRISIS");
-});
-
-// Test 19: Recent-only filter works
-Deno.test("mentorship-safety-check: Check recent messages only", async () => {
-  const hoursAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-  const messageCreatedAt = new Date().toISOString();
-  const isRecent = messageCreatedAt >= hoursAgo;
-
-  assertEquals(isRecent, true);
-});
-
-// Test 20: Response structure validation
-Deno.test("mentorship-safety-check: Response includes summary stats", async () => {
-  const response = {
-    success: true,
-    messages_checked: 45,
-    messages_flagged: 3,
-    critical_escalations: 1,
-    timestamp: new Date().toISOString(),
-  };
-
-  assertEquals(response.success, true);
-  assertEquals(typeof response.messages_checked, "number");
-  assertEquals(typeof response.critical_escalations, "number");
+  assertEquals(analyzeMessageSafety("a".repeat(30)).reasons.length, 1);
+  assertEquals(analyzeMessageSafety(messages[2].content).reasons, []);
 });
