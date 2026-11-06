@@ -326,6 +326,7 @@ final class ThreadViewModel: ObservableObject {
     private var flatReplies: [ForumReply] = []
     private var loadedReplyPages = 1
     private var isFetchingReplies = false
+    private var needsReplyRefresh = false
     private var replyRefreshTask: Task<Void, Never>?
     private var realtimeGeneration = UUID()
     private var pollingTask: Task<Void, Never>?
@@ -352,11 +353,14 @@ final class ThreadViewModel: ObservableObject {
     }
 
     func load(preservingPages: Bool = false, generation: UUID? = nil) async {
-        guard !isFetchingReplies else { return }
+        guard !isFetchingReplies else {
+            if generation == realtimeGeneration { needsReplyRefresh = true }
+            return
+        }
         isFetchingReplies = true
         isLoading = thread == nil
         error = nil
-        defer { isFetchingReplies = false; isLoading = false }
+        defer { finishReplyLoad() }
 
         do {
             let fetchedThread = try await forumService.fetchThread(id: threadId)
@@ -387,7 +391,7 @@ final class ThreadViewModel: ObservableObject {
     func loadMoreReplies() async {
         guard !isFetchingReplies, hasMoreReplies, let cursor = lastReplyCursor else { return }
         isFetchingReplies = true
-        defer { isFetchingReplies = false }
+        defer { finishReplyLoad() }
         do {
             let newReplies = try await forumService.fetchReplies(threadId: threadId, cursor: cursor, limit: 50)
             guard !Task.isCancelled else { return }
@@ -403,6 +407,17 @@ final class ThreadViewModel: ObservableObject {
 
     func refresh() async {
         await load(preservingPages: true)
+    }
+
+    private func finishReplyLoad() {
+        isFetchingReplies = false
+        isLoading = false
+        guard needsReplyRefresh else { return }
+        needsReplyRefresh = false
+        let generation = realtimeGeneration
+        replyRefreshTask = Task { [weak self] in
+            await self?.load(preservingPages: true, generation: generation)
+        }
     }
 
     func subscribeToRealtime() async {
@@ -428,12 +443,16 @@ final class ThreadViewModel: ObservableObject {
             }
 
         realtimeChannel = channel
-        statusSubscription = channel.onStatusChange { [weak self] status in
+        statusSubscription = channel.onStatusChange { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, self.realtimeGeneration == generation else { return }
-                if status == .subscribed {
+                if self.realtimeChannel?.status == .subscribed {
+                    let wasUnavailable = self.pollingTask != nil
                     self.pollingTask?.cancel()
                     self.pollingTask = nil
+                    if wasUnavailable {
+                        await self.load(preservingPages: true, generation: generation)
+                    }
                 } else {
                     self.startPollingFallback(generation: generation)
                 }
@@ -465,6 +484,7 @@ final class ThreadViewModel: ObservableObject {
 
     func stopRealtime() {
         realtimeGeneration = UUID()
+        needsReplyRefresh = false
         replySubscription?.cancel()
         replySubscription = nil
         statusSubscription?.cancel()
