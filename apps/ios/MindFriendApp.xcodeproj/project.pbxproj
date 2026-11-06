@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		CE6B22EDEB8F4D34A1C30007 /* HTMLPreviewSandbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE6B22EDEB8F4D34A1C30006 /* HTMLPreviewSandbox.swift */; };
 		CE6B22EDEB8F4D34A1C30005 /* MentorshipServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63346BD0781377CC6ADE3DA5 /* MentorshipServiceTests.swift */; };
 		CE6B22EDEB8F4D34A1C30003 /* CreativeWorkDeletionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE6B22EDEB8F4D34A1C30004 /* CreativeWorkDeletionTests.swift */; };
 		CE6B22EDEB8F4D34A1C30001 /* AuthUITestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE6B22EDEB8F4D34A1C30002 /* AuthUITestView.swift */; };
@@ -974,6 +975,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		CE6B22EDEB8F4D34A1C30006 /* HTMLPreviewSandbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTMLPreviewSandbox.swift; sourceTree = "<group>"; };
 		CE6B22EDEB8F4D34A1C30004 /* CreativeWorkDeletionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreativeWorkDeletionTests.swift; sourceTree = "<group>"; };
 		CE6B22EDEB8F4D34A1C30002 /* AuthUITestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthUITestView.swift; sourceTree = "<group>"; };
 		CD91A673F84E42D09B31A001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -4391,6 +4393,7 @@
 				86D5DD92A87B9A61991BCE1E /* SyntaxHighlighter.swift */,
 				06BE2A4DD8FB6A6AF3330FCA /* CodeBlockView.swift */,
 				5FC93B2C6A703C7D9A0A34F3 /* MarkdownContentView.swift */,
+				CE6B22EDEB8F4D34A1C30006 /* HTMLPreviewSandbox.swift */,
 				06DFAB6E9142E8C77A781CBA /* HTMLPreviewSheet.swift */,
 			);
 			name = Markdown;
@@ -7473,6 +7476,7 @@
 				8AB684EB199D44A0D01D9ACD /* SyntaxHighlighter.swift in Sources */,
 				E5A8103535E3B015B21006BD /* CodeBlockView.swift in Sources */,
 				6F5796DA064DC0C34DF463DD /* MarkdownContentView.swift in Sources */,
+				CE6B22EDEB8F4D34A1C30007 /* HTMLPreviewSandbox.swift in Sources */,
 				DE49F2B6E27DE39F15587D2F /* HTMLPreviewSheet.swift in Sources */,
 				1EABCDB003A8FA73CF015776 /* ActivationService.swift in Sources */,
 				54C65E7D72A9F48BD6D793F6 /* QuotaIndicator.swift in Sources */,
