@@ -25,7 +25,9 @@ struct MindFriendApp: App {
     @ViewBuilder
     private var launchContent: some View {
         #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("--subscription-ui-test") {
+        if ProcessInfo.processInfo.arguments.contains("--auth-ui-test") {
+            AuthUITestView()
+        } else if ProcessInfo.processInfo.arguments.contains("--subscription-ui-test") {
             SubscriptionCatalogUITestView()
         } else if ProcessInfo.processInfo.arguments.contains("--sleep-ui-test") {
             SleepDashboardUITestView()
@@ -55,7 +57,8 @@ struct MindFriendApp: App {
                 .environment(\.layoutDirection, localizationService.isRTL ? .rightToLeft : .leftToRight)
                 .task {
                     #if DEBUG
-                    if ProcessInfo.processInfo.arguments.contains("--subscription-ui-test") ||
+                    if ProcessInfo.processInfo.arguments.contains("--auth-ui-test") ||
+                       ProcessInfo.processInfo.arguments.contains("--subscription-ui-test") ||
                        ProcessInfo.processInfo.arguments.contains("--sleep-ui-test") ||
                        ProcessInfo.processInfo.arguments.contains("--debt-calendar-ui-test") { return }
                     #endif
