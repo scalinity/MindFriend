@@ -19,22 +19,18 @@ Deno.serve(async (req) => {
       return CouplesErrors.unexpectedError(new Error("Server configuration error"));
     }
 
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      global: {
-        headers: { Authorization: req.headers.get("Authorization")! },
-      },
-    });
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Authenticate user from JWT
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    if (!authHeader?.startsWith("Bearer ") || !authHeader.slice(7).trim()) {
       return CouplesErrors.missingAuth();
     }
 
     const {
       data: { user },
       error: authError,
-    } = await supabase.auth.getUser();
+    } = await supabase.auth.getUser(authHeader.slice(7));
 
     if (authError || !user) {
       return CouplesErrors.missingAuth();
@@ -116,6 +112,7 @@ Deno.serve(async (req) => {
       .from("partner_links")
       .update(updateFields)
       .eq("id", partnerLinkId)
+      .eq(isUser1 ? "user_id_1" : "user_id_2", userId)
       .select()
       .single();
 
