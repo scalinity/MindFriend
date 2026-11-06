@@ -106,7 +106,7 @@ Deno.test("issue 15: offline admission, durable explicit retry and legacy chat c
     SUPABASE_URL: base,
     SUPABASE_ANON_KEY: "synthetic-anon",
     SUPABASE_SERVICE_ROLE_KEY: "synthetic-service",
-    OPENAI_API_KEY: "synthetic-provider",
+    VOICE_AND_NONIMAGE_OPENAI_API_KEY: "synthetic-provider",
   };
   const previous = Object.keys(env).map((name) => Deno.env.get(name));
   const runtime = globalThis as typeof globalThis & {

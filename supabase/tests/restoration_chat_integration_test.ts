@@ -10,7 +10,7 @@ Deno.test({ name: "real chat handler: monthly admission, Auth, streaming, persis
   assert(base === "http://127.0.0.1:55321", "Only the isolated local stack is allowed");
   const nativeFetch = globalThis.fetch;
   const nativeServe = Deno.serve;
-  const env = { SUPABASE_URL: base, SUPABASE_ANON_KEY: cfg.ANON_KEY, SUPABASE_SERVICE_ROLE_KEY: cfg.SERVICE_ROLE_KEY, OPENAI_API_KEY: "synthetic-only" };
+  const env = { SUPABASE_URL: base, SUPABASE_ANON_KEY: cfg.ANON_KEY, SUPABASE_SERVICE_ROLE_KEY: cfg.SERVICE_ROLE_KEY, VOICE_AND_NONIMAGE_OPENAI_API_KEY: "synthetic-only" };
   const previous = Object.keys(env).map((name) => Deno.env.get(name));
   const background: Promise<unknown>[] = [];
   const runtime = globalThis as typeof globalThis & { EdgeRuntime?: { waitUntil(task: Promise<unknown>): void } };

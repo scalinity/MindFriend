@@ -10,6 +10,7 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type UntypedSupabaseClient = SupabaseClient<any, "public", any>;
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { openAINonImageKey } from "../_shared/openai-keys.ts";
 // SEC-CRIT-007: Use multi-language crisis detection instead of legacy crisis.ts
 import {
   detectCrisis as detectCrisisMultiLang,
@@ -155,7 +156,7 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    const OPENAI_API_KEY = openAINonImageKey();
 
     if (
       !SUPABASE_URL ||
