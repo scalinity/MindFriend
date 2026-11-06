@@ -55,6 +55,34 @@ final class MentorshipServiceTests: XCTestCase {
         #"{"id":"44444444-4444-4444-8444-444444444444","match_id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","sender_id":"11111111-1111-4111-8111-111111111111","content":"Saved message","created_at":"2026-11-06T12:00:00Z","read_at":null,"flagged":false}"#
     }
 
+    func testNewestMessagePageIsDisplayedChronologicallyAndPollingPreservesHistory() async throws {
+        func page(_ range: ClosedRange<Int>) throws -> String {
+            let rows: [[String: Any]] = range.reversed().map { index in
+                ["id": String(format: "44444444-4444-4444-8444-%012d", index),
+                 "match_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "sender_id": owner.uuidString,
+                 "content": "Message \(index)", "created_at": ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: Double(index))),
+                 "flagged": false, "read_at": NSNull()]
+            }
+            return String(decoding: try JSONSerialization.data(withJSONObject: rows), as: UTF8.self)
+        }
+        MentorshipFixtureURLProtocol.fixture.prepare([(200, try page(51...100)), (200, try page(1...50)), (200, try page(101...150)), (200, try page(101...150))])
+        let match = UUID(uuidString: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")!
+        let messaging = MentorshipMessagingService(dataService: service())
+        await messaging.loadMessages(matchId: match)
+        XCTAssertEqual(messaging.messages.first?.content, "Message 51")
+        XCTAssertEqual(messaging.latestMessage?.content, "Message 100")
+        await messaging.loadMoreMessages(matchId: match, offset: 50)
+        try await messaging.refreshMessages(matchId: match)
+        try await messaging.refreshMessages(matchId: match)
+        XCTAssertEqual(messaging.messages.count, 150)
+        XCTAssertEqual(messaging.oldestMessage?.content, "Message 1")
+        XCTAssertEqual(messaging.latestMessage?.content, "Message 150")
+        let url = try XCTUnwrap(MentorshipFixtureURLProtocol.fixture.requests.first?.url)
+        let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        XCTAssertEqual(query.first { $0.name == "order" }?.value, "created_at.desc,id.desc")
+        XCTAssertEqual(query.first { $0.name == "limit" }?.value, "50")
+    }
+
     func testMessageSendUsesWritableFieldsAndReturnsDatabaseRow() async throws {
         MentorshipFixtureURLProtocol.fixture.prepare([(201, "[\(messageJSON)]")])
         let saved = try await service().sendMessage(matchId: UUID(uuidString: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")!, content: "Original draft")

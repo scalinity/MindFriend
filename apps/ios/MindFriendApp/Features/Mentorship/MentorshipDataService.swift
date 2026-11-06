@@ -286,16 +286,20 @@ final class MentorshipDataService {
     }
 
     func fetchMessages(matchId: UUID, limit: Int = 50, offset: Int = 0) async throws -> [MentorshipMessage] {
-        return try await perform { userId in
+        return try await perform { _ in
+            guard (1...100).contains(limit), offset >= 0 else {
+                throw MentorshipError.validationError("Invalid message page.")
+            }
             let messages: [MentorshipMessage] = try await self.supabase
                 .from("mentorship_messages")
                 .select()
                 .eq("match_id", value: matchId.uuidString)
-                .order("created_at", ascending: true)
+                .order("created_at", ascending: false)
+                .order("id", ascending: false)
                 .range(from: offset, to: offset + limit - 1)
                 .execute()
                 .value
-            return messages
+            return messages.reversed()
 
         }
     }

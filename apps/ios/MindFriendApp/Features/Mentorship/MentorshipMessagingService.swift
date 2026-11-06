@@ -42,16 +42,19 @@ final class MentorshipMessagingService: ObservableObject {
 
     /// Load messages for a mentorship match
     func loadMessages(matchId: UUID, limit: Int = 50, offset: Int = 0) async {
+        if currentMatchId != matchId { messages = []; unreadCount = 0 }
         self.currentMatchId = matchId
         isLoading = true
         error = nil
 
         do {
-            messages = try await dataService.fetchMessages(
+            let page = try await dataService.fetchMessages(
                 matchId: matchId,
                 limit: limit,
                 offset: offset
             )
+            guard currentMatchId == matchId else { return }
+            mergeMessages(page)
             updateUnreadCount(matchId: matchId)
         } catch {
             if error is CancellationError { return }
@@ -72,7 +75,9 @@ final class MentorshipMessagingService: ObservableObject {
                 limit: limit,
                 offset: offset
             )
-            messages.insert(contentsOf: moreMessages, at: 0)
+            guard currentMatchId == matchId else { return }
+            mergeMessages(moreMessages)
+            updateUnreadCount(matchId: matchId)
         } catch {
             if error is CancellationError { return }
             self.error = error
@@ -92,9 +97,7 @@ final class MentorshipMessagingService: ObservableObject {
                     try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
                     
                     if !Task.isCancelled {
-                        let messages = try await dataService.fetchMessages(matchId: matchId)
-                        self.messages = messages
-                        updateUnreadCount(matchId: matchId)
+                        try await refreshMessages(matchId: matchId)
                     }
                 } catch {
                     // Silently handle cancellation
@@ -103,6 +106,22 @@ final class MentorshipMessagingService: ObservableObject {
                     }
                 }
             }
+        }
+    }
+
+    /// Refresh the newest page without discarding loaded history.
+    func refreshMessages(matchId: UUID) async throws {
+        let page = try await dataService.fetchMessages(matchId: matchId)
+        guard currentMatchId == matchId else { return }
+        mergeMessages(page)
+        updateUnreadCount(matchId: matchId)
+    }
+
+    private func mergeMessages(_ page: [MentorshipMessage]) {
+        var byID = Dictionary(uniqueKeysWithValues: messages.map { ($0.id, $0) })
+        for message in page { byID[message.id] = message }
+        messages = byID.values.sorted {
+            $0.createdAt == $1.createdAt ? $0.id.uuidString < $1.id.uuidString : $0.createdAt < $1.createdAt
         }
     }
 
@@ -121,7 +140,7 @@ final class MentorshipMessagingService: ObservableObject {
         defer { isSending = false }
         do {
             let message = try await dataService.sendMessage(matchId: matchId, content: content)
-            if currentMatchId == matchId { messages.append(message) }
+            if currentMatchId == matchId { mergeMessages([message]) }
         } catch {
             if !(error is CancellationError) { self.error = error }
             throw error
