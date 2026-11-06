@@ -136,6 +136,18 @@ enum DataError: LocalizedError {
 
 // MARK: - Chat Response Types
 
+struct VoiceTranscriptMessage: Codable, Equatable {
+    let id: UUID
+    let role: String
+    let content: String
+    let createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, role, content
+        case createdAt = "created_at"
+    }
+}
+
 struct ChatResponse: Codable {
     var userMessage: Message? = nil
     let message: Message
@@ -1020,6 +1032,31 @@ final class SupabaseDataService: ObservableObject {
             updatedAt: result.updatedAt ?? Date(),
             lastMessage: nil
         )
+    }
+
+    func saveVoiceTranscript(conversationId: UUID, title: String?, messages: [VoiceTranscriptMessage]) async throws {
+        let owner = try userId
+        struct TranscriptPayload: Encodable {
+            let id: UUID
+            let role: String
+            let content: String
+            let created_at: String
+        }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let payload = messages.map {
+            TranscriptPayload(id: $0.id, role: $0.role, content: $0.content,
+                              created_at: formatter.string(from: $0.createdAt))
+        }
+        let savedId: UUID = try await supabase.rpc("save_voice_transcript", params: [
+            "p_conversation_id": AnyEncodable(conversationId),
+            "p_title": AnyEncodable(title),
+            "p_messages": AnyEncodable(payload)
+        ]).execute().value
+        guard try userId == owner else { throw DataError.notAuthenticated }
+        guard savedId == conversationId else {
+            throw DataError.operationFailed("The saved conversation could not be confirmed.")
+        }
     }
 
     func deleteConversation(id: String) async throws {
@@ -2668,6 +2705,16 @@ final class SupabaseDataService: ObservableObject {
         try await supabase
             .from(Tables.pushTokens)
             .upsert(device, onConflict: "user_id,device_token")
+            .execute()
+    }
+
+    func unregisterDevice(apnsToken: String, userId outgoingUserId: UUID) async throws {
+        guard try userId == outgoingUserId else { throw DataError.notAuthenticated }
+        try await supabase
+            .from(Tables.pushTokens)
+            .delete()
+            .eq("user_id", value: outgoingUserId)
+            .eq("device_token", value: apnsToken)
             .execute()
     }
 
