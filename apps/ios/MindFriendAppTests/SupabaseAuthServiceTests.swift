@@ -58,6 +58,92 @@ final class DurablePathwayKeyTests: XCTestCase {
     }
 }
 
+@MainActor
+final class AccountBriefingIsolationTests: XCTestCase {
+    func testAccountSwitchClearsBriefingAndIgnoresLatePriorAccountResult() async {
+        let firstOwner = UUID(), secondOwner = UUID()
+        var owner: UUID? = firstOwner
+        let provider = SuspendedBriefingProvider()
+        let model = DailyBriefingViewModel(briefingService: provider, calendarService: CalendarService(), currentUserId: { owner })
+        let firstRequest = expectation(description: "First account request started")
+        await provider.onRequest { firstRequest.fulfill() }
+        let firstLoad = Task { await model.loadTodaysBriefing() }
+        await fulfillment(of: [firstRequest], timeout: 2)
+
+        owner = secondOwner
+        model.resetForAccountChange(to: secondOwner)
+        XCTAssertNil(model.briefing)
+        XCTAssertNil(model.preferences)
+        XCTAssertFalse(model.isLoading)
+        let secondRequest = expectation(description: "Second account request started")
+        await provider.onRequest { secondRequest.fulfill() }
+        let secondLoad = Task { await model.loadTodaysBriefing() }
+        await fulfillment(of: [secondRequest], timeout: 2)
+        await provider.complete(1, with: Self.briefing(owner: secondOwner))
+        await secondLoad.value
+        await provider.complete(0, with: Self.briefing(owner: firstOwner))
+        await firstLoad.value
+        XCTAssertEqual(model.briefing?.userId, secondOwner)
+        XCTAssertFalse(model.isLoading)
+        await model.loadTodaysBriefing()
+        let count = await provider.requestCount
+        XCTAssertEqual(count, 2, "Only this account's same-day successful result may be reused")
+    }
+
+    func testSignOutInvalidatesInFlightBriefing() async {
+        let firstOwner = UUID()
+        var owner: UUID? = firstOwner
+        let provider = SuspendedBriefingProvider()
+        let model = DailyBriefingViewModel(briefingService: provider, calendarService: CalendarService(), currentUserId: { owner })
+        let requested = expectation(description: "Request started")
+        await provider.onRequest { requested.fulfill() }
+        let load = Task { await model.loadTodaysBriefing() }
+        await fulfillment(of: [requested], timeout: 2)
+        owner = nil
+        model.resetForAccountChange(to: nil)
+        await provider.complete(0, with: Self.briefing(owner: firstOwner))
+        await load.value
+        XCTAssertNil(model.briefing)
+        XCTAssertNil(model.preferences)
+        XCTAssertFalse(model.isLoading)
+    }
+
+    private static func briefing(owner: UUID) -> DailyBriefing {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return DailyBriefing(id: UUID(), userId: owner, localDate: formatter.string(from: Date()),
+                             greeting: "Fixture", predictedMood: nil, moodContext: nil, questId: nil,
+                             questTitle: nil, calendarEvents: [], suggestion: "Fixture", generatedAt: Date(),
+                             lastViewedAt: nil, wellnessScore: nil, importantDates: nil, audioText: nil,
+                             audioUrl: nil, voicePlayed: nil)
+    }
+}
+
+private actor SuspendedBriefingProvider: DailyBriefingProviding {
+    private var pending: [Int: CheckedContinuation<DailyBriefing?, Error>] = [:]
+    private var didRequest: (() -> Void)?
+    private(set) var requestCount = 0
+
+    func onRequest(_ action: @escaping () -> Void) { didRequest = action }
+    func fetchTodaysBriefing() async throws -> DailyBriefing? {
+        let request = requestCount
+        requestCount += 1
+        return try await withCheckedThrowingContinuation { continuation in
+            pending[request] = continuation
+            didRequest?()
+        }
+    }
+    func complete(_ request: Int, with briefing: DailyBriefing) {
+        pending.removeValue(forKey: request)?.resume(returning: briefing)
+    }
+    func generateBriefing(localDate: String, timezone: String, calendarEvents: [BriefingCalendarEvent]) async throws -> DailyBriefing {
+        throw CancellationError()
+    }
+    func markViewed(briefingId: UUID) async throws { }
+    func fetchPreferences() async throws -> BriefingPreferences { .default }
+    func updatePreferences(_ preferences: BriefingPreferences) async throws { }
+}
+
 /// Tests for SupabaseAuthService authentication flows
 /// Session fixtures do not initialize the shared client or read device credentials.
 final class SupabaseAuthServiceTests: XCTestCase {

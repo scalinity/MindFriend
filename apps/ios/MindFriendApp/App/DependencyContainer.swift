@@ -26,6 +26,7 @@ final class DependencyContainer: ObservableObject {
         }
         service.setAccountChangeHandler { [weak self] userId in
             self?.pathwayEncryptionService.setCurrentUser(userId)
+            self?.dailyBriefingViewModel.resetForAccountChange(to: userId)
         }
         return service
     }()
@@ -183,7 +184,8 @@ final class DependencyContainer: ObservableObject {
     lazy var dailyBriefingViewModel: DailyBriefingViewModel = {
         DailyBriefingViewModel(
             briefingService: self.dailyBriefingService,
-            calendarService: self.calendarService
+            calendarService: self.calendarService,
+            currentUserId: { [weak self] in self?.supabaseAuthService.currentUser?.id }
         )
     }()
 
