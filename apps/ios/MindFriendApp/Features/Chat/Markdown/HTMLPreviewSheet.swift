@@ -74,7 +74,7 @@ struct HTMLWebView: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
 
-        // Enable JavaScript for interactive content (Three.js, Canvas, etc.)
+        // Keep inline JavaScript available for local interactive content.
         let preferences = WKWebpagePreferences()
         preferences.allowsContentJavaScript = true
         configuration.defaultWebpagePreferences = preferences
@@ -88,8 +88,8 @@ struct HTMLWebView: UIViewRepresentable {
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
 
-        // Security: Block navigation to external sites
-        webView.navigationDelegate = context.coordinator
+        // Install network rules before any supplied document is loaded.
+        context.coordinator.attach(to: webView)
 
         // Allow scrolling and interaction
         webView.scrollView.bounces = true
@@ -102,29 +102,11 @@ struct HTMLWebView: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
-        // Load HTML from string (no external URLs)
-        webView.loadHTMLString(htmlContent, baseURL: nil)
+        context.coordinator.load(htmlContent)
     }
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
-
-    /// Coordinator to handle navigation and prevent external links
-    class Coordinator: NSObject, WKNavigationDelegate {
-        func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-            // Only allow the initial load (about:blank base URL)
-            if navigationAction.navigationType == .other {
-                decisionHandler(.allow)
-            } else {
-                // Block all navigation attempts (clicks on links, etc.)
-                decisionHandler(.cancel)
-            }
-        }
-
-        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-            // Silently handle navigation failures
-        }
+    func makeCoordinator() -> HTMLPreviewSandbox {
+        HTMLPreviewSandbox()
     }
 }
 
