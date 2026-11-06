@@ -227,6 +227,8 @@ enum ResourceType: String, Codable, CaseIterable, Identifiable {
     case warmLine = "warm_line"
     case professional = "professional"
     case therapist = "therapist"
+    case custom = "custom"
+    case crisisHyphenLine = "crisis-line"
 
     var id: String { rawValue }
 
@@ -239,6 +241,8 @@ enum ResourceType: String, Codable, CaseIterable, Identifiable {
         case .therapist: return "Therapist"
         case .warmLine: return "Warm Line"
         case .professional: return "Professional"
+        case .custom: return "Custom"
+        case .crisisHyphenLine: return "Crisis Text Line"
         }
     }
 }
@@ -312,6 +316,23 @@ struct SafetyPlanPayload: Codable, Equatable {
         self.updatedAt = updatedAt
     }
 
+    // The handler stores content separately from the row's identity and timestamps.
+    // Older local caches include these metadata fields inside the payload.
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decodeIfPresent(String.self, forKey: .id) ?? ""
+        userId = try values.decodeIfPresent(String.self, forKey: .userId) ?? ""
+        version = try values.decodeIfPresent(Int.self, forKey: .version) ?? 1
+        warningSigns = try values.decode([SafetyPlanItem].self, forKey: .warningSigns)
+        coping = try values.decode([CopingStrategy].self, forKey: .coping)
+        contacts = try values.decode([TrustedContact].self, forKey: .contacts)
+        resources = try values.decode([ProfessionalResource].self, forKey: .resources)
+        environmentSteps = try values.decode([SafetyPlanItem].self, forKey: .environmentSteps)
+        anchors = try values.decode([SafetyPlanItem].self, forKey: .anchors)
+        createdAt = try values.decodeIfPresent(Date.self, forKey: .createdAt) ?? .distantPast
+        updatedAt = try values.decodeIfPresent(Date.self, forKey: .updatedAt) ?? .distantPast
+    }
+
     static let empty = SafetyPlanPayload()
 }
 
@@ -326,6 +347,27 @@ struct SafetyPlanSettings: Codable, Equatable {
     ) {
         self.allowAiReference = allowAiReference
         self.pinnedToQuickActions = pinnedToQuickActions
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case allowAiReference = "allow_ai_reference"
+        case pinnedToQuickActions = "pinned_to_quick_actions"
+        case legacyAllowAiReference = "allowAiReference"
+        case legacyPinnedToQuickActions = "pinnedToQuickActions"
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        allowAiReference = try values.decodeIfPresent(Bool.self, forKey: .allowAiReference)
+            ?? values.decodeIfPresent(Bool.self, forKey: .legacyAllowAiReference) ?? false
+        pinnedToQuickActions = try values.decodeIfPresent(Bool.self, forKey: .pinnedToQuickActions)
+            ?? values.decodeIfPresent(Bool.self, forKey: .legacyPinnedToQuickActions) ?? false
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(allowAiReference, forKey: .allowAiReference)
+        try values.encode(pinnedToQuickActions, forKey: .pinnedToQuickActions)
     }
 
     static let `default` = SafetyPlanSettings()
@@ -364,6 +406,20 @@ struct SafetyPlanResponse: Codable {
     let success: Bool
     let data: SafetyPlanData?
     let error: String?
+
+    private enum CodingKeys: String, CodingKey { case success, data, error }
+    private struct ServerError: Decodable { let message: String }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        success = try values.decode(Bool.self, forKey: .success)
+        data = try values.decodeIfPresent(SafetyPlanData.self, forKey: .data)
+        if let message = try? values.decode(String.self, forKey: .error) {
+            error = message
+        } else {
+            error = try values.decodeIfPresent(ServerError.self, forKey: .error)?.message
+        }
+    }
 }
 
 /// Inner data for safety plan response
@@ -378,4 +434,104 @@ enum SafetyPlanOperation: String, Codable {
     case create
     case update
     case delete
+}
+
+/// Content-only request: row metadata and local quick-action preferences stay local.
+struct SafetyPlanRequest: Encodable {
+    let operation: String
+    let payload: Content?
+    let settings: Settings?
+
+    struct Content: Encodable {
+        let warningSigns: [SafetyPlanItem]
+        let coping: [CopingStrategy]
+        let contacts: [TrustedContact]
+        let resources: [ProfessionalResource]
+        let environmentSteps: [SafetyPlanItem]
+        let anchors: [SafetyPlanItem]
+
+        init(_ payload: SafetyPlanPayload) {
+            warningSigns = payload.warningSigns
+            coping = payload.coping
+            contacts = payload.contacts
+            resources = payload.resources
+            environmentSteps = payload.environmentSteps
+            anchors = payload.anchors
+        }
+    }
+
+    struct Settings: Encodable {
+        let allow_ai_reference: Bool
+    }
+}
+
+// The handler accepts older plans without the optional presentation fields.
+extension SafetyPlanItem {
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(String.self, forKey: .id)
+        text = try values.decode(String.self, forKey: .text)
+        order = try values.decodeIfPresent(Int.self, forKey: .order) ?? 0
+        isCustom = try values.decodeIfPresent(Bool.self, forKey: .isCustom) ?? false
+    }
+}
+
+extension CopingStrategy {
+    private enum LegacyKeys: String, CodingKey {
+        case exerciseId = "exercise_id", isFavorite = "is_favorite"
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        let legacy = try decoder.container(keyedBy: LegacyKeys.self)
+        id = try values.decode(String.self, forKey: .id)
+        type = try values.decode(CopingStrategyType.self, forKey: .type)
+        label = try values.decode(String.self, forKey: .label)
+        duration = try values.decodeIfPresent(Int.self, forKey: .duration)
+        category = try values.decode(CopingCategory.self, forKey: .category)
+        isFavorite = try values.decodeIfPresent(Bool.self, forKey: .isFavorite)
+            ?? legacy.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
+        exerciseId = try values.decodeIfPresent(String.self, forKey: .exerciseId)
+            ?? legacy.decodeIfPresent(String.self, forKey: .exerciseId)
+    }
+}
+
+extension TrustedContact {
+    private enum LegacyKeys: String, CodingKey {
+        case preferredMethod = "preferred_method", isPrimary = "is_primary", whatToSay = "what_to_say"
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        let legacy = try decoder.container(keyedBy: LegacyKeys.self)
+        id = try values.decode(String.self, forKey: .id)
+        name = try values.decode(String.self, forKey: .name)
+        phone = try values.decode(String.self, forKey: .phone)
+        relationship = try values.decode(ContactRelationship.self, forKey: .relationship)
+        preferredMethod = try values.decodeIfPresent(ContactMethod.self, forKey: .preferredMethod)
+            ?? legacy.decodeIfPresent(ContactMethod.self, forKey: .preferredMethod) ?? .call
+        isPrimary = try values.decodeIfPresent(Bool.self, forKey: .isPrimary)
+            ?? legacy.decodeIfPresent(Bool.self, forKey: .isPrimary) ?? false
+        notes = try values.decodeIfPresent(String.self, forKey: .notes)
+        whatToSay = try values.decodeIfPresent(String.self, forKey: .whatToSay)
+            ?? legacy.decodeIfPresent(String.self, forKey: .whatToSay)
+    }
+}
+
+extension ProfessionalResource {
+    private enum LegacyKeys: String, CodingKey { case url, notes }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        let legacy = try decoder.container(keyedBy: LegacyKeys.self)
+        id = try values.decode(String.self, forKey: .id)
+        type = try values.decode(ResourceType.self, forKey: .type)
+        name = try values.decode(String.self, forKey: .name)
+        phone = try values.decodeIfPresent(String.self, forKey: .phone) ?? ""
+        country = try values.decodeIfPresent(String.self, forKey: .country) ?? "US"
+        description = try values.decodeIfPresent(String.self, forKey: .description)
+            ?? legacy.decodeIfPresent(String.self, forKey: .notes)
+        website = try values.decodeIfPresent(String.self, forKey: .website)
+            ?? legacy.decodeIfPresent(String.self, forKey: .url)
+    }
 }

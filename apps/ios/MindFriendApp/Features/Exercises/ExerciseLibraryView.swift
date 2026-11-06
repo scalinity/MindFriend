@@ -366,6 +366,9 @@ struct ExercisePlayerView: View {
     @State private var timer: Timer?
     @State private var showCompletion = false
     @State private var rating: Int = 0
+    @State private var isStartingSession = false
+    @State private var isSubmittingCompletion = false
+    @State private var completionError: String?
     @State private var wasPlayingBeforeBackground = false  // Track state for resume
 
     // Efficacy tracking
@@ -468,7 +471,9 @@ struct ExercisePlayerView: View {
         .navigationTitle(exercise.title)
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showCompletion) {
-            ExerciseCompletionView(rating: $rating) {
+            ExerciseCompletionView(
+                rating: $rating, isSubmitting: isSubmittingCompletion, errorMessage: completionError
+            ) {
                 submitCompletion()
             }
         }
@@ -519,6 +524,9 @@ struct ExercisePlayerView: View {
     }
 
     private func startSession() async {
+        guard session == nil, !isStartingSession else { return }
+        isStartingSession = true
+        defer { isStartingSession = false }
         do {
             let sessionId = try await container.supabaseDataService.startExerciseSession(exerciseId: exercise.id)
             session = ExerciseSession(id: sessionId, exerciseId: exercise.id, startedAt: Date(), endedAt: nil, completed: false)
@@ -633,77 +641,56 @@ struct ExercisePlayerView: View {
     }
 
     private func submitCompletion() {
-        guard let session = session else {
-            dismiss()
-            return
-        }
-
+        guard !isSubmittingCompletion else { return }
+        isSubmittingCompletion = true
+        completionError = nil
         Task {
+            defer { isSubmittingCompletion = false }
             do {
+                if session == nil { await startSession() }
+                guard let session else {
+                    throw DataError.operationFailed("The exercise session could not be started. Please retry.")
+                }
                 try await container.supabaseDataService.completeExerciseSession(
-                    sessionId: session.id,
-                    rating: rating > 0 ? rating : nil,
-                    note: nil
+                    sessionId: session.id, rating: rating > 0 ? rating : nil, note: nil
                 )
-
-                // Award XP for exercise completion
-                let xpResult = try await container.supabaseDataService.awardXP(activity: .exerciseComplete(exercise.type))
-
-                // Trigger XP gain toast IMMEDIATELY for instant gratification
-                await MainActor.run {
+                let xpResult = try await container.supabaseDataService.awardXP(
+                    activity: .exerciseComplete(exercise.type), exerciseSessionId: session.id
+                )
+                if xpResult.amount > 0 {
                     container.achievementService.triggerXPGainAnimation(
-                        amount: xpResult.amount,
-                        activity: .exerciseComplete(exercise.type)
+                        amount: xpResult.amount, activity: .exerciseComplete(exercise.type)
                     )
                 }
-
-                // Update event progress for this exercise type
+                // Completion and XP are confirmed. Later optional refresh failures do not need a retry.
+                showCompletion = false
+                dismiss()
                 _ = try? await container.supabaseDataService.incrementEventProgress(activityType: exercise.type.rawValue)
-
-                // Fetch updated profile for exercise count
-                let profile = try await container.supabaseAuthService.fetchProfile()
-
-                // Check for milestone celebrations (exercise milestones)
-                let milestoneCelebrations = try await container.supabaseDataService.checkMilestoneTriggers(
+                if let profile = try? await container.supabaseAuthService.fetchProfile(),
+                   let milestones = try? await container.supabaseDataService.checkMilestoneTriggers(
                     exerciseCount: profile.stats?.totalExercisesCompleted ?? 0,
                     newLevel: xpResult.leveledUp ? xpResult.newLevel : nil
-                )
-
-                // Fire-and-forget: badge check runs in background (slow operation)
-                let achievementService = container.achievementService
-                Task.detached(priority: .utility) {
-                    _ = try? await achievementService.checkBadgeProgress()
-                }
-
-                await MainActor.run {
-                    // Show level-up celebration if leveled up
+                   ) {
                     if xpResult.leveledUp {
                         appState.showLevelUpCelebration(level: xpResult.newLevel, title: xpResult.newTitle)
                     }
-
-                    // Queue milestone celebrations
-                    if !milestoneCelebrations.isEmpty {
-                        let celebrations = milestoneCelebrations.map { $0.toCelebrationEvent(userId: profile.id) }
-                        appState.addCelebrations(celebrations)
-                    }
-
-                    dismiss()
+                    appState.addCelebrations(milestones.map { $0.toCelebrationEvent(userId: profile.id) })
                 }
+                let achievementService = container.achievementService
+                Task.detached(priority: .utility) { _ = try? await achievementService.checkBadgeProgress() }
             } catch {
-                // Log error - exercise was completed locally, will sync when connection restores
-                Log.quests.warning("Failed to record exercise completion: \(error.localizedDescription)")
-                await MainActor.run {
-                    // Dismiss anyway - the exercise was completed locally
-                    // Network sync will happen automatically when connection restores
-                    dismiss()
-                }
+                completionError = "Your exercise hasn't finished saving. Retry to save this same session and its XP."
+                showCompletion = true
             }
         }
     }
+
 }
 
 struct ExerciseCompletionView: View {
     @Binding var rating: Int
+    var isSubmitting = false
+    var errorMessage: String? = nil
     let onComplete: () -> Void
     @Environment(\.dismiss) var dismiss
 
@@ -732,12 +719,21 @@ struct ExerciseCompletionView: View {
                 }
             }
 
+            .disabled(isSubmitting)
+
             Spacer()
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+                    .accessibilityLabel(errorMessage)
+            }
 
             Button {
                 onComplete()
             } label: {
-                Text("Done")
+                Text(isSubmitting ? "Saving…" : (errorMessage == nil ? "Done" : "Retry Save"))
                     .font(.headline)
                     .frame(maxWidth: .infinity)
                     .padding()
@@ -746,8 +742,10 @@ struct ExerciseCompletionView: View {
                     .cornerRadius(12)
             }
             .padding()
+            .disabled(isSubmitting)
         }
         .padding()
+        .interactiveDismissDisabled(isSubmitting)
     }
 }
 

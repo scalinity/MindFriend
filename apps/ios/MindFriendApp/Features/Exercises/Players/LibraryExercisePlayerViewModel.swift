@@ -1,6 +1,15 @@
 import SwiftUI
 import Combine
 
+@MainActor
+protocol LibraryExerciseSessionService {
+    func startExerciseSession(exerciseId: String) async throws -> String
+    func completeExerciseSession(sessionId: String, rating: Int?, note: String?) async throws
+    func awardXP(activity: XPActivity, exerciseSessionId: String?) async throws -> XPAward
+}
+
+extension SupabaseDataService: LibraryExerciseSessionService {}
+
 /// ViewModel for library exercise players
 /// Manages common state and type-specific state for all exercise types
 @MainActor
@@ -8,7 +17,7 @@ class LibraryExercisePlayerViewModel: ObservableObject {
     // MARK: - Dependencies
 
     let exercise: Exercise
-    private let dataService: SupabaseDataService
+    private let dataService: any LibraryExerciseSessionService
     private let efficacyEngine: InterventionEfficacyEngine?
     private let achievementService: AchievementService?
 
@@ -20,6 +29,10 @@ class LibraryExercisePlayerViewModel: ObservableObject {
     @Published var progress: Double = 0
     @Published var showCompletion = false
     @Published var rating: Int = 0
+    @Published private(set) var isSubmittingCompletion = false
+    @Published private(set) var completionError: String?
+    private var isStartingSession = false
+    private var confirmedSessionId: String?
 
     // Session tracking
     @Published private(set) var session: ExerciseSession?
@@ -131,7 +144,7 @@ class LibraryExercisePlayerViewModel: ObservableObject {
 
     init(
         exercise: Exercise,
-        dataService: SupabaseDataService,
+        dataService: any LibraryExerciseSessionService,
         efficacyEngine: InterventionEfficacyEngine? = nil,
         achievementService: AchievementService? = nil
     ) {
@@ -196,6 +209,9 @@ class LibraryExercisePlayerViewModel: ObservableObject {
     // MARK: - Session Management
 
     func startSession() async {
+        guard session == nil, !isStartingSession else { return }
+        isStartingSession = true
+        defer { isStartingSession = false }
         do {
             let sessionId = try await dataService.startExerciseSession(exerciseId: exercise.id)
             session = ExerciseSession(
@@ -522,30 +538,40 @@ class LibraryExercisePlayerViewModel: ObservableObject {
 
     // MARK: - Completion
 
-    func submitCompletion() async throws {
-        guard let session = session else { return }
+    /// A retry retains the same session even if either RPC committed before its response was lost.
+    func submitCompletion() async throws -> String {
+        if let confirmedSessionId { return confirmedSessionId }
+        guard !isSubmittingCompletion else {
+            throw DataError.operationFailed("This exercise is already being saved.")
+        }
+        isSubmittingCompletion = true
+        completionError = nil
+        defer { isSubmittingCompletion = false }
 
-        // 1. Mark session complete
-        try await dataService.completeExerciseSession(
-            sessionId: session.id,
-            rating: rating > 0 ? rating : nil,
-            note: nil
-        )
-
-        // 2. Award XP
-        let xpResult = try await dataService.awardXP(
-            activity: .exerciseComplete(exercise.type)
-        )
-
-        // 3. Trigger XP animation
-        achievementService?.triggerXPGainAnimation(
-            amount: xpResult.amount,
-            activity: .exerciseComplete(exercise.type)
-        )
-
-        // 4. Check badges in background
-        Task.detached(priority: .utility) { [achievementService] in
-            _ = try? await achievementService?.checkBadgeProgress()
+        do {
+            if session == nil { await startSession() }
+            guard let session else {
+                throw DataError.operationFailed("The exercise session could not be started. Please retry.")
+            }
+            try await dataService.completeExerciseSession(
+                sessionId: session.id, rating: rating > 0 ? rating : nil, note: nil
+            )
+            let xpResult = try await dataService.awardXP(
+                activity: .exerciseComplete(exercise.type), exerciseSessionId: session.id
+            )
+            confirmedSessionId = session.id
+            if xpResult.amount > 0 {
+                achievementService?.triggerXPGainAnimation(
+                    amount: xpResult.amount, activity: .exerciseComplete(exercise.type)
+                )
+            }
+            Task.detached(priority: .utility) { [achievementService] in
+                _ = try? await achievementService?.checkBadgeProgress()
+            }
+            return session.id
+        } catch {
+            completionError = "Your exercise hasn't finished saving. Retry to save this same session and its XP."
+            throw error
         }
     }
 

@@ -1,5 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 interface SafetyPlanPayload {
@@ -95,15 +94,15 @@ function responseWithCors(
   });
 }
 
-function normalizeAllowAiReference(settings?: SafetyPlanSettings): boolean {
-  if (!settings) return false;
+function normalizeAllowAiReference(settings?: SafetyPlanSettings): boolean | undefined {
+  if (!settings) return undefined;
   if (typeof settings.allow_ai_reference === "boolean") {
     return settings.allow_ai_reference;
   }
   if (typeof settings.allowAiReference === "boolean") {
     return settings.allowAiReference;
   }
-  return false;
+  return undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -150,7 +149,7 @@ function validatePayload(payload: SafetyPlanPayload | undefined):
   return { ok: true };
 }
 
-serve(async (req: Request) => {
+Deno.serve(async (req: Request) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 
@@ -267,6 +266,13 @@ serve(async (req: Request) => {
     }
 
     if (operation === "update" && !payload && settings) {
+      if (allowAiReference === undefined) {
+        return responseWithCors(
+          { success: false, error: { code: "VALIDATION_ERROR", message: "An AI-reference preference is required" } },
+          400,
+          corsHeaders,
+        );
+      }
       const { data: updatedPlan, error } = await supabase
         .from("safety_plans")
         .update({ allow_ai_reference: allowAiReference })
@@ -354,16 +360,16 @@ serve(async (req: Request) => {
       );
     }
 
-    const { data: result, error: saveError } = await supabase
-      .from("safety_plans")
-      .upsert(
-        {
-          user_id: user.id,
-          payload: payload,
-          allow_ai_reference: allowAiReference,
-        },
-        { onConflict: "user_id" },
-      )
+    // Existing content updates write only content. They cannot replay an old opt-in
+    // over a concurrently committed settings-only opt-out, even from older clients.
+    const save = existingPlan
+      ? supabase.from("safety_plans").update({ payload }).eq("user_id", user.id)
+      : supabase.from("safety_plans").insert({
+        user_id: user.id,
+        payload,
+        allow_ai_reference: allowAiReference ?? false,
+      });
+    const { data: result, error: saveError } = await save
       .select("id, version, payload, allow_ai_reference, created_at, updated_at")
       .single();
 
@@ -396,7 +402,7 @@ serve(async (req: Request) => {
       corsHeaders,
     );
   } catch (error) {
-    console.error("Error managing safety plan:", error);
+    console.error("Unable to manage safety plan");
 
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
