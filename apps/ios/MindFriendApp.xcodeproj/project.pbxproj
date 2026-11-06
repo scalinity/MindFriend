@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		CE6B22EDEB8F4D34A1C30001 /* AuthUITestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE6B22EDEB8F4D34A1C30002 /* AuthUITestView.swift */; };
 		CD91A673F84E42D09B31A002 /* Watch Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CD91A673F84E42D09B31A001 /* Assets.xcassets */; };
 		D1E7D53B0F794FDC9A1A0001 /* DeepLinkNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E7D53B0F794FDC9A1A0002 /* DeepLinkNavigationTests.swift */; };
 		EA5238A7C055484BB1E64D01 /* CoreCompletionContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA5238A7C055484BB1E64D02 /* CoreCompletionContractTests.swift */; };
@@ -971,6 +972,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		CE6B22EDEB8F4D34A1C30002 /* AuthUITestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthUITestView.swift; sourceTree = "<group>"; };
 		CD91A673F84E42D09B31A001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		D1E7D53B0F794FDC9A1A0002 /* DeepLinkNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLinkNavigationTests.swift; sourceTree = "<group>"; };
 		EA5238A7C055484BB1E64D02 /* CoreCompletionContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreCompletionContractTests.swift; sourceTree = "<group>"; };
@@ -5068,6 +5070,7 @@
 		A99FA53A908DEE1FE882CA7E /* Auth */ = {
 			isa = PBXGroup;
 			children = (
+				CE6B22EDEB8F4D34A1C30002 /* AuthUITestView.swift */,
 				696C905684F7F4ED064A764D /* SignInView.swift */,
 			);
 			path = Auth;
@@ -7212,6 +7215,7 @@
 				2C275D28E46D82D2FE256FA4 /* SharedMoodCard.swift in Sources */,
 				FF309AB58C92E117E7F3D21D /* SharedQuestCard.swift in Sources */,
 				3D5F946B919D7C3AD07CA7BC /* SharingSettingsView.swift in Sources */,
+				CE6B22EDEB8F4D34A1C30001 /* AuthUITestView.swift in Sources */,
 				51469850038B79FAAEFEDE8B /* SignInView.swift in Sources */,
 				4A9FC9A0A2A7CF5D224B747F /* SignLanguageView.swift in Sources */,
 				D130C3E6D630894B18C41FEC /* SignaturePatternCard.swift in Sources */,

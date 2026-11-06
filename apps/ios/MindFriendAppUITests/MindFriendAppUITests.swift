@@ -8,14 +8,14 @@ final class MindFriendAppUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
         app = XCUIApplication()
-        app.launchArguments = ["UI_TESTING"]
+        app.launchArguments = ["--auth-ui-test"]
     }
 
     override func tearDownWithError() throws {
         app = nil
     }
 
-    func testInvalidSyntheticEmailLoginReturnsCredentialsError() throws {
+    func testInvalidEmailShowsFixtureCredentialsError() throws {
         app.launch()
         let emailLogin = app.buttons["Continue with Email"]
         XCTAssertTrue(emailLogin.waitForExistence(timeout: 15))
@@ -31,9 +31,9 @@ final class MindFriendAppUITests: XCTestCase {
         if !signIn.isHittable { app.swipeUp() }
         signIn.tap()
         let rejected = app.staticTexts["Incorrect email or password. Please try again."]
-        XCTAssertTrue(rejected.waitForExistence(timeout: 30), "Expected Auth rejection; a transport/DNS failure is not a passing login probe")
+        XCTAssertTrue(rejected.waitForExistence(timeout: 30), "The deterministic authentication rejection must reach the production alert")
         let evidence = XCTAttachment(screenshot: app.screenshot())
-        evidence.name = "Synthetic invalid-login rejection"
+        evidence.name = "Offline sign-in rejection"
         evidence.lifetime = .keepAlways
         add(evidence)
     }
@@ -111,24 +111,51 @@ final class MindFriendAppUITests: XCTestCase {
         XCTAssertTrue(signInWithEmailButton.isHittable, "Email sign-in button should be hittable")
     }
 
-    // MARK: - Navigation Tests
-
-    #if DEBUG
-    func testDevSkipSignIn() throws {
+    func testRelaunchStartsAtSignedOutFixture() {
         app.launch()
-
-        // Look for dev-only skip button
-        let skipButton = app.buttons["Skip Sign In (Dev Only)"]
-
-        if skipButton.waitForExistence(timeout: 3) {
-            skipButton.tap()
-
-            // Should navigate to main tab view
-            let tabBar = app.tabBars.firstMatch
-            XCTAssertTrue(tabBar.waitForExistence(timeout: 5))
-        }
+        XCTAssertTrue(app.buttons["Continue with Email"].waitForExistence(timeout: 5))
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["Continue with Email"].waitForExistence(timeout: 5))
     }
-    #endif
+
+}
+
+/// Explicit opt-in probe of a configured backend; excluded from deterministic UI CI.
+final class AuthBackendIntegrationTests: XCTestCase {
+    func testConfiguredBackendRejectsSyntheticInvalidCredentials() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["MINDFRIEND_RUN_LIVE_AUTH_TESTS"] == "1" else {
+            throw XCTSkip("Set MINDFRIEND_RUN_LIVE_AUTH_TESTS=1 for the live authentication probe")
+        }
+        let urlString = try XCTUnwrap(environment["MINDFRIEND_LIVE_AUTH_URL"], "Explicit backend URL required")
+        let key = try XCTUnwrap(environment["MINDFRIEND_LIVE_AUTH_ANON_KEY"], "Explicit public anon key required")
+        let baseURL = try XCTUnwrap(URL(string: urlString))
+        XCTAssertEqual(baseURL.scheme, "https")
+        XCTAssertNotNil(baseURL.host)
+        XCTAssertFalse(urlString.contains("YOUR_SUPABASE_PROJECT"))
+        XCTAssertFalse(key.isEmpty)
+        guard baseURL.scheme == "https", baseURL.host != nil,
+              !urlString.contains("YOUR_SUPABASE_PROJECT"), !key.isEmpty else { return }
+        var components = URLComponents(url: baseURL.appendingPathComponent("auth/v1/token"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "grant_type", value: "password")]
+        var request = URLRequest(url: components.url!)
+        request.httpMethod = "POST"
+        request.setValue(key, forHTTPHeaderField: "apikey")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "email": "restoration-probe@example.invalid",
+            "password": "Synthetic-invalid-" + UUID().uuidString
+        ])
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 20
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let (data, response) = try await session.data(for: request)
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 400)
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(body["error_code"] as? String, "invalid_credentials")
+    }
 }
 
 // MARK: - Launch Performance Tests
@@ -138,7 +165,9 @@ final class MindFriendAppLaunchTests: XCTestCase {
     func testLaunchPerformance() throws {
         if #available(iOS 17.0, *) {
             measure(metrics: [XCTApplicationLaunchMetric()]) {
-                XCUIApplication().launch()
+                let app = XCUIApplication()
+                app.launchArguments = ["--auth-ui-test"]
+                app.launch()
             }
         }
     }
