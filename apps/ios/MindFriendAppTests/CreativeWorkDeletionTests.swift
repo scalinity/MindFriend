@@ -131,7 +131,7 @@ private final class CreativeDeleteHTTP: @unchecked Sendable {
         var body: Any = [:]
         if url.path == "/auth/v1/user" {
             body = ["id": owner.uuidString, "aud": "authenticated", "app_metadata": [:], "user_metadata": [:],
-                    "created_at": "2026-01-01T00:00:00Z"] as [String: Any]
+                    "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:00Z"] as [String: Any]
         } else if url.path == "/rest/v1/creative_works" {
             let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
             validFilters = validFilters && query.contains { $0.name == "id" && $0.value?.lowercased() == "eq.\(workID.uuidString.lowercased())" }
