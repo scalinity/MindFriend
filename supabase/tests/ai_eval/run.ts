@@ -16,24 +16,26 @@ if (!target || !outPath) throw new Error("usage: run.ts <target> <out.jsonl> [ki
 const USER = "00000000-0000-4000-8000-000000000001";
 
 // Accepts every reservation and records its amount; no database is touched.
-const reservations: number[] = [];
-const admin = {
-  rpc(_name: string, args: Record<string, unknown>) {
-    reservations.push(Number(args.p_reserve_microdollars));
-    const result = {
-      data: {
-        allowed: true, reason: "reserved", request_id: args.p_request_id, user_id: args.p_user_id,
-        feature: args.p_feature, reserve_microdollars: args.p_reserve_microdollars,
-        month_start: "2026-11-01", reserved_microdollars: args.p_reserve_microdollars,
-        limit_microdollars: 10_000_000,
-        remaining_microdollars: 10_000_000 - Number(args.p_reserve_microdollars),
-      },
-      error: null,
-    };
-    const promise = Promise.resolve(result);
-    return Object.assign(promise, { abortSignal: () => promise });
-  },
-};
+// One collector per case, since cases run concurrently.
+function budgetAdmin(reservations: number[]) {
+  return {
+    rpc(_name: string, args: Record<string, unknown>) {
+      reservations.push(Number(args.p_reserve_microdollars));
+      const result = {
+        data: {
+          allowed: true, reason: "reserved", request_id: args.p_request_id, user_id: args.p_user_id,
+          feature: args.p_feature, reserve_microdollars: args.p_reserve_microdollars,
+          month_start: "2026-11-01", reserved_microdollars: args.p_reserve_microdollars,
+          limit_microdollars: 10_000_000,
+          remaining_microdollars: 10_000_000 - Number(args.p_reserve_microdollars),
+        },
+        error: null,
+      };
+      const promise = Promise.resolve(result);
+      return Object.assign(promise, { abortSignal: () => promise });
+    },
+  };
+}
 
 async function realtimeText(vendor: "openai" | "xai", model: string, c: EvalCase) {
   const instructions = c.messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n");
@@ -92,7 +94,8 @@ async function realtimeText(vendor: "openai" | "xai", model: string, c: EvalCase
 async function runCase(c: EvalCase) {
   const [vendor, model] = target.includes(":") ? target.split(/:(.*)/s) : [target, "grok-4.3"];
   const started = performance.now();
-  reservations.length = 0;
+  const reservations: number[] = [];
+  const admin = budgetAdmin(reservations);
   let status = 0, content = "", finishReason = "", inputTokens = 0, outputTokens = 0;
   if (vendor === "openai-realtime" || vendor === "xai-realtime") {
     const r = await realtimeText(vendor === "openai-realtime" ? "openai" : "xai", model, c);
