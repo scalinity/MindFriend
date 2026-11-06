@@ -170,7 +170,10 @@ public struct MentorshipMessage: Codable, Identifiable, Equatable {
     public let matchId: UUID
     public let senderId: UUID
     public let content: String
-    public var isRead: Bool?
+    public var isRead: Bool? {
+        get { readAt != nil }
+        set { readAt = newValue == true ? (readAt ?? Date()) : nil }
+    }
     public let createdAt: Date
     public var readAt: Date?
     public var isFlagged: Bool?
@@ -181,11 +184,9 @@ public struct MentorshipMessage: Codable, Identifiable, Equatable {
         case matchId = "match_id"
         case senderId = "sender_id"
         case content
-        case isRead = "is_read"
         case createdAt = "created_at"
         case readAt = "read_at"
-        case isFlagged = "is_flagged"
-        case flaggedAt = "flagged_at"
+        case isFlagged = "flagged"
     }
 
     public init(
@@ -203,9 +204,8 @@ public struct MentorshipMessage: Codable, Identifiable, Equatable {
         self.matchId = matchId
         self.senderId = senderId
         self.content = content
-        self.isRead = isRead
         self.createdAt = createdAt
-        self.readAt = readAt
+        self.readAt = readAt ?? (isRead == true ? Date() : nil)
         self.isFlagged = isFlagged
         self.flaggedAt = flaggedAt
     }

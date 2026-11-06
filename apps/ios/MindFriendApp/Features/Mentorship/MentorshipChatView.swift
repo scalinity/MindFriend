@@ -5,12 +5,27 @@ struct MentorshipChatView: View {
     let matchId: UUID
     @EnvironmentObject var container: DependencyContainer
 
+    var body: some View {
+        MentorshipChatContent(matchId: matchId, service: container.mentorshipService)
+    }
+}
+
+private struct MentorshipChatContent: View {
+    let matchId: UUID
+    @ObservedObject var service: MentorshipService
+    @ObservedObject var messagingService: MentorshipMessagingService
+
+    init(matchId: UUID, service: MentorshipService) {
+        self.matchId = matchId
+        self.service = service
+        self.messagingService = service.messagingService
+    }
+
     @State private var messageText = ""
     @State private var showingReportSheet = false
     @State private var showingEndSheet = false
 
-    private var messagingService: MentorshipMessagingService { container.mentorshipService.messagingService }
-    private var safetyService: MentorshipSafetyService { container.mentorshipService.safetyService }
+    private var safetyService: MentorshipSafetyService { service.safetyService }
 
     var body: some View {
         ZStack {
@@ -42,6 +57,10 @@ struct MentorshipChatView: View {
 
                 // Message input
                 VStack(spacing: 8) {
+                    if messagingService.error != nil {
+                        Text("Unable to complete the message request. Your draft is still here; please try again.")
+                            .font(.callout).foregroundStyle(.red)
+                    }
                     HStack(spacing: 8) {
                         TextField("Type a message...", text: $messageText)
                             .textFieldStyle(.roundedBorder)
@@ -49,16 +68,12 @@ struct MentorshipChatView: View {
 
                         Button(action: {
                             if !messageText.trimmingCharacters(in: .whitespaces).isEmpty {
+                                let draft = messageText
                                 Task {
                                     do {
-                                        try await messagingService.sendMessage(
-                                            matchId: matchId,
-                                            content: messageText
-                                        )
-                                        messageText = ""
-                                    } catch {
-                                        // Error handled by messagingService.error
-                                    }
+                                        try await messagingService.sendMessage(matchId: matchId, content: draft)
+                                        if messageText == draft { messageText = "" }
+                                    } catch { /* The observed service keeps the failure visible and draft intact. */ }
                                 }
                             }
                         }) {

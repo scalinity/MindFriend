@@ -51,6 +51,49 @@ final class MentorshipServiceTests: XCTestCase {
         XCTAssertEqual(response.matches.first?.id, response.matches.first?.mentorId)
     }
 
+    private var messageJSON: String {
+        #"{"id":"44444444-4444-4444-8444-444444444444","match_id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","sender_id":"11111111-1111-4111-8111-111111111111","content":"Saved message","created_at":"2026-11-06T12:00:00Z","read_at":null,"flagged":false}"#
+    }
+
+    func testMessageSendUsesWritableFieldsAndReturnsDatabaseRow() async throws {
+        MentorshipFixtureURLProtocol.fixture.prepare([(201, "[\(messageJSON)]")])
+        let saved = try await service().sendMessage(matchId: UUID(uuidString: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")!, content: "Original draft")
+        XCTAssertEqual(saved.content, "Saved message")
+        XCTAssertFalse(saved.isRead ?? true)
+        let request = try XCTUnwrap(MentorshipFixtureURLProtocol.fixture.requests.first)
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: request.body) as? [String: Any])
+        XCTAssertEqual(Set(body.keys), ["match_id", "sender_id", "content"])
+    }
+
+    func testFailedMessageSendExposesErrorWithoutAddingLocalMessage() async {
+        MentorshipFixtureURLProtocol.fixture.prepare([(400, "{\"message\":\"Synthetic failure\"}")])
+        let messages = MentorshipMessagingService(dataService: service())
+        do { try await messages.sendMessage(matchId: UUID(), content: "Retained draft"); XCTFail("Must fail") }
+        catch { }
+        XCTAssertNotNil(messages.error)
+        XCTAssertFalse(messages.isSending)
+        XCTAssertTrue(messages.messages.isEmpty)
+    }
+
+    func testReadAndFlagStateDecodeFromPersistedColumns() throws {
+        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+        let json = messageJSON.replacingOccurrences(of: "\"read_at\":null", with: "\"read_at\":\"2026-11-06T12:01:00Z\"")
+            .replacingOccurrences(of: "\"flagged\":false", with: "\"flagged\":true")
+        let message = try decoder.decode(MentorshipMessage.self, from: Data(json.utf8))
+        XCTAssertEqual(message.isRead, true)
+        XCTAssertTrue(message.isSafetyFlagged)
+    }
+
+    func testMessageMutationsUseValidatedDatabaseFunctions() async throws {
+        MentorshipFixtureURLProtocol.fixture.prepare([(200, "true"), (200, "true"), (200, "true")])
+        let data = service(); let match = UUID(); let message = UUID()
+        try await data.markMessagesAsRead(matchId: match)
+        try await data.flagMessage(messageId: message, reason: "Synthetic concern")
+        try await data.deleteMessage(messageId: message)
+        XCTAssertEqual(MentorshipFixtureURLProtocol.fixture.requests.map { $0.url.lastPathComponent },
+                       ["mark_messages_read", "flag_mentorship_message", "delete_mentorship_message"])
+    }
+
     func testExistingProfileDecodesDatabaseVerificationWithoutCreatingAnother() async throws {
         MentorshipFixtureURLProtocol.fixture.prepare([(200, "[\(profileJSON)]")])
         let profile = try await service().fetchOrCreateProfile()

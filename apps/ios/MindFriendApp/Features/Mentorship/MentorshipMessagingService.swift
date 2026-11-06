@@ -117,10 +117,15 @@ final class MentorshipMessagingService: ObservableObject {
     /// Send a message in the mentorship
     func sendMessage(matchId: UUID, content: String) async throws {
         isSending = true
+        error = nil
         defer { isSending = false }
-
-        let message = try await dataService.sendMessage(matchId: matchId, content: content)
-        messages.append(message)
+        do {
+            let message = try await dataService.sendMessage(matchId: matchId, content: content)
+            if currentMatchId == matchId { messages.append(message) }
+        } catch {
+            if !(error is CancellationError) { self.error = error }
+            throw error
+        }
     }
 
     // MARK: - Message Management
@@ -133,7 +138,7 @@ final class MentorshipMessagingService: ObservableObject {
             try await dataService.markMessagesAsRead(matchId: matchId)
             
             // Update local messages
-            for i in messages.indices {
+            for i in messages.indices where messages[i].senderId != dataService.currentUserId {
                 messages[i].isRead = true
             }
             
@@ -175,7 +180,7 @@ final class MentorshipMessagingService: ObservableObject {
     // MARK: - Private Helpers
 
     private func updateUnreadCount(matchId: UUID) {
-        unreadCount = messages.filter { !($0.isRead ?? false) }.count
+        unreadCount = messages.filter { $0.senderId != dataService.currentUserId && !($0.isRead ?? false) }.count
     }
 
     // MARK: - Computed Properties
@@ -205,7 +210,7 @@ final class MentorshipMessagingService: ObservableObject {
     }
 
     var unreadMessages: [MentorshipMessage] {
-        messages.filter { !($0.isRead ?? false) }
+        messages.filter { $0.senderId != dataService.currentUserId && !($0.isRead ?? false) }
     }
 
     /// Messages grouped by day

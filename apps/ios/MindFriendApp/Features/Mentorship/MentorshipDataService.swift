@@ -47,23 +47,14 @@ private struct MatchEndUpdate: Encodable {
     }
 }
 
-private struct MessageReadUpdate: Encodable {
-    let isRead: Bool
-
+private struct MessageInsert: Encodable {
+    let matchId: UUID
+    let senderId: UUID
+    let content: String
     enum CodingKeys: String, CodingKey {
-        case isRead = "is_read"
-    }
-}
-
-private struct MessageFlagUpdate: Encodable {
-    let isFlagged: Bool
-    let flaggedAt: String
-    let flagReason: String
-
-    enum CodingKeys: String, CodingKey {
-        case isFlagged = "is_flagged"
-        case flaggedAt = "flagged_at"
-        case flagReason = "flag_reason"
+        case matchId = "match_id"
+        case senderId = "sender_id"
+        case content
     }
 }
 
@@ -280,21 +271,17 @@ final class MentorshipDataService {
     // MARK: - Messaging
 
     func sendMessage(matchId: UUID, content: String) async throws -> MentorshipMessage {
-        return try await perform { userId in
-            let message = MentorshipMessage(
-                id: UUID(),
-                matchId: matchId,
-                senderId: userId,
-                content: content,
-                isFlagged: false,
-                flaggedAt: nil
-            )
-            _ = try await self.supabase
-                .from("mentorship_messages")
-                .insert(message)
-                .execute()
-            return message
-
+        try await perform { userId in
+            guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, content.count <= 2000 else {
+                throw MentorshipError.validationError("Enter a message of up to 2,000 characters.")
+            }
+            let rows: [MentorshipMessage] = try await self.supabase.from("mentorship_messages")
+                .insert(MessageInsert(matchId: matchId, senderId: userId, content: content))
+                .select().execute().value
+            guard let saved = rows.first, saved.matchId == matchId, saved.senderId == userId else {
+                throw MentorshipError.networkError("Your message was not confirmed. Please try again.")
+            }
+            return saved
         }
     }
 
@@ -314,41 +301,23 @@ final class MentorshipDataService {
     }
 
     func markMessagesAsRead(matchId: UUID) async throws {
-        return try await perform { userId in
-            let update = MessageReadUpdate(isRead: true)
-            _ = try await self.supabase
-                .from("mentorship_messages")
-                .update(update)
-                .eq("match_id", value: matchId.uuidString)
-                .execute()
-
+        try await perform { _ in
+            let confirmed: Bool = try await self.supabase.rpc("mark_messages_read", params: ["p_match_id": matchId.uuidString]).execute().value
+            guard confirmed else { throw MentorshipError.networkError("Read receipts were not saved.") }
         }
     }
 
     func flagMessage(messageId: UUID, reason: String) async throws {
-        return try await perform { userId in
-            let update = MessageFlagUpdate(
-                isFlagged: true,
-                flaggedAt: ISO8601DateFormatter().string(from: Date()),
-                flagReason: reason
-            )
-            _ = try await self.supabase
-                .from("mentorship_messages")
-                .update(update)
-                .eq("id", value: messageId.uuidString)
-                .execute()
-
+        try await perform { _ in
+            let confirmed: Bool = try await self.supabase.rpc("flag_mentorship_message", params: ["p_message_id": messageId.uuidString, "p_reason": reason]).execute().value
+            guard confirmed else { throw MentorshipError.networkError("The message flag was not saved.") }
         }
     }
 
     func deleteMessage(messageId: UUID) async throws {
-        return try await perform { userId in
-            _ = try await self.supabase
-                .from("mentorship_messages")
-                .delete()
-                .eq("id", value: messageId.uuidString)
-                .execute()
-
+        try await perform { _ in
+            let confirmed: Bool = try await self.supabase.rpc("delete_mentorship_message", params: ["p_message_id": messageId.uuidString]).execute().value
+            guard confirmed else { throw MentorshipError.networkError("The message was not deleted.") }
         }
     }
 
