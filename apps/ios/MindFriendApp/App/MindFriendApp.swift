@@ -5,6 +5,7 @@ import EventKit
 
 @main
 struct MindFriendApp: App {
+    @Environment(\.scenePhase) private var scenePhase
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     @StateObject private var appState = AppState()
@@ -129,34 +130,6 @@ struct MindFriendApp: App {
                                 // Update with verified network data
                                 appState.setAuthenticated(user: profile)
 
-                                // Request notification permission after authentication
-                                if !notificationManager.isAuthorized {
-                                    _ = await notificationManager.requestAuthorization()
-                                }
-
-                                // Start ambient theme service
-                                await container.ambientThemeService.start()
-
-                                // Schedule daily quest reminder if enabled
-                                Task {
-                                    do {
-                                        try await container.questNotificationService.scheduleIfEnabled()
-                                    } catch {
-                                        error.report(context: ["action": "schedule_quest_reminder"])
-                                    }
-                                }
-
-                                // Start intervention monitoring for wellness checks
-                                Task {
-                                    do {
-                                        try await container.interventionService.startMonitoring()
-                                    } catch {
-                                        error.report(context: ["action": "start_intervention_monitoring"])
-                                    }
-                                }
-
-                                // Sync any widget actions made while app was inactive
-                                await appState.processPendingWidgetSyncs(container: container)
                             }
 
                             // Set user context for crash reporting and analytics
@@ -180,8 +153,21 @@ struct MindFriendApp: App {
                         appState.setUnauthenticated()
                     }
                 }
+                .task(id: appState.authenticatedAccountID) {
+                    #if DEBUG
+                    if ProcessInfo.processInfo.arguments.contains("--auth-ui-test") ||
+                       ProcessInfo.processInfo.arguments.contains("--subscription-ui-test") ||
+                       ProcessInfo.processInfo.arguments.contains("--sleep-ui-test") ||
+                       ProcessInfo.processInfo.arguments.contains("--debt-calendar-ui-test") { return }
+                    #endif
+                    guard let owner = appState.authenticatedAccountID else { return }
+                    await container.startAuthenticatedServices(for: owner, appState: appState)
+                }
                 .onReceive(container.supabaseAuthService.$session) { session in
                     if appState.sessionRestored && session == nil { appState.setUnauthenticated() }
+                }
+                .onReceive(container.supabaseAuthService.$signOutWarning) { warning in
+                    if let warning { appState.showError(.apiError(warning)) }
                 }
                 .onReceive(container.supabaseAuthService.$requiresPasswordReset) { showPasswordRecovery = $0 }
                 .sheet(isPresented: $showPasswordRecovery) {
@@ -224,6 +210,14 @@ struct MindFriendApp: App {
                     if case .authenticated = newState {
                         processPendingBuddyInvite()
                     }
+                }
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .active {
+                        Task { await container.refreshAuthenticatedIntegrations(appState: appState) }
+                    }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
+                    Task { await container.refreshAuthenticatedIntegrations(appState: appState) }
                 }
         }
     }

@@ -25,6 +25,11 @@ final class AppState: ObservableObject {
     /// Whether the Supabase session has been restored (safe to make edge function calls)
     @Published var sessionRestored: Bool = false
 
+    var authenticatedAccountID: UUID? {
+        guard authState == .authenticated, sessionRestored, !isUsingCachedData else { return nil }
+        return currentUser?.id
+    }
+
     // MARK: - Entitlements
     @Published var entitlements: Entitlements = .free
 
@@ -159,25 +164,10 @@ final class AppState: ObservableObject {
 
     // MARK: - Widget Sync
 
-    /// Process pending quest completions made from widgets
-    /// Called when app becomes active to sync widget actions to backend
-    /// TODO: SharedDataStore not added to Xcode project target
+    /// Reconcile owner-tagged companion actions and refresh their snapshots.
     func processPendingWidgetSyncs(container: DependencyContainer) async {
-        // Temporarily disabled - SharedDataStore exists but not in build target
-        // let pendingCompletions = SharedDataStore.shared.pendingQuestCompletions
-        // guard !pendingCompletions.isEmpty else { return }
-        //
-        // for questId in pendingCompletions {
-        //     do {
-        //         // Sync quest completion to backend (widget completions don't include reflection/rating)
-        //         try await container.supabaseDataService.completeQuest(id: questId, reflectionNote: nil, rating: nil)
-        //         SharedDataStore.shared.clearPendingQuestCompletion(questId: questId)
-        //         Log.general.info("[WidgetSync] Synced quest completion: \(questId)")
-        //     } catch {
-        //         // Keep in pending queue if sync fails - will retry next time
-        //         Log.general.error("[WidgetSync] Failed to sync quest completion: \(questId), error: \(error)")
-        //     }
-        // }
+        guard let owner = authenticatedAccountID, container.supabaseAuthService.currentUser?.id == owner else { return }
+        await CompanionSyncCoordinator.shared.refresh()
     }
 }
 

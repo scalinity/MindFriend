@@ -164,6 +164,7 @@ final class SupabaseAuthService: ObservableObject {
                     continue
                 }
             } else {
+                if currentUser != nil { onAccountChangeHandler?(nil) }
                 self.session = nil
                 self.currentUser = nil
             }
@@ -225,6 +226,7 @@ final class SupabaseAuthService: ObservableObject {
                     // Token might still work for a bit, don't clear immediately
                     // Only clear if it's actually expired
                     if isTokenExpired(currentSession) {
+                        onAccountChangeHandler?(nil)
                         session = nil
                         currentUser = nil
                         clearCachedAuthState()
@@ -244,6 +246,7 @@ final class SupabaseAuthService: ObservableObject {
             return true
         } catch {
             Log.auth.debug("No existing session: \(error.localizedDescription)")
+            if currentUser != nil { onAccountChangeHandler?(nil) }
             session = nil
             currentUser = nil
             clearCachedAuthState()
@@ -264,6 +267,7 @@ final class SupabaseAuthService: ObservableObject {
     private func applyValidatedSession(_ candidate: Session) throws {
         // A delayed event for another account must not clear a newer session.
         guard let stored = supabase.auth.currentSession else {
+            if currentUser != nil { onAccountChangeHandler?(nil) }
             session = nil
             currentUser = nil
             clearCachedAuthState()

@@ -45,16 +45,26 @@ final class NotificationManager: NSObject, ObservableObject {
     private var container: DependencyContainer?
     private var pendingDeepLink: NotificationDeepLink?
     private var pendingTokenRegistration: String?
+    private var activeUserId: UUID?
+    private var accountGeneration = 0
+    private var registrationTask: Task<Void, Never>?
+    private var registeredOwnerId: UUID?
+    private static let deviceTokenKey = "com.mindfriend.apnsDeviceToken"
+    private static let deviceOwnerKey = "com.mindfriend.apnsDeviceOwner"
 
     override init() {
         self.container = nil
         super.init()
+        deviceToken = UserDefaults.standard.string(forKey: Self.deviceTokenKey)
+        registeredOwnerId = UserDefaults.standard.string(forKey: Self.deviceOwnerKey).flatMap(UUID.init(uuidString:))
         UNUserNotificationCenter.current().delegate = self
     }
 
     init(container: DependencyContainer) {
         self.container = container
         super.init()
+        deviceToken = UserDefaults.standard.string(forKey: Self.deviceTokenKey)
+        registeredOwnerId = UserDefaults.standard.string(forKey: Self.deviceOwnerKey).flatMap(UUID.init(uuidString:))
         UNUserNotificationCenter.current().delegate = self
     }
 
@@ -62,26 +72,76 @@ final class NotificationManager: NSObject, ObservableObject {
     /// Call this after container is initialized to register any pending device token.
     func configure(container: DependencyContainer) {
         self.container = container
+    }
 
-        // Register pending token if we received one before container was available
-        if let pendingToken = pendingTokenRegistration {
-            pendingTokenRegistration = nil
-            Task {
-                await registerDeviceWithBackend(token: pendingToken)
-            }
+    func resetForAccountChange(to userId: UUID?) {
+        let outgoingOwner = activeUserId ?? registeredOwnerId
+        let shouldClearNotifications = userId == nil || (outgoingOwner != nil && outgoingOwner != userId)
+        accountGeneration += 1
+        activeUserId = userId
+        // Keep the prior request in the chain: cancellation can return before the
+        // backend finishes it, allowing an old registration to overwrite the new one.
+        pendingTokenRegistration = deviceToken
+        pendingDeepLink = nil
+        if shouldClearNotifications {
+            UIApplication.shared.unregisterForRemoteNotifications()
+            UNUserNotificationCenter.current().removeAllDeliveredNotifications()
+            cancelAllNotifications()
+            registeredOwnerId = nil
+            UserDefaults.standard.removeObject(forKey: Self.deviceOwnerKey)
         }
+    }
+
+    /// Run after verified sign-in, including an installation with permission already granted.
+    func activateAccount(_ userId: UUID) async {
+        guard container?.supabaseAuthService.currentUser?.id == userId else { return }
+        if activeUserId != userId { resetForAccountChange(to: userId) }
+        let generation = accountGeneration
+        await checkAuthorizationStatus()
+        guard isCurrent(userId, generation) else { return }
+        if !isAuthorized { _ = await requestAuthorization() }
+        guard isCurrent(userId, generation), isAuthorized else { return }
+        if let token = pendingTokenRegistration ?? deviceToken { beginRegistration(token: token) }
+        await registrationTask?.value
+        guard isCurrent(userId, generation) else { return }
+        // A known token may still belong to the outgoing account when offline.
+        // Keep delivery disabled until transfer succeeds; foreground activation retries.
+        guard deviceToken == nil || registeredOwnerId == userId else { return }
+        await registerForRemoteNotifications()
+    }
+
+    /// Remove this device only while the outgoing account can still authorize its row.
+    func prepareForSignOut(userId: UUID) async {
+        let pending = registrationTask
+        resetForAccountChange(to: nil)
+        await pending?.value
+        guard let container, container.supabaseAuthService.currentUser?.id == userId,
+              let token = deviceToken else { return }
+        do {
+            try await container.supabaseDataService.unregisterDevice(apnsToken: token, userId: userId)
+        } catch {
+            // Local APNs delivery is disabled immediately. Every subsequent registration
+            // atomically transfers this token, reconciling an offline outgoing removal.
+            Log.notifications.warning("Device unregistration unavailable; reconciliation will occur at sign-in")
+        }
+    }
+
+    private func isCurrent(_ owner: UUID, _ generation: Int) -> Bool {
+        !Task.isCancelled && accountGeneration == generation && activeUserId == owner && container?.supabaseAuthService.currentUser?.id == owner
     }
 
     // MARK: - Authorization
 
     /// Request notification authorization
     func requestAuthorization() async -> Bool {
+        let owner = activeUserId
+        let generation = accountGeneration
         do {
             let options: UNAuthorizationOptions = [.alert, .badge, .sound, .provisional]
             let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: options)
             isAuthorized = granted
 
-            if granted {
+            if granted, let owner, isCurrent(owner, generation), deviceToken == nil {
                 await registerForRemoteNotifications()
             }
 
@@ -107,9 +167,8 @@ final class NotificationManager: NSObject, ObservableObject {
 
     /// Register for remote notifications on the main queue
     private func registerForRemoteNotifications() async {
-        await MainActor.run {
-            UIApplication.shared.registerForRemoteNotifications()
-        }
+        guard let owner = activeUserId, container?.supabaseAuthService.currentUser?.id == owner else { return }
+        UIApplication.shared.registerForRemoteNotifications()
     }
 
     // MARK: - Device Token
@@ -118,6 +177,7 @@ final class NotificationManager: NSObject, ObservableObject {
     func didRegisterForRemoteNotifications(withDeviceToken deviceToken: Data) {
         let tokenString = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
         self.deviceToken = tokenString
+        UserDefaults.standard.set(tokenString, forKey: Self.deviceTokenKey)
 
         // PRIVACY FIX #009: Redact device token in logs - only show prefix in DEBUG builds
         #if DEBUG
@@ -127,9 +187,12 @@ final class NotificationManager: NSObject, ObservableObject {
         #endif
 
         // Register with backend
-        Task {
-            await registerDeviceWithBackend(token: tokenString)
+        guard let owner = activeUserId, container?.supabaseAuthService.currentUser?.id == owner else {
+            pendingTokenRegistration = tokenString
+            UIApplication.shared.unregisterForRemoteNotifications()
+            return
         }
+        beginRegistration(token: tokenString)
     }
 
     /// Called when registration fails
@@ -138,23 +201,35 @@ final class NotificationManager: NSObject, ObservableObject {
         error.report(context: ["action": "register_remote_notifications"])
     }
 
-    /// Register device token with backend
-    private func registerDeviceWithBackend(token: String) async {
-        guard let container = container else {
-            // Store token for later registration when container is configured
-            pendingTokenRegistration = token
-            Log.notifications.debug("[Notifications] Container not ready, storing token for later")
-            return
+    private func beginRegistration(token: String) {
+        pendingTokenRegistration = token
+        guard let owner = activeUserId, container?.supabaseAuthService.currentUser?.id == owner else { return }
+        let previous = registrationTask
+        let generation = accountGeneration
+        registrationTask = Task { @MainActor [weak self] in
+            await previous?.value
+            guard let self else { return }
+            await registerDeviceWithBackend(token: token, owner: owner, generation: generation)
         }
+    }
+
+    /// Registration is bound to the verified account that started it.
+    private func registerDeviceWithBackend(token: String, owner: UUID, generation: Int) async {
+        guard let container, isCurrent(owner, generation) else { return }
 
         do {
             try await container.supabaseDataService.registerDevice(apnsToken: token)
+            guard isCurrent(owner, generation) else { return }
+            pendingTokenRegistration = nil
+            registeredOwnerId = owner
+            UserDefaults.standard.set(owner.uuidString, forKey: Self.deviceOwnerKey)
 
             Analytics.shared.track(.featureUsed, properties: [
                 "feature": "push_notifications",
                 "action": "device_registered"
             ])
         } catch {
+            guard isCurrent(owner, generation) else { return }
             Log.notifications.debug("[Notifications] Failed to register device: \(error)")
             error.report(context: ["action": "register_device_backend"])
         }
