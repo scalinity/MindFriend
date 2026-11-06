@@ -134,6 +134,32 @@ final class SleepScoreCalculatorTests: XCTestCase {
         XCTAssertLessThanOrEqual(breakdown.timing, 8)
     }
 
+    func testTimingScore_AcrossMidnight_Returns20InBothDirections() {
+        let calendar = Calendar.current
+        let day = calendar.date(from: DateComponents(year: 2026, month: 11, day: 6))!
+        let beforeMidnight = calendar.date(bySettingHour: 23, minute: 50, second: 0, of: day)!
+        let afterMidnight = calendar.date(bySettingHour: 0, minute: 5, second: 0, of: day)!
+        for (bedtime, target) in [(beforeMidnight, afterMidnight), (afterMidnight, beforeMidnight)] {
+            goals.targetBedtime = target
+            XCTAssertEqual(calculator.calculateScore(entry: createEntry(bedtime: bedtime), goals: goals).timing, 20)
+        }
+    }
+
+    func testTimingScore_CircularDistancePreservesEveryBoundary() {
+        let calendar = Calendar.current
+        let midnight = calendar.date(from: DateComponents(year: 2026, month: 11, day: 6))!
+        goals.targetBedtime = midnight
+        let cases = [(0, 20), (15, 20), (16, 17), (30, 17), (31, 14), (45, 14),
+                     (46, 11), (60, 11), (61, 8), (90, 8), (91, 5), (720, 5)]
+        for (minutes, expectedScore) in cases {
+            for direction in [-1, 1] {
+                let bedtime = calendar.date(byAdding: .minute, value: direction * minutes, to: midnight)!
+                XCTAssertEqual(calculator.calculateScore(entry: createEntry(bedtime: bedtime), goals: goals).timing,
+                               expectedScore, "Offset: \(direction * minutes) minutes")
+            }
+        }
+    }
+
     // MARK: - Stages Score Tests (0-20 points)
 
     func testStagesScore_OptimalDeepAndREM_Returns20() {
