@@ -10,20 +10,22 @@ import UserNotifications
 @MainActor
 final class InterventionNotificationManagerTests: XCTestCase {
     var manager: InterventionNotificationManager!
+    private var center: InterventionNotificationCenterFixture!
 
     override func setUp() async throws {
-        manager = InterventionNotificationManager()
+        center = InterventionNotificationCenterFixture()
+        manager = InterventionNotificationManager(notificationCenter: center)
     }
 
     override func tearDown() async throws {
-        await manager.cancelPendingInterventions()
         manager = nil
+        center = nil
     }
 
     // MARK: - Test Helpers
 
     private func makeMicroMomentTemplate(
-        id: String = "test-123",
+        id: String = "11111111-1111-4111-8111-111111111111",
         name: String = "Test Moment",
         type: MicroMomentType = .breathing,
         title: String = "Calm Breath",
@@ -55,10 +57,22 @@ final class InterventionNotificationManagerTests: XCTestCase {
     // MARK: - Permission Tests
 
     func testHasNotificationPermissionWhenNotDetermined() async {
+        center.status = .notDetermined
         let hasPermission = await manager.hasNotificationPermission()
-
-        // In test environment without permission, should be false
         XCTAssertFalse(hasPermission)
+    }
+
+    func testHasNotificationPermissionWhenAuthorized() async {
+        center.status = .authorized
+        let hasPermission = await manager.hasNotificationPermission()
+        XCTAssertTrue(hasPermission)
+    }
+
+    func testRequestPermissionUsesAlertSoundAndBadgeAndPreservesDenial() async {
+        center.permissionGranted = false
+        let granted = await manager.requestNotificationPermission()
+        XCTAssertFalse(granted)
+        XCTAssertEqual(center.requestedOptions, [.alert, .sound, .badge])
     }
 
     // MARK: - Notification Content Tests
@@ -68,19 +82,23 @@ final class InterventionNotificationManagerTests: XCTestCase {
         let context = "You have a meeting in 45 minutes"
         let deliveryId = UUID()
 
-        // This will fail in test environment without permission, but we can verify the method exists
-        do {
-            try await manager.deliverIntervention(intervention, context: context, deliveryId: deliveryId)
-            XCTFail("Expected to throw permission error in test environment")
-        } catch {
-            // Expected - no permission in test environment
-            print("Expected error: \(error)")
-        }
+        try await manager.deliverIntervention(intervention, context: context, deliveryId: deliveryId)
+        let request = try XCTUnwrap(center.added.first)
+        XCTAssertEqual(request.identifier, deliveryId.uuidString)
+        XCTAssertNil(request.trigger)
+        XCTAssertEqual(request.content.title, "🌬️ Calm Breath")
+        XCTAssertEqual(request.content.body, "You have a meeting in 45 minutes (1 min)")
+        XCTAssertEqual(request.content.categoryIdentifier, "INTERVENTION")
+        XCTAssertEqual(request.content.threadIdentifier, "interventions")
+        let link = try XCTUnwrap(InterventionDeepLink.parse(from: request.content.userInfo))
+        XCTAssertEqual(link.deliveryId, deliveryId)
+        XCTAssertEqual(link.interventionId, UUID(uuidString: intervention.id))
+        XCTAssertEqual(link.action, .open)
     }
 
     func testScheduleInterventionForFuture() async throws {
         let intervention = makeMicroMomentTemplate(
-            id: "test-456",
+            id: "22222222-2222-4222-8222-222222222222",
             name: "Grounding Exercise",
             type: .grounding,
             title: "5-4-3-2-1 technique",
@@ -90,18 +108,36 @@ final class InterventionNotificationManagerTests: XCTestCase {
         let scheduledDate = Date().addingTimeInterval(60 * 60) // 1 hour from now
         let deliveryId = UUID()
 
+        try await manager.scheduleIntervention(
+            intervention, at: scheduledDate, context: "Prepare for upcoming event", deliveryId: deliveryId
+        )
+        let request = try XCTUnwrap(center.added.first)
+        let trigger = try XCTUnwrap(request.trigger as? UNTimeIntervalNotificationTrigger)
+        XCTAssertEqual(trigger.timeInterval, 3600, accuracy: 2)
+        XCTAssertFalse(trigger.repeats)
+        XCTAssertEqual(request.identifier, deliveryId.uuidString)
+        XCTAssertEqual(request.content.body, "Prepare for upcoming event (2 min)")
+        XCTAssertEqual(InterventionDeepLink.parse(from: request.content.userInfo)?.interventionId,
+                       UUID(uuidString: intervention.id))
+    }
+
+    func testSchedulingFailurePropagatesWithoutRecordingDelivery() async {
+        center.addError = InterventionNotificationCenterFixture.Failure.rejected
         do {
-            try await manager.scheduleIntervention(
-                intervention,
-                at: scheduledDate,
-                context: "Prepare for upcoming event",
-                deliveryId: deliveryId
-            )
-            XCTFail("Expected to throw permission error in test environment")
+            try await manager.deliverIntervention(makeMicroMomentTemplate(), context: "", deliveryId: UUID())
+            XCTFail("Expected the injected scheduling failure")
         } catch {
-            // Expected - no permission in test environment
-            print("Expected error: \(error)")
+            XCTAssertEqual(error as? InterventionNotificationCenterFixture.Failure, .rejected)
         }
+        XCTAssertTrue(center.added.isEmpty)
+        XCTAssertNil(center.badgeCount)
+    }
+
+    func testInvalidInterventionIDDoesNotCreateAValidDeepLink() async throws {
+        try await manager.deliverIntervention(makeMicroMomentTemplate(id: "invalid"), context: "", deliveryId: UUID())
+        let request = try XCTUnwrap(center.added.first)
+        XCTAssertNil(InterventionDeepLink.parse(from: request.content.userInfo))
+        XCTAssertEqual(request.content.userInfo["error"] as? String, "invalid_intervention_id")
     }
 
     // MARK: - Deep Link Parsing Tests
@@ -202,18 +238,30 @@ final class InterventionNotificationManagerTests: XCTestCase {
     // MARK: - Badge Count Tests
 
     func testUpdateBadgeCountReflectsPendingCount() async {
-        // Note: In test environment, this will always be 0
+        center.pending = [pendingRequest("one", category: "INTERVENTION"),
+                          pendingRequest("two", category: "INTERVENTION"),
+                          pendingRequest("other", category: "MEDICATION")]
         await manager.updateBadgeCount()
-
-        // Verify method completes without error
-        // Actual badge count verification would require permission
+        XCTAssertEqual(center.badgeCount, 2)
     }
 
     func testCancelPendingInterventions() async {
+        center.pending = [pendingRequest("intervention", category: "INTERVENTION"),
+                          pendingRequest("other", category: "MEDICATION")]
         await manager.cancelPendingInterventions()
 
         let pendingCount = await manager.getPendingCount()
         XCTAssertEqual(pendingCount, 0)
+        XCTAssertEqual(center.pending.map(\.identifier), ["other"])
+        XCTAssertEqual(center.removed, ["intervention"])
+        XCTAssertEqual(center.badgeCount, 0)
+    }
+
+    private func pendingRequest(_ id: String, category: String) -> UNNotificationRequest {
+        let content = UNMutableNotificationContent()
+        content.categoryIdentifier = category
+        return UNNotificationRequest(identifier: id, content: content,
+                                     trigger: UNTimeIntervalNotificationTrigger(timeInterval: 60, repeats: false))
     }
 
     // MARK: - Type Tests
@@ -239,4 +287,37 @@ final class InterventionNotificationManagerTests: XCTestCase {
         let intervention = makeMicroMomentTemplate(durationSeconds: 180)
         XCTAssertEqual(intervention.durationSeconds, 180)
     }
+}
+
+@MainActor
+private final class InterventionNotificationCenterFixture: InterventionNotificationCenter {
+    enum Failure: Error { case rejected }
+    var status: UNAuthorizationStatus = .authorized
+    var permissionGranted = true
+    var requestedOptions: UNAuthorizationOptions?
+    var addError: Error?
+    var added: [UNNotificationRequest] = []
+    var pending: [UNNotificationRequest] = []
+    var removed: [String] = []
+    var badgeCount: Int?
+    var categories: Set<UNNotificationCategory> = []
+
+    func requestAuthorization(options: UNAuthorizationOptions) async throws -> Bool {
+        requestedOptions = options
+        return permissionGranted
+    }
+    func authorizationStatus() async -> UNAuthorizationStatus { status }
+    func add(_ request: UNNotificationRequest) async throws {
+        if let addError { throw addError }
+        added.append(request)
+        if request.trigger != nil { pending.append(request) }
+    }
+    func pendingNotificationRequests() async -> [UNNotificationRequest] { pending }
+    func removePendingNotificationRequests(withIdentifiers identifiers: [String]) {
+        removed += identifiers
+        pending.removeAll { identifiers.contains($0.identifier) }
+    }
+    func removeDeliveredNotifications(withIdentifiers identifiers: [String]) {}
+    func setNotificationCategories(_ categories: Set<UNNotificationCategory>) { self.categories = categories }
+    func setBadgeCount(_ newBadgeCount: Int) async throws { badgeCount = newBadgeCount }
 }
