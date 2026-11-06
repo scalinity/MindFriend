@@ -19,3 +19,41 @@ final class CrashReporterTestsPlaceholder: XCTestCase {
         XCTAssertTrue(true, "CrashReporterTests disabled - scrubText/scrubPII are private")
     }
 }
+
+final class CrashReportingEnvironmentTests: XCTestCase {
+    func testDebugBuildIsDevelopment() {
+        XCTAssertEqual(
+            CrashReportingEnvironment.resolve(isDebugBuild: true, hasEmbeddedProvisioningProfile: false, receiptFileName: "receipt"),
+            CrashReportingEnvironment.development
+        )
+    }
+
+    func testSelfInstalledReleaseBuildIsDevelopment() {
+        XCTAssertEqual(
+            CrashReportingEnvironment.resolve(isDebugBuild: false, hasEmbeddedProvisioningProfile: true, receiptFileName: nil),
+            CrashReportingEnvironment.development
+        )
+        XCTAssertEqual(
+            CrashReportingEnvironment.resolve(isDebugBuild: false, hasEmbeddedProvisioningProfile: true, receiptFileName: "receipt"),
+            CrashReportingEnvironment.development
+        )
+    }
+
+    func testTestFlightInstallIsTestFlight() {
+        XCTAssertEqual(
+            CrashReportingEnvironment.resolve(isDebugBuild: false, hasEmbeddedProvisioningProfile: false, receiptFileName: "sandboxReceipt"),
+            CrashReportingEnvironment.testFlight
+        )
+    }
+
+    func testAppStoreInstallIsProduction() {
+        XCTAssertEqual(
+            CrashReportingEnvironment.resolve(isDebugBuild: false, hasEmbeddedProvisioningProfile: false, receiptFileName: "receipt"),
+            CrashReportingEnvironment.production
+        )
+        XCTAssertEqual(
+            CrashReportingEnvironment.resolve(isDebugBuild: false, hasEmbeddedProvisioningProfile: false, receiptFileName: nil),
+            CrashReportingEnvironment.production
+        )
+    }
+}
