@@ -19,13 +19,18 @@ actor VaultEncryptionService: VaultEncrypting {
 
     // MARK: - Constants
 
-    private let keychainService = "com.mindfriend.vault"
-    private let keychainAccount = "encryption-key"
+    private let keychainService: String
+    private let keychainAccount: String
 
     // MARK: - Cached State
 
     /// Cache key in memory after first retrieval for performance
     private var cachedKey: SymmetricKey?
+
+    init(keychainService: String = "com.mindfriend.vault", keychainAccount: String = "encryption-key") {
+        self.keychainService = keychainService
+        self.keychainAccount = keychainAccount
+    }
 
     // MARK: - Public Interface
 
