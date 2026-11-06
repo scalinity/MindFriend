@@ -18,6 +18,7 @@ SUITES = (
     "sponsored_entitlement.sql",
     "family_member_removal.sql",
     "family_invitation_acceptance.sql",
+    "apple_account_notifications.sql",
 )
 
 
@@ -77,7 +78,7 @@ def main():
             if time.monotonic() >= deadline:
                 raise RuntimeError("Synthetic database did not finish platform initialization")
             time.sleep(1)
-        for filename in ("platform-bootstrap.sql", "platform-storage-fixture.sql"):
+        for filename in ("platform-bootstrap.sql", "platform-auth-fixture.sql", "platform-storage-fixture.sql"):
             sql(ROOT / "supabase/tests/ci" / filename)
         migrations = sorted((ROOT / "supabase/migrations").glob("*.sql"))
         if not migrations:

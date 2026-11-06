@@ -1,6 +1,5 @@
 -- Synthetic platform compatibility only. Not an application migration.
 -- The postgres image includes legacy Auth helpers; these accept current JWT claims.
-ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS email_confirmed_at timestamptz;
 CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$
  SELECT COALESCE(NULLIF(current_setting('request.jwt.claim', true), ''),
                  NULLIF(current_setting('request.jwt.claims', true), ''))::jsonb;
