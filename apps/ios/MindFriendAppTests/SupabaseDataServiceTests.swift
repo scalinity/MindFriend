@@ -115,6 +115,19 @@ final class SupabaseDataServiceTests: XCTestCase {
         XCTAssertFalse(service.isUniqueConstraintViolation(genericError))
     }
 
+    func testQuietHourUpdatesDistinguishOmittedValuesFromExplicitClear() throws {
+        func payload(_ updates: [String: AnyEncodable]) throws -> [String: Any] {
+            try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(updates)) as? [String: Any])
+        }
+        XCTAssertTrue(try payload(SupabaseDataService.quietHourUpdates(start: nil, end: nil, clear: false)).isEmpty)
+        let enabled = try payload(SupabaseDataService.quietHourUpdates(start: "22:00", end: "07:00", clear: false))
+        XCTAssertEqual(enabled["quiet_hours_start_local"] as? String, "22:00")
+        XCTAssertEqual(enabled["quiet_hours_end_local"] as? String, "07:00")
+        let cleared = try payload(SupabaseDataService.quietHourUpdates(start: "22:00", end: "07:00", clear: true))
+        XCTAssertTrue(cleared["quiet_hours_start_local"] is NSNull)
+        XCTAssertTrue(cleared["quiet_hours_end_local"] is NSNull)
+    }
+
     // MARK: - Invite Code Generation Tests
 
     func testGenerateInviteCode_Format() {

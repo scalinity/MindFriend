@@ -2729,6 +2729,7 @@ final class SupabaseDataService: ObservableObject {
         dailyQuestTimeLocal: String? = nil,
         quietHoursStartLocal: String? = nil,
         quietHoursEndLocal: String? = nil,
+        clearQuietHours: Bool = false,
         remindersEnabled: Bool? = nil,
         nudgeAfterDaysInactive: Int? = nil,
         shareMoodInCircles: Bool? = nil,
@@ -2746,12 +2747,7 @@ final class SupabaseDataService: ObservableObject {
         if let dailyQuestTimeLocal = dailyQuestTimeLocal {
             updates["daily_quest_time_local"] = AnyEncodable(dailyQuestTimeLocal)
         }
-        if let quietHoursStartLocal = quietHoursStartLocal {
-            updates["quiet_hours_start_local"] = AnyEncodable(quietHoursStartLocal)
-        }
-        if let quietHoursEndLocal = quietHoursEndLocal {
-            updates["quiet_hours_end_local"] = AnyEncodable(quietHoursEndLocal)
-        }
+        updates.merge(Self.quietHourUpdates(start: quietHoursStartLocal, end: quietHoursEndLocal, clear: clearQuietHours)) { _, new in new }
         if let remindersEnabled = remindersEnabled {
             updates["reminders_enabled"] = AnyEncodable(remindersEnabled)
         }
@@ -2798,6 +2794,18 @@ final class SupabaseDataService: ObservableObject {
     }
 
     // MARK: - Smart Notifications
+
+    /// Omission preserves saved settings; an explicit clear sends database nulls.
+    nonisolated static func quietHourUpdates(start: String?, end: String?, clear: Bool) -> [String: AnyEncodable] {
+        if clear {
+            return ["quiet_hours_start_local": AnyEncodable(Optional<String>.none),
+                    "quiet_hours_end_local": AnyEncodable(Optional<String>.none)]
+        }
+        var updates: [String: AnyEncodable] = [:]
+        if let start { updates["quiet_hours_start_local"] = AnyEncodable(start) }
+        if let end { updates["quiet_hours_end_local"] = AnyEncodable(end) }
+        return updates
+    }
 
     /// Update notification preferences
     func updateNotificationSettings(
