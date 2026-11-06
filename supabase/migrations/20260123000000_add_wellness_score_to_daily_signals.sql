@@ -1,3 +1,8 @@
+-- Production records this text under both 20260122235900 and 20260123000000.
+-- Every statement is already re-runnable (IF NOT EXISTS, COMMENT ON), so it
+-- succeeds after 20260122235900 created the same columns and index. No
+-- statement differs from the text production applied.
+
 -- Add wellness score columns to existing daily_signals table
 -- This extends the risk-scoring data with wellness-specific calculations
 --
