@@ -532,45 +532,15 @@ final class BillingService: ObservableObject {
             throw BillingError.notFamilyAdmin
         }
 
-        struct RemoveMemberUpdate: Encodable {
-            let status: String
-            let removedAt: String
-
-            enum CodingKeys: String, CodingKey {
-                case status
-                case removedAt = "removed_at"
-            }
+        struct RemovalResponse: Decodable {
+            let success: Bool
         }
-
-        try await supabase
-            .from("family_members")
-            .update(RemoveMemberUpdate(
-                status: "removed",
-                removedAt: ISO8601DateFormatter().string(from: Date())
-            ))
-            .eq("id", value: memberId)
-            .execute()
-
-        // Decrement seats used on admin subscription
-        if let sub = subscription {
-            struct SeatsUpdate: Encodable {
-                let seatsUsed: Int
-                let updatedAt: String
-
-                enum CodingKeys: String, CodingKey {
-                    case seatsUsed = "seats_used"
-                    case updatedAt = "updated_at"
-                }
-            }
-
-            try await supabase
-                .from("subscriptions")
-                .update(SeatsUpdate(
-                    seatsUsed: max(1, sub.seatsUsed - 1),
-                    updatedAt: ISO8601DateFormatter().string(from: Date())
-                ))
-                .eq("id", value: sub.id)
-                .execute()
+        let result: RemovalResponse = try await supabase.functions.invoke(
+            "remove-family-member",
+            options: .init(body: ["member_id": memberId])
+        )
+        guard result.success else {
+            throw BillingError.inviteFailed("Unable to remove family member")
         }
 
         // Reload family members
