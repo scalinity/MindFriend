@@ -182,6 +182,15 @@ actor MentorshipDataService {
         return matches
     }
 
+    func fetchMatch(matchId: UUID) async throws -> MentorshipMatch {
+        let rows: [MentorshipMatch] = try await supabase.from("mentorship_matches")
+            .select().eq("id", value: matchId.uuidString).execute().value
+        guard let match = rows.first, match.mentorId == userId || match.menteeId == userId else {
+            throw MentorshipError.notFound("The mentorship could not be loaded.")
+        }
+        return match
+    }
+
     func acceptMentorshipRequest(matchId: UUID) async throws -> MentorshipMatch {
         let update = MatchStatusUpdate(status: "active")
         let updated: [MentorshipMatch] = try await supabase

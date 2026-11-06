@@ -1,149 +1,151 @@
-import { assertEquals, assertExists } from "jsr:@std/assert@1.0.19";
+import { assert, assertEquals } from "jsr:@std/assert@1.0.19";
+import { handler } from "./index.ts";
 
-/**
- * Test suite for find-mentor-matches Edge Function
- * Tests mentor search, ranking, and compatibility scoring
- */
+const owner = "11111111-1111-4111-8111-111111111111";
+const mentor = "22222222-2222-4222-8222-222222222222";
+Deno.env.set("SUPABASE_URL", "https://mentorship-fixture.invalid");
+Deno.env.set("SUPABASE_ANON_KEY", "synthetic-anon");
+const json = (value: unknown, status = 200) =>
+  new Response(JSON.stringify(value), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+const request = (body: unknown = {}, authorization = "Bearer synthetic-user") =>
+  new Request("https://edge-fixture.invalid", {
+    method: "POST",
+    headers: { Authorization: authorization },
+    body: JSON.stringify(body),
+  });
 
-// Test 1: Valid mentor search with authentication
-Deno.test("find-mentor-matches: Valid request returns matches", async () => {
-  const testUserId = "test-mentee-123";
-  const testToken = "test-jwt-token";
-
-  // Mocking validation (in real test, would use actual local Supabase)
-  const requestBody = {
-    limit: 5,
-    offset: 0,
+Deno.test("discovery uses authenticated RPC signature and maps actual result columns", async () => {
+  const original = globalThis.fetch;
+  let rpcCalls = 0;
+  globalThis.fetch = async (input, init) => {
+    const req = new Request(input, init);
+    const url = new URL(req.url);
+    assertEquals(req.headers.get("Authorization"), "Bearer synthetic-user");
+    if (url.pathname === "/auth/v1/user") return json({ id: owner });
+    if (
+      url.pathname === "/rest/v1/mentorship_profiles" &&
+      url.searchParams.get("select") === "seeking_areas"
+    ) {
+      assertEquals(url.searchParams.get("user_id"), `eq.${owner}`);
+      return json({ seeking_areas: ["stress"] });
+    }
+    if (url.pathname === "/rest/v1/rpc/find_mentor_matches") {
+      rpcCalls++;
+      assertEquals(await req.json(), {
+        p_user_id: owner,
+        p_seeking_areas: ["stress"],
+        p_limit: 5,
+      });
+      return json([{
+        mentor_user_id: mentor,
+        profile_id: "unused-profile-id",
+        expertise_areas: ["stress"],
+        languages: ["en"],
+        availability_hours_week: 2,
+        compatibility_score: 87.5,
+        match_reason: "Shared expertise",
+      }]);
+    }
+    if (url.pathname === "/rest/v1/mentorship_profiles") {
+      assertEquals(url.searchParams.get("select"), "user_id,timezone,verified");
+      return json([{
+        user_id: mentor,
+        timezone: "America/New_York",
+        verified: true,
+      }]);
+    }
+    throw new Error(`Unexpected fixture request: ${url.pathname}`);
   };
-
-  assertEquals(requestBody.limit, 5);
-  assertEquals(requestBody.offset, 0);
-});
-
-// Test 2: Pagination validation
-Deno.test("find-mentor-matches: Pagination limit capped at 100", async () => {
-  const limit = 150; // Exceeds max
-  const safeLimit = Math.min(limit, 100);
-
-  assertEquals(safeLimit, 100);
-});
-
-// Test 3: Invalid pagination (negative offset)
-Deno.test("find-mentor-matches: Negative offset rejected", async () => {
-  const offset = -1;
-  const isValid = offset >= 0;
-
-  assertEquals(isValid, false);
-});
-
-// Test 4: Missing authorization header
-Deno.test("find-mentor-matches: Missing auth returns 401", async () => {
-  const hasAuthHeader = false;
-
-  assertEquals(hasAuthHeader, false);
-});
-
-// Test 5: Compatibility scoring normalization
-Deno.test("find-mentor-matches: Scores normalized to 2 decimals", async () => {
-  const rawScore = 0.856733;
-  const normalized = Math.round(rawScore * 100) / 100;
-
-  assertEquals(normalized, 0.86);
-});
-
-// Test 6: Output sanitization
-Deno.test("find-mentor-matches: Output fields sanitized", async () => {
-  const unsanitizedName = "<script>alert('xss')</script>Alice";
-  const entityMap: Record<string, string> = {
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;",
-    "/": "&#x2F;",
-  };
-
-  const sanitized = unsanitizedName.replace(
-    /[&<>"'\/]/g,
-    (char) => entityMap[char] || char
-  );
-
-  assertEquals(
-    sanitized,
-    "&lt;script&gt;alert(&#39;xss&#39;)&lt;&#x2F;script&gt;Alice"
-  );
-});
-
-// Test 7: Match result structure validation
-Deno.test("find-mentor-matches: Response has required fields", async () => {
-  const mockMatch = {
-    mentor_id: "uuid-123",
-    mentor_name: "John Doe",
-    mentor_alias: "jd-1024",
-    expertise_areas: ["anxiety", "stress"],
-    availability_hours_week: 5,
-    languages: ["en", "es"],
-    timezone: "America/New_York",
-    compatibility_score: 0.87,
-    match_reasons: ["Expertise match", "Language overlap"],
-    is_verified: true,
-  };
-
-  assertExists(mockMatch.mentor_id);
-  assertExists(mockMatch.mentor_name);
-  assertExists(mockMatch.compatibility_score);
-  assertExists(mockMatch.match_reasons);
-  assertEquals(Array.isArray(mockMatch.match_reasons), true);
-});
-
-// Test 8: Empty results handling
-Deno.test("find-mentor-matches: Returns empty array when no matches", async () => {
-  const matches: any[] = [];
-
-  assertEquals(matches.length, 0);
-  assertEquals(Array.isArray(matches), true);
-});
-
-// Test 9: Limit and offset applied correctly
-Deno.test("find-mentor-matches: Pagination limit respected", async () => {
-  const requestedLimit = 10;
-  const results = new Array(10).fill(null).map((_, i) => ({
-    id: `mentor-${i}`,
-  }));
-
-  assertEquals(results.length, requestedLimit);
-});
-
-// Test 10: Multiple matches returned in order
-Deno.test("find-mentor-matches: Multiple matches ordered by score", async () => {
-  const matches = [
-    { mentor_id: "m1", compatibility_score: 0.95 },
-    { mentor_id: "m2", compatibility_score: 0.87 },
-    { mentor_id: "m3", compatibility_score: 0.76 },
-  ];
-
-  // Verify descending order
-  for (let i = 0; i < matches.length - 1; i++) {
-    assertEquals(
-      matches[i].compatibility_score >= matches[i + 1].compatibility_score,
-      true
-    );
+  try {
+    const response = await handler(request());
+    assertEquals(response.status, 200);
+    const body = await response.json();
+    assertEquals(body.matches[0].mentor_id, mentor);
+    assertEquals(body.matches[0].match_reasons, ["Shared expertise"]);
+    assertEquals(body.matches[0].compatibility_score, 87.5);
+    assertEquals(body.matches[0].timezone, "America/New_York");
+    assertEquals(body.matches[0].is_verified, true);
+    assertEquals(body.count, 1);
+    assertEquals(rpcCalls, 1);
+  } finally {
+    globalThis.fetch = original;
   }
 });
 
-// Test 11: Error handling for database failures
-Deno.test("find-mentor-matches: Database error returns 500", async () => {
-  const dbError = new Error("Connection failed");
-  const statusCode = 500;
-
-  assertEquals(statusCode, 500);
-  assertExists(dbError.message);
+Deno.test("discovery fails closed on unauthenticated, invalid pagination, profile and RPC errors", async () => {
+  const original = globalThis.fetch;
+  for (const failure of ["auth", "profile", "rpc", "pagination"]) {
+    let rpcCalls = 0;
+    globalThis.fetch = async (input, init) => {
+      const path = new URL(new Request(input, init).url).pathname;
+      if (path === "/auth/v1/user") {
+        return failure === "auth"
+          ? json({ message: "Invalid JWT" }, 401)
+          : json({ id: owner });
+      }
+      if (path === "/rest/v1/mentorship_profiles") {
+        return failure === "profile"
+          ? json({ message: "Synthetic failure" }, 400)
+          : json({ seeking_areas: ["stress"] });
+      }
+      if (path === "/rest/v1/rpc/find_mentor_matches") {
+        rpcCalls++;
+        return json({ message: "Synthetic failure" }, 400);
+      }
+      throw new Error("Unexpected request");
+    };
+    try {
+      const response = await handler(
+        request(failure === "pagination" ? { limit: 1.5 } : {}),
+      );
+      assertEquals(
+        response.status,
+        failure === "auth" ? 401 : failure === "pagination" ? 400 : 500,
+      );
+      assertEquals(rpcCalls, failure === "rpc" ? 1 : 0);
+    } finally {
+      globalThis.fetch = original;
+    }
+  }
+  assertEquals((await handler(request({}, ""))).status, 401);
 });
 
-// Test 12: Response timestamp included
-Deno.test("find-mentor-matches: Response includes timestamp", async () => {
-  const timestamp = new Date().toISOString();
-  const isValidISO = /^\d{4}-\d{2}-\d{2}T/.test(timestamp);
-
-  assertEquals(isValidISO, true);
+Deno.test("discovery paginates the bounded ten-candidate RPC without unsupported offset argument", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    const req = new Request(input, init);
+    const url = new URL(req.url);
+    if (url.pathname === "/auth/v1/user") return json({ id: owner });
+    if (url.pathname.endsWith("/rpc/find_mentor_matches")) {
+      const body = await req.json();
+      assertEquals(body.p_limit, 10);
+      assert(!("p_offset" in body));
+      return json(
+        Array.from(
+          { length: 10 },
+          (_, i) => ({
+            mentor_user_id: mentor,
+            expertise_areas: [],
+            languages: ["en"],
+            compatibility_score: 100 - i,
+          }),
+        ),
+      );
+    }
+    if (url.searchParams.get("select") === "seeking_areas") {
+      return json({ seeking_areas: [] });
+    }
+    return json([{ user_id: mentor, timezone: "UTC", verified: true }]);
+  };
+  try {
+    const response = await handler(request({ offset: 5, limit: 5 }));
+    const body = await response.json();
+    assertEquals(body.count, 5);
+    assertEquals(body.matches[0].compatibility_score, 95);
+  } finally {
+    globalThis.fetch = original;
+  }
 });

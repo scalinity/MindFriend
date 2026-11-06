@@ -68,32 +68,23 @@ final class MentorshipMatchingService: ObservableObject {
     func requestMentorship(
         mentorId: UUID,
         introductionMessage: String
-    ) async {
+    ) async throws -> UUID {
         isLoading = true
         error = nil
-
+        defer { isLoading = false }
         do {
-            let response = try await dataService.requestMentorship(
-                mentorId: mentorId,
-                introductionMessage: introductionMessage
-            )
-
-            if response.success, let matchId = response.matchId {
-                // Add to pending requests
-                let match = MentorshipMatch(
-                    id: matchId,
-                    mentorId: mentorId,
-                    menteeId: UUID(),
-                    status: .pending,
-                    introductionMessage: introductionMessage
-                )
-                pendingRequests.append(match)
+            let response = try await dataService.requestMentorship(mentorId: mentorId, introductionMessage: introductionMessage)
+            guard response.success, let matchId = response.matchId else {
+                throw MentorshipError.networkError("The mentorship request was not confirmed.")
             }
+            let match = try await dataService.fetchMatch(matchId: matchId)
+            pendingRequests.removeAll { $0.id == match.id }
+            pendingRequests.append(match)
+            return match.id
         } catch {
             self.error = error
+            throw error
         }
-
-        isLoading = false
     }
 
     // MARK: - Loading Matches
@@ -106,6 +97,7 @@ final class MentorshipMatchingService: ObservableObject {
         do {
             let matches = try await dataService.fetchMatches(role: .both)
             userMatches = matches
+            self.matches = matches
 
             // Separate by status
             pendingRequests = matches.filter { $0.status == .pending }

@@ -1,218 +1,107 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import {
   sanitizeInput,
-  validateUUID,
   validateIntroductionMessage,
+  validateUUID,
 } from "../_shared/validation.ts";
 
-interface RequestMentorshipBody {
-  mentor_id: string;
-  introduction_message: string;
-}
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
 
-interface MentorshipRequestResponse {
-  success: boolean;
-  match_id?: string;
-  status?: string;
-  error?: string;
-  message?: string;
-}
-
-Deno.serve(async (req: Request) => {
-  // Only allow POST
-  if (req.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
+export async function handler(req: Request): Promise<Response> {
+  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+  const authorization = req.headers.get("Authorization");
+  if (!authorization?.startsWith("Bearer ")) {
+    return json({ error: "Unauthorized" }, 401);
   }
 
   try {
-    // Extract JWT from Authorization header
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Missing authorization header" }),
-        { status: 401, headers: { "Content-Type": "application/json" } }
-      );
-    }
-
-    // Initialize Supabase client
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      {
+        global: { headers: { Authorization: authorization } },
+        auth: { persistSession: false, autoRefreshToken: false },
+      },
     );
-
-    // Get user from JWT
-    const token = authHeader.replace("Bearer ", "");
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser(token);
-
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
+    const { data: { user }, error: authError } = await supabase.auth.getUser(
+      authorization.slice(7),
+    );
+    if (authError || !user) return json({ error: "Unauthorized" }, 401);
+    const body = await req.json().catch(() => null);
+    if (
+      !body || !validateUUID(body.mentor_id) ||
+      !validateIntroductionMessage(body.introduction_message).valid
+    ) {
+      return json({ error: "Invalid mentor or introduction message" }, 400);
+    }
+    if (user.id.toLowerCase() === body.mentor_id.toLowerCase()) {
+      return json({ error: "Cannot mentor yourself" }, 400);
     }
 
-    // Parse and validate request body
-    const body: RequestMentorshipBody = await req.json();
-    const { mentor_id, introduction_message } = body;
-
-    // Validate mentor_id is a valid UUID
-    if (!validateUUID(mentor_id)) {
-      return new Response(
-        JSON.stringify({ error: "Invalid mentor_id format" }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
-      );
+    // This transaction validates eligibility/capacity and generates both aliases.
+    const { data: matchID, error } = await supabase.rpc(
+      "create_mentorship_request",
+      {
+        p_mentor_id: body.mentor_id,
+        p_introduction_message: sanitizeInput(body.introduction_message.trim()),
+      },
+    );
+    if (error) {
+      if (
+        error.message === "Match already exists" ||
+        error.message === "Mentor at capacity"
+      ) {
+        return json({ error: error.message }, 409);
+      }
+      if (error.message === "Mentor not available") {
+        return json({ error: error.message }, 400);
+      }
+      throw error;
+    }
+    if (!validateUUID(matchID)) throw new Error("Missing persisted match ID");
+    const { data: match, error: readError } = await supabase.from(
+      "mentorship_matches",
+    )
+      .select("id,status,created_at").eq("id", matchID).single();
+    if (readError || !match) {
+      throw readError ?? new Error("Saved match unavailable");
     }
 
-    // Validate introduction message
-    const messageValidation = validateIntroductionMessage(introduction_message);
-    if (!messageValidation.valid) {
-      return new Response(
-        JSON.stringify({
-          error: "Invalid introduction message",
-          details: messageValidation.errors,
-        }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
-      );
-    }
-
-    // Prevent self-mentorship
-    if (user.id === mentor_id) {
-      return new Response(
-        JSON.stringify({ error: "Cannot request mentorship from yourself" }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
-      );
-    }
-
-    // Check if mentor exists and is available
-    const { data: mentorProfile, error: mentorError } = await supabase
-      .from("mentorship_profiles")
-      .select("is_mentor_available, user_id")
-      .eq("user_id", mentor_id)
-      .single();
-
-    if (mentorError || !mentorProfile) {
-      return new Response(
-        JSON.stringify({ error: "Mentor not found or profile incomplete" }),
-        { status: 404, headers: { "Content-Type": "application/json" } }
-      );
-    }
-
-    if (!mentorProfile.is_mentor_available) {
-      return new Response(
-        JSON.stringify({
-          error: "Mentor is not currently available",
-          message: "This mentor is not accepting new mentees at the moment",
-        }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
-      );
-    }
-
-    // Check if a pending request already exists
-    const { data: existingRequest } = await supabase
-      .from("mentorship_matches")
-      .select("id, status")
-      .eq("mentee_id", user.id)
-      .eq("mentor_id", mentor_id)
-      .eq("status", "pending")
-      .single();
-
-    if (existingRequest) {
-      return new Response(
-        JSON.stringify({
-          error: "Request already pending",
-          message: "You have already sent a mentorship request to this mentor",
-          match_id: existingRequest.id,
-        }),
-        { status: 409, headers: { "Content-Type": "application/json" } }
-      );
-    }
-
-    // Create mentorship match with pending status
-    const { data: match, error: createError } = await supabase
-      .from("mentorship_matches")
-      .insert({
-        mentor_id,
-        mentee_id: user.id,
-        status: "pending",
-        introduction_message: sanitizeInput(introduction_message),
-        compatibility_score: null,
-        match_reason: null,
-        created_at: new Date().toISOString(),
-        expires_at: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(), // 72 hours
-      })
-      .select("id, status, created_at")
-      .single();
-
-    if (createError) {
-      console.error("Error creating mentorship request:", createError);
-      return new Response(
-        JSON.stringify({
-          error: "Failed to create mentorship request",
-          details: createError.message,
-        }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
-      );
-    }
-
-    // Send notification to mentor (via send-notification function)
+    // Notification failure does not undo an already persisted request.
+    const admin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      {
+        auth: { persistSession: false, autoRefreshToken: false },
+      },
+    );
     try {
-      const mentorNotificationResp = await supabase.functions.invoke(
-        "send-notification",
-        {
-          body: {
-            user_id: mentor_id,
-            title: "New Mentorship Request",
-            body: "Someone is interested in being your mentee",
-            type: "mentorship_request",
-            data: {
-              match_id: match.id,
-              mentee_id: user.id,
-            },
-          },
-        }
-      );
-
-      if (mentorNotificationResp.error) {
-        console.error(
-          "Error sending notification to mentor:",
-          mentorNotificationResp.error
-        );
-        // Don't fail the request if notification fails
-      }
-    } catch (notificationError) {
-      console.error("Notification service error:", notificationError);
-      // Continue - notification is best-effort
+      await admin.functions.invoke("send-notification", {
+        body: {
+          user_id: body.mentor_id,
+          title: "New Mentorship Request",
+          body: "Someone is interested in being your mentee",
+          type: "mentorship_request",
+          data: { match_id: match.id },
+        },
+      });
+    } catch {
+      /* The saved match remains available in the mentor's request list. */
     }
-
-    // Return success response
-    return new Response(
-      JSON.stringify({
-        success: true,
-        match_id: match.id,
-        status: match.status,
-        message:
-          "Mentorship request sent! The mentor will review your request within 24 hours.",
-        timestamp: match.created_at,
-      }),
-      {
-        status: 201,
-        headers: { "Content-Type": "application/json" },
-      }
-    );
-  } catch (error) {
-    console.error("Unexpected error in request-mentorship:", error);
-    return new Response(
-      JSON.stringify({
-        error: "Internal server error",
-        details: error instanceof Error ? error.message : "Unknown error",
-      }),
-      {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      }
-    );
+    return json({
+      success: true,
+      match_id: match.id,
+      status: match.status,
+      message: "Mentorship request sent.",
+      timestamp: match.created_at,
+    }, 201);
+  } catch {
+    return json({ error: "Failed to create mentorship request" }, 500);
   }
-});
+}
+
+if (import.meta.main) Deno.serve(handler);

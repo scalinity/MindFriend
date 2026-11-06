@@ -22,6 +22,13 @@ final class MentorshipServiceTests: XCTestCase {
         return MentorshipDataService(supabase: client, userId: owner)
     }
 
+    func testDiscoveryIdentityComesFromMentorIdentifier() throws {
+        let json = #"{"success":true,"matches":[{"mentor_id":"22222222-2222-4222-8222-222222222222","mentor_name":"Mentor","mentor_alias":"","expertise_areas":["stress"],"availability_hours_week":2,"languages":["en"],"timezone":"America/New_York","compatibility_score":87.5,"match_reasons":["Shared expertise"],"is_verified":true}],"count":1,"timestamp":"2026-11-06T12:00:00Z"}"#
+        let response = try JSONDecoder().decode(FindMentorMatchesResponse.self, from: Data(json.utf8))
+        XCTAssertEqual(response.matches.first?.id, profileID)
+        XCTAssertEqual(response.matches.first?.id, response.matches.first?.mentorId)
+    }
+
     func testExistingProfileDecodesDatabaseVerificationWithoutCreatingAnother() async throws {
         MentorshipFixtureURLProtocol.fixture.prepare([(200, "[\(profileJSON)]")])
         let profile = try await service().fetchOrCreateProfile()

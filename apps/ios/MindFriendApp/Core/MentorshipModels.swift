@@ -153,6 +153,9 @@ public enum MentorshipRole: String, Codable, Equatable {
 public enum MentorshipStatus: String, Codable, Equatable {
     case pending = "pending"
     case active = "active"
+    case accepted = "accepted"
+    case declined = "declined"
+    case suspended = "suspended"
     case completed = "completed"
     case cancelled = "cancelled"
     case ended = "ended"
@@ -391,7 +394,7 @@ public struct FindMentorMatchesResponse: Codable {
     }
 
     public struct MentorMatch: Codable, Identifiable {
-        public let id: UUID
+        public var id: UUID { mentorId }
         public let mentorId: UUID
         public let mentorName: String
         public let mentorAlias: String
@@ -404,7 +407,6 @@ public struct FindMentorMatchesResponse: Codable {
         public let isVerified: Bool
 
         enum CodingKeys: String, CodingKey {
-            case id
             case mentorId = "mentor_id"
             case mentorName = "mentor_name"
             case mentorAlias = "mentor_alias"
