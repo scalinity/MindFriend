@@ -3,6 +3,61 @@ import struct Supabase.Session
 import struct Supabase.User
 @testable import MindFriendApp
 
+final class DurablePathwayKeyTests: XCTestCase {
+    private var keychainService: String!
+    private let firstOwner = UUID()
+    private let secondOwner = UUID()
+
+    override func setUp() {
+        super.setUp()
+        keychainService = "app.mindfriend.tests.pathway.\(UUID().uuidString)"
+    }
+
+    override func tearDownWithError() throws {
+        for identifier in ["legacy", firstOwner.uuidString, secondOwner.uuidString] {
+            try SecureStorage(keychainService: keychainService, keyIdentifier: identifier).deleteEncryptionKey()
+        }
+        try super.tearDownWithError()
+    }
+
+    private func makeService(owner: UUID?) -> PathwayEncryptionService {
+        let namespace = keychainService!
+        return PathwayEncryptionService(
+            secureStorage: SecureStorage(keychainService: namespace, keyIdentifier: "legacy"),
+            userId: owner,
+            storageForUser: { SecureStorage(keychainService: namespace, keyIdentifier: $0.uuidString) }
+        )
+    }
+
+    func testJournalSurvivesLogoutAndServiceRecreation() throws {
+        let service = makeService(owner: firstOwner)
+        let ciphertext = try service.encryptString("Retained pathway journal")
+        service.setCurrentUser(nil)
+        XCTAssertThrowsError(try service.decryptString(ciphertext))
+
+        let restored = makeService(owner: firstOwner)
+        XCTAssertEqual(try restored.decryptString(ciphertext), "Retained pathway journal")
+    }
+
+    func testAnotherAccountCannotDecryptNewJournal() throws {
+        let service = makeService(owner: firstOwner)
+        let ciphertext = try service.encryptString("First account journal")
+        service.setCurrentUser(secondOwner)
+        XCTAssertThrowsError(try service.decryptString(ciphertext))
+        let secondCiphertext = try service.encryptString("Second account journal")
+        service.setCurrentUser(firstOwner)
+        XCTAssertEqual(try service.decryptString(ciphertext), "First account journal")
+        XCTAssertThrowsError(try service.decryptString(secondCiphertext))
+    }
+
+    func testLegacyJournalStillDecryptsAfterMemoryKeyEviction() throws {
+        let legacy = SecureStorage(keychainService: keychainService, keyIdentifier: "legacy")
+        let ciphertext = try legacy.encrypt("Legacy retained journal").base64EncodedString()
+        legacy.clearCachedKey()
+        XCTAssertEqual(try makeService(owner: firstOwner).decryptString(ciphertext), "Legacy retained journal")
+    }
+}
+
 /// Tests for SupabaseAuthService authentication flows
 /// Session fixtures do not initialize the shared client or read device credentials.
 final class SupabaseAuthServiceTests: XCTestCase {

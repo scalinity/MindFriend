@@ -24,6 +24,9 @@ final class DependencyContainer: ObservableObject {
             // to prevent cross-user leakage on shared devices / account switch.
             ProgressStoryLoadCache.clear()
         }
+        service.setAccountChangeHandler { [weak self] userId in
+            self?.pathwayEncryptionService.setCurrentUser(userId)
+        }
         return service
     }()
 
@@ -576,7 +579,7 @@ final class DependencyContainer: ObservableObject {
 
     // ✅ ARCHITECTURE FIX: Centralize PathwayEncryptionService creation
     lazy var pathwayEncryptionService: PathwayEncryptionService = {
-        PathwayEncryptionService(secureStorage: secureStorage)
+        PathwayEncryptionService(secureStorage: secureStorage, userId: supabaseAuthService.currentUser?.id)
     }()
 
     // ✅ ARCHITECTURE FIX: Centralize NetworkRetryService creation

@@ -82,6 +82,7 @@ final class SupabaseAuthService: ObservableObject {
     // ✅ ARCHITECTURE FIX: Remove PathwayCacheService dependency (breaks circular reference)
     // Use closure injection instead
     private var onLogoutHandler: (() -> Void)?
+    private var onAccountChangeHandler: ((UUID?) -> Void)?
     private let authStorage = AuthClient.Configuration.defaultLocalStorage
     private let recoveryIntentKey = "com.mindfriend.passwordRecoveryIntent"
     private var logoutCleanupTask: Task<Void, Never>?
@@ -122,6 +123,10 @@ final class SupabaseAuthService: ObservableObject {
     // ✅ ARCHITECTURE FIX: Set logout handler (called by DependencyContainer)
     func setLogoutHandler(_ handler: @escaping () -> Void) {
         self.onLogoutHandler = handler
+    }
+
+    func setAccountChangeHandler(_ handler: @escaping (UUID?) -> Void) {
+        onAccountChangeHandler = handler
     }
 
     // MARK: - Auth State Listener
@@ -253,6 +258,9 @@ final class SupabaseAuthService: ObservableObject {
             throw AuthError.sessionUnavailable
         }
         let validated = try Self.validatedSession(stored, expectedUserId: candidate.user.id)
+        if currentUser?.id != validated.user.id {
+            onAccountChangeHandler?(validated.user.id)
+        }
         session = validated
         currentUser = validated.user
     }
@@ -550,6 +558,7 @@ final class SupabaseAuthService: ObservableObject {
 
     private func clearLocalAuthState(userId: String?) {
         if userId == nil, currentUser == nil, session == nil, logoutCleanupTask != nil { return }
+        onAccountChangeHandler?(nil)
         session = nil
         currentUser = nil
         requiresPasswordReset = false
@@ -561,11 +570,9 @@ final class SupabaseAuthService: ObservableObject {
         // Clear process caches synchronously, before another account can sign in.
         onLogoutHandler?()
         try? authStorage.remove(key: recoveryIntentKey)
-        do {
-            try secureStorage.deleteEncryptionKey()
-        } catch {
-            Log.auth.warning("Failed to clear secure storage on logout: \(error.localizedDescription)")
-        }
+        // The legacy key also protects persisted pathway journals. Logout may evict
+        // plaintext/key caches, but must not destroy the only key for retained data.
+        secureStorage.clearCachedKey()
         let previousCleanup = logoutCleanupTask
         logoutCleanupTask = Task { @MainActor in
             await previousCleanup?.value
