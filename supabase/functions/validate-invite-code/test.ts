@@ -7,8 +7,8 @@
 import {
   assertEquals,
   assertExists,
-} from "https://deno.land/std@0.208.0/assert/mod.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+} from "jsr:@std/assert@1.0.19";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "http://localhost:54321";
 const SUPABASE_ANON_KEY =
@@ -149,9 +149,9 @@ Deno.test(
 );
 
 // ============================================================================
-// TEST 3.4: Validation increments uses counter
+// TEST 3.4: Validation leaves uses counter unchanged; joining consumes a use
 // ============================================================================
-Deno.test("validate-invite-code increments uses_count on success", async () => {
+Deno.test("validate-invite-code preserves uses_count on success", async () => {
   const supabase = getServiceRoleClient();
   const testToken = await getTestUserToken();
   const testCode = "COUNTERCODE";
@@ -166,9 +166,11 @@ Deno.test("validate-invite-code increments uses_count on success", async () => {
   const initialCount = beforeData?.uses_count ?? 0;
 
   // Validate the code
-  await callValidateInvite(testCode, testToken);
+  const response = await callValidateInvite(testCode, testToken);
+  assertEquals(response.status, 200);
+  assertEquals(response.data.valid, true);
 
-  // Check uses count incremented
+  // Checking a code must not consume a use before a successful join.
   const { data: afterData } = await supabase
     .from("organization_invites")
     .select("uses_count")
@@ -177,8 +179,8 @@ Deno.test("validate-invite-code increments uses_count on success", async () => {
 
   assertEquals(
     afterData?.uses_count,
-    initialCount + 1,
-    "uses_count should increment by 1",
+    initialCount,
+    "validation should not consume an invite use",
   );
 });
 

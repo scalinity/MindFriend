@@ -3,21 +3,15 @@
 // Processes Stripe webhook events for organization billing
 // ============================================================================
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import Stripe from "https://esm.sh/stripe@14.14.0";
-
-const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
-  apiVersion: "2023-10-16",
-  httpClient: Stripe.createFetchHttpClient(),
-});
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
+import Stripe from "npm:stripe@23.0.0";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET")!;
 // Removed TEST_WEBHOOK_BYPASS_AUTH - signature verification must never be bypassed
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   try {
     // Verify webhook signature
     const signature = req.headers.get("stripe-signature");
@@ -33,9 +27,13 @@ serve(async (req) => {
 
     // Always verify webhook signature - never bypass in production
     try {
-      event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+      const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+      if (!stripeKey || !webhookSecret) return new Response(JSON.stringify({ error: "Webhook not configured" }), { status: 503 });
+      // Incoming webhook API versions remain configured in Stripe; no billing API calls.
+      const stripe = new Stripe(stripeKey, { httpClient: Stripe.createFetchHttpClient(), maxNetworkRetries: 0 });
+      event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret, undefined, Stripe.createSubtleCryptoProvider());
     } catch (err) {
-      console.error("Webhook signature verification failed:", err);
+      console.error("Webhook signature verification failed", err instanceof Error ? err.name : "UnknownError");
       return new Response(JSON.stringify({ error: "Invalid signature" }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
@@ -89,7 +87,7 @@ serve(async (req) => {
 
 async function handleSubscriptionUpdated(
   event: Stripe.Event,
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
 ) {
   const subscription = event.data.object as Stripe.Subscription;
   const organizationId = subscription.metadata?.organization_id;
@@ -146,7 +144,7 @@ async function handleSubscriptionUpdated(
 
 async function handleSubscriptionDeleted(
   event: Stripe.Event,
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
 ) {
   const subscription = event.data.object as Stripe.Subscription;
   const organizationId = subscription.metadata?.organization_id;
@@ -156,39 +154,53 @@ async function handleSubscriptionDeleted(
     return;
   }
 
-  // Update organization status to churned
-  const { error: updateError } = await supabase
+  const endedAt = new Date(
+    (subscription.ended_at ?? event.created) * 1000,
+  ).toISOString();
+
+  // A delayed deletion for a replaced Stripe subscription must not cancel the
+  // organization's current sponsorship.
+  const { data: organization, error: updateError } = await supabase
     .from("organizations")
     .update({
       status: "churned",
       subscription_status: "canceled",
-      updated_at: new Date().toISOString(),
+      updated_at: new Date(event.created * 1000).toISOString(),
     })
-    .eq("id", organizationId);
+    .eq("id", organizationId)
+    .eq("stripe_subscription_id", subscription.id)
+    .select("id")
+    .maybeSingle();
 
   if (updateError) {
     console.error("Failed to update organization status:", updateError);
     throw updateError;
   }
 
-  // Revoke premium access for all members
+  if (!organization) return;
+
+  // Retain the sponsorship's source and organization as history. A personal
+  // purchase may have replaced this user's plan without clearing those fields.
   const { error: subscriptionError } = await supabase
     .from("subscriptions")
     .update({
-      tier: "free",
-      organization_id: null,
-      access_source: null,
-      ended_at: new Date().toISOString(),
+      status: "cancelled",
+      expires_at: endedAt,
+      updated_at: new Date(event.created * 1000).toISOString(),
     })
     .eq("organization_id", organizationId)
-    .eq("access_source", "organization_sponsored");
+    .eq("access_source", "organization_sponsored")
+    .eq("plan_type", "organization")
+    .eq("product_id", "org_sponsored_premium")
+    .eq("status", "active");
 
   if (subscriptionError) {
     console.error("Failed to revoke member subscriptions:", subscriptionError);
+    throw subscriptionError;
   }
 
   // Log to billing audit
-  await supabase.from("billing_audit_log").insert({
+  const { error: auditError } = await supabase.from("billing_audit_log").insert({
     organization_id: organizationId,
     event_type: "subscription_canceled",
     message: "Subscription canceled by Stripe",
@@ -200,12 +212,14 @@ async function handleSubscriptionDeleted(
     },
   });
 
+  if (auditError) throw auditError;
+
   console.log(`Organization ${organizationId} subscription canceled`);
 }
 
 async function handlePaymentFailed(
   event: Stripe.Event,
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
 ) {
   const invoice = event.data.object as Stripe.Invoice;
   const organizationId = invoice.metadata?.organization_id;
@@ -256,7 +270,7 @@ async function handlePaymentFailed(
 
 async function handleInvoicePaid(
   event: Stripe.Event,
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
 ) {
   const invoice = event.data.object as Stripe.Invoice;
   const organizationId = invoice.metadata?.organization_id;
@@ -279,7 +293,8 @@ async function handleInvoicePaid(
       invoice_id: invoice.id,
       amount_paid: invoice.amount_paid,
       billing_reason: invoice.billing_reason,
-      subscription_id: invoice.subscription,
+      subscription_id: (invoice as Stripe.Invoice & { subscription?: string | { id: string } | null }).subscription
+        ?? invoice.parent?.subscription_details?.subscription ?? null,
     },
   });
 
@@ -290,7 +305,7 @@ async function handleInvoicePaid(
 
 async function handlePaymentSucceeded(
   event: Stripe.Event,
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
 ) {
   const invoice = event.data.object as Stripe.Invoice;
   const organizationId = invoice.metadata?.organization_id;
