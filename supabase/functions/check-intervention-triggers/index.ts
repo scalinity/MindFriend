@@ -5,6 +5,7 @@ import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supa
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { logSanitized, sanitizeForLogging } from "../_shared/logging-sanitization.ts";
 import { authenticateRequest, isAuthError } from "../_shared/auth.ts";
+import { checkedTimeZone, localDate, localDayStart } from "../calculate-debt-score/calendar.ts";
 
 // Configuration Constants
 const RETRY_MAX_ATTEMPTS = 3;
@@ -230,7 +231,7 @@ Deno.serve(async (req) => {
           .maybeSingle()
       );
       
-      const userTimezone = settings?.timezone || "UTC";
+      const userTimezone = checkedTimeZone(settings?.timezone || "UTC");
 
       // 1. Load user preferences
       const { data: prefs, error: prefsError } = await withRetry(() =>
@@ -333,13 +334,14 @@ Deno.serve(async (req) => {
   }
 });
 
-async function evaluateTriggers(
+export async function evaluateTriggers(
   supabase: SupabaseClient,
   userId: string,
   prefs: any,
   userTimezone: string,
   authHeader: string,
   context?: TriggerContext,
+  now: Date = new Date(),
 ): Promise<CheckTriggersResponse> {
   // CRITICAL FIX: Use same timezone-aware approach
   const formatter = new Intl.DateTimeFormat("en-US", {
@@ -350,7 +352,7 @@ async function evaluateTriggers(
     hour12: false,
   });
   
-  const parts = formatter.formatToParts(new Date());
+  const parts = formatter.formatToParts(now);
   const hour = parts.find(p => p.type === "hour")?.value || "00";
   const minute = parts.find(p => p.type === "minute")?.value || "00";
   const second = parts.find(p => p.type === "second")?.value || "00";
@@ -376,31 +378,20 @@ async function evaluateTriggers(
     }
   }
 
-  // 3. Check daily limit using user's local date
-  const now = new Date();
-  const formatterDate = new Intl.DateTimeFormat("en-US", {
-    timeZone: userTimezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-  
-  const dateParts = formatterDate.formatToParts(now);
-  const year = dateParts.find(p => p.type === "year")?.value || "2024";
-  const month = dateParts.find(p => p.type === "month")?.value || "01";
-  const day = dateParts.find(p => p.type === "day")?.value || "01";
-  
-  // Construct start and end of day in user's timezone
-  const todayStart = new Date(`${year}-${month}-${day}T00:00:00`);
-  const todayEnd = new Date(`${year}-${month}-${day}T23:59:59.999`);
+  // Calendar labels advance by one day; the instants can be 23 or 25 hours apart.
+  const today = localDate(now, userTimezone);
+  const nextDate = new Date(`${today}T00:00:00Z`);
+  nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+  const todayStart = localDayStart(today, userTimezone);
+  const tomorrowStart = localDayStart(nextDate.toISOString().slice(0, 10), userTimezone);
 
   const { count: todayCount, error: countError } = await withRetry(() =>
     supabase
       .from("intervention_deliveries")
       .select("*", { count: "exact", head: true })
       .eq("user_id", userId)
-      .gte("delivered_at", todayStart.toISOString())
-      .lte("delivered_at", todayEnd.toISOString())
+      .gte("delivered_at", todayStart)
+      .lt("delivered_at", tomorrowStart)
   );
 
   if (countError) {
@@ -414,7 +405,7 @@ async function evaluateTriggers(
 
   // 4. Check cooldown (4 hours after last dismissal)
   const cooldownHours = COOLDOWN_HOURS;
-  const nowCooldown = new Date();
+  const nowCooldown = now;
   const cooldownCutoff = new Date(
     nowCooldown.getTime() - cooldownHours * 60 * 60 * 1000,
   );
