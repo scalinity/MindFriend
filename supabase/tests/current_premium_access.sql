@@ -83,6 +83,43 @@ DO $$ BEGIN
  IF public.revoke_verified_apple_transaction('17100000-0000-4000-8000-000000000001','synthetic_expired','synthetic_current') THEN RAISE EXCEPTION 'Refund replay changed purchase'; END IF;
  IF has_function_privilege('authenticated','public.revoke_verified_apple_transaction(uuid,text,text)','EXECUTE') THEN RAISE EXCEPTION 'Client refund mutation allowed'; END IF;
 END $$;
+-- Exercise the actual family-admin refund trigger, not just the read predicate.
+INSERT INTO auth.users(id,email,raw_user_meta_data) VALUES
+ ('17100000-0000-4000-8000-000000000004','shared-new@example.invalid','{}'),
+ ('17100000-0000-4000-8000-000000000005','shared-legacy@example.invalid','{}');
+INSERT INTO public.profiles(id) VALUES('17100000-0000-4000-8000-000000000004'),('17100000-0000-4000-8000-000000000005') ON CONFLICT(id) DO NOTHING;
+UPDATE public.family_members SET status='active' WHERE user_id='17100000-0000-4000-8000-000000000003';
+INSERT INTO public.family_members(family_id,user_id,status) VALUES
+ ('17100000-0000-4000-8000-000000000010','17100000-0000-4000-8000-000000000001','active'),
+ ('17100000-0000-4000-8000-000000000010','17100000-0000-4000-8000-000000000004','active'),
+ ('17100000-0000-4000-8000-000000000010','17100000-0000-4000-8000-000000000005','active');
+UPDATE public.organizations SET subscription_status='active' WHERE id='17100000-0000-4000-8000-000000000020';
+UPDATE public.subscriptions SET status='active',expires_at=now()+interval '2 days',last_transaction_id='independent-current'
+ WHERE user_id='17100000-0000-4000-8000-000000000001';
+INSERT INTO public.subscriptions(user_id,product_id,original_transaction_id,status,expires_at,plan_type,family_id,is_family_admin,access_source,organization_id) VALUES
+ ('17100000-0000-4000-8000-000000000003','org_sponsored_premium','synthetic_org_receipt','active',NULL,'organization','17100000-0000-4000-8000-000000000010',false,'organization_sponsored','17100000-0000-4000-8000-000000000020'),
+ ('17100000-0000-4000-8000-000000000004','synthetic_family','family-17100000-0000-4000-8000-000000000010-17100000-0000-4000-8000-000000000004','active',now()+interval '1 day','family','17100000-0000-4000-8000-000000000010',false,'personal',NULL),
+ ('17100000-0000-4000-8000-000000000005','synthetic_family','family-synthetic_family_purchase','active',now()+interval '1 day','family','17100000-0000-4000-8000-000000000010',false,'personal',NULL);
+CREATE TEMP TABLE independent_purchase_snapshot AS SELECT user_id,to_jsonb(s) AS value FROM public.subscriptions s
+ WHERE user_id IN ('17100000-0000-4000-8000-000000000001','17100000-0000-4000-8000-000000000003');
+DO $$ DECLARE source_status text; BEGIN
+ FOREACH source_status IN ARRAY ARRAY['active','grace_period'] LOOP
+  UPDATE public.subscriptions SET status=source_status,expires_at=now()+interval '1 day',last_transaction_id='family-admin-current'
+    WHERE user_id='17100000-0000-4000-8000-000000000002';
+  UPDATE public.subscriptions SET status='active',expires_at=now()+interval '1 day'
+    WHERE user_id IN ('17100000-0000-4000-8000-000000000004','17100000-0000-4000-8000-000000000005');
+  UPDATE public.profiles SET subscription_tier='premium',daily_ai_quota=-1 WHERE id::text LIKE '17100000-%';
+  IF NOT public.revoke_verified_apple_transaction('17100000-0000-4000-8000-000000000002','synthetic_family_purchase','family-admin-current') THEN RAISE EXCEPTION 'Family admin refund ignored'; END IF;
+  IF EXISTS(SELECT 1 FROM public.subscriptions s JOIN independent_purchase_snapshot old USING(user_id) WHERE to_jsonb(s) IS DISTINCT FROM old.value) THEN RAISE EXCEPTION 'Family refund destroyed independent personal or sponsored receipt'; END IF;
+  IF EXISTS(SELECT 1 FROM public.profiles WHERE id IN ('17100000-0000-4000-8000-000000000001','17100000-0000-4000-8000-000000000003') AND (subscription_tier <> 'premium' OR daily_ai_quota <> -1)) THEN RAISE EXCEPTION 'Family refund removed independent premium profile'; END IF;
+  IF EXISTS(SELECT 1 FROM public.subscriptions WHERE user_id IN ('17100000-0000-4000-8000-000000000004','17100000-0000-4000-8000-000000000005') AND (status <> 'expired' OR expires_at > now())) THEN RAISE EXCEPTION 'Family-derived access survived refund from %',source_status; END IF;
+  IF EXISTS(SELECT 1 FROM public.profiles WHERE id IN ('17100000-0000-4000-8000-000000000004','17100000-0000-4000-8000-000000000005') AND (subscription_tier <> 'free' OR daily_ai_quota <> 5)) THEN RAISE EXCEPTION 'Shared profile survived refund from %',source_status; END IF;
+ END LOOP;
+ IF (SELECT count(*) FROM public.billing_events WHERE user_id IN ('17100000-0000-4000-8000-000000000004','17100000-0000-4000-8000-000000000005') AND event_type='subscription_expired') <> 4 THEN RAISE EXCEPTION 'Family refund emitted duplicate or missing expiry events'; END IF;
+ IF has_function_privilege('anon','public.compute_current_premium_access(uuid)','EXECUTE') OR
+    has_function_privilege('authenticated','public.compute_current_premium_access(uuid)','EXECUTE') THEN RAISE EXCEPTION 'Internal entitlement calculation exposed'; END IF;
+ IF (SELECT count(*) FROM pg_trigger WHERE tgrelid='public.subscriptions'::regclass AND tgfoid='public.revoke_family_premium_on_expiry()'::regprocedure) <> 1 THEN RAISE EXCEPTION 'Duplicate family expiry trigger remains'; END IF;
+END $$;
 SELECT set_config('request.jwt.claims','{"role":"authenticated","sub":"17100000-0000-4000-8000-000000000001"}',true);
 SELECT set_config('request.jwt.claim.role','authenticated',true);
 SELECT set_config('request.jwt.claim.sub','17100000-0000-4000-8000-000000000001',true);

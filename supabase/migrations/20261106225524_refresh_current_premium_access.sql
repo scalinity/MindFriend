@@ -1,19 +1,11 @@
 BEGIN;
 
 -- Profiles are a display cache, never proof that a purchase is still current.
-CREATE OR REPLACE FUNCTION public.has_current_premium_access(p_user_id uuid)
-RETURNS boolean LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
-BEGIN
-  IF p_user_id IS NULL THEN
-    RAISE EXCEPTION 'Missing entitlement owner' USING ERRCODE = '22023';
-  END IF;
-  IF coalesce(auth.role(), '') <> 'service_role' AND (
-    coalesce(auth.role(), '') <> 'authenticated' OR auth.uid() IS NULL OR auth.uid() <> p_user_id
-    OR coalesce((auth.jwt()->>'is_anonymous')::boolean, false)
-  ) THEN
-    RAISE EXCEPTION 'Unauthorized' USING ERRCODE = '42501';
-  END IF;
-  RETURN EXISTS (
+-- Internal calculation shared by guarded RPCs and subscription triggers. A
+-- scheduled expiry trigger may have no request JWT; clients cannot call this.
+CREATE OR REPLACE FUNCTION public.compute_current_premium_access(p_user_id uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT EXISTS (
     SELECT 1 FROM public.subscriptions s WHERE s.user_id = p_user_id
       AND s.status IN ('active', 'grace_period') AND (s.expires_at IS NULL OR s.expires_at > now())
       -- A sponsored or shared row requires its current source of access below.
@@ -35,6 +27,23 @@ BEGIN
     WHERE m.user_id = p_user_id AND m.is_active = true
       AND o.status = 'active' AND o.subscription_status = 'active'
   );
+$$;
+REVOKE ALL ON FUNCTION public.compute_current_premium_access(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.compute_current_premium_access(uuid) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.has_current_premium_access(p_user_id uuid)
+RETURNS boolean LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  IF p_user_id IS NULL THEN
+    RAISE EXCEPTION 'Missing entitlement owner' USING ERRCODE = '22023';
+  END IF;
+  IF coalesce(auth.role(), '') <> 'service_role' AND (
+    coalesce(auth.role(), '') <> 'authenticated' OR auth.uid() IS NULL OR auth.uid() <> p_user_id
+    OR coalesce((auth.jwt()->>'is_anonymous')::boolean, false)
+  ) THEN
+    RAISE EXCEPTION 'Unauthorized' USING ERRCODE = '42501';
+  END IF;
+  RETURN public.compute_current_premium_access(p_user_id);
 END $$;
 REVOKE ALL ON FUNCTION public.has_current_premium_access(uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.has_current_premium_access(uuid) TO authenticated, service_role;
@@ -187,5 +196,48 @@ REVOKE ALL ON FUNCTION public.reserve_ai_image_quota(uuid) FROM PUBLIC, anon, au
 REVOKE ALL ON FUNCTION public.reserve_voice_journal_quota(uuid,integer) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.reserve_ai_image_quota(uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION public.reserve_voice_journal_quota(uuid,integer) TO service_role;
+
+-- Cancel only access derived from the expiring family's purchase. A personal
+-- purchase may retain a stale family marker and must keep its receipt/expiry.
+CREATE OR REPLACE FUNCTION public.revoke_family_premium_on_expiry()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE v_member record; v_premium boolean; v_changed integer;
+BEGIN
+  IF NEW.is_family_admin = true AND NEW.family_id IS NOT NULL
+     AND OLD.status IN ('active', 'grace_period')
+     AND (NEW.status IN ('expired', 'cancelled') OR NEW.expires_at <= now())
+     AND (OLD.status, OLD.expires_at) IS DISTINCT FROM (NEW.status, NEW.expires_at) THEN
+    -- Do not take member advisory/family-row locks after the admin row is locked:
+    -- family admission takes those locks before its admin subscription lock.
+    FOR v_member IN SELECT user_id FROM public.family_members
+      WHERE family_id = NEW.family_id AND user_id <> NEW.user_id AND status = 'active'
+    LOOP
+      UPDATE public.subscriptions SET status = 'expired', expires_at = now(), updated_at = now()
+        WHERE user_id = v_member.user_id AND family_id = NEW.family_id AND is_family_admin = false
+          AND plan_type IN ('family', 'couples') AND status IN ('active', 'grace_period')
+          AND original_transaction_id IN (
+            'family-' || NEW.family_id::text || '-' || v_member.user_id::text,
+            'family-' || OLD.original_transaction_id
+          );
+      GET DIAGNOSTICS v_changed = ROW_COUNT;
+      v_premium := public.compute_current_premium_access(v_member.user_id);
+      UPDATE public.profiles SET
+        subscription_tier = (CASE WHEN v_premium THEN 'premium' ELSE 'free' END)::public.subscription_tier,
+        daily_ai_quota = CASE WHEN v_premium THEN -1 ELSE 5 END,
+        premium_badge = CASE WHEN v_premium THEN premium_badge ELSE NULL END
+        WHERE id = v_member.user_id;
+      IF v_changed > 0 THEN
+        INSERT INTO public.billing_events(event_type,user_id,family_id,subscription_id,payload)
+        VALUES ('subscription_expired',v_member.user_id,NEW.family_id,NEW.id,
+          jsonb_build_object('reason','admin_subscription_expired','admin_user_id',NEW.user_id));
+      END IF;
+    END LOOP;
+  END IF;
+  RETURN NEW;
+END $$;
+REVOKE ALL ON FUNCTION public.revoke_family_premium_on_expiry() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.revoke_family_premium_on_expiry() TO service_role;
+-- The baseline registers the same trigger function twice.
+DROP TRIGGER IF EXISTS trigger_revoke_family_premium ON public.subscriptions;
 
 COMMIT;
