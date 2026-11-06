@@ -1106,6 +1106,9 @@ Deno.test("OpenAI: the relay entry point mints an OpenAI client secret with the 
   const client = new Socket(), provider = new Socket();
   const opened: Array<{ url: string; protocols: unknown }> = [];
   let secretRequest: { auth: string | null; body: Record<string, unknown> } | null = null;
+  let finalizations = 0;
+  let finalized!: () => void;
+  const settled = new Promise<void>((resolve) => finalized = resolve);
   const json = (data: unknown, status = 200) =>
     new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
   const request = (method: string) =>
@@ -1148,7 +1151,11 @@ Deno.test("OpenAI: the relay entry point mints an OpenAI client secret with the 
           monthly_budget_month: "2026-11-01",
         }));
       }
-      if (url.pathname === "/rest/v1/rpc/finalize_voice_relay") return Promise.resolve(json({ status: "finalized" }));
+      if (url.pathname === "/rest/v1/rpc/finalize_voice_relay") {
+        finalizations++;
+        finalized();
+        return Promise.resolve(json({ status: "finalized" }));
+      }
       throw Error(`Unexpected mock route ${url.pathname}`);
     };
     globalThis.WebSocket = function (url: string | URL, protocols?: string | string[]) {
@@ -1169,6 +1176,15 @@ Deno.test("OpenAI: the relay entry point mints an OpenAI client secret with the 
     }));
     assert(opened.length === 1 && opened[0].url === OPENAI_REALTIME_URL);
     assert(JSON.stringify(opened[0].protocols) === JSON.stringify(["realtime", "openai-insecure-api-key.ek_synthetic"]));
+    // Keep the mocks installed until close accounting reaches the database.
+    client.closed();
+    provider.closed();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      settled,
+      new Promise((_, reject) => timer = setTimeout(() => reject(Error("Finalization did not run")), 2000)),
+    ]).finally(() => clearTimeout(timer));
+    assert(finalizations === 1, "Close was not accounted exactly once");
   } finally {
     client.closed();
     provider.closed();
