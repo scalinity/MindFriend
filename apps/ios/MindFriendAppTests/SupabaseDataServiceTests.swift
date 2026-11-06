@@ -709,7 +709,7 @@ final class ChatRequestTransportTests: XCTestCase {
             (503,["error":"AI_MONTHLY_BUDGET_REACHED","retryable":true,"messageSaved":false],.sharedBudget),
             (429,["error":"Too many requests","retryAfter":9],.rateLimited),
             (503,["code":"chat_provider_unavailable","retryable":true,"messageSaved":true],.provider),
-            (409,["error":"Request outcome pending. Reload history before sending again."],.pending),
+            (409,["code":"chat_request_pending","error":"Request outcome pending. Reload history before sending again.","retryable":false,"messageSaved":NSNull()],.pending),
             (401,["error":"Unauthorized"],.signIn),
             (500,["error":"Unknown service failure"],.unconfirmed)
         ] as [(Int,[String:Any],ChatRequestFailure.Kind)] {
@@ -720,6 +720,7 @@ final class ChatRequestTransportTests: XCTestCase {
                 if kind == .quota { XCTAssertEqual(failure.quotaUsed,5);XCTAssertEqual(failure.quotaLimit,5);XCTAssertEqual(failure.messageSaved,false);XCTAssertNil(failure.resetAt) }
                 if kind == .rateLimited { XCTAssertNotNil(failure.retryAt) }
                 if kind == .pending || kind == .unconfirmed { XCTAssertFalse(failure.retryable) }
+                if kind == .pending { XCTAssertTrue(failure.canRetryRequest) }
             }
         }
     }

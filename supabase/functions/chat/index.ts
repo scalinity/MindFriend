@@ -421,7 +421,7 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
             return new Response(JSON.stringify({ error: "Unable to confirm retry claim" }), { status: 503, headers: responseHeaders });
           }
           if (!claimed) {
-            return new Response(JSON.stringify({ error: "Request outcome pending. Reload history before sending again." }), { status: 409, headers: responseHeaders });
+            return new Response(JSON.stringify({ code: "chat_request_pending", requestId, error: "Request outcome pending. Reload history before sending again." }), { status: 409, headers: responseHeaders });
           }
           execution.receipt = { userId: user.id, requestId };
           execution.messageSaved = previous.messageSaved === false ? false : null;
@@ -438,7 +438,7 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
             throw new Error("RETRY_MESSAGE_UNCONFIRMED");
           }
         } else {
-          return new Response(JSON.stringify({ error: "Request outcome pending. Reload history before sending again." }), { status: 409, headers: responseHeaders });
+          return new Response(JSON.stringify({ code: "chat_request_pending", requestId, error: "Request outcome pending. Reload history before sending again." }), { status: 409, headers: responseHeaders });
         }
       }
       if (!claimError) execution.messageSaved = false;

@@ -642,7 +642,10 @@ Deno.test("issue 15: offline admission, durable explicit retry and legacy chat c
         s.providerRelease.resolve();
         const responses = await Promise.all(attempts);
         equal(responses.map((response) => response.status).sort(), [200, 409]);
-        for (const response of responses) await response.text();
+        for (const response of responses) {
+          if (response.status === 409) await failure(response, "chat_request_pending", false, null);
+          else await response.text();
+        }
         equal([s.userInserts, savedUsers().length, s.providerCalls], [1, 1, 2]);
       },
     );
@@ -804,7 +807,9 @@ Deno.test("issue 15: offline admission, durable explicit retry and legacy chat c
         );
         receipt().response = null;
         receipt().response_status = null;
-        equal((await chat({ retryFailed: true })).status, 409);
+        const pending = await chat({ retryFailed: true });
+        equal(pending.status, 409);
+        await failure(pending, "chat_request_pending", false, null);
         equal([s.providerCalls, s.quotaCalls, s.userInserts], [1, 1, 1]);
       },
     );
