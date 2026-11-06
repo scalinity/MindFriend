@@ -34,48 +34,33 @@ final class MentorshipSafetyService: ObservableObject {
         reason: String,
         description: String?
     ) async throws {
-        isLoading = true
-        defer { isLoading = false }
-
-        let report = try await dataService.createReport(
-            matchId: matchId,
-            reportedUserId: reportedUserId,
-            reason: reason,
-            description: description,
-            messageIds: nil
-        )
-        reports.append(report)
+        try await reportMentorship(matchId: matchId, reportedUserId: reportedUserId,
+                                   reason: reason, description: description)
     }
 
     // MARK: - Reporting
 
-    /// Create a safety report for a mentorship
+    /// Return only after the authenticated report has been saved and read back.
     func reportMentorship(
         matchId: UUID,
-        reportedUserId: UUID,
+        reportedUserId: UUID? = nil,
         reason: String,
-        description: String? = nil,
-        messageIds: [UUID]? = nil
-    ) async {
+        description: String? = nil
+    ) async throws {
         isLoading = true
         error = nil
-
+        defer { isLoading = false }
         do {
-            let report = try await dataService.createReport(
-                matchId: matchId,
-                reportedUserId: reportedUserId,
-                reason: reason,
-                description: description,
-                messageIds: messageIds
-            )
-
+            guard let code = Self.reasonCode(reason) else {
+                throw MentorshipError.validationError("Choose a safety concern.")
+            }
+            let report = try await dataService.createReport(matchId: matchId,
+                reportedUserId: reportedUserId, reason: code, description: description)
             reports.append(report)
         } catch {
-            if error is CancellationError { return }
-            self.error = error
+            if !(error is CancellationError) { self.error = error }
+            throw error
         }
-
-        isLoading = false
     }
 
     /// Load reports for a mentorship match
@@ -209,6 +194,19 @@ final class MentorshipSafetyService: ObservableObject {
         "Threatening language",
         "Other",
     ]
+
+    static func reasonCode(_ reason: String) -> String? {
+        switch reason {
+        case "Inappropriate language", "Sexual or romantic advances", "inappropriate_content": return "inappropriate_content"
+        case "Requests for personal information", "personal_info_request": return "personal_info_request"
+        case "Pressure to meet in person", "Financial requests", "Boundary violations", "boundary_violation": return "boundary_violation"
+        case "Disrespectful behavior", "unprofessional": return "unprofessional"
+        case "Threatening language", "harassment": return "harassment"
+        case "crisis_mishandling": return "crisis_mishandling"
+        case "Other", "other": return "other"
+        default: return nil
+        }
+    }
 
     /// Get user-friendly description of safety concern
     static func descriptionForReason(_ reason: String) -> String {

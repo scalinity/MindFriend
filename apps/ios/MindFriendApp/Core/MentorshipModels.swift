@@ -236,14 +236,14 @@ public struct MentorshipReport: Codable, Identifiable, Equatable {
         case id
         case matchId = "match_id"
         case reporterId = "reporter_id"
-        case reportedUserId = "reported_user_id"
+        case reportedUserId = "reported_id"
         case reason
         case status
         case description
         case messageIds = "message_ids"
         case createdAt = "created_at"
-        case reviewedAt = "reviewed_at"
-        case reviewedBy = "reviewed_by"
+        case reviewedAt = "resolved_at"
+        case reviewedBy = "resolved_by"
         case resolution
     }
 

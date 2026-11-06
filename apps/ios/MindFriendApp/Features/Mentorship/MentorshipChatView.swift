@@ -130,17 +130,11 @@ private struct MentorshipChatContent: View {
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showingReportSheet) {
             ReportSafetySheet(
-                matchId: matchId,
                 isPresented: $showingReportSheet,
                 onReport: { reason, description in
-                    Task {
-                        await safetyService.reportMentorship(
-                            matchId: matchId,
-                            reportedUserId: UUID(),  // Would come from match data
-                            reason: reason,
-                            description: description
-                        )
-                    }
+                    try await safetyService.reportMentorship(
+                        matchId: matchId, reason: reason, description: description
+                    )
                 }
             )
         }
@@ -217,13 +211,13 @@ struct MentorshipMessageBubble: View {
 // MARK: - Report Safety Sheet
 
 struct ReportSafetySheet: View {
-    let matchId: UUID
     @Binding var isPresented: Bool
-    let onReport: (String, String?) -> Void
+    let onReport: (String, String?) async throws -> Void
 
     @State private var selectedReason: String = ""
     @State private var detailsText = ""
     @State private var isSending = false
+    @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -238,7 +232,7 @@ struct ReportSafetySheet: View {
                             Text(reason).tag(reason)
                         }
                     }
-                    .pickerStyle(.segmented)
+                    .pickerStyle(.menu)
                 }
 
                 // Details
@@ -259,9 +253,15 @@ struct ReportSafetySheet: View {
                 VStack(spacing: 12) {
                     Button(action: {
                         isSending = true
-                        onReport(selectedReason, detailsText.isEmpty ? nil : detailsText)
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                            isPresented = false
+                        errorMessage = nil
+                        Task {
+                            defer { isSending = false }
+                            do {
+                                try await onReport(selectedReason, detailsText.isEmpty ? nil : detailsText)
+                                isPresented = false
+                            } catch {
+                                errorMessage = "The report could not be saved. Your details are still here; please try again."
+                            }
                         }
                     }) {
                         if isSending {
@@ -276,6 +276,9 @@ struct ReportSafetySheet: View {
                     .foregroundColor(.white)
                     .cornerRadius(8)
                     .disabled(selectedReason.isEmpty || isSending)
+                    if let errorMessage {
+                        Text(errorMessage).font(.caption).foregroundColor(.red)
+                    }
 
                     Button(action: { isPresented = false }) {
                         Text("Cancel")
@@ -287,6 +290,7 @@ struct ReportSafetySheet: View {
                 }
             }
             .padding()
+            .interactiveDismissDisabled(isSending)
             .navigationTitle("Report Safety Concern")
             .navigationBarTitleDisplayMode(.inline)
         }

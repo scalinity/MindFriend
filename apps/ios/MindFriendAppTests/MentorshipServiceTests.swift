@@ -112,6 +112,53 @@ final class MentorshipServiceTests: XCTestCase {
         XCTAssertTrue(message.isSafetyFlagged)
     }
 
+    private var matchJSON: String {
+        #"{"id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","mentor_id":"22222222-2222-4222-8222-222222222222","mentee_id":"11111111-1111-4111-8111-111111111111","status":"active","created_at":"2026-11-06T12:00:00Z","updated_at":"2026-11-06T12:00:00Z"}"#
+    }
+
+    private var reportJSON: String {
+        #"{"id":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb","match_id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","reporter_id":"11111111-1111-4111-8111-111111111111","reported_id":"22222222-2222-4222-8222-222222222222","reason":"boundary_violation","status":"pending","description":"Keep this detail","message_ids":[],"created_at":"2026-11-06T12:00:00Z","resolved_at":null,"resolved_by":null}"#
+    }
+
+    func testSafetyReportResolvesOtherParticipantAndUsesDatabaseReason() async throws {
+        MentorshipFixtureURLProtocol.fixture.prepare([(200, "[\(matchJSON)]"),
+            (200, "\"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\""), (200, "[\(reportJSON)]")])
+        let safety = MentorshipSafetyService(dataService: service())
+        try await safety.reportMentorship(matchId: UUID(uuidString: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")!,
+            reason: "Boundary violations", description: "Keep this detail")
+        XCTAssertEqual(safety.reports.count, 1)
+        XCTAssertEqual(safety.reports.first?.reportedUserId, profileID)
+        let requests = MentorshipFixtureURLProtocol.fixture.requests
+        XCTAssertEqual(requests.map { $0.url.lastPathComponent }, ["mentorship_matches", "report_mentorship_issue", "mentorship_reports"])
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: requests[1].body) as? [String: String])
+        XCTAssertEqual(body["p_reported_id"], profileID.uuidString)
+        XCTAssertEqual(body["p_reason"], "boundary_violation")
+        XCTAssertEqual(body["p_description"], "Keep this detail")
+    }
+
+    func testSafetyReportFailureIsThrownAndNoLocalSuccessIsPublished() async {
+        MentorshipFixtureURLProtocol.fixture.prepare([(200, "[\(matchJSON)]"), (400, "{\"message\":\"Synthetic failure\"}")])
+        let safety = MentorshipSafetyService(dataService: service())
+        do {
+            try await safety.reportMentorship(matchId: UUID(uuidString: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")!,
+                reason: "Boundary violations", description: "Retained detail")
+            XCTFail("A failed report must remain in the form")
+        } catch { }
+        XCTAssertTrue(safety.reports.isEmpty)
+        XCTAssertNotNil(safety.error)
+        XCTAssertFalse(safety.isLoading)
+    }
+
+    func testSafetyReportRejectsUnrelatedReportedUserBeforeWrite() async {
+        MentorshipFixtureURLProtocol.fixture.prepare([(200, "[\(matchJSON)]")])
+        do {
+            _ = try await service().createReport(matchId: UUID(uuidString: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")!,
+                reportedUserId: UUID(), reason: "other")
+            XCTFail("Only the other participant can be reported")
+        } catch { }
+        XCTAssertEqual(MentorshipFixtureURLProtocol.fixture.requests.count, 1)
+    }
+
     func testEndMentorshipWaitsForConfirmedDatabaseResult() async throws {
         MentorshipFixtureURLProtocol.fixture.prepare([(200, "false"), (200, "true")])
         let data = service(); let match = UUID()

@@ -310,29 +310,29 @@ final class MentorshipDataService {
 
     func createReport(
         matchId: UUID,
-        reportedUserId: UUID,
+        reportedUserId: UUID? = nil,
         reason: String,
-        description: String? = nil,
-        messageIds: [UUID]? = nil
+        description: String? = nil
     ) async throws -> MentorshipReport {
-        return try await perform { userId in
-            let report = MentorshipReport(
-                id: UUID(),
-                matchId: matchId,
-                reporterId: userId,
-                reportedUserId: reportedUserId,
-                reason: reason,
-                status: .pending,
-                description: description,
-                messageIds: messageIds,
-                createdAt: Date()
-            )
-            _ = try await self.supabase
-                .from("mentorship_reports")
-                .insert(report)
-                .execute()
+        try await perform { userId in
+            let match = try await self.fetchMatch(matchId: matchId)
+            let otherParticipant = match.mentorId == userId ? match.menteeId : match.mentorId
+            guard reportedUserId == nil || reportedUserId == otherParticipant else {
+                throw MentorshipError.validationError("Select the other participant in this mentorship.")
+            }
+            let reportId: UUID = try await self.supabase.rpc("report_mentorship_issue", params: [
+                "p_match_id": matchId.uuidString,
+                "p_reported_id": otherParticipant.uuidString,
+                "p_reason": reason,
+                "p_description": description ?? ""
+            ]).execute().value
+            let rows: [MentorshipReport] = try await self.supabase.from("mentorship_reports")
+                .select().eq("id", value: reportId.uuidString).execute().value
+            guard let report = rows.first, report.id == reportId, report.matchId == matchId,
+                  report.reporterId == userId, report.reportedUserId == otherParticipant else {
+                throw MentorshipError.networkError("The report could not be confirmed. Please try again.")
+            }
             return report
-
         }
     }
 
