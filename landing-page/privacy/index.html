@@ -479,9 +479,9 @@
       <div class="flex flex-wrap items-center gap-3">
         <span class="inline-flex items-center gap-2 px-3 py-1.5 bg-white shadow-sm border border-gray-100 rounded-full text-xs font-medium text-gray-700">
           <span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
-          Effective April 26, 2026
+          Effective November 6, 2026
         </span>
-        <span class="text-xs text-gray-400">Last updated April 26, 2026</span>
+        <span class="text-xs text-gray-400">Last updated November 6, 2026</span>
       </div>
     </div>
   </header>
@@ -777,12 +777,12 @@
           </tr>
           <tr>
             <td><strong>xAI</strong></td>
-            <td>AI generation of chat replies, journal analysis, voice-journal transcription and analysis, weekly insights, summaries, story generation, conversation titles</td>
+            <td>Live voice conversations in MindFriend app versions 1.0.3 and earlier, until those versions are retired</td>
             <td>US</td>
           </tr>
           <tr>
             <td><strong>OpenAI, L.L.C.</strong></td>
-            <td>AI image generation for artwork and profile pictures (model: gpt-image-1-mini)</td>
+            <td>AI generation of chat replies, journal and thought-record analysis, voice-journal transcription and analysis, live voice conversations, conversation rehearsal practice, weekly insights, summaries, story generation and conversation titles; AI image generation for artwork and profile pictures</td>
             <td>US</td>
           </tr>
           <tr>
@@ -821,7 +821,7 @@
       <h3>6.6 De-identified and aggregated information</h3>
       <p>We may share aggregated or de-identified data that cannot reasonably identify you, for example for analytics, research, or reporting.</p>
 
-      <h3>6.7 Per-feature data flows to AI providers</h3>
+      <h3 id="per-feature-ai">6.7 Per-feature data flows to AI providers</h3>
       <p>The table below identifies, for each AI-powered feature, exactly what is sent, to which provider, and for what purpose. You can enable or disable each of these independently in <strong>Settings &#x2192; Privacy &#x2192; AI &amp; Data Sharing</strong>.</p>
       <table>
         <thead>
@@ -836,26 +836,38 @@
           <tr>
             <td>AI chat companion</td>
             <td>The message you send and up to the most recent 20 messages of conversation context for that thread</td>
-            <td>xAI</td>
+            <td>OpenAI</td>
             <td>Generate the AI&#x2019;s reply</td>
           </tr>
           <tr>
             <td>AI analysis of journals &amp; reflections</td>
             <td>The text of the journal entry, thought record, or reflection you submit</td>
-            <td>xAI</td>
+            <td>OpenAI</td>
             <td>Detect cognitive distortions, suggest reframes, summarize</td>
           </tr>
           <tr>
             <td>AI voice journaling</td>
             <td>The audio recording you make and its transcribed text</td>
-            <td>xAI</td>
+            <td>OpenAI</td>
             <td>Transcribe speech and analyze the entry</td>
           </tr>
           <tr>
             <td>AI insights &amp; summaries</td>
             <td>Aggregated mood ratings, completed quests, exercise history, and journal text from the past week</td>
-            <td>xAI</td>
+            <td>OpenAI</td>
             <td>Generate weekly story, pattern insights, milestone narratives</td>
+          </tr>
+          <tr>
+            <td>AI voice companion (live voice conversations)</td>
+            <td>The audio of your voice conversation, its transcript, and the voice you chose</td>
+            <td>OpenAI (xAI for app versions 1.0.3 and earlier)</td>
+            <td>Transcribe your speech and generate spoken replies in real time</td>
+          </tr>
+          <tr>
+            <td>Conversation rehearsal practice</td>
+            <td>The scenario you practice and the messages you type during the practice session</td>
+            <td>OpenAI</td>
+            <td>Play the other person in the conversation and give feedback on your practice</td>
           </tr>
           <tr>
             <td>AI image generation</td>
