@@ -4,8 +4,11 @@ import {
   type Clock,
   handleVoiceRelay,
   MONTHLY_VOICE_RESERVE_MICRODOLLARS,
+  OPENAI_REALTIME_MODEL,
+  OPENAI_REALTIME_URL,
   type RelayDependencies,
 } from "../_shared/voice-relay.ts";
+import { OPENAI_TRANSCRIPTION_MODEL, SAFETY_NOTE } from "../_shared/ai-provider.ts";
 function assert(value: unknown, message = "assertion failed"): asserts value {
   if (!value) throw Error(message);
 }
@@ -306,7 +309,7 @@ Deno.test("allow PCM/VAD/mute/cancel; strip custom audio URLs and refuse tools, 
       },
     }),
     false,
-  ));
+  )!);
   assert(
     update.session.audio.input.format.rate === 24000 &&
       update.session.tools.length === 0,
@@ -320,7 +323,7 @@ Deno.test("allow PCM/VAD/mute/cancel; strip custom audio URLs and refuse tools, 
     ]
   ) {
     assert(
-      JSON.parse(clientEvent(JSON.stringify({ type }), false)).type === type,
+      JSON.parse(clientEvent(JSON.stringify({ type }), false)!).type === type,
     );
   }
   for (
@@ -1014,4 +1017,181 @@ Deno.test("current xAI VAD conversation.item.added sequence maps to existing iOS
   assert(h.upstream.reason === "SESSION_LIMIT_REACHED");
   h.upstream.closed();
   assert(!h.clock.timers.size);
+});
+
+// The session.update the released iOS client sends.
+const IOS_SESSION = {
+  type: "session.update",
+  session: {
+    modalities: ["audio", "text"],
+    instructions: "You are MindFriend.",
+    voice: "ara",
+    audio: {
+      input: { format: { type: "audio/pcm", rate: 24000 }, transcription: { model: "grok-transcribe" } },
+      output: { format: { type: "audio/pcm", rate: 24000 } },
+    },
+    turn_detection: { type: "server_vad", threshold: 0.15, prefix_padding_ms: 300, silence_duration_ms: 1200, create_response: true },
+  },
+};
+
+Deno.test("OpenAI: the client's session.update becomes a GA realtime session", () => {
+  const update = JSON.parse(clientEvent(JSON.stringify(IOS_SESSION), false, "openai")!);
+  const session = update.session;
+  assert(update.type === "session.update" && session.type === "realtime");
+  assert(JSON.stringify(session.output_modalities) === JSON.stringify(["audio"]));
+  assert(session.instructions === `You are MindFriend.\n\n${SAFETY_NOTE}`, "Safety note missing");
+  assert(JSON.stringify(session.tools) === "[]");
+  assert(session.audio.input.transcription.model === OPENAI_TRANSCRIPTION_MODEL);
+  assert(JSON.stringify(session.audio.input.turn_detection) === JSON.stringify(IOS_SESSION.session.turn_detection));
+  assert(session.audio.input.format.rate === 24000 && session.audio.output.format.rate === 24000);
+  assert(session.audio.output.voice === "marin");
+  assert(!("voice" in session) && !("turn_detection" in session) && !("modalities" in session));
+  const voices: Record<string, string> = { ara: "marin", rex: "cedar", sal: "sage", eve: "coral", leo: "ash" };
+  for (const [xai, openai] of Object.entries(voices)) {
+    const event = { ...IOS_SESSION, session: { ...IOS_SESSION.session, voice: xai } };
+    assert(JSON.parse(clientEvent(JSON.stringify(event), true, "openai")!).session.audio.output.voice === openai);
+  }
+  // Free accounts keep the single default voice on either vendor.
+  rejects(() => clientEvent(JSON.stringify({ ...IOS_SESSION, session: { ...IOS_SESSION.session, voice: "rex" } }), false, "openai"));
+  assert(clientEvent('{"type":"pong"}', false, "openai") === null);
+  assert(clientEvent('{"type":"pong"}', false) === '{"type":"pong"}');
+});
+
+Deno.test("OpenAI: relay drops unused events and benign client-state errors, and stops on real errors", async () => {
+  const h = harness();
+  h.deps.vendor = "openai";
+  await handleVoiceRelay(h.request(), h.deps);
+  // A pong before configuration is dropped without opening the configuration gate.
+  h.client.message('{"type":"pong"}');
+  assert(h.upstream.sent.length === 0 && h.client.closes === 0);
+  h.client.message(JSON.stringify({ type: "input_audio_buffer.append", audio: "AAAA" }));
+  assert(Number(h.client.closes) === 1, "Audio before configuration was accepted");
+
+  const g = harness();
+  g.deps.vendor = "openai";
+  await handleVoiceRelay(g.request(), g.deps);
+  g.client.message(JSON.stringify(IOS_SESSION));
+  assert(JSON.parse(g.upstream.sent[0]).session.type === "realtime");
+  for (const type of ["rate_limits.updated", "conversation.item.done", "conversation.item.input_audio_transcription.delta"]) {
+    g.upstream.message(JSON.stringify({ type }));
+  }
+  for (const code of ["response_cancel_not_active", "input_audio_buffer_commit_empty", "conversation_already_has_active_response"]) {
+    g.upstream.message(JSON.stringify({ type: "error", error: { type: "invalid_request_error", code } }));
+  }
+  assert(g.client.sent.length === 0, "Dropped events reached the client");
+  assert(g.client.closes === 0 && g.upstream.closes === 0, "A benign event ended the session");
+  g.upstream.message(JSON.stringify({ type: "conversation.item.added", item: { id: "item_1", role: "user" } }));
+  assert(JSON.parse(g.client.sent[0]).type === "conversation.item.created");
+  g.upstream.message(JSON.stringify({ type: "response.output_audio.delta", delta: "AAAA" }));
+  assert(JSON.parse(g.client.sent[1]).type === "response.output_audio.delta");
+  // A dropped event type that carries the secret still stops the session.
+  g.upstream.message(JSON.stringify({ type: "rate_limits.updated", note: "ephemeral-secret" }));
+  assert(Number(g.upstream.closes) === 1, "Secret in a provider frame was not caught");
+
+  const f = harness();
+  f.deps.vendor = "openai";
+  await handleVoiceRelay(f.request(), f.deps);
+  f.client.message(JSON.stringify(IOS_SESSION));
+  f.upstream.message(JSON.stringify({ type: "error", error: { type: "server_error", code: "server_error" } }));
+  assert(f.upstream.closes === 1 && f.client.closes === 1, "A real provider error did not stop the session");
+  assert(JSON.parse(f.client.sent.at(-1)!).error.code === "PROVIDER_ERROR");
+});
+
+Deno.test("OpenAI: the relay entry point mints an OpenAI client secret with the non-image key", async () => {
+  type Handler = (req: Request) => Response | Promise<Response>;
+  let handler!: Handler;
+  const serve = Deno.serve, envGet = Deno.env.get;
+  const fetchOriginal = globalThis.fetch, socketOriginal = globalThis.WebSocket;
+  const upgrade = Deno.upgradeWebSocket;
+  const client = new Socket(), provider = new Socket();
+  const opened: Array<{ url: string; protocols: unknown }> = [];
+  let secretRequest: { auth: string | null; body: Record<string, unknown> } | null = null;
+  let finalizations = 0;
+  let finalized!: () => void;
+  const settled = new Promise<void>((resolve) => finalized = resolve);
+  const json = (data: unknown, status = 200) =>
+    new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
+  const request = (method: string) =>
+    new Request(`http://localhost/voice-token?session_id=${id}`, {
+      method,
+      headers: { Authorization: "Bearer owner", apikey: "anon", upgrade: "websocket" },
+      body: method === "POST" ? JSON.stringify({ transport: "relay" }) : undefined,
+    });
+  try {
+    Deno.serve = ((fn: Handler) => {
+      handler = fn;
+      return {};
+    }) as typeof Deno.serve;
+    Deno.env.get = (key) => ({
+      SUPABASE_URL: "https://mock.supabase.invalid",
+      SUPABASE_SERVICE_ROLE_KEY: "fake-service-role",
+      SUPABASE_ANON_KEY: "anon",
+      AI_PROVIDER: "standard",
+      XAI_API_KEY: "fake-xai-key",
+      OPENAI_API_KEY: "fake-image-key",
+      VOICE_AND_NONIMAGE_OPENAI_API_KEY: "fake-nonimage-key",
+    }[key]);
+    globalThis.fetch = (input, init) => {
+      const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+      if (url.host === "api.openai.com") {
+        assert(url.pathname === "/v1/realtime/client_secrets");
+        secretRequest = {
+          auth: new Headers(init?.headers).get("Authorization"),
+          body: JSON.parse(String(init?.body)),
+        };
+        return Promise.resolve(json({ value: "ek_synthetic", expires_at: 0 }));
+      }
+      assert(url.host === "mock.supabase.invalid", "all HTTP boundaries must be mocked");
+      if (url.pathname === "/auth/v1/user") return Promise.resolve(json({ id, is_anonymous: false }));
+      if (url.pathname === "/rest/v1/rpc/claim_voice_relay") {
+        return Promise.resolve(json({
+          reserved_seconds: 120,
+          is_premium: false,
+          monthly_reserve_microdollars: MONTHLY_VOICE_RESERVE_MICRODOLLARS,
+          monthly_budget_month: "2026-11-01",
+        }));
+      }
+      if (url.pathname === "/rest/v1/rpc/finalize_voice_relay") {
+        finalizations++;
+        finalized();
+        return Promise.resolve(json({ status: "finalized" }));
+      }
+      throw Error(`Unexpected mock route ${url.pathname}`);
+    };
+    globalThis.WebSocket = function (url: string | URL, protocols?: string | string[]) {
+      opened.push({ url: String(url), protocols });
+      return provider.socket();
+    } as unknown as typeof WebSocket;
+    Deno.upgradeWebSocket = () => ({ socket: client.socket(), response: new Response(null) });
+    // A distinct specifier registers a fresh handler; the vendor is read per request.
+    await import("../voice-token/index.ts?openai");
+    Deno.serve = serve;
+    assert((await handler(request("GET"))).status === 200);
+    assert(secretRequest !== null, "No client secret was requested");
+    const sent = secretRequest as { auth: string | null; body: Record<string, unknown> };
+    assert(sent.auth === "Bearer fake-nonimage-key", "Wrong key used for the client secret");
+    assert(JSON.stringify(sent.body) === JSON.stringify({
+      expires_after: { anchor: "created_at", seconds: 300 },
+      session: { type: "realtime", model: OPENAI_REALTIME_MODEL },
+    }));
+    assert(opened.length === 1 && opened[0].url === OPENAI_REALTIME_URL);
+    assert(JSON.stringify(opened[0].protocols) === JSON.stringify(["realtime", "openai-insecure-api-key.ek_synthetic"]));
+    // Keep the mocks installed until close accounting reaches the database.
+    client.closed();
+    provider.closed();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      settled,
+      new Promise((_, reject) => timer = setTimeout(() => reject(Error("Finalization did not run")), 2000)),
+    ]).finally(() => clearTimeout(timer));
+    assert(finalizations === 1, "Close was not accounted exactly once");
+  } finally {
+    client.closed();
+    provider.closed();
+    Deno.serve = serve;
+    Deno.env.get = envGet;
+    globalThis.fetch = fetchOriginal;
+    globalThis.WebSocket = socketOriginal;
+    Deno.upgradeWebSocket = upgrade;
+  }
 });

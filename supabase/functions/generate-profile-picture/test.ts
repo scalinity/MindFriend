@@ -141,12 +141,12 @@ async function scenario(run: (state: Scenario) => Promise<void>) {
       state.providerCalls.push(init);
       fixture.calls.push({ name: "provider", admin: false });
       const body = JSON.parse(String(init.body));
-      equal(body.model, "gpt-image-1-mini");
+      equal(body.model, "gpt-image-2.6-flare");
       equal(body.size, "1024x1024");
       equal(body.n, 1);
       equal(body.output_format, "jpeg");
       equal(body.output_compression, 80);
-      assert(!("quality" in body));
+      equal(body.quality, "low");
       if (body.stream) equal(body.partial_images, 2);
       return Promise.resolve(
         state.provider?.(init) ??

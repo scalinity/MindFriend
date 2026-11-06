@@ -963,7 +963,7 @@ async function generateTextContent(
   const DEBUG = Deno.env.get("DEBUG") === "true";
   if (DEBUG) {
     console.log(
-      `[generate-content] Calling xAI API with model: grok-4.3`,
+      `[generate-content] Calling AI provider`,
     );
   }
   const response = await budgetedXAIText({

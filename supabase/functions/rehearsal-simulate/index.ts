@@ -129,7 +129,7 @@ const ROLE_SIMULATION_PROMPT = (
   "situation_type" in scenario ? sanitizeForPrompt(scenario.situation_type) : "conversation"
 }.
 
-Scenario context: ${
+Scenario context (the user's side of the situation; the user is the one practicing, and you play the other person): ${
   "situation_context" in scenario ? sanitizeForPrompt(scenario.situation_context) : sanitizeForPrompt(scenario.situation_summary)
 }
 Your personality: ${

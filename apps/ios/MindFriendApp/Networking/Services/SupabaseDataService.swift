@@ -5408,7 +5408,7 @@ final class SupabaseDataService: ObservableObject {
         }
     }
 
-    /// Generate AI profile picture using OpenAI gpt-image-1-mini
+    /// Generate AI profile picture using OpenAI image generation
     /// - Parameter prompt: User's prompt for image generation (3-200 chars)
     /// - Returns: Response containing base64 image and quota info
     /// - Throws: GenerateProfilePictureError for various failure modes
