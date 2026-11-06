@@ -13,7 +13,8 @@ type UntypedSupabaseClient = SupabaseClient<any, "public", any>;
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { checkRateLimit, getRateLimitHeaders } from "../_shared/ratelimit.ts";
 import { sanitizeForPrompt } from "../_shared/sanitize.ts";
-import { budgetedXAIText, XAI_TEXT_MODEL } from "../_shared/budgeted-xai-text.ts";
+import { budgetedXAIText } from "../_shared/budgeted-xai-text.ts";
+import { textRoute } from "../_shared/ai-provider.ts";
 
 // Constants
 const MAX_CONTENT_LENGTH = 50000; // ~12,500 tokens
@@ -648,7 +649,7 @@ Deno.serve(async (req) => {
         patterns_identified: analysis.patternsIdentified,
         cognitive_distortions: analysis.cognitiveDistortions,
         supportive_summary: analysis.supportiveSummary,
-        ai_model: XAI_TEXT_MODEL,
+        ai_model: textRoute("journal.analysis").model,
       })
       .select()
       .single();

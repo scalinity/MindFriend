@@ -2,8 +2,16 @@ import {
   type MonthlyAIBudgetAdmin,
   reserveMonthlyAIBudget,
 } from "./monthly-ai-budget.ts";
+import {
+  callStandardText,
+  chatCompletionBody,
+  SAFETY_NOTE,
+  textRoute,
+  vendorKey,
+  XAI_TEXT_ROUTE,
+} from "./ai-provider.ts";
 
-export const XAI_TEXT_MODEL = "grok-4.3";
+export const XAI_TEXT_MODEL = XAI_TEXT_ROUTE.model;
 const MAX_PROMPT_BYTES = 128_000;
 const MAX_RESPONSE_BYTES = 1_048_576;
 
@@ -76,6 +84,10 @@ export async function budgetedXAIText(
   const promptBytes = new TextEncoder().encode(JSON.stringify(messages)).length;
   if (promptBytes > MAX_PROMPT_BYTES) {
     throw new Error("XAI_TEXT_CONTEXT_TOO_LARGE");
+  }
+  const route = textRoute(options.feature);
+  if (route.vendor !== "xai") {
+    return await standardText(options, route, messages, promptBytes);
   }
   const body = JSON.stringify({
     model: XAI_TEXT_MODEL,
@@ -167,6 +179,58 @@ export async function budgetedXAIText(
   }
   return new Response(bytes, {
     status: response.status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+// AI_PROVIDER=standard: same validation, budget order and response shape as the
+// xAI path, priced at the routed model's rates. Sampling temperature is not
+// sent; current Claude models reject it and the OpenAI route runs without it.
+async function standardText(
+  options: XAITextOptions,
+  route: ReturnType<typeof textRoute>,
+  messages: XAITextMessage[],
+  promptBytes: number,
+): Promise<Response> {
+  // Missing configuration must not consume budget.
+  if (!vendorKey(route)) throw new Error("AI_PROVIDER_CONFIG_ERROR");
+  const maxTokens = route.maxTokens ?? options.maxTokens;
+  const signal = options.signal
+    ? AbortSignal.any([options.signal, AbortSignal.timeout(45_000)])
+    : AbortSignal.timeout(45_000);
+  signal.throwIfAborted();
+  await abortable(() =>
+    reserveMonthlyAIBudget(options.admin, {
+      requestId: crypto.randomUUID(),
+      userId: options.userId,
+      feature: options.feature,
+      // The safety note may be appended to the system prompt; always count it.
+      reserveMicrodollars: Math.ceil(
+        (promptBytes + SAFETY_NOTE.length + 1024) * route.inputUsdPerM +
+          maxTokens * route.outputUsdPerM,
+      ),
+    }, signal), signal);
+  signal.throwIfAborted();
+  if (options.beforeProvider) {
+    await abortable(() => options.beforeProvider!(signal), signal);
+    signal.throwIfAborted();
+  }
+  const result = await abortable(() =>
+    callStandardText({
+      route,
+      feature: options.feature,
+      messages,
+      maxTokens,
+      json: options.responseFormat !== undefined,
+      signal,
+      fetcher: options.fetcher,
+    }), signal);
+  signal.throwIfAborted();
+  if (result.status < 200 || result.status >= 300) {
+    return new Response(null, { status: result.status });
+  }
+  return new Response(chatCompletionBody(route, result), {
+    status: 200,
     headers: { "Content-Type": "application/json" },
   });
 }
