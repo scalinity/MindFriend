@@ -125,8 +125,9 @@ final class DependencyContainer: ObservableObject {
 
     // MARK: - Mentorship
     lazy var mentorshipService: MentorshipService = {
-        let userId = self.supabaseAuthService.currentUser?.id ?? UUID()
-        return MentorshipService(supabase: self.supabaseClient, userId: userId)
+        MentorshipService(supabase: self.supabaseClient, userIdProvider: { [weak self] in
+            self?.supabaseAuthService.currentUser?.id
+        })
     }()
 
     lazy var sleepService: SleepService = {
