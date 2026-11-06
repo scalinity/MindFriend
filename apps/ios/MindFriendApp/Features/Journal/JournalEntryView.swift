@@ -27,11 +27,23 @@ struct JournalEntryView: View {
     @State private var showingAnalysis = false
     @State private var quotaRemaining: Int?
     @State private var autoSaveTimer: Timer?
-    @State private var lastSavedContent = ""
+    @State private var lastSavedDraft: JournalDraftSnapshot?
+    @State private var draftSaveTask: Task<Void, Never>?
+    @State private var editorRevision = 0
+    @State private var hasInitialized = false
+    @State private var hasLoadedDraft = false
+    @State private var isEditorActive = false
+    @State private var recoveredDraft: JournalDraft?
+    @State private var restoredPromptId: String?
 
     private let moodEmojis = ["😢", "😔", "😐", "🙂", "😊"]
 
-    private var isEditing: Bool { existingEntry != nil }
+    private var isEditing: Bool { savedEntry != nil || existingEntry != nil }
+
+    private var draftSnapshot: JournalDraftSnapshot {
+        JournalDraftSnapshot(title: title, content: content, mood: mood,
+                             promptId: selectedPrompt?.id ?? restoredPromptId ?? savedEntry?.promptId)
+    }
 
     private var wordCount: Int {
         content.split(separator: " ").count
@@ -53,6 +65,28 @@ struct JournalEntryView: View {
                     // Prompt banner (if using a prompt)
                     if let prompt = selectedPrompt {
                         promptBanner(prompt)
+                    }
+
+                    if let draft = recoveredDraft {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("A previous draft is available. Your current writing has been kept.")
+                                .font(.subheadline)
+                            DisclosureGroup("Read previous draft") {
+                                Text(draft.content).textSelection(.enabled)
+                            }
+                            Button("Add previous draft to this entry") {
+                                content += content.isEmpty ? draft.content : "\n\n" + draft.content
+                                recoveredDraft = nil
+                                scheduleAutoSave()
+                            }
+                            Button("Keep only current writing") {
+                                recoveredDraft = nil
+                                scheduleAutoSave()
+                            }
+                        }
+                        .padding()
+                        .background(Color(.systemGray6))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
 
                     // Mood selection
@@ -84,9 +118,6 @@ struct JournalEntryView: View {
                             .padding(8)
                             .background(Color(.systemGray6))
                             .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .onChange(of: content) { _, newValue in
-                                scheduleAutoSave()
-                            }
                     }
 
                     // Writing tips
@@ -108,6 +139,11 @@ struct JournalEntryView: View {
                             .frame(maxWidth: .infinity)
                             .background(Color.red.opacity(0.1))
                             .clipShape(RoundedRectangle(cornerRadius: 8))
+                        if !hasLoadedDraft && !isEditing {
+                            Button("Retry loading draft") {
+                                Task { await loadExistingData() }
+                            }
+                        }
                     }
                 }
                 .padding()
@@ -155,10 +191,16 @@ struct JournalEntryView: View {
                 .environmentObject(appState)
             }
             .onAppear {
-                loadExistingData()
+                isEditorActive = true
                 checkQuota()
             }
+            .task { await loadExistingData() }
+            .onChange(of: draftSnapshot) { _, _ in
+                editorRevision += 1
+                scheduleAutoSave()
+            }
             .onDisappear {
+                isEditorActive = false
                 autoSaveTimer?.invalidate()
             }
             .keyboardDoneButton()
@@ -348,26 +390,40 @@ struct JournalEntryView: View {
 
     // MARK: - Methods
 
-    private func loadExistingData() {
-        if let entry = existingEntry {
-            title = entry.title ?? ""
-            content = entry.content
-            mood = entry.mood
-            savedEntry = entry
-            lastSavedContent = entry.content
+    private func loadExistingData() async {
+        if !hasInitialized {
+            hasInitialized = true
+            if let entry = existingEntry {
+                title = entry.title ?? ""
+                content = entry.content
+                mood = entry.mood
+                savedEntry = entry
+            }
         }
-
-        // Load existing draft
-        if existingEntry == nil {
-            Task {
-                let service = JournalService(supabase: container.supabase)
-                if let draft = try? await service.fetchDraft() {
+        guard !isEditing, !hasLoadedDraft else { return }
+        let revision = editorRevision
+        let initialSnapshot = draftSnapshot
+        do {
+            let service = JournalService(supabase: container.supabase)
+            let draft = try await service.fetchDraft()
+            guard !Task.isCancelled, isEditorActive, !isEditing, !isSaving else { return }
+            if let draft {
+                if editorRevision == revision, draftSnapshot == initialSnapshot,
+                   initialSnapshot == JournalDraftSnapshot() {
                     title = draft.title ?? ""
                     content = draft.content
                     mood = draft.moodBefore
-                    lastSavedContent = draft.content
+                    restoredPromptId = draft.promptId
+                    lastSavedDraft = draftSnapshot
+                } else {
+                    recoveredDraft = draft
                 }
             }
+            hasLoadedDraft = true
+            scheduleAutoSave()
+        } catch {
+            guard !Task.isCancelled else { return }
+            errorMessage = "Could not load your saved draft. Your current writing is still here. Please retry before draft autosave resumes."
         }
     }
 
@@ -380,48 +436,61 @@ struct JournalEntryView: View {
 
     private func scheduleAutoSave() {
         autoSaveTimer?.invalidate()
+        guard isEditorActive, hasLoadedDraft, recoveredDraft == nil, !isEditing, !isSaving else { return }
         autoSaveTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: false) { _ in
-            Task { @MainActor in
-                await autoSaveDraft()
+            Task { @MainActor in startDraftSave() }
+        }
+    }
+
+    private func startDraftSave() {
+        guard draftSaveTask == nil, !isEditing, !isSaving, isEditorActive,
+              hasLoadedDraft, recoveredDraft == nil, draftSnapshot != lastSavedDraft else { return }
+        let snapshot = draftSnapshot
+        draftSaveTask = Task { @MainActor in
+            defer {
+                draftSaveTask = nil
+                if draftSnapshot != lastSavedDraft { scheduleAutoSave() }
+            }
+            do {
+                let service = JournalService(supabase: container.supabase)
+                _ = try await service.saveDraft(title: snapshot.title.isEmpty ? nil : snapshot.title,
+                                                content: snapshot.content, moodBefore: snapshot.mood,
+                                                promptId: snapshot.promptId)
+                lastSavedDraft = snapshot
+            } catch {
+                errorMessage = "Your draft could not be saved. Your writing is still here; autosave will retry."
             }
         }
     }
 
-    private func autoSaveDraft() async {
-        guard !isEditing, content != lastSavedContent else { return }
-
-        let service = JournalService(supabase: container.supabase)
-        _ = try? await service.saveDraft(
-            title: title.isEmpty ? nil : title,
-            content: content,
-            moodBefore: mood,
-            promptId: selectedPrompt?.id
-        )
-        lastSavedContent = content
-    }
-
     private func saveEntry() async {
+        guard !isSaving else { return }
         isSaving = true
+        autoSaveTimer?.invalidate()
+        // Let the single outstanding draft write finish before creation deletes the draft.
+        await draftSaveTask?.value
+        let snapshot = draftSnapshot
         errorMessage = nil
 
         do {
             let service = JournalService(supabase: container.supabase)
 
-            if let existing = existingEntry {
+            if let existing = savedEntry ?? existingEntry {
                 // Update existing
                 savedEntry = try await service.updateEntry(
                     id: existing.id,
-                    title: title.isEmpty ? nil : title,
-                    content: content,
-                    moodBefore: mood
+                    title: snapshot.title.isEmpty ? nil : snapshot.title,
+                    content: snapshot.content,
+                    moodBefore: snapshot.mood,
+                    promptId: snapshot.promptId
                 )
             } else {
                 // Create new
                 savedEntry = try await service.createEntry(
-                    title: title.isEmpty ? nil : title,
-                    content: content,
-                    moodBefore: mood,
-                    promptId: selectedPrompt?.id
+                    title: snapshot.title.isEmpty ? nil : snapshot.title,
+                    content: snapshot.content,
+                    moodBefore: snapshot.mood,
+                    promptId: snapshot.promptId
                 )
             }
 
@@ -436,6 +505,7 @@ struct JournalEntryView: View {
         }
 
         isSaving = false
+        scheduleAutoSave()
     }
 
     private func requestAnalysis() async {
@@ -470,6 +540,13 @@ struct JournalEntryView: View {
         default: return ""
         }
     }
+}
+
+private struct JournalDraftSnapshot: Equatable {
+    var title = ""
+    var content = ""
+    var mood: Int?
+    var promptId: String?
 }
 
 #Preview {

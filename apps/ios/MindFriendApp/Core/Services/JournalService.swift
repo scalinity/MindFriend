@@ -219,7 +219,7 @@ final class JournalService {
     }
 
     /// Update an existing journal entry
-    func updateEntry(id: String, title: String?, content: String, moodBefore: Int?, moodAfter: Int? = nil) async throws -> JournalEntry {
+    func updateEntry(id: String, title: String?, content: String, moodBefore: Int?, moodAfter: Int? = nil, promptId: String? = nil) async throws -> JournalEntry {
         let userId = try await getCurrentUserId()
 
         let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -234,6 +234,7 @@ final class JournalService {
             let content: String
             let mood_before: Int?
             let mood_after: Int?
+            let prompt_id: String?
             let word_count: Int
             let updated_at: String
         }
@@ -243,6 +244,7 @@ final class JournalService {
             content: trimmedContent,
             mood_before: moodBefore,
             mood_after: moodAfter,
+            prompt_id: promptId,
             word_count: wordCount,
             updated_at: ISO8601DateFormatter().string(from: Date())
         )
