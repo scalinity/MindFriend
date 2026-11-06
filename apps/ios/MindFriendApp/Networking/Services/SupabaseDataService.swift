@@ -2969,19 +2969,6 @@ final class SupabaseDataService: ObservableObject {
 
         Log.data.info("Weekly summaries found: \(summaries.count)")
 
-        if summaries.isEmpty {
-            // Debug: Try fetching any summary to see if any exist
-            let anySummaries: [DBWeeklySummary] = try await supabase
-                .from("weekly_summaries")
-                .select()
-                .eq("user_id", value: try userId)
-                .order("week_start", ascending: false)
-                .limit(3)
-                .execute()
-                .value
-            Log.data.info("Any summaries in DB: \(anySummaries.count), week_starts: \(anySummaries.map { $0.weekStart })")
-        }
-
         guard let summary = summaries.first else {
             return nil
         }
