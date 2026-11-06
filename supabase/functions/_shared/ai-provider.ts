@@ -104,6 +104,49 @@ export interface ProviderTextResult {
   outputTokens?: number;
 }
 
+// Same ceiling as the xAI path in budgeted-xai-text.ts.
+const MAX_RESPONSE_BYTES = 1_048_576;
+
+// Reads a provider body within the ceiling. An abort or oversized body cancels
+// the stream and releases its lock; the caller keeps the budget reservation.
+async function readBounded(
+  response: Response,
+  signal: AbortSignal,
+): Promise<string> {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("AI_TEXT_EMPTY_RESPONSE");
+  const cancel = () => void reader.cancel().catch(() => {});
+  signal.addEventListener("abort", cancel, { once: true });
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  let completed = false;
+  try {
+    while (true) {
+      signal.throwIfAborted();
+      const { value, done } = await reader.read();
+      if (done) {
+        completed = true;
+        break;
+      }
+      size += value.length;
+      if (size > MAX_RESPONSE_BYTES) throw new Error("AI_TEXT_RESPONSE_TOO_LARGE");
+      chunks.push(value);
+    }
+  } finally {
+    signal.removeEventListener("abort", cancel);
+    if (!completed) cancel();
+    reader.releaseLock();
+  }
+  signal.throwIfAborted();
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
 export function vendorKey(route: TextRoute): string | undefined {
   return route.vendor === "openai" ? openAINonImageKey() : undefined;
 }
@@ -139,7 +182,7 @@ export async function callStandardText(
     void response.body?.cancel().catch(() => {});
     return { status: response.status };
   }
-  const data = await response.json();
+  const data = JSON.parse(await readBounded(response, input.signal));
   const usage = {
     inputTokens: data.usage?.input_tokens,
     outputTokens: data.usage?.output_tokens,

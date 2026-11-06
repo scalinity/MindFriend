@@ -1,7 +1,7 @@
 // The AI_PROVIDER switch: routing, budget reservation at the routed model's price,
 // the response shape callers parse, output caps, the safety note and refusals.
 import { budgetedXAIText } from "../functions/_shared/budgeted-xai-text.ts";
-import { SAFETY_NOTE, textRoute } from "../functions/_shared/ai-provider.ts";
+import { callStandardText, SAFETY_NOTE, textRoute } from "../functions/_shared/ai-provider.ts";
 import { CRISIS_RESPONSE } from "../functions/_shared/crisis.ts";
 
 function assert(value: unknown, message: string): asserts value {
@@ -123,5 +123,59 @@ Deno.test("missing OpenAI key fails before any budget is reserved", async () => 
     }
     assert(message === "AI_PROVIDER_CONFIG_ERROR", "Missing key not reported");
     assert(h.reserved.length === 0 && h.bodies.length === 0, "Budget or provider touched");
+  });
+});
+
+const LUNA_ROUTE = { vendor: "openai" as const, model: "gpt-6-luna", inputUsdPerM: 0.1, outputUsdPerM: 0.5 };
+
+Deno.test("an OpenAI body over 1 MiB is rejected", async () => {
+  await withEnv({ VOICE_AND_NONIMAGE_OPENAI_API_KEY: "synthetic" }, async () => {
+    const big = JSON.stringify({
+      status: "completed",
+      output: [{ content: [{ type: "output_text", text: "x".repeat(1_048_577) }] }],
+    });
+    let message = "";
+    try {
+      await callStandardText({
+        route: LUNA_ROUTE, feature: "weekly.insight", messages: [{ role: "user", content: "u" }],
+        maxTokens: 10, json: false, signal: AbortSignal.timeout(5000),
+        fetcher: () => Promise.resolve(new Response(big)),
+      });
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    assert(message === "AI_TEXT_RESPONSE_TOO_LARGE", `Oversized body accepted (${message})`);
+  });
+});
+
+Deno.test("an abort while reading cancels and releases a stalled OpenAI body", async () => {
+  await withEnv({ VOICE_AND_NONIMAGE_OPENAI_API_KEY: "synthetic" }, async () => {
+    let cancelled = false;
+    // A stream that never ends and ignores the request signal.
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("{\"status\":"));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const controller = new AbortController();
+    const pending = callStandardText({
+      route: LUNA_ROUTE, feature: "weekly.insight", messages: [{ role: "user", content: "u" }],
+      maxTokens: 10, json: false, signal: controller.signal,
+      fetcher: () => Promise.resolve(new Response(body)),
+    });
+    await new Promise((r) => setTimeout(r, 10));
+    controller.abort();
+    let rejected = false;
+    try {
+      await pending;
+    } catch {
+      rejected = true;
+    }
+    assert(rejected, "Abort did not reject");
+    assert(cancelled, "Stalled body was not cancelled");
+    assert(!body.locked, "Body reader lock was not released");
   });
 });
