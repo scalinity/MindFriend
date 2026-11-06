@@ -222,7 +222,7 @@ final class FamilyService: ObservableObject {
             options: .init(body: [
                 "inviteCode": FamilyAnyEncodable(inviteCode),
                 "nickname": FamilyAnyEncodable(nickname),
-                "birthDate": FamilyAnyEncodable(birthDate.map { $0.ISO8601Format() })
+                "birthDate": FamilyAnyEncodable(birthDate.map { Self.birthDateString($0) })
             ])
         )
 
@@ -236,6 +236,15 @@ final class FamilyService: ObservableObject {
     }
 
     // MARK: - Family Member Operations
+
+    nonisolated static func birthDateString(_ date: Date, timeZone: TimeZone = .current) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
+    }
 
     /// Fetch all members of the current family
     func fetchFamilyMembers() async throws -> [FamilyWellnessMember] {
@@ -269,7 +278,7 @@ final class FamilyService: ObservableObject {
             "user_id": FamilyAnyEncodable(userId),
             "role": FamilyAnyEncodable(role.rawValue),
             "nickname": FamilyAnyEncodable(nickname),
-            "birth_date": FamilyAnyEncodable(birthDate.map { $0.ISO8601Format() }),
+            "birth_date": FamilyAnyEncodable(birthDate.map { Self.birthDateString($0) }),
             "share_mood_with_family": FamilyAnyEncodable(true),
             "share_activity_with_family": FamilyAnyEncodable(true),
             "share_achievements_with_family": FamilyAnyEncodable(true),

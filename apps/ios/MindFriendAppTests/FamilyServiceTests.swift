@@ -4,6 +4,13 @@ import Supabase
 
 @MainActor
 final class FamilyServiceTests: XCTestCase {
+    func testBirthDateEncodingPreservesSelectedLocalCalendarDate() throws {
+        let instant = try XCTUnwrap(ISO8601DateFormatter().date(from: "2010-07-01T02:30:00Z"))
+        XCTAssertEqual(FamilyService.birthDateString(instant, timeZone: try XCTUnwrap(TimeZone(identifier: "America/New_York"))), "2010-06-30")
+        XCTAssertEqual(FamilyService.birthDateString(instant, timeZone: try XCTUnwrap(TimeZone(identifier: "Asia/Tokyo"))), "2010-07-01")
+        XCTAssertFalse(FamilyService.birthDateString(instant).contains("T"))
+    }
+
     private func service() -> FamilyService {
         FamilyFixtureURLProtocol.fixture.reset()
         let config = URLSessionConfiguration.ephemeral
