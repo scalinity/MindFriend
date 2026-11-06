@@ -781,3 +781,98 @@ private final class ChatTransportFixture: @unchecked Sendable {
     func prepare(status:Int,mime:String,chunks:[Data],failure:URLError?,keepOpen:Bool) {lock.lock();defer{lock.unlock()};value=Value(status:status,mime:mime,chunks:chunks,failure:failure,keepOpen:keepOpen)}
     func snapshot()->Value {lock.lock();defer{lock.unlock()};return value}
 }
+
+@MainActor
+final class ForumLoadingTests: XCTestCase {
+    private func makeService() -> ForumService {
+        ForumLoadingURLProtocol.fixture.reset()
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [ForumLoadingURLProtocol.self]
+        let client = SupabaseClient(supabaseURL: URL(string: "https://forum-fixture.invalid")!, supabaseKey: "synthetic-anon",
+            options: .init(auth: .init(storage: AvatarFixtureAuthStorage(), autoRefreshToken: false),
+                           global: .init(session: URLSession(configuration: config))))
+        return ForumService(supabase: client, currentUserId: { ForumLoadingHTTP.owner })
+    }
+
+    func testReplyPageBatchesHelpfulStateIntoOneRequest() async throws {
+        let service = makeService()
+        let replies = try await service.fetchReplies(threadId: ForumLoadingHTTP.thread, limit: 50)
+        XCTAssertEqual(replies.count, 50)
+        XCTAssertEqual(replies.filter(\.isHelpfulByMe).count, 25)
+        XCTAssertTrue(replies.enumerated().allSatisfy { $0.element.isHelpfulByMe == ($0.offset % 2 == 0) })
+        let requests = ForumLoadingURLProtocol.fixture.requests
+        XCTAssertEqual(requests.count, 2)
+        let helpful = try XCTUnwrap(requests.first { $0.url?.lastPathComponent == "forum_helpful" })
+        let query = URLComponents(url: helpful.url!, resolvingAgainstBaseURL: false)!.queryItems!
+        XCTAssertEqual(query.first { $0.name == "user_id" }?.value, "eq.\(ForumLoadingHTTP.owner.uuidString)")
+        XCTAssertEqual(query.first { $0.name == "reply_id" }?.value?.split(separator: ",").count, 50)
+    }
+
+    func testRefreshRetainsLoadedReplyPagesAndDoesNotReplaceContentWithSpinner() async {
+        let model = ThreadViewModel(forumService: makeService(), threadId: ForumLoadingHTTP.thread)
+        await model.load()
+        await model.loadMoreReplies()
+        let loadedIDs = model.replies.map(\.id)
+        XCTAssertEqual(loadedIDs.count, 100)
+        let refresh = Task { await model.refresh() }
+        await Task.yield()
+        XCTAssertFalse(model.isLoading)
+        await refresh.value
+        XCTAssertEqual(model.replies.map(\.id), loadedIDs)
+        XCTAssertTrue(model.hasMoreReplies)
+    }
+}
+
+private final class ForumLoadingURLProtocol: URLProtocol {
+    static let fixture = ForumLoadingHTTP()
+    override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "forum-fixture.invalid" }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let data = Self.fixture.respond(request)
+        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil,
+            headerFields: ["Content-Type": "application/json"])!, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: data)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
+private final class ForumLoadingHTTP: @unchecked Sendable {
+    static let owner = UUID(uuidString: "11111111-1111-4111-8111-111111111111")!
+    static let thread = UUID(uuidString: "22222222-2222-4222-8222-222222222222")!
+    private let lock = NSLock()
+    private var recorded: [URLRequest] = []
+    var requests: [URLRequest] { lock.lock(); defer { lock.unlock() }; return recorded }
+    func reset() { lock.lock(); defer { lock.unlock() }; recorded = [] }
+    private func id(_ index: Int) -> String { String(format: "33333333-3333-4333-8333-%012d", index) }
+    func respond(_ request: URLRequest) -> Data {
+        lock.lock(); defer { lock.unlock() }
+        recorded.append(request)
+        let query = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!.queryItems ?? []
+        let value: (String) -> String? = { key in query.first { $0.name == key }?.value }
+        let formatter = ISO8601DateFormatter()
+        let start = Date(timeIntervalSince1970: 1_710_000_000)
+        let body: Any
+        switch request.url!.lastPathComponent {
+        case "forum_helpful":
+            let filter = value("reply_id") ?? ""
+            body = (0..<120).filter { $0 % 2 == 0 && filter.contains(id($0)) }.map { ["reply_id": id($0)] }
+        case "forum_threads":
+            body = ["id": Self.thread.uuidString, "board_id": Self.thread.uuidString, "author_id": Self.owner.uuidString,
+                    "is_anonymous": false, "title": "Synthetic discussion", "content": "Synthetic content", "status": "approved",
+                    "is_crisis": false, "reply_count": 120, "helpful_count": 0,
+                    "created_at": formatter.string(from: start), "updated_at": formatter.string(from: start)]
+        default:
+            let after = value("created_at").flatMap { formatter.date(from: String($0.dropFirst(3))) }
+            let indexes = (0..<120).filter { after == nil || start.addingTimeInterval(Double($0)) > after! }
+                .prefix(Int(value("limit") ?? "50") ?? 50)
+            body = indexes.map { index -> [String: Any] in
+                let date = formatter.string(from: start.addingTimeInterval(Double(index)))
+                return ["id": id(index), "thread_id": Self.thread.uuidString, "author_id": Self.owner.uuidString,
+                        "is_anonymous": false, "content": "Synthetic reply \(index)", "status": "approved",
+                        "is_crisis": false, "helpful_count": 0, "depth": 0, "created_at": date, "updated_at": date]
+            }
+        }
+        return try! JSONSerialization.data(withJSONObject: body)
+    }
+}
