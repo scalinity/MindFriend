@@ -32,7 +32,7 @@ final class FamilyHubViewModel: ObservableObject {
 
             // Determine user role
             if let userId = supabase.auth.currentUser?.id,
-               let currentMember = members.first(where: { $0.userId == userId.uuidString }) {
+               let currentMember = members.first(where: { UUID(uuidString: $0.userId) == userId }) {
                 await MainActor.run {
                     self.userRole = currentMember.role
                 }

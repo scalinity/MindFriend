@@ -6,6 +6,15 @@ import XCTest
 @MainActor
 final class BillingServiceTests: XCTestCase {
 
+    func testFamilyAdminIdentityUsesUUIDSemantics() {
+        let owner = UUID(uuidString: "ABCDEFAB-1234-4234-8234-1234567890AB")!
+        XCTAssertTrue(BillingService.isFamilyAdmin(adminUserId: owner.uuidString.lowercased(), userId: owner))
+        XCTAssertTrue(BillingService.isFamilyAdmin(adminUserId: owner.uuidString, userId: owner))
+        XCTAssertFalse(BillingService.isFamilyAdmin(adminUserId: UUID().uuidString, userId: owner))
+        XCTAssertFalse(BillingService.isFamilyAdmin(adminUserId: "invalid", userId: owner))
+        XCTAssertFalse(BillingService.isFamilyAdmin(adminUserId: nil, userId: nil))
+    }
+
     // MARK: - Product ID Mapping Tests
 
     func testProductPlanTypeMappingIndividual() {

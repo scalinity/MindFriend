@@ -528,7 +528,7 @@ final class BillingService: ObservableObject {
     func removeFamilyMember(memberId: String) async throws {
         guard let group = familyGroup,
               let currentUserId = authService.userId,
-              group.adminUserId == currentUserId.uuidString else {
+              Self.isFamilyAdmin(adminUserId: group.adminUserId, userId: currentUserId) else {
             throw BillingError.notFamilyAdmin
         }
 
@@ -582,7 +582,7 @@ final class BillingService: ObservableObject {
     func getPendingInvitations() async throws -> [FamilyInvitation] {
         guard let group = familyGroup,
               let currentUserId = authService.userId,
-              group.adminUserId == currentUserId.uuidString else {
+              Self.isFamilyAdmin(adminUserId: group.adminUserId, userId: currentUserId) else {
             return []
         }
 
@@ -598,8 +598,12 @@ final class BillingService: ObservableObject {
 
     /// Check if current user is the family admin
     var isFamilyAdmin: Bool {
-        guard let currentUserId = authService.userId else { return false }
-        return familyGroup?.adminUserId == currentUserId.uuidString
+        Self.isFamilyAdmin(adminUserId: familyGroup?.adminUserId, userId: authService.userId)
+    }
+
+    nonisolated static func isFamilyAdmin(adminUserId: String?, userId: UUID?) -> Bool {
+        guard let adminUserId, let userId else { return false }
+        return UUID(uuidString: adminUserId) == userId
     }
 
     // MARK: - Promo Codes
