@@ -206,6 +206,14 @@ final class EfficacyCalculatorTests: XCTestCase {
         XCTAssertLessThanOrEqual(result!.efficacyScore, 100, "Efficacy score should be <= 100")
     }
 
+    func testThreeSamplePhasesDoNotOverlap() throws {
+        let trajectory = [0.0, 0.2, 0.2].enumerated().map {
+            createTrajectoryPoint(second: $0.offset * 30, score: $0.element)
+        }
+        let result = try XCTUnwrap(calculator.calculateEfficacy(trajectory: trajectory, sessionDuration: 60))
+        XCTAssertEqual(result.efficacyScore, 79.2, accuracy: 0.000001)
+    }
+
     // MARK: - Helper Methods
 
     private func createTrajectoryPoint(second: Int, score: Double) -> TrajectoryPoint {
