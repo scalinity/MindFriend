@@ -22,6 +22,10 @@ protocol AgentServiceProtocol {
 @MainActor
 final class AgentService: ObservableObject, AgentServiceProtocol {
     private let supabase: SupabaseClient
+    private var actionChannel: RealtimeChannelV2?
+    private var actionSubscriptions: [RealtimeSubscription] = []
+    private var actionRefreshTask: Task<Void, Never>?
+    private var actionGeneration = UUID()
 
     @Published private(set) var settings: AgentSettings?
     @Published private(set) var activeSignals: [AgentSignal] = []
@@ -32,6 +36,11 @@ final class AgentService: ObservableObject, AgentServiceProtocol {
 
     init(supabase: SupabaseClient) {
         self.supabase = supabase
+    }
+
+    deinit {
+        actionSubscriptions.forEach { $0.cancel() }
+        actionRefreshTask?.cancel()
     }
 
     // MARK: - Settings
@@ -174,6 +183,8 @@ final class AgentService: ObservableObject, AgentServiceProtocol {
             .execute()
             .value
 
+        try Task.checkCancellation()
+        guard supabase.auth.currentUser?.id == userId else { throw AgentServiceError.notAuthenticated }
         self.recentActions = response
         return response
     }
@@ -301,6 +312,17 @@ final class AgentService: ObservableObject, AgentServiceProtocol {
     // MARK: - Real-time Subscriptions
 
     func subscribeToActions() async {
+        actionGeneration = UUID()
+        let generation = actionGeneration
+        actionSubscriptions.forEach { $0.cancel() }
+        actionSubscriptions.removeAll()
+        actionRefreshTask?.cancel()
+        actionRefreshTask = nil
+        if let channel = actionChannel {
+            actionChannel = nil
+            await supabase.removeChannel(channel)
+        }
+        guard !Task.isCancelled, actionGeneration == generation else { return }
         guard let userId = supabase.auth.currentUser?.id else { return }
 
         // Validate UUID format for filter safety with strict segment validation
@@ -311,33 +333,55 @@ final class AgentService: ObservableObject, AgentServiceProtocol {
             return
         }
 
-        let channel = supabase.channel("agent_actions_\(userIdString)")
+        let channel = supabase.channel("agent_actions_\(userIdString)_\(generation.uuidString)")
 
         // Listen for new actions
-        _ = channel
+        actionSubscriptions.append(channel
             .onPostgresChange(
                 InsertAction.self,
                 table: "agent_actions",
                 filter: "user_id=eq.\(userIdString)"
             ) { [weak self] _ in
-                Task { @MainActor in
-                    _ = try? await self?.fetchRecentActions()
+                Task { @MainActor [weak self] in
+                    guard let self, self.actionGeneration == generation else { return }
+                    self.actionRefreshTask?.cancel()
+                    self.actionRefreshTask = Task { @MainActor [weak self] in
+                        _ = try? await self?.fetchRecentActions()
+                    }
                 }
-            }
+            })
 
         // Listen for action updates
-        _ = channel
+        actionSubscriptions.append(channel
             .onPostgresChange(
                 UpdateAction.self,
                 table: "agent_actions",
                 filter: "user_id=eq.\(userIdString)"
             ) { [weak self] _ in
-                Task { @MainActor in
-                    _ = try? await self?.fetchRecentActions()
+                Task { @MainActor [weak self] in
+                    guard let self, self.actionGeneration == generation else { return }
+                    self.actionRefreshTask?.cancel()
+                    self.actionRefreshTask = Task { @MainActor [weak self] in
+                        _ = try? await self?.fetchRecentActions()
+                    }
                 }
-            }
+            })
 
-        try? await channel.subscribeWithError()
+        actionChannel = channel
+        do {
+            try await channel.subscribeWithError()
+            guard !Task.isCancelled, actionGeneration == generation else {
+                await supabase.removeChannel(channel)
+                return
+            }
+        } catch {
+            if actionGeneration == generation {
+                actionSubscriptions.forEach { $0.cancel() }
+                actionSubscriptions.removeAll()
+                actionChannel = nil
+            }
+            await supabase.removeChannel(channel)
+        }
     }
 }
 

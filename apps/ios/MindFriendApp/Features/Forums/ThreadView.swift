@@ -50,6 +50,9 @@ struct ThreadView: View {
         .task {
             await viewModel.subscribeToRealtime()
         }
+        .onDisappear {
+            viewModel.stopRealtime()
+        }
     }
 
     @ViewBuilder
@@ -318,6 +321,10 @@ final class ThreadViewModel: ObservableObject {
     @Published var error: String?
 
     private var realtimeChannel: RealtimeChannelV2?
+    private var replySubscription: RealtimeSubscription?
+    private var replyRefreshTask: Task<Void, Never>?
+    private var realtimeGeneration = UUID()
+    private var pollingTask: Task<Void, Never>?
     private var lastReplyCursor: Date?
 
     init(forumService: ForumService, threadId: UUID) {
@@ -330,6 +337,9 @@ final class ThreadViewModel: ObservableObject {
     }
 
     deinit {
+        pollingTask?.cancel()
+        replySubscription?.cancel()
+        replyRefreshTask?.cancel()
         let channel = MainActor.assumeIsolated { self.realtimeChannel }
         Task { @MainActor in
             await channel?.unsubscribe()
@@ -383,37 +393,39 @@ final class ThreadViewModel: ObservableObject {
     }
 
     func subscribeToRealtime() async {
+        stopRealtime()
+        let generation = realtimeGeneration
         // Subscribe to Realtime channel for this thread
-        let channel = forumService.supabase.channel("forum_threads:\(threadId.uuidString)")
+        let channel = forumService.supabase.channel("forum_threads:\(threadId.uuidString):\(generation.uuidString)")
 
         // Listen for new replies
-        let _ = channel
+        replySubscription = channel
             .onPostgresChange(
                 InsertAction.self,
                 table: "forum_replies",
                 filter: "thread_id=eq.\(threadId.uuidString)"
-            ) { action in
-                // Handle new forum reply insertions
-                // This callback receives RealtimeInsertAction events
+            ) { [weak self] action in
+                Task { @MainActor [weak self] in
+                    guard let self, self.realtimeGeneration == generation else { return }
+                    self.replyRefreshTask?.cancel()
+                    self.replyRefreshTask = Task { @MainActor [weak self] in
+                        await self?.handleNewReply(action.record, generation: generation)
+                    }
+                }
             }
 
         realtimeChannel = channel
         try? await channel.subscribeWithError()
-
-        // Handle new reply insertions
-        // TODO: Supabase RealtimeSubscription API has changed
-        // for-await syntax no longer supported. Using polling fallback instead.
-        // Task {
-        //     for await insertion in insertionStream {
-        //         await handleNewReply(insertion.record)
-        //     }
-        // }
+        guard !Task.isCancelled, realtimeGeneration == generation else {
+            await forumService.supabase.removeChannel(channel)
+            return
+        }
 
         // Start polling fallback (30s intervals)
         startPollingFallback()
     }
 
-    private func handleNewReply(_ record: JSONObject) async {
+    private func handleNewReply(_ record: JSONObject, generation: UUID) async {
         // Refresh replies to get the new one
         do {
             let allReplies = try await forumService.fetchReplies(
@@ -421,6 +433,7 @@ final class ThreadViewModel: ObservableObject {
                 cursor: nil,
                 limit: 100
             )
+            guard !Task.isCancelled, realtimeGeneration == generation else { return }
             replies = ForumThread.buildReplyTree(replies: allReplies)
         } catch {
             print("Error fetching new replies:", error)
@@ -428,11 +441,27 @@ final class ThreadViewModel: ObservableObject {
     }
 
     private func startPollingFallback() {
-        Task {
+        pollingTask?.cancel()
+        pollingTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(30))
-                await refresh()
+                do { try await Task.sleep(for: .seconds(30)) } catch { break }
+                await self?.refresh()
             }
+        }
+    }
+
+    func stopRealtime() {
+        realtimeGeneration = UUID()
+        replySubscription?.cancel()
+        replySubscription = nil
+        replyRefreshTask?.cancel()
+        replyRefreshTask = nil
+        pollingTask?.cancel()
+        pollingTask = nil
+        if let channel = realtimeChannel {
+            realtimeChannel = nil
+            let client = forumService.supabase
+            Task { await client.removeChannel(channel) }
         }
     }
 
