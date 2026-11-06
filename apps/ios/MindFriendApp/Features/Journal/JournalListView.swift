@@ -70,7 +70,9 @@ struct JournalListView: View {
                 }
             }
             .searchable(text: $searchText, prompt: "Search entries...")
-            .sheet(isPresented: $showingNewEntry) {
+            .sheet(isPresented: $showingNewEntry, onDismiss: {
+                Task { await loadData() }
+            }) {
                 JournalEntryView()
                     .environmentObject(container)
                     .environmentObject(appState)
@@ -137,11 +139,11 @@ struct JournalListView: View {
                 // Entries list
                 ForEach(filteredEntries) { entryWithAnalysis in
                     NavigationLink {
-                        // TODO: Fix JournalDetailView - currently not in build target
-                        // JournalDetailView(entryId: entryWithAnalysis.id)
-                        //     .environmentObject(container)
-                        //     .environmentObject(appState)
-                        Text("Journal Detail - Coming Soon")
+                        JournalDetailView(entryId: entryWithAnalysis.id) {
+                            Task { await loadData() }
+                        }
+                        .environmentObject(container)
+                        .environmentObject(appState)
                     } label: {
                         JournalEntryCard(entry: entryWithAnalysis)
                     }

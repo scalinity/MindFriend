@@ -3,14 +3,17 @@ import SwiftUI
 struct JournalDetailView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
+    @Environment(\.dismiss) private var dismiss
 
     let entryId: String
+    var onChange: () -> Void = {}
 
     @State private var entry: JournalEntry?
     @State private var analysis: JournalAnalysis?
     @State private var prompt: JournalPrompt?
     @State private var isLoading = true
     @State private var isRequestingAnalysis = false
+    @State private var isDeleting = false
     @State private var errorMessage: String?
     @State private var showingAnalysis = false
     @State private var showingEditSheet = false
@@ -71,6 +74,7 @@ struct JournalDetailView: View {
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
+                .disabled(isDeleting || entry == nil)
             }
         }
         .alert("Error", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
@@ -95,7 +99,10 @@ struct JournalDetailView: View {
                     .environmentObject(appState)
             }
         }
-        .sheet(isPresented: $showingEditSheet) {
+        .sheet(isPresented: $showingEditSheet, onDismiss: {
+            Task { await loadData() }
+            onChange()
+        }) {
             if let entry = entry {
                 JournalEntryView(existingEntry: entry)
                     .environmentObject(container)
@@ -385,12 +392,15 @@ struct JournalDetailView: View {
     }
 
     private func deleteEntry() async {
-        guard entry != nil else { return }
+        guard entry != nil, !isDeleting else { return }
+        isDeleting = true
+        defer { isDeleting = false }
 
         do {
             let service = JournalService(supabase: container.supabase)
             try await service.deleteEntry(id: entryId)
-            // Dismiss the view - in a real app this would pop the navigation
+            onChange()
+            dismiss()
         } catch {
             errorMessage = error.localizedDescription
         }
