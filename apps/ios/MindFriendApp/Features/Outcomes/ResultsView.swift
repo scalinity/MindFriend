@@ -18,6 +18,7 @@ struct ResultsView: View {
     var recommendationService: AssessmentRecommendationService?
     
     var severityColor: Color {
+        guard response.availableScore != nil else { return .gray }
         switch response.severityLevel.lowercased() {
         case "minimal": return Color(red: 0.2, green: 0.6, blue: 0.4)
         case "mild": return Color(red: 0.3, green: 0.7, blue: 0.5)
@@ -34,6 +35,7 @@ struct ResultsView: View {
 
     /// Formatted severity level with proper capitalization
     var formattedSeverityLevel: String {
+        guard response.availableScore != nil else { return "Unavailable" }
         let severity = response.severityLevel.lowercased()
         switch severity {
         case "moderately_severe":
@@ -60,8 +62,11 @@ struct ResultsView: View {
     }
     
     var trendIndicator: (image: String, color: Color, label: String) {
+        guard response.availableScore != nil else {
+            return (image: "minus.circle.fill", color: .gray, label: "No trend")
+        }
         let recentHistory = outcomeService.recentResponses
-            .filter { $0.assessmentTemplateId == response.assessmentTemplateId }
+            .filter { $0.assessmentTemplateId == response.assessmentTemplateId && $0.availableScore != nil }
             .sorted { $0.completedAt > $1.completedAt }
             .prefix(5)
         
@@ -130,7 +135,7 @@ struct ResultsView: View {
                                     .foregroundColor(.gray)
                                 
                                 HStack(alignment: .firstTextBaseline, spacing: 4) {
-                                    Text("\(response.totalScore)")
+                                    Text(response.availableScore.map(String.init) ?? "—")
                                         .font(.system(size: 56, weight: .bold, design: .default))
                                         .foregroundColor(severityColor)
                                     
@@ -140,6 +145,11 @@ struct ResultsView: View {
                                 }
                             }
                             
+                            if let explanation = response.scoreStatus.explanation {
+                                Text(explanation)
+                                    .font(.footnote)
+                                    .foregroundColor(.secondary)
+                            }
                             Divider()
                                 .padding(.vertical, 4)
                             
@@ -395,6 +405,7 @@ struct ResultsView: View {
                                 )
                             }
                             
+                            .disabled(response.availableScore == nil)
                             Button(action: {
                                 isSharing = true
                             }) {
@@ -415,6 +426,7 @@ struct ResultsView: View {
                                 )
                             }
                         }
+                        .disabled(response.availableScore == nil)
                         .padding(20)
                     }
                     .padding(.vertical, 20)
@@ -450,7 +462,7 @@ struct ResultsView: View {
     }
 
     private func loadRecommendations() async {
-        guard let service = recommendationService else { return }
+        guard response.availableScore != nil, let service = recommendationService else { return }
         isLoadingRecommendations = true
         defer { isLoadingRecommendations = false }
 
@@ -466,6 +478,7 @@ struct ResultsView: View {
     }
 
     private func interpretationText() -> String {
+        guard response.availableScore != nil else { return response.scoreStatus.explanation ?? "Score unavailable." }
         let severity = response.severityLevel.lowercased()
         switch severity {
         case "minimal":

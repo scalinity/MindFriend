@@ -347,14 +347,17 @@ struct RecentResultCard: View {
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Score: \(response.totalScore)")
+                Text(response.availableScore.map { "Score: \($0)" } ?? "Score unavailable")
                     .font(.system(size: 18, weight: .bold, design: .default))
                     .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
                 
-                Text(response.severityLevel)
+                Text(response.availableScore == nil ? "Retake this assessment for a current score" : response.severityLevel)
                     .font(.system(size: 13, weight: .semibold, design: .default))
                     .foregroundColor(severityColor)
                 
+                if response.scoreStatus == .recalculated {
+                    Text("Recalculated from saved answers").font(.caption).foregroundColor(.secondary)
+                }
                 Text(response.completedAt.formatted(date: .abbreviated, time: .omitted))
                     .font(.system(size: 12, weight: .regular, design: .default))
                     .foregroundColor(.gray)

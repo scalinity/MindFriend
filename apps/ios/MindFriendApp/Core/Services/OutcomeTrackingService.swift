@@ -142,120 +142,45 @@ final class OutcomeTrackingService: ObservableObject {
 
     // MARK: - Assessment Completion
 
-    /// Submit completed assessment
+    /// Save one logical submission atomically. Reuse submissionId when retrying the same answers.
     func submitAssessment(
         type: AssessmentType,
         answers: [String: Int],
-        notes: String? = nil
+        notes: String? = nil,
+        submissionId: UUID = UUID(),
+        timeZone: String = TimeZone.autoupdatingCurrent.identifier
     ) async throws -> AssessmentResponse {
         let uid = try userId
-
         guard let template = assessmentTemplates.first(where: { $0.code == type.rawValue }) else {
             throw OutcomeTrackingError.templateNotFound
         }
-
-        // Calculate score
-        let totalScore = answers.values.reduce(0, +)
-
-        // Determine severity level
-        let severityLevel = determineSeverityLevel(
-            for: type,
-            score: totalScore,
-            template: template
-        )
-
-        // Check for crisis indicators
-        if shouldLogCrisisEvent(for: type, answers: answers, score: totalScore) {
-            try await logCrisisEvent(
-                type: type,
-                responseId: UUID(),  // Will be created server-side
-                severity: .critical,
-                context: ["score": totalScore]
-            )
+        _ = try type.score(answers: answers, questions: template.questions)
+        let request = OutcomeAssessmentSubmission(responseID: submissionId, templateID: template.id,
+            answers: answers, notes: notes, timeZone: timeZone)
+        let result: OutcomeAssessmentSubmissionResult = try await supabase
+            .rpc("submit_outcome_assessment", params: request)
+            .execute().value
+        guard result.response.userId == uid, result.response.id == submissionId,
+              result.response.assessmentTemplateId == template.id, try userId == uid else {
+            throw OutcomeTrackingError.notAuthenticated
         }
 
-        // Check if this is baseline assessment
-        let isBaseline = recentResponses
-            .filter { $0.assessmentTemplateId == template.id }
-            .isEmpty
-
-        // Create response record
-        let response = AssessmentResponse(
-            id: UUID(),
-            userId: uid,
-            assessmentTemplateId: template.id,
-            answers: answers,
-            totalScore: totalScore,
-            severityLevel: severityLevel,
-            isBaseline: isBaseline,
-            notes: notes,
-            completedAt: Date(),
-            createdAt: Date()
-        )
-
-        // Save to database
-        struct ResponseInsert: Encodable {
-            let id: UUID
-            let user_id: UUID
-            let assessment_template_id: UUID
-            let answers: [String: Int]
-            let total_score: Int
-            let severity_level: String
-            let is_baseline: Bool
-            let notes: String?
-            let completed_at: Date
-        }
-
-        let insert = ResponseInsert(
-            id: response.id,
-            user_id: uid,
-            assessment_template_id: template.id,
-            answers: answers,
-            total_score: totalScore,
-            severity_level: severityLevel,
-            is_baseline: isBaseline,
-            notes: notes,
-            completed_at: response.completedAt
-        )
-
-        logger.info("Inserting assessment response")
-        try await supabase
-            .from("assessment_responses")
-            .insert(insert)
-            .execute()
-        logger.info("Successfully inserted assessment response with id: \(response.id.uuidString)")
-
-        // Update schedule
-        try await updateScheduleAfterCompletion(for: template.id)
-
-        // Create outcome goal if this is baseline
-        if isBaseline {
-            try await createOutcomeGoal(
-                assessmentTemplateId: template.id,
-                baselineScore: totalScore
-            )
-        }
-
+        let response = result.response.recalculatedIfNeeded(using: template)
+        recentResponses.removeAll { $0.id == response.id }
         recentResponses.append(response)
-        logger.info("Submitted \(type.shortName) assessment with score: \(totalScore)")
-
+        recentResponses.sort { $0.completedAt > $1.completedAt }
+        if let schedule = result.schedule, schedule.userId == uid {
+            assessmentSchedules.removeAll { $0.id == schedule.id }
+            if schedule.enabled { assessmentSchedules.append(schedule) }
+        }
+        if let goal = result.goal, goal.userId == uid {
+            outcomeGoals.removeAll { $0.id == goal.id }
+            if !goal.achieved { outcomeGoals.append(goal) }
+        }
         return response
     }
 
     // MARK: - Score Calculation & Severity
-
-    private func determineSeverityLevel(
-        for type: AssessmentType,
-        score: Int,
-        template: AssessmentTemplate
-    ) -> String {
-        for range in template.scoringRanges {
-            if score >= range.minScore && score <= range.maxScore {
-                return range.severityLevel
-            }
-        }
-        return "unknown"
-    }
 
     /// Get PHQ-9 specific severity level
     func getPHQ9SeverityLevel(score: Int) -> PHQ9SeverityLevel {
@@ -280,154 +205,7 @@ final class OutcomeTrackingService: ObservableObject {
         }
     }
 
-    // MARK: - Crisis Detection
-
-    private func shouldLogCrisisEvent(
-        for type: AssessmentType,
-        answers: [String: Int],
-        score: Int
-    ) -> Bool {
-        switch type {
-        case .phq9:
-            // PHQ-9 Question 9 (suicide/self-harm) - any non-zero answer is a crisis indicator
-            // Check multiple possible key formats for robustness: "phq9_q9", "9", "PHQ9_Q9"
-            let q9Keys = ["phq9_q9", "9", "PHQ9_Q9", "PHQ9_9"]
-            let q9Answer = q9Keys.compactMap { answers[$0] }.first ?? 0
-            if q9Answer > 0 {
-                return true
-            }
-            // Also flag for severe depression scores
-            if score >= 20 {
-                return true
-            }
-            return false
-
-        case .gad7:
-            // GAD-7 severe anxiety
-            return score >= 15
-
-        case .pss10:
-            // PSS-10 high stress
-            return score >= 27
-
-        default:
-            return false
-        }
-    }
-
-    /// Log crisis event to audit trail
-    private func logCrisisEvent(
-        type: AssessmentType,
-        responseId: UUID,
-        severity: CrisisEventSeverity,
-        context: [String: Int]?
-    ) async throws {
-        let uid = try userId
-        let templateId = assessmentTemplates
-            .first(where: { $0.code == type.rawValue })?
-            .id ?? UUID()
-
-        struct CrisisInsert: Encodable {
-            let user_id: UUID
-            let assessment_template_id: UUID
-            let assessment_response_id: UUID
-            let event_type: String
-            let severity: String
-            let context: [String: Int]?
-        }
-
-        let insert = CrisisInsert(
-            user_id: uid,
-            assessment_template_id: templateId,
-            assessment_response_id: responseId,
-            event_type: CrisisEventType.phq9Q9Scored.rawValue,
-            severity: severity.rawValue,
-            context: context
-        )
-
-        try await supabase
-            .from("assessment_crisis_events")
-            .insert(insert)
-            .execute()
-
-        logger.warning("Crisis event logged")
-    }
-
-    // MARK: - Schedule Management
-
-    private func updateScheduleAfterCompletion(for templateId: UUID) async throws {
-        guard let schedule = assessmentSchedules.first(where: { $0.assessmentTemplateId == templateId }) else {
-            logger.warning("Schedule not found for template: \(templateId.uuidString)")
-            return
-        }
-
-        let frequency = schedule.customFrequencyDays ?? 14  // Default to bi-weekly
-        let nextDue = Calendar.current.date(byAdding: .day, value: frequency, to: Date()) ?? Date()
-
-        struct ScheduleUpdate: Encodable {
-            let last_completed_at: Date
-            let next_due_at: Date
-            let reminder_sent: Bool
-        }
-
-        let update = ScheduleUpdate(
-            last_completed_at: Date(),
-            next_due_at: nextDue,
-            reminder_sent: false
-        )
-
-        try await supabase
-            .from("assessment_schedule")
-            .update(update)
-            .eq("id", value: schedule.id)
-            .execute()
-
-        logger.info("Updated assessment schedule for template: \(templateId.uuidString)")
-    }
-
     // MARK: - Outcome Goals
-
-    /// Create initial outcome goal based on baseline assessment
-    private func createOutcomeGoal(
-        assessmentTemplateId: UUID,
-        baselineScore: Int
-    ) async throws {
-        let uid = try userId
-
-        // Calculate target score (reduce by 25% or minimum 5 points)
-        let reduction = max(5, baselineScore / 4)
-        let targetScore = max(0, baselineScore - reduction)
-
-        // Target 12 weeks out
-        let targetDate = Calendar.current.date(byAdding: .weekOfYear, value: 12, to: Date())
-
-        struct GoalInsert: Encodable {
-            let id: UUID
-            let user_id: UUID
-            let assessment_template_id: UUID
-            let target_score: Int
-            let target_date: Date?
-            let baseline_score: Int
-            let baseline_date: Date
-        }
-
-        let insert = GoalInsert(
-            id: UUID(),
-            user_id: uid,
-            assessment_template_id: assessmentTemplateId,
-            target_score: targetScore,
-            target_date: targetDate,
-            baseline_score: baselineScore,
-            baseline_date: Date()
-        )
-
-        try await supabase
-            .from("outcome_goals")
-            .insert(insert)
-            .execute()
-
-        logger.info("Created outcome goal with target score: \(targetScore)")
-    }
 
     /// Public method for creating custom outcome goals (called from GoalSettingView)
     func createCustomOutcomeGoal(
@@ -435,7 +213,8 @@ final class OutcomeTrackingService: ObservableObject {
         baselineScore: Int,
         targetScore: Int,
         targetDate: Date,
-        notes: String? = nil
+        notes: String? = nil,
+        baselineResponseId: UUID? = nil
     ) async throws -> OutcomeGoal {
         let uid = try userId
         let goalId = UUID()
@@ -450,6 +229,7 @@ final class OutcomeTrackingService: ObservableObject {
             let baseline_score: Int
             let baseline_date: Date
             let notes: String?
+            let baseline_response_id: UUID?
         }
 
         let insert = GoalInsert(
@@ -460,7 +240,8 @@ final class OutcomeTrackingService: ObservableObject {
             target_date: targetDate,
             baseline_score: baselineScore,
             baseline_date: baselineDate,
-            notes: notes
+            notes: notes,
+            baseline_response_id: baselineResponseId
         )
 
         try await supabase
@@ -479,7 +260,8 @@ final class OutcomeTrackingService: ObservableObject {
             achieved: false,
             achievedAt: nil,
             createdAt: Date(),
-            updatedAt: nil
+            updatedAt: nil,
+            baselineResponseId: baselineResponseId
         )
 
         // Reload goals to update published property
@@ -535,7 +317,8 @@ final class OutcomeTrackingService: ObservableObject {
                 .execute()
                 .value
 
-            self.recentResponses = responses
+            _ = try await getAssessmentTemplates()
+            self.recentResponses = reconciledResponses(responses)
             logger.info("Loaded \(responses.count) recent assessment responses")
         } catch {
             self.error = error
@@ -564,7 +347,8 @@ final class OutcomeTrackingService: ObservableObject {
             .execute()
             .value
 
-        return responses
+        _ = try await getAssessmentTemplates()
+        return reconciledResponses(responses)
     }
 
     /// Get assessment responses directly by template ID
@@ -583,27 +367,32 @@ final class OutcomeTrackingService: ObservableObject {
             .execute()
             .value
 
-        return responses
+        _ = try await getAssessmentTemplates()
+        return reconciledResponses(responses)
     }
 
-    /// Calculate trend direction
+    /// Calculate trend using the instrument's score direction and chronological observations.
     func calculateTrend(responses: [AssessmentResponse]) -> TrendDirection {
-        guard responses.count >= 2 else { return .stable } // No data = treat as stable
-
-        let scores = responses.reversed().map { $0.totalScore }
-        let firstHalf = scores.prefix(scores.count / 2).reduce(0, +) / max(1, scores.count / 2)
-        let secondHalf = scores.suffix(scores.count - scores.count / 2).reduce(0, +) / max(1, scores.count - scores.count / 2)
-
-        if secondHalf < firstHalf {
-            return .improving
-        } else if secondHalf > firstHalf {
-            return .declining
-        } else {
-            return .stable
-        }
+        guard let templateID = responses.first?.assessmentTemplateId,
+              let template = assessmentTemplates.first(where: { $0.id == templateID }),
+              let type = AssessmentType(rawValue: template.code) else { return .stable }
+        let scores = responses.filter { $0.assessmentTemplateId == templateID }
+            .sorted { $0.completedAt < $1.completedAt }.compactMap(\.availableScore)
+        guard scores.count >= 2 else { return .stable }
+        let split = scores.count / 2
+        let previous = Double(scores.prefix(split).reduce(0, +)) / Double(split)
+        let current = Double(scores.suffix(scores.count - split).reduce(0, +)) / Double(scores.count - split)
+        let improvement = type.higherScoresAreBetter ? current - previous : previous - current
+        return improvement > 0 ? .improving : improvement < 0 ? .declining : .stable
     }
 
     // MARK: - Helpers
+
+    private func reconciledResponses(_ responses: [AssessmentResponse]) -> [AssessmentResponse] {
+        responses.map { response in
+            response.recalculatedIfNeeded(using: assessmentTemplates.first { $0.id == response.assessmentTemplateId })
+        }
+    }
 
     private func getAssessmentTemplates() async throws -> [AssessmentTemplate] {
         if assessmentTemplates.isEmpty {

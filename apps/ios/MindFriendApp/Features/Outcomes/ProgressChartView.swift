@@ -10,6 +10,7 @@ struct ProgressChartView: View {
     
     var chartData: [ChartDataPoint] {
         responses
+            .filter { $0.availableScore != nil }
             .sorted { $0.completedAt < $1.completedAt }
             .enumerated()
             .map { index, response in

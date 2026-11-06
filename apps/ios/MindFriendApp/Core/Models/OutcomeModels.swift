@@ -65,6 +65,46 @@ enum AssessmentType: String, Codable, CaseIterable, Identifiable {
         }
     }
 
+    var higherScoresAreBetter: Bool { self == .who5 || self == .wemwbs }
+
+    /// Positive values always mean an improvement, regardless of the instrument's direction.
+    func improvement(from previous: Int, to current: Int) -> Int {
+        higherScoresAreBetter ? current - previous : previous - current
+    }
+
+    func suggestedTargetScore(from baseline: Int) -> Int {
+        let change = max(5, baseline / 4)
+        return higherScoresAreBetter ? min(maxScore, baseline + change) : max(0, baseline - change)
+    }
+
+    /// Answers contain response-option indexes; question numbers define reverse-scored items.
+    func score(answers: [String: Int], questions: [AssessmentQuestion]) throws -> Int {
+        let optionCount: Int
+        switch self {
+        case .phq9, .gad7: optionCount = 4
+        case .who5: optionCount = 6
+        case .pss10, .wemwbs: optionCount = 5
+        }
+        guard questions.count == questionCount,
+              Set(questions.map(\.number)) == Set(1...questionCount),
+              Set(questions.map(\.id)).count == questionCount,
+              questions.allSatisfy({ $0.responseOptions.count == optionCount }) else {
+            throw AssessmentScoringError.invalidTemplate
+        }
+        guard Set(answers.keys) == Set(questions.map(\.id)) else {
+            throw AssessmentScoringError.invalidAnswers
+        }
+        return try questions.reduce(0) { total, question in
+            guard let answer = answers[question.id], (0..<optionCount).contains(answer) else {
+                throw AssessmentScoringError.invalidAnswers
+            }
+            if self == .pss10 && [4, 5, 7, 8].contains(question.number) {
+                return total + 4 - answer
+            }
+            return total + answer + (self == .wemwbs ? 1 : 0)
+        }
+    }
+
     /// Description of what this assessment measures
     var description: String {
         switch self {
@@ -73,6 +113,18 @@ enum AssessmentType: String, Codable, CaseIterable, Identifiable {
         case .who5: return "Measures overall mental well-being"
         case .pss10: return "Measures perceived stress levels"
         case .wemwbs: return "Measures mental well-being and functioning"
+        }
+    }
+}
+
+enum AssessmentScoringError: LocalizedError {
+    case invalidTemplate
+    case invalidAnswers
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidTemplate: return "This assessment could not be loaded. Please try again."
+        case .invalidAnswers: return "Please answer every question using one of the available choices."
         }
     }
 }
@@ -270,6 +322,33 @@ struct AssessmentResponse: Identifiable, Codable, Equatable {
     let notes: String?
     let completedAt: Date
     let createdAt: Date?
+    var scoringVersion: Int? = nil
+    // Read metadata only. Historical raw answers and stored scores are never rewritten on load.
+    var scoreStatus: AssessmentScoreStatus = .recorded
+
+    var availableScore: Int? { scoreStatus == .unavailable ? nil : totalScore }
+
+    func recalculatedIfNeeded(using template: AssessmentTemplate?) -> AssessmentResponse {
+        var result = self
+        guard let template, template.id == assessmentTemplateId else {
+            result.scoreStatus = .unavailable
+            return result
+        }
+        guard template.code == AssessmentType.pss10.rawValue else { return result }
+        guard let score = try? AssessmentType.pss10.score(answers: answers, questions: template.questions),
+              let range = template.scoringRanges.first(where: { ($0.minScore...$0.maxScore).contains(score) }) else {
+            result.scoreStatus = .unavailable
+            return result
+        }
+        result = AssessmentResponse(id: id, userId: userId, assessmentTemplateId: assessmentTemplateId,
+            answers: answers, totalScore: score, severityLevel: range.severityLevel,
+            isBaseline: isBaseline, notes: notes, completedAt: completedAt, createdAt: createdAt,
+            scoringVersion: scoringVersion)
+        if scoringVersion != 2 || score != totalScore || range.severityLevel != severityLevel {
+            result.scoreStatus = .recalculated
+        }
+        return result
+    }
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -282,7 +361,44 @@ struct AssessmentResponse: Identifiable, Codable, Equatable {
         case notes
         case completedAt = "completed_at"
         case createdAt = "created_at"
+        case scoringVersion = "scoring_version"
     }
+}
+
+enum AssessmentScoreStatus: Equatable {
+    case recorded
+    case recalculated
+    case unavailable
+
+    var explanation: String? {
+        switch self {
+        case .recorded: return nil
+        case .recalculated: return "This score was recalculated from your saved answers. Your original record is unchanged."
+        case .unavailable: return "The saved answers could not be scored. Your original answers are unchanged."
+        }
+    }
+}
+
+struct OutcomeAssessmentSubmission: Encodable {
+    let responseID: UUID
+    let templateID: UUID
+    let answers: [String: Int]
+    let notes: String?
+    let timeZone: String
+
+    enum CodingKeys: String, CodingKey {
+        case responseID = "p_response_id"
+        case templateID = "p_template_id"
+        case answers = "p_answers"
+        case notes = "p_notes"
+        case timeZone = "p_time_zone"
+    }
+}
+
+struct OutcomeAssessmentSubmissionResult: Decodable {
+    let response: AssessmentResponse
+    let schedule: AssessmentSchedule?
+    let goal: OutcomeGoal?
 }
 
 // MARK: - Assessment Schedule
@@ -340,6 +456,7 @@ struct OutcomeGoal: Identifiable, Equatable {
     let achievedAt: Date?
     let createdAt: Date?
     let updatedAt: Date?
+    var baselineResponseId: UUID? = nil
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -353,6 +470,7 @@ struct OutcomeGoal: Identifiable, Equatable {
         case achievedAt = "achieved_at"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case baselineResponseId = "baseline_response_id"
     }
 
     /// Progress toward goal (0.0 to 1.0)
@@ -375,6 +493,7 @@ extension OutcomeGoal: Codable {
         targetScore = try container.decode(Int.self, forKey: .targetScore)
         baselineScore = try container.decode(Int.self, forKey: .baselineScore)
         achieved = try container.decode(Bool.self, forKey: .achieved)
+        baselineResponseId = try container.decodeIfPresent(UUID.self, forKey: .baselineResponseId)
 
         // Handle date-only strings (YYYY-MM-DD) or full ISO8601
         targetDate = try Self.decodeFlexibleDate(from: container, forKey: .targetDate)

@@ -1,539 +1,90 @@
 import XCTest
 @testable import MindFriendApp
 
-// Placeholder test class - actual tests disabled due to protocol-based DI requirements
-final class OutcomeTrackingServiceTestsPlaceholder: XCTestCase {
-    func testPlaceholder() {
-        // FIXME: Re-enable OutcomeTrackingServiceTests when protocol-based DI is implemented
-        XCTAssertTrue(true, "OutcomeTrackingServiceTests disabled - needs protocol-based mocking")
-    }
-}
-
-// FIXME: Commented out - depends on OutcomeTrackingMockAuthService which cannot inherit from final SupabaseAuthService
-// To fix: Need protocol-based DI for SupabaseAuthService
-/*
 final class OutcomeTrackingServiceTests: XCTestCase {
-
-    @MainActor var sut: OutcomeTrackingService!
-    @MainActor var mockSupabaseClient: OutcomeTrackingMockSupabaseClient!
-    @MainActor var mockAuthService: OutcomeTrackingMockAuthService!
-
-    @MainActor
-    override func setUp() {
-        super.setUp()
-        mockSupabaseClient = OutcomeTrackingMockSupabaseClient()
-        mockAuthService = OutcomeTrackingMockAuthService()
-        sut = OutcomeTrackingService(supabase: mockSupabaseClient, authService: mockAuthService)
+    private func template(_ type: AssessmentType = .pss10) -> AssessmentTemplate {
+        let options = type == .who5 ? 6 : type == .phq9 || type == .gad7 ? 4 : 5
+        return AssessmentTemplate(id: UUID(), code: type.rawValue, name: type.shortName, description: nil,
+            questions: (1...type.questionCount).map {
+                AssessmentQuestion(id: String($0), number: $0, text: "Fixture question",
+                    responseOptions: (0..<options).map(String.init), isCrisisIndicator: type == .phq9 && $0 == 9)
+            }, scoringRanges: [
+                ScoringRange(minScore: 0, maxScore: 13, severityLevel: "low", label: "Low", recommendations: []),
+                ScoringRange(minScore: 14, maxScore: 26, severityLevel: "moderate", label: "Moderate", recommendations: []),
+                ScoringRange(minScore: 27, maxScore: 40, severityLevel: "high", label: "High", recommendations: [])
+            ], recommendedFrequencyDays: type.recommendedFrequencyDays, isActive: true,
+            createdAt: nil, updatedAt: nil)
     }
 
-    @MainActor
-    override func tearDown() {
-        sut = nil
-        mockSupabaseClient = nil
-        mockAuthService = nil
-        super.tearDown()
+    private func response(template: AssessmentTemplate, answers: [String: Int], score: Int,
+                          time: Date = Date(timeIntervalSince1970: 1_000), version: Int? = nil) -> AssessmentResponse {
+        AssessmentResponse(id: UUID(), userId: UUID(), assessmentTemplateId: template.id, answers: answers,
+            totalScore: score, severityLevel: "low", isBaseline: true, notes: nil,
+            completedAt: time, createdAt: time, scoringVersion: version)
     }
 
-    // MARK: - Assessment Templates
-
-    @MainActor
-    func testLoadAssessmentTemplates_Success() async throws {
-        // Arrange
-        // Use proper mock methods if available, otherwise this might need further adjustment
-        // For now, I'll assume mockSupabaseClient can be configured
-
-        // Act
-        try await sut.loadAssessmentTemplates()
-
-        // Assert
-        XCTAssertEqual(sut.assessmentTemplates.count, 1)
-        XCTAssertEqual(sut.assessmentTemplates.first?.code, "PHQ9")
-        XCTAssertFalse(sut.isLoading)
-        XCTAssertNil(sut.error)
+    func testPSSReverseScoringUsesQuestionNumbersAndRawOptionIndexes() throws {
+        let template = template()
+        let zeroes = Dictionary(uniqueKeysWithValues: template.questions.map { ($0.id, 0) })
+        let fours = Dictionary(uniqueKeysWithValues: template.questions.map { ($0.id, 4) })
+        XCTAssertEqual(try AssessmentType.pss10.score(answers: zeroes, questions: template.questions), 16)
+        XCTAssertEqual(try AssessmentType.pss10.score(answers: fours, questions: template.questions.reversed()), 24)
+        let minimum = Dictionary(uniqueKeysWithValues: template.questions.map { ($0.id, [4,5,7,8].contains($0.number) ? 4 : 0) })
+        let maximum = minimum.mapValues { 4 - $0 }
+        XCTAssertEqual(try AssessmentType.pss10.score(answers: minimum, questions: template.questions), 0)
+        XCTAssertEqual(try AssessmentType.pss10.score(answers: maximum, questions: template.questions), 40)
     }
 
-    @MainActor
-    func testLoadAssessmentTemplates_EmptyResult() async throws {
-        // Arrange
-        mockSupabaseClient.mockAssessmentTemplates = []
-
-        // Act
-        try await sut.loadAssessmentTemplates()
-
-        // Assert
-        XCTAssertTrue(sut.assessmentTemplates.isEmpty)
-        XCTAssertNil(sut.error)
-    }
-
-    @MainActor
-    func testLoadAssessmentTemplates_Failure() async throws {
-        // Arrange
-        mockSupabaseClient.shouldFailAssessmentTemplates = true
-
-        // Act & Assert
-        do {
-            try await sut.loadAssessmentTemplates()
-            XCTFail("Expected error to be thrown")
-        } catch {
-            XCTAssertNotNil(sut.error)
-            XCTAssertTrue(sut.assessmentTemplates.isEmpty)
+    func testScoringRejectsMissingExtraAndOutOfRangeAnswers() throws {
+        let template = template()
+        let valid = Dictionary(uniqueKeysWithValues: template.questions.map { ($0.id, 0) })
+        var missing = valid; missing.removeValue(forKey: "1")
+        var extra = valid; extra["unknown"] = 0
+        var outside = valid; outside["1"] = 5
+        var negative = valid; negative["1"] = -1
+        for invalid in [missing, extra, outside, negative] {
+            XCTAssertThrowsError(try AssessmentType.pss10.score(answers: invalid, questions: template.questions))
         }
     }
 
-    // MARK: - Assessment Scheduling
-
-    @MainActor
-    func testLoadAssessmentSchedules_Success() async throws {
-        // Arrange
-        mockAuthService.mockUserId = UUID()
-        let mockSchedules = [
-            AssessmentSchedule(
-                id: UUID(),
-                userId: mockAuthService.mockUserId!,
-                assessmentTemplateId: UUID(),
-                frequency: "weekly",
-                nextDueAt: Date(),
-                enabled: true,
-                createdAt: Date()
-            )
-        ]
-        mockSupabaseClient.mockAssessmentSchedules = mockSchedules
-
-        // Act
-        try await sut.loadAssessmentSchedules()
-
-        // Assert
-        XCTAssertEqual(sut.assessmentSchedules.count, 1)
-        XCTAssertTrue(sut.assessmentSchedules.first?.enabled ?? false)
-        XCTAssertNil(sut.error)
+    func testHistoricalPSSRecalculatesWithoutChangingSavedAnswers() throws {
+        let template = template()
+        let answers = Dictionary(uniqueKeysWithValues: template.questions.map { ($0.id, 0) })
+        let stored = response(template: template, answers: answers, score: 0)
+        let displayed = stored.recalculatedIfNeeded(using: template)
+        XCTAssertEqual(displayed.availableScore, 16)
+        XCTAssertEqual(displayed.severityLevel, "moderate")
+        XCTAssertEqual(displayed.scoreStatus, .recalculated)
+        XCTAssertEqual(displayed.answers, answers)
+        XCTAssertEqual(displayed.id, stored.id)
+        XCTAssertEqual(stored.totalScore, 0)
+        XCTAssertNil(stored.scoringVersion)
     }
 
-    @MainActor
-    func testLoadAssessmentSchedules_NotAuthenticated() async throws {
-        // Arrange
-        mockAuthService.mockUserId = nil
-
-        // Act & Assert
-        do {
-            try await sut.loadAssessmentSchedules()
-            XCTFail("Expected authentication error")
-        } catch {
-            XCTAssertTrue(error is OutcomeTrackingError)
-        }
+    func testMalformedHistoricalPSSIsUnavailableInsteadOfTrusted() {
+        let template = template()
+        let result = response(template: template, answers: ["1":0], score: 0).recalculatedIfNeeded(using: template)
+        XCTAssertNil(result.availableScore)
+        XCTAssertEqual(result.scoreStatus, .unavailable)
+        XCTAssertEqual(result.answers, ["1":0])
     }
 
-    // MARK: - Assessment Severity Levels
-
-    @MainActor
-    func testPHQ9SeverityLevel_Minimal() {
-        // Arrange & Act
-        let severity = sut.getPHQ9SeverityLevel(score: 4)
-
-        // Assert
-        XCTAssertEqual(severity, .minimal)
+    func testCorrectedPSSSubmissionIsNotMarkedAsHistorical() {
+        let template = template()
+        let answers = Dictionary(uniqueKeysWithValues: template.questions.map { ($0.id, [4,5,7,8].contains($0.number) ? 4 : 0) })
+        let result = response(template: template, answers: answers, score: 0, version: 2).recalculatedIfNeeded(using: template)
+        XCTAssertEqual(result.availableScore, 0)
+        XCTAssertEqual(result.scoreStatus, .recorded)
     }
 
-    @MainActor
-    func testPHQ9SeverityLevel_Mild() {
-        // Act
-        let severity = sut.getPHQ9SeverityLevel(score: 8)
-
-        // Assert
-        XCTAssertEqual(severity, .mild)
-    }
-
-    @MainActor
-    func testPHQ9SeverityLevel_Moderate() {
-        // Act
-        let severity = sut.getPHQ9SeverityLevel(score: 14)
-
-        // Assert
-        XCTAssertEqual(severity, .moderate)
-    }
-
-    @MainActor
-    func testPHQ9SeverityLevel_ModeratelySevere() {
-        // Act
-        let severity = sut.getPHQ9SeverityLevel(score: 19)
-
-        // Assert
-        XCTAssertEqual(severity, .moderatelySevere)
-    }
-
-    @MainActor
-    func testPHQ9SeverityLevel_Severe() {
-        // Act
-        let severity = sut.getPHQ9SeverityLevel(score: 27)
-
-        // Assert
-        XCTAssertEqual(severity, .severe)
-    }
-
-    @MainActor
-    func testGAD7SeverityLevel_Minimal() {
-        // Act
-        let severity = sut.getGAD7SeverityLevel(score: 4)
-
-        // Assert
-        XCTAssertEqual(severity, .minimal)
-    }
-
-    @MainActor
-    func testGAD7SeverityLevel_Mild() {
-        // Act
-        let severity = sut.getGAD7SeverityLevel(score: 9)
-
-        // Assert
-        XCTAssertEqual(severity, .mild)
-    }
-
-    @MainActor
-    func testGAD7SeverityLevel_Moderate() {
-        // Act
-        let severity = sut.getGAD7SeverityLevel(score: 14)
-
-        // Assert
-        XCTAssertEqual(severity, .moderate)
-    }
-
-    @MainActor
-    func testGAD7SeverityLevel_Severe() {
-        // Act
-        let severity = sut.getGAD7SeverityLevel(score: 19)
-
-        // Assert
-        XCTAssertEqual(severity, .severe)
-    }
-
-    // MARK: - Outcome Goals
-
-    @MainActor
-    func testCreateCustomOutcomeGoal_Success() async throws {
-        // Arrange
-        mockAuthService.mockUserId = UUID()
-        let assessmentTemplateId = UUID()
-        let targetScore = 10
-        let baselineScore = 20
-        let targetDate = Calendar.current.date(byAdding: .month, value: 1, to: Date())!
-
-        // Act
-        let goal = try await sut.createCustomOutcomeGoal(
-            assessmentTemplateId: assessmentTemplateId,
-            targetScore: targetScore,
-            baselineScore: baselineScore,
-            targetDate: targetDate
-        )
-
-        // Assert
-        XCTAssertEqual(goal.assessmentTemplateId, assessmentTemplateId)
-        XCTAssertEqual(goal.targetScore, targetScore)
-        XCTAssertEqual(goal.baselineScore, baselineScore)
-        XCTAssertEqual(goal.targetDate, targetDate)
-        XCTAssertFalse(goal.achieved)
-    }
-
-    @MainActor
-    func testCreateCustomOutcomeGoal_NotAuthenticated() async throws {
-        // Arrange
-        mockAuthService.mockUserId = nil
-
-        // Act & Assert
-        do {
-            try await sut.createCustomOutcomeGoal(
-                assessmentTemplateId: UUID(),
-                targetScore: 10,
-                baselineScore: 20,
-                targetDate: Date()
-            )
-            XCTFail("Expected authentication error")
-        } catch {
-            XCTAssertTrue(error is OutcomeTrackingError)
-        }
-    }
-
-    @MainActor
-    func testLoadOutcomeGoals_Success() async throws {
-        // Arrange
-        mockAuthService.mockUserId = UUID()
-        let mockGoals = [
-            OutcomeGoal(
-                id: UUID(),
-                userId: mockAuthService.mockUserId!,
-                assessmentTemplateId: UUID(),
-                targetScore: 10,
-                baselineScore: 20,
-                targetDate: Date(),
-                achieved: false,
-                createdAt: Date()
-            )
-        ]
-        mockSupabaseClient.mockOutcomeGoals = mockGoals
-
-        // Act
-        try await sut.loadOutcomeGoals()
-
-        // Assert
-        XCTAssertEqual(sut.outcomeGoals.count, 1)
-        XCTAssertFalse(sut.outcomeGoals.first?.achieved ?? true)
-        XCTAssertNil(sut.error)
-    }
-
-    // MARK: - Assessment History & Trends
-
-    @MainActor
-    func testGetAssessmentHistory_Success() async throws {
-        // Arrange
-        mockAuthService.mockUserId = UUID()
-        let assessmentTemplateId = UUID()
-        let mockResponses = [
-            AssessmentResponse(
-                id: UUID(),
-                userId: mockAuthService.mockUserId!,
-                assessmentTemplateId: assessmentTemplateId,
-                answers: [:],
-                totalScore: 15,
-                severityLevel: "mild",
-                isBaseline: false,
-                notes: nil,
-                completedAt: Calendar.current.date(byAdding: .day, value: -7, to: Date())!,
-                createdAt: Date()
-            ),
-            AssessmentResponse(
-                id: UUID(),
-                userId: mockAuthService.mockUserId!,
-                assessmentTemplateId: assessmentTemplateId,
-                answers: [:],
-                totalScore: 12,
-                severityLevel: "minimal",
-                isBaseline: false,
-                notes: nil,
-                completedAt: Date(),
-                createdAt: Date()
-            )
-        ]
-        mockSupabaseClient.mockAssessmentResponses = mockResponses
-
-        // Act
-        let history = try await sut.getAssessmentHistory(
-            assessmentTemplateId: assessmentTemplateId,
-            days: 30
-        )
-
-        // Assert
-        XCTAssertEqual(history.count, 2)
-        XCTAssertEqual(history.first?.totalScore, 15)
-        XCTAssertEqual(history.last?.totalScore, 12)
-    }
-
-    @MainActor
-    func testCalculateTrend_Improving() {
-        // Arrange
-        let responses = [
-            AssessmentResponse(
-                id: UUID(),
-                userId: UUID(),
-                assessmentTemplateId: UUID(),
-                answers: [:],
-                totalScore: 20,
-                severityLevel: "moderate",
-                isBaseline: true,
-                notes: nil,
-                completedAt: Calendar.current.date(byAdding: .day, value: -14, to: Date())!,
-                createdAt: Date()
-            ),
-            AssessmentResponse(
-                id: UUID(),
-                userId: UUID(),
-                assessmentTemplateId: UUID(),
-                answers: [:],
-                totalScore: 15,
-                severityLevel: "mild",
-                isBaseline: false,
-                notes: nil,
-                completedAt: Calendar.current.date(byAdding: .day, value: -7, to: Date())!,
-                createdAt: Date()
-            ),
-            AssessmentResponse(
-                id: UUID(),
-                userId: UUID(),
-                assessmentTemplateId: UUID(),
-                answers: [:],
-                totalScore: 10,
-                severityLevel: "minimal",
-                isBaseline: false,
-                notes: nil,
-                completedAt: Date(),
-                createdAt: Date()
-            )
-        ]
-
-        // Act
-        let trend = sut.calculateTrend(responses: responses)
-
-        // Assert
-        XCTAssertEqual(trend, .improving)
-    }
-
-    @MainActor
-    func testCalculateTrend_Declining() {
-        // Arrange
-        let responses = [
-            AssessmentResponse(
-                id: UUID(),
-                userId: UUID(),
-                assessmentTemplateId: UUID(),
-                answers: [:],
-                totalScore: 10,
-                severityLevel: "minimal",
-                isBaseline: true,
-                notes: nil,
-                completedAt: Calendar.current.date(byAdding: .day, value: -14, to: Date())!,
-                createdAt: Date()
-            ),
-            AssessmentResponse(
-                id: UUID(),
-                userId: UUID(),
-                assessmentTemplateId: UUID(),
-                answers: [:],
-                totalScore: 15,
-                severityLevel: "mild",
-                isBaseline: false,
-                notes: nil,
-                completedAt: Calendar.current.date(byAdding: .day, value: -7, to: Date())!,
-                createdAt: Date()
-            ),
-            AssessmentResponse(
-                id: UUID(),
-                userId: UUID(),
-                assessmentTemplateId: UUID(),
-                answers: [:],
-                totalScore: 20,
-                severityLevel: "moderate",
-                isBaseline: false,
-                notes: nil,
-                completedAt: Date(),
-                createdAt: Date()
-            )
-        ]
-
-        // Act
-        let trend = sut.calculateTrend(responses: responses)
-
-        // Assert
-        XCTAssertEqual(trend, .declining)
-    }
-
-    @MainActor
-    func testCalculateTrend_Stable() {
-        // Arrange
-        let responses = [
-            AssessmentResponse(
-                id: UUID(),
-                userId: UUID(),
-                assessmentTemplateId: UUID(),
-                answers: [:],
-                totalScore: 15,
-                severityLevel: "mild",
-                isBaseline: true,
-                notes: nil,
-                completedAt: Calendar.current.date(byAdding: .day, value: -14, to: Date())!,
-                createdAt: Date()
-            ),
-            AssessmentResponse(
-                id: UUID(),
-                userId: UUID(),
-                assessmentTemplateId: UUID(),
-                answers: [:],
-                totalScore: 15,
-                severityLevel: "mild",
-                isBaseline: false,
-                notes: nil,
-                completedAt: Date(),
-                createdAt: Date()
-            )
-        ]
-
-        // Act
-        let trend = sut.calculateTrend(responses: responses)
-
-        // Assert
-        XCTAssertEqual(trend, .stable)
-    }
-
-    // MARK: - Empty Response Handling
-
-    @MainActor
-    func testCalculateTrend_EmptyResponses() {
-        // Act
-        let trend = sut.calculateTrend(responses: [])
-
-        // Assert
-        XCTAssertEqual(trend, .noData)
-    }
-
-    @MainActor
-    func testCalculateTrend_SingleResponse() {
-        // Arrange
-        let responses = [
-            AssessmentResponse(
-                id: UUID(),
-                userId: UUID(),
-                assessmentTemplateId: UUID(),
-                answers: [:],
-                totalScore: 15,
-                severityLevel: "mild",
-                isBaseline: true,
-                notes: nil,
-                completedAt: Date(),
-                createdAt: Date()
-            )
-        ]
-
-        // Act
-        let trend = sut.calculateTrend(responses: responses)
-
-        // Assert
-        XCTAssertEqual(trend, .noData)
+    func testSubmissionEncodesExplicitIdentityAndRawAnswers() throws {
+        let request = OutcomeAssessmentSubmission(responseID: UUID(), templateID: UUID(), answers: ["9":1],
+            notes: "Fixture", timeZone: "America/New_York")
+        let encoder = JSONEncoder(); encoder.outputFormatting = .sortedKeys
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoder.encode(request)) as? [String: Any])
+        XCTAssertEqual(object["p_response_id"] as? String, request.responseID.uuidString)
+        XCTAssertEqual(object["p_template_id"] as? String, request.templateID.uuidString)
+        XCTAssertEqual(object["p_answers"] as? [String:Int], ["9":1])
+        XCTAssertEqual(object["p_time_zone"] as? String, "America/New_York")
     }
 }
-*/
-
-// MARK: - Mock Objects
-// FIXME: Disabled - SupabaseClientProtocol doesn't exist, need protocol-based DI
-/*
-class OutcomeTrackingMockSupabaseClient: SupabaseClientProtocol {
-    var mockAssessmentTemplates: [AssessmentTemplate] = []
-    var mockAssessmentSchedules: [AssessmentSchedule] = []
-    var mockAssessmentResponses: [AssessmentResponse] = []
-    var mockOutcomeGoals: [OutcomeGoal] = []
-    var shouldFailAssessmentTemplates = false
-    var shouldFailSchedules = false
-
-    // MARK: - SupabaseClientProtocol Conformance
-
-    func from(_ table: String) -> PostgrestQueryBuilder {
-        fatalError("MockSupabaseClient.from() should not be called in tests")
-    }
-
-    var auth: Auth {
-        fatalError("MockSupabaseClient.auth should not be called in tests")
-    }
-
-    func getMockSupabaseClient() -> SupabaseClient {
-        return SupabaseClient(
-            supabaseURL: URL(string: "http://localhost:54321")!,
-            supabaseKey: "test-key"
-        )
-    }
-}
-*/
-
-// FIXME: Cannot mock SupabaseAuthService - it's a final class with final properties
-// To fix: Create a SupabaseAuthServiceProtocol and have SupabaseAuthService conform to it
-/*
-class OutcomeTrackingMockAuthService: SupabaseAuthService {
-    var mockUserId: UUID?
-    override var userId: UUID? { mockUserId }
-    init() { super.init(client: SupabaseClient(supabaseURL: URL(string: "https://test.com")!, supabaseKey: "test")) }
-}
-*/
