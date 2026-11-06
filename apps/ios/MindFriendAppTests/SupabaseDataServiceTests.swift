@@ -883,6 +883,8 @@ final class ChatHistoryPaginationTests: XCTestCase {
         ChatHistoryURLProtocol.fixture.reset()
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [ChatHistoryURLProtocol.self]
+        config.timeoutIntervalForRequest = 5
+        config.timeoutIntervalForResource = 10
         let client = SupabaseClient(supabaseURL: URL(string: "https://chat-history-fixture.invalid")!, supabaseKey: "synthetic-anon",
             options: .init(auth: .init(storage: AvatarFixtureAuthStorage(), autoRefreshToken: false),
                            global: .init(session: URLSession(configuration: config))))
@@ -894,15 +896,22 @@ final class ChatHistoryPaginationTests: XCTestCase {
         let service = service()
         var cursor: ChatHistoryCursor?
         var ids: [String] = []
-        repeat {
+        for _ in 0..<8 {
             let page = try await service.getConversationPage(before: cursor)
             XCTAssertLessThanOrEqual(page.items.count, 100)
             ids += page.items.map { $0.id.lowercased() }
             cursor = page.nextCursor
-        } while cursor != nil
+            if cursor == nil { break }
+        }
+        XCTAssertNil(cursor, "Conversation pagination must terminate within the fixture's bounded page count")
         XCTAssertEqual(ids.count, 101)
         XCTAssertEqual(Set(ids).count, 101)
-        XCTAssertEqual(ChatHistoryURLProtocol.fixture.requests.count, 2)
+        let requests = ChatHistoryURLProtocol.fixture.requests
+        XCTAssertEqual(requests.count, 2)
+        let lastRequest = try XCTUnwrap(requests.last)
+        let lastQuery = try XCTUnwrap(URLComponents(url: lastRequest.url!, resolvingAgainstBaseURL: false)?.queryItems)
+        XCTAssertEqual(lastQuery.first { $0.name == "updated_at" }?.value?.lowercased(), "is.null")
+        XCTAssertEqual(lastQuery.first { $0.name == "id" }?.value?.lowercased(), "lt.\(ChatHistoryHTTP.id(1))")
         XCTAssertEqual(ids, (0..<101).reversed().map(ChatHistoryHTTP.id))
     }
 
@@ -910,13 +919,15 @@ final class ChatHistoryPaginationTests: XCTestCase {
         let service = service()
         var cursor: ChatHistoryCursor?
         var ids: [String] = []
-        repeat {
+        for _ in 0..<8 {
             let page = try await service.getMessagePage(conversationId: ChatHistoryHTTP.conversation.uuidString, before: cursor)
             XCTAssertLessThanOrEqual(page.items.count, 50)
             ids.insert(contentsOf: page.items.map(\.id), at: 0)
             if ids.count == 50 { XCTAssertEqual(page.nextCursor?.timestamp, "2026-10-22T12:00:00.123456+00:00") }
             cursor = page.nextCursor
-        } while cursor != nil
+            if cursor == nil { break }
+        }
+        XCTAssertNil(cursor, "Message pagination must terminate within the fixture's bounded page count")
         XCTAssertEqual(ids, (0..<151).map(ChatHistoryHTTP.id))
         XCTAssertEqual(Set(ids).count, 151)
         let requests = ChatHistoryURLProtocol.fixture.requests
@@ -972,7 +983,7 @@ private final class ChatHistoryHTTP: @unchecked Sendable {
                 return date < timestamp || (date == timestamp && ($0["id"] as! String) < id)
             }
         }
-        if query.contains(where: { $0.name == timestampField && $0.value == "is.null" }) {
+        if query.contains(where: { $0.name == timestampField && $0.value?.lowercased() == "is.null" }) {
             let id = String(query.first(where: { $0.name == "id" })!.value!.dropFirst(3)).lowercased()
             rows = rows.filter { $0[timestampField] is NSNull && ($0["id"] as! String) < id }
         }
