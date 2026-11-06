@@ -14,8 +14,16 @@ import subprocess
 parser = argparse.ArgumentParser()
 parser.add_argument("--evidence", type=Path, required=True)
 parser.add_argument("--recovery", type=Path, required=True)
+parser.add_argument("--baseline", default="HEAD", help="Git commit to compare with the protected snapshot (default: HEAD)")
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
+resolved_baseline = subprocess.run(
+    ["git", "rev-parse", "--verify", args.baseline + "^{commit}"],
+    cwd=root, capture_output=True, text=True,
+)
+if resolved_baseline.returncode != 0:
+    parser.error("The baseline must resolve to an available Git commit")
+baseline_commit = resolved_baseline.stdout.strip()
 
 def read_json(name):
     return json.loads((args.evidence / name).read_text())
@@ -59,13 +67,18 @@ for function in deployed:
     slug = function["slug"]
     local = root / "supabase/functions" / slug / "index.ts"
     snapshot = args.recovery / "deployed/supabase/functions" / slug / "index.ts"
-    baseline = subprocess.run(["git", "show", "HEAD:supabase/functions/" + slug + "/index.ts"], cwd=root, capture_output=True).stdout if local.exists() else None
+    baseline_result = subprocess.run(
+        ["git", "show", baseline_commit + ":supabase/functions/" + slug + "/index.ts"],
+        cwd=root, capture_output=True,
+    )
+    baseline = baseline_result.stdout if baseline_result.returncode == 0 else None
     deployed_source = snapshot.read_bytes() if snapshot.exists() else None
     source = deployed_source.decode() if deployed_source else ""
     category = "critical" if slug in {"chat", "voice-token", "voice-session-end", "delete-account"} else "used" if refs["function"].get(slug) or slug in cron_targets else "uncertain"
     functions.append({
         "slug": slug, "version": function["version"], "verify_jwt": function.get("verify_jwt"), "status": function["status"],
         "category": category, "local_entrypoint": local.exists(), "deployed_source_exported": snapshot.exists(),
+        "baseline_source_available": baseline is not None,
         "baseline_exact_match": baseline == deployed_source if baseline is not None and deployed_source is not None else None,
         "baseline_sha256": hashlib.sha256(baseline).hexdigest() if baseline is not None else None,
         "deployed_sha256": hashlib.sha256(deployed_source).hexdigest() if deployed_source is not None else None,
@@ -93,7 +106,7 @@ for bucket in workloads["buckets"]:
     bucket["privacy_review"] = "public object URLs bypass object SELECT policies" if bucket["public"] else "private; signed-download and ownership tests required"
 
 out = {
-    "project_ref": "zfaucivtzfwnrijsbfug", "baseline_commit": "54a5e37f06c78941871be1a6a466ea8a36f1ab46",
+    "project_ref": "zfaucivtzfwnrijsbfug", "baseline_commit": baseline_commit,
     "classification_rule": "critical core path; used means static app or scheduled reference; uncertain means no direct static reference. No component is authorized for deletion.",
     "limitations": ["Static references miss dynamic function/table names and server-side indirect callers.", "Source equality is byte equality against baseline, not a semantic equivalence claim.", "Object content and real user records are excluded."],
     "tables_and_views": tables, "edge_functions": functions, "security_definers": definers,
