@@ -2080,3 +2080,5 @@ Unset, or any other value, keeps the xAI behavior byte for byte. There is no per
 Each streamed partial image adds 100 output tokens ($0.003). The two functions' real streamed requests on `gpt-image-2.6-flare` cost $0.0272 (art, PNG, 8.4 s) and $0.0249 (profile picture, JPEG, 172 KB, 6.8 s). The reservations are $0.0366 and $0.0364.
 
 **Alternative left open:** `gpt-image-2.5-flare` is not deprecated, costs a quarter as much at low quality, and looked as good in a side-by-side of the same prompt. It is also on OpenAI's zero-data-retention image list, which 2.6 is not yet. Switching is a one-line change in `_shared/image-model.ts` (`IMAGE_MODEL = "gpt-image-2.5-flare"`, output 196 tokens → reserve 5_880).
+
+**Chosen and deployed:** `gpt-image-2.6-flare` at low quality. `generate-art` and `generate-profile-picture` were deployed to production at 3:47 PM EST on 2026-11-06, one function per command: the bulk deploy was refused with "402: Max number of functions reached" (210 functions on the project), although both functions already existed. The deployed sources match the repo, and an unauthenticated request to each returns 401.
