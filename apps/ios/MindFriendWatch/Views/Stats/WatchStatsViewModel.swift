@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 /// ViewModel for WatchStatsView - loads real data from UserDefaults
 @MainActor
@@ -14,26 +15,19 @@ final class WatchStatsViewModel: ObservableObject {
         return formatter
     }()
 
+    private var observation: AnyCancellable?
+
     init() {
         loadData()
+        observation = WatchConnectivityManager.shared.$lastSyncDate.sink { [weak self] _ in self?.loadData() }
     }
 
     func loadData() {
-        // Load week moods from history (most recent 7 days, oldest first)
-        var moods: [String] = []
-        for dayOffset in (0..<7).reversed() {
-            let emoji = MoodHistoryManager.moodEmoji(forDayOffset: dayOffset)
-            moods.append(emoji)
-        }
-        weekMoods = moods
-
-        // Count moods logged this week
-        let history = MoodHistoryManager.loadHistory()
-        let weekAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
-        moodsLogged = history.filter { $0.date > weekAgo }.count
-
-        // Load exercises done (synced from iOS)
-        exercisesDone = WatchAppConstants.sharedDefaults.integer(forKey: "watch_exercises_count")
+        let snapshot = SharedDataStore.shared.snapshot()
+        let days = WidgetMoodHelper.last7Days(from: snapshot?.weekMoods ?? [])
+        weekMoods = days.map { $0.mood.map(WidgetMoodHelper.emoji(for:)) ?? "·" }
+        moodsLogged = days.filter { $0.mood != nil }.count
+        exercisesDone = snapshot?.weeklyExercisesCompleted ?? 0
     }
 
     /// Returns single-letter day label for the given index (0 = oldest day in week)

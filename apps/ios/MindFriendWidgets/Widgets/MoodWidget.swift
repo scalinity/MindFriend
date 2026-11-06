@@ -28,24 +28,30 @@ struct MoodWidgetProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (MoodEntry) -> Void) {
+        let snapshot = SharedDataStore.shared.snapshot()
         let entry = MoodEntry(
             date: Date(),
-            currentMood: SharedDataStore.shared.todayMood,
-            weekMoods: SharedDataStore.shared.weekMoods,
-            isPlaceholder: false
+            currentMood: snapshot?.todayMood,
+            weekMoods: snapshot?.weekMoods ?? [],
+            isPlaceholder: false,
+            isPending: SharedDataStore.shared.pendingMood != nil
         )
         completion(entry)
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<MoodEntry>) -> Void) {
+        let snapshot = SharedDataStore.shared.snapshot()
         let entry = MoodEntry(
             date: Date(),
-            currentMood: SharedDataStore.shared.todayMood,
-            weekMoods: SharedDataStore.shared.weekMoods,
-            isPlaceholder: false
+            currentMood: snapshot?.todayMood,
+            weekMoods: snapshot?.weekMoods ?? [],
+            isPlaceholder: false,
+            isPending: SharedDataStore.shared.pendingMood != nil
         )
 
-        let nextUpdate = Calendar.current.date(byAdding: .hour, value: 1, to: Date()) ?? Date()
+        let scheduledUpdate = Calendar.current.date(byAdding: .hour, value: 1, to: Date()) ?? Date()
+        let midnight = Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: Date())) ?? scheduledUpdate
+        let nextUpdate = min(scheduledUpdate, midnight)
         let timeline = Timeline(entries: [entry], policy: .after(nextUpdate))
         completion(timeline)
     }
@@ -58,6 +64,7 @@ struct MoodEntry: TimelineEntry {
     let currentMood: String?
     let weekMoods: [WidgetDailyMood]
     let isPlaceholder: Bool
+    var isPending: Bool = false
 }
 
 // MARK: - Views
@@ -87,11 +94,11 @@ struct MoodWidgetEntryView: View {
                 Text(WidgetMoodHelper.emoji(for: mood))
                     .font(.system(size: 40))
 
-                Text("Today's mood")
+                Text(entry.isPending ? "Waiting to sync" : "Today's mood")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                Text("How are you?")
+                Text(entry.isPending ? "Waiting to sync" : "How are you?")
                     .font(.headline)
 
                 // Interactive mood buttons (iOS 17+)
@@ -130,7 +137,7 @@ struct MoodWidgetEntryView: View {
                             Image(systemName: "plus")
                                 .foregroundStyle(.secondary)
                         }
-                    Text("Log mood")
+                    Text(entry.isPending ? "Waiting to sync" : "Log mood")
                         .font(.caption)
                 }
             }
@@ -185,7 +192,7 @@ struct MoodWidgetEntryView: View {
                             .font(.headline)
                     }
                 } else {
-                    Text("Not logged")
+                    Text(entry.isPending ? "Waiting to sync" : "Not logged")
                         .font(.headline)
                 }
             }
@@ -227,11 +234,13 @@ struct LogMoodIntent: AppIntent {
         self.mood = mood
     }
 
-    func perform() async throws -> some IntentResult {
-        // Update mood in SharedDataStore
+    static var openAppWhenRun = true
+
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        guard ["stressed", "low", "okay", "good", "great"].contains(mood) else { throw SharedDataStore.StoreError.invalidAction }
         let score = WidgetMoodHelper.score(for: mood)
-        SharedDataStore.shared.updateTodayMood(mood, score: score)
-        return .result()
+        try SharedDataStore.shared.queueMood(score: score)
+        return .result(dialog: "Mood queued. Open MindFriend to finish syncing.")
     }
 }
 

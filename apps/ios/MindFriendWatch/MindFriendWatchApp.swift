@@ -2,9 +2,16 @@ import SwiftUI
 
 @main
 struct MindFriendWatchApp: App {
+    @Environment(\.scenePhase) private var scenePhase
+
+    init() { WatchConnectivityManager.shared.activate() }
+
     var body: some Scene {
         WindowGroup {
             WatchNavigationView()
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .active { WatchConnectivityManager.shared.requestSyncFromPhone() }
+                }
         }
     }
 }

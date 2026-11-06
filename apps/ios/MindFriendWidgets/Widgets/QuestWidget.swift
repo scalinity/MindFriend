@@ -40,20 +40,22 @@ struct QuestWidgetProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (QuestEntry) -> Void) {
+        let snapshot = SharedDataStore.shared.snapshot()
         let entry = QuestEntry(
             date: Date(),
-            quest: SharedDataStore.shared.dailyQuest,
-            streak: SharedDataStore.shared.currentStreak,
+            quest: snapshot?.dailyQuest,
+            streak: snapshot?.currentStreak ?? 0,
             isPlaceholder: false
         )
         completion(entry)
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<QuestEntry>) -> Void) {
+        let snapshot = SharedDataStore.shared.snapshot()
         let entry = QuestEntry(
             date: Date(),
-            quest: SharedDataStore.shared.dailyQuest,
-            streak: SharedDataStore.shared.currentStreak,
+            quest: snapshot?.dailyQuest,
+            streak: snapshot?.currentStreak ?? 0,
             isPlaceholder: false
         )
 
@@ -111,7 +113,7 @@ struct QuestWidgetEntryView: View {
                         .font(.caption)
                         .fontWeight(.medium)
 
-                    Text("+\(quest.xpReward) XP")
+                    Text(quest.xpReward > 0 ? "+\(quest.xpReward) XP" : "")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 } else {
@@ -126,7 +128,7 @@ struct QuestWidgetEntryView: View {
                         .multilineTextAlignment(.center)
                         .lineLimit(2)
 
-                    Text("+\(quest.xpReward) XP")
+                    Text(quest.xpReward > 0 ? "+\(quest.xpReward) XP" : "")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -202,7 +204,7 @@ struct QuestWidgetEntryView: View {
                                 Image(systemName: "play.circle.fill")
                                     .font(.system(size: 32))
                                     .foregroundStyle(.blue)
-                                Text("Start")
+                                Text("Complete")
                                     .font(.caption)
                             }
                         }
@@ -249,7 +251,7 @@ struct QuestWidgetEntryView: View {
                             .font(.caption2)
                             .foregroundStyle(.green)
                     } else {
-                        Text("+\(quest.xpReward) XP")
+                        Text(quest.xpReward > 0 ? "+\(quest.xpReward) XP" : "")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -292,9 +294,11 @@ struct CompleteQuestIntent: AppIntent {
         self.questId = questId
     }
 
-    func perform() async throws -> some IntentResult {
-        SharedDataStore.shared.markQuestCompleted(questId: questId)
-        return .result()
+    static var openAppWhenRun = true
+
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        try SharedDataStore.shared.queueQuest(questID: questId)
+        return .result(dialog: "Quest completion queued. Open MindFriend to finish syncing.")
     }
 }
 
