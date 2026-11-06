@@ -245,3 +245,7 @@ verify_jwt = false
 
 [functions.rate-content]
 verify_jwt = false
+
+# Apple authenticates notifications with its verified JWS payload.
+[functions.sign-in-with-apple-notifications]
+verify_jwt = false
