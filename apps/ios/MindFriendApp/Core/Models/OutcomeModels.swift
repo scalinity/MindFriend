@@ -350,6 +350,17 @@ struct AssessmentResponse: Identifiable, Codable, Equatable {
         return result
     }
 
+    /// The predecessor belongs to this result's instrument and occurs strictly before it.
+    func previousResponse(in history: [AssessmentResponse]) -> AssessmentResponse? {
+        history.filter {
+            $0.userId == userId && $0.assessmentTemplateId == assessmentTemplateId
+                && $0.id != id && $0.completedAt < completedAt
+        }.max {
+            if $0.completedAt == $1.completedAt { return $0.id.uuidString < $1.id.uuidString }
+            return $0.completedAt < $1.completedAt
+        }
+    }
+
     enum CodingKeys: String, CodingKey {
         case id
         case userId = "user_id"

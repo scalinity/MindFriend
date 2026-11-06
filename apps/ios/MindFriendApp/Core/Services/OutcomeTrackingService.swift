@@ -371,6 +371,27 @@ final class OutcomeTrackingService: ObservableObject {
         return reconciledResponses(responses)
     }
 
+    /// Query relative to the displayed result, independent of the dashboard's recent-response cache.
+    func getPreviousAssessmentResponse(to response: AssessmentResponse) async throws -> AssessmentResponse? {
+        let uid = try userId
+        guard response.userId == uid else { throw OutcomeTrackingError.notAuthenticated }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let history: [AssessmentResponse] = try await supabase
+            .from("assessment_responses")
+            .select()
+            .eq("user_id", value: uid)
+            .eq("assessment_template_id", value: response.assessmentTemplateId)
+            .lt("completed_at", value: formatter.string(from: response.completedAt))
+            .order("completed_at", ascending: false)
+            .order("id", ascending: false)
+            .limit(1)
+            .execute().value
+        _ = try await getAssessmentTemplates()
+        guard try userId == uid else { throw OutcomeTrackingError.notAuthenticated }
+        return response.previousResponse(in: reconciledResponses(history))
+    }
+
     /// Calculate trend using the instrument's score direction and chronological observations.
     func calculateTrend(responses: [AssessmentResponse]) -> TrendDirection {
         guard let templateID = responses.first?.assessmentTemplateId,

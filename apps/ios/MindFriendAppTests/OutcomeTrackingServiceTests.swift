@@ -18,7 +18,7 @@ final class OutcomeTrackingServiceTests: XCTestCase {
 
     private func response(template: AssessmentTemplate, answers: [String: Int], score: Int,
                           time: Date = Date(timeIntervalSince1970: 1_000), version: Int? = nil) -> AssessmentResponse {
-        AssessmentResponse(id: UUID(), userId: UUID(), assessmentTemplateId: template.id, answers: answers,
+        AssessmentResponse(id: UUID(), userId: UUID(uuidString: "a1000000-0000-4000-8000-000000000001")!, assessmentTemplateId: template.id, answers: answers,
             totalScore: score, severityLevel: "low", isBaseline: true, notes: nil,
             completedAt: time, createdAt: time, scoringVersion: version)
     }
@@ -138,6 +138,28 @@ final class OutcomeTrackingServiceTests: XCTestCase {
         let decreasingWellbeing = goal(baseline: 20, target: 15)
         XCTAssertTrue(decreasingWellbeing.requiresScoreReview(for: .who5))
         XCTAssertNil(decreasingWellbeing.progress(currentScore: 15, type: .who5))
+    }
+
+    func testHistoricalResultsCompareWithTheirOwnImmediatelyPreviousResponse() {
+        let template = template(.phq9)
+        let oldest = response(template: template, answers: [:], score: 20, time: Date(timeIntervalSince1970: 1_000))
+        let middle = response(template: template, answers: [:], score: 10, time: Date(timeIntervalSince1970: 2_000))
+        let newest = response(template: template, answers: [:], score: 15, time: Date(timeIntervalSince1970: 3_000))
+        let history = [middle, newest, oldest]
+        XCTAssertEqual(newest.previousResponse(in: history)?.id, middle.id)
+        XCTAssertEqual(middle.previousResponse(in: history)?.id, oldest.id)
+        XCTAssertNil(oldest.previousResponse(in: history))
+        XCTAssertEqual(AssessmentType.phq9.improvement(from: middle.previousResponse(in: history)!.totalScore,
+            to: middle.totalScore), 10)
+    }
+
+    func testPreviousResponseRejectsUnrelatedAndSimultaneousResults() {
+        let phq = template(.phq9)
+        let shown = response(template: phq, answers: [:], score: 10)
+        let simultaneous = response(template: phq, answers: [:], score: 20)
+        let unrelated = response(template: template(.who5), answers: [:], score: 5,
+            time: shown.completedAt.addingTimeInterval(-1))
+        XCTAssertNil(shown.previousResponse(in: [shown, simultaneous, unrelated]))
     }
 
 }

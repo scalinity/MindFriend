@@ -14,6 +14,9 @@ struct ResultsView: View {
     @State private var recommendations: [AssessmentExerciseRecommendation] = []
     @State private var isLoadingRecommendations = false
     @State private var selectedExercise: Exercise?
+    @State private var previousResponse: AssessmentResponse?
+    @State private var isLoadingTrend = true
+    @State private var trendUnavailable = false
 
     var recommendationService: AssessmentRecommendationService?
     
@@ -65,18 +68,13 @@ struct ResultsView: View {
         guard response.availableScore != nil else {
             return (image: "minus.circle.fill", color: .gray, label: "No trend")
         }
-        let recentHistory = outcomeService.recentResponses
-            .filter { $0.assessmentTemplateId == response.assessmentTemplateId && $0.availableScore != nil }
-            .sorted { $0.completedAt > $1.completedAt }
-            .prefix(5)
-        
-        guard recentHistory.count >= 2 else {
-            return (image: "minus.circle.fill", color: Color.gray, label: "No trend")
+        guard !isLoadingTrend else {
+            return (image: "minus.circle.fill", color: .gray, label: "Loading trend")
         }
-        
-        let previousScore = recentHistory.dropFirst().first?.totalScore ?? response.totalScore
-        guard let type = AssessmentType(rawValue: template.code) else {
-            return (image: "minus.circle.fill", color: .gray, label: "No trend")
+        guard !trendUnavailable, let previousScore = previousResponse?.availableScore,
+              let type = AssessmentType(rawValue: template.code) else {
+            return (image: "minus.circle.fill", color: .gray,
+                    label: trendUnavailable ? "Trend unavailable" : "No earlier score")
         }
         let scoreDelta = type.improvement(from: previousScore, to: response.totalScore)
         
@@ -459,7 +457,19 @@ struct ResultsView: View {
         .sheet(item: $selectedExercise) { exercise in
             ExercisePlayerView(exercise: exercise)
         }
-        .task {
+        .task(id: response.id) {
+            isLoadingTrend = true
+            trendUnavailable = false
+            previousResponse = nil
+            do {
+                let previous = try await outcomeService.getPreviousAssessmentResponse(to: response)
+                guard !Task.isCancelled else { return }
+                previousResponse = previous
+            } catch {
+                guard !Task.isCancelled else { return }
+                trendUnavailable = true
+            }
+            isLoadingTrend = false
             await loadRecommendations()
         }
     }
