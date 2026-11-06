@@ -1,8 +1,7 @@
 // Agent Monitor - Detects wellness signals for users
 // Triggered by cron (every 30 minutes) or manually for testing
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import {
   detectSignals,
   isDuplicateSignal,
@@ -36,7 +35,7 @@ interface Profile {
   current_streak: number;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("origin") ?? "";
   const corsHeaders = getCorsHeaders(origin);
 
@@ -85,14 +84,8 @@ serve(async (req) => {
         });
       }
 
-      // Check if user has admin role for manual triggering
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-
-      if (profile?.role !== "admin") {
+      // Administrative roles come only from server-controlled Auth metadata.
+      if (user.app_metadata?.role !== "admin") {
         return new Response(
           JSON.stringify({ error: "Admin access required" }),
           {
@@ -200,7 +193,7 @@ serve(async (req) => {
 
       const results = await Promise.allSettled(
         batch.map((userSettings) =>
-          processUser(supabase, userSettings as AgentSettings),
+          processUser(supabase, userSettings as AgentSettings, req.signal),
         ),
       );
 
@@ -226,7 +219,7 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error("Agent monitor error:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: (error instanceof Error ? error.message : String(error)) }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -237,7 +230,7 @@ serve(async (req) => {
 const profileCache = new Map<string, Profile | null>();
 
 async function getProfileCached(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   userId: string,
 ): Promise<Profile | null> {
   if (profileCache.has(userId)) {
@@ -255,8 +248,9 @@ async function getProfileCached(
 }
 
 async function processUser(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   settings: AgentSettings,
+  requestSignal?: AbortSignal,
 ): Promise<{ signalsDetected: number; actionsCreated: number }> {
   const userId = settings.user_id;
   let signalsDetected = 0;
@@ -349,7 +343,7 @@ async function processUser(
       evidence: signal.evidence,
       streak: profile?.current_streak || 0,
       timeOfDay,
-    });
+    }, { admin: supabase, userId, feature: "agent.message" }, true, requestSignal);
 
     const reasoning = generateReasoning(
       signal.type,
@@ -402,7 +396,7 @@ async function processUser(
 }
 
 async function logDecision(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   userId: string,
   signalId: string,
   outcome: string,

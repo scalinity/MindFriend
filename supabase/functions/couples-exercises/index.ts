@@ -1,12 +1,11 @@
 // GET /functions/v1/couples/couples-exercises
 // List available couples exercises based on entitlements
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { userHasPremiumAccess } from "../_shared/couples-utils.ts";
 import { CouplesErrors, formatSuccess } from "../_shared/couples-errors.ts";
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   try {
     // Only accept GET method
     if (req.method !== "GET") {

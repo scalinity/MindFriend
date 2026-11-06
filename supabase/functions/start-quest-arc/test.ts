@@ -2,7 +2,7 @@
 import {
   assertEquals,
   assertExists,
-} from "https://deno.land/std@0.168.0/testing/asserts.ts";
+} from "jsr:@std/assert@1.0.19";
 
 // Test data
 const mockArcId = "550e8400-e29b-41d4-a716-446655440000";

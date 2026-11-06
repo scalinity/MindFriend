@@ -1,4 +1,4 @@
-import { assertEquals, assertExists } from "https://deno.land/std@0.208.0/assert/mod.ts";
+import { assertEquals, assertExists } from "jsr:@std/assert@1.0.19";
 
 /**
  * Test suite for find-mentor-matches Edge Function

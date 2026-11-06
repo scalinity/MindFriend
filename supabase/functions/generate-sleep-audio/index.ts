@@ -9,8 +9,7 @@
  * - status: Get current synthesis status for all stories
  */
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 
 // deno-lint-ignore no-explicit-any
 type SupabaseClient = any;
@@ -29,6 +28,9 @@ import {
   concatenateAudioBuffers,
   isValidMP3,
 } from "../_shared/audio-utils.ts";
+import { isAuthorizedCronRequest } from "../_shared/auth.ts";
+import { BACKEND_WORKLOAD_BUDGET_PRINCIPAL, MonthlyAIBudgetExhaustedError, MonthlyAIBudgetUnavailableError } from "../_shared/monthly-ai-budget.ts";
+import type { XAITextBudgetContext } from "../_shared/budgeted-xai-text.ts";
 
 // Voice preset keys by tier (mapped to GOOGLE_VOICE_PRESETS in google-tts.ts)
 const VOICE_BY_TIER = {
@@ -89,7 +91,7 @@ interface GenerateSleepAudioResponse {
   completionStatus: "SUCCESS" | "PARTIAL" | "FAILED";
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 
@@ -109,33 +111,20 @@ serve(async (req) => {
       );
     }
 
-    const token = authHeader.replace("Bearer ", "");
-
-    // Decode JWT payload to check role claim (more robust than string comparison)
-    try {
-      const payloadB64 = token.split(".")[1];
-      const payload = JSON.parse(atob(payloadB64));
-      if (payload.role !== "service_role") {
-        return errorResponse(
-          "This endpoint requires service role authentication",
-          "FORBIDDEN",
-          403,
-          corsHeaders,
-        );
-      }
-    } catch {
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+    if (!await isAuthorizedCronRequest(req.headers, "", serviceRoleKey)) {
       return errorResponse(
-        "Invalid authorization token",
-        "UNAUTHORIZED",
-        401,
+        "This endpoint requires service role authentication",
+        "FORBIDDEN",
+        403,
         corsHeaders,
       );
     }
 
-    // Create admin Supabase client using the provided service role token
+    // Use only the configured key after exact service authorization.
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      token,
+      serviceRoleKey,
     ) as SupabaseClient;
 
     // Parse request
@@ -150,10 +139,10 @@ serve(async (req) => {
         return await handlePreview(supabase, request, corsHeaders);
 
       case "generate":
-        return await handleGenerate(supabase, request, false, corsHeaders);
+        return await handleGenerate(supabase, request, false, corsHeaders, req.signal);
 
       case "regenerate":
-        return await handleGenerate(supabase, request, true, corsHeaders);
+        return await handleGenerate(supabase, request, true, corsHeaders, req.signal);
 
       default:
         return errorResponse(
@@ -303,6 +292,7 @@ async function handleGenerate(
   request: GenerateSleepAudioRequest,
   forceRegenerate: boolean,
   corsHeaders: Record<string, string>,
+  signal?: AbortSignal,
 ): Promise<Response> {
   const stories = await fetchTargetStories(
     supabase,
@@ -355,7 +345,7 @@ async function handleGenerate(
 
     try {
       console.log(
-        `[generate-sleep-audio] Processing: ${story.title} (${tier})`,
+        `[generate-sleep-audio] Processing story (${tier})`,
       );
 
       // Step 1: Generate script if needed
@@ -371,7 +361,7 @@ async function handleGenerate(
           targetDurationMinutes: targetDuration,
           isKids: story.is_kids,
           description: story.description,
-        });
+        }, { admin: supabase, userId: BACKEND_WORKLOAD_BUDGET_PRINCIPAL, feature: "sleep.story" }, signal);
 
         if (!scriptResult.success) {
           throw new Error(
@@ -401,7 +391,7 @@ async function handleGenerate(
 
       const voiceId =
         request.voiceIdOverride || story.voice_id || VOICE_BY_TIER[tier];
-      const audioResult = await synthesizeAudio(script, voiceId);
+      const audioResult = await synthesizeAudio(script, voiceId, { admin: supabase, userId: BACKEND_WORKLOAD_BUDGET_PRINCIPAL, feature: "sleep.tts" }, signal);
 
       if (!audioResult.success) {
         throw new Error(audioResult.error);
@@ -468,13 +458,13 @@ async function handleGenerate(
         characterCount: script.length,
       });
 
-      console.log(`[generate-sleep-audio] Completed: ${story.title}`);
+      console.log("[generate-sleep-audio] Story completed");
 
       // Rate limit delay between stories
       await delay(RATE_LIMIT.delayBetweenStories);
     } catch (err) {
       const error = err as Error;
-      console.error(`[generate-sleep-audio] Failed: ${story.title}`, error);
+      console.error("[generate-sleep-audio] Story failed");
 
       await updateSynthesisStatus(
         supabase,
@@ -491,6 +481,7 @@ async function handleGenerate(
         error: error.message || "Unknown error",
         recommendedAction: getRecommendedAction(error.message || ""),
       });
+      if (err instanceof MonthlyAIBudgetExhaustedError || err instanceof MonthlyAIBudgetUnavailableError || signal?.aborted) break;
     }
   }
 
@@ -508,6 +499,8 @@ async function handleGenerate(
 async function synthesizeAudio(
   text: string,
   voiceId: string,
+  budget: XAITextBudgetContext,
+  signal?: AbortSignal,
 ): Promise<{ success: boolean; audioData?: Uint8Array; error?: string }> {
   try {
     const googleTTS = createGoogleTTSClient();
@@ -532,7 +525,7 @@ async function synthesizeAudio(
           const result = await googleTTS.textToSpeech({
             text: chunks[i],
             voiceId,
-          });
+          }, { budget: { ...budget, feature: "sleep.tts" }, signal });
 
           if (!isValidMP3(result.audioData)) {
             throw new Error("Invalid MP3 data received");
@@ -541,6 +534,7 @@ async function synthesizeAudio(
           audioBuffers.push(result.audioData);
           break; // Success, exit retry loop
         } catch (err) {
+          if (err instanceof MonthlyAIBudgetExhaustedError || err instanceof MonthlyAIBudgetUnavailableError || signal?.aborted) throw err;
           const error = err as Error;
           lastError = error.message || "Unknown error";
           retries++;
@@ -578,6 +572,7 @@ async function synthesizeAudio(
 
     return { success: true, audioData: combinedAudio };
   } catch (err) {
+    if (err instanceof MonthlyAIBudgetExhaustedError || err instanceof MonthlyAIBudgetUnavailableError) throw err;
     const error = err as Error;
     return { success: false, error: error.message || "Unknown error" };
   }

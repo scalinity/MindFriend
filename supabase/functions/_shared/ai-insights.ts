@@ -3,6 +3,7 @@
 // See: specs/06-weekly-insights.md
 
 import { Pattern } from "./pattern-detection.ts";
+import { budgetedXAIText, type XAITextBudgetContext } from "./budgeted-xai-text.ts";
 
 export interface Recommendation {
   title: string;
@@ -33,8 +34,6 @@ export interface InsightContext {
   recentNotes: string[];
 }
 
-const XAI_API_URL = "https://api.x.ai/v1/chat/completions";
-const MODEL = "grok-4-1-fast-non-reasoning";
 
 // Fallback insights when AI is unavailable or data is insufficient
 const FALLBACK_INSIGHTS: Record<string, AIInsightResult> = {
@@ -87,6 +86,8 @@ const FALLBACK_INSIGHTS: Record<string, AIInsightResult> = {
 export async function generateAIInsight(
   context: InsightContext,
   apiKey: string | undefined,
+  budget: XAITextBudgetContext,
+  signal?: AbortSignal,
 ): Promise<AIInsightResult> {
   // Use fallback if no API key or insufficient data
   if (!apiKey) {
@@ -104,10 +105,10 @@ export async function generateAIInsight(
 
   try {
     const prompt = buildPrompt(context);
-    const response = await callXAI(apiKey, prompt);
+    const response = await callXAI(apiKey, prompt, budget, signal);
     return parseResponse(response) || getFallbackInsight(context.moodTrend);
-  } catch (error) {
-    console.error("AI insight generation error:", error);
+  } catch {
+    console.error("AI insight generation unavailable");
     return getFallbackInsight(context.moodTrend);
   }
 }
@@ -206,24 +207,18 @@ Return JSON only:
 {"insight": "Your personalized observation here.", "recommendations": [{"title": "Short action title", "reason": "Why this helps based on their data"}]}`;
 }
 
-async function callXAI(apiKey: string, prompt: string): Promise<string> {
-  const response = await fetch(XAI_API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: MODEL,
+async function callXAI(apiKey: string, prompt: string, budget: XAITextBudgetContext, signal?: AbortSignal): Promise<string> {
+  const response = await budgetedXAIText({
+      ...budget,
+      apiKey,
       messages: [{ role: "user", content: prompt }],
-      max_tokens: 400,
+      maxTokens: 400,
       temperature: 0.7,
-    }),
+      signal,
   });
 
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`xAI API error: ${response.status} ${error}`);
+    throw new Error(`xAI API error: ${response.status}`);
   }
 
   const data = await response.json();

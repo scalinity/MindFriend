@@ -5,8 +5,7 @@
  * Excludes: Wellness score, voice, important dates, push notifications (Phase 2)
  */
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { corsHeaders } from "../_shared/cors.ts";
 
 // MARK: - Types
@@ -46,7 +45,7 @@ interface SuggestionContext {
 
 // MARK: - Handler
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   console.log("========== DAILY BRIEFING START ==========");
   console.log(`[1] Request method: ${req.method}`);
 
@@ -129,7 +128,6 @@ serve(async (req) => {
     let requestBody: GenerateBriefingRequest;
     try {
       requestBody = await req.json();
-      console.log(`[5] Request body:`, JSON.stringify(requestBody));
     } catch (parseError) {
       console.log(`[5] ERROR: Failed to parse request body - ${parseError}`);
       throw new Error(`Failed to parse request body: ${parseError}`);

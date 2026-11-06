@@ -1,5 +1,83 @@
 import Foundation
 import Supabase
+import AVFoundation
+
+// Decode owned originals locally; only bounded canonical PCM leaves the device for
+// analysis. Compressed Storage objects are never replaced or supplemented with WAV.
+enum VoiceJournalPCM {
+    nonisolated static func convert(_ original: Data, fileExtension: String) throws -> Data {
+        try Task.checkCancellation()
+        guard !original.isEmpty, original.count <= 25 * 1024 * 1024 else {
+            throw CreativeError.analysisFailed("The saved recording is too large to analyze (25 MB maximum).")
+        }
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("voice-analysis-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let source = folder.appendingPathComponent("original").appendingPathExtension(fileExtension)
+        try original.write(to: source, options: .atomic)
+        let input = try AVAudioFile(forReading: source)
+        guard let format = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16000, channels: 1, interleaved: true),
+              let converter = AVAudioConverter(from: input.processingFormat, to: format),
+              let sourceBuffer = AVAudioPCMBuffer(pcmFormat: input.processingFormat, frameCapacity: 4096),
+              let output = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 4096) else {
+            throw CreativeError.analysisFailed("This saved recording could not be converted for analysis.")
+        }
+        converter.downmix = true
+        var pcm = Data(count: 44)
+        var finished = false
+        while !finished {
+            try Task.checkCancellation()
+            var readError: Error?
+            var conversionError: NSError?
+            let status = converter.convert(to: output, error: &conversionError) { requested, state in
+                do {
+                    try Task.checkCancellation()
+                    let available = max(0, input.length - input.framePosition)
+                    guard available > 0 else { state.pointee = .endOfStream; return nil }
+                    try input.read(into: sourceBuffer, frameCount: min(requested, sourceBuffer.frameCapacity, AVAudioFrameCount(min(available, 4096))))
+                    state.pointee = sourceBuffer.frameLength > 0 ? .haveData : .endOfStream
+                    return sourceBuffer.frameLength > 0 ? sourceBuffer : nil
+                } catch {
+                    readError = error
+                    state.pointee = .endOfStream
+                    return nil
+                }
+            }
+            if let readError { throw readError }
+            if let conversionError { throw conversionError }
+            let size = Int(output.frameLength) * 2
+            guard pcm.count - 44 + size <= 600 * 32000 else {
+                throw CreativeError.analysisFailed("Recordings must be at most 10 minutes to analyze. The original is still saved.")
+            }
+            if size > 0, let samples = output.int16ChannelData {
+                pcm.append(UnsafeBufferPointer(start: UnsafeRawPointer(samples[0]).assumingMemoryBound(to: UInt8.self), count: size))
+            }
+            switch status {
+            case .endOfStream: finished = true
+            case .haveData: break
+            default: throw CreativeError.analysisFailed("This saved recording could not be converted for analysis.")
+            }
+        }
+        try Task.checkCancellation()
+        guard pcm.count > 44 else { throw CreativeError.analysisFailed("This recording contains no audio to analyze.") }
+        func write(_ number: UInt32, at offset: Int, bytes: Int = 4) {
+            for index in 0..<bytes { pcm[offset + index] = UInt8(truncatingIfNeeded: number >> (8 * index)) }
+        }
+        for (offset, text) in [(0, "RIFF"), (8, "WAVEfmt "), (36, "data")] {
+            pcm.replaceSubrange(offset..<(offset + text.utf8.count), with: text.utf8)
+        }
+        write(UInt32(pcm.count - 8), at: 4)
+        write(16, at: 16)
+        write(1, at: 20, bytes: 2)
+        write(1, at: 22, bytes: 2)
+        write(16000, at: 24)
+        write(32000, at: 28)
+        write(2, at: 32, bytes: 2)
+        write(16, at: 34, bytes: 2)
+        write(UInt32(pcm.count - 44), at: 40)
+        return pcm
+    }
+}
 
 /// Service for managing creative expression features: AI art, voice journals, drawing
 @MainActor
@@ -122,7 +200,6 @@ final class CreativeExpressionService: ObservableObject {
         moodTags: [String]? = nil,
         onPartialImage: @escaping (Data, Int) -> Void
     ) async throws -> CreativeWork {
-        print("[ArtGen] Starting streaming generation with prompt: \(prompt.prefix(50))...")
         try ensureAuthenticated()
         print("[ArtGen] Authentication verified")
 
@@ -143,7 +220,6 @@ final class CreativeExpressionService: ObservableObject {
         if let moodTags = moodTags {
             body["moodTags"] = moodTags
         }
-        print("[ArtGen] Request body built: \(body)")
 
         var finalWorkId: String?
 
@@ -251,6 +327,10 @@ final class CreativeExpressionService: ObservableObject {
         let workId = UUID()
         let storagePath = "\(userId)/voice-journals/\(workId.uuidString).m4a"
 
+        guard !audioData.isEmpty, audioData.count <= 25 * 1024 * 1024,
+              durationSeconds > 0, durationSeconds <= 600 else {
+            throw CreativeError.generationFailed("Record up to 10 minutes of audio (25 MB maximum).")
+        }
         // Upload audio to storage
         try await supabase.storage
             .from("creative-works")
@@ -280,29 +360,67 @@ final class CreativeExpressionService: ObservableObject {
             .execute()
             .value
 
-        let work = insertedWork.toModel()
+        // The insert is the save boundary. A display-signing outage must not
+        // offer a second save of an already persisted journal.
+        let savedWork = insertedWork.toModel()
+        let work = (try? await resolveMedia([savedWork]))?.first ?? savedWork
         creativeWorks.insert(work, at: 0)
 
         return work
     }
 
     /// Analyze a voice journal entry
-    func analyzeVoiceJournal(workId: String, durationSeconds: Int) async throws -> VoiceJournalAnalysis {
+    func analyzeVoiceJournal(workId: String, durationSeconds: Int, originalAudio: Data? = nil) async throws -> VoiceJournalAnalysis {
         try ensureAuthenticated()
 
         isLoading = true
         defer { isLoading = false }
 
-        let request = AnalyzeVoiceRequest(
-            creativeWorkId: workId,
-            audioUrl: nil,
-            durationSeconds: durationSeconds
-        )
-
-        let response: AnalyzeVoiceResponse = try await supabase.functions.invoke(
-            "analyze-voice-journal",
-            options: .init(body: request)
-        )
+        guard let owner = supabase.auth.currentUser?.id else { throw CreativeError.notAuthenticated }
+        let row: DBCreativeWork = try await supabase.from(Tables.creativeWorks).select()
+            .eq("id", value: workId).eq("user_id", value: owner).single().execute().value
+        try Task.checkCancellation()
+        guard supabase.auth.currentUser?.id == owner, row.userId == owner else { throw CreativeError.notAuthenticated }
+        guard row.workType == "voice_journal", let path = row.storagePath else { throw CreativeError.workNotFound }
+        let parts = path.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+        guard parts.count == 3, parts[0].lowercased() == owner.uuidString.lowercased(), parts[1] == "voice-journals",
+              UUID(uuidString: (parts[2] as NSString).deletingPathExtension) != nil,
+              ["m4a", "aac", "wav", "mp3"].contains((parts[2] as NSString).pathExtension.lowercased()) else {
+            throw CreativeError.workNotFound
+        }
+        let options: FunctionInvokeOptions
+        if row.transcriptionStatus == "completed" || row.transcriptionStatus == "processing" {
+            // Saved results and uncertain in-flight work never trigger another conversion or paid call.
+            options = .init(body: AnalyzeVoiceRequest(creativeWorkId: workId, audioUrl: nil, durationSeconds: max(1, min(600, durationSeconds))))
+        } else {
+            let original: Data
+            if let originalAudio { original = originalAudio }
+            else { original = try await supabase.storage.from("creative-works").download(path: path) }
+            try Task.checkCancellation()
+            guard supabase.auth.currentUser?.id == owner else { throw CreativeError.notAuthenticated }
+            let conversion = Task.detached(priority: .userInitiated) {
+                try VoiceJournalPCM.convert(original, fileExtension: (path as NSString).pathExtension)
+            }
+            let pcm = try await withTaskCancellationHandler {
+                try await conversion.value
+            } onCancel: { conversion.cancel() }
+            try Task.checkCancellation()
+            guard supabase.auth.currentUser?.id == owner else { throw CreativeError.notAuthenticated }
+            options = .init(query: [URLQueryItem(name: "creativeWorkId", value: workId)],
+                            headers: ["Content-Type": "audio/wav"], body: pcm, timeoutInterval: 120)
+        }
+        struct Reply: Decodable { let success: Bool?; let error: String?; let quotaExceeded: Bool? }
+        let response: Reply
+        do {
+            response = try await supabase.functions.invoke("analyze-voice-journal", options: options)
+        } catch FunctionsError.httpError(_, let data) {
+            try Task.checkCancellation()
+            let failure = try? JSONDecoder().decode(Reply.self, from: data)
+            if failure?.quotaExceeded == true { throw CreativeError.quotaExceeded }
+            throw CreativeError.analysisFailed(failure?.error ?? "Analysis could not be completed. Your recording is saved.")
+        }
+        try Task.checkCancellation()
+        guard supabase.auth.currentUser?.id == owner else { throw CreativeError.notAuthenticated }
 
         if let error = response.error {
             if response.quotaExceeded == true {
@@ -311,7 +429,7 @@ final class CreativeExpressionService: ObservableObject {
             throw CreativeError.analysisFailed(error)
         }
 
-        guard response.success, let _ = response.analysis else {
+        guard response.success == true else {
             throw CreativeError.analysisFailed("No analysis returned")
         }
 
@@ -322,6 +440,7 @@ final class CreativeExpressionService: ObservableObject {
 
     /// Fetch voice journal analysis for a creative work
     func fetchVoiceAnalysis(workId: String) async throws -> VoiceJournalAnalysis {
+        guard let owner = supabase.auth.currentUser?.id else { throw CreativeError.notAuthenticated }
         let dbAnalysis: DBVoiceJournalAnalysis = try await supabase
             .from(Tables.voiceJournalAnalysis)
             .select()
@@ -329,7 +448,8 @@ final class CreativeExpressionService: ObservableObject {
             .single()
             .execute()
             .value
-
+        try Task.checkCancellation()
+        guard supabase.auth.currentUser?.id == owner else { throw CreativeError.notAuthenticated }
         return dbAnalysis.toModel()
     }
 
@@ -400,7 +520,7 @@ final class CreativeExpressionService: ObservableObject {
             .execute()
             .value
 
-        let work = insertedWork.toModel()
+        let work = try await resolveMedia([insertedWork.toModel()])[0]
         creativeWorks.insert(work, at: 0)
 
         return work
@@ -436,7 +556,7 @@ final class CreativeExpressionService: ObservableObject {
                 .value
         }
 
-        let works = dbWorks.map { $0.toModel() }
+        let works = try await resolveMedia(dbWorks.map { $0.toModel() })
 
         if offset == 0 {
             creativeWorks = works
@@ -457,7 +577,50 @@ final class CreativeExpressionService: ObservableObject {
             .execute()
             .value
 
-        return dbWork.toModel()
+        return try await resolveMedia([dbWork.toModel()])[0]
+    }
+
+    /// Refresh display access together when a gallery becomes visible or returns to the foreground.
+    func refreshMedia(_ works: [CreativeWork]) async throws -> [CreativeWork] {
+        let stale = works.filter { $0.storagePath != nil && SupabaseStorageMedia.signedURLNeedsRefresh($0.mediaUrl) }
+        guard !stale.isEmpty else { return works }
+        let refreshed = try await resolveMedia(stale)
+        try Task.checkCancellation()
+        let byID = Dictionary(uniqueKeysWithValues: refreshed.map { ($0.id, $0.mediaUrl) })
+        return works.map { work in
+            var result = work
+            if let url = byID[work.id] { result.mediaUrl = url }
+            return result
+        }
+    }
+
+    /// A shared link gets its full one-hour lifetime at the explicit Share action.
+    func freshShareURL(for work: CreativeWork) async throws -> URL {
+        guard let owner = supabase.auth.currentUser?.id else { throw CreativeError.notAuthenticated }
+        guard let path = work.storagePath else { throw CreativeError.workNotFound }
+        let url = try await supabase.storage.from("creative-works").createSignedURL(path: path, expiresIn: 3600)
+        try Task.checkCancellation()
+        guard supabase.auth.currentUser?.id == owner else { throw CreativeError.notAuthenticated }
+        return url
+    }
+
+    private func resolveMedia(_ works: [CreativeWork]) async throws -> [CreativeWork] {
+        guard let owner = supabase.auth.currentUser?.id else { throw CreativeError.notAuthenticated }
+        let paths = Array(Set(works.compactMap(\.storagePath)))
+        guard !paths.isEmpty else { return works }
+        let results: [SignedURLResult] = try await supabase.storage.from("creative-works")
+            .createSignedURLs(paths: paths, expiresIn: 3600)
+        try Task.checkCancellation()
+        guard supabase.auth.currentUser?.id == owner else { throw CreativeError.notAuthenticated }
+        var urls: [String: URL] = [:]
+        for result in results {
+            if case .success(let path, let url) = result { urls[path] = url }
+        }
+        return works.map { item in
+            var resolved = item
+            if let path = item.storagePath { resolved.mediaUrl = urls[path] }
+            return resolved
+        }
     }
 
     /// Toggle favorite status

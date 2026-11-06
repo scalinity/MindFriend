@@ -1,5 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { checkRateLimit, createRateLimitResponse } from "../_shared/rate-limiter.ts";
 import { validateUUID } from "../_shared/validation.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
@@ -24,7 +23,8 @@ interface SignatureSignal {
   date: string;
 }
 
-serve(async (req: Request) => {
+Deno.serve(async (req: Request) => {
+  const corsHeaders = getCorsHeaders(req.headers.get("Origin"));
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }

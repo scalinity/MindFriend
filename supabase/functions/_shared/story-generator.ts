@@ -4,10 +4,11 @@
  * Optimized for sleep-inducing content with gentle pacing
  */
 
-const XAI_API_URL = "https://api.x.ai/v1/chat/completions";
+import { budgetedXAIText, type XAITextBudgetContext } from "./budgeted-xai-text.ts";
+import { MonthlyAIBudgetExhaustedError, MonthlyAIBudgetUnavailableError } from "./monthly-ai-budget.ts";
 
 // Story generation typically needs more tokens for longer narratives
-const STORY_TIMEOUT_MS = 120000; // 120 seconds for longer generation
+const STORY_TIMEOUT_MS = 45000;
 const WORDS_PER_MINUTE = 150; // Average narration speed for sleep content
 
 export interface StoryGenerationRequest {
@@ -26,7 +27,7 @@ export interface GeneratedStory {
 }
 
 export interface StoryGenerationError {
-  code: "API_ERROR" | "TIMEOUT" | "INVALID_RESPONSE" | "CONFIG_ERROR";
+  code: "API_ERROR" | "TIMEOUT" | "INVALID_RESPONSE" | "CONFIG_ERROR" | "INVALID_REQUEST";
   message: string;
   details?: string;
 }
@@ -38,6 +39,8 @@ export interface StoryGenerationError {
  */
 export async function generateSleepStory(
   request: StoryGenerationRequest,
+  budget: XAITextBudgetContext,
+  signal?: AbortSignal,
 ): Promise<
   | { success: true; story: GeneratedStory }
   | { success: false; error: StoryGenerationError }
@@ -54,6 +57,9 @@ export async function generateSleepStory(
   }
 
   // Calculate target word count based on duration
+  if (!Number.isFinite(request.targetDurationMinutes) || request.targetDurationMinutes <= 0) {
+    return { success: false, error: { code: "INVALID_REQUEST", message: "Invalid story duration" } };
+  }
   const targetWordCount = request.targetDurationMinutes * WORDS_PER_MINUTE;
 
   // Build the system prompt for sleep story generation
@@ -67,41 +73,27 @@ export async function generateSleepStory(
   const timeoutId = setTimeout(() => controller.abort(), STORY_TIMEOUT_MS);
 
   try {
-    console.log(
-      `[story-generator] Generating "${request.title}" (target: ${targetWordCount} words, ${maxTokens} tokens)`,
-    );
-
-    const response = await fetch(XAI_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "grok-4-1-fast-non-reasoning",
+    const response = await budgetedXAIText({
+        ...budget,
+        apiKey,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
-        max_tokens: maxTokens,
+        maxTokens,
         temperature: 0.8, // Slightly higher for creative storytelling
-      }),
-      signal: controller.signal,
+      signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal,
     });
 
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error(
-        `[story-generator] API error (${response.status}): ${errorText}`,
-      );
+      console.error(`[story-generator] API error (${response.status})`);
       return {
         success: false,
         error: {
           code: "API_ERROR",
           message: `xAI API error: ${response.status}`,
-          details: errorText,
         },
       };
     }
@@ -124,7 +116,7 @@ export async function generateSleepStory(
     const estimatedDurationMinutes = Math.round(wordCount / WORDS_PER_MINUTE);
 
     console.log(
-      `[story-generator] Generated "${request.title}": ${wordCount} words, ~${estimatedDurationMinutes} min`,
+      `[story-generator] Generated ${wordCount} words, ~${estimatedDurationMinutes} min`,
     );
 
     return {
@@ -138,6 +130,7 @@ export async function generateSleepStory(
     };
   } catch (err) {
     clearTimeout(timeoutId);
+    if (err instanceof MonthlyAIBudgetExhaustedError || err instanceof MonthlyAIBudgetUnavailableError) throw err;
     const error = err as Error;
 
     if (error.name === "AbortError") {
@@ -151,12 +144,12 @@ export async function generateSleepStory(
       };
     }
 
-    console.error("[story-generator] Error:", error.message);
+    console.error("[story-generator] Generation failed");
     return {
       success: false,
       error: {
         code: "API_ERROR",
-        message: error.message || "Unknown error",
+        message: "Story generation is unavailable",
       },
     };
   }

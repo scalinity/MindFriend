@@ -1,8 +1,7 @@
 // Agent Act - Delivers scheduled actions via push notifications
 // Triggered by cron (every 15 minutes) to check for due actions
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { isCurrentlyQuietHours } from "../_shared/timing-optimizer.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { isAuthorizedCronRequest } from "../_shared/auth.ts";
@@ -27,7 +26,7 @@ interface DeviceToken {
   platform: string;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("origin") ?? "";
   const corsHeaders = getCorsHeaders(origin);
   if (req.method === "OPTIONS") {
@@ -72,14 +71,8 @@ serve(async (req) => {
         });
       }
 
-      // Check if user has admin role for manual triggering
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-
-      if (profile?.role !== "admin") {
+      // Administrative roles come only from server-controlled Auth metadata.
+      if (user.app_metadata?.role !== "admin") {
         return new Response(
           JSON.stringify({ error: "Admin access required" }),
           {
@@ -250,7 +243,7 @@ serve(async (req) => {
     });
   } catch (error) {
     console.error("Agent act error:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: (error instanceof Error ? error.message : String(error)) }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -258,7 +251,7 @@ serve(async (req) => {
 });
 
 async function sendNotificationViaFunction(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   userId: string,
   action: AgentAction,
 ): Promise<boolean> {

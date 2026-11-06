@@ -29,15 +29,17 @@ setInterval(
 /**
  * Check if request is within rate limit
  * @param key - Unique identifier (e.g., api_key_id)
- * @param limitPerHour - Maximum requests allowed per hour
+ * @param maxRequests - Maximum requests allowed in the window
+ * @param windowMs - Window duration; defaults to one hour
  * @returns { allowed: boolean, remaining: number, resetAt: Date }
  */
 export function checkRateLimit(
   key: string,
-  limitPerHour: number,
-): { allowed: boolean; remaining: number; resetAt: Date } {
+  maxRequests: number,
+  windowMs: number = 60 * 60 * 1000,
+): { allowed: boolean; remaining: number; resetAt: Date; resetIn: number } {
   const now = Date.now();
-  const oneHourAgo = now - 60 * 60 * 1000;
+  const windowStart = now - windowMs;
 
   // Get or create entry
   let entry = rateLimitStore.get(key);
@@ -46,26 +48,27 @@ export function checkRateLimit(
     rateLimitStore.set(key, entry);
   }
 
-  // Remove timestamps older than 1 hour
-  entry.timestamps = entry.timestamps.filter((ts) => ts > oneHourAgo);
+  // Remove timestamps outside the requested window
+  entry.timestamps = entry.timestamps.filter((ts) => ts > windowStart);
 
   // Check if limit exceeded
   const currentCount = entry.timestamps.length;
-  const allowed = currentCount < limitPerHour;
+  const allowed = currentCount < maxRequests;
 
   if (allowed) {
     // Record this request
     entry.timestamps.push(now);
   }
 
-  // Calculate reset time (oldest timestamp + 1 hour)
+  // Calculate reset time from the oldest timestamp in the window
   const oldestTimestamp = entry.timestamps[0] || now;
-  const resetAt = new Date(oldestTimestamp + 60 * 60 * 1000);
+  const resetAt = new Date(oldestTimestamp + windowMs);
 
   return {
     allowed,
-    remaining: Math.max(0, limitPerHour - currentCount - (allowed ? 1 : 0)),
+    remaining: Math.max(0, maxRequests - currentCount - (allowed ? 1 : 0)),
     resetAt,
+    resetIn: Math.max(0, resetAt.getTime() - now),
   };
 }
 

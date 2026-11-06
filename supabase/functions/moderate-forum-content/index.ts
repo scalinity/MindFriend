@@ -2,11 +2,11 @@
 // Uses Grok API for AI-powered safety screening with confidence-based approval
 // Per decisions.md 2026-01-19: Community Forums Implementation Assumptions
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { sanitizeForPrompt } from "../_shared/sanitize.ts";
 import { authenticateRequest, isAuthError } from "../_shared/auth.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { budgetedXAIText, type XAITextBudgetContext } from "../_shared/budgeted-xai-text.ts";
 
 const XAI_API_KEY = Deno.env.get("XAI_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
@@ -55,7 +55,7 @@ const CRISIS_KEYWORDS = [
   "no reason to live",
 ];
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 
@@ -109,12 +109,11 @@ serve(async (req) => {
     // Call Grok API for moderation with timeout
     let moderationResult: GrokModerationResult;
     try {
-      moderationResult = await Promise.race([
-        moderateWithGrok(title, content),
-        timeoutPromise<GrokModerationResult>(CONFIDENCE_THRESHOLDS.TIMEOUT_MS),
-      ]);
-    } catch (error) {
-      console.error("Moderation timeout or error:", error);
+      moderationResult = await moderateWithGrok(title, content,
+        { admin: supabase, userId: authResult.user.id, feature: "forum.moderation" },
+        AbortSignal.any([req.signal, AbortSignal.timeout(CONFIDENCE_THRESHOLDS.TIMEOUT_MS)]));
+    } catch {
+      console.error("Moderation timeout or error");
       // Auto-approve on timeout, flag for human review
       moderationResult = {
         safe: true,
@@ -208,6 +207,8 @@ serve(async (req) => {
 async function moderateWithGrok(
   title: string | undefined,
   content: string,
+  budget: XAITextBudgetContext,
+  signal?: AbortSignal,
 ): Promise<GrokModerationResult> {
   if (!XAI_API_KEY) {
     throw new Error("XAI_API_KEY not configured");
@@ -240,14 +241,9 @@ Respond with JSON in this exact format:
 }`;
 
   try {
-    const response = await fetch("https://api.x.ai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${XAI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "grok-beta",
+    const response = await budgetedXAIText({
+        ...budget,
+        apiKey: XAI_API_KEY,
         messages: [
           {
             role: "system",
@@ -260,13 +256,12 @@ Respond with JSON in this exact format:
           },
         ],
         temperature: 0.3, // Lower temperature for more consistent moderation
-        max_tokens: 200,
-      }),
+        maxTokens: 200,
+        signal,
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Grok API error:", response.status, errorText);
+      console.error("Grok API error:", response.status);
 
       // Rate limit error (429) - return ambiguous confidence for retry
       if (response.status === 429) {
@@ -278,7 +273,7 @@ Respond with JSON in this exact format:
         };
       }
 
-      throw new Error(`Grok API error: ${response.status} ${errorText}`);
+      throw new Error(`Grok API error: ${response.status}`);
     }
 
     const data = await response.json();
@@ -304,8 +299,8 @@ Respond with JSON in this exact format:
     result.confidence = Math.max(0, Math.min(1, result.confidence));
 
     return result;
-  } catch (error) {
-    console.error("Grok API call failed:", error);
+  } catch {
+    console.error("Grok API call failed");
     // On error, return ambiguous confidence (will trigger pending queue)
     return {
       safe: true,
@@ -323,13 +318,4 @@ Respond with JSON in this exact format:
 function detectCrisisKeywords(text: string): boolean {
   const lowerText = text.toLowerCase();
   return CRISIS_KEYWORDS.some((keyword) => lowerText.includes(keyword));
-}
-
-/**
- * Promise that rejects after specified milliseconds
- */
-function timeoutPromise<T>(ms: number): Promise<T> {
-  return new Promise((_, reject) => {
-    setTimeout(() => reject(new Error("Timeout")), ms);
-  });
 }

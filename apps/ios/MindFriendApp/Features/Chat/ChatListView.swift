@@ -4,6 +4,22 @@ import OSLog
 struct ChatListView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
+    @EnvironmentObject private var deepLinkRouter: DeepLinkRouter
+    @State private var linkedConversation: Conversation?
+    @State private var linkedRequest: DeepLinkRouter.Request?
+    @State private var showLinkedConversation = false
+
+    private struct LinkTaskID: Hashable {
+        let requestID: UUID
+        let userID: UUID?
+        let ready: Bool
+    }
+
+    private var linkTaskID: LinkTaskID {
+        LinkTaskID(requestID: deepLinkRouter.requestID, userID: appState.currentUser?.id,
+                   ready: appState.selectedTab == .chat && appState.authState == .authenticated && appState.sessionRestored &&
+                          !showNewChat && !showVoiceChat && !showChatTutorial)
+    }
     @State private var conversations: [Conversation] = []
     @State private var isLoading = true
     @State private var showNewChat = false
@@ -94,6 +110,12 @@ struct ChatListView: View {
             .navigationDestination(isPresented: $showNewChat, destination: {
                 NewChatView()
             })
+            .navigationDestination(isPresented: $showLinkedConversation) {
+                if let conversation = linkedConversation, let request = linkedRequest {
+                    ChatView(conversation: conversation)
+                        .id(request.id)
+                }
+            }
             .fullScreenCover(isPresented: $showVoiceChat, onDismiss: {
                 Task {
                     // Delay to allow title generation API call to complete
@@ -113,6 +135,14 @@ struct ChatListView: View {
             Log.chat.debug("[ChatList] Task triggered, refreshing conversations")
             await loadConversations()
         }
+        .task(id: linkTaskID) { await openLinkedConversation() }
+        .onChange(of: showLinkedConversation) { _, isShowing in
+            if !isShowing, let request = linkedRequest {
+                deepLinkRouter.dismiss(request)
+                linkedConversation = nil
+                linkedRequest = nil
+            }
+        }
         // Trigger refresh when returning from new chat
         .onChange(of: showNewChat) { _, isShowing in
             if !isShowing {
@@ -129,7 +159,7 @@ struct ChatListView: View {
         }
         .onChange(of: appState.selectedTab) { _, newTab in
             // Only show tutorial when chat tab is actually selected
-            if newTab == .chat && !chatTutorialCompleted {
+            if newTab == .chat && !chatTutorialCompleted && deepLinkRouter.pendingRoute == nil {
                 showChatTutorial = true
             }
         }
@@ -139,6 +169,38 @@ struct ChatListView: View {
                 showChatTutorial = false
             })
             .environmentObject(container)
+        }
+    }
+
+    private func openLinkedConversation() async {
+        if deepLinkRouter.requestID != linkedRequest?.id {
+            showLinkedConversation = false
+            linkedConversation = nil
+            linkedRequest = nil
+        }
+        guard linkTaskID.ready,
+              let userID = appState.currentUser?.id,
+              container.supabaseAuthService.userId == userID,
+              let request = deepLinkRouter.requestForPresentation(isAuthenticated: true),
+              case .chat(let id?) = request.route else { return }
+        do {
+            let conversation = try await container.supabaseDataService.getConversation(id: id)
+            try Task.checkCancellation()
+            guard deepLinkRouter.requestID == request.id, appState.currentUser?.id == userID,
+                  container.supabaseAuthService.userId == userID, appState.authState == .authenticated else { return }
+            guard let conversation else { throw DeepLinkRouter.DestinationError.unavailable }
+            linkedConversation = conversation
+            linkedRequest = request
+            showLinkedConversation = true
+            deepLinkRouter.consume(request)
+        } catch {
+            guard !Task.isCancelled, deepLinkRouter.requestID == request.id,
+                  appState.currentUser?.id == userID, container.supabaseAuthService.userId == userID,
+                  appState.authState == .authenticated else { return }
+            deepLinkRouter.consume(request)
+            let message = DeepLinkRouter.destinationError(for: error)?.errorDescription
+                ?? "Couldn't load this conversation. Check your connection and try the link again."
+            appState.showError(.apiError(message))
         }
     }
 
@@ -294,4 +356,5 @@ struct EmptyConversationsView: View {
     ChatListView()
         .environmentObject(AppState())
         .environmentObject(DependencyContainer())
+        .environmentObject(DeepLinkRouter.shared)
 }

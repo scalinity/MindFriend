@@ -1,5 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { corsHeaders } from "../_shared/cors.ts";
 import { withoutContainedSleepImports } from "../_shared/sleep-session-records.ts";
 
@@ -20,14 +19,14 @@ interface WindDownActivity {
 
 interface WindDownSession {
   id: string;
-  userId: string;
-  startedAt: string;
+  user_id: string;
+  started_at: string;
   routine: WindDownActivity[];
-  durationPlannedMinutes: number;
+  duration_planned_minutes: number;
   completed: boolean;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -144,7 +143,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         error: "Failed to generate wind-down routine",
-        message: error.message,
+        message: (error instanceof Error ? error.message : String(error)),
       }),
       {
         status: 500,

@@ -39,6 +39,8 @@ final class DownloadManager: NSObject, ObservableObject {
     // MARK: - Private Properties
 
     private var urlSession: URLSession!
+    private var pendingDownloads: [UUID: UUID] = [:]
+    private var sessionGeneration = UUID()
     private var backgroundTaskMap: [Int: UUID] = [:] // URLSessionTask.taskIdentifier -> DownloadTask.id
     private let storageManager = OfflineStorageManager.shared
     private var cancellables = Set<AnyCancellable>()
@@ -110,15 +112,24 @@ final class DownloadManager: NSObject, ObservableObject {
         }
 
         // Check if already downloading
-        guard !activeTasks.contains(where: { $0.contentId == content.id }) else {
-            return
+        guard pendingDownloads[content.id] == nil,
+              !activeTasks.contains(where: { $0.contentId == content.id && $0.status != .failed }) else { return }
+        // Reserve before storage checks or signing can suspend; failed entries permit manual retry.
+        let reservation = UUID()
+        let generation = sessionGeneration
+        pendingDownloads[content.id] = reservation
+        defer {
+            if pendingDownloads[content.id] == reservation { pendingDownloads.removeValue(forKey: content.id) }
         }
+        activeTasks.removeAll { $0.contentId == content.id && $0.status == .failed }
 
         // Check storage limit
         let hasSpace = try await storageManager.hasEnoughSpace(
             for: content.estimatedSize,
             currentLimit: storageLimit
         )
+        try Task.checkCancellation()
+        guard generation == sessionGeneration else { throw CancellationError() }
         guard hasSpace else {
             throw OfflineError.storageLimitExceeded
         }
@@ -128,6 +139,9 @@ final class DownloadManager: NSObject, ObservableObject {
             throw OfflineError.networkUnavailable
         }
 
+        let accessURL = try await SupabaseStorageMedia.resolve(content.audioUrl)
+        try Task.checkCancellation()
+        guard generation == sessionGeneration else { throw CancellationError() }
         // Create download task
         let task = DownloadTask(
             contentId: content.id,
@@ -140,9 +154,16 @@ final class DownloadManager: NSObject, ObservableObject {
 
         activeTasks.append(task)
         await saveActiveTasks()
+        if Task.isCancelled {
+            cancelDownload(taskId: task.id)
+            throw CancellationError()
+        }
+        guard generation == sessionGeneration, activeTasks.contains(where: { $0.id == task.id }) else {
+            throw CancellationError()
+        }
 
         // Start the download
-        let downloadTask = urlSession.downloadTask(with: content.audioUrl)
+        let downloadTask = urlSession.downloadTask(with: accessURL)
         backgroundTaskMap[downloadTask.taskIdentifier] = task.id
         downloadTask.resume()
 
@@ -151,29 +172,13 @@ final class DownloadManager: NSObject, ObservableObject {
 
     /// Cancel a download
     func cancelDownload(taskId: UUID) {
-        // Capture MainActor-isolated data before entering non-isolated closure
-        let taskMap = self.backgroundTaskMap
-
-        // Find and cancel the URLSession task
-        urlSession.getAllTasks { [weak self] tasks in
-            // Find the task identifier for this download task ID
-            if let taskIdentifier = taskMap.first(where: { $0.value == taskId })?.key,
-               let task = tasks.first(where: { $0.taskIdentifier == taskIdentifier }) {
-                task.cancel()
-
-                Task { @MainActor [weak self] in
-                    self?.activeTasks.removeAll { $0.id == taskId }
-                    self?.backgroundTaskMap.removeValue(forKey: taskIdentifier)
-                    await self?.saveActiveTasks()
-                }
-            } else {
-                // Task not found in map, just clean up activeTasks
-                Task { @MainActor [weak self] in
-                    self?.activeTasks.removeAll { $0.id == taskId }
-                    await self?.saveActiveTasks()
-                }
-            }
+        let identifiers = Set(backgroundTaskMap.filter { $0.value == taskId }.map(\.key))
+        activeTasks.removeAll { $0.id == taskId }
+        backgroundTaskMap = backgroundTaskMap.filter { $0.value != taskId }
+        urlSession.getAllTasks { tasks in
+            for task in tasks where identifiers.contains(task.taskIdentifier) { task.cancel() }
         }
+        Task { await saveActiveTasks() }
     }
 
     /// Pause a download
@@ -205,27 +210,36 @@ final class DownloadManager: NSObject, ObservableObject {
     /// Resume a paused download
     func resumeDownload(taskId: UUID) {
         guard let index = activeTasks.firstIndex(where: { $0.id == taskId }),
-              activeTasks[index].status == .paused else {
+              [.paused, .failed].contains(activeTasks[index].status) else {
             return
         }
 
         let task = activeTasks[index]
+        let generation = sessionGeneration
 
-        let downloadTask: URLSessionDownloadTask
-        if let resumeData = task.resumeData {
-            downloadTask = urlSession.downloadTask(withResumeData: resumeData)
-        } else {
-            downloadTask = urlSession.downloadTask(with: task.remoteUrl)
-        }
-
-        backgroundTaskMap[downloadTask.taskIdentifier] = task.id
-        downloadTask.resume()
-
-        activeTasks[index].status = .downloading
-        activeTasks[index].resumeData = nil
-
+        activeTasks[index].status = .queued
         Task {
-            await saveActiveTasks()
+            do {
+                let url = try await SupabaseStorageMedia.resolve(task.remoteUrl)
+                try Task.checkCancellation()
+                guard generation == sessionGeneration else { return }
+                guard let currentIndex = activeTasks.firstIndex(where: { $0.id == task.id }),
+                      activeTasks[currentIndex].status == .queued else { return }
+                let downloadTask: URLSessionDownloadTask
+                if SupabaseStorageMedia.privateObject(in: task.remoteUrl) == nil, let resumeData = task.resumeData {
+                    downloadTask = urlSession.downloadTask(withResumeData: resumeData)
+                } else {
+                    downloadTask = urlSession.downloadTask(with: url)
+                }
+                backgroundTaskMap[downloadTask.taskIdentifier] = task.id
+                activeTasks[currentIndex].status = .downloading
+                activeTasks[currentIndex].resumeData = nil
+                downloadTask.resume()
+                await saveActiveTasks()
+            } catch {
+                guard generation == sessionGeneration, !Task.isCancelled else { return }
+                updateTaskStatus(task.id, status: .failed, error: error)
+            }
         }
     }
 
@@ -271,13 +285,15 @@ final class DownloadManager: NSObject, ObservableObject {
 
     /// Clear all state on logout - cancels downloads and resets state
     func clearOnLogout() async {
-        // Cancel all active downloads
-        urlSession.getAllTasks { [weak self] tasks in
-            for task in tasks {
-                task.cancel()
-            }
-            Task { @MainActor in
-                self?.backgroundTaskMap.removeAll()
+        sessionGeneration = UUID()
+        pendingDownloads.removeAll()
+        backgroundTaskMap.removeAll()
+        // Background-session tasks can outlive the app process and its map.
+        // Finish cancellation before another account can start new transfers.
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            urlSession.getAllTasks { tasks in
+                for task in tasks { task.cancel() }
+                continuation.resume()
             }
         }
 
@@ -386,14 +402,19 @@ final class DownloadManager: NSObject, ObservableObject {
     }
 
     private func updateStorageUsed() async {
-        totalStorageUsed = (try? await storageManager.totalStorageUsed()) ?? 0
+        let generation = sessionGeneration
+        let total = (try? await storageManager.totalStorageUsed()) ?? 0
+        guard generation == sessionGeneration else { return }
+        totalStorageUsed = total
     }
 
     // MARK: - Persistence
 
     private func loadPersistedData() async {
+        let generation = sessionGeneration
         // Load downloads
         if let loaded = try? await storageManager.loadContentIndex() {
+            guard generation == sessionGeneration else { return }
             downloads = loaded
         }
 
@@ -402,6 +423,7 @@ final class DownloadManager: NSObject, ObservableObject {
             key: "active_download_tasks",
             as: [DownloadTask].self
         ) {
+            guard generation == sessionGeneration else { return }
             // Restore only paused tasks, others should be re-queued
             activeTasks = tasks.filter { $0.status == .paused }
         }
@@ -411,6 +433,7 @@ final class DownloadManager: NSObject, ObservableObject {
             key: OfflineCacheKey.downloadSettings.rawValue,
             as: DownloadSettings.self
         ) {
+            guard generation == sessionGeneration else { return }
             settings = loadedSettings
             storageLimit = loadedSettings.storageLimit
         }
@@ -440,6 +463,14 @@ extension DownloadManager: URLSessionDownloadDelegate {
         downloadTask: URLSessionDownloadTask,
         didFinishDownloadingTo location: URL
     ) {
+        let status = (downloadTask.response as? HTTPURLResponse)?.statusCode
+        guard let status, (200..<300).contains(status) else {
+            let error = URLError(status == 401 || status == 403 ? .userAuthenticationRequired : .badServerResponse)
+            Task { @MainActor in
+                failDownload(taskIdentifier: downloadTask.taskIdentifier, error: error)
+            }
+            return
+        }
         // CRITICAL: The system deletes the temp file at `location` when this method returns.
         // We must copy it synchronously before dispatching to MainActor.
         let tempCopy = FileManager.default.temporaryDirectory
@@ -448,7 +479,9 @@ extension DownloadManager: URLSessionDownloadDelegate {
         do {
             try FileManager.default.copyItem(at: location, to: tempCopy)
         } catch {
-            print("[DownloadManager] Failed to copy temp download file: \(error)")
+            Task { @MainActor in
+                failDownload(taskIdentifier: downloadTask.taskIdentifier, error: error)
+            }
             return
         }
 
@@ -481,21 +514,16 @@ extension DownloadManager: URLSessionDownloadDelegate {
         didCompleteWithError error: Error?
     ) {
         Task { @MainActor in
-            guard let taskId = backgroundTaskMap[task.taskIdentifier] else { return }
+            guard backgroundTaskMap[task.taskIdentifier] != nil else { return }
 
-            if let error = error {
-                // Check if it's a cancellation (user initiated)
-                let nsError = error as NSError
-                if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled {
-                    // Don't report cancelled downloads as failures
-                    return
-                }
-
-                updateTaskStatus(taskId, status: .failed, error: error)
-                onDownloadFailed?(taskId, error)
+            // Successful completion is finalized by didFinishDownloadingTo, including HTTP validation.
+            guard let error else { return }
+            let nsError = error as NSError
+            if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled {
+                backgroundTaskMap.removeValue(forKey: task.taskIdentifier)
+                return
             }
-
-            backgroundTaskMap.removeValue(forKey: task.taskIdentifier)
+            failDownload(taskIdentifier: task.taskIdentifier, error: error)
         }
     }
 
@@ -508,12 +536,21 @@ extension DownloadManager: URLSessionDownloadDelegate {
 
     // MARK: - Download Completion Handler
 
+    private func failDownload(taskIdentifier: Int, error: Error) {
+        guard let taskID = backgroundTaskMap.removeValue(forKey: taskIdentifier),
+              activeTasks.contains(where: { $0.id == taskID }) else { return }
+        updateTaskStatus(taskID, status: .failed, error: error)
+        onDownloadFailed?(taskID, error)
+    }
+
     private func handleDownloadCompletion(taskIdentifier: Int, location: URL) async {
         guard let taskId = backgroundTaskMap[taskIdentifier],
-              let task = activeTasks.first(where: { $0.id == taskId }) else {
+              let task = activeTasks.first(where: { $0.id == taskId && $0.status == .downloading }) else {
             return
         }
 
+        let generation = sessionGeneration
+        var movedFile: URL?
         do {
             // Move file to permanent storage
             let fileExtension = task.remoteUrl.pathExtension.isEmpty ? "mp3" : task.remoteUrl.pathExtension
@@ -523,8 +560,19 @@ extension DownloadManager: URLSessionDownloadDelegate {
                 fileExtension: fileExtension
             )
 
+            movedFile = destination
+            guard generation == sessionGeneration else {
+                try? FileManager.default.removeItem(at: destination)
+                return
+            }
+
             // Get actual file size
             let fileSize = try await storageManager.fileSize(for: task.contentId, fileExtension: fileExtension)
+
+            guard generation == sessionGeneration, activeTasks.contains(where: { $0.id == taskId && $0.status == .downloading }) else {
+                try? FileManager.default.removeItem(at: destination)
+                return
+            }
 
             // Create downloaded content record
             let downloaded = DownloadedContent(
@@ -548,14 +596,20 @@ extension DownloadManager: URLSessionDownloadDelegate {
             backgroundTaskMap.removeValue(forKey: taskIdentifier)
 
             await saveDownloads()
+            guard generation == sessionGeneration else { return }
             await saveActiveTasks()
+            guard generation == sessionGeneration else { return }
             await updateStorageUsed()
 
+            guard generation == sessionGeneration else { return }
             onDownloadComplete?(task.contentId)
 
         } catch {
-            updateTaskStatus(taskId, status: .failed, error: error)
-            onDownloadFailed?(taskId, error)
+            guard generation == sessionGeneration else {
+                if let movedFile { try? FileManager.default.removeItem(at: movedFile) }
+                return
+            }
+            failDownload(taskIdentifier: taskIdentifier, error: error)
         }
     }
 }

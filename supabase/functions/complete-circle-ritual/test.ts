@@ -12,7 +12,7 @@ import {
   assertEquals,
   assert,
   assertExists,
-} from "https://deno.land/std@0.168.0/testing/asserts.ts";
+} from "jsr:@std/assert@1.0.19";
 
 Deno.test("complete-circle-ritual - creator can complete", () => {
   const userId: string = "660e8400-e29b-41d4-a716-446655440001";

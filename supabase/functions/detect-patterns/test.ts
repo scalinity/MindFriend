@@ -3,7 +3,7 @@ import {
   assertEquals,
   assertGreater,
   assertLessOrEqual,
-} from "https://deno.land/std@0.168.0/testing/asserts.ts";
+} from "jsr:@std/assert@1.0.19";
 
 // Mock seasonal data for testing
 const mockSeasonalData = {

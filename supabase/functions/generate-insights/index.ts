@@ -1,8 +1,7 @@
 // supabase/functions/generate-insights/index.ts
 // Smart Personalization: Generate personalized insights from user data
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 interface Insight {
@@ -16,7 +15,7 @@ interface Insight {
   action_data?: Record<string, unknown>;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 

@@ -3,6 +3,7 @@ import SwiftUI
 struct CreativeHubView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var recentWorks: [CreativeWork] = []
     @State private var quota: CreativeQuota?
@@ -63,8 +64,19 @@ struct CreativeHubView: View {
         }) {
             DrawingCanvasView()
         }
-        .task {
-            await loadData()
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            if recentWorks.isEmpty {
+                await loadData()
+            } else {
+                do {
+                    let refreshed = try await container.creativeExpressionService.refreshMedia(recentWorks)
+                    try Task.checkCancellation()
+                    recentWorks = refreshed
+                } catch {
+                    if !Task.isCancelled { Log.creative.error("Failed to refresh recent media", error: error) }
+                }
+            }
         }
         .refreshable {
             await loadData()
@@ -345,10 +357,7 @@ struct CreativeWorkThumbnail: View {
             }
     }
 
-    private func storageURL(for path: String) -> URL? {
-        guard let baseURL = URL(string: SupabaseConfig.projectURL.absoluteString) else { return nil }
-        return baseURL.appendingPathComponent("storage/v1/object/public/creative-works/\(path)")
-    }
+    private func storageURL(for path: String) -> URL? { work.mediaUrl }
 }
 
 #Preview {

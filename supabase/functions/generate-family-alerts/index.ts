@@ -2,8 +2,7 @@
 // Generates parental alerts based on child activity patterns and mood trends
 // Can be called by cron or manually
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 
 interface GenerateAlertsResponse {
   success: boolean;
@@ -12,7 +11,7 @@ interface GenerateAlertsResponse {
   error?: string;
 }
 
-serve(async (req: Request): Promise<Response> => {
+Deno.serve(async (req: Request): Promise<Response> => {
   // Allow both GET (for cron) and POST (for manual triggering)
   if (req.method !== "GET" && req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {

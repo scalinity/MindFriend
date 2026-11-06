@@ -1,8 +1,7 @@
 // POST /functions/v1/couples/partner-links
 // Generate a unique invite code to invite a partner
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import {
   generateInviteCode,
   sha256Hash,
@@ -14,7 +13,7 @@ import {
   logRateLimitAttempt,
 } from "../_shared/couples-rate-limit.ts";
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   try {
     // Only accept POST method
     if (req.method !== "POST") {

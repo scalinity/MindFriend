@@ -272,6 +272,11 @@ final class BillingService: ObservableObject {
         // Fetch entitlements from Supabase profile
         guard let userId = authService.userId else { return }
 
+        let hasSponsoredAccess: Bool = try await supabase
+            .rpc("refresh_sponsored_entitlement", params: ["p_user_id": userId])
+            .execute()
+            .value
+
         // Use dedicated struct for partial select to avoid decoding errors
         struct DBEntitlementsRow: Codable {
             let subscriptionTier: String
@@ -294,8 +299,8 @@ final class BillingService: ObservableObject {
             .value
 
         entitlements = Entitlements(
-            tier: Tier(rawValue: entitlementsRow.subscriptionTier) ?? .free,
-            dailyAiQuota: entitlementsRow.dailyAiQuota,
+            tier: hasSponsoredAccess ? .premium : (Tier(rawValue: entitlementsRow.subscriptionTier) ?? .free),
+            dailyAiQuota: hasSponsoredAccess ? -1 : entitlementsRow.dailyAiQuota,
             dailyAiUsed: entitlementsRow.dailyAiUsed
         )
 

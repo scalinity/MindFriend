@@ -2,7 +2,7 @@
 import {
   assertEquals,
   assertExists,
-} from "https://deno.land/std@0.192.0/testing/asserts.ts";
+} from "jsr:@std/assert@1.0.19";
 
 const BASE_URL = Deno.env.get("SUPABASE_URL") || "http://localhost:54321";
 const TEST_JWT = Deno.env.get("TEST_USER_JWT") || "";

@@ -7,8 +7,7 @@
  * Body: { circleId, title, ritualType, startOption, scheduledFor? }
  */
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import {
   validateCreateRitualInput,
   jsonResponse,
@@ -27,7 +26,7 @@ interface CreateRitualRequest {
   scheduledFor?: string;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 
@@ -171,7 +170,7 @@ serve(async (req) => {
           acc[device.user_id].push(device);
           return acc;
         },
-        {} as Record<string, typeof allDevices>,
+        {} as Record<string, NonNullable<typeof allDevices>>,
       );
 
       // Format notification time

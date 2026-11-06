@@ -308,7 +308,7 @@ function extractTopExercises(strategy: UserPattern): string[] {
     Array.isArray(strategy.patternData.exercises)
   ) {
     return strategy.patternData.exercises
-      .filter((e): e is string => typeof e === 'string')
+      .filter((e: unknown): e is string => typeof e === 'string')
       .slice(0, 3);
   }
 
@@ -318,7 +318,7 @@ function extractTopExercises(strategy: UserPattern): string[] {
     Array.isArray(strategy.patternData.topActivities)
   ) {
     return strategy.patternData.topActivities
-      .filter((a): a is string => typeof a === 'string')
+      .filter((a: unknown): a is string => typeof a === 'string')
       .slice(0, 3);
   }
 
@@ -336,8 +336,8 @@ function extractPeakTimes(timePattern: UserPattern): string[] {
     Array.isArray(timePattern.patternData.peakHours)
   ) {
     return timePattern.patternData.peakHours
-      .filter((h): h is number => typeof h === 'number' && !isNaN(h))
-      .map((h) => `${h.toString().padStart(2, "0")}:00`);
+      .filter((h: unknown): h is number => typeof h === 'number' && !isNaN(h))
+      .map((h: number) => `${h.toString().padStart(2, "0")}:00`);
   }
 
   // Extract from pattern_data.times
@@ -346,7 +346,7 @@ function extractPeakTimes(timePattern: UserPattern): string[] {
     Array.isArray(timePattern.patternData.times)
   ) {
     return timePattern.patternData.times
-      .filter((t): t is string => typeof t === 'string')
+      .filter((t: unknown): t is string => typeof t === 'string')
       .slice(0, 3);
   }
 

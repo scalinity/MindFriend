@@ -1,8 +1,7 @@
 // Spec 11: Family Wellness - Join Family Edge Function
 // Allows users to join a family group via invite code
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import {
   validateFamilyInviteCode,
   isValidInviteCode,
@@ -92,7 +91,7 @@ function validateBirthDate(birthDate: string | undefined): string | null {
   return birthDate;
 }
 
-serve(async (req: Request): Promise<Response> => {
+Deno.serve(async (req: Request): Promise<Response> => {
   // Handle CORS
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
@@ -165,29 +164,6 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   try {
-    const anonKey =
-      Deno.env.get("SUPABASE_ANON_KEY") ??
-      Deno.env.get("SUPABASE_PUBLISHABLE_KEY");
-
-    if (!anonKey) {
-      return new Response(
-        JSON.stringify({ error: "Missing Supabase anon key" }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    const supabaseUser = createClient(Deno.env.get("SUPABASE_URL")!, anonKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-      global: {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      },
-    });
-
     const body: JoinFamilyRequest = await req.json();
     const { inviteCode, nickname, birthDate } = body;
 
@@ -246,12 +222,6 @@ serve(async (req: Request): Promise<Response> => {
       .eq("invite_code", validationResult.normalized)
       .single();
 
-    console.log(
-      `Found family for code ${validationResult.normalized}:`,
-      JSON.stringify(family),
-      familyError,
-    );
-
     // SECURITY: Use constant-time response to prevent timing attacks
     // Return identical error for all failure modes (invalid code, already member, etc)
     // Add random jitter to obscure timing side-channel
@@ -280,11 +250,6 @@ serve(async (req: Request): Promise<Response> => {
       .eq("user_id", user.id)
       .eq("status", "active")
       .maybeSingle();
-
-    console.log(
-      `Existing member check for family ${family.id}, user ${user.id}:`,
-      JSON.stringify(existingMember),
-    );
 
     if (existingMember) {
       // Use SAME error message for all failure modes (prevent enumeration)
@@ -334,8 +299,8 @@ serve(async (req: Request): Promise<Response> => {
 
       if (inviteUpdateError) {
         console.error(
-          "Warning: Failed to mark invitation as accepted:",
-          inviteUpdateError,
+          "Failed to mark invitation as accepted",
+          inviteUpdateError.code,
         );
         // Don't block the flow - invitation status update is non-critical
       }
@@ -351,7 +316,7 @@ serve(async (req: Request): Promise<Response> => {
 
     // Use atomic RPC to add family member
     // This prevents TOCTOU race condition by checking member limit and inserting in single transaction
-    const { data: rpcResult, error: rpcError } = await supabaseUser.rpc(
+    const { data: rpcResult, error: rpcError } = await supabaseAdmin.rpc(
       "add_family_member",
       {
         p_family_id: family.id,
@@ -363,7 +328,7 @@ serve(async (req: Request): Promise<Response> => {
     );
 
     if (rpcError || !rpcResult) {
-      console.error("RPC Error adding family member:", JSON.stringify(rpcError));
+      console.error("Failed to add family member", rpcError?.code);
       return new Response(
         JSON.stringify({
           error: "Failed to add family member",
@@ -418,11 +383,8 @@ serve(async (req: Request): Promise<Response> => {
           },
           status: "pending",
         });
-      } catch (notificationError) {
-        console.error(
-          `Warning: Failed to send notification to admin ${admin.user_id}:`,
-          notificationError,
-        );
+      } catch {
+        console.error("Failed to save family notification");
         // Don't block the flow - notifications are best-effort
       }
     }

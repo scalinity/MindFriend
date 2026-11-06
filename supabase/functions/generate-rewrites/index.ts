@@ -1,7 +1,7 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { sanitizeForPrompt } from "../_shared/sanitize.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { budgetedXAIText } from "../_shared/budgeted-xai-text.ts";
 
 interface GenerateRewritesRequest {
   conversationId: string;
@@ -41,7 +41,7 @@ function isValidUUID(str: string): boolean {
 // Premium rewrite types
 const PREMIUM_TYPES = ["more_actionable", "more_compassionate"];
 
-serve(async (req: Request): Promise<Response> => {
+Deno.serve(async (req: Request): Promise<Response> => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 
@@ -172,7 +172,10 @@ serve(async (req: Request): Promise<Response> => {
       );
     }
 
-    if (!isPremium) {
+    let rewriteQuotaReserved = false;
+    const beforeRewriteProvider = async (signal: AbortSignal) => {
+      signal.throwIfAborted();
+      if (isPremium || rewriteQuotaReserved) return;
       // Use database function to atomically check and increment quota
       const { data: quotaResult, error: quotaError } = await supabase.rpc(
         "check_and_increment_rewrite_quota",
@@ -180,18 +183,19 @@ serve(async (req: Request): Promise<Response> => {
           p_user_id: user.id,
           max_daily: 5,
         },
-      );
+      ).abortSignal(signal);
+      signal.throwIfAborted();
 
       if (quotaError) {
         console.error("Quota check error:", quotaError);
-        return new Response(
+        throw new Response(
           JSON.stringify({ error: "Failed to check quota" }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
       if (!quotaResult) {
-        return new Response(
+        throw new Response(
           JSON.stringify({
             error: "Daily rewrite limit reached",
             remainingQuota: 0,
@@ -201,7 +205,8 @@ serve(async (req: Request): Promise<Response> => {
           { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
-    }
+      rewriteQuotaReserved = true;
+    };
 
     // Get rewrite type for system prompt
     const { data: rewriteTypeData } = await supabase
@@ -241,25 +246,23 @@ Format: JSON array [{"text": "...", "explanation": "..."}]`;
       });
     }
 
-    const aiResponse = await fetch("https://api.x.ai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${xaiApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "grok-2",
+    const aiResponse = await budgetedXAIText({
+        admin: supabase,
+        userId: user.id,
+        feature: "rewrite.generate",
+        apiKey: xaiApiKey,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: sanitizeForPrompt(messageText) },
         ],
         temperature: 0.7,
-        max_tokens: 500,
-      }),
+        maxTokens: 500,
+        signal: req.signal,
+        beforeProvider: beforeRewriteProvider,
     });
 
     if (!aiResponse.ok) {
-      console.error("xAI API error:", await aiResponse.text());
+      console.error("xAI API error:", aiResponse.status);
       return new Response(
         JSON.stringify({ error: "Failed to generate rewrites" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -279,8 +282,8 @@ Format: JSON array [{"text": "...", "explanation": "..."}]`;
         // Fallback parsing
         rewrites = JSON.parse(content);
       }
-    } catch (parseError) {
-      console.error("Failed to parse AI response:", content);
+    } catch {
+      console.error("Failed to parse AI response");
       return new Response(
         JSON.stringify({ error: "Invalid AI response format" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -325,7 +328,8 @@ Format: JSON array [{"text": "...", "explanation": "..."}]`;
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
-    console.error("Error generating rewrites:", error);
+    if (error instanceof Response) return error;
+    console.error("Error generating rewrites");
     return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

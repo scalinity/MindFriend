@@ -3,7 +3,7 @@
  * Tests EN, ES, and PT-BR pattern matching
  */
 
-import { assertEquals } from "https://deno.land/std@0.168.0/testing/asserts.ts";
+import { assertEquals } from "jsr:@std/assert@1.0.19";
 import { detectDistortion } from "./distortion-detection.ts";
 
 // English Tests

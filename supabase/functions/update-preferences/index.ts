@@ -1,8 +1,7 @@
 // supabase/functions/update-preferences/index.ts
 // Smart Personalization: Update learned preferences from engagement events
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 interface EngagementEvent {
@@ -28,7 +27,7 @@ interface PreferenceUpdate {
   duration: number;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 
@@ -197,7 +196,7 @@ function getLengthBucket(minutes: number): string {
 }
 
 async function updateLearnedPreference(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   userId: string,
   prefType: string,
   prefKey: string,
@@ -275,7 +274,7 @@ async function updateLearnedPreference(
 }
 
 async function maybeRecalculatePatterns(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   userId: string,
 ) {
   // Check if patterns need recalculation (e.g., every 10 engagements)
@@ -291,7 +290,7 @@ async function maybeRecalculatePatterns(
 }
 
 async function recalculateUsagePatterns(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   userId: string,
 ) {
   // Get recent engagements

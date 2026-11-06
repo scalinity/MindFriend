@@ -65,13 +65,6 @@ final class GeneratedContentService: ObservableObject {
             return response
         } catch let functionError as FunctionsError {
             print("[GeneratedContentService] ERROR: FunctionsError occurred")
-            print("[GeneratedContentService] FunctionsError details: \(functionError)")
-            if case .httpError(let code, let data) = functionError {
-                print("[GeneratedContentService] HTTP Status Code: \(code)")
-                if let bodyString = String(data: data, encoding: .utf8) {
-                    print("[GeneratedContentService] Response body: \(bodyString)")
-                }
-            }
             let contentError = mapFunctionsError(functionError)
             error = contentError
             throw contentError
@@ -131,8 +124,6 @@ final class GeneratedContentService: ObservableObject {
             .value
 
         print("[GeneratedContentService] fetchContent result:")
-        print("[GeneratedContentService]   - title: \(content.title)")
-        print("[GeneratedContentService]   - audioUrl: \(content.audioUrl ?? "nil")")
         print("[GeneratedContentService]   - status: \(content.status)")
         print("[GeneratedContentService]   - duration: \(content.duration ?? -1)")
         return content

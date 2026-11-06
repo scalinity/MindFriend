@@ -19,7 +19,7 @@ import {
 import {
   assertEquals,
   assert,
-} from "https://deno.land/std@0.168.0/testing/asserts.ts";
+} from "jsr:@std/assert@1.0.19";
 
 Deno.test("validateCreateRitualInput - valid 'now' ritual", () => {
   const result = validateCreateRitualInput({

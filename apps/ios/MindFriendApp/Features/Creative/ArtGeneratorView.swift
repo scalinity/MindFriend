@@ -4,6 +4,8 @@ struct ArtGeneratorView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
+    @StateObject private var sharing = CreativeWorkSharing()
 
     @State private var prompt = ""
     @State private var selectedStyle: ArtStyle = .none
@@ -53,6 +55,19 @@ struct ArtGeneratorView: View {
             } message: {
                 if let error = error {
                     Text(error)
+                }
+            }
+            .modifier(CreativeWorkSharePresentation(sharing: sharing))
+            .task(id: scenePhase) {
+                guard scenePhase == .active, let work = generatedWork else { return }
+                do {
+                    let refreshed = try await container.creativeExpressionService.refreshMedia([work])
+                    try Task.checkCancellation()
+                    guard generatedWork?.id == work.id else { return }
+                    generatedWork?.mediaUrl = refreshed.first?.mediaUrl
+                    generatedImageURL = refreshed.first?.mediaUrl
+                } catch {
+                    if !Task.isCancelled { self.error = "Unable to refresh this image. Please try again." }
                 }
             }
             .onDisappear {
@@ -271,12 +286,16 @@ struct ArtGeneratorView: View {
                 }
                 .buttonStyle(.bordered)
 
-                ShareLink(item: url) {
-                    Label("Share", systemImage: "square.and.arrow.up")
-                        .font(.subheadline)
-                        .lineLimit(1)
+                if let work = generatedWork {
+                    Button {
+                        sharing.share(work, using: container.creativeExpressionService)
+                    } label: {
+                        Label("Share", systemImage: "square.and.arrow.up")
+                            .font(.subheadline)
+                            .lineLimit(1)
+                    }
+                    .buttonStyle(.bordered)
                 }
-                .buttonStyle(.bordered)
 
                 if let work = generatedWork {
                     Button {
@@ -368,16 +387,8 @@ struct ArtGeneratorView: View {
                         }
                     )
                 } catch {
-                    // If streaming fails, fall back to non-streaming
                     guard !Task.isCancelled else { return }
-                    print("[ArtGenerator] Streaming failed (\(error.localizedDescription)), falling back to non-streaming")
-                    await MainActor.run { partialImage = nil }
-                    work = try await container.creativeExpressionService.generateArt(
-                        prompt: prompt,
-                        style: selectedStyle,
-                        moodScore: moodScore,
-                        moodTags: Array(selectedMoodTags)
-                    )
+                    throw error
                 }
 
                 guard !Task.isCancelled else { return }
@@ -386,9 +397,7 @@ struct ArtGeneratorView: View {
                     generatedWork = work
                     partialImage = nil
 
-                    if let path = work.storagePath {
-                        generatedImageURL = SupabaseConfig.projectURL.appendingPathComponent("storage/v1/object/public/creative-works/\(path)")
-                    }
+                    generatedImageURL = work.mediaUrl
 
                     isGenerating = false
                 }

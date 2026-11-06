@@ -61,6 +61,7 @@ final class AppState: ObservableObject {
 
     func setAuthenticated(user: UserProfile) {
         self.currentUser = user
+        self.entitlements = user.entitlements?.subscriptionTier == "premium" ? .premium : .free
         self.authState = .authenticated
         self.hasCompletedInitialAuth = true
         self.isUsingCachedData = false
@@ -94,8 +95,7 @@ final class AppState: ObservableObject {
     }
 
     func completeOnboarding(user: UserProfile) {
-        self.currentUser = user
-        self.authState = .authenticated
+        setAuthenticated(user: user)
     }
 
     func showError(_ error: AppError) {

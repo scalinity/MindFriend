@@ -1,12 +1,11 @@
 // Generate a title for a conversation based on content
 // Used by voice mode and other flows that bypass the main chat function
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { checkRateLimit } from "../_shared/ratelimit.ts";
+import { budgetedXAIText } from "../_shared/budgeted-xai-text.ts";
 
-const XAI_API_URL = "https://api.x.ai/v1/chat/completions";
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -18,7 +17,7 @@ interface GenerateTitleRequest {
   content: string;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const corsHeaders = getCorsHeaders(req.headers.get("Origin"));
 
   if (req.method === "OPTIONS") {
@@ -199,14 +198,11 @@ serve(async (req) => {
 
     let titleResponse: Response;
     try {
-      titleResponse = await fetch(XAI_API_URL, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${xaiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "grok-4-1-fast-reasoning",
+      titleResponse = await budgetedXAIText({
+          admin: supabase,
+          userId: user.id,
+          feature: "conversation.title",
+          apiKey: xaiKey,
           messages: [
             {
               role: "system",
@@ -215,10 +211,9 @@ serve(async (req) => {
             },
             { role: "user", content: truncatedContent },
           ],
-          max_tokens: 20,
+          maxTokens: 20,
           temperature: 0.5,
-        }),
-        signal: controller.signal,
+        signal: AbortSignal.any([req.signal, controller.signal]),
       });
     } catch (fetchError) {
       clearTimeout(timeoutId);
@@ -238,11 +233,9 @@ serve(async (req) => {
     }
 
     if (!titleResponse.ok) {
-      const errorText = await titleResponse.text();
       console.error(
         "Title generation API error:",
         titleResponse.status,
-        errorText,
       );
       return new Response(
         JSON.stringify({ error: "Failed to generate title" }),
@@ -259,10 +252,7 @@ serve(async (req) => {
 
     // Validate we got a proper string response, not an error object
     if (typeof rawTitle !== "string" || rawTitle.trim().length === 0) {
-      console.error(
-        "Invalid AI response structure:",
-        JSON.stringify(titleData).slice(0, 200),
-      );
+      console.error("Invalid AI response structure");
       // Use fallback but log for monitoring
     }
 
@@ -292,8 +282,8 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       },
     );
-  } catch (error) {
-    console.error("Generate title error:", error);
+  } catch {
+    console.error("Generate title error");
     return new Response(JSON.stringify({ error: "Internal error" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

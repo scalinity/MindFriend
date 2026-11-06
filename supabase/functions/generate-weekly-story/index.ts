@@ -2,11 +2,10 @@
 // Generates 3-5 visual story cards from weekly data for progress recaps
 // See: kimispecs/07-progress-stories-spec.md
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import {
   createClient,
   SupabaseClient,
-} from "https://esm.sh/@supabase/supabase-js@2.49.1";
+} from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import {
   getCorsHeaders,
   validateContentType,
@@ -92,7 +91,7 @@ const MESSAGES = {
   },
 };
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 
@@ -226,18 +225,20 @@ serve(async (req) => {
     };
 
     // Global rate limiting: 10 requests per hour per user (across all weeks)
-    const { data: rateLimitData, error: rateLimitError } = await supabaseAuth
+    const { data: rateLimitRows, error: rateLimitError } = await supabaseAuth
       .rpc("check_rate_limit", {
         p_user_id: user.id,
         p_endpoint: "generate-weekly-story",
         p_max_requests: 10,
-        p_window_seconds: 3600, // 1 hour
+        p_window_start: new Date(Date.now() - 3600000).toISOString(),
+        p_window_ms: 3600000,
       });
 
-    if (rateLimitError) {
-      console.error("Rate limit check error:", rateLimitError);
-      // Continue despite rate limit check failure (fail open)
-    } else if (rateLimitData && !rateLimitData.allowed) {
+    const rateLimitData = rateLimitRows?.[0];
+    if (rateLimitError || !rateLimitData) {
+      return new Response(JSON.stringify({ error: "Rate limit unavailable" }), { status: 503, headers });
+    }
+    if (!rateLimitData.allowed) {
       return new Response(
         JSON.stringify({
           error: "Rate limit exceeded",

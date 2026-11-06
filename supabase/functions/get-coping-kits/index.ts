@@ -1,8 +1,7 @@
 // Edge Function: get-coping-kits
 // Fetches available coping kits with user state (pin status, active progress)
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { corsHeaders } from "../_shared/cors.ts";
 import { CommonErrors, createErrorResponse } from "../_shared/errors.ts";
 
@@ -36,7 +35,7 @@ interface GetCopingKitsResponse {
   active_progress_kits: ActiveProgressResponse[];
 }
 
-serve(async (req: Request): Promise<Response> => {
+Deno.serve(async (req: Request): Promise<Response> => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });

@@ -2,8 +2,7 @@
 // Daily cron job that evaluates auto-entry/exit conditions for all users
 // See: kimispecs/03-recovery-mode-ux-spec.md
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 interface EvaluationResult {
@@ -24,7 +23,7 @@ interface CronResponse {
   results: EvaluationResult[];
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const headers = {
     ...getCorsHeaders(origin),
@@ -187,7 +186,7 @@ serve(async (req) => {
 });
 
 async function evaluateUserRecoveryMode(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   userId: string,
 ): Promise<EvaluationResult> {
   // Call the database function that handles the evaluation logic

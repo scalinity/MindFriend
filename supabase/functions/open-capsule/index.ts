@@ -1,8 +1,7 @@
 // Open Time Capsule Edge Function
 // Fetches capsule data, marks as opened, returns journey comparison
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import {
   captureUserSnapshot,
   calculateHighlights,
@@ -23,7 +22,7 @@ interface OpenCapsuleRequest {
   capsuleId: string;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   try {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,

@@ -15,6 +15,7 @@ struct ProgramDayView: View {
     @State private var reflectionText = ""
     @State private var applyText = ""
     @State private var moodBefore: Int?
+    @State private var exerciseSessionId: String?
     @State private var isLoading = true
     @State private var isCompleting = false
     @State private var showSkipConfirm = false
@@ -79,6 +80,10 @@ struct ProgramDayView: View {
                             content: content,
                             isCompleted: completedContent.contains(content.type.rawValue),
                             onComplete: { completeContent(content) },
+                            onExerciseComplete: { sessionId in
+                                exerciseSessionId = sessionId
+                                completeContent(content)
+                            },
                             reflectionText: $reflectionText,
                             applyText: $applyText,
                             moodBefore: $moodBefore
@@ -189,6 +194,19 @@ struct ProgramDayView: View {
             reflectionText = progress?.reflectionResponse ?? ""
             applyText = progress?.applyReport ?? ""
             moodBefore = progress?.moodBefore
+            exerciseSessionId = progress?.exerciseSessionId
+            // Restore linked practice only when the same session has completed AND earned XP.
+            if let practice = currentDay?.content.first(where: { $0.type == .practice && $0.exerciseId != nil }),
+               let exerciseId = practice.exerciseId,
+               completedContent.contains(ProgramContentType.practice.rawValue) {
+                completedContent.remove(ProgramContentType.practice.rawValue)
+                if let sessionId = exerciseSessionId,
+                   try await container.supabaseDataService.completedProgramExerciseSession(
+                    exerciseId: exerciseId, startedAfter: enrollment.startedAt, sessionId: sessionId
+                   ) != nil {
+                    completedContent.insert(ProgramContentType.practice.rawValue)
+                }
+            }
 
             Analytics.shared.track(.programDayStarted, properties: [
                 "program_id": enrollment.programId,
@@ -205,8 +223,6 @@ struct ProgramDayView: View {
     }
 
     private func saveProgress() async {
-        guard progress != nil else { return }
-        
         do {
             let contentDict = Dictionary(uniqueKeysWithValues:
                 completedContent.map { ($0, true) }
@@ -218,11 +234,12 @@ struct ProgramDayView: View {
                 contentCompleted: contentDict,
                 reflectionResponse: reflectionText.isEmpty ? nil : reflectionText,
                 applyReport: applyText.isEmpty ? nil : applyText,
-                moodBefore: moodBefore
+                moodBefore: moodBefore,
+                exerciseSessionId: exerciseSessionId
             )
         } catch {
             // Log error but don't interrupt user for background saves
-            print("Failed to save progress: \(error)")
+            Log.data.error("Failed to save program progress")
         }
     }
 
@@ -231,12 +248,17 @@ struct ProgramDayView: View {
         defer { isCompleting = false }
 
         do {
-            let _ = Dictionary(uniqueKeysWithValues:
+            let content = Dictionary(uniqueKeysWithValues:
                 completedContent.map { ($0, true) }
             )
-
             let result = try await container.supabaseDataService.completeProgramDay(
-                enrollmentId: enrollment.id
+                enrollmentId: enrollment.id,
+                dayNumber: enrollment.currentDay,
+                contentCompleted: content,
+                reflectionResponse: reflectionText.isEmpty ? nil : reflectionText,
+                applyReport: applyText.isEmpty ? nil : applyText,
+                moodBefore: moodBefore,
+                exerciseSessionId: exerciseSessionId
             )
 
             if result.programComplete {
@@ -328,6 +350,7 @@ struct ProgramContentBlock: View {
     let content: ProgramDayContent
     let isCompleted: Bool
     let onComplete: () -> Void
+    var onExerciseComplete: ((String) -> Void)? = nil
     @Binding var reflectionText: String
     @Binding var applyText: String
     @Binding var moodBefore: Int?
@@ -359,7 +382,7 @@ struct ProgramContentBlock: View {
                 LearnContentView(content: content, isCompleted: isCompleted, onComplete: onComplete)
 
             case .practice:
-                PracticeContentView(content: content, isCompleted: isCompleted, onComplete: onComplete)
+                PracticeContentView(content: content, isCompleted: isCompleted, onComplete: onComplete, onExerciseComplete: onExerciseComplete)
 
             case .reflect:
                 ReflectContentView(content: content, isCompleted: isCompleted, text: $reflectionText, onComplete: onComplete)
@@ -405,40 +428,68 @@ struct LearnContentView: View {
 }
 
 struct PracticeContentView: View {
+    @EnvironmentObject var appState: AppState
+    @EnvironmentObject var container: DependencyContainer
     let content: ProgramDayContent
     let isCompleted: Bool
     let onComplete: () -> Void
+    var onExerciseComplete: ((String) -> Void)? = nil
+    @State private var exercise: Exercise?
+    @State private var isOpening = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let intro = content.intro {
-                Text(intro)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                Text(intro).font(.subheadline).foregroundStyle(.secondary)
             }
-
             if content.exerciseId != nil {
-                // TODO: Link to exercise view
                 Button {
-                    onComplete()
+                    Task { await openExercise() }
                 } label: {
                     Label(isCompleted ? "Completed" : "Start Exercise", systemImage: "play.circle.fill")
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(isCompleted)
+                .disabled(isCompleted || isOpening)
                 .accessibilityHint(isCompleted ? "Exercise completed" : "Double tap to start the exercise")
             } else if let duration = content.durationMinutes {
-                Button {
-                    onComplete()
-                } label: {
-                    Label(isCompleted ? "Completed" : "Practice (\(duration) min)", systemImage: "timer")
+                Button(action: onComplete) {
+                    Label(isCompleted ? "Completed" : "Mark \(duration) min practice complete", systemImage: "checkmark.circle")
                 }
                 .buttonStyle(.bordered)
                 .disabled(isCompleted)
-                .accessibilityHint(isCompleted ? "Practice completed" : "Double tap to start \(duration) minute practice")
+                .accessibilityHint("Mark complete after finishing the practice")
+            }
+        }
+        .sheet(item: $exercise) { exercise in
+            NavigationStack {
+                LibraryExercisePlayerView(exercise: exercise, container: container) { sessionId in
+                    onExerciseComplete?(sessionId)
+                }
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Close") { self.exercise = nil }
+                        }
+                    }
             }
         }
     }
+
+    private func openExercise() async {
+        guard let exerciseId = content.exerciseId else { return }
+        isOpening = true
+        defer { isOpening = false }
+        do {
+            let exercises = try await container.supabaseDataService.getExercises()
+            guard let selected = exercises.first(where: { $0.id.lowercased() == exerciseId.lowercased() }) else {
+                throw DataError.operationFailed("This exercise is unavailable. Please try again later.")
+            }
+            exercise = selected
+        } catch {
+            appState.showError(.apiError(error.localizedDescription))
+        }
+    }
+
+
 }
 
 struct ReflectContentView: View {

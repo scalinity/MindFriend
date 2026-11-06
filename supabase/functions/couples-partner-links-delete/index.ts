@@ -1,11 +1,10 @@
 // DELETE /functions/v1/couples/partner-links-delete/{id}
 // Unlink partnership (silent to other partner)
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { CouplesErrors } from "../_shared/couples-errors.ts";
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   try {
     // Only accept DELETE method
     if (req.method !== "DELETE") {

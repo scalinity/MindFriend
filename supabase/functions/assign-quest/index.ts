@@ -3,11 +3,10 @@
 // Triggered by cron job or directly
 // See: specs/03-circle-virality.md, specs/10-streak-recovery.md
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import {
   createClient,
   SupabaseClient,
-} from "https://esm.sh/@supabase/supabase-js@2.49.1";
+} from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { timingSafeEqual } from "../_shared/security.ts";
 
@@ -554,7 +553,7 @@ async function checkStreakProtection(
   try {
     const rpcPromise = supabase.rpc("check_streak_protection", {
       p_user_id: userId,
-    }) as Promise<{
+    }) as PromiseLike<{
       data: StreakProtectionResult[] | null;
       error: Error | null;
     }>;
@@ -708,7 +707,7 @@ async function updateStreakAndCheckMilestone(
   await checkShieldEarning(supabase, userId, newStreak);
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const headers = {
     ...getCorsHeaders(origin),

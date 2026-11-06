@@ -1,11 +1,12 @@
 // MindFriend Generate Profile Picture Edge Function
 // Supports streaming partial images for interactive UX with full persistence
 
-import { createClient } from "jsr:@supabase/supabase-js@2.49.1";
+import { createClient } from "jsr:@supabase/supabase-js@2.118.0";
 import {
   MonthlyAIBudgetExhaustedError,
   reserveMonthlyAIBudget,
 } from "../_shared/monthly-ai-budget.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 import {
   AvatarError,
@@ -17,15 +18,8 @@ import {
   readProviderJSON,
 } from "./image.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
-
-
 export async function handler(req: Request): Promise<Response> {
+  const corsHeaders = getCorsHeaders(req.headers.get("origin") ?? "");
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), {
       status,

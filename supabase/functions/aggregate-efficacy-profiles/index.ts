@@ -1,11 +1,11 @@
 // Intervention Efficacy Engine: Aggregate Efficacy Profiles Edge Function
 // Nightly cron job to update user_efficacy_profiles from intervention_efficacy data
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { createLogger, generateRequestId } from "../_shared/logger.ts";
+import { isAuthorizedCronRequest } from "../_shared/auth.ts";
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const startTime = performance.now();
   const requestId = generateRequestId();
   const logger = createLogger("aggregate-efficacy-profiles", { requestId });
@@ -14,16 +14,9 @@ serve(async (req) => {
     logger.logRequest(req.method, "/aggregate-efficacy-profiles");
 
     // Authenticate cron job (service role or cron secret)
-    const authHeader = req.headers.get("Authorization");
-    const cronSecret = Deno.env.get("CRON_SECRET");
-
-    // Check if request is authenticated via service role key OR cron secret
-    const isServiceRole = authHeader?.includes(
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
-    );
-    const isCronSecret = cronSecret && authHeader?.includes(cronSecret);
-
-    if (!isServiceRole && !isCronSecret) {
+    const authorized = await isAuthorizedCronRequest(req.headers,
+      Deno.env.get("CRON_SECRET") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
+    if (!authorized) {
       logger.warn("Unauthorized cron job request");
       return new Response(
         JSON.stringify({
@@ -34,9 +27,7 @@ serve(async (req) => {
       );
     }
 
-    logger.info("Starting efficacy profile aggregation", {
-      authMethod: isServiceRole ? "serviceRole" : "cronSecret",
-    });
+    logger.info("Starting efficacy profile aggregation");
 
     // This is a cron job, use service role key
     const supabaseAdmin = createClient(

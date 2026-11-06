@@ -4,7 +4,7 @@
 import {
   assertEquals,
   assertExists,
-} from "https://deno.land/std@0.192.0/testing/asserts.ts";
+} from "jsr:@std/assert@1.0.19";
 
 // Mock Supabase client for testing
 interface MockData {

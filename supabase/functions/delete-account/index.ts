@@ -1,7 +1,7 @@
 // MindFriend Delete Account Edge Function
 // Handles complete account deletion with proper cascade and cleanup
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { createLogger } from "../_shared/logger.ts";
 import { handleError, errorResponse } from "../_shared/error-handler.ts";
@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
     }
 
     const userId = user.id;
-    log.userAction("Deleting account", userId);
+    log.info("Deleting account", { userId });
 
     // Delete from tables that don't have ON DELETE CASCADE FKs to profiles
     // Most tables cascade automatically when the auth user is deleted

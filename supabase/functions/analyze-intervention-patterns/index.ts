@@ -1,8 +1,7 @@
 // MindFriend Analyze Intervention Patterns Edge Function
 // Server-side ML timing analysis: learns optimal intervention delivery times from historical data
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { logSanitized } from "../_shared/logging-sanitization.ts";
 import { authenticateRequest, isAuthError } from "../_shared/auth.ts";
@@ -50,7 +49,7 @@ interface TimingPreferences {
 
 // Retry helper
 async function withRetry<T>(
-  operation: () => Promise<T>,
+  operation: () => PromiseLike<T>,
   maxRetries = RETRY_MAX_ATTEMPTS,
   baseDelay = RETRY_BASE_DELAY_MS,
 ): Promise<T> {
@@ -69,7 +68,7 @@ async function withRetry<T>(
   throw lastError;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });

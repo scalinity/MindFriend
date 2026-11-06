@@ -2,8 +2,7 @@
 // Determines intervention type and content based on prediction factors
 // See: docs/specs/005-predictive-mood-intelligence.md
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { isAuthorizedCronRequest, isValidUUID } from "../_shared/auth.ts";
 import type {
@@ -19,7 +18,7 @@ const OPERATION_TIMEOUT_MS = 15000; // 15s timeout for DB operations
  * Wrap a promise with a timeout
  */
 function withTimeout<T>(
-  promise: Promise<T>,
+  promise: PromiseLike<T>,
   timeoutMs: number,
   errorMessage: string,
 ): Promise<T> {
@@ -118,7 +117,7 @@ function determineInterventionType(
  * Optimized: Uses parallel queries and early termination
  */
 async function matchExercise(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   interventionType: InterventionType,
   userId: string,
 ): Promise<MatchedExercise | null> {
@@ -211,7 +210,7 @@ function generateMessage(
   return message;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 

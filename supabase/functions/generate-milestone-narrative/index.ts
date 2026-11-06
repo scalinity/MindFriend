@@ -1,15 +1,15 @@
 // MindFriend Generate Milestone Narrative
 // AI-powered personalized milestone story generation
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
+import { budgetedXAIText } from "../_shared/budgeted-xai-text.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 interface MilestoneRequest {
   level: number;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 
@@ -17,6 +17,7 @@ serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  let milestoneLevel: number | undefined;
   try {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -45,6 +46,7 @@ serve(async (req) => {
 
     const body: MilestoneRequest = await req.json();
     const level = body.level;
+    milestoneLevel = level;
 
     // Validate milestone level
     const milestones = [5, 10, 25, 50, 100];
@@ -132,18 +134,15 @@ User's journey:
 
 Write in a warm, encouraging tone. Focus on growth, resilience, and self-compassion. Make it feel personal and meaningful. Use 2-3 relevant emoji. Keep it 150-200 words.`;
 
-    const xaiResponse = await fetch("https://api.x.ai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${Deno.env.get("XAI_API_KEY")}`,
-      },
-      body: JSON.stringify({
-        model: "grok-beta",
+    const xaiResponse = await budgetedXAIText({
+        admin: supabase,
+        userId: user.id,
+        feature: "milestone.narrative",
+        apiKey: Deno.env.get("XAI_API_KEY") ?? "",
         messages: [{ role: "user", content: prompt }],
         temperature: 0.8,
-        max_tokens: 500,
-      }),
+        maxTokens: 500,
+        signal: req.signal,
     });
 
     if (!xaiResponse.ok) {
@@ -182,13 +181,12 @@ Write in a warm, encouraging tone. Focus on growth, resilience, and self-compass
       }),
       { status: 200, headers: corsHeaders },
     );
-  } catch (error) {
-    console.error("Error:", error);
+  } catch {
+    console.error("Milestone generation unavailable");
 
     // Fallback template
-    const fallbackNarrative = `Congratulations on reaching level ${(await req.json()).level}! 🎉 This is a significant milestone in your wellness journey. You've shown incredible dedication and commitment to your mental health. Every quest completed, every mood logged, and every exercise practiced has brought you here. Your resilience and self-compassion are truly inspiring. Keep nurturing your well-being—you're doing amazing! 🌟`;
+    const fallbackNarrative = `Congratulations on reaching ${milestoneLevel === undefined ? "a new milestone" : `level ${milestoneLevel}`}! 🎉 This is a significant milestone in your wellness journey. You've shown incredible dedication and commitment to your mental health. Every quest completed, every mood logged, and every exercise practiced has brought you here. Your resilience and self-compassion are truly inspiring. Keep nurturing your well-being—you're doing amazing! 🌟`;
 
-    console.error("Error generating milestone narrative:", error); // Log full error server-side
     return new Response(
       JSON.stringify({
         success: true,

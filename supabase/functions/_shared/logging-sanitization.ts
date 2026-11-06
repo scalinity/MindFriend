@@ -17,6 +17,10 @@ interface TriggerContext {
     | {
         heartRate?: number;
         hrv?: number;
+        hasElevatedHR?: never;
+        hrCategory?: never;
+        hasLowHRV?: never;
+        hrvCategory?: never;
       }
     | {
         hasElevatedHR?: boolean;

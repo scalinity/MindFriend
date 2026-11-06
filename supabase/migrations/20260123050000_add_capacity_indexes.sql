@@ -1,3 +1,4 @@
+-- Guarded the user_capacity statements with to_regclass (the table is created in 20260427230000); production applied the original text.
 -- =====================================================
 -- Migration: Add Performance Indexes for Capacity Calculation
 -- Description: Optimizes queries used in calculate-capacity Edge Function
@@ -6,10 +7,15 @@
 
 -- Index for capacity cache lookups (user_id, local_date)
 -- Optimizes: SELECT * FROM user_capacity WHERE user_id = ? AND local_date = ?
-CREATE UNIQUE INDEX IF NOT EXISTS idx_user_capacity_user_date
-    ON user_capacity(user_id, local_date);
-
-COMMENT ON INDEX idx_user_capacity_user_date IS 'Optimizes capacity cache lookups (one row per user per day)';
+DO $$
+BEGIN
+  IF pg_catalog.to_regclass('public.user_capacity') IS NOT NULL THEN
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_user_capacity_user_date
+        ON user_capacity(user_id, local_date);
+    COMMENT ON INDEX idx_user_capacity_user_date IS 'Optimizes capacity cache lookups (one row per user per day)';
+  END IF;
+END
+$$;
 
 -- Index for mood queries (fetchMoodData)
 -- Optimizes: SELECT * FROM moods WHERE user_id = ? AND created_at >= ? AND created_at <= ? ORDER BY created_at DESC
@@ -43,4 +49,10 @@ COMMENT ON INDEX idx_quests_user_status IS 'Optimizes quest status queries';
 ANALYZE moods;
 ANALYZE sleep_sessions;
 ANALYZE quests;
-ANALYZE user_capacity;
+DO $$
+BEGIN
+  IF pg_catalog.to_regclass('public.user_capacity') IS NOT NULL THEN
+    ANALYZE user_capacity;
+  END IF;
+END
+$$;

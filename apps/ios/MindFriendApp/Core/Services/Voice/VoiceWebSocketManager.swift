@@ -11,15 +11,13 @@ final class VoiceWebSocketManager {
     private var urlSession: URLSession?
     private(set) var isConnected = false
 
-    // Reconnection state
-    private var reconnectAttempts = 0
-    private let maxReconnectAttempts = 5
-    private var reconnectTask: Task<Void, Never>?
-    private var shouldReconnect = false
+    // Current receive loop
+    private var acceptsMessages = false
+    private var receiveTask: Task<Void, Never>?
 
     // Callbacks
     var onMessage: ((URLSessionWebSocketTask.Message) -> Void)?
-    var onConnectionLost: (() -> Void)?
+    var onConnectionLost: ((_ sessionLimitReached: Bool) -> Void)?
 
     // MARK: - Initialization
 
@@ -27,22 +25,37 @@ final class VoiceWebSocketManager {
 
     // MARK: - Connection Management
 
-    func connect(token: String) async throws {
-        guard let url = URL(string: "wss://api.x.ai/v1/realtime") else {
-            throw VoiceError.connectionFailed("Invalid WebSocket URL")
+    /// Builds the upgrade only from the configured project, never a response-provided host.
+    static func relayRequest(sessionId: String, userToken: String) throws -> URLRequest {
+        guard UUID(uuidString: sessionId) != nil, !userToken.isEmpty,
+              var components = URLComponents(
+                url: SupabaseConfig.projectURL.appendingPathComponent("functions/v1/test-auth-diagnostic"),
+                resolvingAgainstBaseURL: false
+              ), components.scheme == "https", components.host != nil else {
+            throw VoiceError.connectionFailed("Invalid secure voice relay session")
         }
+        components.scheme = "wss"
+        components.queryItems = [URLQueryItem(name: "session_id", value: sessionId)]
+        guard let url = components.url else {
+            throw VoiceError.connectionFailed("Invalid secure voice relay URL")
+        }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(userToken)", forHTTPHeaderField: "Authorization")
+        request.setValue(SupabaseConfig.anonKey, forHTTPHeaderField: "apikey")
+        request.timeoutInterval = 30
+        return request
+    }
+
+    func connect(sessionId: String, userToken: String) async throws {
+        let request = try Self.relayRequest(sessionId: sessionId, userToken: userToken)
 
         #if DEBUG
         Log.voice.debug("[WebSocket] Connecting...")
         #endif
 
-        // Enable reconnection
-        shouldReconnect = true
-        reconnectAttempts = 0
-
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.timeoutInterval = 30
+        disconnect()
+        // A failed socket is reported to the owner, which closes capture and its session.
+        acceptsMessages = true
 
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = 30
@@ -66,10 +79,9 @@ final class VoiceWebSocketManager {
         #endif
 
         // Disable reconnection
-        shouldReconnect = false
-        reconnectTask?.cancel()
-        reconnectTask = nil
-        reconnectAttempts = 0
+        acceptsMessages = false
+        receiveTask?.cancel()
+        receiveTask = nil
 
         webSocket?.cancel(with: .normalClosure, reason: nil)
         webSocket = nil
@@ -106,73 +118,25 @@ final class VoiceWebSocketManager {
 
     // MARK: - Private Methods
 
-    private nonisolated func receiveMessages() {
-        Task { @MainActor in
-            let socket = self.webSocket
-            socket?.receive { [weak self] result in
-                guard let self = self else { return }
-
-                switch result {
-                case .success(let message):
-                    #if DEBUG
-                    switch message {
-                    case .string(let text):
-                        Log.voice.debug("[WebSocket] Received string message (\(text.count) chars)")
-                    case .data(let data):
-                        Log.voice.debug("[WebSocket] Received data message (\(data.count) bytes)")
-                    @unknown default:
-                        Log.voice.debug("[WebSocket] Received unknown message type")
-                    }
-                    #endif
-
-                    Task { @MainActor in
-                        self.onMessage?(message)
-                    }
-                    self.receiveMessages()
-
-                case .failure(let error):
-                    #if DEBUG
-                    Log.voice.error("[WebSocket] Receive error: \(error.localizedDescription)")
-                    #endif
-
-                    Task { @MainActor in
-                        self.isConnected = false
-                        self.onConnectionLost?()
-                        self.attemptReconnect()
-                    }
+    private func receiveMessages() {
+        guard let socket = webSocket else { return }
+        receiveTask?.cancel()
+        receiveTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                do {
+                    let message = try await socket.receive()
+                    guard let self, self.webSocket === socket, self.acceptsMessages else { return }
+                    self.onMessage?(message)
+                } catch {
+                    guard let self, self.webSocket === socket, self.acceptsMessages, !Task.isCancelled else { return }
+                    self.isConnected = false
+                    let reason = socket.closeReason.flatMap { String(data: $0, encoding: .utf8) }
+                    let reachedLimit = socket.closeCode == .normalClosure ||
+                        reason?.lowercased() == "session limit reached"
+                    self.onConnectionLost?(reachedLimit)
+                    return
                 }
             }
-        }
-    }
-
-    private func attemptReconnect() {
-        reconnectTask?.cancel()
-
-        guard shouldReconnect, reconnectAttempts < maxReconnectAttempts else {
-            if reconnectAttempts >= maxReconnectAttempts {
-                #if DEBUG
-                Log.voice.error("[WebSocket] Max reconnect attempts reached")
-                #endif
-                shouldReconnect = false
-            }
-            return
-        }
-
-        reconnectAttempts += 1
-        let delay = min(pow(2.0, Double(reconnectAttempts - 1)), 30.0)
-
-        #if DEBUG
-        Log.voice.debug("[WebSocket] Reconnect attempt \(self.reconnectAttempts)/\(self.maxReconnectAttempts) in \(delay)s")
-        #endif
-
-        reconnectTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-
-            guard let self, !Task.isCancelled, self.shouldReconnect else { return }
-
-            // Reconnection logic would go here
-            // In practice, the parent service should handle re-connection
-            // by calling connect() again with a fresh token
         }
     }
 }

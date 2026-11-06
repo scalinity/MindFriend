@@ -2,7 +2,7 @@
  * Test helpers for ritual Edge Functions
  */
 
-import { isValidUUID } from "./ritual-validation.test.ts";
+import { isValidUUID } from "../ritual-validation.ts";
 
 /**
  * Create a valid UUID for testing
@@ -74,7 +74,7 @@ export function createMockMembers(count: number): Array<{
   user_id: string;
   profiles: { id: string; display_name: string };
 }> {
-  const members = [];
+  const members: Array<{ user_id: string; profiles: { id: string; display_name: string } }> = [];
   for (let i = 0; i < count; i++) {
     const uuid = `770e8400-e29b-41d4-a716-44665544000${i + 2}`;
     members.push({

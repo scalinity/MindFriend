@@ -1,5 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { corsHeaders } from "../_shared/cors.ts";
 import { withoutContainedSleepImports } from "../_shared/sleep-session-records.ts";
 import {
@@ -37,7 +36,7 @@ interface SleepAnalysisResponse {
   recommendations: string[];
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -179,7 +178,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         error: "Failed to analyze sleep patterns",
-        message: error.message,
+        message: (error instanceof Error ? error.message : String(error)),
       }),
       {
         status: 500,
@@ -288,7 +287,7 @@ function detectPatterns(entries: any[]): Array<{
   impact: string;
   recommendation: string;
 }> {
-  const patterns = [];
+  const patterns: ReturnType<typeof detectPatterns> = [];
 
   // Weekend sleep shift
   const weekendShift = detectWeekendShift(entries);
@@ -379,7 +378,7 @@ function generateRecommendations(
   sleepDebt: any,
   patterns: any[],
 ): string[] {
-  const recommendations = [];
+  const recommendations: string[] = [];
 
   // Sleep debt recommendations
   if (sleepDebt && sleepDebt.currentMinutes > 120) {

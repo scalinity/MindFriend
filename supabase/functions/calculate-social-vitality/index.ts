@@ -15,8 +15,7 @@
  * 4. Upsert to social_vitality_scores table
  */
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 
 // Type definitions
 interface InteractionMetric {
@@ -46,7 +45,7 @@ interface CalculationResult {
   error?: string;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   try {
     // Initialize Supabase client with service role key (bypasses RLS)
     const supabase = createClient(

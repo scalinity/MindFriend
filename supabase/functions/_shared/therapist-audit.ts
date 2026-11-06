@@ -5,7 +5,7 @@
  * Security: Append-only, service role access required
  */
 
-import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 
 export type AuditAction =
   | "view_mood"
@@ -26,8 +26,8 @@ export interface AuditLogEntry {
   action: AuditAction;
   resourceType?: string;
   resourceId?: string;
-  ipAddress?: string;
-  userAgent?: string;
+  ipAddress?: string | null;
+  userAgent?: string | null;
 }
 
 /**

@@ -8,12 +8,14 @@ struct LibraryExercisePlayerView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     let exercise: Exercise
+    var onCompleted: ((String) -> Void)? = nil
     @StateObject private var viewModel: LibraryExercisePlayerViewModel
 
     @State private var wasPlayingBeforeBackground = false
 
-    init(exercise: Exercise, container: DependencyContainer) {
+    init(exercise: Exercise, container: DependencyContainer, onCompleted: ((String) -> Void)? = nil) {
         self.exercise = exercise
+        self.onCompleted = onCompleted
         _viewModel = StateObject(wrappedValue: LibraryExercisePlayerViewModel(
             exercise: exercise,
             dataService: container.supabaseDataService,
@@ -30,7 +32,11 @@ struct LibraryExercisePlayerView: View {
         .navigationTitle(exercise.title)
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $viewModel.showCompletion) {
-            ExerciseCompletionView(rating: $viewModel.rating) {
+            ExerciseCompletionView(
+                rating: $viewModel.rating,
+                isSubmitting: viewModel.isSubmittingCompletion,
+                errorMessage: viewModel.completionError
+            ) {
                 submitCompletion()
             }
         }
@@ -88,31 +94,29 @@ struct LibraryExercisePlayerView: View {
     // MARK: - Completion
 
     private func submitCompletion() {
+        guard !viewModel.isSubmittingCompletion else { return }
         Task {
             do {
-                try await viewModel.submitCompletion()
+                let sessionId = try await viewModel.submitCompletion()
+                // The program callback is emitted only after completion AND XP are confirmed.
+                onCompleted?(sessionId)
+                viewModel.showCompletion = false
+                dismiss()
 
-                // Check for level up
-                let profile = try await container.supabaseAuthService.fetchProfile()
-                let celebrations = try await container.supabaseDataService.checkMilestoneTriggers(
-                    exerciseCount: profile.stats?.totalExercisesCompleted ?? 0,
-                    newLevel: nil
-                )
-
-                await MainActor.run {
-                    if !celebrations.isEmpty {
-                        let events = celebrations.map { $0.toCelebrationEvent(userId: profile.id) }
-                        appState.addCelebrations(events)
-                    }
-                    dismiss()
+                // Optional celebrations must not turn a saved exercise into a retry.
+                if let profile = try? await container.supabaseAuthService.fetchProfile(),
+                   let celebrations = try? await container.supabaseDataService.checkMilestoneTriggers(
+                    exerciseCount: profile.stats?.totalExercisesCompleted ?? 0, newLevel: nil
+                   ), !celebrations.isEmpty {
+                    appState.addCelebrations(celebrations.map { $0.toCelebrationEvent(userId: profile.id) })
                 }
             } catch {
-                await MainActor.run {
-                    dismiss()
-                }
+                // Keep the model, UUID, rating, and completion sheet available for Retry Save.
+                viewModel.showCompletion = true
             }
         }
     }
+
 }
 
 // MARK: - Preview

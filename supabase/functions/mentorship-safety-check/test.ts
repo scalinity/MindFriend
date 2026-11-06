@@ -1,4 +1,4 @@
-import { assertEquals, assertStringIncludes } from "https://deno.land/std@0.208.0/assert/mod.ts";
+import { assertEquals, assertStringIncludes } from "jsr:@std/assert@1.0.19";
 
 /**
  * Test suite for mentorship-safety-check Edge Function
@@ -132,7 +132,7 @@ Deno.test("mentorship-safety-check: Excessive length flagged", async () => {
 // Test 14: Multiple issues in single message
 Deno.test("mentorship-safety-check: Multiple flags for complex message", async () => {
   const message = "I want to hurt myself (123-45-6789). Let's meet romantically?";
-  const flags = [];
+  const flags: string[] = [];
 
   if (/\b(hurt myself|self-harm)\b/i.test(message)) flags.push("crisis");
   if (/\b\d{3}-\d{2}-\d{4}\b/.test(message)) flags.push("pii");

@@ -12,7 +12,7 @@ import {
   assertEquals,
   assert,
   assertExists,
-} from "https://deno.land/std@0.168.0/testing/asserts.ts";
+} from "jsr:@std/assert@1.0.19";
 
 const GRACE_PERIOD_MS = 2 * 60 * 1000; // 2 minutes
 

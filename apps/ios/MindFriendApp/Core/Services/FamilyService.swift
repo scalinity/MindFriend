@@ -24,6 +24,7 @@ final class FamilyService: ObservableObject {
 
     private let supabase: SupabaseClient
     private var familyChannel: RealtimeChannelV2?
+    private var sessionUpdatesTask: Task<Void, Never>?
     private var sessionsSubscriptionTask: Task<Void, Never>?
     private var alertsSubscriptionTask: Task<Void, Never>?
 
@@ -35,6 +36,7 @@ final class FamilyService: ObservableObject {
 
     deinit {
         sessionsSubscriptionTask?.cancel()
+        sessionUpdatesTask?.cancel()
         alertsSubscriptionTask?.cancel()
         Task { [familyChannel] in
             await familyChannel?.unsubscribe()
@@ -651,7 +653,7 @@ final class FamilyService: ObservableObject {
 
     /// Subscribe to together session updates
     func subscribeToSessionUpdates(sessionId: String) async {
-        sessionsSubscriptionTask?.cancel()
+        await unsubscribeFromSessionUpdates()
 
         let channel = supabase.realtimeV2.channel("session:\(sessionId)")
 
@@ -691,7 +693,7 @@ final class FamilyService: ObservableObject {
         }
 
         // Also handle updates
-        Task {
+        sessionUpdatesTask = Task {
             for await update in updates {
                 if Task.isCancelled { break }
 
@@ -714,7 +716,9 @@ final class FamilyService: ObservableObject {
     func unsubscribeFromSessionUpdates() async {
         sessionsSubscriptionTask?.cancel()
         sessionsSubscriptionTask = nil
-        await familyChannel?.unsubscribe()
+        sessionUpdatesTask?.cancel()
+        sessionUpdatesTask = nil
+        if let channel = familyChannel { await supabase.removeChannel(channel) }
         familyChannel = nil
     }
 

@@ -2,8 +2,7 @@
 // HTTP POST endpoint: generates personalized 7-day recovery programs
 // Triggered when user's debt reaches danger level or manually requested
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import type {
   DebtScore,
@@ -19,10 +18,11 @@ import { getDateNDaysLater } from "../_shared/wellbeing-debt-utils.ts";
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-serve(async (req) => {
+Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req.headers.get("Origin"));
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: getCorsHeaders(req) });
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {
@@ -33,7 +33,7 @@ serve(async (req) => {
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Missing authorization" }), {
         status: 401,
-        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -45,7 +45,7 @@ serve(async (req) => {
     if (authError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -72,13 +72,13 @@ serve(async (req) => {
         }),
         {
           status: 200, // Not a server error, just missing data
-          headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         },
       );
     }
 
     return new Response(JSON.stringify({ success: true, program: result }), {
-      headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
     console.error("Error in generate-recovery-program:", error); // Log full error server-side
@@ -90,7 +90,7 @@ serve(async (req) => {
       }),
       {
         status: 500,
-        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       },
     );
   }

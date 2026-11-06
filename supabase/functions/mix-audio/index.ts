@@ -2,15 +2,14 @@
 // Mixes generated voice audio with background sounds using FFmpeg
 // Supports: rain, ocean, forest, fireplace, white_noise
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import {
   createClient,
   SupabaseClient,
-} from "https://esm.sh/@supabase/supabase-js@2.49.1";
+} from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 // Type alias for untyped Supabase client
-type UntypedSupabaseClient = SupabaseClient<unknown, "public", unknown>;
+type UntypedSupabaseClient = SupabaseClient;
 
 // Background sound configurations
 const BACKGROUND_SOUNDS: Record<string, { url: string; volume: number }> = {
@@ -34,11 +33,11 @@ interface MixAudioRequest {
 interface MixAudioResponse {
   success: boolean;
   mixedAudioUrl?: string;
-  duration?: number;
-  error?: string;
+  duration?: number | null;
+  error?: string | null;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const baseCorsHeaders = getCorsHeaders(origin);
 

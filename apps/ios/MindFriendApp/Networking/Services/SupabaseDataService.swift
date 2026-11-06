@@ -431,6 +431,24 @@ final class SupabaseDataService: ObservableObject {
         return quests.first?.toQuest()
     }
 
+    /// Resolve a linked quest without assigning today's quest or searching a limited list.
+    func getQuest(id: String) async throws -> Quest? {
+        guard let questId = UUID(uuidString: id) else { throw DataError.invalidId }
+        let ownerId = try userId
+        let quests: [DBQuestWithTemplate] = try await supabase
+            .from(Tables.quests)
+            .select("*, quest_templates(*), user_quest_arcs(id, arc_id, current_day, status, snapshot_duration_days, snapshot_milestone_days, quest_arcs(id, title, category, duration_days, milestone_days))")
+            .eq("id", value: questId)
+            .eq("user_id", value: ownerId)
+            .limit(1)
+            .execute()
+            .value
+        try Task.checkCancellation()
+        guard try userId == ownerId else { throw CancellationError() }
+        guard let quest = quests.first, quest.userId == ownerId else { return nil }
+        return quest.toQuest()
+    }
+
     func completeQuest(id: String, reflectionNote: String?, rating: Int?) async throws {
         guard let questId = UUID(uuidString: id) else { return }
 
@@ -899,31 +917,18 @@ final class SupabaseDataService: ObservableObject {
     }
 
     func completeExerciseSession(sessionId: String, rating: Int?, note: String?) async throws {
-        guard let sessionUUID = UUID(uuidString: sessionId) else { return }
-
-        let updates: [String: AnyEncodable] = [
-            "completed_at": AnyEncodable(ISO8601DateFormatter().string(from: Date())),
-            "rating": AnyEncodable(rating),
-            "note": AnyEncodable(note)
-        ]
-
-        try await supabase
-            .from(Tables.exerciseSessions)
-            .update(updates)
-            .eq("id", value: sessionUUID)
-            .execute()
-
-        // Update stats (FIX: use user_stats table which has total_exercises_completed, not profiles)
-        try await supabase
-            .from(Tables.userStats)
-            .update(["total_exercises_completed": AnyEncodable("total_exercises_completed + 1")])
-            .eq("user_id", value: try userId)
-            .execute()
-
-        Analytics.shared.track(.exerciseCompleted, properties: [
-            "session_id": sessionId,
-            "rating": rating ?? 0
-        ])
+        guard let sessionUUID = UUID(uuidString: sessionId) else { throw DataError.invalidId }
+        _ = try userId
+        let newlyCompleted: Bool = try await supabase.rpc("complete_exercise_session", params: [
+            "p_session_id": AnyEncodable(sessionUUID),
+            "p_rating": AnyEncodable(rating),
+            "p_note": AnyEncodable(note)
+        ]).execute().value
+        if newlyCompleted {
+            Analytics.shared.track(.exerciseCompleted, properties: [
+                "session_id": sessionId, "rating": rating ?? 0
+            ])
+        }
     }
 
     // MARK: - Conversations
@@ -954,6 +959,29 @@ final class SupabaseDataService: ObservableObject {
                 lastMessage: nil
             )
         }
+    }
+
+    /// Resolve a linked conversation independently of the paginated history list.
+    func getConversation(id: String) async throws -> Conversation? {
+        guard let conversationId = UUID(uuidString: id) else { throw DataError.invalidId }
+        let ownerId = try userId
+        let matches: [DBConversation] = try await supabase
+            .from(Tables.conversations)
+            .select()
+            .eq("id", value: conversationId)
+            .eq("user_id", value: ownerId)
+            .limit(1)
+            .execute()
+            .value
+        guard let conversation = matches.first else { return nil }
+        return Conversation(
+            id: conversation.id?.uuidString ?? "",
+            title: conversation.title,
+            status: .active,
+            createdAt: conversation.createdAt ?? Date(),
+            updatedAt: conversation.updatedAt ?? Date(),
+            lastMessage: nil
+        )
     }
 
     func createConversation(title: String?) async throws -> Conversation {
@@ -3310,7 +3338,24 @@ final class SupabaseDataService: ObservableObject {
     // MARK: - XP & Progression
 
     /// Award XP for completing an activity
-    func awardXP(activity: XPActivity) async throws -> XPAward {
+    func awardXP(activity: XPActivity, exerciseSessionId: String? = nil) async throws -> XPAward {
+        if case .exerciseComplete = activity, let exerciseSessionId {
+            guard let sessionId = UUID(uuidString: exerciseSessionId) else { throw DataError.invalidId }
+            _ = try userId
+            struct SessionAward: Decodable {
+                let amount: Int
+                let new_xp: Int
+                let new_level: Int
+                let new_title: String
+                let level_up: Bool
+            }
+            let results: [SessionAward] = try await supabase.rpc("award_exercise_session_xp", params: [
+                "p_session_id": sessionId
+            ]).execute().value
+            guard let result = results.first else { throw DataError.operationFailed("XP award failed") }
+            return XPAward(amount: result.amount, newTotal: result.new_xp, newLevel: result.new_level,
+                           newTitle: result.new_title, leveledUp: result.level_up)
+        }
         let currentUserId = try userId
 
         // Call the award_xp RPC function
@@ -4100,94 +4145,60 @@ final class SupabaseDataService: ObservableObject {
         return response.first?.toDayProgress()
     }
 
-    /// Save or update progress for a program day
-    func saveProgramDayProgress(enrollmentId: String, dayNumber: Int, contentCompleted: [String: Bool], reflectionResponse: String?, applyReport: String?, moodBefore: Int?) async throws {
-        struct ProgressUpsert: Encodable {
-            let enrollment_id: String
-            let day_number: Int
-            let status: String
-            let content_completed: [String: Bool]
-            let reflection_response: String?
-            let apply_report: String?
-            let mood_before: Int?
-            let started_at: String
-        }
-
-        let data = ProgressUpsert(
-            enrollment_id: enrollmentId,
-            day_number: dayNumber,
-            status: "in_progress",
-            content_completed: contentCompleted,
-            reflection_response: reflectionResponse,
-            apply_report: applyReport,
-            mood_before: moodBefore,
-            started_at: ISO8601DateFormatter().string(from: Date())
-        )
-
-        try await supabase
-            .from("program_day_progress")
-            .upsert(data)
-            .execute()
+    /// Save through the existing RPC so the enrollment/day conflict key is respected.
+    func saveProgramDayProgress(enrollmentId: String, dayNumber: Int, contentCompleted: [String: Bool], reflectionResponse: String?, applyReport: String?, moodBefore: Int?, exerciseSessionId: String? = nil) async throws {
+        _ = try userId
+        try await supabase.rpc("save_program_day_progress", params: [
+            "p_enrollment_id": AnyEncodable(enrollmentId),
+            "p_day_number": AnyEncodable(dayNumber),
+            "p_content_completed": AnyEncodable(contentCompleted),
+            "p_reflection_response": AnyEncodable(reflectionResponse),
+            "p_apply_report": AnyEncodable(applyReport),
+            "p_mood_before": AnyEncodable(moodBefore),
+            "p_exercise_session_id": AnyEncodable(exerciseSessionId)
+        ]).execute()
     }
 
-    /// Complete the current day and advance to next day or complete program
-    func completeProgramDay(enrollmentId: String) async throws -> (programComplete: Bool, certificateNumber: String?) {
-        // Get enrollment with program details
-        let enrollmentResponse: [DBProgramEnrollment] = try await supabase
-            .from("program_enrollments")
-            .select("*, programs(*)")
-            .eq("id", value: enrollmentId)
-            .limit(1)
-            .execute()
-            .value
-
-        guard let enrollment = enrollmentResponse.first else {
-            throw DataError.custom("Enrollment not found")
+    /// Complete the displayed day atomically and return the persisted certificate number.
+    func completeProgramDay(enrollmentId: String, dayNumber: Int? = nil, contentCompleted: [String: Bool]? = nil, reflectionResponse: String? = nil, applyReport: String? = nil, moodBefore: Int? = nil, exerciseSessionId: String? = nil) async throws -> (programComplete: Bool, certificateNumber: String?) {
+        let owner = try userId
+        let enrollments: [DBProgramEnrollment] = try await supabase
+            .from("program_enrollments").select()
+            .eq("id", value: enrollmentId).eq("user_id", value: owner)
+            .limit(1).execute().value
+        guard let enrollment = enrollments.first else {
+            throw DataError.operationFailed("Enrollment not found")
         }
-
-        let currentDay = enrollment.currentDay
-        let totalDays = enrollment.programs?.durationDays ?? 0
-
-        // Mark current day as completed
-        try await supabase
-            .from("program_day_progress")
-            .update([
-                "status": "completed",
-                "completed_at": ISO8601DateFormatter().string(from: Date())
-            ])
-            .eq("enrollment_id", value: enrollmentId)
-            .eq("day_number", value: currentDay)
-            .execute()
-
-        let programComplete = currentDay >= totalDays
-
-        if programComplete {
-            // Mark enrollment as completed and generate certificate
-            let certificateNumber = "MF-\(UUID().uuidString.prefix(8).uppercased())"
-            try await supabase
-                .from("program_enrollments")
-                .update([
-                    "status": "completed",
-                    "completed_at": ISO8601DateFormatter().string(from: Date())
-                ])
-                .eq("id", value: enrollmentId)
-                .execute()
-            return (programComplete: true, certificateNumber: certificateNumber)
-        } else {
-            // Advance to next day and update streak
-            let newStreak = enrollment.streakDays + 1
-            let longestStreak = max(newStreak, enrollment.longestStreak)
-            try await supabase
-                .from("program_enrollments")
-                .update([
-                    "current_day": currentDay + 1,
-                    "streak_days": newStreak,
-                    "longest_streak": longestStreak
-                ])
-                .eq("id", value: enrollmentId)
-                .execute()
-            return (programComplete: false, certificateNumber: nil)
+        let requestedDay = dayNumber ?? enrollment.currentDay
+        let saved = try await getDayProgress(enrollmentId: enrollmentId, dayNumber: requestedDay)
+        let result: CompleteProgramDayResult = try await supabase.rpc("complete_program_day", params: [
+            "p_enrollment_id": AnyEncodable(enrollmentId),
+            "p_day_number": AnyEncodable(requestedDay),
+            "p_content_completed": AnyEncodable(contentCompleted ?? saved?.contentCompleted ?? [:]),
+            "p_reflection_response": AnyEncodable(reflectionResponse ?? saved?.reflectionResponse),
+            "p_apply_report": AnyEncodable(applyReport ?? saved?.applyReport),
+            "p_mood_before": AnyEncodable(moodBefore ?? saved?.moodBefore),
+            "p_exercise_session_id": AnyEncodable(exerciseSessionId ?? saved?.exerciseSessionId)
+        ]).execute().value
+        if result.programComplete && result.certificateNumber == nil {
+            throw DataError.operationFailed("The program certificate could not be confirmed. Please try again.")
         }
+        return (result.programComplete, result.certificateNumber)
+    }
+
+    /// Both completion and XP must be persisted before saved practice can be restored.
+    func completedProgramExerciseSession(exerciseId: String, startedAfter: Date, sessionId: String? = nil) async throws -> String? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        var query = supabase.from(Tables.exerciseSessions).select()
+            .eq("user_id", value: try userId).eq("exercise_id", value: exerciseId)
+            .gte("started_at", value: formatter.string(from: startedAfter))
+            .not("completed_at", operator: .is, value: "null")
+            .not("xp_awarded_at", operator: .is, value: "null")
+        if let sessionId { query = query.eq("id", value: sessionId) }
+        let sessions: [DBExerciseSession] = try await query
+            .order("completed_at", ascending: false).limit(1).execute().value
+        return sessions.first?.id?.uuidString
     }
 
     /// Skip the current day (uses a skip allowance)
@@ -4444,50 +4455,137 @@ final class SupabaseDataService: ObservableObject {
     
     // MARK: - Certificates
     
-    /// Get user's certificates
+    /// List persisted certificates, including their program metadata.
     func getCertificates() async throws -> [ProgramCertificate] {
-        // Post-MVP feature - stub implementation
-        return []
+        let certificates: [DBProgramCertificate] = try await supabase
+            .from("program_certificates").select("*, programs(*)")
+            .eq("user_id", value: try userId)
+            .order("issued_at", ascending: false).execute().value
+        guard !certificates.isEmpty else { return [] }
+        struct SharedPost: Decodable { let id: UUID }
+        let posts: [SharedPost] = try await supabase.from(Tables.circlePosts).select("id")
+            .eq("user_id", value: try userId).in("id", values: certificates.map(\.id)).execute().value
+        let sharedIds = Set(posts.map(\.id))
+        return certificates.map {
+            var certificate = $0.toCertificate()
+            certificate.sharedToCircle = certificate.sharedToCircle || sharedIds.contains($0.id)
+            return certificate
+        }
     }
-    
-    /// Share certificate to circle
+
+    private func ownedCertificate(_ certificateId: String) async throws -> DBProgramCertificate {
+        guard UUID(uuidString: certificateId) != nil else { throw DataError.invalidId }
+        let certificates: [DBProgramCertificate] = try await supabase
+            .from("program_certificates").select("*, programs(*)")
+            .eq("id", value: certificateId).eq("user_id", value: try userId)
+            .limit(1).execute().value
+        guard let certificate = certificates.first else {
+            throw DataError.operationFailed("Certificate not found")
+        }
+        return certificate
+    }
+
+    /// Share only after the existing explicit action. A stable post ID prevents retry duplicates.
     func shareCertificateToCircle(certificateId: String, circleId: UUID? = nil, caption: String? = nil) async throws {
-        // Post-MVP feature - stub implementation
-        throw DataError.notImplemented("Certificate circle sharing not yet implemented")
+        let owner = try userId
+        let certificate = try await ownedCertificate(certificateId)
+        struct Membership: Decodable { let circle_id: UUID }
+        var query = supabase.from("circle_members").select("circle_id").eq("user_id", value: owner)
+        if let circleId { query = query.eq("circle_id", value: circleId) }
+        let memberships: [Membership] = try await query.order("joined_at").limit(1).execute().value
+        guard let membership = memberships.first else {
+            throw DataError.operationFailed("Join a circle before sharing a certificate.")
+        }
+        struct ExistingPost: Decodable { let circle_id: UUID; let user_id: UUID }
+        let existing: [ExistingPost] = try await supabase.from(Tables.circlePosts)
+            .select("circle_id, user_id").eq("id", value: certificate.id).limit(1).execute().value
+        if let post = existing.first {
+            guard post.user_id == owner, post.circle_id == membership.circle_id else {
+                throw DataError.operationFailed("This certificate has already been shared to another circle.")
+            }
+            return
+        }
+        struct CertificatePost: Encodable {
+            let id: UUID
+            let circle_id: UUID
+            let user_id: UUID
+            let kind = "milestone"
+            let post_type = "milestone"
+            let mood_emoji = "🎉"
+            let body_text: String
+            let local_date: String
+        }
+        let text = "I completed \(certificate.completionStats.programTitle ?? "a wellness program") on MindFriend! Certificate #\(certificate.certificateNumber)"
+        let post = CertificatePost(
+            id: certificate.id, circle_id: membership.circle_id, user_id: owner,
+            body_text: caption.map { "\($0)\n\n\(text)" } ?? text,
+            local_date: DateFormatter.dateOnly.string(from: Date())
+        )
+        try await supabase.from(Tables.circlePosts)
+            .upsert(post, onConflict: "id", ignoreDuplicates: true).execute()
+        // Confirm the target on retry races; RLS still controls the post and circle.
+        let confirmed: [ExistingPost] = try await supabase.from(Tables.circlePosts)
+            .select("circle_id, user_id").eq("id", value: certificate.id).limit(1).execute().value
+        guard confirmed.first?.user_id == owner, confirmed.first?.circle_id == membership.circle_id else {
+            throw DataError.operationFailed("Certificate sharing could not be confirmed.")
+        }
     }
-    
-    /// Share certificate externally
+
+    /// Produce share text from the persisted certificate; the system share sheet owns delivery.
     func shareCertificateExternally(certificateId: String) async throws -> String {
-        // Post-MVP feature - stub implementation
-        throw DataError.notImplemented("External certificate sharing not yet implemented")
+        let certificate = try await ownedCertificate(certificateId)
+        return "I completed \(certificate.completionStats.programTitle ?? "a wellness program") on MindFriend! Certificate #\(certificate.certificateNumber)"
     }
-    
+
     // MARK: - Safety Plan
     
-    /// Fetch user's safety plan
+    /// Fetch user's safety plan. A successful null response means no plan exists.
     func fetchSafetyPlan() async throws -> SafetyPlanResponse {
-        // Post-MVP feature - stub implementation
-        throw DataError.notImplemented("Safety plan fetching not yet implemented")
+        try await manageSafetyPlan(SafetyPlanRequest(operation: "get", payload: nil, settings: nil))
     }
-    
-    /// Save user's safety plan
+
+    /// Content saves never change the separately managed AI-reference preference.
     func saveSafetyPlan(payload: SafetyPlanPayload, operation: SafetyPlanOperation) async throws -> SafetyPlanResponse {
-        // Post-MVP feature - stub implementation
-        throw DataError.notImplemented("Safety plan saving not yet implemented")
+        if operation == .delete { return try await deleteSafetyPlan() }
+        return try await manageSafetyPlan(SafetyPlanRequest(
+            operation: operation.rawValue,
+            payload: SafetyPlanRequest.Content(payload),
+            settings: nil
+        ))
     }
-    
-    /// Update safety plan settings
+
     func updateSafetyPlanSettings(settings: SafetyPlanSettings) async throws -> SafetyPlanResponse {
-        // Post-MVP feature - stub implementation
-        throw DataError.notImplemented("Safety plan settings update not yet implemented")
+        try await manageSafetyPlan(SafetyPlanRequest(
+            operation: "update", payload: nil,
+            settings: .init(allow_ai_reference: settings.allowAiReference)
+        ))
     }
-    
-    /// Delete user's safety plan
+
     func deleteSafetyPlan() async throws -> SafetyPlanResponse {
-        // Post-MVP feature - stub implementation
-        throw DataError.notImplemented("Safety plan deletion not yet implemented")
+        try await manageSafetyPlan(SafetyPlanRequest(operation: "delete", payload: nil, settings: nil))
     }
-    
+
+    private func manageSafetyPlan(_ request: SafetyPlanRequest) async throws -> SafetyPlanResponse {
+        _ = try userId
+        let response: SafetyPlanResponse
+        do {
+            response = try await supabase.functions.invoke(
+                "manage-safety-plan", options: FunctionInvokeOptions(body: request)
+            )
+        } catch FunctionsError.httpError(_, let data) {
+            // Decode the handler's structured errors without logging private plan content.
+            if let failure = try? JSONDecoder().decode(SafetyPlanResponse.self, from: data),
+               let message = failure.error {
+                throw DataError.operationFailed(message)
+            }
+            throw DataError.operationFailed("Unable to update safety plan. Please try again.")
+        }
+        guard response.success else {
+            throw DataError.operationFailed(response.error ?? "Unable to update safety plan. Please try again.")
+        }
+        return response
+    }
+
     // MARK: - AI Coaching
     
     /// Invoke coaching function

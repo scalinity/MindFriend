@@ -1,6 +1,5 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import { Webhook } from "https://esm.sh/svix@1.15.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
+import { Webhook } from "npm:svix@2.8.0";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -10,7 +9,11 @@ if (!webhookSecret) {
   throw new Error("RESEND_WEBHOOK_SECRET environment variable is not set");
 }
 
-serve(async (req: Request) => {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });
   }
@@ -26,18 +29,17 @@ serve(async (req: Request) => {
     const payload = await req.text();
     const wh = new Webhook(webhookSecret);
 
-    let body;
+    let body: unknown;
     try {
-      body = wh.verify(payload, svixHeaders) as Record<string, unknown>;
+      wh.verify(payload, svixHeaders);
+      body = JSON.parse(payload);
     } catch (error) {
-      console.error("Webhook signature verification failed:", error);
+      console.error("Webhook signature verification failed", error instanceof Error ? error.name : "UnknownError");
       return new Response(
         JSON.stringify({ error: "Unauthorized - invalid signature" }),
         { status: 401, headers: { "Content-Type": "application/json" } },
       );
     }
-
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Webhook payload structure:
     // {
@@ -52,14 +54,43 @@ serve(async (req: Request) => {
     //   }
     // }
 
-    const { type, data } = body;
-
-    if (!type || !data) {
-      return new Response(JSON.stringify({ error: "Missing type or data" }), {
+    if (
+      !isRecord(body) || typeof body.type !== "string" || !body.type.trim() ||
+      !isRecord(body.data)
+    ) {
+      return new Response(JSON.stringify({ error: "Invalid webhook payload" }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
       });
     }
+
+    const { type, data } = body;
+    if (!["email.opened", "email.clicked", "email.bounced", "email.complained", "email.sent"].includes(type)) {
+      return new Response(JSON.stringify({ success: true, type }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    if (typeof data.email_id !== "string" || !data.email_id.trim()) {
+      return new Response(JSON.stringify({ error: "Invalid webhook payload" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    const bounce = data.bounce;
+    if (
+      bounce != null && (
+        !isRecord(bounce) ||
+        (bounce.type != null && typeof bounce.type !== "string") ||
+        (bounce.message != null && typeof bounce.message !== "string")
+      )
+    ) {
+      return new Response(JSON.stringify({ error: "Invalid webhook payload" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     console.log(`Processing webhook: ${type}`);
 
@@ -102,8 +133,8 @@ serve(async (req: Request) => {
         break;
 
       case "email.bounced":
-        const bounceType = data.bounce?.type || "unknown";
-        const bounceReason = data.bounce?.message || "Unknown bounce reason";
+        const bounceType = bounce?.type || "unknown";
+        const bounceReason = bounce?.message || "Unknown bounce reason";
 
         await supabase
           .from("email_logs")

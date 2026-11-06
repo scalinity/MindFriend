@@ -2,11 +2,14 @@
 // Handles AI art generation with quota enforcement using OpenAI gpt-image-1-mini
 // Supports streaming partial images for interactive UX
 
-console.log("[BOOT] generate-art function loading...");
-
-import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2.49.1";
-
-console.log("[BOOT] Supabase client imported successfully");
+import {
+  createClient,
+  type SupabaseClient,
+} from "jsr:@supabase/supabase-js@2.118.0";
+import {
+  MonthlyAIBudgetExhaustedError,
+  reserveMonthlyAIBudget,
+} from "../_shared/monthly-ai-budget.ts";
 
 // --- Inlined from _shared/cors.ts (eliminates bundler path resolution issues) ---
 
@@ -59,12 +62,6 @@ async function checkRateLimit(
   endpoint: string,
   config: RateLimitConfig = { windowMs: 60 * 1000, maxRequests: 10 },
 ): Promise<RateLimitResult> {
-  console.log(
-    "[RATELIMIT] Checking rate limit for user:",
-    userId,
-    "endpoint:",
-    endpoint,
-  );
   const now = new Date();
   const windowStart = new Date(now.getTime() - config.windowMs);
 
@@ -78,12 +75,7 @@ async function checkRateLimit(
     });
 
     if (error) {
-      console.error(
-        "[RATELIMIT] Rate limit check failed (failing closed):",
-        error.code,
-        error.message,
-        error.details,
-      );
+      console.error("[generate-art] Operation failed");
       return {
         allowed: false,
         remaining: 0,
@@ -92,13 +84,11 @@ async function checkRateLimit(
       };
     }
 
-    console.log("[RATELIMIT] Raw result:", JSON.stringify(data));
     const result = data?.[0];
     if (!result) {
-      console.log("[RATELIMIT] No result, allowing by default");
       return {
-        allowed: true,
-        remaining: config.maxRequests,
+        allowed: false,
+        remaining: 0,
         resetAt: new Date(now.getTime() + config.windowMs),
       };
     }
@@ -108,12 +98,6 @@ async function checkRateLimit(
       ? undefined
       : Math.ceil((resetAt.getTime() - now.getTime()) / 1000);
 
-    console.log(
-      "[RATELIMIT] Result - allowed:",
-      result.allowed,
-      "remaining:",
-      result.remaining,
-    );
     return {
       allowed: result.allowed,
       remaining: result.remaining,
@@ -121,7 +105,7 @@ async function checkRateLimit(
       retryAfter,
     };
   } catch (err) {
-    console.error("[RATELIMIT] Exception during rate limit check:", err);
+    console.error("[generate-art] Operation failed");
     return {
       allowed: false,
       remaining: 0,
@@ -144,22 +128,20 @@ function getRateLimitHeaders(result: RateLimitResult): Record<string, string> {
 
 // Catch unhandled promise rejections to prevent worker crashes
 globalThis.addEventListener("unhandledrejection", (event) => {
-  console.error("[FATAL] Unhandled rejection:", event.reason);
+  console.error("[generate-art] Operation failed");
   if (event.reason instanceof Error) {
-    console.error("[FATAL] Stack:", event.reason.stack);
+    console.error("[generate-art] Operation failed");
   }
   event.preventDefault();
 });
 
 // Catch uncaught errors
 globalThis.addEventListener("error", (event) => {
-  console.error("[FATAL] Uncaught error:", event.error);
+  console.error("[generate-art] Operation failed");
   if (event.error instanceof Error) {
-    console.error("[FATAL] Stack:", event.error.stack);
+    console.error("[generate-art] Operation failed");
   }
 });
-
-console.log("[BOOT] Error handlers registered");
 
 // Security constants - OpenAI gpt-image-1 supports up to 32000 chars, but we keep it reasonable
 const MAX_PROMPT_LENGTH = 1000;
@@ -212,55 +194,30 @@ interface GenerateArtRequest {
   stream?: boolean;
 }
 
-console.log("[BOOT] All definitions loaded, registering Deno.serve handler...");
-
 Deno.serve(async (req) => {
   const requestId = crypto.randomUUID().slice(0, 8);
-  console.log(`[${requestId}] ========== REQUEST START ==========`);
-  console.log(`[${requestId}] Method: ${req.method}`);
-  console.log(`[${requestId}] URL: ${req.url}`);
-  console.log(
-    `[${requestId}] Headers:`,
-    JSON.stringify(Object.fromEntries(req.headers.entries())),
-  );
 
   const origin = req.headers.get("Origin");
   const baseCorsHeaders = getCorsHeaders(origin);
-  console.log(`[${requestId}] Origin: ${origin}, CORS headers generated`);
 
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
-    console.log(`[${requestId}] Returning OPTIONS preflight response`);
     return new Response("ok", { headers: baseCorsHeaders });
   }
 
   try {
     // Check environment variables
-    console.log(`[${requestId}] Checking environment variables...`);
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
     const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
 
-    console.log(
-      `[${requestId}] SUPABASE_URL: ${supabaseUrl ? "SET (" + supabaseUrl.slice(0, 30) + "...)" : "MISSING"}`,
-    );
-    console.log(
-      `[${requestId}] SUPABASE_SERVICE_ROLE_KEY: ${serviceRoleKey ? "SET (length: " + serviceRoleKey.length + ")" : "MISSING"}`,
-    );
-    console.log(
-      `[${requestId}] SUPABASE_ANON_KEY: ${anonKey ? "SET (length: " + anonKey.length + ")" : "MISSING"}`,
-    );
-    console.log(
-      `[${requestId}] OPENAI_API_KEY: ${openaiApiKey ? "SET (length: " + openaiApiKey.length + ")" : "MISSING"}`,
-    );
-
     if (!supabaseUrl || !serviceRoleKey) {
-      console.error(`[${requestId}] Missing required Supabase env vars`);
+      console.error("[generate-art] Operation failed");
       return new Response(
         JSON.stringify({
           error: "Server configuration error",
-          debug: "Missing Supabase env vars",
         }),
         {
           status: 500,
@@ -270,20 +227,15 @@ Deno.serve(async (req) => {
     }
 
     // Initialize Supabase admin client
-    console.log(`[${requestId}] Creating Supabase admin client...`);
+
     let supabaseAdmin: SupabaseClient;
     try {
       supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
-      console.log(`[${requestId}] Supabase admin client created successfully`);
     } catch (err) {
-      console.error(
-        `[${requestId}] Failed to create Supabase admin client:`,
-        err,
-      );
+      console.error("[generate-art] Operation failed");
       return new Response(
         JSON.stringify({
           error: "Failed to initialize database client",
-          debug: String(err),
         }),
         {
           status: 500,
@@ -293,40 +245,27 @@ Deno.serve(async (req) => {
     }
 
     // Authenticate user
-    console.log(`[${requestId}] Checking authorization header...`);
+
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      console.log(`[${requestId}] Missing authorization header`);
       return new Response(JSON.stringify({ error: "Missing authorization" }), {
         status: 401,
         headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
       });
     }
-    console.log(
-      `[${requestId}] Auth header present, length: ${authHeader.length}`,
-    );
 
     const token = authHeader.replace("Bearer ", "");
-    console.log(
-      `[${requestId}] Token extracted, length: ${token.length}, prefix: ${token.slice(0, 20)}...`,
-    );
 
-    console.log(`[${requestId}] Calling supabaseAdmin.auth.getUser()...`);
     let user;
     let authError;
     try {
       const authResult = await supabaseAdmin.auth.getUser(token);
       user = authResult.data?.user;
       authError = authResult.error;
-      console.log(`[${requestId}] auth.getUser() completed`);
-      console.log(`[${requestId}] User: ${user ? user.id : "null"}`);
-      console.log(
-        `[${requestId}] Auth error: ${authError ? JSON.stringify(authError) : "none"}`,
-      );
     } catch (err) {
-      console.error(`[${requestId}] Exception during auth.getUser():`, err);
+      console.error("[generate-art] Operation failed");
       return new Response(
-        JSON.stringify({ error: "Auth check failed", debug: String(err) }),
+        JSON.stringify({ error: "Auth check failed" }),
         {
           status: 500,
           headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
@@ -335,11 +274,8 @@ Deno.serve(async (req) => {
     }
 
     if (authError || !user) {
-      console.log(
-        `[${requestId}] Auth failed - error: ${authError?.message}, user: ${user ? "exists" : "null"}`,
-      );
       return new Response(
-        JSON.stringify({ error: "Invalid token", details: authError?.message }),
+        JSON.stringify({ error: "Invalid token" }),
         {
           status: 401,
           headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
@@ -347,22 +283,18 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`[${requestId}] User authenticated: ${user.id}`);
-
     // Create a user-scoped client for RPCs that depend on auth.uid()
-    console.log(`[${requestId}] Creating user-scoped Supabase client...`);
+
     let supabaseUser: SupabaseClient;
     try {
       supabaseUser = createClient(supabaseUrl, anonKey!, {
         global: { headers: { Authorization: authHeader } },
       });
-      console.log(`[${requestId}] User-scoped client created`);
     } catch (err) {
-      console.error(`[${requestId}] Failed to create user-scoped client:`, err);
+      console.error("[generate-art] Operation failed");
       return new Response(
         JSON.stringify({
           error: "Failed to initialize user client",
-          debug: String(err),
         }),
         {
           status: 500,
@@ -372,7 +304,7 @@ Deno.serve(async (req) => {
     }
 
     // Rate limiting (5 per minute)
-    console.log(`[${requestId}] Checking rate limit...`);
+
     let rateLimitResult: RateLimitResult;
     try {
       rateLimitResult = await checkRateLimit(
@@ -381,15 +313,11 @@ Deno.serve(async (req) => {
         "generate-art",
         { windowMs: 60 * 1000, maxRequests: 5 },
       );
-      console.log(
-        `[${requestId}] Rate limit check completed - allowed: ${rateLimitResult.allowed}, remaining: ${rateLimitResult.remaining}`,
-      );
     } catch (err) {
-      console.error(`[${requestId}] Rate limit check exception:`, err);
+      console.error("[generate-art] Operation failed");
       return new Response(
         JSON.stringify({
           error: "Rate limit check failed",
-          debug: String(err),
         }),
         {
           status: 500,
@@ -399,9 +327,6 @@ Deno.serve(async (req) => {
     }
 
     if (!rateLimitResult.allowed) {
-      console.log(
-        `[${requestId}] Rate limited - retry after: ${rateLimitResult.retryAfter}s`,
-      );
       return new Response(
         JSON.stringify({
           error: "Too many requests",
@@ -426,21 +351,16 @@ Deno.serve(async (req) => {
     };
 
     // Parse request body
-    console.log(`[${requestId}] Parsing request body...`);
+
     let requestBody: GenerateArtRequest;
     try {
       const bodyText = await req.text();
-      console.log(`[${requestId}] Body text length: ${bodyText.length}`);
-      console.log(`[${requestId}] Body preview: ${bodyText.slice(0, 200)}`);
+
       requestBody = JSON.parse(bodyText);
-      console.log(
-        `[${requestId}] Body parsed successfully:`,
-        JSON.stringify(requestBody),
-      );
     } catch (err) {
-      console.error(`[${requestId}] Failed to parse request body:`, err);
+      console.error("[generate-art] Operation failed");
       return new Response(
-        JSON.stringify({ error: "Invalid request format", debug: String(err) }),
+        JSON.stringify({ error: "Invalid request format" }),
         {
           status: 400,
           headers: responseHeaders,
@@ -456,13 +376,8 @@ Deno.serve(async (req) => {
       stream: enableStreaming,
     } = requestBody;
 
-    console.log(
-      `[${requestId}] Request params - prompt: "${prompt?.slice(0, 50)}...", style: ${style}, stream: ${enableStreaming}`,
-    );
-
     // Validate prompt
     if (!prompt || typeof prompt !== "string") {
-      console.log(`[${requestId}] Invalid prompt: ${typeof prompt}`);
       return new Response(JSON.stringify({ error: "Prompt is required" }), {
         status: 400,
         headers: responseHeaders,
@@ -470,9 +385,6 @@ Deno.serve(async (req) => {
     }
 
     if (prompt.length > MAX_PROMPT_LENGTH) {
-      console.log(
-        `[${requestId}] Prompt too long: ${prompt.length} > ${MAX_PROMPT_LENGTH}`,
-      );
       return new Response(
         JSON.stringify({
           error: `Prompt must be under ${MAX_PROMPT_LENGTH} characters`,
@@ -482,34 +394,30 @@ Deno.serve(async (req) => {
     }
 
     // Validate and sanitize optional fields
-    const validMoodScore =
-      typeof moodScore === "number" &&
-      !isNaN(moodScore) &&
-      moodScore >= 1 &&
-      moodScore <= 10
-        ? moodScore
-        : null;
+    const validMoodScore = typeof moodScore === "number" &&
+        !isNaN(moodScore) &&
+        moodScore >= 1 &&
+        moodScore <= 10
+      ? moodScore
+      : null;
     const validMoodTags = Array.isArray(moodTags)
       ? moodTags
-          .filter((t): t is string => typeof t === "string" && t.length <= 50)
-          .slice(0, 10)
+        .filter((t): t is string => typeof t === "string" && t.length <= 50)
+        .slice(0, 10)
       : null;
 
     // Check quota
-    console.log(`[${requestId}] Checking creative quota via RPC...`);
+
     let quotaData;
     let quotaError;
     try {
       const quotaResult = await supabaseUser.rpc("get_creative_quota");
       quotaData = quotaResult.data;
       quotaError = quotaResult.error;
-      console.log(
-        `[${requestId}] Quota RPC completed - data: ${JSON.stringify(quotaData)}, error: ${quotaError ? JSON.stringify(quotaError) : "none"}`,
-      );
     } catch (err) {
-      console.error(`[${requestId}] Quota RPC exception:`, err);
+      console.error("[generate-art] Operation failed");
       return new Response(
-        JSON.stringify({ error: "Failed to check quota", debug: String(err) }),
+        JSON.stringify({ error: "Failed to check quota" }),
         {
           status: 500,
           headers: responseHeaders,
@@ -518,11 +426,10 @@ Deno.serve(async (req) => {
     }
 
     if (quotaError) {
-      console.error(`[${requestId}] Quota check error:`, quotaError);
+      console.error("[generate-art] Operation failed");
       return new Response(
         JSON.stringify({
           error: "Failed to check quota",
-          details: quotaError.message,
         }),
         {
           status: 500,
@@ -532,12 +439,8 @@ Deno.serve(async (req) => {
     }
 
     const quota = quotaData?.[0];
-    console.log(
-      `[${requestId}] Quota - count: ${quota?.ai_art_count}, limit: ${quota?.ai_art_limit}, premium: ${quota?.is_premium}`,
-    );
 
     if (quota && quota.ai_art_count >= quota.ai_art_limit) {
-      console.log(`[${requestId}] Quota exceeded`);
       return new Response(
         JSON.stringify({
           error: "Daily limit reached",
@@ -549,6 +452,19 @@ Deno.serve(async (req) => {
         { status: 429, headers: responseHeaders },
       );
     }
+
+    if (!openaiApiKey) {
+      return new Response(
+        JSON.stringify({ error: "Art generation not available" }),
+        { status: 503, headers: responseHeaders },
+      );
+    }
+    const providerAbort = new AbortController();
+    const providerSignal = AbortSignal.any([
+      req.signal,
+      providerAbort.signal,
+      AbortSignal.timeout(120000),
+    ]);
 
     // Build enhanced prompt
     const stylePreset = style ? STYLE_PRESETS[style] : null;
@@ -567,12 +483,65 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(
-      `[${requestId}] Enhanced prompt: "${enhancedPrompt.slice(0, 100)}..."`,
+    // The request is pinned to one 1024-square generation with no image inputs.
+    // Omitted quality is priced at high ($0.036); each partial adds 100 output
+    // tokens ($0.0008). UTF-8 prompt bytes bound text tokens at $2/M, with
+    // 1024 additional input tokens covering request framing conservatively.
+    const providerBody = JSON.stringify({
+      model: "gpt-image-1-mini",
+      prompt: enhancedPrompt,
+      n: 1,
+      size: "1024x1024",
+      output_format: "png",
+      ...(enableStreaming ? { stream: true, partial_images: 2 } : {}),
+    });
+    try {
+      await reserveMonthlyAIBudget(supabaseAdmin, {
+        requestId: crypto.randomUUID(),
+        userId: user.id,
+        feature: "art.image",
+        reserveMicrodollars: Math.ceil(
+          (new TextEncoder().encode(JSON.stringify(enhancedPrompt)).length +
+                1024) *
+              2 + 36_000 + (enableStreaming ? 2 * 800 : 0),
+        ),
+      }, req.signal);
+    } catch (error) {
+      const exhausted = error instanceof MonthlyAIBudgetExhaustedError;
+      return new Response(
+        JSON.stringify({
+          error: exhausted
+            ? "Monthly AI budget reached"
+            : "AI budget unavailable",
+          code: exhausted
+            ? "monthly_ai_budget_exhausted"
+            : "monthly_ai_budget_unavailable",
+        }),
+        {
+          status: exhausted ? 429 : 503,
+          headers: responseHeaders,
+        },
+      );
+    }
+
+    const { data: reserved, error: reservationError } = await supabaseAdmin.rpc(
+      "reserve_ai_image_quota",
+      { p_user_id: user.id },
     );
+    if (reservationError || !reserved) {
+      return new Response(
+        JSON.stringify({
+          error: reservationError
+            ? "Image quota unavailable"
+            : "Daily image allowance reached",
+          quotaExceeded: !reservationError,
+        }),
+        { status: reservationError ? 503 : 429, headers: responseHeaders },
+      );
+    }
 
     // Create generation record
-    console.log(`[${requestId}] Creating generation record in database...`);
+
     let generationRecord;
     let insertError;
     try {
@@ -591,15 +560,11 @@ Deno.serve(async (req) => {
         .single();
       generationRecord = insertResult.data;
       insertError = insertResult.error;
-      console.log(
-        `[${requestId}] Insert result - data: ${JSON.stringify(generationRecord)}, error: ${insertError ? JSON.stringify(insertError) : "none"}`,
-      );
     } catch (err) {
-      console.error(`[${requestId}] Insert exception:`, err);
+      console.error("[generate-art] Operation failed");
       return new Response(
         JSON.stringify({
           error: "Failed to create generation record",
-          debug: String(err),
         }),
         {
           status: 500,
@@ -609,11 +574,10 @@ Deno.serve(async (req) => {
     }
 
     if (insertError || !generationRecord) {
-      console.error(`[${requestId}] Insert error:`, insertError);
+      console.error("[generate-art] Operation failed");
       return new Response(
         JSON.stringify({
           error: "Failed to create generation record",
-          details: insertError?.message,
         }),
         {
           status: 500,
@@ -622,13 +586,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(
-      `[${requestId}] Generation record created: ${generationRecord.id}`,
-    );
-
     // Check OpenAI API key
     if (!openaiApiKey) {
-      console.error(`[${requestId}] Missing OPENAI_API_KEY`);
+      console.error("[generate-art] Operation failed");
       await updateGenerationStatus(
         supabaseAdmin,
         generationRecord.id,
@@ -644,39 +604,24 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`[${requestId}] Streaming mode: ${!!enableStreaming}`);
-
     // Streaming mode - return SSE stream with partial images
     if (enableStreaming) {
-      console.log(`[${requestId}] Starting streaming generation...`);
-
-      console.log(`[${requestId}] Calling OpenAI streaming API...`);
       let openaiResponse: Response;
       try {
         openaiResponse = await fetch(
           "https://api.openai.com/v1/images/generations",
           {
             method: "POST",
+            signal: providerSignal,
             headers: {
               Authorization: `Bearer ${openaiApiKey}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({
-              model: "gpt-image-1-mini",
-              prompt: enhancedPrompt,
-              n: 1,
-              size: "1024x1024",
-              output_format: "png",
-              stream: true,
-              partial_images: 2,
-            }),
+            body: providerBody,
           },
         );
-        console.log(
-          `[${requestId}] OpenAI response status: ${openaiResponse.status}`,
-        );
       } catch (err) {
-        console.error(`[${requestId}] OpenAI fetch exception:`, err);
+        console.error("[generate-art] Operation failed");
         await updateGenerationStatus(
           supabaseAdmin,
           generationRecord.id,
@@ -686,17 +631,14 @@ Deno.serve(async (req) => {
         return new Response(
           JSON.stringify({
             error: "Failed to connect to AI service",
-            debug: String(err),
           }),
           { status: 502, headers: responseHeaders },
         );
       }
 
       if (!openaiResponse.ok) {
-        const errorText = await openaiResponse.text();
-        console.error(
-          `[${requestId}] OpenAI streaming error: ${openaiResponse.status} - ${errorText}`,
-        );
+        await openaiResponse.body?.cancel();
+        console.error("[generate-art] Operation failed");
         await updateGenerationStatus(
           supabaseAdmin,
           generationRecord.id,
@@ -708,27 +650,28 @@ Deno.serve(async (req) => {
             error: "Art generation failed",
             generationId: generationRecord.id,
             openaiStatus: openaiResponse.status,
-            openaiError: errorText.slice(0, 500),
           }),
           { status: 502, headers: responseHeaders },
         );
       }
 
       // Create a TransformStream to proxy the SSE from OpenAI to the client
-      console.log(`[${requestId}] Setting up TransformStream for SSE...`);
+
       const { readable, writable } = new TransformStream();
       const writer = writable.getWriter();
+      void writer.closed.catch(() => providerAbort.abort());
       const encoder = new TextEncoder();
 
       // Process the OpenAI SSE stream in the background
       (async () => {
-        console.log(`[${requestId}] Starting background stream processor...`);
         const reader = openaiResponse.body?.getReader();
         if (!reader) {
-          console.error(`[${requestId}] No response body reader`);
+          console.error("[generate-art] Operation failed");
           await writer.write(
             encoder.encode(
-              `data: ${JSON.stringify({ type: "error", error: "No response body" })}\n\n`,
+              `data: ${
+                JSON.stringify({ type: "error", error: "No response body" })
+              }\n\n`,
             ),
           );
           try {
@@ -748,13 +691,13 @@ Deno.serve(async (req) => {
           while (true) {
             const { done, value } = await reader.read();
             if (done) {
-              console.log(
-                `[${requestId}] Stream done, final image: ${finalImageBase64 ? "received" : "missing"}`,
-              );
               break;
             }
 
             buffer += decoder.decode(value, { stream: true });
+            if (buffer.length > 8 * 1024 * 1024) {
+              throw new Error("Image stream exceeded the size limit");
+            }
             const lines = buffer.split("\n");
             buffer = lines.pop() || "";
 
@@ -762,49 +705,43 @@ Deno.serve(async (req) => {
               if (line.startsWith("data: ")) {
                 const data = line.slice(6);
                 if (data === "[DONE]") {
-                  console.log(`[${requestId}] Received [DONE] marker`);
                   continue;
                 }
 
+                let event;
                 try {
-                  const event = JSON.parse(data);
-                  console.log(
-                    `[${requestId}] SSE event type: ${event.type || "unknown"}`,
-                  );
-
+                  event = JSON.parse(data);
+                } catch {
+                  continue;
+                }
+                {
                   // Handle partial image events
                   if (event.type === "image_generation.partial_image") {
                     partialCount++;
-                    console.log(
-                      `[${requestId}] Partial image ${partialCount} received`,
-                    );
+
                     await writer.write(
                       encoder.encode(
-                        `data: ${JSON.stringify({
-                          type: "partial",
-                          index: event.partial_image_index,
-                          imageBase64: event.b64_json,
-                          generationId: generationRecord.id,
-                        })}\n\n`,
+                        `data: ${
+                          JSON.stringify({
+                            type: "partial",
+                            index: event.partial_image_index,
+                            imageBase64: event.b64_json,
+                            generationId: generationRecord.id,
+                          })
+                        }\n\n`,
                       ),
                     );
                   }
 
                   // Handle completion event
                   if (event.type === "image_generation.completed") {
-                    console.log(`[${requestId}] Completion event received`);
                     finalImageBase64 = event.b64_json;
                   }
 
                   // Handle result event (final image for some API versions)
                   if (event.data?.[0]?.b64_json) {
-                    console.log(
-                      `[${requestId}] Data array completion received`,
-                    );
                     finalImageBase64 = event.data[0].b64_json;
                   }
-                } catch {
-                  // Skip non-JSON lines
                 }
               }
             }
@@ -812,13 +749,9 @@ Deno.serve(async (req) => {
 
           // After streaming completes, save the final image
           if (finalImageBase64) {
-            console.log(
-              `[${requestId}] Processing final image (length: ${finalImageBase64.length})...`,
-            );
             const imageBuffer = base64ToUint8Array(finalImageBase64);
             const storagePath = `${user.id}/ai-art/${generationRecord.id}.png`;
 
-            console.log(`[${requestId}] Uploading to storage: ${storagePath}`);
             const { error: uploadError } = await supabaseAdmin.storage
               .from("creative-works")
               .upload(storagePath, imageBuffer, {
@@ -827,7 +760,7 @@ Deno.serve(async (req) => {
               });
 
             if (uploadError) {
-              console.error(`[${requestId}] Upload error:`, uploadError);
+              console.error("[generate-art] Operation failed");
               await updateGenerationStatus(
                 supabaseAdmin,
                 generationRecord.id,
@@ -836,20 +769,28 @@ Deno.serve(async (req) => {
               );
               await writer.write(
                 encoder.encode(
-                  `data: ${JSON.stringify({ type: "error", error: "Failed to store image", generationId: generationRecord.id })}\n\n`,
+                  `data: ${
+                    JSON.stringify({
+                      type: "error",
+                      error: "Failed to store image",
+                      generationId: generationRecord.id,
+                    })
+                  }\n\n`,
                 ),
               );
             } else {
-              console.log(`[${requestId}] Upload successful`);
-              const { data: publicUrlData } = supabaseAdmin.storage
-                .from("creative-works")
-                .getPublicUrl(storagePath);
+              const { data: publicUrlData, error: signingError } =
+                await supabaseAdmin.storage
+                  .from("creative-works")
+                  .createSignedUrl(storagePath, 3600);
 
-              const finalImageUrl = publicUrlData.publicUrl;
-              console.log(`[${requestId}] Public URL: ${finalImageUrl}`);
+              if (signingError || !publicUrlData?.signedUrl) {
+                throw new Error("Unable to open generated art");
+              }
+              const finalImageUrl = publicUrlData.signedUrl;
 
               // Create creative work entry
-              console.log(`[${requestId}] Creating creative work entry...`);
+
               const { data: creativeWork, error: workError } =
                 await supabaseAdmin
                   .from("creative_works")
@@ -868,52 +809,50 @@ Deno.serve(async (req) => {
                   .single();
 
               if (workError || !creativeWork) {
-                console.error(`[${requestId}] Work creation error:`, workError);
+                console.error("[generate-art] Operation failed");
                 await updateGenerationStatus(
                   supabaseAdmin,
                   generationRecord.id,
                   "failed",
                   "Failed to create work record",
                 );
+                throw new Error("Unable to save generated art");
               } else {
-                console.log(
-                  `[${requestId}] Creative work created: ${creativeWork.id}`,
-                );
-
                 await supabaseAdmin
                   .from("ai_art_generations")
                   .update({
                     creative_work_id: creativeWork.id,
-                    image_url: finalImageUrl,
+                    image_url:
+                      `${supabaseUrl}/storage/v1/object/public/creative-works/${storagePath}`,
                     storage_path: storagePath,
                     generation_status: "completed",
                     completed_at: new Date().toISOString(),
                   })
                   .eq("id", generationRecord.id);
 
-                console.log(`[${requestId}] Incrementing quota...`);
-                await supabaseUser.rpc("increment_ai_art_quota");
+                // Usage was reserved before contacting the provider.
 
                 await writer.write(
                   encoder.encode(
-                    `data: ${JSON.stringify({
-                      type: "complete",
-                      success: true,
-                      generationId: generationRecord.id,
-                      creativeWorkId: creativeWork.id,
-                      imageUrl: finalImageUrl,
-                      imageBase64: finalImageBase64,
-                      prompt: prompt,
-                      enhancedPrompt: enhancedPrompt,
-                      style: style || null,
-                    })}\n\n`,
+                    `data: ${
+                      JSON.stringify({
+                        type: "complete",
+                        success: true,
+                        generationId: generationRecord.id,
+                        creativeWorkId: creativeWork.id,
+                        imageUrl: finalImageUrl,
+                        imageBase64: finalImageBase64,
+                        prompt: prompt,
+                        enhancedPrompt: enhancedPrompt,
+                        style: style || null,
+                      })
+                    }\n\n`,
                   ),
                 );
-                console.log(`[${requestId}] Complete event sent`);
               }
             }
           } else {
-            console.error(`[${requestId}] No final image received from stream`);
+            console.error("[generate-art] Operation failed");
             await updateGenerationStatus(
               supabaseAdmin,
               generationRecord.id,
@@ -922,14 +861,20 @@ Deno.serve(async (req) => {
             );
             await writer.write(
               encoder.encode(
-                `data: ${JSON.stringify({ type: "error", error: "No image generated", generationId: generationRecord.id })}\n\n`,
+                `data: ${
+                  JSON.stringify({
+                    type: "error",
+                    error: "No image generated",
+                    generationId: generationRecord.id,
+                  })
+                }\n\n`,
               ),
             );
           }
         } catch (error) {
-          console.error(`[${requestId}] Stream processing error:`, error);
+          console.error("[generate-art] Operation failed");
           if (error instanceof Error) {
-            console.error(`[${requestId}] Stack:`, error.stack);
+            console.error("[generate-art] Operation failed");
           }
           try {
             await updateGenerationStatus(
@@ -939,36 +884,39 @@ Deno.serve(async (req) => {
               "Stream error",
             );
           } catch (e) {
-            console.error(
-              `[${requestId}] Failed to update generation status:`,
-              e,
-            );
+            console.error("[generate-art] Operation failed");
           }
           try {
             await writer.write(
               encoder.encode(
-                `data: ${JSON.stringify({ type: "error", error: error instanceof Error ? error.message : "Stream error", generationId: generationRecord.id })}\n\n`,
+                `data: ${
+                  JSON.stringify({
+                    type: "error",
+                    error: "Image stream failed",
+                    generationId: generationRecord.id,
+                  })
+                }\n\n`,
               ),
             );
           } catch (e) {
-            console.error(`[${requestId}] Failed to write error to stream:`, e);
+            console.error("[generate-art] Operation failed");
           }
         } finally {
+          await reader.cancel().catch(() => {});
+          reader.releaseLock();
           try {
             await writer.close();
           } catch {
             /* already closed */
           }
-          console.log(`[${requestId}] Stream processor finished`);
         }
       })().catch((err) => {
-        console.error(`[${requestId}] [FATAL] Stream IIFE crash:`, err);
+        console.error("[generate-art] Operation failed");
         if (err instanceof Error) {
-          console.error(`[${requestId}] Stack:`, err.stack);
+          console.error("[generate-art] Operation failed");
         }
       });
 
-      console.log(`[${requestId}] Returning SSE response`);
       return new Response(readable, {
         headers: {
           ...baseCorsHeaders,
@@ -980,15 +928,13 @@ Deno.serve(async (req) => {
     }
 
     // Non-streaming mode (backward compatible)
-    console.log(`[${requestId}] Starting non-streaming generation...`);
+
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
-        console.log(`[${requestId}] Request timeout triggered`);
         controller.abort();
       }, API_TIMEOUT_MS);
 
-      console.log(`[${requestId}] Calling OpenAI non-streaming API...`);
       let openaiResponse: Response;
       try {
         openaiResponse = await fetch(
@@ -999,28 +945,17 @@ Deno.serve(async (req) => {
               Authorization: `Bearer ${openaiApiKey}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({
-              model: "gpt-image-1-mini",
-              prompt: enhancedPrompt,
-              n: 1,
-              size: "1024x1024",
-              output_format: "png",
-            }),
-            signal: controller.signal,
+            body: providerBody,
+            signal: AbortSignal.any([providerSignal, controller.signal]),
           },
-        );
-        console.log(
-          `[${requestId}] OpenAI response status: ${openaiResponse.status}`,
         );
       } finally {
         clearTimeout(timeoutId);
       }
 
       if (!openaiResponse.ok) {
-        const errorText = await openaiResponse.text();
-        console.error(
-          `[${requestId}] OpenAI API error: ${openaiResponse.status} - ${errorText}`,
-        );
+        await openaiResponse.body?.cancel();
+        console.error("[generate-art] Operation failed");
         await updateGenerationStatus(
           supabaseAdmin,
           generationRecord.id,
@@ -1032,21 +967,16 @@ Deno.serve(async (req) => {
             error: "Art generation failed",
             generationId: generationRecord.id,
             openaiStatus: openaiResponse.status,
-            openaiError: errorText.slice(0, 500),
           }),
           { status: 502, headers: responseHeaders },
         );
       }
 
-      console.log(`[${requestId}] Parsing OpenAI response...`);
       const openaiData = await openaiResponse.json();
       const imageBase64 = openaiData.data?.[0]?.b64_json;
 
       if (!imageBase64) {
-        console.error(
-          `[${requestId}] No image in OpenAI response:`,
-          JSON.stringify(openaiData).slice(0, 500),
-        );
+        console.error("[generate-art] Operation failed");
         await updateGenerationStatus(
           supabaseAdmin,
           generationRecord.id,
@@ -1062,13 +992,9 @@ Deno.serve(async (req) => {
         );
       }
 
-      console.log(
-        `[${requestId}] Image received, length: ${imageBase64.length}`,
-      );
       const imageBuffer = base64ToUint8Array(imageBase64);
       const storagePath = `${user.id}/ai-art/${generationRecord.id}.png`;
 
-      console.log(`[${requestId}] Uploading to storage...`);
       const { error: uploadError } = await supabaseAdmin.storage
         .from("creative-works")
         .upload(storagePath, imageBuffer, {
@@ -1077,7 +1003,7 @@ Deno.serve(async (req) => {
         });
 
       if (uploadError) {
-        console.error(`[${requestId}] Upload error:`, uploadError);
+        console.error("[generate-art] Operation failed");
         await updateGenerationStatus(
           supabaseAdmin,
           generationRecord.id,
@@ -1093,14 +1019,16 @@ Deno.serve(async (req) => {
         );
       }
 
-      const { data: publicUrlData } = supabaseAdmin.storage
+      const { data: publicUrlData, error: signingError } = await supabaseAdmin
+        .storage
         .from("creative-works")
-        .getPublicUrl(storagePath);
+        .createSignedUrl(storagePath, 3600);
 
-      const finalImageUrl = publicUrlData.publicUrl;
-      console.log(`[${requestId}] Upload successful, URL: ${finalImageUrl}`);
+      if (signingError || !publicUrlData?.signedUrl) {
+        throw new Error("Unable to open generated art");
+      }
+      const finalImageUrl = publicUrlData.signedUrl;
 
-      console.log(`[${requestId}] Creating creative work entry...`);
       const { data: creativeWork, error: workError } = await supabaseAdmin
         .from("creative_works")
         .insert({
@@ -1118,10 +1046,7 @@ Deno.serve(async (req) => {
         .single();
 
       if (workError || !creativeWork) {
-        console.error(
-          `[${requestId}] Work creation error:`,
-          workError?.message || "No data returned",
-        );
+        console.error("[generate-art] Operation failed");
         await updateGenerationStatus(
           supabaseAdmin,
           generationRecord.id,
@@ -1138,23 +1063,20 @@ Deno.serve(async (req) => {
         );
       }
 
-      console.log(`[${requestId}] Creative work created: ${creativeWork.id}`);
-
       await supabaseAdmin
         .from("ai_art_generations")
         .update({
           creative_work_id: creativeWork?.id || null,
-          image_url: finalImageUrl,
+          image_url:
+            `${supabaseUrl}/storage/v1/object/public/creative-works/${storagePath}`,
           storage_path: storagePath,
           generation_status: "completed",
           completed_at: new Date().toISOString(),
         })
         .eq("id", generationRecord.id);
 
-      console.log(`[${requestId}] Incrementing quota...`);
-      await supabaseUser.rpc("increment_ai_art_quota");
+      // Usage was reserved before contacting the provider.
 
-      console.log(`[${requestId}] ========== REQUEST SUCCESS ==========`);
       return new Response(
         JSON.stringify({
           success: true,
@@ -1168,9 +1090,9 @@ Deno.serve(async (req) => {
         { status: 200, headers: responseHeaders },
       );
     } catch (apiError) {
-      console.error(`[${requestId}] API call error:`, apiError);
+      console.error("[generate-art] Operation failed");
       if (apiError instanceof Error) {
-        console.error(`[${requestId}] Stack:`, apiError.stack);
+        console.error("[generate-art] Operation failed");
       }
       await updateGenerationStatus(
         supabaseAdmin,
@@ -1182,20 +1104,19 @@ Deno.serve(async (req) => {
         JSON.stringify({
           error: "Art generation failed",
           generationId: generationRecord.id,
-          debug: String(apiError),
         }),
         { status: 502, headers: responseHeaders },
       );
     }
   } catch (error) {
-    console.error(`[${requestId}] ========== UNHANDLED ERROR ==========`);
-    console.error(`[${requestId}] Error:`, error);
+    console.error("[generate-art] Operation failed");
+    console.error("[generate-art] Operation failed");
     if (error instanceof Error) {
-      console.error(`[${requestId}] Message:`, error.message);
-      console.error(`[${requestId}] Stack:`, error.stack);
+      console.error("[generate-art] Operation failed");
+      console.error("[generate-art] Operation failed");
     }
     return new Response(
-      JSON.stringify({ error: "Internal server error", debug: String(error) }),
+      JSON.stringify({ error: "Internal server error" }),
       {
         status: 500,
         headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
@@ -1203,8 +1124,6 @@ Deno.serve(async (req) => {
     );
   }
 });
-
-console.log("[BOOT] Deno.serve handler registered successfully");
 
 // Helper: Convert base64 string to Uint8Array using built-in atob
 function base64ToUint8Array(base64: string): Uint8Array {
@@ -1222,9 +1141,6 @@ async function updateGenerationStatus(
   status: string,
   errorMessage?: string,
 ) {
-  console.log(
-    `[STATUS] Updating generation ${generationId} to ${status}: ${errorMessage || "no error"}`,
-  );
   try {
     await supabase
       .from("ai_art_generations")
@@ -1234,8 +1150,7 @@ async function updateGenerationStatus(
         completed_at: status === "failed" ? new Date().toISOString() : null,
       })
       .eq("id", generationId);
-    console.log(`[STATUS] Update successful`);
   } catch (err) {
-    console.error(`[STATUS] Update failed:`, err);
+    console.error("[generate-art] Operation failed");
   }
 }

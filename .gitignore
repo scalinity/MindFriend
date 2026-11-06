@@ -188,3 +188,11 @@ supabase/.temp/
 
 # Xcode project backups
 *.pbxproj.backup*
+
+# Track the native iOS dependency lock; keep user workspace state ignored.
+!apps/ios/MindFriendApp.xcodeproj/project.xcworkspace/
+apps/ios/MindFriendApp.xcodeproj/project.xcworkspace/*
+!apps/ios/MindFriendApp.xcodeproj/project.xcworkspace/xcshareddata/
+apps/ios/MindFriendApp.xcodeproj/project.xcworkspace/xcshareddata/*
+!apps/ios/MindFriendApp.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
+!apps/ios/MindFriendApp.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved

@@ -1,8 +1,7 @@
 // MindFriend Enterprise Inquiry Edge Function
 // Receives enterprise sales inquiry from iOS app, saves to database, sends email notification
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { escapeHtml, isValidEmail, sanitizeEmail } from "../_shared/utils.ts";
 
@@ -28,7 +27,7 @@ const MAX_MESSAGE_LENGTH = 2000;
 const DUPLICATE_WINDOW_MINUTES = 5;
 const MAX_INQUIRIES_PER_DAY = 10;
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 

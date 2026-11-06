@@ -1,7 +1,7 @@
 // Signal Detection Algorithms for Autonomous Wellness Agent
 // Detects patterns: mood_decline, activity_drop, streak_risk, inactivity, positive_momentum
 
-import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 
 export interface SignalDetectionResult {
   type: SignalType;

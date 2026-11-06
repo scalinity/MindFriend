@@ -3,8 +3,7 @@
  * Runs yearly (January 1 04:00 UTC) to calculate yearly statistics with seasonal patterns
  */
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import {
   getSeasonForMonth,
   getQuarterForMonth,
@@ -35,7 +34,7 @@ interface YearlyComparison {
   exercises_delta: number | null;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("origin") ?? "";
   const corsHeaders = getCorsHeaders(origin);
 

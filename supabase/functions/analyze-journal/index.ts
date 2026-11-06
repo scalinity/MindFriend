@@ -2,11 +2,10 @@
 // Analyzes journal entries using Grok AI to detect cognitive distortions
 // and provide supportive insights with gentle, non-clinical language
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import {
   createClient,
   SupabaseClient,
-} from "https://esm.sh/@supabase/supabase-js@2.49.1";
+} from "https://esm.sh/@supabase/supabase-js@2.118.0";
 
 // Type alias for untyped Supabase client
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -14,12 +13,12 @@ type UntypedSupabaseClient = SupabaseClient<any, "public", any>;
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { checkRateLimit, getRateLimitHeaders } from "../_shared/ratelimit.ts";
 import { sanitizeForPrompt } from "../_shared/sanitize.ts";
+import { budgetedXAIText, XAI_TEXT_MODEL } from "../_shared/budgeted-xai-text.ts";
 
 // Constants
 const MAX_CONTENT_LENGTH = 50000; // ~12,500 tokens
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const XAI_API_URL = "https://api.x.ai/v1/chat/completions";
 const FREE_DAILY_QUOTA = 3;
 
 // Banned clinical language patterns - must be filtered from AI responses
@@ -293,13 +292,13 @@ function parseAnalysisResponse(content: string): AnalysisResult | null {
     );
 
     return parsed;
-  } catch (error) {
-    console.error("Failed to parse AI response:", error);
+  } catch {
+    console.error("Failed to parse AI response");
     return null;
   }
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   // Get origin for CORS handling
   const origin = req.headers.get("Origin");
   const baseCorsHeaders = getCorsHeaders(origin);
@@ -549,21 +548,18 @@ serve(async (req) => {
       ? `Title: ${sanitizedTitle}\n\n${sanitizedContent}`
       : sanitizedContent;
 
-    const aiResponse = await fetch(XAI_API_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${xaiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "grok-4-1-fast-reasoning",
+    const aiResponse = await budgetedXAIText({
+        admin: supabaseAdmin,
+        userId: user.id,
+        feature: "journal.analysis",
+        apiKey: xaiKey,
         messages: [
           { role: "system", content: ANALYSIS_SYSTEM_PROMPT },
           { role: "user", content: userMessage },
         ],
-        max_tokens: 2000,
+        maxTokens: 2000,
         temperature: 0.7,
-      }),
+        signal: req.signal,
     });
 
     if (!aiResponse.ok) {
@@ -616,7 +612,7 @@ serve(async (req) => {
           patterns_identified: fallbackAnalysis.patternsIdentified,
           cognitive_distortions: fallbackAnalysis.cognitiveDistortions,
           supportive_summary: fallbackAnalysis.supportiveSummary,
-          ai_model: "grok-4-1-fast-reasoning",
+          ai_model: "template",
         })
         .select()
         .single();
@@ -652,7 +648,7 @@ serve(async (req) => {
         patterns_identified: analysis.patternsIdentified,
         cognitive_distortions: analysis.cognitiveDistortions,
         supportive_summary: analysis.supportiveSummary,
-        ai_model: "grok-4-1-fast-reasoning",
+        ai_model: XAI_TEXT_MODEL,
       })
       .select()
       .single();
@@ -683,19 +679,19 @@ serve(async (req) => {
       );
 
       // Increment analyses_used if row existed
-      await supabaseAdmin
+      const { error: incrementError } = await supabaseAdmin
         .rpc("increment_journal_analysis_usage", {
           p_user_id: user.id,
           p_date: today,
-        })
-        .catch(() => {
-          // If RPC doesn't exist, manually update
-          supabaseAdmin
-            .from("journal_daily_usage")
-            .update({ analyses_used: 1 })
-            .eq("user_id", user.id)
-            .eq("date", today);
         });
+      if (incrementError) {
+        // If RPC doesn't exist, manually update.
+        await supabaseAdmin
+          .from("journal_daily_usage")
+          .update({ analyses_used: 1 })
+          .eq("user_id", user.id)
+          .eq("date", today);
+      }
     }
 
     // Get updated quota info for response
@@ -728,8 +724,8 @@ serve(async (req) => {
       }),
       { headers: responseHeaders },
     );
-  } catch (error) {
-    console.error("Unexpected error:", error);
+  } catch {
+    console.error("Journal analysis unavailable");
     return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500,
       headers: { ...baseCorsHeaders, "Content-Type": "application/json" },

@@ -2,20 +2,23 @@
 // Synthesize audio from existing generated_content using Google Cloud TTS
 // Supports re-synthesis with different voice settings
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import {
   createClient,
   SupabaseClient,
-} from "https://esm.sh/@supabase/supabase-js@2.49.1";
+} from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import {
   createGoogleTTSClient,
-  estimateDuration,
   DEFAULT_VOICE_ID,
-  GoogleTTSError,
+  estimateDuration,
   GOOGLE_VOICE_PRESETS,
+  GoogleTTSError,
 } from "../_shared/google-tts.ts";
 import { checkRateLimit } from "../_shared/ratelimit.ts";
+import {
+  MonthlyAIBudgetExhaustedError,
+  MonthlyAIBudgetUnavailableError,
+} from "../_shared/monthly-ai-budget.ts";
 
 // deno-lint-ignore no-explicit-any
 type UntypedSupabaseClient = SupabaseClient<any, "public", any>;
@@ -49,7 +52,7 @@ interface SynthesizeVoiceResponse {
   code?: string;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const baseCorsHeaders = getCorsHeaders(origin);
 
@@ -136,8 +139,7 @@ serve(async (req) => {
       .eq("id", user.id)
       .single();
 
-    const isPremium =
-      profile?.subscription_tier === "premium" ||
+    const isPremium = profile?.subscription_tier === "premium" ||
       profile?.subscription_tier === "family";
 
     // PREMIUM GATE: Block free tier users from server-side TTS synthesis
@@ -255,7 +257,7 @@ serve(async (req) => {
     );
 
     if (budgetError) {
-      console.error("Monthly budget check error:", budgetError);
+      console.error("[synthesize-voice] Operation failed");
       // Fail closed on budget check errors to prevent overrun
       return new Response(
         JSON.stringify({
@@ -289,64 +291,70 @@ serve(async (req) => {
       );
     }
 
-    // ── Daily Quota Check (10/day secondary safeguard) ──
-    const { data: quotaResult, error: quotaError } = await supabaseAdmin.rpc(
-      "check_and_increment_synthesis_quota",
-      {
-        p_user_id: user.id,
-        p_is_premium: isPremium,
-        p_character_count: charCount,
-      },
-    );
-
-    if (quotaError) {
-      console.error("Synthesis quota check error:", quotaError);
-      // Fail closed on quota check errors to prevent abuse
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: "Failed to check synthesis quota",
-          code: "QUOTA_CHECK_ERROR",
-        }),
+    // Debit the daily allowance only after global monthly admission. Keep this
+    // callback once-only if a synthesis attempt is retried in this invocation.
+    let synthesisQuotaReserved = false;
+    const reserveSynthesisQuota = async (signal: AbortSignal) => {
+      if (synthesisQuotaReserved) return;
+      const { data: quotaResult, error: quotaError } = await supabaseAdmin.rpc(
+        "check_and_increment_synthesis_quota",
         {
-          status: 500,
-          headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
+          p_user_id: user.id,
+          p_is_premium: isPremium,
+          p_character_count: charCount,
         },
-      );
-    }
+      ).abortSignal(signal);
 
-    const quota = quotaResult?.[0] || {
-      allowed: false,
-      quota_used: 0,
-      quota_limit: 10,
+      if (quotaError) {
+        console.error("[synthesize-voice] Operation failed");
+        // Fail closed on quota check errors to prevent abuse
+        throw new Response(
+          JSON.stringify({
+            success: false,
+            error: "Failed to check synthesis quota",
+            code: "QUOTA_CHECK_ERROR",
+          }),
+          {
+            status: 500,
+            headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      const quota = quotaResult?.[0] || {
+        allowed: false,
+        quota_used: 0,
+        quota_limit: 10,
+      };
+
+      if (!quota.allowed) {
+        throw new Response(
+          JSON.stringify({
+            success: false,
+            error:
+              "Daily voice synthesis limit reached (10/day). Your limit resets tomorrow.",
+            code: "SYNTHESIS_QUOTA_EXCEEDED",
+            quotaUsed: quota.quota_used,
+            quotaLimit: quota.quota_limit,
+          }),
+          {
+            status: 429,
+            headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      synthesisQuotaReserved = true;
     };
-
-    if (!quota.allowed) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error:
-            "Daily voice synthesis limit reached (10/day). Your limit resets tomorrow.",
-          code: "SYNTHESIS_QUOTA_EXCEEDED",
-          quotaUsed: quota.quota_used,
-          quotaLimit: quota.quota_limit,
-        }),
-        {
-          status: 429,
-          headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
 
     // Determine voice settings
     const contentType = content.content_type || "default";
-    const preset =
-      GOOGLE_VOICE_PRESETS[contentType] || GOOGLE_VOICE_PRESETS.default;
+    const preset = GOOGLE_VOICE_PRESETS[contentType] ||
+      GOOGLE_VOICE_PRESETS.default;
     const voiceId = request.voiceId || content.voice_id || DEFAULT_VOICE_ID;
 
     // Resolve speaking rate: prefer explicit request > legacy speed param > preset default
-    const speakingRate =
-      request.voiceSettings?.speakingRate ??
+    const speakingRate = request.voiceSettings?.speakingRate ??
       request.voiceSettings?.speed ??
       preset.speakingRate;
     const pitch = request.voiceSettings?.pitch ?? preset.pitch;
@@ -381,6 +389,7 @@ serve(async (req) => {
 
     // Synthesize voice
     let audioUrl: string;
+    let audioObjectURL: string;
     let durationSeconds: number;
 
     try {
@@ -394,8 +403,7 @@ serve(async (req) => {
       if (textBytes.length > maxBytes) {
         // Truncate by decoding back from byte limit
         const truncatedBytes = textBytes.slice(0, maxBytes);
-        processedText =
-          new TextDecoder().decode(truncatedBytes).slice(0, -10) +
+        processedText = new TextDecoder().decode(truncatedBytes).slice(0, -10) +
           "... (content truncated for synthesis)";
         console.warn(
           `Text truncated from ${textBytes.length} to ~${maxBytes} bytes for synthesis`,
@@ -404,12 +412,21 @@ serve(async (req) => {
 
       // Use the content-type preset key as voiceId for Google TTS
       // Google TTS client resolves preset key → voice name internally
-      const resolvedVoiceId =
-        GOOGLE_VOICE_PRESETS[voiceId] ? voiceId : contentType;
+      const resolvedVoiceId = GOOGLE_VOICE_PRESETS[voiceId]
+        ? voiceId
+        : contentType;
 
       const ttsResult = await googleTTS.textToSpeech({
         text: processedText,
         voiceId: resolvedVoiceId,
+      }, {
+        budget: {
+          admin: supabaseAdmin,
+          userId: user.id,
+          feature: "voice.tts",
+        },
+        signal: req.signal,
+        beforeProvider: reserveSynthesisQuota,
       });
 
       // Upload to Supabase Storage
@@ -422,7 +439,7 @@ serve(async (req) => {
         });
 
       if (uploadError) {
-        console.error("Audio upload error:", uploadError);
+        console.error("[synthesize-voice] Operation failed");
         return new Response(
           JSON.stringify({
             success: false,
@@ -436,15 +453,39 @@ serve(async (req) => {
         );
       }
 
-      // Get public URL
-      const { data: urlData } = supabaseAdmin.storage
-        .from("generated-audio")
-        .getPublicUrl(fileName);
-
-      audioUrl = urlData?.publicUrl || "";
+      const { data: urlData, error: signingError } = await supabaseAdmin.storage
+        .from("generated-audio").createSignedUrl(fileName, 3600);
+      if (signingError || !urlData?.signedUrl) {
+        throw new Error("Unable to authorize audio access");
+      }
+      audioUrl = urlData.signedUrl;
+      audioObjectURL = `${
+        Deno.env.get("SUPABASE_URL")
+      }/storage/v1/object/public/generated-audio/${fileName}`;
       durationSeconds = estimateDuration(processedText);
     } catch (ttsError) {
-      console.error("TTS error:", ttsError);
+      if (ttsError instanceof Response) return ttsError;
+      console.error("[synthesize-voice] Synthesis failed");
+
+      if (
+        ttsError instanceof MonthlyAIBudgetExhaustedError ||
+        ttsError instanceof MonthlyAIBudgetUnavailableError
+      ) {
+        const exhausted = ttsError instanceof MonthlyAIBudgetExhaustedError;
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: exhausted
+              ? "Monthly AI budget reached"
+              : "AI budget unavailable",
+            code: ttsError.code,
+          }),
+          {
+            status: exhausted ? 429 : 503,
+            headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
 
       if (ttsError instanceof GoogleTTSError) {
         if (ttsError.code === "RATE_LIMIT_EXCEEDED") {
@@ -495,8 +536,7 @@ serve(async (req) => {
     }
 
     // Build voice settings used record
-    const resolvedPreset =
-      GOOGLE_VOICE_PRESETS[voiceId] ||
+    const resolvedPreset = GOOGLE_VOICE_PRESETS[voiceId] ||
       GOOGLE_VOICE_PRESETS[contentType] ||
       GOOGLE_VOICE_PRESETS.default;
     const voiceSettingsUsed = {
@@ -508,20 +548,33 @@ serve(async (req) => {
     };
 
     // Update database with new audio URL and settings
-    const { error: updateError } = await supabaseAdmin
+    const { data: savedContent, error: updateError } = await supabaseAdmin
       .from("generated_content")
       .update({
-        audio_url: audioUrl,
+        audio_url: audioObjectURL,
         voice_id: voiceId,
         voice_settings_used: voiceSettingsUsed,
-        duration: durationSeconds,
+        duration_seconds: durationSeconds,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", content.id);
+      .eq("id", content.id)
+      .eq("user_id", user.id)
+      .select("id")
+      .single();
 
-    if (updateError) {
-      console.error("Database update error:", updateError);
-      // Non-fatal - audio was synthesized and uploaded successfully
+    if (updateError || !savedContent) {
+      console.error("[synthesize-voice] Operation failed");
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Unable to save audio history",
+          code: "DATABASE_ERROR",
+        }),
+        {
+          status: 503,
+          headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     // Return success
@@ -536,9 +589,9 @@ serve(async (req) => {
       status: 200,
       headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
     });
-  } catch (error) {
+  } catch {
     // Log full error details server-side only
-    console.error("synthesize-voice error:", error);
+    console.error("[synthesize-voice] Operation failed");
 
     // Return generic message to client to avoid leaking internal details
     return new Response(

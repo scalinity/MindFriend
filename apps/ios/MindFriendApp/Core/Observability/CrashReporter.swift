@@ -220,7 +220,6 @@ final class CrashReporter {
             let sessionSampleRate: Float = 1.0
             let onErrorSampleRate: Float = 1.0
             // Allow Session Replay in simulator/debug environments for testing
-            options.experimental.enableSessionReplayInUnreliableEnvironment = true
             #else
             // Production: 10% of sessions recorded, 100% of error sessions captured
             let sessionSampleRate: Float = 0.1

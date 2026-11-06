@@ -1,5 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { checkRateLimit, getRateLimitHeaders } from "../_shared/ratelimit.ts";
 import {
@@ -28,7 +27,7 @@ const RATE_LIMIT_ENDPOINT = "generate-action-plan";
 const RATE_LIMIT_CONFIG = { windowMs: 60 * 1000, maxRequests: 10 };
 const FREE_DAILY_LIMIT = 2;
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 

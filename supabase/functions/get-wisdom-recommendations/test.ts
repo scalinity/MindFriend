@@ -6,7 +6,7 @@
  * Run with: deno test --allow-net --allow-env get-wisdom-recommendations/test.ts
  */
 
-import { assertEquals } from "https://deno.land/std@0.168.0/testing/asserts.ts";
+import { assertEquals } from "jsr:@std/assert@1.0.19";
 
 // Relevance Score Calculation
 interface Insight {

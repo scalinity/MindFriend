@@ -20,6 +20,7 @@ struct MindFriendApp: App {
     @State private var pendingBuddyCode: String?
     @State private var showBuddyAcceptedAlert = false
     @State private var buddyAcceptedMessage = ""
+    @State private var showPasswordRecovery = false
 
     @ViewBuilder
     private var launchContent: some View {
@@ -58,6 +59,10 @@ struct MindFriendApp: App {
                        ProcessInfo.processInfo.arguments.contains("--sleep-ui-test") ||
                        ProcessInfo.processInfo.arguments.contains("--debt-calendar-ui-test") { return }
                     #endif
+                    // A cold-launch notification can arrive before SwiftUI subscribes.
+                    if let deepLink = notificationManager.consumePendingDeepLink() {
+                        handleNotificationDeepLink(deepLink)
+                    }
                     // DEBUG: Log calendar permission status and Info.plist keys at app launch
                     #if DEBUG
                     // Check if calendar Info.plist keys exist in bundle
@@ -97,24 +102,6 @@ struct MindFriendApp: App {
 
                     // Register medication notification categories
                     NotificationCategoryManager.shared.registerCategories()
-
-                    // OPTIMIZATION 1: Load cached auth state immediately to skip splash
-                    if let cachedProfile = container.supabaseAuthService.getCachedProfile() {
-                        if cachedProfile.needsOnboarding {
-                            appState.requireOnboarding()
-                        } else {
-                            // Show UI immediately with cached data
-                            appState.setAuthenticatedFromCache(user: cachedProfile)
-
-                            // Set user context for crash reporting (from cache)
-                            CrashReporter.shared.setUser(
-                                id: cachedProfile.id.uuidString,
-                                email: cachedProfile.email,
-                                username: cachedProfile.handle
-                            )
-                            Analytics.shared.identify(userId: cachedProfile.id.uuidString)
-                        }
-                    }
 
                     // OPTIMIZATION 2: Parallelize network calls
                     async let sessionTask = container.supabaseAuthService.restoreSession()
@@ -188,8 +175,14 @@ struct MindFriendApp: App {
                     } else {
                         // No session - if we showed cached data, clear it now
                         appState.setUnauthenticated()
-                        container.supabaseAuthService.clearCachedProfile()
                     }
+                }
+                .onReceive(container.supabaseAuthService.$session) { session in
+                    if appState.sessionRestored && session == nil { appState.setUnauthenticated() }
+                }
+                .onReceive(container.supabaseAuthService.$requiresPasswordReset) { showPasswordRecovery = $0 }
+                .sheet(isPresented: $showPasswordRecovery) {
+                    PasswordRecoveryView(authService: container.supabaseAuthService)
                 }
                 .onOpenURL { url in
                     // Handle Google Sign-In and custom deep links
@@ -199,6 +192,7 @@ struct MindFriendApp: App {
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .notificationDeepLinkReceived)) { notification in
                     if let deepLink = notification.userInfo?["deepLink"] as? NotificationDeepLink {
+                        _ = notificationManager.consumePendingDeepLink()
                         handleNotificationDeepLink(deepLink)
                     }
                 }
@@ -212,7 +206,17 @@ struct MindFriendApp: App {
                 } message: {
                     Text(buddyAcceptedMessage)
                 }
-                .onChange(of: appState.authState) { _, newState in
+                .onChange(of: appState.currentUser?.id) { oldID, newID in
+                    if oldID != nil && oldID != newID {
+                        deepLinkRouter.clearNavigationState()
+                        _ = notificationManager.consumePendingDeepLink()
+                    }
+                }
+                .onChange(of: appState.authState) { oldState, newState in
+                    if oldState == .authenticated && newState != .authenticated {
+                        deepLinkRouter.clearNavigationState()
+                        _ = notificationManager.consumePendingDeepLink()
+                    }
                     // Process pending buddy invite after authentication
                     if case .authenticated = newState {
                         processPendingBuddyInvite()
@@ -223,6 +227,18 @@ struct MindFriendApp: App {
 
     private func handleDeepLink(_ url: URL) {
         guard url.scheme == "mindfriend" else { return }
+        if url.host == "auth", url.path == "/callback" {
+            Task { @MainActor in
+                do {
+                    let profile = try await container.supabaseAuthService.handleAuthCallback(url)
+                    if profile.needsOnboarding { appState.requireOnboarding() }
+                    else { appState.setAuthenticated(user: profile) }
+                } catch {
+                    appState.showError(.apiError("The sign-in link could not be completed. Request a new link and try again."))
+                }
+            }
+            return
+        }
 
         // Parse the deep link using the router
         guard let route = deepLinkRouter.parseURL(url) else { return }
@@ -238,38 +254,11 @@ struct MindFriendApp: App {
     }
 
     private func handleNotificationDeepLink(_ deepLink: NotificationDeepLink) {
-        switch deepLink {
-        case .quest(let id):
-            // Navigate to quest with id
-            Log.general.info("[DeepLink] Navigate to quest: \(id ?? "nil")")
-        case .chat(let conversationId):
-            // Navigate to chat
-            Log.general.info("[DeepLink] Navigate to chat: \(conversationId)")
-        case .circle(let id):
-            // Navigate to circle
-            Log.general.info("[DeepLink] Navigate to circle: \(id)")
-        case .mood:
-            // Navigate to mood tracking
-            Log.general.info("[DeepLink] Navigate to mood")
-        case .settings:
-            // Navigate to settings
-            Log.general.info("[DeepLink] Navigate to settings")
-        case .insights:
-            // Navigate to insights/weekly summary
-            Log.general.info("[DeepLink] Navigate to insights")
-        case .buddy(let code):
-            // Handle buddy invite
+        guard let route = deepLinkRouter.route(for: deepLink) else { return }
+        if case .buddy(let code) = route {
             handleBuddyInvite(code: code)
-        case .micro(let templateId):
-            // Navigate to micro-moments
-            appState.selectedTab = .home
-            Log.general.info("[DeepLink] Navigate to micro-moments: \(templateId ?? "hub")")
-        case .sleep(let contentId):
-            // Navigate to sleep tab
-            appState.selectedTab = .sleep
-            Log.general.info("[DeepLink] Navigate to sleep: \(contentId ?? "home")")
-        case .none:
-            break
+        } else {
+            deepLinkRouter.handleRoute(route, appState: appState)
         }
     }
 
@@ -383,4 +372,43 @@ struct SplashView: View {
         .environmentObject(container)
         .environmentObject(container.achievementService)
         .environmentObject(container.ambientThemeService)
+}
+
+private struct PasswordRecoveryView: View {
+    @ObservedObject var authService: SupabaseAuthService
+    @Environment(\.dismiss) private var dismiss
+    @State private var password = ""
+    @State private var confirmation = ""
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                SecureField("New password", text: $password)
+                    .textContentType(.newPassword)
+                SecureField("Confirm password", text: $confirmation)
+                    .textContentType(.newPassword)
+                if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
+                Button(isSaving ? "Saving…" : "Save password") {
+                    isSaving = true
+                    Task { @MainActor in
+                        defer { isSaving = false }
+                        do {
+                            try await authService.completePasswordRecovery(password: password)
+                            password = ""
+                            confirmation = ""
+                            dismiss()
+                        } catch {
+                            errorMessage = "Password could not be updated. Check your connection or request a new recovery link."
+                        }
+                    }
+                }
+                .disabled(isSaving || password.count < 8 || password != confirmation)
+            }
+            .navigationTitle("Reset password")
+            .interactiveDismissDisabled(isSaving)
+        }
+        .privacySensitive()
+    }
 }

@@ -4,8 +4,8 @@
 import {
   assertEquals,
   assert,
-} from "https://deno.land/std@0.208.0/assert/mod.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+} from "jsr:@std/assert@1.0.19";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 
 // Test configuration
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "http://localhost:54321";

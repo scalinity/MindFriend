@@ -2,11 +2,10 @@
 // Endpoint: GET /functions/v1/list-boundaries?status=all&limit=20&offset=0
 // Lists all boundaries for the authenticated user with filtering and pagination
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { corsHeaders } from "../_shared/cors.ts";
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });

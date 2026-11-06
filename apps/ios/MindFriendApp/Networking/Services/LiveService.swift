@@ -83,8 +83,11 @@ final class LiveService: ObservableObject {
 
     /// Active Realtime channel for live session
     private var sessionChannel: RealtimeChannelV2?
+    private var sessionBroadcastTasks: [Task<Void, Never>] = []
 
     /// Active Realtime channel for circle room
+    private var roomChangesTask: Task<Void, Never>?
+    private var presenceChangesTask: Task<Void, Never>?
     private var roomChannel: RealtimeChannelV2?
 
     /// Presence channel for friends
@@ -104,6 +107,9 @@ final class LiveService: ObservableObject {
 
     deinit {
         heartbeatTimer?.invalidate()
+        sessionBroadcastTasks.forEach { $0.cancel() }
+        roomChangesTask?.cancel()
+        presenceChangesTask?.cancel()
     }
 
     // MARK: - Authentication Helper
@@ -314,36 +320,48 @@ final class LiveService: ObservableObject {
     // MARK: - Realtime Subscriptions
 
     private func subscribeToSession(sessionId: String) async {
+        await unsubscribeFromSession()
         // Create channel for this session
         let channel = supabase.realtimeV2.channel("live:session:\(sessionId)")
 
         // Listen for broadcast events
         let broadcastStream = channel.broadcastStream(event: "participant_update")
-        Task {
+        sessionBroadcastTasks.append(Task { [weak self] in
             for await message in broadcastStream {
-                await handleSessionBroadcast(message)
+                guard !Task.isCancelled else { break }
+                await self?.handleSessionBroadcast(message)
             }
-        }
+        })
 
         let reactionStream = channel.broadcastStream(event: "reaction")
-        Task {
+        sessionBroadcastTasks.append(Task { [weak self] in
             for await message in reactionStream {
-                await handleReactionBroadcast(message)
+                guard !Task.isCancelled else { break }
+                await self?.handleReactionBroadcast(message)
             }
-        }
+        })
 
         // Subscribe
-        try? await channel.subscribeWithError()
-
-        sessionChannel = channel
-        isConnected = true
+        do {
+            try await channel.subscribeWithError()
+            sessionChannel = channel
+            isConnected = true
+        } catch {
+            sessionBroadcastTasks.forEach { $0.cancel() }
+            sessionBroadcastTasks.removeAll()
+            await supabase.removeChannel(channel)
+            errorMessage = "Live connection unavailable. Please try again."
+            return
+        }
 
         logger.info("Subscribed to session channel: live:session:\(sessionId)")
     }
 
     private func unsubscribeFromSession() async {
+        sessionBroadcastTasks.forEach { $0.cancel() }
+        sessionBroadcastTasks.removeAll()
         if let channel = sessionChannel {
-            await channel.unsubscribe()
+            await supabase.removeChannel(channel)
             sessionChannel = nil
         }
         isConnected = false
@@ -567,6 +585,7 @@ final class LiveService: ObservableObject {
     }
 
     private func subscribeToCircleRoom(roomId: String) async {
+        await unsubscribeFromCircleRoom()
         let channel = supabase.realtimeV2.channel("circle:room:\(roomId)")
 
         // Listen for participant changes
@@ -577,7 +596,7 @@ final class LiveService: ObservableObject {
             filter: "room_id=eq.\(roomId)"
         )
 
-        Task {
+        roomChangesTask = Task {
             for await change in participantStream {
                 await handleCircleRoomChange(change)
             }
@@ -590,8 +609,10 @@ final class LiveService: ObservableObject {
     }
 
     private func unsubscribeFromCircleRoom() async {
+        roomChangesTask?.cancel()
+        roomChangesTask = nil
         if let channel = roomChannel {
-            await channel.unsubscribe()
+            await supabase.removeChannel(channel)
             roomChannel = nil
         }
     }
@@ -648,6 +669,7 @@ final class LiveService: ObservableObject {
 
     /// Subscribe to presence updates for a circle
     func subscribeToCirclePresence(circleId: String) async {
+        await unsubscribeFromCirclePresence()
         let channel = supabase.realtimeV2.channel("presence:circle:\(circleId)")
 
         // Use Postgres changes on user_presence table filtered by circle membership
@@ -657,7 +679,7 @@ final class LiveService: ObservableObject {
             table: Tables.userPresence
         )
 
-        Task {
+        presenceChangesTask = Task {
             for await _ in presenceStream {
                 // Refresh presence when any change occurs
                 do {
@@ -683,8 +705,10 @@ final class LiveService: ObservableObject {
     }
 
     func unsubscribeFromCirclePresence() async {
+        presenceChangesTask?.cancel()
+        presenceChangesTask = nil
         if let channel = presenceChannel {
-            await channel.unsubscribe()
+            await supabase.removeChannel(channel)
             presenceChannel = nil
         }
     }

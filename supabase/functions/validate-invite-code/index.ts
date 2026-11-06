@@ -1,5 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 const supabase = createClient(
@@ -21,7 +20,7 @@ interface ValidateInviteCodeResponse {
   errorCode?: string;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 
@@ -41,7 +40,7 @@ serve(async (req) => {
 
     // Validate authentication
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    if (!authHeader?.startsWith("Bearer ") || !authHeader.slice(7)) {
       return new Response(
         JSON.stringify({
           valid: false,
@@ -57,9 +56,10 @@ serve(async (req) => {
     const token = authHeader.replace("Bearer ", "");
     const {
       data: { user },
+      error: authError,
     } = await supabase.auth.getUser(token);
 
-    if (!user) {
+    if (authError || !user) {
       return new Response(
         JSON.stringify({
           valid: false,
@@ -98,13 +98,16 @@ serve(async (req) => {
         id,
         invite_code,
         organization_id,
+        created_by_admin_id,
         max_uses,
         uses_count,
         expires_at,
         is_active,
         organizations (
           id,
-          name
+          name,
+          status,
+          subscription_status
         )
       `,
       )
@@ -143,7 +146,7 @@ serve(async (req) => {
     // Check if invite has expired
     if (invite.expires_at) {
       const expiresAt = new Date(invite.expires_at);
-      if (expiresAt < new Date()) {
+      if (!Number.isFinite(expiresAt.getTime()) || expiresAt <= new Date()) {
         return new Response(
           JSON.stringify({
             valid: false,
@@ -173,29 +176,60 @@ serve(async (req) => {
       );
     }
 
-    // Increment uses_count
-    const { error: updateError } = await supabase
-      .from("organization_invites")
-      .update({ uses_count: invite.uses_count + 1 })
-      .eq("id", invite.id);
-
-    if (updateError) {
-      console.error("Error incrementing uses_count:", updateError);
-      // Non-fatal - validation still succeeds
+    const organization = invite.organizations as unknown as {
+      name: string;
+      status: string;
+      subscription_status: string;
+    } | null;
+    if (
+      !organization || organization.status !== "active" ||
+      organization.subscription_status !== "active"
+    ) {
+      return new Response(
+        JSON.stringify({
+          valid: false,
+          error: "Organization sponsorship is not active",
+          errorCode: "SPONSORSHIP_INACTIVE",
+        }),
+        {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
-    // Calculate remaining uses (after increment)
-    const remainingUses =
-      invite.max_uses !== null
-        ? invite.max_uses - (invite.uses_count + 1)
-        : null;
+    const { data: issuer, error: issuerError } = await supabase
+      .from("organization_admins")
+      .select("id")
+      .eq("id", invite.created_by_admin_id)
+      .eq("organization_id", invite.organization_id)
+      .eq("role", "admin")
+      .maybeSingle();
+    if (issuerError || !issuer) {
+      return new Response(
+        JSON.stringify({
+          valid: false,
+          error: "Invite issuer is not authorized",
+          errorCode: "INVITE_DEACTIVATED",
+        }),
+        {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    // Validation is a preview. Only a committed join consumes an invitation use.
+    const remainingUses = invite.max_uses !== null
+      ? invite.max_uses - (invite.uses_count ?? 0)
+      : null;
 
     // Return valid response
     return new Response(
       JSON.stringify({
         valid: true,
         organizationId: invite.organization_id,
-        organizationName: (invite.organizations as any)?.name,
+        organizationName: organization.name,
         remainingUses,
         expiresAt: invite.expires_at,
       } as ValidateInviteCodeResponse),

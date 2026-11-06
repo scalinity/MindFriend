@@ -11,8 +11,7 @@
  * Minimum sample size: 10 users (MVP), 100 for production
  */
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 
 const MIN_SAMPLE_SIZE = 10; // Set to 100 for production
 const INSIGHT_TTL_HOURS = 24;
@@ -27,7 +26,7 @@ interface AggregationResult {
   batches: number;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   // Verify this is an internal call (cron or admin)
   const serviceKey = req.headers.get("X-Service-Key");
   const expectedKey = Deno.env.get("AGGREGATION_SERVICE_KEY");
@@ -179,6 +178,8 @@ serve(async (req) => {
         result.errors.push(`Insight generation for ${key}: ${(e as Error).message}`);
       }
     }
+
+    const contributions = Object.values(allGroups).flat();
 
     // Generate "not alone" insights for mood patterns
     await generateNotAloneInsights(supabase, contributions, result);
@@ -361,7 +362,7 @@ function generateInsight(
  * Generates "not alone" insights for low mood patterns
  */
 async function generateNotAloneInsights(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   contributions: Contribution[],
   result: AggregationResult,
 ): Promise<void> {
@@ -427,7 +428,7 @@ async function generateNotAloneInsights(
  * Updates community aggregate stats
  */
 async function updateAggregateStats(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   contributions: Contribution[],
   result: AggregationResult,
 ): Promise<void> {

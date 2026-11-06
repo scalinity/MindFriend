@@ -3,8 +3,7 @@
 // Used by iOS for circle activity notifications to reduce N+1 calls
 // See: specs/04-smart-notifications.md
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { checkRateLimit, getRateLimitHeaders } from "../_shared/ratelimit.ts";
 import { createLogger } from "../_shared/logger.ts";
@@ -44,10 +43,11 @@ interface BatchResult {
   recipientId: string;
   success: boolean;
   skipped?: boolean;
+  queued?: boolean;
   reason?: string;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const headers = {
     ...getCorsHeaders(origin),
@@ -67,7 +67,7 @@ serve(async (req) => {
 
     // Validate authorization
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    if (!authHeader?.startsWith("Bearer ") || !authHeader.slice(7)) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers,
@@ -77,9 +77,10 @@ serve(async (req) => {
     const token = authHeader.replace("Bearer ", "");
     const {
       data: { user },
+      error: authError,
     } = await supabaseAdmin.auth.getUser(token);
 
-    if (!user) {
+    if (authError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers,
@@ -121,6 +122,15 @@ serve(async (req) => {
       );
     }
 
+    if (body.recipientIds.some((id) => typeof id !== "string" || !id)) {
+      return new Response(JSON.stringify({ error: "Invalid recipientIds" }), {
+        status: 400,
+        headers,
+      });
+    }
+    // Match database UUID formatting when filtering Swift's uppercase UUIDs.
+    body.recipientIds = body.recipientIds.map((id) => id.toLowerCase());
+
     if (body.recipientIds.length === 0) {
       return new Response(
         JSON.stringify({ success: true, results: [], sent: 0 }),
@@ -137,28 +147,40 @@ serve(async (req) => {
       );
     }
 
-    // For circle_activity notifications, validate sender is a member of the circle
-    if (body.type === "circle_activity" && body.data?.circleId) {
-      const { data: membership, error: membershipError } = await supabaseAdmin
-        .from("circle_members")
-        .select("id")
-        .eq("circle_id", body.data.circleId)
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (membershipError || !membership) {
-        log.warn("Circle membership validation failed", {
-          userId: user.id.slice(0, 8),
-          circleId: body.data.circleId.slice(0, 8),
-        });
-        return new Response(
-          JSON.stringify({
-            error: "Not authorized to send notifications for this circle",
-            code: "NOT_CIRCLE_MEMBER",
-          }),
-          { status: 403, headers },
-        );
-      }
+    // iOS batches only circle activity, hugs and challenge notifications.
+    // Every batch requires the same sender/circle boundary as a single send.
+    if (!["circle_activity", "hug", "challenge"].includes(body.type)) {
+      return new Response(
+        JSON.stringify({ error: "Forbidden notification type" }),
+        {
+          status: 403,
+          headers,
+        },
+      );
+    }
+    if (!body.data?.circleId || typeof body.data.circleId !== "string") {
+      return new Response(
+        JSON.stringify({ error: "Missing circleId for circle notification" }),
+        {
+          status: 400,
+          headers,
+        },
+      );
+    }
+    const { data: membership, error: membershipError } = await supabaseAdmin
+      .from("circle_members")
+      .select("id")
+      .eq("circle_id", body.data.circleId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (membershipError || !membership) {
+      return new Response(
+        JSON.stringify({ error: "Not authorized for this circle" }),
+        {
+          status: 403,
+          headers,
+        },
+      );
     }
 
     // SECURITY FIX #002: Filter recipients to only valid circle members
@@ -168,12 +190,21 @@ serve(async (req) => {
       "challenge",
     ];
     if (body.data?.circleId && CIRCLE_SCOPED_TYPES.includes(body.type)) {
-      const { data: validMembers } = await supabaseAdmin
+      const { data: validMembers, error: membersError } = await supabaseAdmin
         .from("circle_members")
         .select("user_id")
         .eq("circle_id", body.data.circleId)
         .in("user_id", body.recipientIds);
 
+      if (membersError) {
+        return new Response(
+          JSON.stringify({ error: "Unable to validate recipients" }),
+          {
+            status: 403,
+            headers,
+          },
+        );
+      }
       const validSet = new Set((validMembers || []).map((m) => m.user_id));
       const filteredIds = body.recipientIds.filter((id) => validSet.has(id));
 
@@ -198,7 +229,9 @@ serve(async (req) => {
     }
 
     // SECURITY FIX #002: Forward user JWT to send-notification (don't use service role bypass)
-    const fnUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/send-notification`;
+    const fnUrl = `${
+      Deno.env.get("SUPABASE_URL")
+    }/functions/v1/send-notification`;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
     const results: BatchResult[] = [];
@@ -227,6 +260,8 @@ serve(async (req) => {
         const result = (await response.json()) as {
           success?: boolean;
           skipped?: boolean;
+          sent?: boolean;
+          queued?: boolean;
           reason?: string;
           error?: string;
         };
@@ -241,9 +276,14 @@ serve(async (req) => {
 
         return {
           recipientId,
-          success: result.success && !result.skipped,
+          success: result.success === true && result.sent === true &&
+            !result.skipped && !result.queued,
           skipped: result.skipped,
-          reason: result.reason,
+          queued: result.queued,
+          reason: result.reason ??
+            (result.sent === false && !result.skipped && !result.queued
+              ? "Delivery failed"
+              : undefined),
         };
       } catch (err) {
         log.error("Error sending notification", {
@@ -275,9 +315,12 @@ serve(async (req) => {
 
     const sent = results.filter((r) => r.success).length;
     const skipped = results.filter((r) => r.skipped).length;
-    const failed = results.filter((r) => !r.success && !r.skipped).length;
+    const queued = results.filter((r) => r.queued).length;
+    const failed = results.filter((r) =>
+      !r.success && !r.skipped && !r.queued
+    ).length;
 
-    log.info("Batch notification complete", { sent, skipped, failed });
+    log.info("Batch notification complete", { sent, skipped, queued, failed });
 
     return new Response(
       JSON.stringify({
@@ -285,6 +328,7 @@ serve(async (req) => {
         results,
         sent,
         skipped,
+        queued,
         failed,
       }),
       { status: 200, headers },

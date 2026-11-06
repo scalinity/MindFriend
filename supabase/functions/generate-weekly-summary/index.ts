@@ -3,11 +3,10 @@
 // Also supports manual trigger via ?user_id=<uuid> query param
 // See: specs/04-smart-notifications.md, specs/06-weekly-insights.md
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import {
   createClient,
   SupabaseClient,
-} from "https://esm.sh/@supabase/supabase-js@2.49.1";
+} from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import {
   isAuthorizedCronRequest,
@@ -70,7 +69,7 @@ interface ExtendedWeeklyStats {
   exercise_minutes: number;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 
@@ -147,11 +146,11 @@ serve(async (req) => {
         now,
         xaiApiKey,
         false, // Don't send notification for on-demand triggers
+        req.signal,
       );
 
       return new Response(
         JSON.stringify({
-          success: true,
           onDemand: true,
           userId: authenticatedUserId,
           timestamp: now.toISOString(),
@@ -175,11 +174,11 @@ serve(async (req) => {
         now,
         xaiApiKey,
         false, // Don't send notification for manual triggers
+        req.signal,
       );
 
       return new Response(
         JSON.stringify({
-          success: true,
           manual: true,
           userId: manualUserId,
           timestamp: now.toISOString(),
@@ -237,6 +236,7 @@ serve(async (req) => {
             now,
             xaiApiKey,
             true,
+            req.signal,
           ),
         ),
       );
@@ -283,6 +283,7 @@ async function processUserWithInsights(
   now: Date,
   xaiApiKey: string | undefined,
   sendNotification: boolean,
+  signal?: AbortSignal,
 ): Promise<{
   success: boolean;
   notificationSent: boolean;
@@ -397,7 +398,7 @@ async function processUserWithInsights(
     recentNotes,
   };
 
-  const aiInsight = await generateAIInsight(insightContext, xaiApiKey);
+  const aiInsight = await generateAIInsight(insightContext, xaiApiKey, { admin: supabase, userId, feature: "weekly.insight" }, signal);
 
   // Aggregate cognitive distortions for this week
   const { data: distortionData, error: distortionError } = await supabase
@@ -426,7 +427,7 @@ async function processUserWithInsights(
   // Determine new patterns (distortions not seen in previous weeks)
   const { data: previousWeekDistortions } = await supabase
     .from("distortion_encounters")
-    .select("DISTINCT distortion_code")
+    .select("distortion_code")
     .eq("user_id", userId)
     .lt("occurred_at", `${weekStartStr}T00:00:00Z`);
 

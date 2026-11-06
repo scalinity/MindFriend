@@ -3,8 +3,7 @@
  * Runs weekly (Sunday 02:00 UTC) to calculate weekly statistics for all users
  */
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import {
   calculatePopulationVariance,
   getWeekBounds,
@@ -22,7 +21,7 @@ interface AggregationResult {
   error?: string;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("origin") ?? "";
   const corsHeaders = getCorsHeaders(origin);
 

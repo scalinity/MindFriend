@@ -2,23 +2,22 @@
 // AI-powered content generation with TTS for personalized wellness content
 // Supports: sleep stories, meditations, breathing exercises, grounding, mindfulness, affirmations
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import {
   createClient,
   SupabaseClient,
-} from "https://esm.sh/@supabase/supabase-js@2.49.1";
+} from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import {
-  validateContentRequest,
-  validateGeneratedContent,
   detectTriggerWarnings,
   getContentDisclaimer,
+  validateContentRequest,
+  validateGeneratedContent,
 } from "../_shared/content-validation.ts";
 import {
   createGoogleTTSClient,
-  estimateTTSCost,
-  estimateDuration,
   DEFAULT_VOICE_ID,
+  estimateDuration,
+  estimateTTSCost,
   GoogleTTSError,
 } from "../_shared/google-tts.ts";
 import { sanitizeForPrompt } from "../_shared/sanitize.ts";
@@ -34,7 +33,7 @@ import { buildContextualPrompt } from "./prompt-builder.ts";
 type AnySupabaseClient = any;
 
 // Constants
-const XAI_API_URL = "https://api.x.ai/v1/chat/completions";
+import { budgetedXAIText, type XAITextBudgetContext } from "../_shared/budgeted-xai-text.ts";
 const MAX_GENERATION_TIME_MS = 60000; // 60 second timeout
 
 // Content type definitions
@@ -108,7 +107,8 @@ interface GenerateContentResponse {
 
 // System prompts for different content types
 const CONTENT_PROMPTS: Record<ContentType, string> = {
-  sleep_story: `You are a master storyteller creating soothing sleep stories. Your role is to:
+  sleep_story:
+    `You are a master storyteller creating soothing sleep stories. Your role is to:
 - Create gentle, flowing narratives that help listeners drift off to sleep
 - Use calming imagery: soft moonlight, peaceful forests, quiet beaches
 - Avoid any conflict, excitement, or stimulating content
@@ -119,7 +119,8 @@ const CONTENT_PROMPTS: Record<ContentType, string> = {
 
 Write a sleep story script of approximately {duration} minutes. Include natural pauses marked with [pause]. The theme is: {theme}`,
 
-  meditation: `You are a skilled meditation guide creating personalized guided meditations. Your role is to:
+  meditation:
+    `You are a skilled meditation guide creating personalized guided meditations. Your role is to:
 - Guide listeners through a peaceful meditation experience
 - Use present-moment awareness language
 - Include body awareness and breath attention
@@ -129,7 +130,8 @@ Write a sleep story script of approximately {duration} minutes. Include natural 
 
 Write a {duration}-minute guided meditation script. Focus: {focus}. Approach: {approach}. Include [pause] markers for silent moments.`,
 
-  breathing: `You are a wellness instructor guiding breathing exercises. Your role is to:
+  breathing:
+    `You are a wellness instructor guiding breathing exercises. Your role is to:
 - Provide clear, calming guidance for each breath phase
 - Count smoothly and reassuringly
 - Remind listeners to breathe naturally between cycles
@@ -138,7 +140,8 @@ Write a {duration}-minute guided meditation script. Focus: {focus}. Approach: {a
 
 Write a breathing exercise script using the {pattern} pattern for {duration} minutes. Include timing markers like [inhale 4], [hold 4], [exhale 4].`,
 
-  grounding: `You are a compassionate guide helping someone ground themselves in the present moment. Your role is to:
+  grounding:
+    `You are a compassionate guide helping someone ground themselves in the present moment. Your role is to:
 - Guide through 5-4-3-2-1 sensory awareness
 - Provide specific, relatable sensory observations
 - Progress from visual (easier) to taste (harder)
@@ -147,7 +150,8 @@ Write a breathing exercise script using the {pattern} pattern for {duration} min
 
 Write a {duration}-minute grounding exercise script for someone in a {location} environment experiencing {scenario}. Make observations specific and relatable.`,
 
-  mindfulness: `You are a mindfulness teacher creating brief awareness prompts. Your role is to:
+  mindfulness:
+    `You are a mindfulness teacher creating brief awareness prompts. Your role is to:
 - Focus on present-moment awareness
 - Use observing language (notice, allow, be curious)
 - Keep prompts short and accessible
@@ -156,7 +160,8 @@ Write a {duration}-minute grounding exercise script for someone in a {location} 
 
 Write a {duration}-minute mindfulness prompt for {timeOfDay}. Theme: {theme}`,
 
-  cbt: `You are a cognitive-behavioral guide helping someone examine their thoughts. Your role is to:
+  cbt:
+    `You are a cognitive-behavioral guide helping someone examine their thoughts. Your role is to:
 - Use gentle Socratic questioning
 - Help identify thought patterns
 - Suggest balanced alternative perspectives (not "positive thinking")
@@ -165,7 +170,8 @@ Write a {duration}-minute mindfulness prompt for {timeOfDay}. Theme: {theme}`,
 
 Write a {duration}-minute cognitive reflection exercise. Help examine the thought: "{thought}". Guide toward balanced perspectives.`,
 
-  journaling: `You are a reflective writing guide creating journaling prompts. Your role is to:
+  journaling:
+    `You are a reflective writing guide creating journaling prompts. Your role is to:
 - Create specific, evocative prompts (not generic)
 - Build on previous themes when provided
 - Encourage exploration without forcing conclusions
@@ -174,7 +180,8 @@ Write a {duration}-minute cognitive reflection exercise. Help examine the though
 
 Write 3-5 journaling prompts for {duration} minutes of writing. Theme: {theme}`,
 
-  affirmation: `You are a compassionate voice creating personalized affirmations. Your role is to:
+  affirmation:
+    `You are a compassionate voice creating personalized affirmations. Your role is to:
 - Create affirmations that feel authentic, not generic
 - Use "I am" and "I can" statements
 - Focus on strengths and values, not fixing problems
@@ -184,7 +191,7 @@ Write 3-5 journaling prompts for {duration} minutes of writing. Theme: {theme}`,
 Write 10 personalized affirmations for someone dealing with {theme}. Each should be a single sentence.`,
 };
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const baseCorsHeaders = getCorsHeaders(origin);
 
@@ -198,7 +205,9 @@ serve(async (req) => {
 
   try {
     if (DEBUG) {
-      console.log(`[generate-content] Request received at ${new Date().toISOString()}`);
+      console.log(
+        `[generate-content] Request received at ${new Date().toISOString()}`,
+      );
       console.log(`[generate-content] Method: ${req.method}, URL: ${req.url}`);
     }
 
@@ -235,7 +244,9 @@ serve(async (req) => {
     if (DEBUG) {
       console.log(`[generate-content] Auth header present: ${!!authHeader}`);
       console.log(
-        `[generate-content] Auth header starts with Bearer: ${authHeader?.startsWith("Bearer ")}`,
+        `[generate-content] Auth header starts with Bearer: ${
+          authHeader?.startsWith("Bearer ")
+        }`,
       );
     }
 
@@ -252,9 +263,6 @@ serve(async (req) => {
     const token = authHeader.replace("Bearer ", "");
     if (DEBUG) {
       console.log(`[generate-content] Token length: ${token.length}`);
-      console.log(
-        `[generate-content] Token prefix: ${token.substring(0, 30)}...`,
-      );
     }
 
     // Create Supabase clients
@@ -270,7 +278,9 @@ serve(async (req) => {
     ) as AnySupabaseClient;
 
     // Get authenticated user
-    if (DEBUG) console.log(`[generate-content] Calling supabaseUser.auth.getUser()...`);
+    if (DEBUG) {
+      console.log(`[generate-content] Calling supabaseUser.auth.getUser()...`);
+    }
     const {
       data: { user },
       error: authError,
@@ -278,7 +288,9 @@ serve(async (req) => {
 
     if (DEBUG) {
       console.log(
-        `[generate-content] getUser result - user: ${user?.id ?? "null"}, error: ${authError?.message ?? "none"}`,
+        `[generate-content] getUser result - user: ${
+          user?.id ?? "null"
+        }, error: ${authError?.message ?? "none"}`,
       );
     }
 
@@ -338,7 +350,9 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({
           error: "INVALID_CONTENT_TYPE",
-          message: `Invalid content type. Must be one of: ${validTypes.join(", ")}`,
+          message: `Invalid content type. Must be one of: ${
+            validTypes.join(", ")
+          }`,
         }),
         {
           status: 400,
@@ -363,8 +377,8 @@ serve(async (req) => {
     }
 
     // Content validation (crisis keywords, inappropriate content)
-    const topic =
-      request.params.theme || request.params.focus || request.contentType;
+    const topic = request.params.theme || request.params.focus ||
+      request.contentType;
     const validationResult = validateContentRequest({
       topic,
       contentType: request.contentType,
@@ -393,89 +407,94 @@ serve(async (req) => {
       .eq("id", user.id)
       .single();
 
-    const isPremium =
-      profile?.subscription_tier === "premium" ||
+    const isPremium = profile?.subscription_tier === "premium" ||
       profile?.subscription_tier === "family";
 
-    // Check and enforce quota
-    if (DEBUG) {
-      console.log(`[generate-content] About to call supabaseAdmin.rpc for quota check`);
-      console.log(`[generate-content] supabaseAdmin type: ${typeof supabaseAdmin}`);
-      console.log(`[generate-content] supabaseAdmin.rpc type: ${typeof supabaseAdmin.rpc}`);
-    }
-    const { data: quotaResult, error: quotaError } = await supabaseAdmin.rpc(
-      "check_and_increment_content_quota",
-      {
-        p_user_id: user.id,
-        p_is_premium: isPremium,
-      },
-    );
-
-    if (quotaError) {
-      console.error("Quota check error:", quotaError);
-      return new Response(JSON.stringify({ error: "Failed to check quota" }), {
-        status: 500,
-        headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const quota = quotaResult?.[0] || {
-      allowed: false,
-      quota_used: 0,
-      quota_limit: 3,
-    };
-
-    if (DEBUG) console.log(`[generate-content] Quota check result:`, JSON.stringify(quota));
-
-    if (!quota.allowed) {
-      return new Response(
-        JSON.stringify({
-          error: "AI_QUOTA_EXCEEDED",
-          message:
-            "You've reached your monthly generation limit. Upgrade to Premium for unlimited content!",
-          quotaUsed: quota.quota_used,
-          quotaLimit: quota.quota_limit,
-        }),
-        {
-          status: 429,
-          headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    // Generate content title
     const title = generateTitle(request.contentType, request.params);
-
-    // Create initial record in database
-    const { data: contentRecord, error: insertError } = await supabaseAdmin
-      .from("generated_content")
-      .insert({
-        user_id: user.id,
-        content_type: request.contentType,
-        request_params: request.params,
-        title,
-        text_content: "", // Will be updated
-        voice_id: request.params.voiceId || DEFAULT_VOICE_ID,
-        background_sound: request.params.backgroundSound || "silence",
-        status: "generating",
-        series_id: request.params.seriesId || null,
-        series_position: request.params.seriesPosition || null,
-      })
-      .select("id")
-      .single();
-
-    if (insertError || !contentRecord) {
-      console.error("Insert error:", insertError);
-      return new Response(
-        JSON.stringify({ error: "Failed to create content record" }),
+    let contentId: string | undefined;
+    let quota = { allowed: false, quota_used: 0, quota_limit: 3 };
+    const beforeTextProvider = async (signal: AbortSignal) => {
+      signal.throwIfAborted();
+      if (contentId) return;
+      const { data: quotaResult, error: quotaError } = await supabaseAdmin.rpc(
+        "check_and_increment_content_quota",
         {
+          p_user_id: user.id,
+          p_is_premium: isPremium,
+        },
+      ).abortSignal(signal);
+      signal.throwIfAborted();
+
+      if (quotaError) {
+        console.error("Quota check error:", quotaError);
+        throw new Response(JSON.stringify({ error: "Failed to check quota" }), {
           status: 500,
           headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
+        });
+      }
 
-    const contentId = contentRecord.id;
+      quota = quotaResult?.[0] || {
+        allowed: false,
+        quota_used: 0,
+        quota_limit: 3,
+      };
+
+      if (DEBUG) {
+        console.log(
+          `[generate-content] Quota check result:`,
+          JSON.stringify(quota),
+        );
+      }
+
+      if (!quota.allowed) {
+        throw new Response(
+          JSON.stringify({
+            error: "AI_QUOTA_EXCEEDED",
+            message:
+              "You've reached your monthly generation limit. Upgrade to Premium for unlimited content!",
+            quotaUsed: quota.quota_used,
+            quotaLimit: quota.quota_limit,
+          }),
+          {
+            status: 429,
+            headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      // This row is the content quota's counted reservation. Insert it only after
+      // monthly admission and the quota check, so a free request cannot count itself.
+      const { data: contentRecord, error: insertError } = await supabaseAdmin
+        .from("generated_content")
+        .insert({
+          user_id: user.id,
+          content_type: request.contentType,
+          request_params: request.params,
+          title,
+          text_content: "", // Will be updated
+          voice_id: request.params.voiceId || DEFAULT_VOICE_ID,
+          background_sound: request.params.backgroundSound || "silence",
+          status: "generating",
+          series_id: request.params.seriesId || null,
+          series_position: request.params.seriesPosition || null,
+        })
+        .select("id")
+        .single().abortSignal(signal);
+
+      if (insertError || !contentRecord) {
+        console.error("Insert error:", insertError);
+        throw new Response(
+          JSON.stringify({ error: "Failed to create content record" }),
+          {
+            status: 500,
+            headers: { ...baseCorsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      contentId = contentRecord.id;
+      signal.throwIfAborted();
+    };
 
     try {
       // NEW: Gather user context for personalized generation (for exercise types)
@@ -510,7 +529,11 @@ serve(async (req) => {
         request,
         user.id,
         generationContext,
+        { admin: supabaseAdmin, userId: user.id, feature: "content.text" },
+        req.signal,
+        beforeTextProvider,
       );
+      if (!contentId) throw new Error("Content reservation unavailable");
 
       // Validate generated content
       const contentValidation = validateGeneratedContent(textContent);
@@ -562,6 +585,7 @@ serve(async (req) => {
       // TTS synthesis - PREMIUM ONLY to control costs
       // Free tier users get text_content only; iOS app uses native AVSpeechSynthesizer
       let audioUrl: string | undefined;
+      let audioObjectURL: string | undefined;
       let actualDuration: number | undefined;
       let generationCost = 0;
 
@@ -570,46 +594,94 @@ serve(async (req) => {
         // Check monthly TTS character budget ($5/month cap)
         // Use displayText (extracted readable content) not raw JSON
         const charCount = displayText.length;
-        if (DEBUG) console.log(`[generate-content] Premium user - checking TTS budget for ${charCount} characters`);
-        const { data: budgetResult, error: budgetError } =
-          await supabaseAdmin.rpc("check_tts_monthly_budget", {
+        if (DEBUG) {
+          console.log(
+            `[generate-content] Premium user - checking TTS budget for ${charCount} characters`,
+          );
+        }
+        const { data: budgetResult, error: budgetError } = await supabaseAdmin
+          .rpc("check_tts_monthly_budget", {
             p_user_id: user.id,
             p_character_count: charCount,
           });
 
-        if (DEBUG) console.log(`[generate-content] TTS budget check - error: ${budgetError?.message || "none"}, result:`, JSON.stringify(budgetResult));
+        if (DEBUG) {
+          console.log(
+            `[generate-content] TTS budget check - error: ${
+              budgetError?.message || "none"
+            }, result:`,
+            JSON.stringify(budgetResult),
+          );
+        }
         const budget = budgetResult?.[0];
         if (budgetError || !budget?.allowed) {
           // Monthly budget exceeded — fall back to text-only like free tier
-          if (DEBUG) console.log(
-            `Premium user ${user.id}: monthly TTS budget exceeded (${budget?.chars_used || "?"}/${budget?.chars_limit || "?"} chars), returning text-only`,
-          );
+          if (DEBUG) {
+            console.log(
+              `Premium user ${user.id}: monthly TTS budget exceeded (${
+                budget?.chars_used || "?"
+              }/${budget?.chars_limit || "?"} chars), returning text-only`,
+            );
+          }
           actualDuration = estimateDuration(displayText);
         }
 
+        let synthesisQuotaReserved = false;
+        const beforeSpeechProvider = async (signal: AbortSignal) => {
+          signal.throwIfAborted();
+          if (synthesisQuotaReserved) return;
+          const reservation = await supabaseAdmin.rpc("check_and_increment_synthesis_quota", {
+            p_user_id: user.id,
+            p_is_premium: true,
+            p_character_count: charCount,
+          }).abortSignal(signal);
+          signal.throwIfAborted();
+          if (reservation.error || !reservation.data?.[0]?.allowed) {
+            throw new GoogleTTSError("Voice synthesis quota unavailable", "QUOTA_EXCEEDED");
+          }
+          synthesisQuotaReserved = true;
+        };
         if (budget?.allowed) {
-          if (DEBUG) console.log(`[generate-content] TTS budget allowed, synthesizing audio with Chirp 3 HD...`);
+          if (DEBUG) {
+            console.log(
+              `[generate-content] TTS budget allowed, synthesizing audio with Chirp 3 HD...`,
+            );
+          }
           try {
             const googleTTS = createGoogleTTSClient();
             // Map content type to voice preset key
-            const voiceId =
-              request.params.voiceId || request.contentType || DEFAULT_VOICE_ID;
-            if (DEBUG) console.log(`[generate-content] Using Chirp 3 HD voiceId: ${voiceId}`);
+            const voiceId = request.params.voiceId || request.contentType ||
+              DEFAULT_VOICE_ID;
+            if (DEBUG) {
+              console.log(
+                `[generate-content] Using Chirp 3 HD voiceId: ${voiceId}`,
+              );
+            }
 
             // Chunk text if it exceeds Google's 5000 byte limit
             const chunks = chunkTextForTTS(displayText, 4800);
-            if (DEBUG) console.log(`[generate-content] Text split into ${chunks.length} chunk(s)`);
+            if (DEBUG) {
+              console.log(
+                `[generate-content] Text split into ${chunks.length} chunk(s)`,
+              );
+            }
 
             const audioChunks: Uint8Array[] = [];
             let totalCharCount = 0;
 
             for (let i = 0; i < chunks.length; i++) {
-              if (DEBUG) console.log(`[generate-content] Synthesizing chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars)`);
+              if (DEBUG) {
+                console.log(
+                  `[generate-content] Synthesizing chunk ${
+                    i + 1
+                  }/${chunks.length} (${chunks[i].length} chars)`,
+                );
+              }
               const ttsResult = await googleTTS.textToSpeech({
                 text: chunks[i],
                 voiceId,
                 useChirp3HD: true,
-              });
+              }, { budget: { admin: supabaseAdmin, userId: user.id, feature: "content.tts" }, signal: req.signal, beforeProvider: beforeSpeechProvider });
               audioChunks.push(ttsResult.audioData);
               totalCharCount += ttsResult.characterCount;
             }
@@ -626,7 +698,11 @@ serve(async (req) => {
               offset += chunk.length;
             }
 
-            if (DEBUG) console.log(`[generate-content] TTS synthesis successful, ${combinedAudio.length} bytes, ${totalCharCount} chars`);
+            if (DEBUG) {
+              console.log(
+                `[generate-content] TTS synthesis successful, ${combinedAudio.length} bytes, ${totalCharCount} chars`,
+              );
+            }
 
             // Upload to Supabase Storage
             const fileName = `${user.id}/${contentId}.mp3`;
@@ -638,14 +714,21 @@ serve(async (req) => {
               });
 
             if (!uploadError) {
-              if (DEBUG) console.log(`[generate-content] Audio uploaded successfully to: ${fileName}`);
-              // Get public URL
-              const { data: urlData } = supabaseAdmin.storage
-                .from("generated-audio")
-                .getPublicUrl(fileName);
-
-              audioUrl = urlData?.publicUrl;
-              if (DEBUG) console.log(`[generate-content] Audio URL: ${audioUrl}`);
+              if (DEBUG) {
+                console.log(
+                  `[generate-content] Audio uploaded successfully to: ${fileName}`,
+                );
+              }
+              const { data: urlData, error: signingError } = await supabaseAdmin
+                .storage
+                .from("generated-audio").createSignedUrl(fileName, 3600);
+              if (signingError || !urlData?.signedUrl) {
+                throw new Error("Unable to authorize audio access");
+              }
+              audioUrl = urlData.signedUrl;
+              audioObjectURL = `${
+                Deno.env.get("SUPABASE_URL")
+              }/storage/v1/object/public/generated-audio/${fileName}`;
               actualDuration = estimateDuration(displayText);
               generationCost = estimateTTSCost(totalCharCount);
             } else {
@@ -656,23 +739,18 @@ serve(async (req) => {
             }
           } catch (ttsError) {
             // Log TTS error but don't fail the request
-            console.error("TTS error (non-fatal):", ttsError);
+            console.error("TTS synthesis unavailable; returning text");
             if (ttsError instanceof GoogleTTSError) {
               console.error("Google TTS error code:", ttsError.code);
             }
           }
-
-          // Record synthesis for monthly budget tracking
-          await supabaseAdmin.rpc("check_and_increment_synthesis_quota", {
-            p_user_id: user.id,
-            p_is_premium: true,
-            p_character_count: charCount,
-          });
         } // end budget?.allowed
       } else {
         // Free tier: estimate duration from displayText for UI display
         actualDuration = estimateDuration(displayText);
-        if (DEBUG) console.log(`Free tier user: skipping TTS, text-only content`);
+        if (DEBUG) {
+          console.log(`Free tier user: skipping TTS, text-only content`);
+        }
       }
 
       // Calculate quality score (simple heuristic)
@@ -686,11 +764,17 @@ serve(async (req) => {
 
       // Update final record
       const processingTime = Date.now() - startTime;
-      if (DEBUG) console.log(`[generate-content] Updating DB record ${contentId} with audio_url: ${audioUrl ? "present" : "null"}`);
+      if (DEBUG) {
+        console.log(
+          `[generate-content] Updating DB record ${contentId} with audio_url: ${
+            audioUrl ? "present" : "null"
+          }`,
+        );
+      }
       const { error: finalUpdateError } = await supabaseAdmin
         .from("generated_content")
         .update({
-          audio_url: audioUrl,
+          audio_url: audioObjectURL,
           duration_seconds: actualDuration,
           quality_score: qualityScore,
           generation_cost_usd: generationCost,
@@ -703,7 +787,9 @@ serve(async (req) => {
           `[generate-content] CRITICAL: Failed to update DB record: ${finalUpdateError.message}`,
         );
       } else if (DEBUG) {
-        console.log(`[generate-content] DB record updated successfully with audio_url`);
+        console.log(
+          `[generate-content] DB record updated successfully with audio_url`,
+        );
       }
 
       // Also create request record for analytics
@@ -719,11 +805,13 @@ serve(async (req) => {
 
       // Return success response
       // Ensure quota values are valid numbers (fallback to defaults if undefined)
-      const quotaUsedValue =
-        typeof quota.quota_used === "number" ? quota.quota_used + 1 : 1;
+      const quotaUsedValue = typeof quota.quota_used === "number"
+        ? quota.quota_used + 1
+        : 1;
       // For premium users, quota_limit is -1 (unlimited). Convert to 999 for iOS display.
-      const rawQuotaLimit =
-        typeof quota.quota_limit === "number" ? quota.quota_limit : 3;
+      const rawQuotaLimit = typeof quota.quota_limit === "number"
+        ? quota.quota_limit
+        : 3;
       const quotaLimitValue = rawQuotaLimit === -1 ? 999 : rawQuotaLimit;
 
       const response: GenerateContentResponse = {
@@ -737,11 +825,17 @@ serve(async (req) => {
         quotaUsed: quotaUsedValue,
         quotaLimit: quotaLimitValue,
         disclaimer: getContentDisclaimer(),
-        triggerWarnings:
-          triggerWarnings.length > 0 ? triggerWarnings : undefined,
+        triggerWarnings: triggerWarnings.length > 0
+          ? triggerWarnings
+          : undefined,
       };
 
-      if (DEBUG) console.log(`[generate-content] SUCCESS - Returning response:`, JSON.stringify(response, null, 2));
+      if (DEBUG) {
+        console.log(
+          `[generate-content] SUCCESS - Returning response:`,
+          JSON.stringify(response, null, 2),
+        );
+      }
 
       return new Response(JSON.stringify(response), {
         status: 200,
@@ -749,12 +843,11 @@ serve(async (req) => {
       });
     } catch (generationError) {
       // Update record as failed
-      const errorMessage =
-        generationError instanceof Error
-          ? generationError.message
-          : "Unknown generation error";
+      const errorMessage = generationError instanceof Error
+        ? generationError.message
+        : "Unknown generation error";
 
-      await supabaseAdmin
+      if (contentId) await supabaseAdmin
         .from("generated_content")
         .update({
           status: "failed",
@@ -765,9 +858,11 @@ serve(async (req) => {
       throw generationError;
     }
   } catch (error) {
-    console.error("Generate content error:", error);
-    const errorMessage =
-      error instanceof Error ? error.message : "An unexpected error occurred";
+    if (error instanceof Response) return error;
+    console.error("Generate content error");
+    const errorMessage = error instanceof Error
+      ? error.message
+      : "An unexpected error occurred";
 
     return new Response(
       JSON.stringify({
@@ -790,6 +885,9 @@ async function generateTextContent(
   request: GenerateContentRequest,
   userId: string,
   context: GenerationContext | null,
+  budget: XAITextBudgetContext,
+  signal?: AbortSignal,
+  beforeProvider?: (signal: AbortSignal) => Promise<void>,
 ): Promise<string> {
   const xaiApiKey = Deno.env.get("XAI_API_KEY");
   if (!xaiApiKey) {
@@ -804,8 +902,8 @@ async function generateTextContent(
     "journaling",
     "mindfulness",
   ];
-  const useContextualPrompt =
-    exerciseTypes.includes(request.contentType) && context !== null;
+  const useContextualPrompt = exerciseTypes.includes(request.contentType) &&
+    context !== null;
 
   let systemPrompt: string;
   let userPrompt: string;
@@ -826,10 +924,21 @@ async function generateTextContent(
     const durationMinutes = Math.round((request.params.duration || 300) / 60);
 
     // Sanitize user-supplied params before interpolating into prompts
-    const safeTheme = sanitizeForPrompt(request.params.theme || request.params.focus || "general wellness", 200);
-    const safeFocus = sanitizeForPrompt(request.params.focus || "mindfulness", 200);
-    const safeGroundingScenario = sanitizeForPrompt(request.params.groundingScenario || "general", 200);
-    const safeCustomPrompt = request.params.customPrompt ? sanitizeForPrompt(request.params.customPrompt, 2000) : "anxious thoughts";
+    const safeTheme = sanitizeForPrompt(
+      request.params.theme || request.params.focus || "general wellness",
+      200,
+    );
+    const safeFocus = sanitizeForPrompt(
+      request.params.focus || "mindfulness",
+      200,
+    );
+    const safeGroundingScenario = sanitizeForPrompt(
+      request.params.groundingScenario || "general",
+      200,
+    );
+    const safeCustomPrompt = request.params.customPrompt
+      ? sanitizeForPrompt(request.params.customPrompt, 2000)
+      : "anxious thoughts";
 
     userPrompt = basePrompt
       .replace("{duration}", String(durationMinutes))
@@ -852,15 +961,14 @@ async function generateTextContent(
   }
 
   const DEBUG = Deno.env.get("DEBUG") === "true";
-  if (DEBUG) console.log(`[generate-content] Calling xAI API with model: grok-4-1-fast-reasoning`);
-  const response = await fetch(XAI_API_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${xaiApiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "grok-4-1-fast-reasoning",
+  if (DEBUG) {
+    console.log(
+      `[generate-content] Calling xAI API with model: grok-4.3`,
+    );
+  }
+  const response = await budgetedXAIText({
+      ...budget,
+      apiKey: xaiApiKey,
       messages: [
         {
           role: "system",
@@ -871,20 +979,17 @@ async function generateTextContent(
           content: userPrompt,
         },
       ],
-      max_tokens: 4000,
+      maxTokens: 4000,
       temperature: 0.7,
-    }),
+      signal,
+      beforeProvider,
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
     console.error(
       `[generate-content] xAI API error - Status: ${response.status}`,
     );
-    console.error(`[generate-content] xAI API error - Response: ${errorText}`);
-    throw new Error(
-      `xAI API error (${response.status}): ${errorText.substring(0, 200)}`,
-    );
+    throw new Error(`xAI API error (${response.status})`);
   }
 
   const data = await response.json();
@@ -972,7 +1077,7 @@ function calculateQualityScore(
     "quiet",
   ];
   const hasCalmingLanguage = calmingWords.some((word) =>
-    content.toLowerCase().includes(word),
+    content.toLowerCase().includes(word)
   );
   if (hasCalmingLanguage) {
     score += 1;
@@ -1067,13 +1172,17 @@ function extractDisplayText(
 
         let text = intro;
         if (pattern) {
-          text += `\n\n[Breathing Pattern: ${pattern.patternName || "Guided Breathing"}]`;
+          text += `\n\n[Breathing Pattern: ${
+            pattern.patternName || "Guided Breathing"
+          }]`;
           text += `\nInhale for ${pattern.inhaleSeconds} seconds`;
-          if (pattern.holdInSeconds > 0)
+          if (pattern.holdInSeconds > 0) {
             text += `\nHold for ${pattern.holdInSeconds} seconds`;
+          }
           text += `\nExhale for ${pattern.exhaleSeconds} seconds`;
-          if (pattern.holdOutSeconds > 0)
+          if (pattern.holdOutSeconds > 0) {
             text += `\nHold for ${pattern.holdOutSeconds} seconds`;
+          }
           text += `\n\nRepeat for ${cycles} cycles.`;
         }
         if (outro) text += `\n\n${outro}`;
@@ -1131,7 +1240,11 @@ function extractDisplayText(
     }
   } catch {
     // Not valid JSON, return as-is (it's already plain text)
-    if (DEBUG) console.log("[generate-content] Content is not JSON, using as plain text");
+    if (Deno.env.get("DEBUG") === "true") {
+      console.log(
+        "[generate-content] Content is not JSON, using as plain text",
+      );
+    }
     return jsonContent;
   }
 }

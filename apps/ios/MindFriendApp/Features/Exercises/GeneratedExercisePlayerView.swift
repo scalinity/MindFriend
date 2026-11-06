@@ -589,6 +589,7 @@ class ExercisePlayerViewModel: ObservableObject {
     private var timer: Timer?
     private var breathingTimer: Timer?
     private var audioPlayer: AVPlayer?
+    private var audioSetupTask: Task<Void, Never>?
     private var timeObserver: Any?
     private var playerEndObserver: NSObjectProtocol?
 
@@ -689,6 +690,11 @@ class ExercisePlayerViewModel: ObservableObject {
     }
 
     func playAudio(for content: GeneratedContent) {
+        audioSetupTask?.cancel()
+        audioSetupTask = Task { [weak self] in await self?.startAudio(for: content) }
+    }
+
+    private func startAudio(for content: GeneratedContent) async {
         // Configure audio session
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
@@ -698,8 +704,8 @@ class ExercisePlayerViewModel: ObservableObject {
         }
 
         if let urlString = content.audioUrl, let url = URL(string: urlString) {
-            // Play server-generated audio (Google Cloud TTS Chirp 3 HD)
-            let playerItem = AVPlayerItem(url: url)
+            guard let accessURL = try? await SupabaseStorageMedia.resolve(url), !Task.isCancelled else { return }
+            let playerItem = AVPlayerItem(url: accessURL)
             audioPlayer = AVPlayer(playerItem: playerItem)
 
             // Observe time progress
@@ -739,6 +745,8 @@ class ExercisePlayerViewModel: ObservableObject {
     }
 
     func stopAudio() {
+        audioSetupTask?.cancel()
+        audioSetupTask = nil
         // Stop AVPlayer
         audioPlayer?.pause()
         if let observer = timeObserver {

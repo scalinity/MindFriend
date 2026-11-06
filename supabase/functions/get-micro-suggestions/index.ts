@@ -1,8 +1,7 @@
 // MindFriend Get Micro-Suggestions Edge Function
 // Returns personalized micro-moment suggestions based on context and preferences
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 // Configuration Constants
@@ -43,7 +42,7 @@ class CircuitBreaker {
   private lastFailureTime: number | null = null;
   private successCount = 0;
 
-  async execute<T>(operation: () => Promise<T>): Promise<T> {
+  async execute<T>(operation: () => PromiseLike<T>): Promise<T> {
     if (this.state === CircuitState.OPEN) {
       if (
         this.lastFailureTime &&
@@ -123,7 +122,7 @@ interface MicroMomentTemplate {
 }
 
 // Singleton Supabase client to prevent connection pool exhaustion
-let supabaseClient: ReturnType<typeof createClient> | null = null;
+let supabaseClient: SupabaseClient | null = null;
 
 function getSupabaseClient() {
   if (!supabaseClient) {
@@ -137,7 +136,7 @@ function getSupabaseClient() {
 
 // Retry helper with exponential backoff
 async function withRetry<T>(
-  operation: () => Promise<T>,
+  operation: () => PromiseLike<T>,
   maxRetries = RETRY_MAX_ATTEMPTS,
   baseDelay = RETRY_BASE_DELAY_MS
 ): Promise<T> {
@@ -156,7 +155,7 @@ async function withRetry<T>(
   throw lastError;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 

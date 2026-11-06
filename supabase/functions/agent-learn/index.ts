@@ -1,8 +1,7 @@
 // Agent Learn - Updates learnings based on user responses
 // Called when user responds to an agent action
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 
 // CORS configuration - restrict to known origins for mobile app
 const ALLOWED_ORIGINS = [
@@ -43,7 +42,7 @@ const MAX_REQUEST_SIZE_BYTES = 10240; // 10KB max request body
  * Uses atomic increment to handle concurrent requests safely
  */
 async function checkRateLimitDistributed(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   userId: string,
 ): Promise<{ allowed: boolean; remaining: number }> {
   try {
@@ -115,7 +114,7 @@ interface AgentAction {
   delivered_at: string;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 
@@ -300,7 +299,7 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error("Agent learn error:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: (error instanceof Error ? error.message : String(error)) }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -348,7 +347,7 @@ function getStatusFromResponse(responseType: string): string {
 }
 
 async function updateLearnings(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   userId: string,
   action: AgentAction,
   userResponse: { response_type: string; timestamp: string },
@@ -388,7 +387,7 @@ async function updateLearnings(
 }
 
 async function updateLearning(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   userId: string,
   learningType: string,
   newData: Record<string, unknown>,

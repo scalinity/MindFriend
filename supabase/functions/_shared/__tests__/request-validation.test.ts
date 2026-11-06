@@ -1,5 +1,5 @@
 // Tests for request validation utilities
-import { assertEquals } from "https://deno.land/std@0.168.0/testing/asserts.ts";
+import { assertEquals } from "jsr:@std/assert@1.0.19";
 import { extractAuthToken, safeParseJson } from "../request-validation.ts";
 
 Deno.test("extractAuthToken - valid Bearer token", () => {

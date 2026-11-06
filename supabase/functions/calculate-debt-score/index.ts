@@ -2,8 +2,10 @@
 // Runs daily at 2:00 AM UTC via cron (after detect-transactions)
 // Calculates rolling debts, trends, threshold status, and updates user profiles
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import {
+  createClient,
+  type SupabaseClient,
+} from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import {
   currentSourceTransactions,
   ledgerDate,
@@ -39,7 +41,7 @@ type CurrentDebtScore = DebtScore & {
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   try {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -165,7 +167,7 @@ serve(async (req) => {
   }
 });
 
-async function calculateDebtScoresForAllUsers(supabase: any) {
+async function calculateDebtScoresForAllUsers(supabase: SupabaseClient) {
   const yesterday = getYesterdayISO();
 
   // Get all users who have transactions for yesterday

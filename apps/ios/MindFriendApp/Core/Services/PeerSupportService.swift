@@ -36,7 +36,7 @@ final class PeerSupportService: ObservableObject {
     deinit {
         subscriptionTask?.cancel()
         Task { [sessionChannel] in
-            await sessionChannel?.unsubscribe()
+            if let channel = sessionChannel { await supabase.removeChannel(channel) }
         }
     }
 
@@ -329,7 +329,7 @@ final class PeerSupportService: ObservableObject {
     func subscribeToSessionMessages(sessionId: UUID) async {
         // Cancel any existing subscription
         subscriptionTask?.cancel()
-        await sessionChannel?.unsubscribe()
+        if let channel = sessionChannel { await supabase.removeChannel(channel) }
 
         let channel = supabase.realtimeV2.channel("session:\(sessionId)")
 
@@ -366,7 +366,7 @@ final class PeerSupportService: ObservableObject {
     func unsubscribeFromSessionMessages() async {
         subscriptionTask?.cancel()
         subscriptionTask = nil
-        await sessionChannel?.unsubscribe()
+        if let channel = sessionChannel { await supabase.removeChannel(channel) }
         sessionChannel = nil
         currentSessionMessages = []
     }

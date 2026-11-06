@@ -246,6 +246,57 @@ extension SupabaseDataServiceTests {
     }
 }
 
+
+extension SupabaseDataServiceTests {
+    @MainActor
+    func testRecoveryIntentSurvivesRelaunchAndRequiresSameAccountAndVerifier() throws {
+        let requestedAt = Date(timeIntervalSince1970: 1_710_000_000)
+        let verifier = Data("synthetic-recovery-verifier".utf8)
+        let saved = PasswordRecoveryIntent(email: "  Recovery@Example.test ", verifier: verifier, requestedAt: requestedAt)
+        let restored = try JSONDecoder().decode(PasswordRecoveryIntent.self, from: JSONEncoder().encode(saved))
+        let now = requestedAt.addingTimeInterval(60)
+
+        XCTAssertTrue(restored.matches(email: "recovery@example.test", verifier: verifier, now: now))
+        XCTAssertFalse(restored.matches(email: "another@example.test", verifier: verifier, now: now))
+        XCTAssertFalse(restored.matches(email: "recovery@example.test", verifier: Data("oauth-verifier".utf8), now: now))
+        XCTAssertFalse(restored.matches(email: "recovery@example.test", verifier: nil, now: now))
+        XCTAssertFalse(restored.matches(email: nil, verifier: verifier, now: now))
+    }
+
+    @MainActor
+    func testRecoveryIntentExpiresAndVerifiedIntentCannotBeReusedAsPending() throws {
+        let requestedAt = Date(timeIntervalSince1970: 1_710_000_000)
+        let verifier = Data("synthetic-recovery-verifier".utf8)
+        var intent = PasswordRecoveryIntent(email: "recovery@example.test", verifier: verifier, requestedAt: requestedAt)
+
+        XCTAssertFalse(intent.matches(email: intent.email, verifier: verifier, now: requestedAt.addingTimeInterval(3600)))
+        XCTAssertFalse(intent.matches(email: intent.email, verifier: verifier, now: requestedAt.addingTimeInterval(-1)))
+        let verifiedUserId = UUID()
+        intent.verifiedUserId = verifiedUserId
+        let restored = try JSONDecoder().decode(PasswordRecoveryIntent.self, from: JSONEncoder().encode(intent))
+        XCTAssertEqual(restored.verifiedUserId, verifiedUserId)
+        XCTAssertFalse(restored.matches(email: intent.email, verifier: verifier, now: requestedAt.addingTimeInterval(60)))
+    }
+
+    func testChatWireResponsePreservesServerMessageAndUnixTimestamp() throws {
+        let fixture = Data("""
+        {"userMessage":{"id":"server-user-message","role":"user","content":"Synthetic fixture","createdAt":1710000000,"blocked":false},"message":{"id":"server-assistant-message","role":"assistant","content":"Fixture response","createdAt":1710000001,"blocked":false},"quotaUsed":1,"quotaLimit":5}
+        """.utf8)
+        let response = try ChatFunctionResponse.decode(fixture)
+        XCTAssertEqual(response.userMessage?.id, "server-user-message")
+        XCTAssertEqual(response.message.createdAt.timeIntervalSince1970, 1710000001)
+    }
+
+    func testChatWireResponseAcceptsInstalledBackendWithoutUserMessage() throws {
+        let fixture = Data("""
+        {"message":{"id":"legacy-assistant","role":"assistant","content":"Fixture","createdAt":1710000001,"blocked":false}}
+        """.utf8)
+        let response = try ChatFunctionResponse.decode(fixture)
+        XCTAssertNil(response.userMessage)
+        XCTAssertEqual(response.message.id, "legacy-assistant")
+    }
+}
+
 // #12: the production URLSession delegate receives synthetic bytes; no provider or backend calls.
 import SwiftUI
 
@@ -617,25 +668,6 @@ private final class AvatarFixtureHTTP: @unchecked Sendable {
     }
 }
 
-extension SupabaseDataServiceTests {
-    func testChatWireResponsePreservesServerMessageAndUnixTimestamp() throws {
-        let fixture = Data("""
-        {"userMessage":{"id":"server-user-message","role":"user","content":"Synthetic fixture","createdAt":1710000000,"blocked":false},"message":{"id":"server-assistant-message","role":"assistant","content":"Fixture response","createdAt":1710000001,"blocked":false},"quotaUsed":1,"quotaLimit":5}
-        """.utf8)
-        let response = try ChatFunctionResponse.decode(fixture)
-        XCTAssertEqual(response.userMessage?.id, "server-user-message")
-        XCTAssertEqual(response.message.createdAt.timeIntervalSince1970, 1710000001)
-    }
-
-    func testChatWireResponseAcceptsInstalledBackendWithoutUserMessage() throws {
-        let fixture = Data("""
-        {"message":{"id":"legacy-assistant","role":"assistant","content":"Fixture","createdAt":1710000001,"blocked":false}}
-        """.utf8)
-        let response = try ChatFunctionResponse.decode(fixture)
-        XCTAssertNil(response.userMessage)
-        XCTAssertEqual(response.message.id, "legacy-assistant")
-    }
-}
 
 final class ChatRequestTransportTests: XCTestCase {
     private func request() -> URLRequest { URLRequest(url: URL(string: "https://chat-fixture.invalid/chat")!) }

@@ -4,6 +4,7 @@ import Supabase
 struct VoiceChatView: View {
     @StateObject private var voiceService: GrokVoiceService
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var container: DependencyContainer
 
@@ -129,8 +130,11 @@ struct VoiceChatView: View {
             await startVoiceSession()
         }
         .onDisappear {
-            Task {
-                await endVoiceSession()
+            Task { await endVoiceSession() }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background {
+                Task { await endVoiceSession(); dismiss() }
             }
         }
     }
@@ -263,6 +267,14 @@ struct VoiceChatView: View {
             Text(stateMachine.state.statusText)
                 .font(.title3.weight(.medium))
                 .foregroundStyle(.white.opacity(0.9))
+
+            Text("Up to two minutes per session")
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.6))
+            Text(voiceService.isPremium ? "Unlimited monthly voice minutes" :
+                String(format: "%.1f of 3 free monthly voice minutes remaining", voiceService.minutesRemaining))
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.6))
         }
     }
 
@@ -351,8 +363,11 @@ struct VoiceChatView: View {
         _ = stateMachine.send(.micPermissionGranted)
 
         do {
-            try await voiceService.connect()
+            try await voiceService.connect(startMuted: stateMachine.isMuted)
             _ = stateMachine.send(.connected)
+        } catch is CancellationError {
+            // Session end and view dismissal already update the connection state.
+            return
         } catch let error as VoiceError {
             handleVoiceError(error)
         } catch {

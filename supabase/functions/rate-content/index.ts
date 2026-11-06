@@ -1,11 +1,10 @@
 // MindFriend Rate Content Edge Function
 // Handles user ratings and feedback for AI-generated content
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import {
   createClient,
   SupabaseClient,
-} from "https://esm.sh/@supabase/supabase-js@2.49.1";
+} from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { checkRateLimit } from "../_shared/ratelimit.ts";
 
@@ -26,7 +25,7 @@ interface RateContentResponse {
   message: string;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const baseCorsHeaders = getCorsHeaders(origin);
 

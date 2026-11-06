@@ -3,8 +3,7 @@
 // Triggered Monday at 05:00 UTC
 // See: specs/10-streak-recovery.md
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 // Constants
@@ -42,7 +41,7 @@ function constantTimeCompare(a: string, b: string): boolean {
  * Creates a promise that rejects after the specified timeout
  */
 function withTimeout<T>(
-  promise: Promise<T>,
+  promise: PromiseLike<T>,
   timeoutMs: number,
   operation: string,
 ): Promise<T> {
@@ -53,7 +52,7 @@ function withTimeout<T>(
       );
     }, timeoutMs);
 
-    promise
+    Promise.resolve(promise)
       .then((result) => {
         clearTimeout(timeoutId);
         resolve(result);
@@ -76,7 +75,7 @@ function chunkArray<T>(array: T[], chunkSize: number): T[][] {
   return chunks;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const headers = {
     ...getCorsHeaders(origin),
@@ -134,7 +133,7 @@ serve(async (req) => {
     // Get users who need notification (shields were used) - with timeout
     const fetchUsersPromise = supabaseAdmin.rpc(
       "get_users_for_shield_reset_notification",
-    ) as Promise<{
+    ) as PromiseLike<{
       data: UserForNotification[] | null;
       error: Error | null;
     }>;
@@ -156,7 +155,7 @@ serve(async (req) => {
     );
 
     // Reset shields for all users - with timeout
-    const resetPromise = supabaseAdmin.rpc("reset_weekly_shields") as Promise<{
+    const resetPromise = supabaseAdmin.rpc("reset_weekly_shields") as PromiseLike<{
       data: { users_reset: number; shield_events_created: number }[] | null;
       error: Error | null;
     }>;

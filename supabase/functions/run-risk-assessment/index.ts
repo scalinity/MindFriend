@@ -2,8 +2,7 @@
 // Runs daily via cron or on-demand for individual users
 // Calculates risk scores and triggers proactive interventions
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { isAuthorizedCronRequest } from "../_shared/auth.ts";
 import {
@@ -16,6 +15,7 @@ import {
   getInterventionMessage,
   getSuggestedActions,
   type DailySignals,
+  type RiskFactors,
   type BiometricSummary,
 } from "../_shared/risk-scoring.ts";
 
@@ -42,7 +42,7 @@ interface PredictionSettings {
   family_alert_threshold: string;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 
@@ -196,7 +196,7 @@ serve(async (req) => {
 });
 
 async function assessUser(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   userId: string,
 ): Promise<AssessmentResult> {
   // 1. Check if user has predictions enabled
@@ -326,12 +326,12 @@ async function assessUser(
 }
 
 async function triggerIntervention(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   userId: string,
   assessment: { id: string; risk_level: string; risk_score: number },
   settings: PredictionSettings,
   topFactors: string[],
-  factors: Record<string, unknown>,
+  factors: RiskFactors,
 ): Promise<boolean> {
   const riskLevel = assessment.risk_level as
     | "low"
@@ -476,7 +476,7 @@ async function triggerIntervention(
 }
 
 async function sendFamilyAlert(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   userId: string,
   assessment: { id: string; risk_level: string; risk_score: number },
   interventionId: string,
@@ -514,7 +514,7 @@ async function sendFamilyAlert(
 }
 
 async function sendCrisisNotification(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   userId: string,
   message: string,
 ): Promise<void> {

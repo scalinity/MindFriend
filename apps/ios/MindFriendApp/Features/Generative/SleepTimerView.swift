@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// View for selecting sleep timer duration with fade-out
+/// View for selecting sleep timer duration for the current playback mode
 struct SleepTimerView: View {
     @Binding var selectedMinutes: Int?
+    let usesBuiltInVoice: Bool
     @Environment(\.dismiss) private var dismiss
     
     /// Available timer presets in minutes
@@ -11,7 +12,9 @@ struct SleepTimerView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 24) {
-                Text("Audio will fade out gently over the last 30 seconds")
+                Text(usesBuiltInVoice
+                     ? "Built-in voice will pause when the timer ends"
+                     : "Audio will fade out gently over the last 30 seconds")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -90,6 +93,6 @@ struct SleepTimerView: View {
 
 #if DEBUG
 #Preview {
-    SleepTimerView(selectedMinutes: .constant(30))
+    SleepTimerView(selectedMinutes: .constant(30), usesBuiltInVoice: false)
 }
 #endif

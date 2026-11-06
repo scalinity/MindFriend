@@ -8,6 +8,7 @@ struct VoiceJournalRecorderView: View {
 
     @StateObject private var recorder = VoiceJournalRecorder()
     @State private var savedWork: CreativeWork?
+    @State private var savedAudio: Data?
     @State private var showAnalysis = false
     @State private var isSaving = false
     @State private var error: String?
@@ -153,7 +154,7 @@ struct VoiceJournalRecorderView: View {
             }
             .sheet(isPresented: $showAnalysis) {
                 if let work = savedWork {
-                    VoiceJournalAnalysisView(work: work)
+                    VoiceJournalAnalysisView(work: work, analyzeOnOpen: true, originalAudio: savedAudio)
                 }
             }
             .onDisappear {
@@ -180,24 +181,19 @@ struct VoiceJournalRecorderView: View {
             return
         }
 
+        let durationSeconds = Int(ceil(recorder.duration))
         isSaving = true
 
         do {
             let work = try await container.creativeExpressionService.createVoiceJournal(
                 audioData: audioData,
-                durationSeconds: Int(recorder.duration)
+                durationSeconds: durationSeconds
             )
 
             savedWork = work
+            savedAudio = audioData
             showAnalysis = true
 
-            // Trigger analysis in background
-            Task {
-                _ = try? await container.creativeExpressionService.analyzeVoiceJournal(
-                    workId: work.id,
-                    durationSeconds: Int(recorder.duration)
-                )
-            }
         } catch CreativeError.quotaExceeded {
             error = "You've reached your daily voice journal limit. Upgrade to premium for more."
             appState.showPaywall = true
@@ -265,8 +261,9 @@ class VoiceJournalRecorder: NSObject, ObservableObject {
 
         do {
             audioRecorder = try AVAudioRecorder(url: url, settings: settings)
+            audioRecorder?.delegate = self
             audioRecorder?.isMeteringEnabled = true
-            audioRecorder?.record()
+            guard audioRecorder?.record(forDuration: 600) == true else { return }
 
             isRecording = true
             duration = 0
@@ -275,7 +272,9 @@ class VoiceJournalRecorder: NSObject, ObservableObject {
             // Start duration timer
             timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
                 Task { @MainActor in
-                    self?.duration += 1
+                    guard let self, self.isRecording else { return }
+                    self.duration = self.audioRecorder?.currentTime ?? self.duration
+                    if self.duration >= 600 { self.stopRecording() }
                 }
             }
 
@@ -291,7 +290,12 @@ class VoiceJournalRecorder: NSObject, ObservableObject {
     }
 
     func stopRecording() {
+        // currentTime resets after stop; retain the measured fraction before closing the file.
+        if let audioRecorder, audioRecorder.isRecording { duration = audioRecorder.currentTime }
         audioRecorder?.stop()
+        if let recordingURL, let file = try? AVAudioFile(forReading: recordingURL) {
+            duration = Double(file.length) / file.processingFormat.sampleRate
+        }
         timer?.invalidate()
         levelTimer?.invalidate()
         timer = nil
@@ -361,7 +365,14 @@ class VoiceJournalRecorder: NSObject, ObservableObject {
     }
 }
 
-extension VoiceJournalRecorder: AVAudioPlayerDelegate {
+extension VoiceJournalRecorder: AVAudioPlayerDelegate, AVAudioRecorderDelegate {
+    nonisolated func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) {
+        Task { @MainActor [weak self] in
+            guard let self, self.isRecording else { return }
+            self.stopRecording()
+        }
+    }
+
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         Task { @MainActor in
             isPlaying = false
@@ -394,8 +405,12 @@ struct VoiceJournalAnalysisView: View {
     @EnvironmentObject var container: DependencyContainer
 
     let work: CreativeWork
+    var analyzeOnOpen = false
+    var originalAudio: Data?
     @State private var analysis: VoiceJournalAnalysis?
     @State private var isLoading = true
+    @State private var analysisError: String?
+    @State private var analysisAttempt = 0
 
     var body: some View {
         NavigationStack {
@@ -413,11 +428,13 @@ struct VoiceJournalAnalysisView: View {
                     } else if let analysis = analysis {
                         analysisContent(analysis)
                     } else {
-                        ContentUnavailableView(
-                            "Analysis Pending",
-                            systemImage: "waveform",
-                            description: Text("Your recording is being processed. Check back soon.")
-                        )
+                        ContentUnavailableView {
+                            Label("Voice Journal Analysis", systemImage: "waveform")
+                        } description: {
+                            Text(analysisError ?? "Analyze your saved recording for themes and reflection prompts.")
+                        } actions: {
+                            Button("Analyze Recording") { analysisAttempt += 1 }
+                        }
                     }
                 }
                 .padding()
@@ -430,8 +447,9 @@ struct VoiceJournalAnalysisView: View {
                     Button("Done") { dismiss() }
                 }
             }
-            .task {
-                await loadAnalysis()
+            .task(id: analysisAttempt) {
+                if analyzeOnOpen || analysisAttempt > 0 { await analyzeRecording() }
+                else { await loadAnalysis() }
             }
         }
     }
@@ -578,8 +596,25 @@ struct VoiceJournalAnalysisView: View {
 
         do {
             analysis = try await container.creativeExpressionService.fetchVoiceAnalysis(workId: work.id)
+        } catch { /* A saved recording can explicitly start or retry analysis below. */ }
+    }
+
+    private func analyzeRecording() async {
+        isLoading = true
+        analysisError = nil
+        defer { isLoading = false }
+        do {
+            analysis = try await container.creativeExpressionService.analyzeVoiceJournal(
+                workId: work.id, durationSeconds: work.durationSeconds ?? 1, originalAudio: originalAudio
+            )
         } catch {
-            Log.creative.error("Failed to load analysis", error: error)
+            guard !Task.isCancelled else { return }
+            if case CreativeError.quotaExceeded = error {
+                analysisError = "You've reached your daily voice journal analysis limit. Your recording is saved."
+            } else {
+                analysisError = (error as? CreativeError)?.localizedDescription
+                    ?? "Analysis could not be completed. Your recording is saved; try again when available."
+            }
         }
     }
 }
