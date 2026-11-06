@@ -32,6 +32,11 @@ BEGIN
     WHERE i.user_id = v_user_id AND i.provider = 'apple' AND i.identity_data->>'sub' = p_subject
       AND lower(i.identity_data->>'email') LIKE '%@privaterelay.appleid.com'
     LIMIT 1;
+  -- A later signed event may have a relay newer than the provider identity.
+  -- Events such as account-deleted omit email; keep that trusted current address.
+  IF lower(v_metadata->>'apple_relay_email') LIKE '%@privaterelay.appleid.com' THEN
+    v_relay_email := lower(v_metadata->>'apple_relay_email');
+  END IF;
   IF lower(p_email) LIKE '%@privaterelay.appleid.com' THEN v_relay_email := lower(p_email); END IF;
   v_event_at := to_timestamp(p_event_time);
 

@@ -31,10 +31,10 @@ DO $$ DECLARE t bigint; result uuid; metadata jsonb; BEGIN
  IF EXISTS(SELECT 1 FROM auth.users WHERE id='18100000-0000-4000-8000-000000000002' AND raw_app_meta_data ? 'apple_email_disabled') THEN RAISE EXCEPTION 'Client-editable sub selected another account'; END IF;
  IF (SELECT count(*) FROM auth.sessions WHERE user_id=result) <> 2 THEN RAISE EXCEPTION 'Email change revoked sessions'; END IF;
  PERFORM public.process_apple_account_event('synthetic.apple.subject','email-enabled',t-1);
- IF (SELECT raw_app_meta_data->>'apple_email_disabled' FROM auth.users WHERE id=result) <> 'true' THEN RAISE EXCEPTION 'Old email event overrode new state'; END IF;
+ IF (SELECT raw_app_meta_data->>'apple_email_disabled' FROM auth.users WHERE id=result) IS DISTINCT FROM 'true' THEN RAISE EXCEPTION 'Old email event overrode new state'; END IF;
  PERFORM public.process_apple_account_event('synthetic.apple.subject','email-enabled',t+1,'updated@privaterelay.appleid.com');
- IF (SELECT raw_app_meta_data->>'apple_email_disabled' FROM auth.users WHERE id=result) <> 'false' OR
-    (SELECT raw_app_meta_data->>'apple_relay_email' FROM auth.users WHERE id=result) <> 'updated@privaterelay.appleid.com' THEN RAISE EXCEPTION 'New signed email forwarding change ignored'; END IF;
+ IF (SELECT raw_app_meta_data->>'apple_email_disabled' FROM auth.users WHERE id=result) IS DISTINCT FROM 'false' OR
+    (SELECT raw_app_meta_data->>'apple_relay_email' FROM auth.users WHERE id=result) IS DISTINCT FROM 'updated@privaterelay.appleid.com' THEN RAISE EXCEPTION 'New signed email forwarding change ignored'; END IF;
  PERFORM public.process_apple_account_event('synthetic.apple.subject','consent-revoked',t+2);
  IF EXISTS(SELECT 1 FROM auth.sessions WHERE id='18100000-0000-4000-8000-000000000021') OR
     EXISTS(SELECT 1 FROM auth.refresh_tokens WHERE token IN ('synthetic-old','synthetic-legacy')) THEN RAISE EXCEPTION 'Revocation retained old sessions/tokens'; END IF;
@@ -44,8 +44,12 @@ DO $$ DECLARE t bigint; result uuid; metadata jsonb; BEGIN
  PERFORM public.process_apple_account_event('synthetic.apple.subject','account-deleted',t+3);
  IF NOT EXISTS(SELECT 1 FROM auth.users WHERE id=result) OR NOT EXISTS(SELECT 1 FROM public.profiles WHERE id=result) OR
     NOT EXISTS(SELECT 1 FROM auth.identities WHERE user_id=result AND provider='google') THEN RAISE EXCEPTION 'Apple deletion removed app account/data/other provider'; END IF;
- IF (SELECT raw_app_meta_data->>'apple_account_deleted' FROM auth.users WHERE id=result) <> 'true' OR
-    (SELECT raw_app_meta_data->>'apple_email_disabled' FROM auth.users WHERE id=result) <> 'true' THEN RAISE EXCEPTION 'Apple deletion state missing'; END IF;
+ IF (SELECT raw_app_meta_data->>'apple_account_deleted' FROM auth.users WHERE id=result) IS DISTINCT FROM 'true' OR
+    (SELECT raw_app_meta_data->>'apple_email_disabled' FROM auth.users WHERE id=result) IS DISTINCT FROM 'true' THEN RAISE EXCEPTION 'Apple deletion state missing'; END IF;
+ IF (SELECT raw_app_meta_data->>'apple_relay_email' FROM auth.users WHERE id=result) IS DISTINCT FROM 'updated@privaterelay.appleid.com' THEN RAISE EXCEPTION 'Stale identity replaced the current disabled relay'; END IF;
+ UPDATE auth.identities SET identity_data=identity_data-'email' WHERE user_id=result AND provider='apple';
+ PERFORM public.process_apple_account_event('synthetic.apple.subject','account-deleted',t+4);
+ IF (SELECT raw_app_meta_data->>'apple_relay_email' FROM auth.users WHERE id=result) IS DISTINCT FROM 'updated@privaterelay.appleid.com' THEN RAISE EXCEPTION 'Missing identity email erased current relay suppression'; END IF;
  IF public.process_apple_account_event('unknown.subject','account-deleted',t) IS NOT NULL THEN RAISE EXCEPTION 'Unknown Apple identity resolved'; END IF;
  IF has_function_privilege('anon','public.process_apple_account_event(text,text,bigint,text)','EXECUTE') OR
     has_function_privilege('authenticated','public.process_apple_account_event(text,text,bigint,text)','EXECUTE') THEN RAISE EXCEPTION 'Client can forge Apple events'; END IF;
