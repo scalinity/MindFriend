@@ -526,24 +526,17 @@ final class FamilyService: ObservableObject {
         // Refresh sessions
         togetherSessions = try await fetchTogetherSessions()
 
-        // Return a basic TogetherSession (would need full fetch in real scenario)
-        return TogetherSession(
-            id: sessionData.id,
-            familyId: sessionData.familyId,
-            exerciseId: exerciseId,
-            togetherTemplateId: templateId,
-            title: sessionData.title,
-            scheduledFor: nil,
-            startedAt: Date(),
-            endedAt: nil,
-            durationSeconds: nil,
-            minimumParticipants: 1,
-            status: .inProgress,
-            syncMode: syncMode == "realtime" ? .realtime : .asyncWindow,
-            asyncWindowHours: syncMode == "async_window" ? 24 : nil,
-            createdBy: supabase.auth.currentUser?.id.uuidString ?? "",
-            createdAt: Date()
-        )
+        guard let session = togetherSessions.first(where: { $0.id == sessionData.id }) else {
+            return try await fetchTogetherSession(sessionId: sessionData.id)
+        }
+        return session
+    }
+
+    func fetchTogetherSession(sessionId: String) async throws -> TogetherSession {
+        guard let familyId = familyGroup?.id else { throw FamilyServiceError.noFamilyGroup }
+        return try await supabase.from("together_sessions").select()
+            .eq("id", value: sessionId).eq("family_id", value: familyId)
+            .single().execute().value
     }
 
     /// Fetch participants in a together session
@@ -562,43 +555,57 @@ final class FamilyService: ObservableObject {
 
     /// Join a together session
     func joinTogetherSession(sessionId: String) async throws {
-        guard let _ = supabase.auth.currentUser?.id else {
+        guard let userId = currentUserId(), let familyId = familyGroup?.id else {
             throw FamilyServiceError.notAuthenticated
         }
-
-        // Find the participant record for this user
-        let participants: [TogetherParticipant] = try await supabase
-            .from("together_participants")
-            .select()
-            .eq("session_id", value: sessionId)
-            .execute()
-            .value
-
-        if let participantId = participants.first?.id {
-            try await supabase
-                .from("together_participants")
-                .update([
-                    "status": FamilyAnyEncodable("joined"),
-                    "joined_at": FamilyAnyEncodable(Date().ISO8601Format())
-                ])
-                .eq("id", value: participantId)
-                .execute()
+        let session = try await fetchTogetherSession(sessionId: sessionId)
+        guard session.status == .pending || session.status == .inProgress else { throw FamilyServiceError.sessionUnavailable }
+        struct MemberIdentity: Decodable { let id: String }
+        let members: [MemberIdentity] = try await supabase.from("family_members").select("id")
+            .eq("family_id", value: familyId).eq("user_id", value: userId).eq("status", value: "active")
+            .limit(1).execute().value
+        guard let memberId = members.first?.id else { throw FamilyServiceError.memberNotFound }
+        let participants: [TogetherParticipant] = try await supabase.from("together_participants").select()
+            .eq("session_id", value: sessionId).eq("member_id", value: memberId).execute().value
+        guard let participant = participants.first else { throw FamilyServiceError.memberNotFound }
+        guard participant.status == .invited || participant.status == .joined else { throw FamilyServiceError.sessionUnavailable }
+        guard currentUserId() == userId else { throw FamilyServiceError.notAuthenticated }
+        if participant.status == .invited {
+            let updated: [TogetherParticipant] = try await supabase.from("together_participants")
+                .update(["status": FamilyAnyEncodable("joined"), "joined_at": FamilyAnyEncodable(Date().ISO8601Format())])
+                .eq("id", value: participant.id).eq("member_id", value: memberId).eq("status", value: "invited")
+                .select().execute().value
+            guard updated.count == 1 else { throw FamilyServiceError.sessionUnavailable }
         }
-
         currentSessionParticipants = try await fetchSessionParticipants(sessionId: sessionId)
     }
 
-    /// Complete a together session
-    func completeTogetherSession(sessionId: String) async throws {
-        try await supabase
-            .from("together_sessions")
-            .update([
-                "status": FamilyAnyEncodable("completed"),
-                "ended_at": FamilyAnyEncodable(Date().ISO8601Format())
-            ])
-            .eq("id", value: sessionId)
-            .execute()
+    func beginTogetherSession(sessionId: String) async throws {
+        guard let userId = currentUserId() else { throw FamilyServiceError.notAuthenticated }
+        let session = try await fetchTogetherSession(sessionId: sessionId)
+        guard UUID(uuidString: session.createdBy) == userId, session.status == .pending else {
+            throw FamilyServiceError.sessionUnavailable
+        }
+        let participants = try await fetchSessionParticipants(sessionId: sessionId)
+        guard participants.filter({ $0.status == .joined }).count >= session.minimumParticipants else {
+            throw FamilyServiceError.notEnoughParticipants
+        }
+        let updated: [TogetherSession] = try await supabase.from("together_sessions")
+            .update(["status": FamilyAnyEncodable("in_progress"), "started_at": FamilyAnyEncodable(Date().ISO8601Format())])
+            .eq("id", value: sessionId).eq("created_by", value: userId).eq("status", value: "pending")
+            .select().execute().value
+        guard updated.count == 1 else { throw FamilyServiceError.sessionUnavailable }
+        togetherSessions = try await fetchTogetherSessions()
+    }
 
+    /// Finish the saved activity only after the creator's update is confirmed.
+    func completeTogetherSession(sessionId: String) async throws {
+        guard let userId = currentUserId() else { throw FamilyServiceError.notAuthenticated }
+        let updated: [TogetherSession] = try await supabase.from("together_sessions")
+            .update(["status": FamilyAnyEncodable("completed"), "ended_at": FamilyAnyEncodable(Date().ISO8601Format())])
+            .eq("id", value: sessionId).eq("created_by", value: userId).eq("status", value: "in_progress")
+            .select().execute().value
+        guard updated.count == 1 else { throw FamilyServiceError.sessionUnavailable }
         togetherSessions = try await fetchTogetherSessions()
     }
 
@@ -794,6 +801,8 @@ enum FamilyServiceError: LocalizedError {
     case createChallengeFailed
     case startSessionFailed
     case requestConsentFailed
+    case sessionUnavailable
+    case notEnoughParticipants
     case memberNotFound
     case familyNotFound
 
@@ -815,6 +824,10 @@ enum FamilyServiceError: LocalizedError {
             return "Failed to start together session."
         case .requestConsentFailed:
             return "Failed to request parental consent."
+        case .sessionUnavailable:
+            return "This activity changed or is no longer available. Refresh and try again."
+        case .notEnoughParticipants:
+            return "Wait for the minimum number of participants to join before beginning."
         case .memberNotFound:
             return "Family member not found."
         case .familyNotFound:
