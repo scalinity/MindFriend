@@ -144,6 +144,7 @@ private struct TogetherSessionDetailView: View {
     @State private var members: [FamilyWellnessMember] = []
     @State private var isBusy = false
     @State private var errorMessage: String?
+    @State private var revision = 0
     @State private var audioPlayer: AVPlayer?
     @State private var isPlaying = false
 
@@ -243,13 +244,17 @@ private struct TogetherSessionDetailView: View {
     }
 
     private func refresh() async {
+        let startedRevision = revision
         do {
             async let savedSession = service.fetchTogetherSession(sessionId: session.id)
             async let savedParticipants = service.fetchSessionParticipants(sessionId: session.id)
             async let savedMembers = service.fetchFamilyMembers()
-            session = try await savedSession
-            participants = try await savedParticipants
-            members = try await savedMembers
+            let refreshed = try await (savedSession, savedParticipants, savedMembers)
+            try Task.checkCancellation()
+            guard revision == startedRevision else { return }
+            session = refreshed.0
+            participants = refreshed.1
+            members = refreshed.2
             if !isOpen { audioPlayer?.pause(); isPlaying = false }
             errorMessage = nil
         } catch is CancellationError { } catch { errorMessage = error.localizedDescription }
@@ -258,6 +263,7 @@ private struct TogetherSessionDetailView: View {
     private func perform(_ action: () async throws -> Void) async {
         guard !isBusy else { return }
         isBusy = true
+        revision += 1
         defer { isBusy = false }
         do { try await action(); await refresh() } catch { errorMessage = error.localizedDescription }
     }
