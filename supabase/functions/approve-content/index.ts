@@ -1,4 +1,5 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
+import { authenticateStaffRequest } from "../_shared/staff-auth.ts";
+import { isAuthError } from "../_shared/auth.ts";
 
 interface ContentReviewRequest {
   contentId: string;
@@ -34,36 +35,9 @@ function validateUUID(uuid: string): boolean {
 }
 
 Deno.serve(async (req) => {
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  );
-
-  // Verify authentication
-  const authHeader = req.headers.get("Authorization")!;
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
-
-  if (authError || !user) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-    });
-  }
-
-  // Check if user is a clinical reviewer (admin or designated reviewer)
-  const { data: adminCheck } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single();
-
-  if (adminCheck?.role !== "admin" && adminCheck?.role !== "reviewer") {
-    return new Response(JSON.stringify({ error: "Reviewer access required" }), {
-      status: 403,
-    });
-  }
+  const auth = await authenticateStaffRequest(req, ["admin", "reviewer"]);
+  if (isAuthError(auth)) return auth.response;
+  const { user, supabaseAdmin: supabase } = auth;
 
   const review: ContentReviewRequest = await req.json();
 
