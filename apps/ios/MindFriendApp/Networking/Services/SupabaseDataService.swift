@@ -288,6 +288,47 @@ final class SupabaseDataService: ObservableObject {
 
     // MARK: - Moods
 
+    func ingestCompanionAction(_ action: CompanionAction) async throws -> CompanionActionReceipt {
+        try await Self.performCompanionAction(action, currentOwner: { self.currentUserId }) { payload in
+            try await supabase.rpc("ingest_companion_action", params: ["p_action": AnyEncodable(payload)]).execute().value
+        }
+    }
+
+    static func performCompanionAction(
+        _ action: CompanionAction,
+        currentOwner: () -> UUID?,
+        persist: ([String: AnyEncodable]) async throws -> CompanionActionReceipt
+    ) async throws -> CompanionActionReceipt {
+        guard let owner = currentOwner(), owner == action.ownerID else { throw DataError.notAuthenticated }
+        guard action.isValid else { throw DataError.operationFailed("Invalid companion action.") }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        var payload: [String: AnyEncodable] = [
+            "event_id": AnyEncodable(action.id), "owner_id": AnyEncodable(owner),
+            "kind": AnyEncodable(action.kind.rawValue),
+            "observed_at": AnyEncodable(formatter.string(from: action.observedAt)),
+            "local_date": AnyEncodable(action.localDate), "time_zone": AnyEncodable(action.timeZoneID)
+        ]
+        if let score = action.moodScore { payload["mood_score"] = AnyEncodable(score) }
+        if let quest = action.questID { payload["quest_id"] = AnyEncodable(quest) }
+        if let cycles = action.breathingCycles { payload["breathing_cycles"] = AnyEncodable(cycles) }
+        let receipt = try await persist(payload)
+        guard currentOwner() == owner else { throw DataError.notAuthenticated }
+        guard receipt.eventID == action.id, receipt.ownerID == owner else {
+            throw DataError.operationFailed("The companion action could not be confirmed.")
+        }
+        return receipt
+    }
+
+    func getCompanionDaySummary(localDate: String, timeZone: String = TimeZone.current.identifier) async throws -> CompanionDaySummary {
+        let owner = try userId
+        let result: CompanionDaySummary = try await supabase.rpc("get_companion_day_summary", params: [
+            "p_local_date": localDate, "p_time_zone": timeZone
+        ]).execute().value
+        guard try userId == owner else { throw DataError.notAuthenticated }
+        return result
+    }
+
     func createMood(_ mood: MoodEntry) async throws {
         let dbMood = DBMood(
             id: nil,
@@ -1002,6 +1043,7 @@ final class SupabaseDataService: ObservableObject {
             "p_note": AnyEncodable(note)
         ]).execute().value
         if newlyCompleted {
+            DebtSourceChanges.saved()
             Analytics.shared.track(.exerciseCompleted, properties: [
                 "session_id": sessionId, "rating": rating ?? 0
             ])

@@ -980,3 +980,70 @@ private final class ChatHistoryHTTP: @unchecked Sendable {
         return try! JSONSerialization.data(withJSONObject: Array(rows.prefix(limit)))
     }
 }
+
+@MainActor
+final class CompanionActionServiceTests: XCTestCase {
+    func testCompanionPayloadRetainsOriginalIdentityDayAndFractionalTime() async throws {
+        let owner = UUID()
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/New_York")!
+        let action = CompanionAction(ownerID: owner, kind: .mood,
+                                     observedAt: Date(timeIntervalSince1970: 1_710_000_000.125), calendar: calendar, moodScore: 4)
+        let receipt = CompanionActionReceipt(eventID: action.id, ownerID: owner, status: .preservedNewer)
+        let result = try await SupabaseDataService.performCompanionAction(action, currentOwner: { owner }) { payload in
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(payload)) as? [String: Any])
+            XCTAssertEqual(json["event_id"] as? String, action.id.uuidString)
+            XCTAssertEqual(json["owner_id"] as? String, owner.uuidString)
+            XCTAssertEqual(json["kind"] as? String, "mood")
+            XCTAssertEqual(json["observed_at"] as? String, "2024-03-09T16:00:00.125Z")
+            XCTAssertEqual(json["local_date"] as? String, action.localDate)
+            XCTAssertEqual(json["time_zone"] as? String, "America/New_York")
+            XCTAssertEqual(json["mood_score"] as? Int, 4)
+            XCTAssertNil(json["quest_id"])
+            XCTAssertNil(json["breathing_cycles"])
+            return receipt
+        }
+        XCTAssertEqual(result, receipt)
+    }
+
+    func testCompanionActionRejectsWrongOwnerBeforeSending() async {
+        let action = CompanionAction(ownerID: UUID(), kind: .breathing, breathingCycles: 5)
+        var called = false
+        do {
+            _ = try await SupabaseDataService.performCompanionAction(action, currentOwner: { UUID() }) { _ in
+                called = true
+                return CompanionActionReceipt(eventID: action.id, ownerID: action.ownerID, status: .applied)
+            }
+            XCTFail("Wrong-owner action must fail")
+        } catch { XCTAssertFalse(called) }
+    }
+
+    func testInvalidCompanionActionIsRejectedBeforeSending() async {
+        let owner = UUID()
+        let action = CompanionAction(ownerID: owner, kind: .mood, moodScore: 0)
+        var called = false
+        do {
+            _ = try await SupabaseDataService.performCompanionAction(action, currentOwner: { owner }) { _ in
+                called = true
+                return CompanionActionReceipt(eventID: action.id, ownerID: owner, status: .applied)
+            }
+            XCTFail("Invalid action must fail")
+        } catch { XCTAssertFalse(called) }
+    }
+
+    func testCompanionReceiptRejectsAccountSwitchOrMismatchedIdentity() async {
+        let owner = UUID()
+        let action = CompanionAction(ownerID: owner, kind: .quest, questID: UUID())
+        for mode in 0..<3 {
+            var currentOwner: UUID? = owner
+            do {
+                _ = try await SupabaseDataService.performCompanionAction(action, currentOwner: { currentOwner }) { _ in
+                    if mode == 0 { currentOwner = UUID() }
+                    return CompanionActionReceipt(eventID: mode == 1 ? UUID() : action.id,
+                                                  ownerID: mode == 2 ? UUID() : owner, status: .applied)
+                }
+                XCTFail("Changed owner or mismatched receipt must not be acknowledged")
+            } catch { }
+        }
+    }
+}
