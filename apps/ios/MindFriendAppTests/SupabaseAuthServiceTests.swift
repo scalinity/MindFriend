@@ -538,14 +538,20 @@ final class AccountMonitoringLifecycleTests: XCTestCase {
         let (client, storage) = try client(owner: ownerA)
         let analyzer = OptimalTimingAnalyzer(supabase: client)
         let requested = expectation(description: "A timing analysis request")
-        MonitoringFixtureURLProtocol.fixture.prepare(body: #"{"hourly_confidence":{"9":{"completion_rate":0.9,"avg_rating":4.5,"dismiss_rate":0.1,"confidence":0.4,"sample_count":20}},"last_updated":"2026-11-06T12:00:00Z","sample_count":20,"minimum_data_met":true}"#, hold: true) { requested.fulfill() }
+        // FunctionsClient uses JSONDecoder's default date strategy in this fixture.
+        // Encode a valid response so the request reaches the stale-owner guard.
+        let response = TimingPreferences(
+            hourlyConfidence: [9: HourlyMetrics(completionRate: 0.9, avgRating: 4.5, dismissRate: 0.1, confidence: 0.4, sampleCount: 20)],
+            lastUpdated: Date(timeIntervalSince1970: 1_793_966_400), sampleCount: 20, minimumDataMet: true)
+        let responseJSON = String(decoding: try JSONEncoder().encode(response), as: UTF8.self)
+        MonitoringFixtureURLProtocol.fixture.prepare(body: responseJSON, hold: true) { requested.fulfill() }
         let pending = Task { try await analyzer.analyzePatterns() }
         await fulfillment(of: [requested], timeout: 2)
         try storage.setOwner(ownerB)
         analyzer.resetForAccountChange(to: ownerB)
         MonitoringFixtureURLProtocol.fixture.release()
         do { _ = try await pending.value; XCTFail("Old timing result must be cancelled") }
-        catch { XCTAssertTrue(error is CancellationError) }
+        catch { XCTAssertTrue(error is CancellationError, "Expected stale-owner cancellation, received \(String(reflecting: error))") }
         XCTAssertEqual(analyzer.getConfidenceBoost(for: 9), 0)
         XCTAssertTrue(analyzer.getBestHours().isEmpty)
         XCTAssertEqual(MonitoringFixtureURLProtocol.fixture.requestCount, 1, "Old analysis must not be persisted")
