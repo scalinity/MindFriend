@@ -104,4 +104,3 @@ END;
 $$;
 RESET ROLE;
 ROLLBACK;
-
