@@ -876,3 +876,107 @@ private final class ForumLoadingHTTP: @unchecked Sendable {
         return try! JSONSerialization.data(withJSONObject: body)
     }
 }
+
+@MainActor
+final class ChatHistoryPaginationTests: XCTestCase {
+    private func service() -> SupabaseDataService {
+        ChatHistoryURLProtocol.fixture.reset()
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [ChatHistoryURLProtocol.self]
+        let client = SupabaseClient(supabaseURL: URL(string: "https://chat-history-fixture.invalid")!, supabaseKey: "synthetic-anon",
+            options: .init(auth: .init(storage: AvatarFixtureAuthStorage(), autoRefreshToken: false),
+                           global: .init(session: URLSession(configuration: config))))
+        return SupabaseDataService(authService: DependencyContainer.preview.supabaseAuthService,
+                                   historyClient: client, historyUserId: { ChatHistoryHTTP.owner })
+    }
+
+    func testAllConversationsRemainReachableAcrossEqualTimestamps() async throws {
+        let service = service()
+        var cursor: ChatHistoryCursor?
+        var ids: [String] = []
+        repeat {
+            let page = try await service.getConversationPage(before: cursor)
+            XCTAssertLessThanOrEqual(page.items.count, 100)
+            ids += page.items.map { $0.id.lowercased() }
+            cursor = page.nextCursor
+        } while cursor != nil
+        XCTAssertEqual(ids.count, 101)
+        XCTAssertEqual(Set(ids).count, 101)
+        XCTAssertEqual(ChatHistoryURLProtocol.fixture.requests.count, 2)
+        XCTAssertEqual(ids, (0..<101).reversed().map(ChatHistoryHTTP.id))
+    }
+
+    func testMessagesTraverseBoundedPagesWithoutGapsOrDuplicates() async throws {
+        let service = service()
+        var cursor: ChatHistoryCursor?
+        var ids: [String] = []
+        repeat {
+            let page = try await service.getMessagePage(conversationId: ChatHistoryHTTP.conversation.uuidString, before: cursor)
+            XCTAssertLessThanOrEqual(page.items.count, 50)
+            ids.insert(contentsOf: page.items.map(\.id), at: 0)
+            if ids.count == 50 { XCTAssertEqual(page.nextCursor?.timestamp, "2026-10-22T12:00:00.123456+00:00") }
+            cursor = page.nextCursor
+        } while cursor != nil
+        XCTAssertEqual(ids, (0..<151).map(ChatHistoryHTTP.id))
+        XCTAssertEqual(Set(ids).count, 151)
+        let requests = ChatHistoryURLProtocol.fixture.requests
+        XCTAssertEqual(requests.count, 4)
+        let secondQuery = URLComponents(url: requests[1].url!, resolvingAgainstBaseURL: false)!.queryItems!
+        XCTAssertEqual(secondQuery.first { $0.name == "or" }?.value,
+                       "(created_at.lt.2026-10-22T12:00:00.123456+00:00,and(created_at.eq.2026-10-22T12:00:00.123456+00:00,id.lt.\(ChatHistoryHTTP.id(101).uppercased())),created_at.is.null)")
+        XCTAssertEqual(secondQuery.first { $0.name == "order" }?.value, "created_at.desc.nullslast,id.desc.nullslast")
+    }
+}
+
+private final class ChatHistoryURLProtocol: URLProtocol {
+    static let fixture = ChatHistoryHTTP()
+    override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "chat-history-fixture.invalid" }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let body = Self.fixture.respond(request)
+        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil,
+            headerFields: ["Content-Type": "application/json"])!, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: body)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
+private final class ChatHistoryHTTP: @unchecked Sendable {
+    static let owner = UUID(uuidString: "11111111-1111-4111-8111-111111111111")!
+    static let conversation = UUID(uuidString: "22222222-2222-4222-8222-222222222222")!
+    static func id(_ index: Int) -> String { String(format: "33333333-3333-4333-8333-%012d", index) }
+    private let lock = NSLock()
+    private var recorded: [URLRequest] = []
+    var requests: [URLRequest] { lock.lock(); defer { lock.unlock() }; return recorded }
+    func reset() { lock.lock(); defer { lock.unlock() }; recorded = [] }
+    func respond(_ request: URLRequest) -> Data {
+        lock.lock(); defer { lock.unlock() }; recorded.append(request)
+        let query = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!.queryItems ?? []
+        let conversations = request.url!.lastPathComponent == "conversations"
+        let timestampField = conversations ? "updated_at" : "created_at"
+        var rows: [[String: Any]] = (0..<(conversations ? 101 : 151)).reversed().map { index in
+            let date: Any = index < 3 ? NSNull() : index < 25 ? "2026-10-22T12:00:00.123455+00:00" : "2026-10-22T12:00:00.123456+00:00"
+            if conversations {
+                return ["id": Self.id(index), "user_id": Self.owner.uuidString, "title": "Synthetic \(index)",
+                        "created_at": date, "updated_at": date]
+            }
+            return ["id": Self.id(index), "conversation_id": Self.conversation.uuidString, "role": "user",
+                    "content": "Synthetic \(index)", "created_at": date]
+        }
+        if let filter = query.first(where: { $0.name == "or" })?.value {
+            let timestamp = String(filter.dropFirst("(\(timestampField).lt.".count)).components(separatedBy: ",and(")[0]
+            let id = filter.components(separatedBy: "id.lt.").last!.components(separatedBy: ")")[0].lowercased()
+            rows = rows.filter {
+                guard let date = $0[timestampField] as? String else { return true }
+                return date < timestamp || (date == timestamp && ($0["id"] as! String) < id)
+            }
+        }
+        if query.contains(where: { $0.name == timestampField && $0.value == "is.null" }) {
+            let id = String(query.first(where: { $0.name == "id" })!.value!.dropFirst(3)).lowercased()
+            rows = rows.filter { $0[timestampField] is NSNull && ($0["id"] as! String) < id }
+        }
+        let limit = Int(query.first(where: { $0.name == "limit" })?.value ?? "0") ?? 0
+        return try! JSONSerialization.data(withJSONObject: Array(rows.prefix(limit)))
+    }
+}

@@ -148,6 +148,45 @@ struct VoiceTranscriptMessage: Codable, Equatable {
     }
 }
 
+/// Keep the database timestamp text so sub-millisecond precision survives paging.
+struct ChatHistoryCursor: Equatable {
+    let timestamp: String?
+    let id: UUID
+}
+
+struct ChatHistoryPage<Item> {
+    let items: [Item]
+    let nextCursor: ChatHistoryCursor?
+}
+
+private struct ConversationPageRow: Decodable {
+    let value: DBConversation
+    let cursor: ChatHistoryCursor
+    enum CodingKeys: String, CodingKey { case updatedAt = "updated_at" }
+    init(from decoder: Decoder) throws {
+        value = try DBConversation(from: decoder)
+        let fields = try decoder.container(keyedBy: CodingKeys.self)
+        guard let id = value.id else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Missing conversation ID"))
+        }
+        cursor = ChatHistoryCursor(timestamp: try fields.decodeIfPresent(String.self, forKey: .updatedAt), id: id)
+    }
+}
+
+private struct MessagePageRow: Decodable {
+    let value: DBMessage
+    let cursor: ChatHistoryCursor
+    enum CodingKeys: String, CodingKey { case createdAt = "created_at" }
+    init(from decoder: Decoder) throws {
+        value = try DBMessage(from: decoder)
+        let fields = try decoder.container(keyedBy: CodingKeys.self)
+        guard let id = value.id else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Missing message ID"))
+        }
+        cursor = ChatHistoryCursor(timestamp: try fields.decodeIfPresent(String.self, forKey: .createdAt), id: id)
+    }
+}
+
 struct ChatResponse: Codable {
     var userMessage: Message? = nil
     let message: Message
@@ -189,14 +228,22 @@ final class SupabaseDataService: ObservableObject {
     private let authService: SupabaseAuthService
     private let avatarClient: SupabaseClient
     private let avatarUserId: () throws -> UUID
+    private let historyClient: SupabaseClient
+    private let historyUserId: () throws -> UUID
 
     /// In-memory cache for methodology info (static reference data)
     private var methodologyCache: [String: MethodologyInfo] = [:]
 
-    init(authService: SupabaseAuthService, avatarClient: SupabaseClient? = nil, avatarUserId: (() throws -> UUID)? = nil) {
+    init(authService: SupabaseAuthService, avatarClient: SupabaseClient? = nil, avatarUserId: (() throws -> UUID)? = nil,
+         historyClient: SupabaseClient? = nil, historyUserId: (() throws -> UUID)? = nil) {
         self.authService = authService
         self.avatarClient = avatarClient ?? supabase
         self.avatarUserId = avatarUserId ?? {
+            guard let id = authService.userId else { throw DataError.notAuthenticated }
+            return id
+        }
+        self.historyClient = historyClient ?? supabase
+        self.historyUserId = historyUserId ?? {
             guard let id = authService.userId else { throw DataError.notAuthenticated }
             return id
         }
@@ -946,31 +993,33 @@ final class SupabaseDataService: ObservableObject {
     // MARK: - Conversations
 
     func getConversations() async throws -> [Conversation] {
-        Log.data.debug("[Data] getConversations: Starting...")
-        let uid = try userId
-        Log.data.debug("[Data] getConversations: Got userId=\(uid)")
+        try await getConversationPage().items
+    }
 
-        // PERF-HIGH-001: Added limit to prevent unbounded data fetching
-        let conversations: [DBConversation] = try await supabase
-            .from(Tables.conversations)
-            .select()
-            .eq("user_id", value: uid)
-            .order("updated_at", ascending: false)
-            .limit(100) // Limit conversations, implement pagination for more
-            .execute()
-            .value
-
-        Log.data.debug("[Data] getConversations: Fetched \(conversations.count) conversations")
-        return conversations.map { conv in
-            Conversation(
-                id: conv.id?.uuidString ?? "",
-                title: conv.title,
-                status: .active,
-                createdAt: conv.createdAt ?? Date(),
-                updatedAt: conv.updatedAt ?? Date(),
-                lastMessage: nil
-            )
+    func getConversationPage(before cursor: ChatHistoryCursor? = nil, limit: Int = 100) async throws -> ChatHistoryPage<Conversation> {
+        let owner = try historyUserId()
+        let pageSize = min(100, max(1, limit))
+        var query = historyClient.from(Tables.conversations).select().eq("user_id", value: owner)
+        if let cursor {
+            if let timestamp = cursor.timestamp {
+                query = query.or("updated_at.lt.\(timestamp),and(updated_at.eq.\(timestamp),id.lt.\(cursor.id.uuidString)),updated_at.is.null")
+            } else {
+                query = query.is("updated_at", value: nil).lt("id", value: cursor.id)
+            }
         }
+        let rows: [ConversationPageRow] = try await query
+            .order("updated_at", ascending: false, nullsFirst: false)
+            .order("id", ascending: false)
+            .limit(pageSize + 1)
+            .execute().value
+        guard try historyUserId() == owner else { throw DataError.notAuthenticated }
+        let page = Array(rows.prefix(pageSize))
+        let conversations = page.map { row in
+            let conv = row.value
+            return Conversation(id: row.cursor.id.uuidString, title: conv.title, status: .active,
+                                createdAt: conv.createdAt ?? Date(), updatedAt: conv.updatedAt ?? Date(), lastMessage: nil)
+        }
+        return ChatHistoryPage(items: conversations, nextCursor: rows.count > pageSize ? page.last?.cursor : nil)
     }
 
     /// Resolve a linked conversation independently of the paginated history list.
@@ -1107,26 +1156,34 @@ final class SupabaseDataService: ObservableObject {
     }
 
     func getMessages(conversationId: String, limit: Int = 50) async throws -> [Message] {
-        guard let convId = UUID(uuidString: conversationId) else { return [] }
+        try await getMessagePage(conversationId: conversationId, limit: limit).items
+    }
 
-        let messages: [DBMessage] = try await supabase
-            .from(Tables.messages)
-            .select()
-            .eq("conversation_id", value: convId)
-            .order("created_at", ascending: false)
-            .limit(limit)
-            .execute()
-            .value
-
-        return messages.reversed().map { msg in
-            Message(
-                id: msg.id?.uuidString.lowercased() ?? "",
-                role: MessageRole(rawValue: msg.role) ?? .user,
-                content: msg.content,
-                createdAt: msg.createdAt ?? Date(),
-                blocked: false
-            )
+    func getMessagePage(conversationId: String, before cursor: ChatHistoryCursor? = nil, limit: Int = 50) async throws -> ChatHistoryPage<Message> {
+        guard let convId = UUID(uuidString: conversationId) else { throw DataError.invalidId }
+        let owner = try historyUserId()
+        let pageSize = min(100, max(1, limit))
+        var query = historyClient.from(Tables.messages).select().eq("conversation_id", value: convId)
+        if let cursor {
+            if let timestamp = cursor.timestamp {
+                query = query.or("created_at.lt.\(timestamp),and(created_at.eq.\(timestamp),id.lt.\(cursor.id.uuidString)),created_at.is.null")
+            } else {
+                query = query.is("created_at", value: nil).lt("id", value: cursor.id)
+            }
         }
+        let rows: [MessagePageRow] = try await query
+            .order("created_at", ascending: false, nullsFirst: false)
+            .order("id", ascending: false)
+            .limit(pageSize + 1)
+            .execute().value
+        guard try historyUserId() == owner else { throw DataError.notAuthenticated }
+        let page = Array(rows.prefix(pageSize))
+        let messages = page.reversed().map { row in
+            let msg = row.value
+            return Message(id: row.cursor.id.uuidString.lowercased(), role: MessageRole(rawValue: msg.role) ?? .user,
+                           content: msg.content, createdAt: msg.createdAt ?? Date(), blocked: false)
+        }
+        return ChatHistoryPage(items: messages, nextCursor: rows.count > pageSize ? page.last?.cursor : nil)
     }
 
     /// Send a message and get AI response via Edge Function

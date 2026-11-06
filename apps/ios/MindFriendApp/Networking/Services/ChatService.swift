@@ -21,12 +21,20 @@ final class ChatService: ObservableObject {
         try await dataService.getConversations()
     }
 
+    func getConversationPage(before cursor: ChatHistoryCursor? = nil) async throws -> ChatHistoryPage<Conversation> {
+        try await dataService.getConversationPage(before: cursor)
+    }
+
     func deleteConversation(id: String) async throws {
         try await dataService.deleteConversation(id: id)
     }
 
     func getMessages(conversationId: String, limit: Int = 50) async throws -> [Message] {
         try await dataService.getMessages(conversationId: conversationId, limit: limit)
+    }
+
+    func getMessagePage(conversationId: String, before cursor: ChatHistoryCursor? = nil) async throws -> ChatHistoryPage<Message> {
+        try await dataService.getMessagePage(conversationId: conversationId, before: cursor)
     }
 
     /// Send a message and get AI response via Edge Function
