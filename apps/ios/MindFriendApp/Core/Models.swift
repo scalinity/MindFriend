@@ -711,6 +711,8 @@ struct VoiceTokenResponse: Codable {
     let isPremium: Bool
     let availableVoices: [String]
     let sessionId: String
+    let transport: String?
+    let maxDurationSeconds: Int?
 
     enum CodingKeys: String, CodingKey {
         case token
@@ -720,6 +722,14 @@ struct VoiceTokenResponse: Codable {
         case isPremium = "is_premium"
         case availableVoices = "available_voices"
         case sessionId = "session_id"
+        case transport
+        case maxDurationSeconds = "max_duration_seconds"
+    }
+
+    var relayDurationSeconds: Int? {
+        guard transport == "relay", let seconds = maxDurationSeconds,
+              (1...120).contains(seconds) else { return nil }
+        return seconds
     }
 
     var grokVoice: GrokVoice {
@@ -4251,11 +4261,13 @@ struct CreativeWork: Identifiable, Codable, Equatable {
     let createdAt: Date
     let updatedAt: Date
 
-    /// Full URL for the creative work image/audio
-    var mediaUrl: URL? {
-        guard let path = storagePath else { return nil }
-        // Construct Supabase storage URL
-        return URL(string: "\(SupabaseConfig.projectURL.absoluteString)/storage/v1/object/public/creative-works/\(path)")
+    // Access URLs stay in memory and are renewed when the work is fetched.
+    var mediaUrl: URL? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case id, userId, workType, title, description, storagePath, generationPrompt
+        case artStyle, durationSeconds, transcription, transcriptionStatus, moodScore, moodTags
+        case isFavorite, isSharedToCircle, createdAt, updatedAt
     }
 
     /// Duration formatted as mm:ss

@@ -89,7 +89,7 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
         }
     }
 
-    /// Whether WebSocket is disconnected due to idle timeout (mic still listening for VAD)
+    /// Retained for voice UI compatibility; relay session ends stop microphone capture.
     @Published private(set) var isIdleDisconnected = false {
         didSet {
             if isIdleDisconnected && !oldValue {
@@ -125,7 +125,7 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
     // Emotion analysis
     private let emotionAnalyzer = EmotionAnalyzer()
     // Emotion analysis enabled by default - uses Accelerate/vDSP for fast FFT
-    private var emotionAnalysisEnabled: Bool = UserDefaults.standard.object(forKey: "voiceEmotionAnalysisEnabled") as? Bool ?? true
+    private var emotionAnalysisEnabled: Bool = UserDefaults.standard.object(forKey: "voiceEmotionAnalysisEnabled") as? Bool ?? false
     private var emotionSensitivityThreshold: Double = 0.6
     private var lastEmotionAnalysisTime: Date?
     private let emotionAnalysisCooldown: TimeInterval = 2.0  // Min 2s between analyses
@@ -133,16 +133,23 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
     private let maxEmotionHistorySize = 100  // Cap history at ~3 minutes at 2s intervals
 
     // Session tracking
+    private var connectionGeneration = UUID()
+    private var isDisconnecting = false
+    private var lifecycleSubscriptions = Set<AnyCancellable>()
     private var sessionId: String?
     private var sessionStartTime: Date?
     private var initialMinutesRemaining: Double = 0
     private var messageCount = 0
+    private var didReceiveSessionCreated = false
+    private var didReceiveSessionUpdated = false
     private var sessionCreatedContinuation: CheckedContinuation<Void, Error>?
     private var sessionUpdatedContinuation: CheckedContinuation<Void, Error>?
     private var sessionCreatedTimeoutTask: Task<Void, Never>?
     private var sessionUpdatedTimeoutTask: Task<Void, Never>?
     private var isWaitingForResponse = false
     private var usageTimer: Timer?
+    private var sessionLimitTask: Task<Void, Never>?
+    private let sessionLimitMessage = "Voice session ended. Sessions last up to two minutes, or your remaining monthly allowance. Tap to start a new session."
 
     // MARK: - Idle Management
 
@@ -154,27 +161,6 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
 
     /// Threshold in seconds before idle disconnect (90 seconds)
     private let idleDisconnectThreshold: TimeInterval = 90
-
-    /// Cached token for fast reconnection
-    private var cachedToken: String?
-
-    /// Reconnection task for cancellation during disconnect
-    private var reconnectionTask: Task<Void, Never>?
-
-    /// Expiry time of cached token
-    private var cachedTokenExpiry: Date?
-
-    /// Counter for client-side VAD while idle
-    private var vadFramesAboveThreshold = 0
-
-    /// Threshold for client VAD detection (mic level 0.0-1.0)
-    private let vadDetectionThreshold: Float = 0.15
-
-    /// Number of consecutive frames above threshold required to trigger reconnection
-    private let vadRequiredFrames = 3  // ~125ms at typical buffer rate
-
-    /// Flag to prevent multiple simultaneous reconnection attempts
-    private var isReconnecting = false
 
     // Voice instructions for MindFriend personality
     private let voiceInstructions = """
@@ -201,6 +187,22 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
     init(supabase: SupabaseClient) {
         self.supabase = supabase
         setupComponentCallbacks()
+        NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)
+            .sink { [weak self] notification in
+                guard let raw = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+                      AVAudioSession.InterruptionType(rawValue: raw) == .began else { return }
+                Task { @MainActor in
+                    self?.finishSession(message: "Audio was interrupted. Tap to start a new voice session.")
+                }
+            }.store(in: &lifecycleSubscriptions)
+        NotificationCenter.default.publisher(for: AVAudioSession.routeChangeNotification)
+            .sink { [weak self] notification in
+                guard let raw = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
+                      AVAudioSession.RouteChangeReason(rawValue: raw) == .oldDeviceUnavailable else { return }
+                Task { @MainActor in
+                    self?.finishSession(message: "Audio device disconnected. Tap to start a new voice session.")
+                }
+            }.store(in: &lifecycleSubscriptions)
 
         // Grant consent if user previously enabled emotion analysis (persisted in UserDefaults)
         // This respects the user's previous opt-in choice
@@ -216,18 +218,15 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
     private func setupComponentCallbacks() {
         // WebSocket callbacks
         webSocketManager.onMessage = { [weak self] message in
-            Task { @MainActor in
-                self?.handleWebSocketMessage(message)
-            }
+            self?.handleWebSocketMessage(message)
         }
         
-        webSocketManager.onConnectionLost = { [weak self] in
-            Task { @MainActor in
-                self?.stopListening()
-                self?.connectionState = .reconnecting
-            }
+        webSocketManager.onConnectionLost = { [weak self] reachedLimit in
+            guard let self else { return }
+            self.finishSession(message: reachedLimit ? self.sessionLimitMessage :
+                "Connection lost. Tap to start a new voice session.")
         }
-        
+
         // Audio capture callbacks
         audioCapture.onAudioData = { [weak self] audioData in
             Task { @MainActor in
@@ -237,16 +236,16 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
 
         audioCapture.onMicLevelUpdate = { [weak self] level in
             Task { @MainActor in
-                self?.micLevel = level
-                // Check for client-side VAD while in idle disconnected state
-                self?.checkClientVadWhileIdle(level: level)
+                guard let self, self.isListening else { return }
+                self.micLevel = level
             }
         }
 
         // Audio playback callbacks
         audioPlayback.onPlaybackStart = { [weak self] in
             Task { @MainActor in
-                self?.isSpeaking = true
+                guard let self, self.connectionState.isConnected else { return }
+                self.isSpeaking = true
             }
         }
         
@@ -258,7 +257,8 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
         
         audioPlayback.onPlaybackLevelUpdate = { [weak self] level in
             Task { @MainActor in
-                self?.playbackLevel = level
+                guard let self else { return }
+                self.playbackLevel = self.isSpeaking ? level : 0
             }
         }
     }
@@ -267,20 +267,36 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
 
     /// Connect to voice service
     func connect() async throws {
-        guard connectionState != .connected && connectionState != .connecting else {
-            return
+        try await connect(startMuted: false)
+    }
+
+    func connect(startMuted: Bool) async throws {
+        guard !isDisconnecting else {
+            throw VoiceError.connectionFailed("The previous voice session is ending. Try again shortly.")
         }
+        guard connectionState != .connected && connectionState != .connecting else { return }
 
         connectionState = .connecting
+        let generation = UUID()
+        connectionGeneration = generation
 
-        // Reset idle state in case we're reconnecting
+        // Every explicit connection starts a new relay session.
         isIdleDisconnected = false
-        isReconnecting = false
 
         do {
             try await requestMicrophonePermission()
+            try Task.checkCancellation()
+            guard connectionGeneration == generation else { throw CancellationError() }
 
             let tokenResponse = try await fetchVoiceToken()
+            guard !Task.isCancelled, connectionGeneration == generation else {
+                // This response belongs to an obsolete attempt, never the active session.
+                // A new task lets the compensating request run even if connect was cancelled.
+                await Task { @MainActor in
+                    await endSession(sessionId: tokenResponse.sessionId, durationSeconds: 0, messagesCount: 0)
+                }.value
+                throw CancellationError()
+            }
 
             minutesRemaining = tokenResponse.minutesRemaining
             initialMinutesRemaining = tokenResponse.minutesRemaining
@@ -288,25 +304,38 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
             availableVoices = tokenResponse.grokAvailableVoices
             currentVoice = tokenResponse.grokVoice
             sessionId = tokenResponse.sessionId
+            sessionStartTime = Date()
 
-            // Cache the token for potential reconnection
-            cachedToken = tokenResponse.token
-            if let expiryDate = ISO8601DateFormatter().date(from: tokenResponse.expiresAt) {
-                cachedTokenExpiry = expiryDate
+            guard let duration = tokenResponse.relayDurationSeconds else {
+                throw VoiceError.connectionFailed("Secure voice relay is unavailable. A compatible app and voice server are required.")
             }
-
-            try await webSocketManager.connect(token: tokenResponse.token)
+            // Secondary client cap. The relay enforces the authoritative session limit.
+            sessionLimitTask = Task { @MainActor [weak self] in
+                do { try await Task.sleep(nanoseconds: UInt64(duration) * 1_000_000_000) }
+                catch { return }
+                guard let self, self.connectionGeneration == generation else { return }
+                self.finishSession(message: self.sessionLimitMessage)
+            }
+            let userSession = try await supabase.auth.session
+            try Task.checkCancellation()
+            guard connectionGeneration == generation else { throw CancellationError() }
+            didReceiveSessionCreated = false
+            try await webSocketManager.connect(sessionId: tokenResponse.sessionId, userToken: userSession.accessToken)
+            try Task.checkCancellation()
+            guard connectionGeneration == generation else { throw CancellationError() }
 
             // Wait for session.created event from the server
             #if DEBUG
             Log.voice.debug("[Voice] Waiting for session.created event...")
             #endif
+            if !didReceiveSessionCreated {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
                 sessionCreatedContinuation = continuation
 
                 // Set timeout for session creation - store task to cancel if event arrives
                 sessionCreatedTimeoutTask = Task { @MainActor [weak self] in
-                    try? await Task.sleep(nanoseconds: 10_000_000_000) // 10 seconds
+                    // Relay preparation and socket setup each allow twelve seconds.
+                    try? await Task.sleep(nanoseconds: 30_000_000_000)
                     guard let self, !Task.isCancelled else { return }
                     if let cont = self.sessionCreatedContinuation {
                         self.sessionCreatedContinuation = nil
@@ -315,13 +344,20 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
                 }
             }
 
+            }
             // Now configure the session with our settings
+            try Task.checkCancellation()
+            guard connectionGeneration == generation else { throw CancellationError() }
+            didReceiveSessionUpdated = false
             try await configureSession()
+            try Task.checkCancellation()
+            guard connectionGeneration == generation else { throw CancellationError() }
 
             // Wait for session.updated confirmation
             #if DEBUG
             Log.voice.debug("[Voice] Waiting for session.updated...")
             #endif
+            if !didReceiveSessionUpdated {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
                 sessionUpdatedContinuation = continuation
 
@@ -336,8 +372,10 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
                 }
             }
 
+            }
+            try Task.checkCancellation()
+            guard connectionGeneration == generation else { throw CancellationError() }
             connectionState = .connected
-            sessionStartTime = Date()
             messageCount = 0
             #if DEBUG
             Log.voice.debug("[Voice] Connection complete, ready for audio")
@@ -351,28 +389,41 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
             // Start idle disconnect timer
             startIdleTimer()
 
-            // Auto-start listening for continuous conversation mode
-            try startListening()
+            // Preserve the microphone choice when explicitly starting a new session.
+            if !startMuted { try startListening() }
         } catch {
-            connectionState = .error(error.localizedDescription)
+            if connectionGeneration == generation {
+                await disconnect()
+                if !(error is CancellationError) { connectionState = .error(error.localizedDescription) }
+            }
             throw error
         }
     }
 
     /// Disconnect from voice service
     func disconnect() async {
+        await disconnect(endingState: .disconnected)
+    }
+
+    private func disconnect(endingState: ConnectionState) async {
+        guard !isDisconnecting else { return }
+        isDisconnecting = true
+        connectionGeneration = UUID()
+        defer { isDisconnecting = false }
         stopListening()
         audioPlayback.stop()
+        isSpeaking = false
+        isUserSpeaking = false
+        micLevel = 0
+        playbackLevel = 0
         stopUsageTimer()
+        sessionLimitTask?.cancel()
+        sessionLimitTask = nil
         stopIdleTimer()
 
         // Cancel emotion analysis task
         emotionAnalysisTask?.cancel()
         emotionAnalysisTask = nil
-
-        // Cancel any pending reconnection task (prevents ghost connections after disconnect)
-        reconnectionTask?.cancel()
-        reconnectionTask = nil
 
         // Cancel any pending timeout tasks first
         sessionCreatedTimeoutTask?.cancel()
@@ -392,21 +443,20 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
 
         webSocketManager.disconnect()
 
-        await endSession()
-
-        connectionState = .disconnected
-        transcribedText = ""
+        let endedSessionId = sessionId
+        let elapsedSeconds = max(0, Date().timeIntervalSince(sessionStartTime ?? Date()))
+        let durationSeconds = Int(elapsedSeconds)
+        if !isPremium { minutesRemaining = max(0, initialMinutesRemaining - elapsedSeconds / 60) }
+        let endedMessageCount = messageCount
         sessionId = nil
         sessionStartTime = nil
+        connectionState = endingState
+        transcribedText = ""
         isWaitingForResponse = false
 
         // Clear idle state
         isIdleDisconnected = false
-        isReconnecting = false
-        cachedToken = nil
-        cachedTokenExpiry = nil
         lastSpeechActivityTime = nil
-        vadFramesAboveThreshold = 0
 
         // Clear echo suppression state
         playbackStartTime = nil
@@ -419,6 +469,19 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
         emotionHistory = []
         lastEmotionAnalysisTime = nil
         audioCapture.clearRollingBuffer()
+
+        if let endedSessionId {
+            await endSession(sessionId: endedSessionId, durationSeconds: durationSeconds, messagesCount: endedMessageCount)
+        }
+    }
+
+    private func finishSession(message: String) {
+        guard !isDisconnecting, connectionState != .disconnected else { return }
+        let generation = connectionGeneration
+        Task { @MainActor [weak self] in
+            guard let self, self.connectionGeneration == generation else { return }
+            await self.disconnect(endingState: .error(message))
+        }
     }
 
     /// Start listening for voice input
@@ -617,6 +680,7 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
     }
 
     private func fetchVoiceToken() async throws -> VoiceTokenResponse {
+        let generation = connectionGeneration
         do {
             // Refresh session to ensure we have a valid token
             #if DEBUG
@@ -635,7 +699,7 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
             #endif
 
             // Always refresh to get a fresh token
-            let session = try await supabase.auth.refreshSession()
+            let session = try await supabase.auth.session
             #if DEBUG
             Log.voice.debug("[VoiceToken] Session refreshed successfully, user: \(session.user.id)")
             Log.voice.debug("[VoiceToken] New token expires at: \(session.expiresAt)")
@@ -655,12 +719,21 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
             Log.voice.debug("[VoiceToken] Auth header constructed successfully")
             #endif
 
+            try Task.checkCancellation()
+            guard connectionGeneration == generation else { throw CancellationError() }
             let tokenResponse: VoiceTokenResponse = try await supabase.functions.invoke(
-                "voice-token",
+                "test-auth-diagnostic",
                 options: FunctionInvokeOptions(
-                    headers: ["Authorization": authHeader]
+                    headers: ["Authorization": authHeader],
+                    body: ["transport": "relay"]
                 )
             )
+            guard !Task.isCancelled, connectionGeneration == generation else {
+                await Task { @MainActor in
+                    await endSession(sessionId: tokenResponse.sessionId, durationSeconds: 0, messagesCount: 0)
+                }.value
+                throw CancellationError()
+            }
             #if DEBUG
             Log.voice.debug("[VoiceToken] Got token for voice successfully (token redacted from logs)")
             #endif
@@ -692,6 +765,9 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
                 #endif
 
                 // Handle specific error codes
+                if errorResponse?.code == "SESSION_LIMIT_REACHED" {
+                    throw VoiceError.connectionFailed(sessionLimitMessage)
+                }
                 if errorResponse?.code == "QUOTA_EXCEEDED" || code == 403 {
                     // 403 Forbidden typically means quota exceeded for this endpoint
                     throw VoiceError.quotaExceeded
@@ -709,6 +785,10 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
             }
         } catch let error as VoiceError {
             throw error
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as URLError where error.code == .cancelled {
+            throw CancellationError()
         } catch {
             #if DEBUG
             Log.voice.debug("[VoiceToken] Unknown error: \(error)")
@@ -732,10 +812,12 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
                 "modalities": ["audio", "text"],
                 "instructions": voiceInstructions,
                 "voice": currentVoice.rawValue,
-                "input_audio_format": "pcm16",
-                "output_audio_format": "pcm16",
-                "input_audio_transcription": [
-                    "model": "whisper-1"
+                "audio": [
+                    "input": [
+                        "format": ["type": "audio/pcm", "rate": 24000],
+                        "transcription": ["model": "grok-transcribe"],
+                    ],
+                    "output": ["format": ["type": "audio/pcm", "rate": 24000]],
                 ],
                 "turn_detection": [
                     "type": "server_vad",
@@ -921,6 +1003,7 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
 
         switch type {
         case "session.created", "conversation.created":
+            didReceiveSessionCreated = true
             #if DEBUG
             Log.voice.debug("[Voice] Session/conversation created successfully")
             #endif
@@ -933,6 +1016,7 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
             }
 
         case "session.updated":
+            didReceiveSessionUpdated = true
             #if DEBUG
             Log.voice.debug("[Voice] Session updated")
             #endif
@@ -1026,11 +1110,11 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
             }
             #endif
 
-        case "conversation.item.input_audio_transcription.completed":
+        case "conversation.item.input_audio_transcription.updated", "conversation.item.input_audio_transcription.completed":
             // User's speech has been transcribed
             if let transcript = json["transcript"] as? String {
                 #if DEBUG
-                Log.voice.debug("[Voice] User transcript: \(transcript)")
+                Log.voice.debug("[Voice] User transcript received")
                 #endif
                 userTranscribedText = transcript
             }
@@ -1060,7 +1144,7 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
         case "response.audio_transcript.delta", "response.output_audio_transcript.delta":
             if let delta = json["delta"] as? String {
                 #if DEBUG
-                Log.voice.debug("[Voice] Transcript delta: \(delta)")
+                Log.voice.debug("[Voice] Transcript delta received")
                 #endif
                 transcribedText += delta
             }
@@ -1086,14 +1170,13 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
             // Reset idle timer after response completes
             resetIdleTimer()
 
-            // Clear transcript after a delay
-            Task {
-                try? await Task.sleep(nanoseconds: 3_000_000_000) // 3 seconds
-                await MainActor.run {
-                    if !self.isWaitingForResponse { // Only clear if not waiting for next response
-                        self.transcribedText = ""
-                    }
-                }
+            // A previous session must not clear a new session's transcript.
+            let generation = connectionGeneration
+            Task { @MainActor [weak self] in
+                do { try await Task.sleep(nanoseconds: 3_000_000_000) }
+                catch { return }
+                guard let self, self.connectionGeneration == generation, !self.isWaitingForResponse else { return }
+                self.transcribedText = ""
             }
 
         case "response.audio.done", "response.text.done":
@@ -1101,31 +1184,12 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
             Log.voice.debug("[Voice] Audio/text stream done")
             #endif
 
-        case "error":
-            isWaitingForResponse = false
-            isSpeaking = false
-            transcribedText = ""  // Clear partial transcript on error
-            let errorMessage: String
-            if let error = json["error"] as? [String: Any] {
-                let message = error["message"] as? String ?? "Unknown error"
-                let code = error["code"] as? String ?? "unknown"
-                #if DEBUG
-                Log.voice.debug("[Voice] Error: \(code) - \(message)")
-                #endif
-                errorMessage = message
-            } else {
-                // Sometimes error is at root level
-                let message = json["message"] as? String ?? "Unknown error"
-                #if DEBUG
-                Log.voice.debug("[Voice] Error: \(message)")
-                #endif
-                errorMessage = message
-            }
-            connectionState = .error(errorMessage)
-            // Disconnect WebSocket on server error
-            Task {
-                await self.disconnect()
-            }
+        case "error", "session.error":
+            let error = json["error"] as? [String: Any] ?? json
+            let code = error["code"] as? String
+            let message = error["message"] as? String ?? "Voice session ended. Tap to start a new session."
+            let reachedLimit = code == "SESSION_LIMIT_REACHED" || message.lowercased() == "session limit reached"
+            finishSession(message: reachedLimit ? sessionLimitMessage : message)
 
         default:
             #if DEBUG
@@ -1133,7 +1197,7 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
             Log.voice.debug("[Voice] Unhandled event type: \(type)")
             if let jsonData = try? JSONSerialization.data(withJSONObject: json, options: .prettyPrinted),
                let jsonStr = String(data: jsonData, encoding: .utf8) {
-                Log.voice.debug("[Voice] Event data: \(String(jsonStr.prefix(1000)))")
+                Log.voice.debug("[Voice] Event data received")
             }
             #endif
         }
@@ -1186,7 +1250,6 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
     /// Reset the idle timer when speech activity is detected
     private func resetIdleTimer() {
         lastSpeechActivityTime = Date()
-        vadFramesAboveThreshold = 0
 
         #if DEBUG
         Log.voice.debug("[Voice] Idle timer reset")
@@ -1201,158 +1264,8 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
 
         let elapsed = Date().timeIntervalSince(lastActivity)
         if elapsed >= idleDisconnectThreshold {
-            performIdleDisconnect()
+            finishSession(message: "Voice session ended after inactivity. Tap to start a new session.")
         }
-    }
-
-    /// Disconnect WebSocket due to idle timeout but keep audio capture running for VAD
-    private func performIdleDisconnect() {
-        #if DEBUG
-        Log.voice.debug("[Voice] Performing idle disconnect (threshold exceeded)")
-        #endif
-
-        isIdleDisconnected = true
-        stopIdleTimer()
-
-        // Stop audio playback
-        audioPlayback.stop()
-
-        // Disconnect WebSocket but DON'T stop audio capture - we need it for client VAD
-        webSocketManager.disconnect()
-        connectionState = .disconnected
-
-        // Keep audioCapture running so we can detect speech and reconnect
-        // The mic level updates will trigger checkClientVadWhileIdle()
-    }
-
-    /// Check for client-side VAD while in idle disconnected state
-    private func checkClientVadWhileIdle(level: Float) {
-        guard isIdleDisconnected, !isReconnecting else { return }
-
-        if level >= vadDetectionThreshold {
-            vadFramesAboveThreshold += 1
-
-            if vadFramesAboveThreshold >= vadRequiredFrames {
-                #if DEBUG
-                Log.voice.debug("[Voice] Client VAD detected speech while idle - triggering reconnection")
-                #endif
-                triggerReconnection()
-            }
-        } else {
-            vadFramesAboveThreshold = 0
-        }
-    }
-
-    /// Reconnect after idle disconnect when speech is detected
-    private func triggerReconnection() {
-        guard isIdleDisconnected, !isReconnecting else { return }
-
-        isReconnecting = true
-        connectionState = .reconnecting
-
-        // Store task reference so it can be cancelled in disconnect()
-        reconnectionTask = Task { [weak self] in
-            guard let self else { return }
-            guard !Task.isCancelled else { return }
-            do {
-                // Get cached or fresh token
-                let token = try await getCachedOrFreshToken()
-
-                // Reconnect WebSocket
-                try await webSocketManager.connect(token: token)
-
-                // Wait for session.created
-                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                    self.sessionCreatedContinuation = continuation
-
-                    self.sessionCreatedTimeoutTask = Task { @MainActor [weak self] in
-                        try? await Task.sleep(nanoseconds: 10_000_000_000)
-                        guard let self, !Task.isCancelled else { return }
-                        if let cont = self.sessionCreatedContinuation {
-                            self.sessionCreatedContinuation = nil
-                            cont.resume(throwing: VoiceError.connectionTimeout)
-                        }
-                    }
-                }
-
-                // Configure session
-                try await configureSession()
-
-                // Wait for session.updated
-                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                    self.sessionUpdatedContinuation = continuation
-
-                    self.sessionUpdatedTimeoutTask = Task { @MainActor [weak self] in
-                        try? await Task.sleep(nanoseconds: 10_000_000_000)
-                        guard let self, !Task.isCancelled else { return }
-                        if let cont = self.sessionUpdatedContinuation {
-                            self.sessionUpdatedContinuation = nil
-                            cont.resume(throwing: VoiceError.connectionTimeout)
-                        }
-                    }
-                }
-
-                // Flush buffered audio that triggered reconnection
-                if let recentAudio = audioCapture.getRecentAudioBuffer(duration: 3.0) {
-                    let data = audioCapture.convertToData(recentAudio)
-                    sendAudioData(data)
-                    #if DEBUG
-                    Log.voice.debug("[Voice] Flushed \(data.count) bytes of buffered audio after reconnection")
-                    #endif
-                }
-
-                // Commit to trigger server VAD processing
-                webSocketManager.send(["type": "input_audio_buffer.commit"])
-
-                // Success - reset state
-                isIdleDisconnected = false
-                isReconnecting = false
-                connectionState = .connected
-                startIdleTimer()
-
-                #if DEBUG
-                Log.voice.debug("[Voice] Reconnection after idle disconnect successful")
-                #endif
-
-            } catch {
-                // Check if task was cancelled (normal during disconnect)
-                guard !Task.isCancelled else { return }
-                #if DEBUG
-                Log.voice.error("[Voice] Reconnection failed: \(error)")
-                #endif
-                await MainActor.run { [weak self] in
-                    self?.isReconnecting = false
-                    self?.connectionState = .error(error.localizedDescription)
-                }
-            }
-        }
-    }
-
-    /// Get cached token if still valid, otherwise fetch fresh token
-    private func getCachedOrFreshToken() async throws -> String {
-        // Check if cached token is still valid (with 30s buffer)
-        if let token = cachedToken,
-           let expiry = cachedTokenExpiry,
-           expiry > Date().addingTimeInterval(30) {
-            #if DEBUG
-            Log.voice.debug("[Voice] Using cached token for reconnection")
-            #endif
-            return token
-        }
-
-        // Fetch fresh token
-        #if DEBUG
-        Log.voice.debug("[Voice] Fetching fresh token for reconnection")
-        #endif
-        let response = try await fetchVoiceToken()
-
-        // Cache the new token
-        cachedToken = response.token
-        if let expiryDate = ISO8601DateFormatter().date(from: response.expiresAt) {
-            cachedTokenExpiry = expiryDate
-        }
-
-        return response.token
     }
 
     private func updateMinutesRemaining() {
@@ -1364,22 +1277,11 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
         
         // Stop session when quota is exhausted
         if minutesRemaining <= 0 {
-            stopUsageTimer()
-            Task {
-                await disconnect()
-                connectionState = .error("Voice quota exceeded")
-            }
+            finishSession(message: "Monthly voice quota reached. Your three free minutes have been used. Premium includes unlimited monthly minutes, with sessions up to two minutes.")
         }
     }
 
-    private func endSession() async {
-        guard let sessionId = sessionId,
-              let startTime = sessionStartTime else {
-            return
-        }
-
-        let durationSeconds = Int(Date().timeIntervalSince(startTime))
-
+    private func endSession(sessionId: String, durationSeconds: Int, messagesCount: Int) async {
         struct EndSessionRequest: Encodable {
             let sessionId: String
             let durationSeconds: Int
@@ -1396,7 +1298,7 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
 
         do {
             // Refresh session to ensure we have a valid token (not stale)
-            let session = try await supabase.auth.refreshSession()
+            let session = try await supabase.auth.session
             _ = try await supabase.functions.invoke(
                 "voice-session-end",
                 options: FunctionInvokeOptions(
@@ -1404,7 +1306,7 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
                     body: EndSessionRequest(
                         sessionId: sessionId,
                         durationSeconds: durationSeconds,
-                        messagesCount: messageCount,
+                        messagesCount: messagesCount,
                         wasQuotaLimited: false
                     )
                 )

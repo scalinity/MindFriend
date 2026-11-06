@@ -1,12 +1,11 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 // UUID v4 validation regex
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const corsHeaders = getCorsHeaders(req.headers.get("Origin"));
 
   if (req.method === "OPTIONS") {
@@ -72,6 +71,62 @@ serve(async (req) => {
     if (!session || session.user_id !== user.id) {
       return new Response(JSON.stringify({ error: "Session not found" }), {
         status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Relay membership is server-only. Ignore all client-reported relay usage.
+    let { data: relay, error: relayError } = await supabase
+      .from("voice_relay_reservations")
+      .select("claimed_at, finalized_at, duration_seconds")
+      .eq("session_id", session_id)
+      .maybeSingle();
+    if (relayError) throw Error("Unable to inspect relay status");
+    if (relay) {
+      if (!relay.claimed_at && !relay.finalized_at) {
+        const { error } = await supabase.rpc("end_voice_session", {
+          p_session_id: session_id,
+          p_duration_seconds: 0,
+        });
+        if (error) throw Error("Unable to close preparation");
+        // Claim may have won the row lock while the first status read was in flight.
+        const refreshed = await supabase.from("voice_relay_reservations")
+          .select("claimed_at, finalized_at, duration_seconds").eq(
+            "session_id",
+            session_id,
+          ).single();
+        if (refreshed.error || !refreshed.data) {
+          throw Error("Unable to inspect relay status");
+        }
+        relay = refreshed.data;
+      }
+      return new Response(
+        JSON.stringify({
+          success: true,
+          transport: "relay",
+          status: relay.finalized_at
+            ? "finalized"
+            : relay.claimed_at
+            ? "pending"
+            : "ended",
+          duration_seconds: relay.finalized_at ? relay.duration_seconds : null,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    if (
+      (duration_seconds !== undefined &&
+        (!Number.isInteger(duration_seconds) || duration_seconds < 0 ||
+          duration_seconds > 86_400)) ||
+      (messages_count !== undefined &&
+        (!Number.isInteger(messages_count) || messages_count < 0 ||
+          messages_count > 100_000)) ||
+      (was_quota_limited !== undefined &&
+        typeof was_quota_limited !== "boolean")
+    ) {
+      return new Response(JSON.stringify({ error: "Invalid session usage" }), {
+        status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
