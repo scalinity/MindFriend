@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		CD91A673F84E42D09B31A002 /* Watch Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CD91A673F84E42D09B31A001 /* Assets.xcassets */; };
+		D1E7D53B0F794FDC9A1A0001 /* DeepLinkNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E7D53B0F794FDC9A1A0002 /* DeepLinkNavigationTests.swift */; };
+		EA5238A7C055484BB1E64D01 /* CoreCompletionContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA5238A7C055484BB1E64D02 /* CoreCompletionContractTests.swift */; };
 		00121B35665A6BB8EB4D5423 /* FamilyServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF873E90D4AF69D2DB5CE6A3 /* FamilyServiceTests.swift */; };
 		006586140AD224EA055E93C5 /* TactileLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A74FD0DE463FA5DBB479FA96 /* TactileLibraryView.swift */; };
 		00EE7C42BC23C3C719CD3C9F /* AccessibilityHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58AC3779493347E53EC5C762 /* AccessibilityHelpers.swift */; };
@@ -935,7 +938,7 @@
 		329606ABFC5B649BA4B5E682 /* Embed Watch Content */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
-			dstPath = "";
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
 			dstSubfolderSpec = 16;
 			files = (
 				7EDA9E64927CFACDDF17FA2A /* MindFriendWatch.app in Embed Watch Content */,
@@ -968,6 +971,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		CD91A673F84E42D09B31A001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		D1E7D53B0F794FDC9A1A0002 /* DeepLinkNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLinkNavigationTests.swift; sourceTree = "<group>"; };
+		EA5238A7C055484BB1E64D02 /* CoreCompletionContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreCompletionContractTests.swift; sourceTree = "<group>"; };
 		002F50A6F50C5741D3915B4A /* NeedsAssessmentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NeedsAssessmentView.swift; sourceTree = "<group>"; };
 		0061C6AFBA74C0F17BF2F9C6 /* CrashReporter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CrashReporter.swift; sourceTree = "<group>"; };
 		00B9E6A2CEECDC283D2EA746 /* NotificationManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
@@ -3322,6 +3328,7 @@
 		359B66CAE23A1AF9064AB107 /* MindFriendWatch */ = {
 			isa = PBXGroup;
 			children = (
+				CD91A673F84E42D09B31A001 /* Assets.xcassets */,
 				0BE80B55982C3892DD2F09DF /* MindFriendWatchApp.swift */,
 				BB5A8AEE8D000B8B4137BE4B /* WatchConnectivityManager.swift */,
 				F4459416AB4D2F7531D54206 /* HeartRateStreamer.swift */,
@@ -4453,6 +4460,8 @@
 		8A6121F5BCAF1B51FCF9C617 /* MindFriendAppTests */ = {
 			isa = PBXGroup;
 			children = (
+				EA5238A7C055484BB1E64D02 /* CoreCompletionContractTests.swift */,
+				D1E7D53B0F794FDC9A1A0002 /* DeepLinkNavigationTests.swift */,
 				48B6788DB3E3293D6339A393 /* Core */,
 				4760CBC6D1BE1E24DBF84554 /* ActionCardServiceTests.swift */,
 				58A2CB3DB148A064E5F5BB3A /* ActionPlanSchedulerTests.swift */,
@@ -6667,6 +6676,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CD91A673F84E42D09B31A002 /* Watch Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -6698,6 +6708,7 @@
 /* Begin PBXShellScriptBuildPhase section */
 		1E0506F23CFC561B3CE5CF9C /* [Sentry] Upload Debug Symbols */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -6710,11 +6721,10 @@
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				"$(DERIVED_FILE_DIR)/sentry-dsym-upload.stamp",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "if [ \"$CONFIGURATION\" = \"Release\" ]; then\n  echo \"🔍 Uploading dSYMs to Sentry...\"\n  \n  # Check if sentry-cli is installed\n  if ! command -v sentry-cli &> /dev/null; then\n    echo \"⚠️  sentry-cli not found. Install with: brew install getsentry/tools/sentry-cli\"\n    exit 0\n  fi\n  \n  # Find all dSYM files in the build directory\n  DSYM_FOLDER=\"${DWARF_DSYM_FOLDER_PATH}\"\n  if [ -z \"$DSYM_FOLDER\" ]; then\n    DSYM_FOLDER=\"${CONFIGURATION_BUILD_DIR}\"\n  fi\n  \n  echo \"📦 Searching for dSYMs in: $DSYM_FOLDER\"\n  \n  # Upload dSYMs\n  if [ -d \"$DSYM_FOLDER\" ]; then\n    sentry-cli upload-dif --include-sources \"$DSYM_FOLDER\" 2>&1 | while read line; do\n      echo \"   $line\"\n    done\n    \n    if [ $? -eq 0 ]; then\n      echo \"✅ Successfully uploaded dSYMs to Sentry\"\n    else\n      echo \"⚠️  Failed to upload dSYMs (build will continue)\"\n    fi\n  else\n    echo \"⚠️  dSYM folder not found: $DSYM_FOLDER\"\n  fi\nfi\n";
+			shellScript = "/bin/sh \"${SRCROOT}/../../scripts/upload_sentry_symbols.sh\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -6744,6 +6754,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				CBAA1800929326D23991EB76 /* AccessibilityServiceTests.swift in Sources */,
+				EA5238A7C055484BB1E64D01 /* CoreCompletionContractTests.swift in Sources */,
+				D1E7D53B0F794FDC9A1A0001 /* DeepLinkNavigationTests.swift in Sources */,
 				06ACB2307DF5981D38856E59 /* ActionCardServiceTests.swift in Sources */,
 				78B8051CDD9B8A4D05D72525 /* ActionPlanSchedulerTests.swift in Sources */,
 				570A676B0E6685CFD91DF580 /* AdherenceCalculatorTests.swift in Sources */,
@@ -7772,7 +7784,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 202604231215;
+				CURRENT_PROJECT_VERSION = 202610230709;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = 25H5DDPKAC;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -7792,7 +7804,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.0.1;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -7916,7 +7928,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 202604231215;
+				CURRENT_PROJECT_VERSION = 202610230709;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 25H5DDPKAC;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -7930,7 +7942,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.0.1;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -8134,24 +8146,24 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/getsentry/sentry-cocoa";
 			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 9.0.0;
+				kind = exactVersion;
+				version = 9.31.0;
 			};
 		};
 		927CE705CDFCAF30998EEC7C /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
 			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 8.0.0;
+				kind = exactVersion;
+				version = 10.0.0;
 			};
 		};
 		AFF5FC3EB58303125F65E167 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/supabase/supabase-swift";
 			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 2.0.0;
+				kind = exactVersion;
+				version = 2.55.4;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
