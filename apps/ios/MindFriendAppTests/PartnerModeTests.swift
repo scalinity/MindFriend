@@ -1,40 +1,19 @@
 import XCTest
+import Supabase
 @testable import MindFriendApp
 
 final class PartnerModeTests: XCTestCase {
 
     // MARK: - Invite Code Validation Tests
 
-    func testInviteCodeFormat_6Characters() {
-        let validCodes = ["ABC123", "XYZ789", "LMN456", "PQW234"]
-        for code in validCodes {
-            XCTAssertEqual(code.count, 6, "Code \(code) should be 6 characters")
-        }
-    }
-
-    func testInviteCodeFormat_NoAmbiguousCharacters() {
-        // Buddy codes should NOT contain: I, O, 0, 1 to avoid confusion
-        let validChars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-        let invalidChars = "IO01"
-
-        for char in invalidChars {
-            XCTAssertFalse(validChars.contains(char), "Code should not contain ambiguous char: \(char)")
-        }
-    }
-
-    func testInviteCodeValidation_TooShort() {
-        let shortCode = "ABC12"
-        XCTAssertNotEqual(shortCode.count, 6, "Code should be rejected if not 6 chars")
-    }
-
-    func testInviteCodeValidation_TooLong() {
-        let longCode = "ABC1234"
-        XCTAssertNotEqual(longCode.count, 6, "Code should be rejected if not 6 chars")
-    }
-
-    func testInviteCodeValidation_Empty() {
-        let emptyCode = ""
-        XCTAssertNotEqual(emptyCode.count, 6, "Empty code should be rejected")
+    func testPartnerInviteCodeUsesEightCaseSensitiveBase58Characters() {
+        XCTAssertTrue(PartnerModeViewModel.isValidInviteCode("Ab7x2Qp9"))
+        XCTAssertTrue(PartnerModeViewModel.isValidInviteCode("11111111"))
+        XCTAssertFalse(PartnerModeViewModel.isValidInviteCode("ABC123"))
+        XCTAssertFalse(PartnerModeViewModel.isValidInviteCode("Ab7x2Qp90"))
+        XCTAssertFalse(PartnerModeViewModel.isValidInviteCode("Ab7x2Qp0"))
+        XCTAssertFalse(PartnerModeViewModel.isValidInviteCode("Ab7x2Qpl"))
+        XCTAssertFalse(PartnerModeViewModel.isValidInviteCode(""))
     }
 
     // MARK: - Sharing Settings Tests
@@ -319,188 +298,72 @@ final class PartnerModeTests: XCTestCase {
     }
 }
 
-// MARK: - PartnerModeViewModel Tests
+// MARK: - Actual partner invitation route regressions
 
-// FIXME: Commented out - requires protocol-based DI for SupabaseDataService
-// See FIXME note at bottom of file for MockSupabaseDataService
-/*
 @MainActor
-final class PartnerModeViewModelTests: XCTestCase {
-
-    var viewModel: PartnerModeViewModel!
-    var mockDataService: PartnerMockSupabaseDataService!
-
-    override func setUp() {
-        super.setUp()
-        mockDataService = PartnerMockSupabaseDataService()
-        viewModel = PartnerModeViewModel(dataService: mockDataService)
-    }
-
-    override func tearDown() {
-        viewModel = nil
-        mockDataService = nil
-        super.tearDown()
-    }
-
-    // MARK: - Code Input Validation Tests
-
-    func testCodeInputValidation_Valid6Characters() {
-        viewModel.codeInput = "ABC123"
-        XCTAssertTrue(viewModel.isCodeInputValid)
-    }
-
-    func testCodeInputValidation_TooShort() {
-        viewModel.codeInput = "ABC12"
-        XCTAssertFalse(viewModel.isCodeInputValid)
-    }
-
-    func testCodeInputValidation_TooLong() {
-        viewModel.codeInput = "ABC1234"
-        XCTAssertFalse(viewModel.isCodeInputValid)
-    }
-
-    func testCodeInputValidation_Empty() {
-        viewModel.codeInput = ""
-        XCTAssertFalse(viewModel.isCodeInputValid)
-    }
-
-    func testCodeInputValidation_LowercaseConverted() {
-        viewModel.codeInput = "abc123"
-        // The ViewModel should handle uppercase conversion in acceptInviteCode()
-        XCTAssertEqual(viewModel.codeInput, "abc123")
-    }
-
-    // MARK: - Formatted Invite Code Tests
-
-    func testFormattedInviteCode_WithCode() {
-        viewModel.inviteCode = "ABC123"
-        XCTAssertEqual(viewModel.formattedInviteCode, "ABC 123")
-    }
-
-    func testFormattedInviteCode_NilCode() {
-        viewModel.inviteCode = nil
-        XCTAssertEqual(viewModel.formattedInviteCode, "")
-    }
-
-    func testFormattedInviteCode_5Characters() {
-        viewModel.inviteCode = "ABC12"
-        XCTAssertEqual(viewModel.formattedInviteCode, "ABC12")
-    }
-
-    // MARK: - Days Until Expiry Tests
-
-    func testDaysUntilExpiry_30Days() {
-        let futureDate = Date().addingTimeInterval(86400 * 30)
-        viewModel.inviteExpiresAt = futureDate
-        XCTAssertEqual(viewModel.daysUntilExpiry, 30)
-    }
-
-    func testDaysUntilExpiry_1Day() {
-        let futureDate = Date().addingTimeInterval(86400)
-        viewModel.inviteExpiresAt = futureDate
-        XCTAssertEqual(viewModel.daysUntilExpiry, 1)
-    }
-
-    func testDaysUntilExpiry_PastDate() {
-        let pastDate = Date().addingTimeInterval(-86400)
-        viewModel.inviteExpiresAt = pastDate
-        XCTAssertEqual(viewModel.daysUntilExpiry, 0)
-    }
-
-    func testDaysUntilExpiry_NilDate() {
-        viewModel.inviteExpiresAt = nil
-        XCTAssertEqual(viewModel.daysUntilExpiry, 0)
-    }
-
-    // MARK: - Partner Has Shared Data Tests
-
-    func testPartnerHasSharedData_NoPartner() {
-        viewModel.partnerState = .noPartner
-        XCTAssertFalse(viewModel.partnerHasSharedData)
-    }
-
-    func testPartnerHasSharedData_Loading() {
-        viewModel.partnerState = .loading
-        XCTAssertFalse(viewModel.partnerHasSharedData)
-    }
-
-    func testPartnerHasSharedData_PendingInvite() {
-        viewModel.partnerState = .pendingInvite(code: "ABC123", expiresAt: Date())
-        XCTAssertFalse(viewModel.partnerHasSharedData)
-    }
-
-    func testPartnerHasSharedData_WithPartnerSharingMood() {
-        let partnerInfo = PartnerInfo(
-            partnerId: UUID(),
-            partnerName: "Test",
-            partnerStreak: 5,
-            hasCompletedToday: true,
-            lastActive: Date(),
-            isSharingMood: true,
-            isSharingExercises: false
-        )
-        viewModel.partnerState = .hasPartner(partnerInfo)
-        XCTAssertTrue(viewModel.partnerHasSharedData)
-    }
-
-    func testPartnerHasSharedData_WithPartnerSharingExercises() {
-        let partnerInfo = PartnerInfo(
-            partnerId: UUID(),
-            partnerName: "Test",
-            partnerStreak: 5,
-            hasCompletedToday: true,
-            lastActive: Date(),
-            isSharingMood: false,
-            isSharingExercises: true
-        )
-        viewModel.partnerState = .hasPartner(partnerInfo)
-        XCTAssertTrue(viewModel.partnerHasSharedData)
-    }
-
-    func testPartnerHasSharedData_WithPartnerSharingNothing() {
-        let partnerInfo = PartnerInfo(
-            partnerId: UUID(),
-            partnerName: "Test",
-            partnerStreak: 5,
-            hasCompletedToday: true,
-            lastActive: Date(),
-            isSharingMood: false,
-            isSharingExercises: false
-        )
-        viewModel.partnerState = .hasPartner(partnerInfo)
-        XCTAssertFalse(viewModel.partnerHasSharedData)
+final class PartnerInvitationRouteTests: XCTestCase {
+    func testGenerateAndAcceptUseCouplesEndpointsAndPreserveCodeCase() async throws {
+        PartnerInviteURLProtocol.requests = []
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [PartnerInviteURLProtocol.self]
+        let client = SupabaseClient(supabaseURL: URL(string: "https://partner-fixture.invalid")!, supabaseKey: "synthetic-anon",
+            options: .init(auth: .init(storage: PartnerInviteStorage(), autoRefreshToken: false),
+                           global: .init(session: URLSession(configuration: config))))
+        let api = PartnerInvitationClient(client: client)
+        let invitation = try await api.create()
+        XCTAssertEqual(invitation.code, "Ab7x2Qp9")
+        XCTAssertGreaterThan(invitation.expiresAt, Date())
+        XCTAssertEqual(PartnerInviteURLProtocol.requests.first?.url?.lastPathComponent, "couples-partner-links")
+        try await api.accept(code: invitation.code)
+        let accepted = try XCTUnwrap(PartnerInviteURLProtocol.requests.last)
+        XCTAssertEqual(accepted.url?.lastPathComponent, "couples-partner-links-accept")
+        let body = try XCTUnwrap(accepted.httpBody)
+        XCTAssertEqual(try JSONSerialization.jsonObject(with: body) as? [String: String], ["inviteCode": "Ab7x2Qp9"])
+        XCTAssertEqual(PartnerInviteURLProtocol.requests.count, 2, "No buddy mutation or external account request")
     }
 }
-*/
 
-// MARK: - Mock Data Service
-
-// FIXME: Cannot mock SupabaseDataService - it's a final class
-// To fix: Create a SupabaseDataServiceProtocol and have SupabaseDataService conform to it
-// Then update PartnerModeViewModel to accept the protocol instead of the concrete class
-/*
-final class PartnerMockSupabaseDataService: SupabaseDataService {
-    init() { super.init(authService: SupabaseAuthService(client: SupabaseClient(supabaseURL: URL(string: "https://test.com")!, supabaseKey: "test"))) }
-
-    override func getPartnerInfo() async throws -> PartnerInfo? {
-        return nil
-    }
-
-    override func getOrCreatePartnerInviteCode() async throws -> (code: String, expiresAt: Date) {
-        return ("MOCK12", Date().addingTimeInterval(86400 * 30))
-    }
-
-    override func acceptBuddyInvite(code: String) async throws -> BuddyRelationship {
-        return BuddyRelationship(
-            id: UUID(),
-            inviterId: UUID(),
-            inviteeId: UUID(),
-            inviteCode: code,
-            status: .accepted,
-            invitedAt: Date(),
-            acceptedAt: Date(),
-            expiresAt: Date()
-        )
-    }
+private struct PartnerInviteStorage: AuthLocalStorage {
+    func store(key: String, value: Data) throws {}
+    func retrieve(key: String) throws -> Data? { nil }
+    func remove(key: String) throws {}
 }
-*/
+private final class PartnerInviteURLProtocol: URLProtocol {
+    private static let lock = NSLock()
+    private static var recorded: [URLRequest] = []
+    static var requests: [URLRequest] {
+        get { lock.lock(); defer { lock.unlock() }; return recorded }
+        set { lock.lock(); defer { lock.unlock() }; recorded = newValue }
+    }
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        var captured = request
+        if captured.httpBody == nil, let stream = captured.httpBodyStream {
+            stream.open()
+            defer { stream.close() }
+            var data = Data()
+            var buffer = [UInt8](repeating: 0, count: 1024)
+            while stream.hasBytesAvailable {
+                let count = stream.read(&buffer, maxLength: buffer.count)
+                if count <= 0 { break }
+                data.append(buffer, count: count)
+            }
+            captured.httpBody = data
+        }
+        Self.lock.lock(); Self.recorded.append(captured); Self.lock.unlock()
+        let response: [String: String]
+        switch request.url?.lastPathComponent {
+        case "couples-partner-links":
+            response = ["inviteCode": "Ab7x2Qp9", "expiresAt": ISO8601DateFormatter.string(from: Date().addingTimeInterval(3600), timeZone: .init(secondsFromGMT: 0)!, formatOptions: [.withInternetDateTime, .withFractionalSeconds])]
+        case "couples-partner-links-accept": response = ["status": "active"]
+        default:
+            client?.urlProtocol(self, didFailWithError: URLError(.unsupportedURL))
+            return
+        }
+        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: try! JSONSerialization.data(withJSONObject: response))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
