@@ -86,6 +86,7 @@ class Fixture {
   allowedTypes = new Set([...legacyTypes, ...addedTypes]);
   insertError = false;
   updateError = false;
+  updateErrorAfterClaim = false;
   zeroUpdatedRows = false;
   tokenError = false;
   settingsError = false;
@@ -93,6 +94,7 @@ class Fixture {
   profileError = false;
   configured = true;
   pushStatus = 200;
+  pushThrows = false;
   pushBodies: Row[] = [];
   deletedTokens: URL[] = [];
 
@@ -146,6 +148,7 @@ class Fixture {
     if (url.hostname === "api.sandbox.push.apple.com") {
       this.events.push("apns.send");
       this.pushBodies.push(body);
+      if (this.pushThrows) throw new TypeError("Synthetic lost provider response");
       return this.pushStatus === 200
         ? new Response(null, {
           status: 200,
@@ -187,12 +190,16 @@ class Fixture {
       }
       if (req.method === "PATCH") {
         this.events.push("history.update");
-        if (this.updateError) return this.error("23514");
+        if (this.updateError || (this.updateErrorAfterClaim && body.status)) return this.error("23514");
         if (this.zeroUpdatedRows) return this.error("PGRST116", 406);
         const row = this.rows.find((r) =>
           `eq.${r.id}` === url.searchParams.get("id")
         );
         assert(row, "Update must address an existing notification UUID");
+        if (url.searchParams.has("scheduled_for") &&
+            (!row.scheduled_for || row.status !== "pending" || new Date(row.scheduled_for) > new Date())) {
+          return this.json(null);
+        }
         Object.assign(row, body);
         return this.json({ id: row.id });
       }
@@ -580,7 +587,7 @@ Deno.test("queue respects quiet hours and distinguishes no token from provider r
   assertEquals(rejected.rows[0].sent_at, null);
 });
 
-Deno.test("queue persistence failure reports failure and documents duplicate risk on retry", async () => {
+Deno.test("queue claim failure sends nothing and remains retryable", async () => {
   for (const zeroRows of [false, true]) {
     const fixture = new Fixture();
     const id = fixture.queue();
@@ -589,13 +596,84 @@ Deno.test("queue persistence failure reports failure and documents duplicate ris
     const failed = await fixture.process();
     assertEquals(failed.status, 500);
     assertEquals(failed.body.success, false);
-    assertEquals(failed.body.persistenceFailures, 1);
+    assertEquals(failed.body.claimFailures, 1);
     assertEquals(fixture.rows[0].status, "pending");
+    assertEquals(fixture.pushBodies.length, 0);
     fixture.updateError = false;
     fixture.zeroUpdatedRows = false;
     assertEquals((await fixture.process()).body.sent, 1);
-    assertEquals(fixture.pushBodies.map((p) => p.notification_id), [id, id]);
+    assertEquals(fixture.pushBodies.map((p) => p.notification_id), [id]);
   }
+});
+
+Deno.test("queue post-send persistence failure retains uncertainty without replay", async () => {
+  const fixture = new Fixture();
+  fixture.queue();
+  fixture.updateErrorAfterClaim = true;
+  const failed = await fixture.process();
+  assertEquals(failed.status, 500);
+  assertEquals(failed.body.persistenceFailures, 1);
+  assertEquals(fixture.rows[0].scheduled_for, null);
+  assertEquals(fixture.rows[0].metadata.delivery_state, "attempting");
+  fixture.updateErrorAfterClaim = false;
+  assertEquals((await fixture.process()).body.processed, 0);
+  assertEquals(fixture.pushBodies.length, 1);
+});
+
+Deno.test("queue retries explicit 503 rejection with the same identity, then succeeds", async () => {
+  const fixture = new Fixture();
+  const id = fixture.queue();
+  fixture.pushStatus = 503;
+  assertEquals((await fixture.process()).body.stillQueued, 1);
+  assertEquals(fixture.rows[0].status, "pending");
+  assertEquals(fixture.rows[0].metadata.delivery_attempts, 1);
+  assert(new Date(fixture.rows[0].scheduled_for) > new Date());
+  assertEquals((await fixture.process()).body.processed, 0);
+  fixture.rows[0].scheduled_for = "2020-01-01T00:00:00Z";
+  fixture.pushStatus = 200;
+  assertEquals((await fixture.process()).body.sent, 1);
+  assertEquals(fixture.rows[0].status, "sent");
+  assertEquals(fixture.pushBodies.map((p) => p.notification_id), [id, id]);
+});
+
+Deno.test("queue bounds temporary rejection retries at four attempts", async () => {
+  const fixture = new Fixture();
+  fixture.queue();
+  fixture.pushStatus = 429;
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    fixture.rows[0].scheduled_for = "2020-01-01T00:00:00Z";
+    await fixture.process();
+    assertEquals(fixture.rows[0].metadata.delivery_attempts, attempt);
+    assertEquals(fixture.rows[0].status, attempt < 4 ? "pending" : "failed");
+  }
+  assertEquals((await fixture.process()).body.processed, 0);
+  assertEquals(fixture.pushBodies.length, 4);
+});
+
+Deno.test("queue transport uncertainty is retained and never automatically replayed", async () => {
+  const fixture = new Fixture();
+  fixture.queue();
+  fixture.pushThrows = true;
+  const result = await fixture.process();
+  assertEquals(result.status, 500);
+  assertEquals(result.body.uncertain, 1);
+  assertEquals(fixture.rows[0].metadata.delivery_state, "uncertain");
+  assertEquals(fixture.rows[0].scheduled_for, null);
+  fixture.pushThrows = false;
+  assertEquals((await fixture.process()).body.processed, 0);
+  assertEquals(fixture.pushBodies.length, 1);
+});
+
+Deno.test("concurrent queue runs claim one provider attempt", async () => {
+  const fixture = new Fixture();
+  fixture.queue();
+  await fixture.run(async () => {
+    const request = () => new Request("http://localhost/process-notification-queue", {
+      method: "POST", headers: { Authorization: `Bearer ${serviceKey}` },
+    });
+    await Promise.all([queueHandler(request()), queueHandler(request())]);
+  });
+  assertEquals(fixture.pushBodies.length, 1);
 });
 
 Deno.test("invalid-token cleanup uses device_token and exact user in both handlers", async () => {
