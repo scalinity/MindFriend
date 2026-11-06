@@ -470,14 +470,16 @@ final class AudioPlayerService: NSObject, ObservableObject {
               completionGate.claim(retryRejected: retryRejected) else { return }
         let position = Int(state.currentTime)
         await playbackStartTask?.value
-        guard generation == loadGeneration, currentSessionId != nil else { return }
+        guard generation == loadGeneration, let sessionId = currentSessionId else { return }
         
         // Ensure we have a valid session before making authenticated API calls
         guard let _ = try? await supabase.auth.session else { return }
+        guard generation == loadGeneration, currentSessionId == sessionId else { return }
 
         let body: [String: AudioPlayerServiceAnyEncodable] = [
             "trackId": AudioPlayerServiceAnyEncodable(track.id),
             "eventType": AudioPlayerServiceAnyEncodable("complete"),
+            "playbackSessionId": AudioPlayerServiceAnyEncodable(sessionId),
             "positionSeconds": AudioPlayerServiceAnyEncodable(position),
             "durationListenedSeconds": AudioPlayerServiceAnyEncodable(position),
         ]
