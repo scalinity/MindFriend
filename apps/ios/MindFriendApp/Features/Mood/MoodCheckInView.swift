@@ -98,6 +98,8 @@ struct MoodCheckInView: View {
                                         .foregroundStyle(.secondary)
                                 }
                                 Slider(value: $anxietyScore, in: 1...5, step: 1)
+                                    .accessibilityLabel("Anxiety level")
+                                    .accessibilityValue("\(currentAnxietyLabel), \(Int(anxietyScore)) of 5")
                             }
 
                             // Energy
@@ -110,6 +112,8 @@ struct MoodCheckInView: View {
                                         .foregroundStyle(.secondary)
                                 }
                                 Slider(value: $energyScore, in: 1...5, step: 1)
+                                    .accessibilityLabel("Energy level")
+                                    .accessibilityValue("\(currentEnergyLabel), \(Int(energyScore)) of 5")
                             }
 
                             // Note
