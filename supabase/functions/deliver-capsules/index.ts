@@ -53,6 +53,7 @@ Deno.serve(async (req) => {
       .from("time_capsules")
       .select("*")
       .eq("status", "sealed")
+      .is("deleted_at", null)
       .lte("deliver_at", now.toISOString())
       .order("deliver_at", { ascending: true })
       .limit(50);
@@ -88,17 +89,15 @@ Deno.serve(async (req) => {
           .from("profiles")
           .select("id")
           .eq("id", capsule.user_id)
-          .single();
+          .maybeSingle();
 
-        if (userCheckError || !userExists) {
-          console.log(
-            `Skipping capsule ${capsule.id} - user ${capsule.user_id} no longer exists`,
-          );
-          // Soft delete the capsule
-          await supabase
-            .from("time_capsules")
-            .update({ deleted_at: new Date().toISOString() })
-            .eq("id", capsule.id);
+        if (userCheckError) {
+          throw userCheckError;
+        }
+        if (!userExists) {
+          // A missing profile is not proof of account deletion. Account cleanup
+          // owns removal; delivery must never discard retained capsule content.
+          console.warn("Capsule delivery deferred: profile unavailable");
           failureCount++;
           continue;
         }
