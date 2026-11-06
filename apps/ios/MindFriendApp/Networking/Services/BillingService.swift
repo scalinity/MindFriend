@@ -325,10 +325,8 @@ final class BillingService: ObservableObject {
             let result = results.first
             subscription = result
 
-            // If user has a family group, load it
-            if result?.familyId != nil {
-                await loadFamilyGroup()
-            }
+            // Family access can coexist with a retained historical personal purchase.
+            await loadFamilyGroup()
         } catch {
             Log.billing.error("Failed to load subscription: \(error)")
         }
@@ -340,64 +338,32 @@ final class BillingService: ObservableObject {
     func loadFamilyGroup() async {
         guard let userId = authService.userId else { return }
 
-        // First check if user is admin - wrap in separate try to isolate failure
-        var group: FamilyGroup?
-        
         do {
-            let adminGroups: [FamilyGroup] = try await supabase
-                .from("family_groups")
-                .select()
-                .eq("admin_user_id", value: userId)
+            struct MembershipResult: Decodable {
+                let family_id: UUID
+            }
+            let memberships: [MembershipResult] = try await supabase
+                .from("family_members")
+                .select("family_id")
+                .eq("user_id", value: userId)
+                .eq("status", value: "active")
+                .order("joined_at", ascending: false)
                 .limit(1)
                 .execute()
                 .value
-            group = adminGroups.first
-        } catch {
-            // Log but don't fail - user might still be a member
-            Log.billing.warning("Failed to check admin family groups: \(error)")
-        }
-
-        // If not admin, check if member
-        if group == nil {
-            do {
-                // Check family_members for this user's family
-                struct MembershipResult: Codable {
-                    let familyId: String
-
-                    enum CodingKeys: String, CodingKey {
-                        case familyId = "family_id"
-                    }
-                }
-
-                let memberships: [MembershipResult] = try await supabase
-                    .from("family_members")
-                    .select("family_id")
-                    .eq("user_id", value: userId)
-                    .eq("status", value: "active")
-                    .limit(1)
-                    .execute()
-                    .value
-
-                if let membership = memberships.first {
-                    group = try await supabase
-                        .from("family_groups")
-                        .select()
-                        .eq("id", value: membership.familyId)
-                        .single()
-                        .execute()
-                        .value
-                }
-            } catch {
-                // Log but don't fail - user might not have a family
-                Log.billing.warning("Failed to check family membership: \(error)")
+            var query = supabase.from("family_groups").select()
+            if let membership = memberships.first {
+                query = query.eq("id", value: membership.family_id)
+            } else {
+                query = query.eq("admin_user_id", value: userId)
             }
-        }
-
-        familyGroup = group
-
-        // Load members if we have a group
-        if group != nil {
-            await loadFamilyMembers()
+            let groups: [FamilyGroup] = try await query.limit(1).execute().value
+            guard authService.userId == userId else { return }
+            if familyGroup?.id != groups.first?.id { familyMembers = [] }
+            familyGroup = groups.first
+            if familyGroup != nil { await loadFamilyMembers() }
+        } catch {
+            Log.billing.warning("Failed to load family membership: \(error)")
         }
     }
 

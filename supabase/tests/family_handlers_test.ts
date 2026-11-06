@@ -132,3 +132,164 @@ Deno.test("family removal authenticates the actor and delegates one atomic mutat
     );
   }
 });
+
+Deno.test("family invite routes use one recipient-bound transaction", async (t) => {
+  const nativeFetch = globalThis.fetch;
+  const nativeServe = Deno.serve;
+  const names = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"];
+  const previous = names.map((key) => Deno.env.get(key));
+  Deno.env.set(names[0], "http://localhost:55321");
+  Deno.env.set(names[1], "synthetic-service");
+  const userId = "18200000-0000-4000-8000-000000000002";
+  let handler!: (req: Request) => Promise<Response>;
+  let rpcError: string | null = null;
+  let rpcCalls: unknown[] = [];
+  Deno.serve = ((callback: typeof handler) => {
+    handler = callback;
+    return { finished: Promise.resolve(), shutdown: () => Promise.resolve() };
+  }) as unknown as typeof Deno.serve;
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    assert(url.hostname === "localhost", "Unexpected external request");
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({
+        id: userId,
+        email: "recipient@example.invalid",
+        app_metadata: {},
+        user_metadata: {},
+      });
+    }
+    if (url.pathname === "/rest/v1/rpc/check_rate_limit") {
+      return Response.json([{
+        allowed: true,
+        remaining: 9,
+        reset_at: new Date(Date.now() + 60_000).toISOString(),
+      }]);
+    }
+    if (url.pathname === "/rest/v1/rpc/join_family_atomic") {
+      rpcCalls.push(JSON.parse(String(init?.body)));
+      return rpcError
+        ? Response.json({ code: rpcError, message: "Synthetic denial" }, {
+          status: 400,
+        })
+        : Response.json({
+          success: true,
+          family_id: "family-id",
+          family_name: "Family",
+          member_id: "member-id",
+          role: "child",
+          circle_id: null,
+        });
+    }
+    if (
+      url.pathname === "/rest/v1/family_members" &&
+      (!init?.method || init.method === "GET")
+    ) return Response.json([]);
+    throw new Error(`Unexpected split mutation ${url.pathname}`);
+  };
+  const request = (body: unknown) =>
+    handler(
+      new Request("http://localhost/family", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer synthetic-user",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      }),
+    );
+  try {
+    await import("../functions/accept-family-invite/index.ts");
+    await t.step(
+      "paid invitation requires exact invitation and verified actor",
+      async () => {
+        rpcCalls = [];
+        const response = await request({
+          invite_code: "abcd5678",
+          user_id: "attacker",
+          role: "admin",
+        });
+        assert(response.status === 200, "Acceptance failed");
+        const body = await response.json();
+        assert(
+          body.familyId === "family-id" && body.success === true,
+          "Client response contract changed",
+        );
+        assert(
+          JSON.stringify(rpcCalls) ===
+            JSON.stringify([{
+              p_user_id: userId,
+              p_invite_code: "ABCD5678",
+              p_require_invitation: true,
+            }]),
+          "Incorrect invitation transaction",
+        );
+      },
+    );
+    await t.step(
+      "recipient denial returns forbidden without partial writes",
+      async () => {
+        rpcError = "42501";
+        const response = await request({ invite_code: "ABCD5678" });
+        assert(response.status === 403, "Recipient denial hidden");
+        await response.text();
+        rpcError = null;
+      },
+    );
+    await import("../functions/join-family/index.ts");
+    await t.step(
+      "group route preserves date-only payload and never sends claimed role",
+      async () => {
+        rpcCalls = [];
+        const response = await request({
+          inviteCode: "abcd5678",
+          nickname: " Name ",
+          birthDate: "1990-01-01",
+          role: "parent",
+        });
+        assert(response.status === 200, "Group join failed");
+        const body = await response.json();
+        assert(body.member.role === "child", "Authoritative role lost");
+        assert(
+          JSON.stringify(rpcCalls) ===
+            JSON.stringify([{
+              p_user_id: userId,
+              p_invite_code: "ABCD5678",
+              p_nickname: "Name",
+              p_birth_date: "1990-01-01",
+            }]),
+          "Untrusted role or incorrect request",
+        );
+      },
+    );
+    await t.step("impossible date cannot reach transaction", async () => {
+      rpcCalls = [];
+      const response = await request({
+        inviteCode: "ABCD5678",
+        birthDate: "2015-02-30",
+      });
+      assert(
+        response.status === 400 && rpcCalls.length === 0,
+        "Impossible birth date accepted",
+      );
+      await response.text();
+    });
+    await t.step(
+      "transaction failure does not become a successful join",
+      async () => {
+        rpcError = "XX000";
+        const response = await request({ inviteCode: "ABCD5678" });
+        assert(response.status === 500, "Transaction failure hidden");
+        await response.text();
+      },
+    );
+  } finally {
+    globalThis.fetch = nativeFetch;
+    Deno.serve = nativeServe;
+    names.forEach((name, index) =>
+      previous[index] === undefined
+        ? Deno.env.delete(name)
+        : Deno.env.set(name, previous[index]!)
+    );
+  }
+});
