@@ -16,6 +16,8 @@ SUITES = (
     "content_report_authorization.sql",
     "recipient_entitlement.sql",
     "sponsored_entitlement.sql",
+    "family_member_removal.sql",
+    "family_invitation_acceptance.sql",
 )
 
 

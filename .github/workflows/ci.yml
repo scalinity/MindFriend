@@ -76,6 +76,7 @@ jobs:
           deno test --allow-env --allow-read \
             supabase/tests/issue15_chat_test.ts \
             supabase/tests/monthly-ai-budget.test.ts \
+            supabase/tests/family_handlers_test.ts \
             supabase/functions/_shared/sleep-session-records.test.ts \
             supabase/functions/_shared/sleep-session-readers.test.ts \
             supabase/functions/manage-safety-plan/handler.test.ts
