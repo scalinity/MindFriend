@@ -37,6 +37,40 @@ enum SupabaseConfig {
     static let redirectURL = URL(string: "mindfriend://auth/callback")!
 }
 
+/// Resolves retained object URLs through the signed-in owner's Storage policies.
+enum SupabaseStorageMedia {
+    static func privateObject(in url: URL) -> (bucket: String, path: String)? {
+        guard url.host == SupabaseConfig.projectURL.host,
+              url.scheme == SupabaseConfig.projectURL.scheme else { return nil }
+        let parts = url.path.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+        guard parts.count >= 7, Array(parts.prefix(3)) == ["storage", "v1", "object"],
+              ["public", "authenticated", "sign"].contains(parts[3]),
+              ["creative-works", "generated-audio"].contains(parts[4]) else { return nil }
+        return (parts[4], parts.dropFirst(5).joined(separator: "/"))
+    }
+
+    /// Token expiry is a display refresh hint only. Storage still authorizes every signature.
+    static func signedURLNeedsRefresh(_ url: URL?, now: Date = Date(), minimumValidity: TimeInterval = 60) -> Bool {
+        guard let url,
+              let token = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
+                .first(where: { $0.name == "token" })?.value else { return true }
+        let parts = token.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 3 else { return true }
+        var payload = String(parts[1]).replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        payload += String(repeating: "=", count: (4 - payload.count % 4) % 4)
+        guard let data = Data(base64Encoded: payload),
+              let claims = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let expiry = claims["exp"] as? Double, expiry.isFinite else { return true }
+        return expiry <= now.timeIntervalSince1970 + minimumValidity
+    }
+
+    static func resolve(_ url: URL) async throws -> URL {
+        guard let object = privateObject(in: url) else { return url }
+        return try await supabase.storage.from(object.bucket)
+            .createSignedURL(path: object.path, expiresIn: 3600)
+    }
+}
+
 /// Shared Supabase client instance
 let supabase = SupabaseClient(
     supabaseURL: SupabaseConfig.projectURL,
@@ -268,7 +302,7 @@ struct DBUserStatsRow: Codable {
 
 /// Compose UserProfile from the three separate table rows
 extension DBProfileRow {
-    func toUserProfile(settings: DBUserSettingsRow, stats: DBUserStatsRow) -> UserProfile {
+    func toUserProfile(settings: DBUserSettingsRow, stats: DBUserStatsRow, hasSponsoredAccess: Bool = false) -> UserProfile {
         UserProfile(
             id: id,
             handle: handle,
@@ -300,7 +334,7 @@ extension DBProfileRow {
                 privacyMode: PrivacyMode(rawValue: settings.privacyMode) ?? .standard
             ),
             entitlements: UserEntitlements(
-                subscriptionTier: subscriptionTier,
+                subscriptionTier: hasSponsoredAccess ? "premium" : subscriptionTier,
                 premiumExpiresAt: nil,
                 features: [:]
             ),

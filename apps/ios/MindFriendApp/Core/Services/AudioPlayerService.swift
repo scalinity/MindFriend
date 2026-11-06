@@ -13,6 +13,9 @@ final class AudioPlayerService: NSObject, ObservableObject {
     private var player: AVPlayer?
     private var playerItem: AVPlayerItem?
     private var timeObserver: Any?
+    private var loadGeneration = UUID()
+    private var loadTask: Task<URL, Error>?
+    private var wantsPlayback = false
     private var cancellables = Set<AnyCancellable>()
 
     @Published private(set) var state = PlaybackState()
@@ -45,19 +48,7 @@ final class AudioPlayerService: NSObject, ObservableObject {
         sleepTimer?.invalidate()
         sleepTimer = nil
         
-        // Remove time observer
-        if let observer = timeObserver, let player = player {
-            player.removeTimeObserver(observer)
-        }
-        timeObserver = nil
-        
-        // Cancel Combine subscriptions
-        cancellables.removeAll()
-        
-        // Stop playback
-        player?.pause()
-        player = nil
-        playerItem = nil
+        stop()
     }
 
     // MARK: - Audio Session Setup
@@ -111,6 +102,9 @@ final class AudioPlayerService: NSObject, ObservableObject {
     // MARK: - Playback Control
 
     func play(_ track: AudioTrack, context: String = "browse") async {
+        stop()
+        let generation = loadGeneration
+        wantsPlayback = true
         state.currentTrack = track
         state.isBuffering = true
         state.error = nil
@@ -122,33 +116,60 @@ final class AudioPlayerService: NSObject, ObservableObject {
 
         // Check if offline available
         guard let audioUrl = cacheManager.getCachedURL(for: track) ?? URL(string: track.audioUrl) else {
+            state.isBuffering = false
             state.error = "Invalid audio URL"
             return
         }
 
-        let asset = AVURLAsset(url: audioUrl)
-        playerItem = AVPlayerItem(asset: asset)
-
-        player = AVPlayer(playerItem: playerItem)
+        let resolution = Task { try await SupabaseStorageMedia.resolve(audioUrl) }
+        loadTask = resolution
+        let resolvedURL: URL
+        do {
+            resolvedURL = try await withTaskCancellationHandler {
+                try await resolution.value
+            } onCancel: {
+                resolution.cancel()
+            }
+            try Task.checkCancellation()
+            guard generation == loadGeneration else { return }
+            loadTask = nil
+        } catch {
+            guard generation == loadGeneration else { return }
+            loadTask = nil
+            state.isBuffering = false
+            if !Task.isCancelled && !resolution.isCancelled {
+                state.error = "Unable to open this audio. Please try again."
+            }
+            return
+        }
+        let asset = AVURLAsset(url: resolvedURL)
+        let item = AVPlayerItem(asset: asset)
+        playerItem = item
+        player = AVPlayer(playerItem: item)
 
         // Observe player item status
         playerItem?.publisher(for: \.status)
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] status in
+            .sink { [weak self, weak item] status in
+                guard let self, generation == self.loadGeneration,
+                      let item, self.playerItem === item else { return }
                 switch status {
                 case .readyToPlay:
-                    self?.state.isBuffering = false
-                    self?.state.duration = self?.playerItem?.duration.seconds ?? 0
-                    self?.player?.play()
-                    self?.state.isPlaying = true
-                    self?.updateNowPlayingInfo()
-                case .failed:
-                    if let itemError = self?.playerItem?.error {
-                        self?.state.error = "Failed to load audio: \(itemError.localizedDescription)"
-                    } else {
-                        self?.state.error = "Failed to load audio"
+                    self.state.isBuffering = false
+                    self.state.duration = item.duration.seconds.isFinite ? item.duration.seconds : 0
+                    if self.wantsPlayback {
+                        self.player?.play()
+                        self.state.isPlaying = true
                     }
-                    self?.state.isBuffering = false
+                    self.updateNowPlayingInfo()
+                case .failed:
+                    if let itemError = item.error {
+                        self.state.error = "Failed to load audio: \(itemError.localizedDescription)"
+                    } else {
+                        self.state.error = "Failed to load audio"
+                    }
+                    self.state.isBuffering = false
+                    self.state.isPlaying = false
                 default:
                     break
                 }
@@ -161,15 +182,16 @@ final class AudioPlayerService: NSObject, ObservableObject {
             queue: .main
         ) { [weak self] time in
             MainActor.assumeIsolated {
-                self?.state.currentTime = time.seconds
-                self?.updateNowPlayingInfo()
+                guard let self, generation == self.loadGeneration else { return }
+                self.state.currentTime = time.seconds
+                self.updateNowPlayingInfo()
 
                 // Check for completion (95% played)
-                if let duration = self?.state.duration,
-                   duration > 0,
+                let duration = self.state.duration
+                if duration > 0,
                    time.seconds / duration > 0.95 {
                     Task {
-                        await self?.recordPlaybackComplete()
+                        await self.recordPlaybackComplete()
                     }
                 }
             }
@@ -179,7 +201,8 @@ final class AudioPlayerService: NSObject, ObservableObject {
         NotificationCenter.default.publisher(for: .AVPlayerItemDidPlayToEndTime, object: playerItem)
             .sink { [weak self] _ in
                 Task {
-                    await self?.handlePlaybackEnd()
+                    guard let self, generation == self.loadGeneration else { return }
+                    await self.handlePlaybackEnd(generation: generation)
                 }
             }
             .store(in: &cancellables)
@@ -188,11 +211,14 @@ final class AudioPlayerService: NSObject, ObservableObject {
     }
 
     func play() {
-        player?.play()
+        wantsPlayback = true
+        guard let player, playerItem?.status == .readyToPlay else { return }
+        player.play()
         state.isPlaying = true
     }
 
     func pause() {
+        wantsPlayback = false
         player?.pause()
         state.isPlaying = false
     }
@@ -222,14 +248,17 @@ final class AudioPlayerService: NSObject, ObservableObject {
     }
 
     func stop() {
+        loadGeneration = UUID()
+        loadTask?.cancel()
+        loadTask = nil
+        wantsPlayback = false
         player?.pause()
-        player = nil
-        playerItem = nil
-
         if let observer = timeObserver {
             player?.removeTimeObserver(observer)
         }
         timeObserver = nil
+        player = nil
+        playerItem = nil
 
         state = PlaybackState()
         cancellables.removeAll()
@@ -402,8 +431,9 @@ final class AudioPlayerService: NSObject, ObservableObject {
         }
     }
 
-    private func handlePlaybackEnd() async {
+    private func handlePlaybackEnd(generation: UUID) async {
         await recordPlaybackComplete()
+        guard generation == loadGeneration else { return }
         
         // Loop if enabled, otherwise stop
         if isLoopingEnabled {
@@ -538,7 +568,11 @@ final class AudioCacheManager {
         guard let url = URL(string: track.audioUrl) else {
             throw NSError(domain: "AudioCache", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid audio URL"])
         }
-        let (tempURL, _) = try await URLSession.shared.download(from: url)
+        let resolvedURL = try await SupabaseStorageMedia.resolve(url)
+        let (tempURL, response) = try await URLSession.shared.download(from: resolvedURL)
+        guard let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
         try FileManager.default.moveItem(at: tempURL, to: localPath)
     }
 

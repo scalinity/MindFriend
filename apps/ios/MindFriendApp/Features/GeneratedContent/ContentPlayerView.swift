@@ -66,6 +66,7 @@ struct ContentPlayerView: View {
             Text("How would you rate this \(content.contentType.displayName.lowercased())?")
         }
         .onAppear {
+            viewModel.preparePlayback()
             Task {
                 await viewModel.recordPlay()
             }
@@ -186,7 +187,7 @@ struct ContentPlayerView: View {
                 Button {
                     viewModel.togglePlayback()
                 } label: {
-                    Image(systemName: viewModel.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                    Image(systemName: viewModel.isPlaying || viewModel.wantsPlayback ? "pause.circle.fill" : "play.circle.fill")
                         .font(.system(size: 64))
                 }
 
@@ -199,6 +200,12 @@ struct ContentPlayerView: View {
                 }
             }
             .foregroundStyle(.primary)
+
+            if viewModel.isLoading { ProgressView("Loading audio…") }
+            if let error = viewModel.playbackError {
+                Text(error).font(.caption).foregroundStyle(.secondary)
+                Button("Try Again") { viewModel.togglePlayback() }
+            }
 
             // Speed control
             HStack {
@@ -585,9 +592,16 @@ final class ContentPlayerViewModel: ObservableObject {
     private let content: GeneratedContent
     private let service: GeneratedContentService
     private var player: AVPlayer?
+    private var setupTask: Task<Void, Never>?
+    private var endObserver: NSObjectProtocol?
+    private var statusObserver: NSKeyValueObservation?
+    private var setupGeneration = UUID()
     private var timeObserver: Any?
 
     @Published var isPlaying = false
+    @Published private(set) var wantsPlayback = false
+    @Published private(set) var isLoading = false
+    @Published private(set) var playbackError: String?
     @Published var playbackProgress: Double = 0
     @Published var currentTime: TimeInterval = 0
     @Published var playbackSpeed: Double = 1.0
@@ -611,65 +625,124 @@ final class ContentPlayerViewModel: ObservableObject {
         self.service = service
         self.isFavorite = content.isFavorite
 
-        setupPlayer()
+        preparePlayback()
     }
 
     deinit {
+        setupTask?.cancel()
+        if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
         if let timeObserver = timeObserver {
             player?.removeTimeObserver(timeObserver)
         }
     }
 
-    private func setupPlayer() {
-        guard let audioUrl = content.audioUrl,
-              let url = URL(string: audioUrl) else { return }
+    func preparePlayback() {
+        guard player == nil, setupTask == nil, content.hasAudio else { return }
+        let generation = UUID()
+        setupGeneration = generation
+        isLoading = true
+        playbackError = nil
+        setupTask = Task { [weak self] in await self?.setupPlayer(generation: generation) }
+    }
 
-        let playerItem = AVPlayerItem(url: url)
-        player = AVPlayer(playerItem: playerItem)
-
-        // Add time observer
-        let interval = CMTime(seconds: 0.5, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
-        timeObserver = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
-            guard let self = self else { return }
-
-            MainActor.assumeIsolated {
-                guard let duration = self.player?.currentItem?.duration,
-                      duration.isNumeric else { return }
-
-                let currentSeconds = time.seconds
-                let totalSeconds = duration.seconds
-
-                self.currentTime = currentSeconds
-                self.playbackProgress = currentSeconds / totalSeconds
+    private func setupPlayer(generation: UUID) async {
+        do {
+            guard let audioUrl = content.audioUrl, let url = URL(string: audioUrl) else {
+                throw URLError(.badURL)
             }
-        }
+            let accessURL = try await SupabaseStorageMedia.resolve(url)
+            try Task.checkCancellation()
+            guard generation == setupGeneration else { return }
+            let playerItem = AVPlayerItem(url: accessURL)
+            player = AVPlayer(playerItem: playerItem)
+            setupTask = nil
 
-        // Observe when playback ends
-        NotificationCenter.default.addObserver(
-            forName: .AVPlayerItemDidPlayToEndTime,
-            object: playerItem,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.isPlaying = false
-                self?.playbackProgress = 0
-                self?.currentTime = 0
-                self?.player?.seek(to: .zero)
+            statusObserver = playerItem.observe(\.status, options: [.initial, .new]) { [weak self] item, _ in
+                Task { @MainActor [weak self] in
+                    guard let self, generation == self.setupGeneration,
+                          self.player?.currentItem === item else { return }
+                    switch item.status {
+                    case .readyToPlay:
+                        self.isLoading = false
+                        if self.wantsPlayback {
+                            self.player?.playImmediately(atRate: Float(self.playbackSpeed))
+                            self.isPlaying = true
+                        }
+                    case .failed:
+                        self.isLoading = false
+                        self.isPlaying = false
+                        self.wantsPlayback = false
+                        self.playbackError = "Unable to load this audio. Tap Play to try again."
+                    default: break
+                    }
+                }
+            }
+
+            let interval = CMTime(seconds: 0.5, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
+            timeObserver = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
+                MainActor.assumeIsolated {
+                    guard let self, generation == self.setupGeneration,
+                          let duration = self.player?.currentItem?.duration,
+                          duration.isNumeric, duration.seconds > 0 else { return }
+                    self.currentTime = time.seconds
+                    self.playbackProgress = time.seconds / duration.seconds
+                }
+            }
+
+            endObserver = NotificationCenter.default.addObserver(
+                forName: .AVPlayerItemDidPlayToEndTime, object: playerItem, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self, generation == self.setupGeneration else { return }
+                    self.isPlaying = false
+                    self.wantsPlayback = false
+                    self.playbackProgress = 0
+                    self.currentTime = 0
+                    self.player?.seek(to: .zero)
+                }
+            }
+        } catch {
+            guard generation == setupGeneration else { return }
+            setupTask = nil
+            isLoading = false
+            wantsPlayback = false
+            if !Task.isCancelled {
+                playbackError = "Unable to open this audio. Tap Play to try again."
             }
         }
     }
 
     func togglePlayback() {
-        if isPlaying {
+        if wantsPlayback || isPlaying {
+            wantsPlayback = false
             player?.pause()
+            isPlaying = false
         } else {
-            player?.play()
+            if player?.currentItem?.status == .failed { stopPlayback() }
+            wantsPlayback = true
+            playbackError = nil
+            if let player, player.currentItem?.status == .readyToPlay {
+                player.playImmediately(atRate: Float(playbackSpeed))
+                isPlaying = true
+            } else {
+                preparePlayback()
+            }
         }
-        isPlaying.toggle()
     }
 
     func stopPlayback() {
+        setupGeneration = UUID()
+        setupTask?.cancel()
+        setupTask = nil
+        statusObserver = nil
+        if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
+        endObserver = nil
+        if let timeObserver { player?.removeTimeObserver(timeObserver) }
+        timeObserver = nil
         player?.pause()
+        player = nil
+        wantsPlayback = false
+        isLoading = false
         isPlaying = false
     }
 
@@ -689,10 +762,7 @@ final class ContentPlayerViewModel: ObservableObject {
     }
 
     func setPlaybackSpeed(_ speed: Double) {
-        player?.rate = Float(speed)
-        if isPlaying {
-            player?.play()
-        }
+        if isPlaying { player?.rate = Float(speed) }
     }
 
     func toggleFavorite() async {

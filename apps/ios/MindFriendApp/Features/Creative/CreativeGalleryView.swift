@@ -1,14 +1,18 @@
 import SwiftUI
+import AVFoundation
 
 struct CreativeGalleryView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
+    @Environment(\.scenePhase) private var scenePhase
+    @StateObject private var sharing = CreativeWorkSharing()
 
     @State private var works: [CreativeWork] = []
     @State private var selectedFilter: CreativeWorkType?
     @State private var isLoading = true
     @State private var showingDeleteAlert = false
     @State private var workToDelete: CreativeWork?
+    @State private var isRefreshingMedia = false
 
     private let columns = [GridItem(.adaptive(minimum: 150), spacing: 12)]
 
@@ -35,8 +39,10 @@ struct CreativeGalleryView: View {
             }
         }
         .navigationTitle("Gallery")
-        .task {
-            await loadWorks()
+        .modifier(CreativeWorkSharePresentation(sharing: sharing))
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            if works.isEmpty { await loadWorks() } else { await refreshDisplayMedia() }
         }
         .refreshable {
             await loadWorks()
@@ -111,6 +117,7 @@ struct CreativeGalleryView: View {
                     CreativeWorkDetailView(work: work)
                 } label: {
                     GalleryThumbnailView(work: work)
+                        .task { await refreshDisplayMedia() }
                         .contextMenu {
                             Button {
                                 Task { await toggleFavorite(work) }
@@ -121,8 +128,10 @@ struct CreativeGalleryView: View {
                                 )
                             }
 
-                            if let url = shareURL(for: work) {
-                                ShareLink(item: url) {
+                            if work.storagePath != nil {
+                                Button {
+                                    sharing.share(work, using: container.creativeExpressionService)
+                                } label: {
                                     Label("Share", systemImage: "square.and.arrow.up")
                                 }
                             }
@@ -175,12 +184,71 @@ struct CreativeGalleryView: View {
         workToDelete = nil
     }
 
-    private func shareURL(for work: CreativeWork) -> URL? {
-        guard let path = work.storagePath,
-              let baseURL = URL(string: SupabaseConfig.projectURL.absoluteString) else {
-            return nil
+    private func refreshDisplayMedia() async {
+        guard !isRefreshingMedia else { return }
+        isRefreshingMedia = true
+        defer { isRefreshingMedia = false }
+        do {
+            let refreshed = try await container.creativeExpressionService.refreshMedia(works)
+            try Task.checkCancellation()
+            let urls = Dictionary(uniqueKeysWithValues: refreshed.map { ($0.id, $0.mediaUrl) })
+            for index in works.indices {
+                if let url = urls[works[index].id] { works[index].mediaUrl = url }
+            }
+        } catch {
+            if !Task.isCancelled { Log.creative.error("Failed to refresh gallery media", error: error) }
         }
-        return baseURL.appendingPathComponent("storage/v1/object/public/creative-works/\(path)")
+    }
+}
+
+/// Keeps asynchronous signing and its sheet on the screen that owns the Share action.
+@MainActor
+final class CreativeWorkSharing: ObservableObject {
+    struct Item: Identifiable {
+        let id = UUID()
+        let url: URL
+    }
+    @Published var item: Item?
+    @Published var error: String?
+    private var task: Task<Void, Never>?
+
+    func share(_ work: CreativeWork, using service: CreativeExpressionService) {
+        task?.cancel()
+        error = nil
+        task = Task { [weak self] in
+            do {
+                let url = try await service.freshShareURL(for: work)
+                try Task.checkCancellation()
+                self?.item = Item(url: url)
+            } catch {
+                guard !Task.isCancelled else { return }
+                self?.error = "Unable to prepare this link. Please try sharing again."
+            }
+        }
+    }
+
+    func cancel() {
+        task?.cancel()
+        task = nil
+    }
+}
+
+struct CreativeWorkSharePresentation: ViewModifier {
+    @ObservedObject var sharing: CreativeWorkSharing
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(item: $sharing.item) { item in
+                ShareSheet(items: ["Anyone with this link can open it for one hour.", item.url])
+            }
+            .alert("Unable to Share", isPresented: Binding(
+                get: { sharing.error != nil }, set: { if !$0 { sharing.error = nil } }
+            )) {
+                Button("OK") { sharing.error = nil }
+            } message: {
+                Text(sharing.error ?? "Please try again.")
+            }
+            .onDisappear { sharing.cancel() }
     }
 }
 
@@ -296,10 +364,7 @@ struct GalleryThumbnailView: View {
             }
     }
 
-    private func storageURL(for path: String) -> URL? {
-        guard let baseURL = URL(string: SupabaseConfig.projectURL.absoluteString) else { return nil }
-        return baseURL.appendingPathComponent("storage/v1/object/public/creative-works/\(path)")
-    }
+    private func storageURL(for path: String) -> URL? { work.mediaUrl }
 
     private var accessibilityLabel: String {
         var label = work.workType.displayName
@@ -320,12 +385,18 @@ struct CreativeWorkDetailView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
+    @StateObject private var sharing = CreativeWorkSharing()
 
     let work: CreativeWork
     @State private var localWork: CreativeWork
     @State private var analysis: VoiceJournalAnalysis?
+    @State private var showingVoiceAnalysis = false
     @State private var showingDeleteAlert = false
     @State private var isPlaying = false
+    @State private var audioPlayer: AVPlayer?
+    @State private var playbackError: String?
+    @State private var playbackTask: Task<Void, Never>?
 
     init(work: CreativeWork) {
         self.work = work
@@ -350,6 +421,14 @@ struct CreativeWorkDetailView: View {
                 if localWork.workType == .voiceJournal, let analysis = analysis {
                     voiceAnalysisSection(analysis)
                 }
+                if localWork.workType == .voiceJournal {
+                    Button {
+                        showingVoiceAnalysis = true
+                    } label: {
+                        Label(analysis == nil ? "Analyze Recording" : "View Analysis", systemImage: "waveform")
+                    }
+                    .buttonStyle(.bordered)
+                }
             }
             .padding()
         }
@@ -367,8 +446,10 @@ struct CreativeWorkDetailView: View {
                         )
                     }
 
-                    if let url = shareURL {
-                        ShareLink(item: url) {
+                    if localWork.storagePath != nil {
+                        Button {
+                            sharing.share(localWork, using: container.creativeExpressionService)
+                        } label: {
                             Label("Share", systemImage: "square.and.arrow.up")
                         }
                     }
@@ -391,7 +472,30 @@ struct CreativeWorkDetailView: View {
         } message: {
             Text("This cannot be undone.")
         }
-        .task {
+        .modifier(CreativeWorkSharePresentation(sharing: sharing))
+        .sheet(isPresented: $showingVoiceAnalysis, onDismiss: {
+            Task { await loadAnalysis() }
+        }) {
+            VoiceJournalAnalysisView(work: localWork, analyzeOnOpen: false)
+        }
+        .onDisappear {
+            playbackTask?.cancel()
+            playbackTask = nil
+            audioPlayer?.pause()
+            audioPlayer = nil
+            isPlaying = false
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .AVPlayerItemDidPlayToEndTime)) { notification in
+            if let item = notification.object as? AVPlayerItem, item === audioPlayer?.currentItem {
+                isPlaying = false
+            }
+        }
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            if let refreshed = try? await container.creativeExpressionService.refreshMedia([localWork]),
+               !Task.isCancelled, let url = refreshed.first?.mediaUrl {
+                localWork.mediaUrl = url
+            }
             if localWork.workType == .voiceJournal {
                 await loadAnalysis()
             }
@@ -476,15 +580,18 @@ struct CreativeWorkDetailView: View {
 
             // Play button
             Button {
-                isPlaying.toggle()
+                playbackTask?.cancel()
+                playbackTask = Task { await toggleVoicePlayback() }
             } label: {
                 Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
                     .font(.system(size: 60))
                     .foregroundStyle(Color.accentColor)
             }
 
+            if let playbackError { Text(playbackError).font(.caption).foregroundStyle(.secondary) }
+
             // Transcription
-            if let transcription = localWork.transcription {
+            if let transcription = analysis?.fullTranscription ?? localWork.transcription {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Transcription")
                         .font(.headline)
@@ -557,6 +664,8 @@ struct CreativeWorkDetailView: View {
 
     private func voiceAnalysisSection(_ analysis: VoiceJournalAnalysis) -> some View {
         VStack(alignment: .leading, spacing: 16) {
+            Text("Insights are inferred from the transcript.")
+                .font(.caption).foregroundStyle(.secondary)
             Text("Insights")
                 .font(.headline)
 
@@ -606,6 +715,29 @@ struct CreativeWorkDetailView: View {
 
     // MARK: - Actions
 
+    private func toggleVoicePlayback() async {
+        if isPlaying {
+            audioPlayer?.pause()
+            isPlaying = false
+            return
+        }
+        do {
+            guard let path = localWork.storagePath else { return }
+            let url = try await supabase.storage.from("creative-works").createSignedURL(path: path, expiresIn: 3600)
+            try Task.checkCancellation()
+            try AVAudioSession.sharedInstance().setCategory(.playback)
+            try AVAudioSession.sharedInstance().setActive(true)
+            audioPlayer = AVPlayer(url: url)
+            audioPlayer?.play()
+            isPlaying = true
+            playbackError = nil
+        } catch {
+            guard !Task.isCancelled else { return }
+            playbackError = "Unable to play this recording. Please try again."
+            isPlaying = false
+        }
+    }
+
     private func toggleFavorite() async {
         do {
             let newStatus = try await container.creativeExpressionService.toggleFavorite(workId: localWork.id)
@@ -632,15 +764,7 @@ struct CreativeWorkDetailView: View {
         }
     }
 
-    private func storageURL(for path: String) -> URL? {
-        guard let baseURL = URL(string: SupabaseConfig.projectURL.absoluteString) else { return nil }
-        return baseURL.appendingPathComponent("storage/v1/object/public/creative-works/\(path)")
-    }
-
-    private var shareURL: URL? {
-        guard let path = localWork.storagePath else { return nil }
-        return storageURL(for: path)
-    }
+    private func storageURL(for path: String) -> URL? { localWork.mediaUrl }
 
     private func formatDuration(_ seconds: Int) -> String {
         let mins = seconds / 60
