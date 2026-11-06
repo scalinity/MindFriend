@@ -3,6 +3,12 @@
 // Chirp 3 HD voices: $30 per 1M characters (higher quality, more natural)
 // Docs: https://cloud.google.com/text-to-speech/docs/chirp3-hd
 
+import {
+  type MonthlyAIBudgetAdmin,
+  MonthlyAIBudgetUnavailableError,
+  reserveMonthlyAIBudget,
+} from "./monthly-ai-budget.ts";
+
 const GOOGLE_TTS_API_URL =
   "https://texttospeech.googleapis.com/v1/text:synthesize";
 
@@ -45,6 +51,16 @@ export interface TTSResponse {
   contentType: string;
   durationMs?: number;
   characterCount: number;
+}
+
+export interface GoogleTTSOptions {
+  budget: {
+    admin: MonthlyAIBudgetAdmin;
+    userId: string;
+    feature: "voice.tts" | "meditation.tts" | "content.tts" | "sleep.tts";
+  };
+  signal?: AbortSignal;
+  beforeProvider?: (signal: AbortSignal) => Promise<void>;
 }
 
 // ─── Voice Presets ───────────────────────────────────────────
@@ -206,7 +222,10 @@ export class GoogleTTSClient {
     this.apiKey = config.apiKey;
   }
 
-  async textToSpeech(request: TTSRequest): Promise<TTSResponse> {
+  async textToSpeech(
+    request: TTSRequest,
+    options: GoogleTTSOptions,
+  ): Promise<TTSResponse> {
     const { text, ssml, voiceId, useChirp3HD = false } = request;
 
     const inputContent = ssml || text;
@@ -234,6 +253,28 @@ export class GoogleTTSClient {
     const presets = useChirp3HD ? CHIRP3_HD_PRESETS : GOOGLE_VOICE_PRESETS;
     const preset = presets[voiceId] || presets.default;
 
+    // Price the resolved voice, never a caller-supplied estimate. Reject other
+    // voice families before reserving or contacting the paid endpoint.
+    const standard = /^en-US-Standard-[A-J]$/.test(preset?.voiceName);
+    const chirp =
+      /^en-US-Chirp3-HD-(Aoede|Kore|Leda|Zephyr|Puck|Charon|Fenrir|Orus)$/
+        .test(preset?.voiceName);
+    if (
+      preset?.languageCode !== "en-US" ||
+      (useChirp3HD ? !chirp : !standard)
+    ) {
+      throw new GoogleTTSError(
+        "Unsupported voice configuration",
+        "INVALID_REQUEST",
+      );
+    }
+    if (
+      !options?.budget ||
+      !["voice.tts", "meditation.tts", "content.tts", "sleep.tts"].includes(
+        options.budget.feature,
+      )
+    ) throw new MonthlyAIBudgetUnavailableError("invalid_request");
+
     // Build Google API request body
     const body = {
       input: ssml ? { ssml } : { text },
@@ -253,8 +294,25 @@ export class GoogleTTSClient {
     // Use v1beta1 for Chirp 3 HD voices
     const apiUrl = useChirp3HD ? GOOGLE_TTS_V1BETA1_URL : GOOGLE_TTS_API_URL;
 
+    // UTF-8 bytes bound billed characters, including all SSML markup. Do not
+    // assume any free tier, cached speech, or a cheaper voice than the resolved one.
+    const signal = AbortSignal.any([
+      ...(options.signal ? [options.signal] : []),
+      AbortSignal.timeout(45_000),
+    ]);
+    await reserveMonthlyAIBudget(options.budget.admin, {
+      requestId: crypto.randomUUID(),
+      userId: options.budget.userId,
+      feature: options.budget.feature,
+      reserveMicrodollars: Math.ceil(textBytes.length * (chirp ? 30 : 4)),
+    }, signal);
+    signal.throwIfAborted();
+    await options.beforeProvider?.(signal);
+    signal.throwIfAborted();
+
     const response = await fetch(apiUrl, {
       method: "POST",
+      signal,
       headers: {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": this.apiKey,
@@ -263,40 +321,28 @@ export class GoogleTTSClient {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      let errorMessage = `Google TTS API error: ${response.status}`;
-      let errorCode = "API_ERROR";
-
-      try {
-        const errorJson = JSON.parse(errorText);
-        errorMessage =
-          errorJson.error?.message || errorJson.error?.status || errorMessage;
-
-        if (
-          response.status === 403 ||
-          errorJson.error?.status === "PERMISSION_DENIED"
-        ) {
-          errorCode = "UNAUTHORIZED";
-        } else if (
-          response.status === 429 ||
-          errorJson.error?.status === "RESOURCE_EXHAUSTED"
-        ) {
-          errorCode = "RATE_LIMIT_EXCEEDED";
-        } else if (response.status === 400) {
-          errorCode = "INVALID_REQUEST";
-        }
-      } catch {
-        // Use default error message
-      }
-
-      throw new GoogleTTSError(errorMessage, errorCode, errorText);
+      await response.body?.cancel();
+      const errorCode = response.status === 403
+        ? "UNAUTHORIZED"
+        : response.status === 429
+        ? "RATE_LIMIT_EXCEEDED"
+        : response.status === 400
+        ? "INVALID_REQUEST"
+        : "API_ERROR";
+      throw new GoogleTTSError("Voice synthesis service failed", errorCode);
     }
 
     // Parse response — Google returns { audioContent: base64string }
-    const data = await response.json();
-    const audioBase64: string = data.audioContent;
+    let data;
+    try {
+      data = await response.json();
+    } catch {
+      signal.throwIfAborted();
+      throw new GoogleTTSError("Invalid voice synthesis response", "API_ERROR");
+    }
+    const audioBase64 = data?.audioContent;
 
-    if (!audioBase64) {
+    if (typeof audioBase64 !== "string" || !audioBase64) {
       throw new GoogleTTSError(
         "No audio content in response",
         "API_ERROR",

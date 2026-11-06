@@ -1,5 +1,5 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
+import { budgetedXAIText, type XAITextBudgetContext } from "../_shared/budgeted-xai-text.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 interface ThoughtRecord {
@@ -102,6 +102,8 @@ const COGNITIVE_DISTORTIONS: Record<string, CognitiveDistortion> = {
 async function analyzeWithGrok(
   thoughtRecord: ThoughtRecord,
   xaiApiKey: string,
+  budget: XAITextBudgetContext,
+  signal?: AbortSignal,
 ): Promise<{
   distortions: string[];
   explanations: Record<string, string>;
@@ -150,14 +152,9 @@ Respond in JSON format:
   "copingStrategies": ["strategy 1", "strategy 2"]
 }`;
 
-  const response = await fetch("https://api.x.ai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${xaiApiKey}`,
-    },
-    body: JSON.stringify({
-      model: "grok-3-mini",
+  const response = await budgetedXAIText({
+      ...budget,
+      apiKey: xaiApiKey,
       messages: [
         {
           role: "system",
@@ -167,13 +164,12 @@ Respond in JSON format:
         { role: "user", content: prompt },
       ],
       temperature: 0.7,
-      max_tokens: 1000,
-    }),
+      maxTokens: 1000,
+      signal,
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    console.error("Grok API error:", errorText);
+    console.error("Grok API error:", response.status);
     throw new Error(`Grok API error: ${response.status}`);
   }
 
@@ -195,7 +191,7 @@ Respond in JSON format:
   try {
     return JSON.parse(jsonContent);
   } catch {
-    console.error("Failed to parse Grok response:", content);
+    console.error("Failed to parse Grok response");
     // Return a fallback analysis
     return {
       distortions: [],
@@ -212,7 +208,7 @@ Respond in JSON format:
   }
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 
@@ -296,7 +292,7 @@ serve(async (req) => {
     }
 
     // Analyze with Grok
-    const analysis = await analyzeWithGrok(thoughtRecord, xaiApiKey);
+    const analysis = await analyzeWithGrok(thoughtRecord, xaiApiKey, { admin: supabase, userId: user.id, feature: "thought.analysis" }, req.signal);
 
     // Build the response
     const aiAnalysis = {
@@ -341,11 +337,11 @@ serve(async (req) => {
       },
     );
   } catch (error) {
-    console.error("Error analyzing thought record:", error);
+    console.error("Error analyzing thought record");
     return new Response(
       JSON.stringify({
         error: "Failed to analyze thought record",
-        details: error.message,
+        details: (error instanceof Error ? error.message : String(error)),
       }),
       {
         status: 500,

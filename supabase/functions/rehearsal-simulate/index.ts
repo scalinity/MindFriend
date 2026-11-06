@@ -1,11 +1,10 @@
 // MindFriend Conversation Rehearsal Edge Function
 // Handles scenario creation, AI role-play simulation, and communication feedback
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import {
   createClient,
   SupabaseClient,
-} from "https://esm.sh/@supabase/supabase-js@2.49.1";
+} from "https://esm.sh/@supabase/supabase-js@2.118.0";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type UntypedSupabaseClient = SupabaseClient<any, "public", any>;
@@ -51,6 +50,10 @@ interface CustomScenarioData {
 }
 
 type ScenarioUnion = PrebuiltScenario | CustomScenarioData;
+
+type ScenarioPromptData =
+  | Pick<PrebuiltScenario, "other_party_role" | "other_party_personality" | "situation_context">
+  | Pick<CustomScenarioData, "other_party_role" | "situation_type" | "situation_summary">;
 
 interface CreateScenarioParams {
   title: string;
@@ -116,11 +119,12 @@ interface UpdateLayoutPreferencesRequest {
 const MAX_MESSAGE_LENGTH = 1000; // Rehearsal messages are shorter
 const FREE_TIER_WEEKLY_QUOTA = 2;
 const FREE_TIER_EXCHANGES_LIMIT = 10;
-const XAI_API_URL = "https://api.x.ai/v1/chat/completions";
+import { budgetedXAIText, type XAITextBudgetContext } from "../_shared/budgeted-xai-text.ts";
+import { MonthlyAIBudgetExhaustedError, MonthlyAIBudgetUnavailableError } from "../_shared/monthly-ai-budget.ts";
 
 // AI Prompts for role simulation
 const ROLE_SIMULATION_PROMPT = (
-  scenario: ScenarioUnion,
+  scenario: ScenarioPromptData,
 ) => `You are role-playing as ${sanitizeForPrompt(scenario.other_party_role)} in a ${
   "situation_type" in scenario ? sanitizeForPrompt(scenario.situation_type) : "conversation"
 }.
@@ -253,7 +257,7 @@ function buildResponseHeaders(
   });
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const baseCorsHeaders = getCorsHeaders(origin);
 
@@ -359,6 +363,7 @@ serve(async (req) => {
           user.id,
           supabaseUser,
           supabaseAdmin,
+          req.signal,
         );
         break;
       case "send-message":
@@ -404,7 +409,7 @@ serve(async (req) => {
       },
     });
   } catch (error: any) {
-    console.error("Rehearsal function error:", error);
+    console.error("Rehearsal function error");
     return buildResponseHeaders(
       {
         error: "unexpected_error",
@@ -477,6 +482,7 @@ async function handleStartSession(
   userId: string,
   supabaseUser: UntypedSupabaseClient,
   supabaseAdmin: UntypedSupabaseClient,
+  signal?: AbortSignal,
 ): Promise<SuccessResponse | ErrorResponse | CrisisResponse> {
   const { scenarioId, customScenarioId } = params;
 
@@ -624,6 +630,8 @@ async function handleStartSession(
         { role: "user", content: "Start the conversation naturally." },
       ],
       3,
+      { admin: supabaseAdmin, userId, feature: "rehearsal.opening" },
+      signal,
     );
   } catch (messageError) {
     // Rollback quota on opening message generation failure
@@ -632,13 +640,13 @@ async function handleStartSession(
       if (rollbackError) {
         console.error(
           "CRITICAL: Quota rollback failed after opening message failure. User may be overcharged.",
-          { userId, rollbackError, originalError: messageError }
+          { userId, rollbackError }
         );
       }
     } catch (rollbackException) {
       console.error(
         "CRITICAL: Quota rollback exception after opening message failure. User may be overcharged.",
-        { userId, rollbackException, originalError: messageError }
+        { userId, rollbackException }
       );
     }
     return {
@@ -654,7 +662,9 @@ async function handleStartSession(
       session: {
         id: session.id,
         scenarioTitle: scenario.title,
-        keyPoints: scenario.key_points_to_convey || scenario.key_points || [],
+        keyPoints: ("key_points_to_convey" in scenario
+          ? scenario.key_points_to_convey
+          : scenario.key_points) || [],
         goal: scenario.desired_outcome,
       },
       openingMessage,
@@ -822,7 +832,7 @@ async function handleSendMessage(
       .map((t: any) => ({ role: t.role, content: t.content })),
   ];
 
-  const aiResponse = await callXAIWithRetry(conversationHistory, 3);
+  const aiResponse = await callXAIWithRetry(conversationHistory, 3, { admin: supabaseAdmin, userId, feature: "rehearsal.reply" }, req.signal);
 
   // Validate subscription status mid-session before generating AI response
   const isPremium = "is_premium" in scenario && scenario.is_premium;
@@ -837,7 +847,7 @@ async function handleSendMessage(
   });
 
   // Generate feedback asynchronously (don't block response)
-  const feedbackPromise = generateFeedback(message, scenario)
+  const feedbackPromise = generateFeedback(message, scenario, { admin: supabaseAdmin, userId, feature: "rehearsal.feedback" })
     .then((feedback) =>
       supabaseAdmin.from("rehearsal_feedback").insert({
         session_id: sessionId,
@@ -850,8 +860,8 @@ async function handleSendMessage(
         improvements: [feedback.improvement],
       }),
     )
-    .catch((error) => {
-      console.error("Feedback generation failed:", error);
+    .catch(() => {
+      console.error("Feedback generation failed");
       // Continue - don't block user response
     });
 
@@ -1098,25 +1108,19 @@ async function handleGetSessionHistory(
 }
 
 // Utility: Call xAI API with timeout
-async function callXAI(messages: any[], timeoutMs = 30000): Promise<string> {
+async function callXAI(messages: any[], budget: XAITextBudgetContext, requestSignal?: AbortSignal, timeoutMs = 30000): Promise<string> {
   const controller = new AbortController();
-  const signal = controller.signal;
+  const signal = requestSignal ? AbortSignal.any([requestSignal, controller.signal]) : controller.signal;
 
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(XAI_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${Deno.env.get("XAI_API_KEY")}`,
-      },
-      body: JSON.stringify({
-        model: "grok-2-latest",
+    const response = await budgetedXAIText({
+        ...budget,
+        apiKey: Deno.env.get("XAI_API_KEY") ?? "",
         messages,
         temperature: 0.7,
-        max_tokens: 300,
-      }),
+        maxTokens: 300,
       signal,
     });
 
@@ -1144,6 +1148,8 @@ async function callXAI(messages: any[], timeoutMs = 30000): Promise<string> {
 async function callXAIWithRetry(
   messages: any[],
   maxRetries: number,
+  budget: XAITextBudgetContext,
+  signal?: AbortSignal,
   baseDelayMs = 1000,
   timeoutMs = 30000,
 ): Promise<string> {
@@ -1151,13 +1157,15 @@ async function callXAIWithRetry(
 
   while (retries < maxRetries) {
     try {
-      return await callXAI(messages, timeoutMs);
+      signal?.throwIfAborted();
+      return await callXAI(messages, budget, signal, timeoutMs);
     } catch (error: any) {
+      if (signal?.aborted || error instanceof MonthlyAIBudgetExhaustedError || error instanceof MonthlyAIBudgetUnavailableError) throw error;
       retries++;
       if (retries >= maxRetries) {
         throw error;
       }
-      console.warn(`xAI API retry ${retries}/${maxRetries}:`, error);
+      console.warn(`xAI API retry ${retries}/${maxRetries}`);
       await new Promise((resolve) => setTimeout(resolve, baseDelayMs * Math.pow(2, retries - 1)));
     }
   }
@@ -1167,7 +1175,7 @@ async function callXAIWithRetry(
 }
 
 // Utility: Generate feedback using AI
-async function generateFeedback(message: string, scenario: any) {
+async function generateFeedback(message: string, scenario: any, budget: XAITextBudgetContext) {
   const contextDesc = `${scenario.title}: ${scenario.situation_context || scenario.situation_summary}`;
   const sanitizedMessage = sanitizeForPrompt(message);
   const prompt = FEEDBACK_PROMPT(sanitizedMessage, contextDesc);
@@ -1178,7 +1186,7 @@ async function generateFeedback(message: string, scenario: any) {
       content: "You are a communication coach analyzing conversation practice.",
     },
     { role: "user", content: prompt },
-  ], 2, 1000, 15000);
+  ], 2, budget, AbortSignal.timeout(45_000), 1000, 15000);
 
   try {
     // Parse AI response as JSON

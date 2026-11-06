@@ -1,11 +1,10 @@
 // Deliver Time Capsules Cron Function
 // Runs hourly to deliver due capsules with AI companion letters
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import {
   createClient,
   SupabaseClient,
-} from "https://esm.sh/@supabase/supabase-js@2.49.1";
+} from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import {
   captureUserSnapshot,
   calculateHighlights,
@@ -13,6 +12,8 @@ import {
   UserSnapshot,
 } from "../_shared/capsule-utils.ts";
 import { logError, createErrorResponse } from "../_shared/error-logger.ts";
+import { budgetedXAIText, type XAITextBudgetContext } from "../_shared/budgeted-xai-text.ts";
+import { isAuthorizedCronRequest } from "../_shared/auth.ts";
 
 // TypeScript interfaces for type safety
 interface TimeCapsule {
@@ -36,8 +37,11 @@ interface TimeCapsule {
   capsule_snapshots?: UserSnapshot[];
 }
 
-serve(async (_req) => {
+Deno.serve(async (req) => {
   try {
+    if (!await isAuthorizedCronRequest(req.headers, Deno.env.get("CRON_SECRET") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "")) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -116,6 +120,7 @@ serve(async (_req) => {
             capsule,
             thenSnapshot,
             nowSnapshot,
+            req.signal,
           );
         } catch (letterError) {
           logError(
@@ -212,6 +217,7 @@ async function generateCompanionLetter(
   capsule: TimeCapsule,
   thenSnapshot: UserSnapshot | null,
   nowSnapshot: UserSnapshot,
+  signal?: AbortSignal,
 ): Promise<string> {
   try {
     // Get user profile for personalization
@@ -255,13 +261,15 @@ async function generateCompanionLetter(
           thenSnapshot,
           nowSnapshot,
           highlights,
+          { admin: supabase, userId: capsule.user_id, feature: "capsule.letter" },
+          signal,
         );
 
         if (aiLetter) {
           return aiLetter;
         }
-      } catch (aiError) {
-        console.error("AI letter generation failed, using fallback:", aiError);
+      } catch {
+        console.error("AI letter generation failed, using fallback");
       }
     }
 
@@ -273,8 +281,8 @@ async function generateCompanionLetter(
       nowSnapshot,
       highlights,
     );
-  } catch (error) {
-    console.error("Error generating companion letter:", error);
+  } catch {
+    console.error("Error generating companion letter");
     // Return basic fallback
     return `Dear friend,\n\nYour time capsule from the past is ready to open. We hope it brings back meaningful memories.\n\nKeep going! 🌱`;
   }
@@ -289,6 +297,8 @@ async function callGrokAPI(
   thenSnapshot: UserSnapshot | null,
   nowSnapshot: UserSnapshot,
   highlights: string[],
+  budget: XAITextBudgetContext,
+  signal?: AbortSignal,
 ): Promise<string | null> {
   const prompt = `You are a warm, supportive wellness companion writing a heartfelt letter to accompany a time capsule.
 
@@ -315,18 +325,13 @@ Write a warm, personal letter (200-300 words) that:
 
 Tone: Warm, celebratory, genuine. Avoid being overly effusive.`;
 
-  const response = await fetch("https://api.x.ai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "grok-beta",
+  const response = await budgetedXAIText({
+      ...budget,
+      apiKey,
       messages: [{ role: "user", content: prompt }],
-      max_tokens: 500,
+      maxTokens: 500,
       temperature: 0.7,
-    }),
+      signal,
   });
 
   if (!response.ok) {

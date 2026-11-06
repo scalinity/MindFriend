@@ -5,14 +5,11 @@
 // concatenate the speech chunks with programmatically-generated silence
 // to produce a full-duration MP3 matching the exercise length.
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import {
-  createGoogleTTSClient,
-  CHIRP3_HD_PRESETS,
-} from "../_shared/google-tts.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
+import { createGoogleTTSClient } from "../_shared/google-tts.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
-
+import { isAuthorizedCronRequest } from "../_shared/auth.ts";
+import { BACKEND_WORKLOAD_BUDGET_PRINCIPAL } from "../_shared/monthly-ai-budget.ts";
 
 interface MeditationSegment {
   timestamp_seconds: number;
@@ -65,8 +62,7 @@ function extractMP3Frames(mp3Data: Uint8Array): Uint8Array {
     mp3Data[1] === 0x44 &&
     mp3Data[2] === 0x33
   ) {
-    const size =
-      ((mp3Data[6] & 0x7f) << 21) |
+    const size = ((mp3Data[6] & 0x7f) << 21) |
       ((mp3Data[7] & 0x7f) << 14) |
       ((mp3Data[8] & 0x7f) << 7) |
       (mp3Data[9] & 0x7f);
@@ -202,7 +198,7 @@ function scaleTimestamps(
 
 // ─── Main Handler ─────────────────────────────────────────────────────
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("origin") ?? "";
   const corsHeaders = getCorsHeaders(origin);
 
@@ -213,8 +209,20 @@ serve(async (req) => {
 
   try {
     // Initialize clients
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return new Response(JSON.stringify({ error: "Service unavailable" }), {
+        status: 503,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (!await isAuthorizedCronRequest(req.headers, "", supabaseServiceKey)) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const ttsClient = createGoogleTTSClient();
@@ -268,7 +276,7 @@ serve(async (req) => {
 
     for (const exercise of exercises) {
       try {
-        console.log(`Processing: ${exercise.title}`);
+        console.log("Processing meditation exercise");
 
         // Extract meditation instructions
         const instructions = exercise.instructions as {
@@ -293,10 +301,9 @@ serve(async (req) => {
         const segments = instructions.data.segments;
 
         // Use duration_seconds, falling back to duration_minutes * 60
-        const exerciseDuration =
-          exercise.duration_seconds > 0
-            ? exercise.duration_seconds
-            : (exercise.duration_minutes ?? 0) * 60;
+        const exerciseDuration = exercise.duration_seconds > 0
+          ? exercise.duration_seconds
+          : (exercise.duration_minutes ?? 0) * 60;
 
         if (exerciseDuration <= 0) {
           results.push({
@@ -312,7 +319,9 @@ serve(async (req) => {
 
         console.log(
           `  ${segments.length} segments, duration: ${exerciseDuration}s, ` +
-            `scaled range: ${scaledTimestamps[0]?.toFixed(0)}-${scaledTimestamps[scaledTimestamps.length - 1]?.toFixed(0)}s`,
+            `scaled range: ${scaledTimestamps[0]?.toFixed(0)}-${
+              scaledTimestamps[scaledTimestamps.length - 1]?.toFixed(0)
+            }s`,
         );
 
         if (dryRun) {
@@ -322,8 +331,8 @@ serve(async (req) => {
             const speechDuration = estimateSpeechDuration(segments[i].text);
             totalDuration += speechDuration;
             if (i < segments.length - 1) {
-              const gap =
-                scaledTimestamps[i + 1] - scaledTimestamps[i] - speechDuration;
+              const gap = scaledTimestamps[i + 1] - scaledTimestamps[i] -
+                speechDuration;
               totalDuration += Math.max(2, gap);
             }
           }
@@ -331,8 +340,7 @@ serve(async (req) => {
           const lastSpeech = estimateSpeechDuration(
             segments[segments.length - 1].text,
           );
-          const trailing =
-            exerciseDuration -
+          const trailing = exerciseDuration -
             scaledTimestamps[scaledTimestamps.length - 1] -
             lastSpeech;
           totalDuration += Math.max(0, trailing);
@@ -362,14 +370,19 @@ serve(async (req) => {
           const segment = segments[i];
 
           // Generate speech for this segment
-          console.log(
-            `  Segment ${i + 1}/${segments.length}: "${segment.text.substring(0, 40)}..." (${segment.text.length} chars)`,
-          );
+          console.log(`Generating segment ${i + 1}/${segments.length}`);
 
           const ttsResponse = await ttsClient.textToSpeech({
             text: segment.text,
             voiceId: "meditation",
             useChirp3HD: true,
+          }, {
+            budget: {
+              admin: supabase,
+              userId: BACKEND_WORKLOAD_BUDGET_PRINCIPAL,
+              feature: "meditation.tts",
+            },
+            signal: req.signal,
           });
 
           // Extract raw MP3 frames (strip headers)
@@ -377,25 +390,30 @@ serve(async (req) => {
           audioChunks.push(speechFrames);
 
           // Calculate actual speech duration from MP3 byte count (CBR 32kbps)
-          const actualSpeechDuration = speechFrames.length / MP3_BYTES_PER_SECOND;
+          const actualSpeechDuration = speechFrames.length /
+            MP3_BYTES_PER_SECOND;
           accumulatedTime += actualSpeechDuration;
 
           // Calculate silence gap using actual speech duration
           let silenceDuration: number;
           if (i < segments.length - 1) {
             // Gap until next segment's target timestamp
-            silenceDuration =
-              scaledTimestamps[i + 1] - scaledTimestamps[i] - actualSpeechDuration;
+            silenceDuration = scaledTimestamps[i + 1] - scaledTimestamps[i] -
+              actualSpeechDuration;
           } else {
             // Trailing silence after last segment
-            silenceDuration =
-              exerciseDuration - scaledTimestamps[i] - actualSpeechDuration;
+            silenceDuration = exerciseDuration - scaledTimestamps[i] -
+              actualSpeechDuration;
           }
 
           silenceDuration = Math.max(2, silenceDuration); // At least 2s gap
 
           console.log(
-            `    Speech: ${actualSpeechDuration.toFixed(1)}s (${speechFrames.length} bytes), Silence: ${silenceDuration.toFixed(1)}s`,
+            `    Speech: ${
+              actualSpeechDuration.toFixed(1)
+            }s (${speechFrames.length} bytes), Silence: ${
+              silenceDuration.toFixed(1)
+            }s`,
           );
 
           const silenceData = generateSilenceData(silenceDuration);
@@ -408,8 +426,14 @@ serve(async (req) => {
         const actualDuration = finalAudio.length / MP3_BYTES_PER_SECOND;
 
         console.log(
-          `  Final audio: ${finalAudio.length} bytes (${(finalAudio.length / 1024).toFixed(0)} KB), ` +
-            `duration: ${actualDuration.toFixed(1)}s / ${exerciseDuration}s target (${((actualDuration / exerciseDuration) * 100).toFixed(0)}%)`,
+          `  Final audio: ${finalAudio.length} bytes (${
+            (finalAudio.length / 1024).toFixed(0)
+          } KB), ` +
+            `duration: ${
+              actualDuration.toFixed(1)
+            }s / ${exerciseDuration}s target (${
+              ((actualDuration / exerciseDuration) * 100).toFixed(0)
+            }%)`,
         );
 
         // Upload to Supabase Storage
@@ -454,10 +478,10 @@ serve(async (req) => {
           actualDuration: Math.round(actualDuration),
         });
 
-        console.log(`  Success: ${exercise.title} -> ${audioUrl}`);
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        console.error(`Error processing ${exercise.title}:`, errorMessage);
+        console.log("Meditation audio saved");
+      } catch {
+        const errorMessage = "Meditation audio generation failed";
+        console.error("[generate-meditation-audio] Generation failed");
 
         results.push({
           id: exercise.id,
@@ -480,9 +504,9 @@ serve(async (req) => {
     return new Response(JSON.stringify({ summary, results }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("Function error:", errorMessage);
+  } catch {
+    const errorMessage = "Meditation audio generation failed";
+    console.error("[generate-meditation-audio] Operation failed");
 
     return new Response(JSON.stringify({ error: errorMessage }), {
       status: 500,

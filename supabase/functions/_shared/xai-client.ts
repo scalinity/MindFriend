@@ -4,13 +4,13 @@
  * Used by: analyze-decision, generate-weekly-insights Edge Functions
  */
 
-const XAI_API_URL = "https://api.x.ai/v1/chat/completions";
+import { budgetedXAIText, type XAITextBudgetContext } from "./budgeted-xai-text.ts";
 const DEFAULT_TIMEOUT_MS = 10000; // 10 seconds as per decisions.md
 const DEFAULT_MAX_TOKENS = 200;
 const DEFAULT_TEMPERATURE = 0.7;
 
 export interface XAIRequest {
-  model: "grok-2-latest";
+  model: "grok-4.3";
   messages: Array<{
     role: "system" | "user" | "assistant";
     content: string;
@@ -40,6 +40,8 @@ export interface XAIResponse {
 }
 
 export interface GrokCallOptions {
+  budget: XAITextBudgetContext;
+  signal?: AbortSignal;
   maxTokens?: number;
   temperature?: number;
   timeout?: number;
@@ -55,7 +57,7 @@ export interface GrokCallOptions {
 export async function callGrokAPI(
   systemPrompt: string,
   userPrompt: string,
-  options: GrokCallOptions = {},
+  options: GrokCallOptions,
 ): Promise<string | null> {
   const {
     maxTokens = DEFAULT_MAX_TOKENS,
@@ -75,38 +77,23 @@ export async function callGrokAPI(
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 
   try {
-    const requestBody: XAIRequest = {
-      model: "grok-2-latest",
+    const response = await budgetedXAIText({
+      ...options.budget,
+      apiKey,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
-      max_tokens: maxTokens,
+      maxTokens,
       temperature,
-    };
-
-    console.log(
-      `[xai-client] Calling Grok API (max_tokens=${maxTokens}, timeout=${timeout}ms)`,
-    );
-
-    const response = await fetch(XAI_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(requestBody),
-      signal: controller.signal,
+      signal: options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal,
     });
 
     clearTimeout(timeoutId);
 
     // Handle HTTP errors
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error(
-        `[xai-client] API error (status ${response.status}): ${errorText}`,
-      );
+      console.error(`[xai-client] API error (status ${response.status})`);
       return null;
     }
 
@@ -114,10 +101,7 @@ export async function callGrokAPI(
     const data: XAIResponse = await response.json();
 
     if (!data.choices || data.choices.length === 0) {
-      console.error(
-        "[xai-client] No choices in API response:",
-        JSON.stringify(data),
-      );
+      console.error("[xai-client] No choices in API response");
       return null;
     }
 
@@ -131,10 +115,10 @@ export async function callGrokAPI(
   } catch (error) {
     clearTimeout(timeoutId);
 
-    if (error.name === "AbortError") {
+    if (error instanceof Error && error.name === "AbortError") {
       console.error(`[xai-client] Request timeout after ${timeout}ms`);
     } else {
-      console.error("[xai-client] Request failed:", error.message);
+      console.error("[xai-client] Request failed");
     }
 
     return null;

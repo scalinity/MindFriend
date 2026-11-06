@@ -2,6 +2,7 @@
 // Provides message templates and AI-powered personalization
 
 import type { SignalType, SignalEvidence } from "./signal-detectors.ts";
+import { budgetedXAIText, type XAITextBudgetContext } from "./budgeted-xai-text.ts";
 
 export type ActionType =
   | "check_in"
@@ -65,13 +66,15 @@ export function getActionTypeForSignal(signalType: SignalType): ActionType {
 export async function generateActionContent(
   actionType: ActionType,
   context: MessageContext,
+  budget: XAITextBudgetContext,
   useAI = true,
+  signal?: AbortSignal,
 ): Promise<ActionContent> {
   const template = getTemplate(actionType, context.signalType);
 
   if (useAI && Deno.env.get("XAI_API_KEY")) {
     try {
-      return await generateAIMessage(actionType, context, template);
+      return await generateAIMessage(actionType, context, template, budget, signal);
     } catch {
       // Fall back to template
     }
@@ -324,6 +327,8 @@ async function generateAIMessage(
   actionType: ActionType,
   context: MessageContext,
   fallbackTemplate: MessageTemplate,
+  budget: XAITextBudgetContext,
+  signal?: AbortSignal,
 ): Promise<ActionContent> {
   const apiKey = Deno.env.get("XAI_API_KEY");
   if (!apiKey) {
@@ -337,19 +342,13 @@ async function generateAIMessage(
   const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
   try {
-    const response = await fetch("https://api.x.ai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "grok-beta",
+    const response = await budgetedXAIText({
+        ...budget,
+        apiKey,
         messages: [{ role: "user", content: prompt }],
-        max_tokens: 150,
+        maxTokens: 150,
         temperature: 0.7,
-      }),
-      signal: controller.signal,
+      signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal,
     });
 
     clearTimeout(timeoutId);

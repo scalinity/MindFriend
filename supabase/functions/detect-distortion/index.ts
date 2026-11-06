@@ -7,8 +7,7 @@
 // Date: 2026-01-23
 // =====================================================
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import type {
   DetectDistortionRequest,
   DetectDistortionResponse,
@@ -18,6 +17,7 @@ import type {
 } from "./types.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { sanitizeForPrompt } from "../_shared/sanitize.ts";
+import { budgetedXAIText, type XAITextBudgetContext } from "../_shared/budgeted-xai-text.ts";
 
 // =====================================================
 // Environment Variable Validation (P0 Security Fix)
@@ -114,7 +114,7 @@ const DISTORTION_PATTERNS: Record<DistortionType, string[]> = {
   personalization: ["my fault", "because of me", "I caused", "I'm responsible"],
 };
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const origin = req.headers.get("origin") ?? "";
   const corsHeaders = getCorsHeaders(origin);
 
@@ -209,7 +209,7 @@ serve(async (req) => {
       XAI_API_KEY
     ) {
       // Medium confidence: enhance with LLM
-      const llmResult = await enhanceWithLLM(sanitizedText, XAI_API_KEY);
+      const llmResult = await enhanceWithLLM(sanitizedText, XAI_API_KEY, { admin: supabase, userId: user.id, feature: "distortion.enhance" }, req.signal);
       if (llmResult && llmResult.confidence >= CONFIDENCE_THRESHOLD) {
         detectedDistortion = llmResult;
         detectionMethod = "llm";
@@ -303,18 +303,15 @@ function detectPatterns(text: string): DetectedDistortion | null {
  * Only called when pattern confidence is 0.5-0.75
  */
 async function enhanceWithLLM(
-  text: string,
+  sanitizedText: string,
   apiKey: string,
+  budget: XAITextBudgetContext,
+  signal?: AbortSignal,
 ): Promise<DetectedDistortion | null> {
   try {
-    const response = await fetch("https://api.x.ai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "grok-beta",
+    const response = await budgetedXAIText({
+        ...budget,
+        apiKey,
         messages: [
           {
             role: "system",
@@ -343,8 +340,8 @@ If no distortion detected, respond: {"type": null, "confidence": 0, "reasoning":
           },
         ],
         temperature: 0.3,
-        max_tokens: 150,
-      }),
+        maxTokens: 150,
+        signal,
     });
 
     if (!response.ok) {
@@ -376,7 +373,6 @@ If no distortion detected, respond: {"type": null, "confidence": 0, "reasoning":
     console.error({
       context: "LLM enhancement error",
       errorType: error instanceof Error ? error.name : "Unknown",
-      errorMessage: error instanceof Error ? error.message : "Unknown error",
       // DO NOT log full error object or transcript text
     });
     return null;
