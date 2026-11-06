@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		CE6B22EDEB8F4D34A1C30003 /* CreativeWorkDeletionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE6B22EDEB8F4D34A1C30004 /* CreativeWorkDeletionTests.swift */; };
 		CE6B22EDEB8F4D34A1C30001 /* AuthUITestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE6B22EDEB8F4D34A1C30002 /* AuthUITestView.swift */; };
 		CD91A673F84E42D09B31A002 /* Watch Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CD91A673F84E42D09B31A001 /* Assets.xcassets */; };
 		D1E7D53B0F794FDC9A1A0001 /* DeepLinkNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E7D53B0F794FDC9A1A0002 /* DeepLinkNavigationTests.swift */; };
@@ -972,6 +973,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		CE6B22EDEB8F4D34A1C30004 /* CreativeWorkDeletionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreativeWorkDeletionTests.swift; sourceTree = "<group>"; };
 		CE6B22EDEB8F4D34A1C30002 /* AuthUITestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthUITestView.swift; sourceTree = "<group>"; };
 		CD91A673F84E42D09B31A001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		D1E7D53B0F794FDC9A1A0002 /* DeepLinkNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLinkNavigationTests.swift; sourceTree = "<group>"; };
@@ -4478,6 +4480,7 @@
 				45C1AE3E0E78F54E9AF08D1F /* ChatViewModelTests.swift */,
 				FFE06815B0E11041343A10E6 /* CoachServiceTests.swift */,
 				F1BEF6545FDB6808A728C354 /* COPPAComplianceTests.swift */,
+				CE6B22EDEB8F4D34A1C30004 /* CreativeWorkDeletionTests.swift */,
 				E1CA472EDC79CE2F1DD3C6EA /* CrashReporterTests.swift */,
 				3B4FD668CC90FC913046AE74 /* EmotionAnalyzerTests.swift */,
 				BF873E90D4AF69D2DB5CE6A3 /* FamilyServiceTests.swift */,
@@ -6772,6 +6775,7 @@
 				04D83DA7814ACFAF11223D33 /* ChallengeServiceTests.swift in Sources */,
 				41210604F1F2ADDF9BDAFE7C /* ChatViewModelTests.swift in Sources */,
 				BA741E5CE387938F2A213BA0 /* CoachServiceTests.swift in Sources */,
+				CE6B22EDEB8F4D34A1C30003 /* CreativeWorkDeletionTests.swift in Sources */,
 				8563F3D7F9F630DFD6A8BB24 /* CrashReporterTests.swift in Sources */,
 				7F107286ACB74F16A1872841 /* EmotionAnalyzerTests.swift in Sources */,
 				00121B35665A6BB8EB4D5423 /* FamilyServiceTests.swift in Sources */,
