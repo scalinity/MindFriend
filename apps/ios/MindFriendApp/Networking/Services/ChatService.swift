@@ -13,6 +13,10 @@ final class ChatService: ObservableObject {
         try await dataService.createConversation(title: title)
     }
 
+    func saveVoiceTranscript(conversationId: UUID, title: String?, messages: [VoiceTranscriptMessage]) async throws {
+        try await dataService.saveVoiceTranscript(conversationId: conversationId, title: title, messages: messages)
+    }
+
     func getConversations() async throws -> [Conversation] {
         try await dataService.getConversations()
     }
