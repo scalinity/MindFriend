@@ -863,16 +863,16 @@ final class SleepEntryDecodingRegressionTests: XCTestCase {
         XCTAssertNil(model.errorMessage)
     }
     func testAsleepStagesCannotExceedTimeAsleep() async {
-        await XCTAssertThrowsError(try decode(deep: 91))
+        await XCTAssertThrowsErrorAsync(try decode(deep: 91))
     }
     func testSleepAndAwakeCannotExceedTimeInBed() async {
-        await XCTAssertThrowsError(try decode(awake: 31))
+        await XCTAssertThrowsErrorAsync(try decode(awake: 31))
     }
     func testPartialSleepTotalsStillValidateAgainstTimeInBed() async throws {
         let entry = try decode(asleep: nil)
         XCTAssertNil(entry.timeAsleepMinutes)
         XCTAssertNil(entry.displayableScore)
-        await XCTAssertThrowsError(try decode(asleep: nil, awake: 31))
+        await XCTAssertThrowsErrorAsync(try decode(asleep: nil, awake: 31))
     }
 }
 

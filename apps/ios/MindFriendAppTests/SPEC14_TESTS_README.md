@@ -105,7 +105,7 @@ async {
 Error scenarios tested with `XCTAssertThrowsError` async helper:
 
 ```swift
-await XCTAssertThrowsError(
+await XCTAssertThrowsErrorAsync(
     try await service.submitFeedback(invalidFeedback)
 ) { error in
     XCTAssertEqual(error as? AccessibilityError, .invalidFeedback("..."))

@@ -38,7 +38,7 @@ final class AccessibilityServiceTests: XCTestCase {
     func testLoadPreferences_NoUser() async throws {
         mockSupabase.mockCurrentUser = nil
 
-        await XCTAssertThrowsError(try await service.loadPreferences()) { error in
+        await XCTAssertThrowsErrorAsync(try await service.loadPreferences()) { error in
             XCTAssertEqual(error as? AccessibilityError, .invalidPreferences)
         }
     }
@@ -249,7 +249,7 @@ final class AccessibilityServiceTests: XCTestCase {
             assistiveTechUsed: []
         )
 
-        await XCTAssertThrowsError(try await service.submitFeedback(feedback)) { error in
+        await XCTAssertThrowsErrorAsync(try await service.submitFeedback(feedback)) { error in
             XCTAssertEqual(error as? AccessibilityError, .invalidFeedback("Description is required"))
         }
     }
@@ -355,7 +355,7 @@ class MockAuth {
 // MARK: - Test Helper
 
 extension XCTestCase {
-    func XCTAssertThrowsError<T>(
+    func XCTAssertThrowsErrorAsync<T>(
         _ expression: @autoclosure () async throws -> T,
         _ message: @autoclosure () -> String = "",
         file: StaticString = #filePath,
