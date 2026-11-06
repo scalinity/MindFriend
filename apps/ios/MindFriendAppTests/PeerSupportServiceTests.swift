@@ -61,6 +61,19 @@ final class PeerSupportServiceTests: XCTestCase {
         catch PeerSupportError.sessionUnavailable { }
     }
 
+    func testCancelledDestinationCannotOpenRealtimeChannel() async {
+        let service = service()
+        let task = Task { @MainActor in
+            withUnsafeCurrentTask { $0?.cancel() }
+            do {
+                _ = try await service.subscribeToSessionMessages(sessionId: PeerHTTP.sessionId)
+                XCTFail("Cancelled destination opened a channel")
+            } catch is CancellationError { } catch { XCTFail("Unexpected error: \(error)") }
+        }
+        await task.value
+        XCTAssertTrue(PeerURLProtocol.fixture.requests.isEmpty)
+    }
+
     func testPendingRequestCancellationReturnsConfirmedState() async throws {
         let service = service(status: "pending")
         let saved = try await service.cancelSession(sessionId: PeerHTTP.sessionId)

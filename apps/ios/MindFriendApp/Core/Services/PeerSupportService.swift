@@ -359,8 +359,11 @@ final class PeerSupportService: ObservableObject {
 
     /// A subscription token prevents a closing destination from removing a newer channel.
     func subscribeToSessionMessages(sessionId: UUID) async throws -> UUID {
+        try Task.checkCancellation()
         guard let owner = currentUserId else { throw PeerSupportError.notAuthenticated }
         await unsubscribeFromSessionMessages()
+        try Task.checkCancellation()
+        guard currentUserId == owner else { throw PeerSupportError.notAuthenticated }
         let subscriptionId = UUID()
         messageSubscriptionId = subscriptionId
         let channel = supabase.realtimeV2.channel("peer-session:\(sessionId)")

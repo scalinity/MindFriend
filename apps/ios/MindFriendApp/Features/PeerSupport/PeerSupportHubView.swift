@@ -641,6 +641,7 @@ struct SupportSessionView: View {
         .onReceive(service.$currentSessionMessages) { mergeMessages($0) }
         .task(id: session.id) {
             await refresh()
+            guard !Task.isCancelled else { return }
             var subscriptionId: UUID?
             if session.status.isActive {
                 do { subscriptionId = try await service.subscribeToSessionMessages(sessionId: session.id) }
