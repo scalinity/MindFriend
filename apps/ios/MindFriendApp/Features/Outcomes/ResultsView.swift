@@ -75,12 +75,15 @@ struct ResultsView: View {
         }
         
         let previousScore = recentHistory.dropFirst().first?.totalScore ?? response.totalScore
-        let scoreDelta = response.totalScore - previousScore
+        guard let type = AssessmentType(rawValue: template.code) else {
+            return (image: "minus.circle.fill", color: .gray, label: "No trend")
+        }
+        let scoreDelta = type.improvement(from: previousScore, to: response.totalScore)
         
-        if scoreDelta < 0 {
-            return (image: "arrow.down.circle.fill", color: Color(red: 0.2, green: 0.6, blue: 0.4), label: String(localized: "Improving"))
-        } else if scoreDelta > 0 {
-            return (image: "arrow.up.circle.fill", color: Color(red: 1.0, green: 0.2, blue: 0.2), label: String(localized: "Worsening"))
+        if scoreDelta > 0 {
+            return (image: type.higherScoresAreBetter ? "arrow.up.circle.fill" : "arrow.down.circle.fill", color: Color(red: 0.2, green: 0.6, blue: 0.4), label: String(localized: "Improving"))
+        } else if scoreDelta < 0 {
+            return (image: type.higherScoresAreBetter ? "arrow.down.circle.fill" : "arrow.up.circle.fill", color: Color(red: 1.0, green: 0.2, blue: 0.2), label: String(localized: "Worsening"))
         } else {
             return (image: "minus.circle.fill", color: Color.gray, label: String(localized: "Stable"))
         }

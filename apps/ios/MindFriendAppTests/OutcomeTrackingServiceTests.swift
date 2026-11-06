@@ -87,4 +87,18 @@ final class OutcomeTrackingServiceTests: XCTestCase {
         XCTAssertEqual(object["p_answers"] as? [String:Int], ["9":1])
         XCTAssertEqual(object["p_time_zone"] as? String, "America/New_York")
     }
+    func testImprovementDirectionDiffersBetweenPHQAndWHO() {
+        XCTAssertEqual(AssessmentType.phq9.improvement(from: 10, to: 20), -10)
+        XCTAssertEqual(AssessmentType.who5.improvement(from: 10, to: 20), 10)
+        XCTAssertEqual(AssessmentType.phq9.improvement(from: 20, to: 10), 10)
+        XCTAssertEqual(AssessmentType.who5.improvement(from: 20, to: 10), -10)
+    }
+
+    func testRecommendedTargetsRespectInstrumentDirectionAndBounds() {
+        XCTAssertEqual(AssessmentType.phq9.suggestedTargetScore(from: 20), 15)
+        XCTAssertEqual(AssessmentType.who5.suggestedTargetScore(from: 10), 15)
+        XCTAssertEqual(AssessmentType.who5.suggestedTargetScore(from: 24), 25)
+        XCTAssertEqual(AssessmentType.phq9.suggestedTargetScore(from: 2), 0)
+    }
+
 }

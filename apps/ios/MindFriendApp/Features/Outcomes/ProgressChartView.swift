@@ -191,7 +191,7 @@ struct ProgressChartView: View {
                     .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
                 
                 InsightCard(
-                    icon: "arrow.trend.down",
+                    icon: assessmentType.higherScoresAreBetter ? "arrow.trend.up" : "arrow.trend.down",
                     title: "Trend Direction",
                     description: getTrendDescription(),
                     color: getTrendColor()
@@ -228,12 +228,12 @@ struct ProgressChartView: View {
         let recent = chartData.suffix(2)
         let previousScore = recent.first?.score ?? 0
         let currentScore = recent.last?.score ?? 0
-        let delta = currentScore - previousScore
+        let delta = assessmentType.improvement(from: Int(previousScore), to: Int(currentScore))
         
-        if delta < 0 {
-            return "Improving by \(Int(-delta)) points"
-        } else if delta > 0 {
-            return "Increasing by \(Int(delta)) points"
+        if delta > 0 {
+            return "Improving by \(delta) points"
+        } else if delta < 0 {
+            return "Worsening by \(-delta) points"
         } else {
             return "Score stable"
         }
@@ -245,11 +245,11 @@ struct ProgressChartView: View {
         let recent = chartData.suffix(2)
         let previousScore = recent.first?.score ?? 0
         let currentScore = recent.last?.score ?? 0
-        let delta = currentScore - previousScore
+        let delta = assessmentType.improvement(from: Int(previousScore), to: Int(currentScore))
         
-        if delta < 0 {
+        if delta > 0 {
             return Color(red: 0.2, green: 0.6, blue: 0.4)
-        } else if delta > 0 {
+        } else if delta < 0 {
             return Color(red: 1.0, green: 0.2, blue: 0.2)
         } else {
             return Color.gray
