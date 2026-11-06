@@ -179,3 +179,28 @@ Deno.test("an abort while reading cancels and releases a stalled OpenAI body", a
     assert(!body.locked, "Body reader lock was not released");
   });
 });
+
+Deno.test("only completed or cap-truncated Responses results become replies", async () => {
+  await withEnv({ VOICE_AND_NONIMAGE_OPENAI_API_KEY: "synthetic" }, async () => {
+    const run = (reply: Record<string, unknown>, feature = "milestone.narrative") =>
+      callStandardText({
+        route: LUNA_ROUTE, feature, messages: [{ role: "user", content: "u" }],
+        maxTokens: 10, json: false, signal: AbortSignal.timeout(5000),
+        fetcher: () => Promise.resolve(Response.json(reply)),
+      });
+    const text = [{ content: [{ type: "output_text", text: "partial" }] }];
+    const failed = await run({ status: "failed", error: { message: "private" }, output: [] });
+    assert(failed.status === 502 && failed.content === undefined, "Failed result became a reply");
+    const odd = await run({ status: "in_progress", output: text });
+    assert(odd.status === 502, "Unexpected status became a reply");
+    const capped = await run({ status: "incomplete", incomplete_details: { reason: "max_output_tokens" }, output: text });
+    assert(capped.status === 200 && capped.content === "partial" && capped.finishReason === "length", "Capped reply lost");
+    const filteredReply = await run(
+      { status: "incomplete", incomplete_details: { reason: "content_filter" }, output: text },
+      "rehearsal.reply",
+    );
+    assert(filteredReply.content === CRISIS_RESPONSE && filteredReply.finishReason === "refusal", "Filter not handled as refusal");
+    const filteredAnalysis = await run({ status: "incomplete", incomplete_details: { reason: "content_filter" }, output: text });
+    assert(filteredAnalysis.content === "", "Filtered analysis returned content");
+  });
+});

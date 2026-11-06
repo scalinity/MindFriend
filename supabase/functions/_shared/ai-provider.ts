@@ -190,7 +190,19 @@ export async function callStandardText(
   const parts = (data.output ?? []).flatMap((
     item: { content?: Array<{ type: string; text?: string }> },
   ) => item.content ?? []);
-  if (parts.some((part: { type: string }) => part.type === "refusal")) {
+  // Only a completed result, or one cut off at the output cap, is a reply. A
+  // failed or unexpected result is a sanitized 502 so callers' fallbacks run.
+  const truncated = data.status === "incomplete" &&
+    data.incomplete_details?.reason === "max_output_tokens";
+  const filtered = data.status === "incomplete" &&
+    data.incomplete_details?.reason === "content_filter";
+  if (data.status !== "completed" && !truncated && !filtered) {
+    return { status: 502, ...usage };
+  }
+  if (
+    filtered ||
+    parts.some((part: { type: string }) => part.type === "refusal")
+  ) {
     return {
       status: 200,
       content: CONVERSATIONAL_FEATURES.has(input.feature) ? CRISIS_RESPONSE : "",
@@ -204,7 +216,7 @@ export async function callStandardText(
   return {
     status: 200,
     content: text,
-    finishReason: data.status === "incomplete" ? "length" : "stop",
+    finishReason: truncated ? "length" : "stop",
     ...usage,
   };
 }
