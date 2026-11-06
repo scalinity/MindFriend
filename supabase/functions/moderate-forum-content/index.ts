@@ -2,28 +2,29 @@
 // Uses Grok API for AI-powered safety screening with confidence-based approval
 // Per decisions.md 2026-01-19: Community Forums Implementation Assumptions
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { sanitizeForPrompt } from "../_shared/sanitize.ts";
 import { authenticateRequest, isAuthError } from "../_shared/auth.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { budgetedXAIText, type XAITextBudgetContext } from "../_shared/budgeted-xai-text.ts";
 
-const XAI_API_KEY = Deno.env.get("XAI_API_KEY");
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-
 // Moderation confidence thresholds (per decisions.md)
 const CONFIDENCE_THRESHOLDS = {
-  AUTO_APPROVE: 0.8, // High confidence safe content
-  AUTO_REJECT: 0.3, // High confidence violation
-  TIMEOUT_MS: 30000, // 30 seconds before auto-approve
+  DECISIVE: 0.8, // Confidence in the safe/unsafe verdict
+  TIMEOUT_MS: 30000, // Keep content pending on timeout
 };
 
 interface ModerationRequest {
   contentType: "thread" | "reply";
   contentId: string;
-  title?: string; // Only for threads
+}
+
+interface StoredForumContent {
+  id: string;
+  author_id: string;
+  title?: string;
   content: string;
+  updated_at: string;
+  status: string;
 }
 
 interface ModerationResponse {
@@ -55,7 +56,7 @@ const CRISIS_KEYWORDS = [
   "no reason to live",
 ];
 
-Deno.serve(async (req) => {
+export async function handleModerateForumContent(req: Request): Promise<Response> {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 
@@ -71,40 +72,53 @@ Deno.serve(async (req) => {
       return authResult.response;
     }
 
-    // Initialize Supabase client with service role
-    const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
+    const supabase = authResult.supabaseAdmin;
+    const { contentType, contentId }: ModerationRequest = await req.json();
+    const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json" };
 
-    // Parse request body
-    const { contentType, contentId, title, content }: ModerationRequest =
-      await req.json();
-
-    // Validate request
-    if (!contentType || !contentId || !content) {
-      return new Response(
-        JSON.stringify({ error: "Missing required fields" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+    if ((contentType !== "thread" && contentType !== "reply") ||
+        typeof contentId !== "string" ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(contentId)) {
+      return new Response(JSON.stringify({ error: "Invalid content type or ID" }), {
+        status: 400, headers: jsonHeaders,
+      });
     }
 
-    // Validate contentId UUID format
-    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!UUID_REGEX.test(contentId)) {
-      return new Response(
-        JSON.stringify({ error: "Invalid contentId format" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+    // Never trust caller-supplied text or let one author screen another's row.
+    const table = contentType === "thread" ? "forum_threads" : "forum_replies";
+    const { data: stored, error: readError } = await supabase
+      .from(table)
+      .select(contentType === "thread"
+        ? "id,author_id,title,content,updated_at,status"
+        : "id,author_id,content,updated_at,status")
+      .eq("id", contentId)
+      .eq("author_id", authResult.user.id)
+      .maybeSingle()
+      .overrideTypes<StoredForumContent | null, { merge: false }>();
+    if (readError) throw readError;
+    if (!stored || stored.author_id !== authResult.user.id) {
+      return new Response(JSON.stringify({ error: "Content not found" }), {
+        status: 404, headers: jsonHeaders,
+      });
     }
-
-    // Validate content length
-    if (content.length > 10000) {
-      return new Response(
-        JSON.stringify({ error: "Content exceeds maximum length of 10000 characters" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+    if (stored.status !== "pending") {
+      return new Response(JSON.stringify({ error: "Content is no longer awaiting moderation" }), {
+        status: 409, headers: jsonHeaders,
+      });
+    }
+    const content = stored.content;
+    const title = contentType === "thread" ? stored.title : undefined;
+    if (typeof content !== "string" || !content || [...content].length > 10000 ||
+        (contentType === "thread" &&
+          (typeof title !== "string" || !title || [...title].length > 300)) ||
+        typeof stored.updated_at !== "string") {
+      return new Response(JSON.stringify({ error: "Stored content cannot be screened in full" }), {
+        status: 422, headers: jsonHeaders,
+      });
     }
 
     // Check for crisis keywords first (fast path)
-    const hasCrisisKeywords = detectCrisisKeywords(content);
+    const hasCrisisKeywords = detectCrisisKeywords(`${title ?? ""}\n${content}`);
 
     // Call Grok API for moderation with timeout
     let moderationResult: GrokModerationResult;
@@ -114,7 +128,7 @@ Deno.serve(async (req) => {
         AbortSignal.any([req.signal, AbortSignal.timeout(CONFIDENCE_THRESHOLDS.TIMEOUT_MS)]));
     } catch {
       console.error("Moderation timeout or error");
-      // Auto-approve on timeout, flag for human review
+      // Keep uncertain content pending for human review
       moderationResult = {
         safe: true,
         confidence: 0.5, // Ambiguous = pending queue
@@ -128,55 +142,42 @@ Deno.serve(async (req) => {
       moderationResult.isCrisis = true;
     }
 
-    // Determine status based on confidence thresholds
-    let status: "approved" | "pending" | "rejected";
-    if (moderationResult.confidence >= CONFIDENCE_THRESHOLDS.AUTO_APPROVE) {
-      status = "approved";
-    } else if (
-      moderationResult.confidence <= CONFIDENCE_THRESHOLDS.AUTO_REJECT
-    ) {
-      status = "rejected";
-    } else {
-      status = "pending"; // Queue for human moderator review
-    }
+    // Confidence is confidence in the verdict, not a safety score.
+    const status = moderationResult.confidence >= CONFIDENCE_THRESHOLDS.DECISIVE
+      ? (moderationResult.safe ? "approved" : "rejected")
+      : "pending";
 
-    // Special handling for crisis content: always approve (allow peer support)
-    if (moderationResult.isCrisis) {
-      status = "approved";
-    }
-
-    // Update database with moderation result
-    const table = contentType === "thread" ? "forum_threads" : "forum_replies";
-    const { error: updateError } = await supabase
+    // The database owns updated_at and refreshes it on every client update.
+    // A changed revision must be screened again, never approved by an old result.
+    const { data: updated, error: updateError } = await supabase
       .from(table)
       .update({
         status,
         moderation_confidence: moderationResult.confidence,
         is_crisis: moderationResult.isCrisis,
       })
-      .eq("id", contentId);
+      .eq("id", contentId)
+      .eq("author_id", authResult.user.id)
+      .eq("updated_at", stored.updated_at)
+      .eq("status", "pending")
+      .select("id")
+      .maybeSingle();
 
-    if (updateError) {
-      console.error("Failed to update content status:", updateError);
-      throw updateError;
+    if (updateError) throw updateError;
+    if (!updated) {
+      return new Response(JSON.stringify({ error: "Content changed during moderation; please retry" }), {
+        status: 409, headers: jsonHeaders,
+      });
     }
 
-    // Log crisis event if detected
+    // Preserve crisis support independently of publication. Store only metadata,
+    // using the actual crisis_events schema, never an excerpt of private text.
     if (moderationResult.isCrisis) {
-      // Get author_id from content
-      const { data: contentData, error: fetchError } = await supabase
-        .from(table)
-        .select("author_id")
-        .eq("id", contentId)
-        .single();
-
-      if (!fetchError && contentData) {
-        await supabase.from("crisis_events").insert({
-          user_id: contentData.author_id,
-          source: "forum",
-          content_preview: content.substring(0, 200),
-        });
-      }
+      const { error: crisisError } = await supabase.from("crisis_events").insert({
+        user_id: stored.author_id,
+        notes: `Forum ${contentType} ${contentId}: crisis language detected`,
+      });
+      if (crisisError) console.error("Failed to record forum crisis event");
     }
 
     // Return moderation response
@@ -198,7 +199,9 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-});
+}
+
+if (import.meta.main) Deno.serve(handleModerateForumContent);
 
 /**
  * Call Grok API for content moderation
@@ -210,12 +213,13 @@ async function moderateWithGrok(
   budget: XAITextBudgetContext,
   signal?: AbortSignal,
 ): Promise<GrokModerationResult> {
-  if (!XAI_API_KEY) {
+  const apiKey = Deno.env.get("XAI_API_KEY");
+  if (!apiKey) {
     throw new Error("XAI_API_KEY not configured");
   }
 
-  const sanitizedTitle = title ? sanitizeForPrompt(title) : undefined;
-  const sanitizedContent = sanitizeForPrompt(content);
+  const sanitizedTitle = title ? sanitizeForPrompt(title, title.length) : undefined;
+  const sanitizedContent = sanitizeForPrompt(content, content.length);
   const fullText = sanitizedTitle ? `${sanitizedTitle}\n\n${sanitizedContent}` : sanitizedContent;
 
   const prompt = `You are a content moderator for a mental health support forum. Analyze this forum post for safety and appropriateness.
@@ -243,7 +247,7 @@ Respond with JSON in this exact format:
   try {
     const response = await budgetedXAIText({
         ...budget,
-        apiKey: XAI_API_KEY,
+        apiKey,
         messages: [
           {
             role: "system",
@@ -290,15 +294,13 @@ Respond with JSON in this exact format:
     if (
       typeof result.safe !== "boolean" ||
       typeof result.confidence !== "number" ||
+      !Number.isFinite(result.confidence) || result.confidence < 0 || result.confidence > 1 ||
       typeof result.isCrisis !== "boolean"
     ) {
       throw new Error("Invalid Grok API response structure");
     }
 
-    // Clamp confidence to 0-1 range
-    result.confidence = Math.max(0, Math.min(1, result.confidence));
-
-    return result;
+    return { ...result, reason: typeof result.reason === "string" ? result.reason : undefined };
   } catch {
     console.error("Grok API call failed");
     // On error, return ambiguous confidence (will trigger pending queue)
