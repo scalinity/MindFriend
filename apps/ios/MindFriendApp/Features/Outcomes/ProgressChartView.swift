@@ -38,8 +38,8 @@ struct ProgressChartView: View {
         return chartData.map { $0.score }.reduce(0, +) / Double(chartData.count)
     }
     
-    var currentScore: Double {
-        responses.sorted { $0.completedAt > $1.completedAt }.first.map { Double($0.totalScore) } ?? 0
+    var currentScore: Int? {
+        responses.sorted { $0.completedAt > $1.completedAt }.first?.availableScore
     }
     
     var body: some View {
@@ -62,13 +62,13 @@ struct ProgressChartView: View {
             HStack(spacing: 12) {
                 StatPill(
                     label: "Current",
-                    value: "\(Int(currentScore))",
+                    value: currentScore.map(String.init) ?? "—",
                     color: Color(red: 0.1, green: 0.3, blue: 0.5)
                 )
                 
                 StatPill(
                     label: "Average",
-                    value: "\(Int(averageScore))",
+                    value: chartData.isEmpty ? "—" : "\(Int(averageScore))",
                     color: Color(red: 0.2, green: 0.6, blue: 0.4)
                 )
                 
@@ -198,16 +198,13 @@ struct ProgressChartView: View {
                 )
                 
                 if let goal = goal {
-                    let daysToGoal = Int(goal.targetDate?.timeIntervalSince(Date()) ?? 0) / 86400
-                    let scoreGap = goal.targetScore - Int(currentScore)
+                    let remaining = goal.remainingPoints(currentScore: currentScore, type: assessmentType)
                     
                     InsightCard(
                         icon: "target",
                         title: "Goal Progress",
-                        description: scoreGap > 0 ?
-                            "Need to reduce score by \(scoreGap) points in \(daysToGoal) days" :
-                            "Goal achieved! \(-scoreGap) points below target",
-                        color: scoreGap > 0 ? Color(red: 0.95, green: 0.7, blue: 0.0) : Color(red: 0.2, green: 0.6, blue: 0.4)
+                        description: goalProgressDescription(goal),
+                        color: remaining == 0 ? Color(red: 0.2, green: 0.6, blue: 0.4) : .gray
                     )
                 }
             }
@@ -222,6 +219,17 @@ struct ProgressChartView: View {
         }
     }
     
+    private func goalProgressDescription(_ goal: OutcomeGoal) -> String {
+        if goal.requiresScoreReview(for: assessmentType) {
+            return "This target needs review after scoring corrections. Set a new goal from a current assessment."
+        }
+        guard let remaining = goal.remainingPoints(currentScore: currentScore, type: assessmentType) else {
+            return "A current assessment is needed to show progress."
+        }
+        if remaining == 0 { return "Goal achieved!" }
+        return "\(assessmentType.higherScoresAreBetter ? "Increase" : "Reduce") score by \(remaining) points to reach your target"
+    }
+
     private func getTrendDescription() -> String {
         guard chartData.count >= 2 else { return "Insufficient data" }
         

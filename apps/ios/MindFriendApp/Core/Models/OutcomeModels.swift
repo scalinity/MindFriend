@@ -473,14 +473,25 @@ struct OutcomeGoal: Identifiable, Equatable {
         case baselineResponseId = "baseline_response_id"
     }
 
-    /// Progress toward goal (0.0 to 1.0)
-    var progressPercent: Double {
-        let totalReduction = baselineScore - targetScore
-        guard totalReduction > 0 else { return 0.0 }
-
-        let currentReduction = baselineScore - targetScore  // Placeholder
-        return min(1.0, Double(currentReduction) / Double(totalReduction))
+    func requiresScoreReview(for type: AssessmentType) -> Bool {
+        (type == .pss10 && baselineResponseId == nil)
+            || type.improvement(from: baselineScore, to: targetScore) < 0
     }
+
+    /// Missing observations remain distinct from an observed score of zero.
+    func remainingPoints(currentScore: Int?, type: AssessmentType) -> Int? {
+        guard let currentScore, !requiresScoreReview(for: type) else { return nil }
+        return max(0, type.improvement(from: currentScore, to: targetScore))
+    }
+
+    func progress(currentScore: Int?, type: AssessmentType) -> Double? {
+        guard let currentScore, !requiresScoreReview(for: type) else { return nil }
+        let required = type.improvement(from: baselineScore, to: targetScore)
+        guard required > 0 else { return type.improvement(from: targetScore, to: currentScore) >= 0 ? 1 : 0 }
+        let completed = type.improvement(from: baselineScore, to: currentScore)
+        return min(1, max(0, Double(completed) / Double(required)))
+    }
+
 }
 
 extension OutcomeGoal: Codable {

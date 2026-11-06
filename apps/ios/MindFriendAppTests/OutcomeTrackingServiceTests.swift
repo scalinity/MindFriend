@@ -101,4 +101,43 @@ final class OutcomeTrackingServiceTests: XCTestCase {
         XCTAssertEqual(AssessmentType.phq9.suggestedTargetScore(from: 2), 0)
     }
 
+    private func goal(baseline: Int, target: Int, linked: Bool = true) -> OutcomeGoal {
+        OutcomeGoal(id: UUID(), userId: UUID(), assessmentTemplateId: UUID(), targetScore: target,
+            targetDate: nil, baselineScore: baseline, baselineDate: Date(timeIntervalSince1970: 0),
+            achieved: false, achievedAt: nil, createdAt: nil, updatedAt: nil,
+            baselineResponseId: linked ? UUID() : nil)
+    }
+
+    func testGoalProgressRequiresReachingTheTargetInTheInstrumentDirection() throws {
+        let depression = goal(baseline: 20, target: 10)
+        XCTAssertEqual(depression.remainingPoints(currentScore: 15, type: .phq9), 5)
+        XCTAssertEqual(depression.progress(currentScore: 15, type: .phq9), 0.5)
+        XCTAssertEqual(depression.remainingPoints(currentScore: 10, type: .phq9), 0)
+        XCTAssertEqual(depression.remainingPoints(currentScore: 5, type: .phq9), 0)
+        XCTAssertEqual(depression.progress(currentScore: 25, type: .phq9), 0)
+        let wellbeing = goal(baseline: 10, target: 20)
+        XCTAssertEqual(wellbeing.remainingPoints(currentScore: 15, type: .who5), 5)
+        XCTAssertEqual(wellbeing.progress(currentScore: 15, type: .who5), 0.5)
+        XCTAssertEqual(wellbeing.remainingPoints(currentScore: 20, type: .who5), 0)
+        XCTAssertEqual(wellbeing.remainingPoints(currentScore: 25, type: .who5), 0)
+    }
+
+    func testGoalProgressDistinguishesMissingScoreFromZero() {
+        let goal = goal(baseline: 15, target: 10)
+        XCTAssertNil(goal.progress(currentScore: nil, type: .phq9))
+        XCTAssertNil(goal.remainingPoints(currentScore: nil, type: .phq9))
+        XCTAssertEqual(goal.progress(currentScore: 0, type: .phq9), 1)
+        XCTAssertEqual(goal.remainingPoints(currentScore: 0, type: .phq9), 0)
+    }
+
+    func testHistoricalGoalsRequireReviewWhenScoringOrDirectionChanged() {
+        let unlinkedStress = goal(baseline: 20, target: 15, linked: false)
+        XCTAssertTrue(unlinkedStress.requiresScoreReview(for: .pss10))
+        XCTAssertNil(unlinkedStress.progress(currentScore: 15, type: .pss10))
+        XCTAssertNil(unlinkedStress.remainingPoints(currentScore: 15, type: .pss10))
+        let decreasingWellbeing = goal(baseline: 20, target: 15)
+        XCTAssertTrue(decreasingWellbeing.requiresScoreReview(for: .who5))
+        XCTAssertNil(decreasingWellbeing.progress(currentScore: 15, type: .who5))
+    }
+
 }
