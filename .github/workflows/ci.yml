@@ -40,6 +40,7 @@ jobs:
             -only-testing:MindFriendAppTests/VaultEncryptionTests \
             -only-testing:MindFriendAppTests/VaultStorageTests \
             -only-testing:MindFriendAppTests/InterventionNotificationManagerTests \
+            -only-testing:MindFriendAppTests/AuthUITestIsolationTests \
             -only-testing:MindFriendAppTests/AvatarPersistenceTests \
             -only-testing:MindFriendAppTests/SleepHealthImportRegressionTests \
             -only-testing:MindFriendAppTests/SleepImportPersistenceRegressionTests \

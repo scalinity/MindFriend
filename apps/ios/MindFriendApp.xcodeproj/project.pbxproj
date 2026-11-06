@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		CE6B22EDEB8F4D34A1C30009 /* AuthUITestIsolationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE6B22EDEB8F4D34A1C30008 /* AuthUITestIsolationTests.swift */; };
 		CE6B22EDEB8F4D34A1C30007 /* HTMLPreviewSandbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE6B22EDEB8F4D34A1C30006 /* HTMLPreviewSandbox.swift */; };
 		CE6B22EDEB8F4D34A1C30005 /* MentorshipServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63346BD0781377CC6ADE3DA5 /* MentorshipServiceTests.swift */; };
 		CE6B22EDEB8F4D34A1C30003 /* CreativeWorkDeletionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE6B22EDEB8F4D34A1C30004 /* CreativeWorkDeletionTests.swift */; };
@@ -975,6 +976,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		CE6B22EDEB8F4D34A1C30008 /* AuthUITestIsolationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthUITestIsolationTests.swift; sourceTree = "<group>"; };
 		CE6B22EDEB8F4D34A1C30006 /* HTMLPreviewSandbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTMLPreviewSandbox.swift; sourceTree = "<group>"; };
 		CE6B22EDEB8F4D34A1C30004 /* CreativeWorkDeletionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreativeWorkDeletionTests.swift; sourceTree = "<group>"; };
 		CE6B22EDEB8F4D34A1C30002 /* AuthUITestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthUITestView.swift; sourceTree = "<group>"; };
@@ -4518,6 +4520,7 @@
 				0BBEF2C808BEE6A47C055FBF /* SPEC15_TESTS_README.md */,
 				62DBD1E659486A2BDD247494 /* SupabaseAuthServiceTests.swift */,
 				DE6D5639F8C3024D05B32C13 /* SupabaseDataServiceTests.swift */,
+				CE6B22EDEB8F4D34A1C30008 /* AuthUITestIsolationTests.swift */,
 				E0D13504C434AE9D622A5CD0 /* VaultEncryptionTests.swift */,
 				D014DC1E79AA55F72172CA65 /* VaultStorageTests.swift */,
 				29CA65E8C74715C00FBD479E /* VoiceEmotionIntegrationTests.swift */,
@@ -6812,6 +6815,7 @@
 				E0BF75A8C29EFD09124DA510 /* SmartNotificationTests.swift in Sources */,
 				FC9371EC7D2EA3FAE9485619 /* SupabaseAuthServiceTests.swift in Sources */,
 				66ED2869F2D97CB4C1EA6AA4 /* SupabaseDataServiceTests.swift in Sources */,
+				CE6B22EDEB8F4D34A1C30009 /* AuthUITestIsolationTests.swift in Sources */,
 				FF8AD84DA999F4BE3F115E1C /* VaultEncryptionTests.swift in Sources */,
 				0C0CA589E1BCD1862F02B79A /* VaultStorageTests.swift in Sources */,
 				60BEBFD5655469F9D0E5F652 /* VoiceEmotionIntegrationTests.swift in Sources */,
