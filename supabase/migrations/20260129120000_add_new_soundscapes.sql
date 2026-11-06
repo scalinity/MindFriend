@@ -1,3 +1,4 @@
+-- Guarded the seed to skip when app.settings.supabase_url is unset (fresh databases); production applied the original text.
 -- Add new soundscapes from the soundscapes storage bucket
 -- These use the royalty-free audio files uploaded from BigSoundBank and Archive.org
 -- URLs are constructed dynamically from app.settings.supabase_url
@@ -7,6 +8,10 @@ DECLARE
     v_base_url TEXT;
 BEGIN
     v_base_url := current_setting('app.settings.supabase_url', true) || '/storage/v1/object/public/soundscapes';
+    -- A fresh database has no project URL setting; seed only where it is configured.
+    IF NULLIF(current_setting('app.settings.supabase_url', true), '') IS NULL THEN
+        RETURN;
+    END IF;
 
     -- Rain (free) - 1:20 duration
     INSERT INTO sleep_content (
