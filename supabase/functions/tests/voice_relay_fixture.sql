@@ -22,8 +22,8 @@ RETURNS void LANGUAGE sql SECURITY DEFINER AS $$
  INSERT INTO public.voice_usage(user_id, period_start, minutes_used) VALUES(p_user_id, p_period_start, p_minutes)
  ON CONFLICT(user_id, period_start) DO UPDATE SET minutes_used = voice_usage.minutes_used + excluded.minutes_used;
 $$;
-\ir ../../migrations/20261022215252_secure_voice_accounting.sql
-\ir ../../migrations/20261023003000_voice_relay.sql
+\ir ../../migrations/20261023082449_secure_voice_accounting.sql
+\ir ../../migrations/20261023083500_voice_relay.sql
 INSERT INTO auth.users VALUES ('10000000-0000-4000-8000-000000000001'), ('20000000-0000-4000-8000-000000000002');
 INSERT INTO public.profiles SELECT id, 'free' FROM auth.users;
 SELECT set_config('request.jwt.claim.role', 'service_role', false);

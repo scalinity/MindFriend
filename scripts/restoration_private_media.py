@@ -42,7 +42,7 @@ for bucket,mime,extension in [('creative-works','image/png','png'),('generated-a
  check('before: seed '+bucket,code in (200,201))
  code,_=http('/storage/v1/object/public/'+bucket+'/'+object_path)
  check('before: anonymous public URL exposes synthetic '+bucket,code==200)
-for source in ['supabase/migrations/20261023002000_normalize_storage_owner_uuid.sql','supabase/operations/20261022_private_media.sql']:
+for source in ['supabase/migrations/20261023082638_normalize_storage_owner_uuid.sql','supabase/operations/20261022_private_media.sql']:
  result=subprocess.run(['docker','exec','-i','supabase_db_mindfriend-restoration-local','psql','-U','postgres','-v','ON_ERROR_STOP=1'],input=Path(source).read_text(),text=True,capture_output=True)
  if result.returncode:raise RuntimeError('Local policy apply failed: '+result.stderr)
 code,_=http('/storage/v1/object/creative-works/'+path,token=a['access_token'],raw=b'synthetic-audio',mime='audio/m4a')

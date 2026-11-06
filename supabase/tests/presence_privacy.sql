@@ -83,7 +83,7 @@ DO $$ BEGIN
   END IF;
 END $$;
 RESET ROLE;
-\ir ../migrations/20261023091000_honor_presence_privacy.sql
+\ir ../migrations/20261105210400_honor_presence_privacy.sql
 
 SET ROLE anon;
 SELECT set_config('request.jwt.claim.sub','',false);

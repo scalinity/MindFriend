@@ -24,11 +24,11 @@ ALTER TABLE public.subscriptions ADD COLUMN id uuid DEFAULT gen_random_uuid(),
 CREATE TABLE public.organizations(id uuid PRIMARY KEY, status text, subscription_status text);
 CREATE TABLE public.organization_members(id uuid PRIMARY KEY, user_id uuid, organization_id uuid, is_active boolean, joined_at timestamptz);
 CREATE TABLE public.creative_quota_usage(user_id uuid, date date, ai_art_count integer, voice_minutes_used integer, UNIQUE(user_id,date));
-\ir ../migrations/20261023001000_reserve_voice_journal_quota.sql
-\ir ../migrations/20261023005000_refresh_sponsored_entitlement.sql
-\ir ../migrations/20261023006000_provider_cost_limits.sql
-\ir ../migrations/20261023052846_bound_monthly_ai_budget.sql
-\ir ../migrations/20261023092500_admit_bounded_voice.sql
+\ir ../migrations/20261023083458_reserve_voice_journal_quota.sql
+\ir ../migrations/20261023083506_refresh_sponsored_entitlement.sql
+\ir ../migrations/20261023092051_provider_cost_limits.sql
+\ir ../migrations/20261023072340_bound_monthly_ai_budget.sql
+\ir ../migrations/20261023092207_admit_bounded_voice.sql
 -- The 06000 default remains closed; only this disposable fixture changes it.
 UPDATE public.voice_relay_reservations SET budget_day=budget_day-1 WHERE claimed_at IS NOT NULL;
 INSERT INTO auth.users SELECT ('60000000-0000-4000-8000-' || lpad(n::text,12,'0'))::uuid FROM generate_series(1,4) n;

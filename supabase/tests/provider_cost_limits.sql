@@ -18,8 +18,8 @@ SELECT pg_get_functiondef('public.get_voice_minutes_remaining(uuid)'::regprocedu
   (SELECT count(*) FROM public.voice_sessions) AS sessions;
 CREATE TABLE public.creative_quota_usage(user_id uuid, date date, ai_art_count integer,
   voice_minutes_used integer, UNIQUE(user_id, date));
-\ir ../migrations/20261023001000_reserve_voice_journal_quota.sql
-\ir ../migrations/20261023006000_provider_cost_limits.sql
+\ir ../migrations/20261023083458_reserve_voice_journal_quota.sql
+\ir ../migrations/20261023092051_provider_cost_limits.sql
 
 DO $$ BEGIN
   IF EXISTS(SELECT 1 FROM provider_cost_before WHERE

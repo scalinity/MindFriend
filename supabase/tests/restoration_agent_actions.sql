@@ -25,7 +25,7 @@ DO $$ BEGIN
     ('dddddddd-dddd-4ddd-8ddd-dddddddddddd','22222222-2222-4222-8222-222222222222','{"synthetic":"forged action"}');
 END $$;
 RESET ROLE;
-\ir ../migrations/20261022213613_restrict_agent_actions_policy.sql
+\ir ../migrations/20261023024312_restrict_agent_actions_policy.sql
 SET LOCAL ROLE anon;
 DO $$ BEGIN
   IF EXISTS (SELECT FROM public.agent_actions) THEN RAISE EXCEPTION 'anon read leaked'; END IF;

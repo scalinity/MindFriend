@@ -1572,7 +1572,7 @@ GRANT INSERT, SELECT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN ON
 
 GRANT INSERT, SELECT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN ON TABLE public.agent_actions TO "authenticated";
 
--- Realtime rollback is valid only after 20261022220426 successfully applied from
+-- Realtime rollback is valid only after 20261105210000 successfully applied from
 -- the verified zero-membership baseline. Do not run it after a baseline precondition failure.
 DO $$ DECLARE name text; BEGIN FOREACH name IN ARRAY ARRAY['agent_actions','together_participants','support_messages','circle_room_participants','user_presence','forum_replies'] LOOP IF EXISTS(SELECT FROM pg_publication_tables WHERE pubname='supabase_realtime' AND schemaname='public' AND tablename=name) THEN EXECUTE format('ALTER PUBLICATION supabase_realtime DROP TABLE public.%I',name); END IF; END LOOP; END $$;
 
