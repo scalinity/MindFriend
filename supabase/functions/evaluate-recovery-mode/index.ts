@@ -2,8 +2,16 @@
 // Daily cron job that evaluates auto-entry/exit conditions for all users
 // See: kimispecs/03-recovery-mode-ux-spec.md
 
-import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
+import {
+  createClient,
+  type SupabaseClient,
+} from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import {
+  authenticateRequest,
+  isAuthError,
+  isAuthorizedCronRequest,
+} from "../_shared/auth.ts";
 
 interface EvaluationResult {
   userId: string;
@@ -36,90 +44,37 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Initialize Supabase client with service role (this is a cron job)
+    const isScheduled = await isAuthorizedCronRequest(
+      req.headers,
+      Deno.env.get("CRON_SECRET") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    );
+    if (!isScheduled) {
+      const auth = await authenticateRequest(req);
+      if (isAuthError(auth)) return auth.response;
+      const result = await evaluateUserRecoveryMode(
+        auth.supabaseUser,
+        auth.user.id,
+      );
+      return new Response(
+        JSON.stringify({
+          success: true,
+          processedUsers: 1,
+          entered: result.action === "enter" ? 1 : 0,
+          exited: result.action === "exit" ? 1 : 0,
+          unchanged: result.action === "none" ? 1 : 0,
+          errors: 0,
+          results: [result],
+        }),
+        { status: 200, headers },
+      );
+    }
+
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-
-    // Validate this is a service role call (cron jobs use service role)
-    const authHeader = req.headers.get("Authorization");
-    if (authHeader) {
-      const token = authHeader.replace("Bearer ", "");
-      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-
-      // Constant-time comparison
-      const tokenBytes = new TextEncoder().encode(token);
-      const keyBytes = new TextEncoder().encode(serviceRoleKey);
-      let isServiceRole = tokenBytes.length === keyBytes.length;
-      if (isServiceRole) {
-        let diff = 0;
-        for (let i = 0; i < tokenBytes.length; i++) {
-          diff |= tokenBytes[i] ^ keyBytes[i];
-        }
-        isServiceRole = diff === 0;
-      }
-
-      if (!isServiceRole) {
-        // Validate as authenticated user for manual trigger (testing)
-        const {
-          data: { user },
-        } = await supabaseAdmin.auth.getUser(token);
-        if (!user) {
-          return new Response(JSON.stringify({ error: "Unauthorized" }), {
-            status: 401,
-            headers,
-          });
-        }
-        // For authenticated users, only evaluate their own state
-        const result = await evaluateUserRecoveryMode(supabaseAdmin, user.id);
-        return new Response(
-          JSON.stringify({
-            success: true,
-            processedUsers: 1,
-            entered: result.action === "enter" ? 1 : 0,
-            exited: result.action === "exit" ? 1 : 0,
-            unchanged: result.action === "none" ? 1 : 0,
-            errors: 0,
-            results: [result],
-          }),
-          { status: 200, headers },
-        );
-      }
-    }
-
-    // Service role: process all users with recent mood activity
-    console.log("[Recovery Mode Cron] Starting evaluation...");
-
-    // Get all users who have logged moods in the last 7 days
-    // This is more efficient than evaluating all users
-    const { data: activeUsers, error: usersError } = await supabaseAdmin
-      .from("moods")
-      .select("user_id")
-      .gte(
-        "created_at",
-        new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-      )
-      .order("user_id");
-
-    if (usersError) {
-      console.error(
-        "[Recovery Mode Cron] Error fetching active users:",
-        usersError,
-      );
-      return new Response(
-        JSON.stringify({ error: "Failed to fetch active users" }),
-        { status: 500, headers },
-      );
-    }
-
-    // Deduplicate user IDs
-    const uniqueUserIds = [
-      ...new Set(activeUsers?.map((m) => m.user_id) || []),
-    ];
-    console.log(
-      `[Recovery Mode Cron] Processing ${uniqueUserIds.length} active users`,
-    );
+    const uniqueUserIds = await recoveryCandidateUserIds(supabaseAdmin);
 
     const results: EvaluationResult[] = [];
     let entered = 0;
@@ -144,7 +99,9 @@ Deno.serve(async (req) => {
             return {
               userId,
               action: "none" as const,
-              reason: `error: ${error instanceof Error ? error.message : "unknown"}`,
+              reason: `error: ${
+                error instanceof Error ? error.message : "unknown"
+              }`,
               previousState: false,
               newState: false,
             };
@@ -202,23 +159,53 @@ async function evaluateUserRecoveryMode(
     throw error;
   }
 
-  // The function returns a single row
-  const result = data?.[0];
-  if (!result) {
-    return {
-      userId,
-      action: "none",
-      reason: "no_result",
-      previousState: false,
-      newState: false,
-    };
-  }
+  return parseRecoveryEvaluation(data, userId);
+}
 
+/** The SQL RPC returns a JSON object, not a table row array. Reject invalid state instead of inventing it. */
+export function parseRecoveryEvaluation(
+  data: unknown,
+  userId: string,
+): EvaluationResult {
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("Invalid recovery evaluation result");
+  }
+  const result = data as Record<string, unknown>;
+  if (
+    !["enter", "exit", "none"].includes(String(result.action)) ||
+    typeof result.reason !== "string" ||
+    typeof result.previous_state !== "boolean" ||
+    typeof result.new_state !== "boolean"
+  ) {
+    throw new Error("Invalid recovery evaluation result");
+  }
   return {
     userId,
-    action: result.action as "enter" | "exit" | "none",
-    reason: result.reason || "",
-    previousState: result.previous_state || false,
-    newState: result.new_state || false,
+    action: result.action as EvaluationResult["action"],
+    reason: result.reason,
+    previousState: result.previous_state,
+    newState: result.new_state,
   };
+}
+
+async function recoveryCandidateUserIds(
+  supabase: SupabaseClient,
+): Promise<string[]> {
+  const ids = new Set<string>();
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  for (const table of ["moods", "user_settings"] as const) {
+    for (let offset = 0;; offset += 1000) {
+      let query = supabase.from(table).select("user_id").order("user_id").order(
+        "id",
+      );
+      query = table === "moods"
+        ? query.gte("created_at", since)
+        : query.eq("recovery_mode_active", true);
+      const { data, error } = await query.range(offset, offset + 999);
+      if (error) throw error;
+      for (const row of data ?? []) ids.add(row.user_id);
+      if (!data || data.length < 1000) break;
+    }
+  }
+  return [...ids];
 }
