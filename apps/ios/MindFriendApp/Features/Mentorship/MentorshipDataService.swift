@@ -35,18 +35,6 @@ private struct MatchStatusUpdate: Encodable {
     let status: String
 }
 
-private struct MatchEndUpdate: Encodable {
-    let status: String
-    let endedAt: String
-    let endReason: String?
-
-    enum CodingKeys: String, CodingKey {
-        case status
-        case endedAt = "ended_at"
-        case endReason = "end_reason"
-    }
-}
-
 private struct MessageInsert: Encodable {
     let matchId: UUID
     let senderId: UUID
@@ -253,18 +241,11 @@ final class MentorshipDataService {
     }
 
     func endMentorship(matchId: UUID, reason: String? = nil) async throws {
-        return try await perform { userId in
-            let update = MatchEndUpdate(
-                status: "completed",
-                endedAt: ISO8601DateFormatter().string(from: Date()),
-                endReason: reason
-            )
-            _ = try await self.supabase
-                .from("mentorship_matches")
-                .update(update)
-                .eq("id", value: matchId.uuidString)
-                .execute()
-
+        try await perform { _ in
+            let confirmed: Bool = try await self.supabase.rpc("end_mentorship", params: [
+                "p_match_id": matchId.uuidString, "p_reason": reason ?? "completed"
+            ]).execute().value
+            guard confirmed else { throw MentorshipError.networkError("The mentorship was not ended.") }
         }
     }
 

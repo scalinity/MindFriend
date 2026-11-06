@@ -112,6 +112,15 @@ final class MentorshipServiceTests: XCTestCase {
         XCTAssertTrue(message.isSafetyFlagged)
     }
 
+    func testEndMentorshipWaitsForConfirmedDatabaseResult() async throws {
+        MentorshipFixtureURLProtocol.fixture.prepare([(200, "false"), (200, "true")])
+        let data = service(); let match = UUID()
+        do { try await data.endMentorship(matchId: match, reason: "Finished"); XCTFail("False is not persistence") }
+        catch { }
+        try await data.endMentorship(matchId: match, reason: "Finished")
+        XCTAssertEqual(MentorshipFixtureURLProtocol.fixture.requests.map { $0.url.lastPathComponent }, ["end_mentorship", "end_mentorship"])
+    }
+
     func testMessageMutationsUseValidatedDatabaseFunctions() async throws {
         MentorshipFixtureURLProtocol.fixture.prepare([(200, "true"), (200, "true"), (200, "true")])
         let data = service(); let match = UUID(); let message = UUID()

@@ -24,6 +24,8 @@ private struct MentorshipChatContent: View {
     @State private var messageText = ""
     @State private var showingReportSheet = false
     @State private var showingEndSheet = false
+    @State private var mentorshipEnded = false
+    @Environment(\.dismiss) private var dismiss
 
     private var safetyService: MentorshipSafetyService { service.safetyService }
 
@@ -142,8 +144,14 @@ private struct MentorshipChatContent: View {
                 }
             )
         }
-        .sheet(isPresented: $showingEndSheet) {
-            EndMentorshipSheet(isPresented: $showingEndSheet)
+        .sheet(isPresented: $showingEndSheet, onDismiss: {
+            if mentorshipEnded { dismiss() }
+        }) {
+            EndMentorshipSheet(isPresented: $showingEndSheet) { reason in
+                try await service.endMentorship(matchId, reason: reason.isEmpty ? "completed" : reason)
+                messagingService.stopAutoUpdate()
+                mentorshipEnded = true
+            }
         }
         .onAppear {
             Task {
@@ -289,6 +297,8 @@ struct ReportSafetySheet: View {
 
 struct EndMentorshipSheet: View {
     @Binding var isPresented: Bool
+    let onEnd: (String) async throws -> Void
+    @State private var errorMessage: String?
     @State private var reasonText = ""
     @State private var isSending = false
 
@@ -307,12 +317,21 @@ struct EndMentorshipSheet: View {
                 }
 
                 Spacer()
-
+                if let errorMessage {
+                    Text(errorMessage).foregroundStyle(.red).font(.callout)
+                }
                 VStack(spacing: 12) {
                     Button(action: {
                         isSending = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                            isPresented = false
+                        errorMessage = nil
+                        Task {
+                            defer { isSending = false }
+                            do {
+                                try await onEnd(reasonText.trimmingCharacters(in: .whitespacesAndNewlines))
+                                isPresented = false
+                            } catch {
+                                errorMessage = "The mentorship could not be ended. Please try again."
+                            }
                         }
                     }) {
                         if isSending {
@@ -335,9 +354,11 @@ struct EndMentorshipSheet: View {
                             .background(Color(.quaternarySystemFill))
                             .cornerRadius(8)
                     }
+                    .disabled(isSending)
                 }
             }
             .padding()
+            .interactiveDismissDisabled(isSending)
             .navigationTitle("End Mentorship")
             .navigationBarTitleDisplayMode(.inline)
         }
