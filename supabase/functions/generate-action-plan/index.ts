@@ -1,3 +1,4 @@
+import { refreshPremiumAccess } from "../_shared/entitlement.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { checkRateLimit, getRateLimitHeaders } from "../_shared/ratelimit.ts";
@@ -126,20 +127,7 @@ Deno.serve(async (req) => {
     const localDate = getLocalDate(timezone);
     const regenerate = body.regenerate === true;
 
-    const { data: profile, error: profileError } = await supabaseAdmin
-      .from("profiles")
-      .select("subscription_tier")
-      .eq("id", user.id)
-      .single();
-
-    if (profileError || !profile) {
-      return new Response(JSON.stringify({ error: "Unable to load profile" }), {
-        status: 500,
-        headers: responseHeaders,
-      });
-    }
-
-    const isPremium = profile.subscription_tier === "premium";
+    const isPremium = await refreshPremiumAccess(supabaseAdmin, user.id);
 
     const { data: existingPlans, error: existingError } = await supabaseAdmin
       .from("action_plans")

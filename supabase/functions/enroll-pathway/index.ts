@@ -1,3 +1,4 @@
+import { refreshPremiumAccess } from "../_shared/entitlement.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 
@@ -205,13 +206,7 @@ Deno.serve(async (req) => {
 
     // 2. Check if premium pathway and user has entitlement
     if (pathway.is_premium) {
-      const { data: profile } = await supabaseClient
-        .from("profiles")
-        .select("subscription_tier")
-        .eq("id", user.id)
-        .single();
-
-      const hasSubscription = profile?.subscription_tier === "premium";
+      const hasSubscription = await refreshPremiumAccess(supabaseClient, user.id);
 
       if (!hasSubscription) {
         return new Response(

@@ -34,7 +34,11 @@ const verifiers = [
 ];
 
 export class TransactionVerificationError extends Error {
-  constructor(public readonly code: string, message: string) {
+  constructor(
+    public readonly code: string,
+    message: string,
+    public readonly revokedTransaction?: { transactionId: string; originalTransactionId: string },
+  ) {
     super(message);
     this.name = "TransactionVerificationError";
   }
@@ -96,6 +100,17 @@ export async function verifyAppleTransaction(
       "Missing transaction identifiers",
     );
   }
+  // Purchases made before account tokens were supplied remain restorable. When
+  // Apple includes a token, it must bind the purchase to the authenticated UUID.
+  if (
+    transaction.appAccountToken !== undefined &&
+    transaction.appAccountToken.toLowerCase() !== callerId.toLowerCase()
+  ) {
+    throw new TransactionVerificationError(
+      "APP_ACCOUNT_TOKEN_MISMATCH",
+      "Purchase belongs to another account",
+    );
+  }
   if (
     transaction.revocationDate !== undefined ||
     transaction.revocationReason !== undefined
@@ -103,6 +118,7 @@ export async function verifyAppleTransaction(
     throw new TransactionVerificationError(
       "TRANSACTION_REVOKED",
       "Transaction has been revoked",
+      { transactionId: transaction.transactionId, originalTransactionId: transaction.originalTransactionId },
     );
   }
   // Every supported product is a subscription. Never manufacture a new expiry
@@ -122,17 +138,7 @@ export async function verifyAppleTransaction(
       "Subscription has expired",
     );
   }
-  // Purchases made before account tokens were supplied remain restorable. When
-  // Apple includes a token, it must bind the purchase to the authenticated UUID.
-  if (
-    transaction.appAccountToken !== undefined &&
-    transaction.appAccountToken.toLowerCase() !== callerId.toLowerCase()
-  ) {
-    throw new TransactionVerificationError(
-      "APP_ACCOUNT_TOKEN_MISMATCH",
-      "Purchase belongs to another account",
-    );
-  }
+
 
   return transaction as VerifiedAppleTransaction;
 }

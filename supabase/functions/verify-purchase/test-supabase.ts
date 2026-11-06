@@ -10,6 +10,7 @@ export const database = {
   failTable: "",
   failOperation: "",
   reads: [] as string[],
+  rpcCalls: [] as { name: string; args: Record<string, unknown> }[],
   writes: [] as {
     table: string;
     operation: string;
@@ -24,6 +25,7 @@ export const database = {
     this.failTable = "";
     this.failOperation = "";
     this.reads = [];
+    this.rpcCalls = [];
     this.writes = [];
   },
 };
@@ -38,6 +40,20 @@ export function createClient(..._args: unknown[]): any {
           data: { user: database.authenticated ? { id: callerId } : null },
           error: null,
         }),
+    },
+    rpc(name: string, args: Record<string, unknown>) {
+      database.rpcCalls.push({ name, args });
+      if (name !== "revoke_verified_apple_transaction") throw new Error("Unexpected RPC");
+      if (database.failOperation === "rpc") return Promise.resolve({ data: null, error: { code: "synthetic-revoke-failure" } });
+      const subscription = database.subscription;
+      const matches = subscription && subscription.user_id === args.p_user_id &&
+        subscription.original_transaction_id === args.p_original_transaction_id &&
+        subscription.last_transaction_id === args.p_transaction_id;
+      if (matches) {
+        subscription.status = "cancelled";
+        database.writes.push({ table: "subscriptions", operation: "update", data: { status: "cancelled" } });
+      }
+      return Promise.resolve({ data: Boolean(matches), error: null });
     },
     from(table: string) {
       database.reads.push(table);

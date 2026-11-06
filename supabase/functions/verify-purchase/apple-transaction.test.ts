@@ -70,6 +70,7 @@ const existingSubscription = (overrides: Record<string, unknown> = {}) => ({
   original_transaction_id: "100000000000001",
   last_transaction_id: "200000000000001",
   plan_type: "individual",
+  status: "active",
   billing_period: "monthly",
   expires_at: new Date(Date.now() + 86_400_000).toISOString(),
   family_id: null,
@@ -239,15 +240,6 @@ Deno.test("Apple verifier and verify-purchase handler with synthetic signatures 
         { expiresDate: Number.MAX_SAFE_INTEGER },
         "INVALID_TRANSACTION_EXPIRY",
       ],
-      ["revoked transaction", {
-        revocationDate: Date.now() - 1,
-        revocationReason: 0,
-      }, "TRANSACTION_REVOKED"],
-      [
-        "revocation reason without date",
-        { revocationReason: 1 },
-        "TRANSACTION_REVOKED",
-      ],
       [
         "unknown product",
         { productId: "com.other.subscription" },
@@ -290,6 +282,7 @@ Deno.test("Apple verifier and verify-purchase handler with synthetic signatures 
           assert.equal((await response.json()).code, code);
           assert.deepEqual(database.reads, []);
           assert.deepEqual(database.writes, []);
+          assert.deepEqual(database.rpcCalls, []);
         },
       );
     }
@@ -351,6 +344,46 @@ Deno.test("Apple verifier and verify-purchase handler with synthetic signatures 
         assert.deepEqual(database.writes, []);
       },
     );
+
+    for (const overrides of [{ revocationDate: Date.now() - 1, revocationReason: 0 }, { revocationReason: 1 }]) {
+      await t.step("verified revocation reconciles only the matching stored transaction", async () => {
+        database.reset();
+        database.subscription = existingSubscription();
+        const response = await request(trustedChain.sign(testTransaction(overrides)));
+        assert.equal(response.status, 400);
+        assert.equal((await response.json()).code, "TRANSACTION_REVOKED");
+        assert.equal(database.subscription.status, "cancelled");
+        assert.deepEqual(database.rpcCalls, [{ name: "revoke_verified_apple_transaction", args: {
+          p_user_id: callerId, p_original_transaction_id: "100000000000001", p_transaction_id: "200000000000001",
+        } }]);
+      });
+    }
+    for (const subscription of [existingSubscription({ user_id: "22222222-2222-4222-8222-222222222222" }), existingSubscription({ last_transaction_id: "newer-renewal" })]) {
+      await t.step("revoked older or other-owner receipt cannot cancel current access", async () => {
+        database.reset();
+        database.subscription = { ...subscription };
+        const response = await request(trustedChain.sign(testTransaction({ revocationReason: 0 })));
+        assert.equal(response.status, 400);
+        assert.equal(database.subscription.status, "active");
+        assert.deepEqual(database.writes, []);
+      });
+    }
+    await t.step("revoked receipt with a mismatched account token never reaches reconciliation", async () => {
+      database.reset();
+      database.subscription = existingSubscription();
+      const response = await request(trustedChain.sign(testTransaction({ revocationReason: 0, appAccountToken: "22222222-2222-4222-8222-222222222222" })));
+      assert.equal(response.status, 403);
+      assert.deepEqual(database.rpcCalls, []);
+      assert.deepEqual(database.writes, []);
+    });
+    await t.step("revocation persistence failure returns a retryable server error", async () => {
+      database.reset();
+      database.subscription = existingSubscription();
+      database.failOperation = "rpc";
+      const response = await request(trustedChain.sign(testTransaction({ revocationReason: 0 })));
+      assert.equal(response.status, 500);
+      assert.equal(database.subscription.status, "active");
+    });
 
     await t.step(
       "same transaction is idempotent with no database writes",
