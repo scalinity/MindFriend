@@ -10,6 +10,8 @@ final class AudioPlayerViewModel: ObservableObject {
 
     @Published private(set) var isLoading = false
     @Published private(set) var isPlaying = false
+    @Published private(set) var isPlaybackRequested = false
+    @Published private(set) var usesBuiltInVoice = false
     @Published private(set) var currentTime: TimeInterval = 0
     @Published private(set) var duration: TimeInterval = 0
     @Published var error: String?
@@ -45,11 +47,25 @@ final class AudioPlayerViewModel: ObservableObject {
     private var timeObserver: Any?
     private var sleepTimerTask: Task<Void, Never>?
     private var fadeOutTask: Task<Void, Never>?
+    private var backgroundLoadTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
+    private var playbackCancellables = Set<AnyCancellable>()
+    private var loadID = UUID()
+    private var backgroundLoadID = UUID()
+    private var resumeAfterInterruption = false
+    private var speechText: String?
+    private var speechSettings = NativeTTSService.VoiceSettings.calm
+    private let speech: any NativeSpeechPlaying
+    private let resolveAudioURL: @MainActor (URL) async throws -> URL
 
     // MARK: - Initialization
 
-    init() {
+    init(speech: (any NativeSpeechPlaying)? = nil,
+         resolveAudioURL: @escaping @MainActor (URL) async throws -> URL = {
+             try await SupabaseStorageMedia.resolve($0)
+         }) {
+        self.speech = speech ?? NativeTTSService()
+        self.resolveAudioURL = resolveAudioURL
         setupAudioSession()
     }
 
@@ -58,25 +74,17 @@ final class AudioPlayerViewModel: ObservableObject {
         // The view should call cleanup() in onDisappear
         sleepTimerTask?.cancel()
         fadeOutTask?.cancel()
+        backgroundLoadTask?.cancel()
     }
 
     // MARK: - Audio Session Setup
 
     private func setupAudioSession() {
-        do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .spokenAudio, options: [.mixWithOthers])
-            try session.setActive(true)
-
-            // Handle interruptions (phone calls, alarms)
-            NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)
-                .sink { [weak self] notification in
-                    self?.handleInterruption(notification)
-                }
-                .store(in: &cancellables)
-        } catch {
-            print("Failed to setup audio session: \(error)")
-        }
+        NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)
+            .sink { [weak self] notification in
+                Task { @MainActor in self?.handleInterruption(notification) }
+            }
+            .store(in: &cancellables)
     }
 
     private func handleInterruption(_ notification: Notification) {
@@ -87,11 +95,15 @@ final class AudioPlayerViewModel: ObservableObject {
 
         switch type {
         case .began:
+            let wasPlaybackRequested = isPlaybackRequested
             pause()
+            resumeAfterInterruption = wasPlaybackRequested
         case .ended:
+            let shouldResume = resumeAfterInterruption
+            resumeAfterInterruption = false
             if let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt {
                 let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
-                if options.contains(.shouldResume) {
+                if shouldResume && options.contains(.shouldResume) {
                     play()
                 }
             }
@@ -102,118 +114,191 @@ final class AudioPlayerViewModel: ObservableObject {
 
     // MARK: - Playback Control
 
-    /// Load audio from URL
-    func load(audioURL: URL) async throws {
-        isLoading = true
-        error = nil
-
-        print("[AudioPlayerViewModel] Loading audio from URL: \(audioURL)")
-
-        // Create asset with options for better error reporting
-        let asset = AVURLAsset(url: audioURL, options: [
-            AVURLAssetPreferPreciseDurationAndTimingKey: true
-        ])
-
-        // First check if the asset is playable
-        do {
-            let isPlayable = try await asset.load(.isPlayable)
-            print("[AudioPlayerViewModel] Asset isPlayable: \(isPlayable)")
-
-            if !isPlayable {
-                print("[AudioPlayerViewModel] ERROR: Asset is not playable")
-                self.error = "Audio format not supported"
-                isLoading = false
+    /// The Home hub, history and favorites all use this same playback choice.
+    func load(content: GeneratedContent) async {
+        if let value = content.audioUrl, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            guard let url = URL(string: value), url.scheme != nil else {
+                cleanup()
+                error = "Unable to open this audio. Try again."
                 return
             }
-        } catch {
-            print("[AudioPlayerViewModel] ERROR checking playability: \(error)")
-            self.error = "Failed to load audio: \(error.localizedDescription)"
-            isLoading = false
+            try? await load(audioURL: url)
+        } else {
+            loadSpeech(text: content.textContent, contentType: content.contentType.rawValue)
+        }
+    }
+
+    private func loadSpeech(text: String, contentType: String) {
+        cleanup()
+        guard !Task.isCancelled else { return }
+        usesBuiltInVoice = true
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            error = "There is no text to read aloud."
             return
         }
-
-        // Wait for duration to be available
-        do {
-            let duration = try await asset.load(.duration)
-            let durationSeconds = CMTimeGetSeconds(duration)
-            print("[AudioPlayerViewModel] Duration loaded: \(durationSeconds) seconds")
-            self.duration = durationSeconds
-        } catch {
-            print("[AudioPlayerViewModel] ERROR loading duration: \(error)")
-            self.duration = 0
+        speechText = text
+        speechSettings = NativeTTSService.settingsForContentType(contentType)
+        // Reading progress has no seekable audio timeline.
+        duration = 1
+        let requestID = loadID
+        speech.playbackStates.sink { [weak self] state in
+            guard let self, self.loadID == requestID else { return }
+            self.currentTime = state.progress
+            self.isLoading = state.isPreparing
+            self.isPlaying = state.isSpeaking && !state.isPaused
+            if let error = state.error {
+                self.failPlayback(error)
+            } else if !state.isSpeaking && state.progress >= 1 {
+                self.handlePlaybackEnd()
+            }
         }
+        .store(in: &playbackCancellables)
+    }
 
-        // Create player item and player
-        let playerItem = AVPlayerItem(asset: asset)
+    /// Resolve private media before loading; a Play tap while preparing is retained.
+    func load(audioURL: URL) async throws {
+        cleanup()
+        guard !Task.isCancelled else { return }
+        let requestID = loadID
+        isLoading = true
 
-        // Observe player item status for errors
-        playerItem.publisher(for: \.status)
-            .sink { [weak self] status in
+        do {
+            let accessURL = try await resolveAudioURL(audioURL)
+            guard loadID == requestID else { return }
+            try Task.checkCancellation()
+            let asset = AVURLAsset(url: accessURL, options: [
+                AVURLAssetPreferPreciseDurationAndTimingKey: true
+            ])
+            let playable = try await asset.load(.isPlayable)
+            guard loadID == requestID else { return }
+            try Task.checkCancellation()
+            guard playable else {
+                failPlayback("Audio format not supported. Try again.")
+                return
+            }
+            let assetDuration = try await asset.load(.duration)
+            guard loadID == requestID else { return }
+            try Task.checkCancellation()
+            let seconds = CMTimeGetSeconds(assetDuration)
+            duration = seconds.isFinite && seconds > 0 ? seconds : 0
+
+            let item = AVPlayerItem(asset: asset)
+            let newPlayer = AVPlayer(playerItem: item)
+            newPlayer.actionAtItemEnd = .pause
+            player = newPlayer
+
+            item.publisher(for: \.status).sink { [weak self] status in
                 Task { @MainActor in
+                    guard let self, self.loadID == requestID else { return }
                     switch status {
                     case .failed:
-                        let errorMsg = playerItem.error?.localizedDescription ?? "Unknown error"
-                        print("[AudioPlayerViewModel] PlayerItem failed: \(errorMsg)")
-                        self?.error = "Playback error: \(errorMsg)"
+                        self.failPlayback("Unable to load this audio. Try again.")
                     case .readyToPlay:
-                        print("[AudioPlayerViewModel] PlayerItem ready to play")
-                    case .unknown:
-                        print("[AudioPlayerViewModel] PlayerItem status unknown")
-                    @unknown default:
+                        self.isLoading = false
+                        if self.isPlaybackRequested { self.play() }
+                    default:
                         break
                     }
                 }
             }
-            .store(in: &cancellables)
+            .store(in: &playbackCancellables)
 
-        player = AVPlayer(playerItem: playerItem)
-        player?.actionAtItemEnd = .pause
+            NotificationCenter.default.publisher(for: .AVPlayerItemDidPlayToEndTime, object: item)
+                .sink { [weak self] _ in
+                    Task { @MainActor in
+                        guard let self, self.loadID == requestID else { return }
+                        self.handlePlaybackEnd()
+                    }
+                }
+                .store(in: &playbackCancellables)
 
-        print("[AudioPlayerViewModel] Player created successfully")
-
-        // Observe playback end
-        NotificationCenter.default.publisher(for: .AVPlayerItemDidPlayToEndTime, object: playerItem)
-            .sink { [weak self] _ in
+            let interval = CMTime(seconds: 0.5, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
+            timeObserver = newPlayer.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
                 Task { @MainActor in
-                    self?.handlePlaybackEnd()
+                    guard let self, self.loadID == requestID else { return }
+                    let seconds = CMTimeGetSeconds(time)
+                    if seconds.isFinite { self.currentTime = seconds }
                 }
             }
-            .store(in: &cancellables)
-
-        // Setup time observer
-        let interval = CMTime(seconds: 0.5, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
-        timeObserver = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
-            Task { @MainActor in
-                self?.currentTime = CMTimeGetSeconds(time)
+        } catch {
+            guard loadID == requestID else { return }
+            if Task.isCancelled {
+                cleanup()
+                return
             }
+            failPlayback("Unable to open this audio. Try again.")
         }
-
-        isLoading = false
     }
 
-    /// Start or resume playback
+    var canPlay: Bool {
+        error == nil && (isLoading || speechText != nil || player != nil)
+    }
+
+    var canSeek: Bool {
+        !usesBuiltInVoice && !isLoading && player != nil && error == nil
+    }
+
+    /// Start or resume playback, including a request made while audio is preparing.
     func play() {
-        player?.rate = playbackRate
+        guard canPlay else { return }
+        isPlaybackRequested = true
+        if usesBuiltInVoice {
+            if speech.isPaused {
+                speech.resume()
+            } else if !speech.isSpeaking, let speechText {
+                speech.speak(speechText, settings: speechSettings)
+            }
+            // Starting speech resets the previous utterance's completion state synchronously.
+            isPlaybackRequested = error == nil
+            if isPlaying { backgroundPlayer?.play() }
+            return
+        }
+        guard !isLoading, let player else { return }
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .spokenAudio, options: [.mixWithOthers])
+            try session.setActive(true)
+        } catch {
+            failPlayback("Unable to start audio. Try again.")
+            return
+        }
+        if duration > 0 && currentTime >= duration {
+            player.seek(to: .zero)
+            currentTime = 0
+        }
+        player.playImmediately(atRate: playbackRate)
         isPlaying = true
         backgroundPlayer?.play()
     }
 
-    /// Pause playback
+    /// Explicit pause and timer cutoff also cancel interrupted or pending playback.
     func pause() {
+        resumeAfterInterruption = false
+        isPlaybackRequested = false
         player?.pause()
+        speech.pause()
         isPlaying = false
         backgroundPlayer?.pause()
     }
 
+    private func failPlayback(_ message: String) {
+        pause()
+        isLoading = false
+        error = message
+    }
+
     /// Seek to a specific time
     func seek(to time: TimeInterval) {
-        let cmTime = CMTime(seconds: time, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
+        guard canSeek, time.isFinite else { return }
+        let target = max(0, min(time, duration))
+        let cmTime = CMTime(seconds: target, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
         player?.seek(to: cmTime)
+        currentTime = target
     }
 
     /// Toggle play/pause
     func togglePlayback() {
-        if isPlaying {
+        if isPlaybackRequested {
             pause()
         } else {
             play()
@@ -234,6 +319,12 @@ final class AudioPlayerViewModel: ObservableObject {
 
     /// Cleanup resources
     func cleanup() {
+        loadID = UUID()
+        backgroundLoadID = UUID()
+        playbackCancellables.removeAll()
+        speech.stop()
+        speechText = nil
+        resumeAfterInterruption = false
         if let observer = timeObserver {
             player?.removeTimeObserver(observer)
             timeObserver = nil
@@ -246,7 +337,16 @@ final class AudioPlayerViewModel: ObservableObject {
         sleepTimerTask = nil
         fadeOutTask?.cancel()
         fadeOutTask = nil
-        cancellables.removeAll()
+        backgroundLoadTask?.cancel()
+        backgroundLoadTask = nil
+        sleepTimerMinutes = nil
+        isLoading = false
+        isPlaying = false
+        isPlaybackRequested = false
+        usesBuiltInVoice = false
+        currentTime = 0
+        duration = 0
+        error = nil
     }
 
     // MARK: - Sleep Timer
@@ -261,7 +361,8 @@ final class AudioPlayerViewModel: ObservableObject {
             var remaining = totalSeconds
 
             while remaining > 0 && !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+                do { try await Task.sleep(nanoseconds: 1_000_000_000) }
+                catch { return }
                 remaining -= 1
                 await MainActor.run {
                     sleepTimerRemaining = remaining
@@ -298,7 +399,8 @@ final class AudioPlayerViewModel: ObservableObject {
             let steps = 30 // 30 steps over 30 seconds
             for step in 0..<steps {
                 if Task.isCancelled { break }
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                do { try await Task.sleep(nanoseconds: 1_000_000_000) }
+                catch { return }
                 let volume = Float(steps - step - 1) / Float(steps)
                 await MainActor.run {
                     player?.volume = volume
@@ -311,6 +413,8 @@ final class AudioPlayerViewModel: ObservableObject {
     // MARK: - Background Sound
 
     private func updateBackgroundSound() {
+        backgroundLoadID = UUID()
+        backgroundLoadTask?.cancel()
         backgroundPlayer?.stop()
         backgroundPlayer = nil
 
@@ -341,14 +445,15 @@ final class AudioPlayerViewModel: ObservableObject {
             }
         } else {
             // Remote file - download to cache first, then play
-            Task {
-                await loadRemoteBackgroundSound(from: url, for: soundType)
+            let requestID = backgroundLoadID
+            backgroundLoadTask = Task { [weak self] in
+                await self?.loadRemoteBackgroundSound(from: url, for: soundType, requestID: requestID)
             }
         }
     }
 
     /// Download and cache remote background sound, then play it
-    private func loadRemoteBackgroundSound(from url: URL, for soundType: BackgroundSoundType) async {
+    private func loadRemoteBackgroundSound(from url: URL, for soundType: BackgroundSoundType, requestID: UUID) async {
         let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("BackgroundSounds")
 
@@ -359,6 +464,7 @@ final class AudioPlayerViewModel: ObservableObject {
 
         // Check if already cached
         if FileManager.default.fileExists(atPath: cachedFile.path) {
+            guard backgroundLoadID == requestID, !Task.isCancelled else { return }
             await playBackgroundSound(from: cachedFile)
             return
         }
@@ -366,6 +472,7 @@ final class AudioPlayerViewModel: ObservableObject {
         // Download the file
         do {
             let (tempUrl, _) = try await URLSession.shared.download(from: url)
+            guard backgroundLoadID == requestID, !Task.isCancelled else { return }
             try? FileManager.default.removeItem(at: cachedFile)
             try FileManager.default.moveItem(at: tempUrl, to: cachedFile)
             await playBackgroundSound(from: cachedFile)
@@ -398,7 +505,9 @@ final class AudioPlayerViewModel: ObservableObject {
     // MARK: - Playback End
 
     private func handlePlaybackEnd() {
+        isPlaybackRequested = false
         isPlaying = false
+        backgroundPlayer?.pause()
         currentTime = duration
 
         // Cancel sleep timer if story ended naturally

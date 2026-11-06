@@ -11,6 +11,7 @@ struct GeneratedStoryView: View {
     @State private var showSleepTimer = false
     @State private var screenBrightness: Double = 0.3
     @State private var originalBrightness: CGFloat = UIScreen.main.brightness
+    @State private var loadAttempt = 0
     @State private var isFavorite: Bool
 
     // UserDefaults key for brightness restoration on force-quit recovery
@@ -58,11 +59,13 @@ struct GeneratedStoryView: View {
             .presentationDetents([.medium])
         }
         .sheet(isPresented: $showSleepTimer) {
-            SleepTimerView(selectedMinutes: $player.sleepTimerMinutes)
+            SleepTimerView(selectedMinutes: $player.sleepTimerMinutes, usesBuiltInVoice: player.usesBuiltInVoice)
                 .presentationDetents([.height(400)])
         }
+        .task(id: "\(content.id)-\(loadAttempt)") {
+            await player.load(content: content)
+        }
         .onAppear {
-            loadAudio()
             dimScreen()
         }
         .onDisappear {
@@ -174,9 +177,15 @@ struct GeneratedStoryView: View {
                     .foregroundStyle(.white.opacity(0.6))
             }
             
+            if player.usesBuiltInVoice {
+                Label("Built-in voice", systemImage: "speaker.wave.2")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.6))
+            }
+
             // Loading/error states
             if player.isLoading {
-                ProgressView()
+                ProgressView("Preparing audio...")
                     .tint(.white)
             }
             
@@ -184,6 +193,10 @@ struct GeneratedStoryView: View {
                 Text(error)
                     .font(.caption)
                     .foregroundStyle(.orange)
+                Button("Try again") {
+                    loadAttempt += 1
+                }
+                .font(.caption)
             }
         }
     }
@@ -194,19 +207,27 @@ struct GeneratedStoryView: View {
         VStack(spacing: 24) {
             // Progress bar
             VStack(spacing: 8) {
-                Slider(
-                    value: Binding(
-                        get: { player.currentTime },
-                        set: { player.seek(to: $0) }
-                    ),
-                    in: 0...max(player.duration, 1)
-                )
-                .tint(.indigo)
-                
+                if player.usesBuiltInVoice {
+                    ProgressView(value: player.progress)
+                        .tint(.indigo)
+                } else {
+                    Slider(
+                        value: Binding(
+                            get: { player.currentTime },
+                            set: { player.seek(to: $0) }
+                        ),
+                        in: 0...max(player.duration, 1)
+                    )
+                    .tint(.indigo)
+                    .disabled(!player.canSeek)
+                }
+
                 HStack {
-                    Text(player.formattedCurrentTime)
+                    Text(player.usesBuiltInVoice ? "\(Int(player.progress * 100))% read" : player.formattedCurrentTime)
                     Spacer()
-                    Text(player.formattedDuration)
+                    if !player.usesBuiltInVoice {
+                        Text(player.formattedDuration)
+                    }
                 }
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.5))
@@ -221,15 +242,17 @@ struct GeneratedStoryView: View {
                         .font(.title2)
                         .foregroundStyle(.white.opacity(0.7))
                 }
-                
+                .disabled(!player.canSeek)
+
                 Button {
                     player.togglePlayback()
                 } label: {
-                    Image(systemName: player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                    Image(systemName: player.isPlaybackRequested ? "pause.circle.fill" : "play.circle.fill")
                         .font(.system(size: 72))
                         .foregroundStyle(.indigo)
                 }
-                .disabled(player.isLoading || content.audioUrl == nil)
+                .disabled(!player.canPlay)
+                .accessibilityLabel(player.isPlaybackRequested ? "Pause" : "Play")
                 
                 Button {
                     player.skipForward()
@@ -238,6 +261,7 @@ struct GeneratedStoryView: View {
                         .font(.title2)
                         .foregroundStyle(.white.opacity(0.7))
                 }
+                .disabled(!player.canSeek)
             }
         }
     }
@@ -335,22 +359,6 @@ struct GeneratedStoryView: View {
     }
     
     // MARK: - Actions
-    
-    private func loadAudio() {
-        guard let urlString = content.audioUrl,
-              let url = URL(string: urlString) else {
-            player.error = "No audio available"
-            return
-        }
-        
-        Task {
-            do {
-                try await player.load(audioURL: url)
-            } catch {
-                player.error = "Failed to load audio"
-            }
-        }
-    }
     
     private func toggleFavorite() {
         isFavorite.toggle()

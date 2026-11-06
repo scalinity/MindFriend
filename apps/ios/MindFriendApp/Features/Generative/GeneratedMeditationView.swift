@@ -10,6 +10,7 @@ struct GeneratedMeditationView: View {
     @State private var showBackgroundSounds = false
     @State private var showSleepTimer = false
     @State private var showRatingSheet = false
+    @State private var loadAttempt = 0
     @State private var isFavorite: Bool
     @State private var hasRated = false
 
@@ -66,7 +67,7 @@ struct GeneratedMeditationView: View {
             .presentationDetents([.medium])
         }
         .sheet(isPresented: $showSleepTimer) {
-            SleepTimerView(selectedMinutes: $player.sleepTimerMinutes)
+            SleepTimerView(selectedMinutes: $player.sleepTimerMinutes, usesBuiltInVoice: player.usesBuiltInVoice)
                 .presentationDetents([.height(300)])
         }
         .sheet(isPresented: $showRatingSheet) {
@@ -75,18 +76,17 @@ struct GeneratedMeditationView: View {
             })
             .presentationDetents([.height(300)])
         }
-        .onAppear {
-            loadAudio()
+        .task(id: "\(content.id)-\(loadAttempt)") {
+            await player.load(content: content)
         }
         .onDisappear {
             player.cleanup()
         }
-        .onChange(of: player.isPlaying) { _, isPlaying in
-            if !isPlaying && player.progress >= 0.95 && !hasRated {
-                // Show rating prompt after content ends
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    showRatingSheet = true
-                }
+        .task(id: "\(content.id)-\(player.isPlaying)") {
+            if !player.isPlaying && player.progress >= 0.95 && !hasRated {
+                do { try await Task.sleep(nanoseconds: 500_000_000) }
+                catch { return }
+                showRatingSheet = true
             }
         }
     }
@@ -135,9 +135,15 @@ struct GeneratedMeditationView: View {
             .font(.caption)
             .foregroundStyle(.secondary)
 
+            if player.usesBuiltInVoice {
+                Label("Built-in voice", systemImage: "speaker.wave.2")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             // Loading indicator
             if player.isLoading {
-                ProgressView("Loading audio...")
+                ProgressView("Preparing audio...")
                     .padding()
             }
 
@@ -150,8 +156,8 @@ struct GeneratedMeditationView: View {
                     Text(error)
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Button("Generate Audio") {
-                        // Re-synthesize
+                    Button("Try again") {
+                        loadAttempt += 1
                     }
                     .buttonStyle(.bordered)
                 }
@@ -163,19 +169,25 @@ struct GeneratedMeditationView: View {
 
     private var playerControls: some View {
         VStack(spacing: 16) {
-            // Progress bar
-            Slider(
-                value: Binding(
-                    get: { player.currentTime },
-                    set: { player.seek(to: $0) }
-                ),
-                in: 0...max(player.duration, 1)
-            )
-            .tint(content.contentType.backgroundColor)
+            // Built-in speech reports reading progress without audio seeking.
+            if player.usesBuiltInVoice {
+                ProgressView(value: player.progress)
+                    .tint(content.contentType.backgroundColor)
+            } else {
+                Slider(
+                    value: Binding(
+                        get: { player.currentTime },
+                        set: { player.seek(to: $0) }
+                    ),
+                    in: 0...max(player.duration, 1)
+                )
+                .tint(content.contentType.backgroundColor)
+                .disabled(!player.canSeek)
+            }
 
             // Time labels
             HStack {
-                Text(player.formattedCurrentTime)
+                Text(player.usesBuiltInVoice ? "\(Int(player.progress * 100))% read" : player.formattedCurrentTime)
                 Spacer()
                 if player.sleepTimerMinutes != nil {
                     HStack(spacing: 4) {
@@ -186,7 +198,9 @@ struct GeneratedMeditationView: View {
                     .foregroundStyle(.orange)
                 }
                 Spacer()
-                Text(player.formattedDuration)
+                if !player.usesBuiltInVoice {
+                    Text(player.formattedDuration)
+                }
             }
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -199,15 +213,17 @@ struct GeneratedMeditationView: View {
                     Image(systemName: "gobackward.15")
                         .font(.title)
                 }
+                .disabled(!player.canSeek)
 
                 Button {
                     player.togglePlayback()
                 } label: {
-                    Image(systemName: player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                    Image(systemName: player.isPlaybackRequested ? "pause.circle.fill" : "play.circle.fill")
                         .font(.system(size: 64))
                         .foregroundStyle(content.contentType.backgroundColor)
                 }
-                .disabled(player.isLoading || content.audioUrl == nil)
+                .disabled(!player.canPlay)
+                .accessibilityLabel(player.isPlaybackRequested ? "Pause" : "Play")
 
                 Button {
                     player.skipForward()
@@ -215,6 +231,7 @@ struct GeneratedMeditationView: View {
                     Image(systemName: "goforward.15")
                         .font(.title)
                 }
+                .disabled(!player.canSeek)
             }
             .foregroundStyle(.primary)
         }
@@ -224,25 +241,27 @@ struct GeneratedMeditationView: View {
 
     private var toolbarView: some View {
         HStack(spacing: 24) {
-            // Speed control
-            Menu {
-                ForEach(AudioPlayerViewModel.playbackSpeeds, id: \.self) { speed in
-                    Button {
-                        player.playbackRate = speed
-                    } label: {
-                        HStack {
-                            Text("\(speed, specifier: "%.2f")x")
-                            if player.playbackRate == speed {
-                                Image(systemName: "checkmark")
+            // Recorded audio supports adjustable playback speed.
+            if !player.usesBuiltInVoice {
+                Menu {
+                    ForEach(AudioPlayerViewModel.playbackSpeeds, id: \.self) { speed in
+                        Button {
+                            player.playbackRate = speed
+                        } label: {
+                            HStack {
+                                Text("\(speed, specifier: "%.2f")x")
+                                if player.playbackRate == speed {
+                                    Image(systemName: "checkmark")
+                                }
                             }
                         }
                     }
-                }
-            } label: {
-                VStack(spacing: 2) {
-                    Image(systemName: "speedometer")
-                    Text("\(player.playbackRate, specifier: "%.1f")x")
-                        .font(.caption2)
+                } label: {
+                    VStack(spacing: 2) {
+                        Image(systemName: "speedometer")
+                        Text("\(player.playbackRate, specifier: "%.1f")x")
+                            .font(.caption2)
+                    }
                 }
             }
 
@@ -313,28 +332,6 @@ struct GeneratedMeditationView: View {
     }
 
     // MARK: - Actions
-
-    private func loadAudio() {
-        print("[GeneratedMeditationView] loadAudio called for content: \(content.id)")
-        print("[GeneratedMeditationView] content.audioUrl: \(content.audioUrl ?? "nil")")
-        print("[GeneratedMeditationView] content.textContent length: \(content.textContent.count)")
-
-        guard let urlString = content.audioUrl,
-              let url = URL(string: urlString) else {
-            print("[GeneratedMeditationView] No audio URL available, setting error")
-            player.error = "No audio available"
-            return
-        }
-        print("[GeneratedMeditationView] Loading audio from: \(urlString)")
-
-        Task {
-            do {
-                try await player.load(audioURL: url)
-            } catch {
-                player.error = "Failed to load audio"
-            }
-        }
-    }
 
     private func toggleFavorite() {
         print("[GeneratedMeditationView] toggleFavorite called, current state: \(isFavorite)")
