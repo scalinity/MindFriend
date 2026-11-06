@@ -284,6 +284,7 @@
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
       }
     }
   </style>
@@ -1044,6 +1045,7 @@
 
   <!-- Scripts -->
   <script>
+    const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
     if (window.gsap && window.ScrollTrigger && window.VanillaTilt) {
     // Register GSAP plugins
     gsap.registerPlugin(ScrollTrigger);
@@ -1056,6 +1058,20 @@
       document.getElementById('scrollProgress').style.width = `${progress}%`;
     });
 
+    function initializeMotion() {
+      gsap.matchMedia().add({
+        reduced: '(prefers-reduced-motion: reduce)',
+        full: '(prefers-reduced-motion: no-preference)'
+      }, (context) => {
+        if (context.conditions.reduced) {
+          document.querySelectorAll('.counter, .level-counter').forEach(counter => {
+            counter.textContent = counter.dataset.target;
+          });
+          document.querySelectorAll('.xp-bar').forEach(bar => { bar.style.width = '78%'; });
+          return;
+        }
+        const motionEvents = new AbortController();
+
     // Initialize Vanilla Tilt
     VanillaTilt.init(document.querySelectorAll("[data-tilt]"), {
       max: 15,
@@ -1065,7 +1081,6 @@
     });
 
     // Hero animations on load
-    document.addEventListener('DOMContentLoaded', () => {
       // Hero entrance animation
       const heroTl = gsap.timeline({ defaults: { ease: 'power3.out' } });
 
@@ -1130,7 +1145,7 @@
             ease: 'power2.out'
           });
         });
-      });
+      }, { signal: motionEvents.signal });
 
       // Scroll-triggered reveal animations
       gsap.utils.toArray('.gsap-reveal').forEach((element) => {
@@ -1223,7 +1238,6 @@
           });
         }
       });
-    });
 
     // Magnetic button effect
     document.querySelectorAll('.magnetic-btn').forEach((btn) => {
@@ -1248,7 +1262,7 @@
             ease: 'power2.out'
           });
         }
-      });
+      }, { signal: motionEvents.signal });
 
       btn.addEventListener('mouseleave', () => {
         gsap.to(btn, {
@@ -1267,20 +1281,35 @@
             ease: 'elastic.out(1, 0.5)'
           });
         }
-      });
+      }, { signal: motionEvents.signal });
     });
 
-    // Smooth scroll for anchor links
+        return () => {
+          motionEvents.abort();
+          document.querySelectorAll('[data-tilt]').forEach(element => element.vanillaTilt?.destroy());
+          // Event-created tweens run after the media context's initial setup.
+          gsap.killTweensOf('.orb, .magnetic-btn, .magnetic-btn span, .counter, .level-counter, .xp-bar');
+          gsap.set('.orb, .magnetic-btn, .magnetic-btn span', { clearProps: 'transform' });
+        };
+      });
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initializeMotion, { once: true });
+    } else {
+      initializeMotion();
+    }
+    }
+
+    // Anchor navigation also works when optional animation libraries are absent.
     document.querySelectorAll('a[href^="#"]').forEach(anchor => {
       anchor.addEventListener('click', function (e) {
         e.preventDefault();
         const target = document.querySelector(this.getAttribute('href'));
         if (target) {
-          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          target.scrollIntoView({ behavior: motionPreference.matches ? 'instant' : 'smooth', block: 'start' });
         }
       });
     });
-    }
   </script>
 
   <script>
