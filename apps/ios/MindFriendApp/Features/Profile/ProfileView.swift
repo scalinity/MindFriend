@@ -756,6 +756,7 @@ struct NotificationSettingsView: View {
                 dailyQuestTimeLocal: formatTime(questTime),
                 quietHoursStartLocal: quietHoursEnabled ? formatTime(quietStart) : nil,
                 quietHoursEndLocal: quietHoursEnabled ? formatTime(quietEnd) : nil,
+                clearQuietHours: !quietHoursEnabled,
                 remindersEnabled: remindersEnabled,
                 notifyCircleActivity: notifyCircleActivity,
                 notifyHugs: notifyHugs,
