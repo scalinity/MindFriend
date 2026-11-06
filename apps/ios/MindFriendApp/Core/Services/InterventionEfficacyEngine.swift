@@ -61,15 +61,18 @@ final class InterventionEfficacyEngine: ObservableObject {
             throw EfficacyError.noActiveSession
         }
         
-        // Stop tracking and get trajectory
-        let trajectory = try await tracker.stopTracking()
-        
-        guard trajectory.count >= 3 else {
-            // Insufficient data for efficacy calculation
+        defer {
             isTrackingSession = false
             currentSessionId = nil
             currentExerciseId = nil
             sessionStartTime = nil
+        }
+
+        // Stop tracking and get supported observations, if any.
+        let trajectory = try await tracker.stopTracking()
+
+        guard trajectory.count >= 3 else {
+            // Insufficient data for efficacy calculation
             return nil
         }
         
@@ -79,10 +82,6 @@ final class InterventionEfficacyEngine: ObservableObject {
             trajectory: trajectory,
             sessionDuration: sessionDuration
         ) else {
-            isTrackingSession = false
-            currentSessionId = nil
-            currentExerciseId = nil
-            sessionStartTime = nil
             return nil
         }
         
@@ -115,37 +114,32 @@ final class InterventionEfficacyEngine: ObservableObject {
                     CalculateEfficacyRequest.TrajectoryPoint(
                         timestamp: ISO8601DateFormatter().string(from: point.timestamp),
                         secondsFromStart: point.secondsFromStart,
-                        nervousSystemState: point.nervousSystemState ?? "",
+                        nervousSystemState: point.nervousSystemState,
                         emotionClassification: point.emotionClassification.map { emotion in
                             CalculateEfficacyRequest.TrajectoryPoint.EmotionClassification(
                                 primary: emotion.primary,
                                 valence: emotion.valence,
-                                arousal: emotion.arousal ?? 0
+                                arousal: emotion.arousal
                             )
                         },
-                        hrvReading: point.hrvReading ?? 0,
+                        hrvReading: point.hrvReading,
                         compositeScore: point.compositeScore
                     )
                 },
                 sessionDuration: Int(sessionDuration)
             )
             
-            struct EmptyResponseLocal: Decodable {}
-            
-            let _: EmptyResponseLocal = try await supabase.functions.invoke(
+            struct MeasurementResponse: Decodable { let status: String }
+
+            let response: MeasurementResponse = try await supabase.functions.invoke(
                 "calculate-efficacy",
                 options: FunctionInvokeOptions(body: request)
             )
+            guard response.status == "observed" else { return nil }
         } catch {
             print("Failed to sync efficacy to server: \(error)")
-            // Continue anyway - we have local calculation
+            return nil // A failed or unsupported measurement is not a confirmed efficacy result.
         }
-        
-        // Clear session state
-        isTrackingSession = false
-        currentSessionId = nil
-        currentExerciseId = nil
-        sessionStartTime = nil
         
         return efficacy
     }
@@ -243,14 +237,14 @@ private struct CalculateEfficacyRequest: Encodable {
         struct EmotionClassification: Encodable {
             let primary: String
             let valence: Double
-            let arousal: Double
+            let arousal: Double?
         }
         
         let timestamp: String
         let secondsFromStart: Int
-        let nervousSystemState: String
+        let nervousSystemState: String?
         let emotionClassification: EmotionClassification?
-        let hrvReading: Double
+        let hrvReading: Double?
         let compositeScore: Double
     }
     

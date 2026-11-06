@@ -1,3 +1,4 @@
+import { observedTrajectory } from "./observations.ts";
 import { calculateEfficacy, type EfficacyResult, type TrajectoryPoint } from "./calculation.ts";
 // Intervention Efficacy Engine: Calculate Efficacy Edge Function
 // Calculates efficacy scores from emotional trajectories
@@ -16,7 +17,7 @@ import {
 interface CalculateEfficacyRequest {
   sessionId: string;
   exerciseId: string;
-  trajectoryPoints: TrajectoryPoint[];
+  trajectoryPoints?: TrajectoryPoint[]; // Legacy clients may send these; never used as observations.
   sessionDuration: number;
   // Note: userId is derived from JWT auth token, not request body
 }
@@ -93,32 +94,20 @@ Deno.serve(async (req) => {
     logger.addContext({
       sessionId: body.sessionId,
       exerciseId: body.exerciseId,
-      trajectoryPointsCount: body.trajectoryPoints.length,
+      trajectoryPointsCount: body.trajectoryPoints?.length ?? 0,
     });
     logger.info("Request parsed");
 
-    // Validate input
-    if (body.trajectoryPoints.length < 3) {
-      logger.warn("Insufficient trajectory data", {
-        pointCount: body.trajectoryPoints.length,
+    if (typeof body.sessionId !== "string" || typeof body.exerciseId !== "string") {
+      return new Response(JSON.stringify({ error: "INVALID_SESSION" }), {
+        status: 400, headers: { "Content-Type": "application/json" },
       });
-
-      return new Response(
-        JSON.stringify({
-          error: "INSUFFICIENT_DATA",
-          message: "Trajectory must have at least 3 data points",
-        }),
-        {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        },
-      );
     }
 
     // Verify session ownership (prevent unauthorized efficacy submission)
     const { data: session, error: sessionError } = await supabaseAdmin
       .from("exercise_sessions")
-      .select("user_id")
+      .select("user_id, exercise_id")
       .eq("id", body.sessionId)
       .single();
 
@@ -155,10 +144,38 @@ Deno.serve(async (req) => {
 
     logger.info("Session ownership verified");
 
+    if (session.exercise_id !== body.exerciseId) {
+      return new Response(JSON.stringify({ error: "EXERCISE_MISMATCH" }), {
+        status: 400, headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // An older client can submit simulated samples. Use only owned, explicitly
+    // sourced stored observations; lack of measurement never fails completion.
+    const { data: storedTrajectory, error: trajectoryError } = await supabaseAdmin
+      .from("emotional_trajectories")
+      .select("samples, measurement_status, measurement_source")
+      .eq("session_id", body.sessionId)
+      .eq("exercise_id", body.exerciseId)
+      .eq("user_id", user.id)
+      .eq("measurement_status", "observed")
+      .eq("measurement_source", "self_reported_valence")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (trajectoryError) throw trajectoryError;
+    const trajectory = observedTrajectory(storedTrajectory);
+    if (!trajectory) {
+      return new Response(JSON.stringify({
+        status: "unavailable",
+        reason: "No supported emotional measurements were recorded for this session.",
+      }), { headers: { "Content-Type": "application/json" } });
+    }
+
     // Calculate efficacy
     logger.debug("Starting efficacy calculation");
     const efficacy = await logger.measure("calculateEfficacy", async () =>
-      calculateEfficacy(body.trajectoryPoints),
+      calculateEfficacy(trajectory),
     );
     logger.info("Efficacy calculated", {
       efficacyScore: efficacy.efficacyScore,
@@ -178,17 +195,10 @@ Deno.serve(async (req) => {
             ? "evening"
             : "night";
 
-    // Extract starting state
-    const firstPoint = body.trajectoryPoints[0];
+    // Self-reports establish emotional valence, not a physiological or stress reading.
+    const firstPoint = trajectory[0];
     const startingState = {
-      nervousSystemState: firstPoint.nervousSystemState || "unknown",
-      primaryEmotion: firstPoint.emotionClassification?.primary || "neutral",
-      stressLevel:
-        firstPoint.compositeScore < -0.5
-          ? 0.8
-          : firstPoint.compositeScore < 0
-            ? 0.5
-            : 0.2,
+      primaryEmotion: firstPoint.emotionClassification!.primary,
     };
 
     // Insert efficacy record using service role client
@@ -197,6 +207,8 @@ Deno.serve(async (req) => {
       .from("intervention_efficacy")
       .insert({
         user_id: user.id,
+        measurement_status: "observed",
+        measurement_source: "self_reported_valence",
         exercise_id: body.exerciseId,
         session_id: body.sessionId,
         completed_at: completedAt.toISOString(),
@@ -238,6 +250,7 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({
+        status: "observed",
         efficacy_id: efficacyRecord.id,
         efficacy_score: efficacy.efficacyScore,
         net_emotional_change: efficacy.netEmotionalChange,
