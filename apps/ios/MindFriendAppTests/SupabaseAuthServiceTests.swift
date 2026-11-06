@@ -144,6 +144,46 @@ private actor SuspendedBriefingProvider: DailyBriefingProviding {
     func updatePreferences(_ preferences: BriefingPreferences) async throws { }
 }
 
+@MainActor
+final class LocalLogoutCompletionTests: XCTestCase {
+    private enum FixtureError: Error { case remoteUnavailable, localRemovalFailed }
+
+    func testRemoteFailureStillRemovesCredentialsAndAwaitsCleanup() async throws {
+        var events: [String] = []
+        let remoteFailed = try await SupabaseAuthService.finishLogout(
+            revokeRemote: { events.append("remote"); throw FixtureError.remoteUnavailable },
+            removeLocalCredentials: { events.append("credentials") },
+            cleanup: { await Task.yield(); events.append("cleanup") }
+        )
+        XCTAssertTrue(remoteFailed)
+        XCTAssertEqual(events, ["remote", "credentials", "cleanup"])
+    }
+
+    func testLocalCredentialFailureCannotReturnLogoutSuccess() async {
+        var cleanupRan = false
+        do {
+            _ = try await SupabaseAuthService.finishLogout(
+                revokeRemote: { },
+                removeLocalCredentials: { throw FixtureError.localRemovalFailed },
+                cleanup: { cleanupRan = true }
+            )
+            XCTFail("Local credential removal failure must remain visible")
+        } catch FixtureError.localRemovalFailed { }
+        catch { XCTFail("Unexpected error: \(error)") }
+        XCTAssertFalse(cleanupRan, "Keep the active UI until local credentials are actually removed")
+    }
+
+    func testConfirmedRevocationWaitsForLocalCleanup() async throws {
+        var cleanupRan = false
+        let remoteFailed = try await SupabaseAuthService.finishLogout(
+            revokeRemote: { }, removeLocalCredentials: { },
+            cleanup: { await Task.yield(); cleanupRan = true }
+        )
+        XCTAssertFalse(remoteFailed)
+        XCTAssertTrue(cleanupRan)
+    }
+}
+
 /// Tests for SupabaseAuthService authentication flows
 /// Session fixtures do not initialize the shared client or read device credentials.
 final class SupabaseAuthServiceTests: XCTestCase {
