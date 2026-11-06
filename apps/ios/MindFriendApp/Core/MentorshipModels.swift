@@ -286,6 +286,7 @@ public struct MentorshipReport: Codable, Identifiable, Equatable {
 
 /// Status of a report
 public enum ReportStatus: String, Codable {
+    case investigating // Review is in progress
     case pending       // Awaiting moderator review
     case resolved      // Reviewed and action taken
     case dismissed     // No violation found

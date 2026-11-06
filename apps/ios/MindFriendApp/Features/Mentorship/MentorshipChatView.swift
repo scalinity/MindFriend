@@ -290,6 +290,7 @@ struct ReportSafetySheet: View {
                 }
             }
             .padding()
+            .disabled(isSending)
             .interactiveDismissDisabled(isSending)
             .navigationTitle("Report Safety Concern")
             .navigationBarTitleDisplayMode(.inline)

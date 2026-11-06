@@ -136,6 +136,15 @@ final class MentorshipServiceTests: XCTestCase {
         XCTAssertEqual(body["p_description"], "Keep this detail")
     }
 
+    func testReportUnderInvestigationDecodesDatabaseResolutionColumns() throws {
+        let json = reportJSON.replacingOccurrences(of: "\"status\":\"pending\"", with: "\"status\":\"investigating\"")
+            .replacingOccurrences(of: "\"resolved_at\":null", with: "\"resolved_at\":\"2026-11-06T13:00:00Z\"")
+        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+        let report = try decoder.decode(MentorshipReport.self, from: Data(json.utf8))
+        XCTAssertEqual(report.status, .investigating)
+        XCTAssertNotNil(report.reviewedAt)
+    }
+
     func testSafetyReportFailureIsThrownAndNoLocalSuccessIsPublished() async {
         MentorshipFixtureURLProtocol.fixture.prepare([(200, "[\(matchJSON)]"), (400, "{\"message\":\"Synthetic failure\"}")])
         let safety = MentorshipSafetyService(dataService: service())
