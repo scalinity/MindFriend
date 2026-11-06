@@ -11,14 +11,14 @@ max_rows = 1000
 [db]
 port = 54322
 shadow_port = 54320
-major_version = 15
+major_version = 17
 
 [studio]
 enabled = true
 port = 54323
 api_url = "http://localhost"
 
-[inbucket]
+[local_smtp]
 enabled = true
 port = 54324
 smtp_port = 54325
@@ -146,7 +146,7 @@ verify_jwt = false  # Cron job, uses service role key internally
 verify_jwt = false  # Cron job, uses service role key internally
 
 [functions.generate-meditation-audio]
-verify_jwt = false  # Admin function, uses service role key internally
+verify_jwt = true
 
 # Notification System Functions
 [functions.send-notification]
@@ -200,3 +200,48 @@ verify_jwt = false  # Cron job, uses cron secret internally
 [functions.agent-learn]
 verify_jwt = false  # Called by agent-act internally
 
+
+[functions.generate-weekly-summary]
+verify_jwt = false
+
+[functions.check-badge-progress]
+verify_jwt = false
+
+[functions.generate-insights]
+verify_jwt = false
+
+[functions.generate-weekly-story]
+verify_jwt = false
+
+[functions.create-circle-ritual]
+verify_jwt = false
+
+[functions.join-circle-ritual]
+verify_jwt = false
+
+[functions.complete-circle-ritual]
+verify_jwt = false
+
+[functions.enroll-pathway]
+verify_jwt = false
+
+[functions.get-pathway-content]
+verify_jwt = false
+
+[functions.advance-pathway-phase]
+verify_jwt = false
+
+[functions.pause-pathway]
+verify_jwt = false
+
+[functions.resume-pathway]
+verify_jwt = false
+
+[functions.abandon-pathway]
+verify_jwt = false
+
+[functions.submit-pathway-checkin]
+verify_jwt = false
+
+[functions.rate-content]
+verify_jwt = false
