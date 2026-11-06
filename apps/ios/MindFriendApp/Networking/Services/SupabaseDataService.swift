@@ -2670,19 +2670,11 @@ final class SupabaseDataService: ObservableObject {
     // MARK: - Device Registration
 
     func registerDevice(apnsToken: String) async throws {
-        let device = DBDevice(
-            id: nil,
-            userId: try userId,
-            deviceToken: apnsToken,
-            platform: "ios",
-            createdAt: nil,
-            updatedAt: Date()
-        )
-
-        try await supabase
-            .from(Tables.pushTokens)
-            .upsert(device, onConflict: "user_id,device_token")
-            .execute()
+        let owner = try userId
+        let registeredOwner: UUID = try await supabase.rpc("register_current_device", params: [
+            "p_device_token": apnsToken, "p_platform": "ios"
+        ]).execute().value
+        guard try userId == owner, registeredOwner == owner else { throw DataError.notAuthenticated }
     }
 
     func unregisterDevice(apnsToken: String, userId outgoingUserId: UUID) async throws {
