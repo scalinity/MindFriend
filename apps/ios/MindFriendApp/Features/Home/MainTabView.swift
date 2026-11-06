@@ -3,6 +3,7 @@ import SwiftUI
 struct MainTabView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
+    @EnvironmentObject private var deepLinkRouter: DeepLinkRouter
 
     // Progressive disclosure state
     @State private var showFeatureUnlock = false
@@ -10,6 +11,16 @@ struct MainTabView: View {
     // Cache unlocked features state for proper SwiftUI reactivity
     @State private var programsUnlocked = false
     @State private var outcomesUnlocked = false
+    @State private var activationLoaded = false
+    @State private var deepLinkPresentation: DeepLinkRouter.Request?
+    @State private var blockedRequestID: UUID?
+    @State private var deepLinkDismissing = false
+
+    private var canPresentDeepLink: Bool {
+        appState.authState == .authenticated && appState.sessionRestored && activationLoaded &&
+        !showFeatureUnlock && !appState.showCrisisResources && !appState.showPaywall &&
+        !appState.showWelcomeBack && !appState.showError && !deepLinkDismissing
+    }
 
     var body: some View {
         TabView(selection: $appState.selectedTab) {
@@ -61,6 +72,7 @@ struct MainTabView: View {
             // Update local state when features change - triggers view refresh
             programsUnlocked = features.contains(.programs)
             outcomesUnlocked = features.contains(.outcomes)
+            presentPendingDeepLink()
         }
         .task {
             // Load activation state on appear
@@ -68,10 +80,26 @@ struct MainTabView: View {
             // Initialize local state
             programsUnlocked = container.activationService.isUnlocked(.programs)
             outcomesUnlocked = container.activationService.isUnlocked(.outcomes)
+            activationLoaded = true
             // Check if justActivated was set before view appeared (timing edge case)
             if container.activationService.justActivated {
                 showFeatureUnlock = true
             }
+        }
+        .onChange(of: deepLinkRouter.pendingRequest) { _, _ in presentPendingDeepLink() }
+        .onChange(of: deepLinkRouter.requestID) { _, _ in
+            if deepLinkRouter.pendingRequest == nil { deepLinkPresentation = nil }
+        }
+        .onChange(of: canPresentDeepLink) { _, ready in
+            if ready { presentPendingDeepLink() }
+        }
+        .sheet(item: $deepLinkPresentation, onDismiss: {
+            deepLinkDismissing = false
+            // A link received while a sheet is open waits for its dismissal, without a timer.
+            presentPendingDeepLink()
+        }) { request in
+            DeepLinkDestinationView(request: request)
+                .onAppear { deepLinkRouter.consume(request) }
         }
         .sheet(isPresented: $appState.showCrisisResources) {
             CrisisResourcesView()
@@ -110,6 +138,63 @@ struct MainTabView: View {
         // TODO: Add Celebration folder files to Xcode project to enable
         // .celebrationOverlay(pending: $appState.pendingCelebrations)
     }
+
+    private func presentPendingDeepLink() {
+        guard canPresentDeepLink,
+              let request = deepLinkRouter.requestForPresentation(isAuthenticated: true) else { return }
+
+        if let presented = deepLinkPresentation {
+            if presented.id != request.id {
+                deepLinkDismissing = true
+                deepLinkPresentation = nil
+            }
+            return
+        }
+
+        let lockedFeature: String?
+        switch request.route {
+        case .programs, .program, .therapeuticPrograms:
+            lockedFeature = programsUnlocked && container.activationService.loadError == nil ? nil : "Programs"
+        case .progress, .assessment:
+            lockedFeature = outcomesUnlocked && container.activationService.loadError == nil ? nil : "Progress"
+        default:
+            lockedFeature = nil
+        }
+        if let lockedFeature {
+            appState.selectedTab = .home
+            if blockedRequestID != request.id {
+                blockedRequestID = request.id
+                let message = container.activationService.loadError == nil
+                    ? "\(lockedFeature) unlocks after logging a mood or completing a quest and sending a chat message. This link will wait until then."
+                    : "Couldn't check whether \(lockedFeature) is unlocked. This link will wait until access can be confirmed."
+                appState.showError(.apiError(message))
+            }
+            return
+        }
+
+        switch request.route {
+        case .home, .quote:
+            appState.selectedTab = .home
+        case .profile, .settings:
+            appState.selectedTab = .profile
+        case .programs:
+            appState.selectedTab = .programs
+        case .progress, .assessment(code: nil):
+            appState.selectedTab = .outcomes
+        case .chat(let id):
+            appState.selectedTab = .chat
+            if id != nil { return } // ChatListView resolves ownership and consumes this request.
+        case .unknown:
+            appState.showError(.apiError("This link isn't supported or contains an invalid identifier."))
+        case .buddy:
+            return // Buddy acceptance has its own authenticated app-level path.
+        default:
+            deepLinkPresentation = request
+            return
+        }
+        deepLinkRouter.consume(request)
+    }
+
 }
 
 #Preview {
@@ -118,4 +203,202 @@ struct MainTabView: View {
         .environmentObject(AppState())
         .environmentObject(container)
         .environmentObject(container.achievementService)
+        .environmentObject(DeepLinkRouter.shared)
+}
+
+
+/// Resolves linked identifiers through existing services before constructing their real views.
+private struct DeepLinkDestinationView: View {
+    let request: DeepLinkRouter.Request
+    @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var container: DependencyContainer
+    @EnvironmentObject private var router: DeepLinkRouter
+    @Environment(\.dismiss) private var dismiss
+    @State private var destination: Destination?
+    @State private var errorMessage: String?
+    @State private var retryID = UUID()
+
+    private enum Destination {
+        case screen(DeepLinkRoute)
+        case quest(Quest)
+        case circle(FriendCircle)
+        case exercise(Exercise)
+        case program(Program)
+        case micro(MicroMomentTemplate)
+        case sleep(SleepContent)
+        case assessment(AssessmentTemplate)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if let errorMessage {
+                    ContentUnavailableView {
+                        Label("Couldn't open link", systemImage: "exclamationmark.triangle")
+                    } description: {
+                        Text(errorMessage)
+                    } actions: {
+                        Button("Try Again") { retryID = UUID() }
+                    }
+                } else if let destination {
+                    destinationView(destination)
+                } else {
+                    ProgressView("Opening link…")
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { dismiss() }
+                }
+            }
+        }
+        .task(id: retryID) { await resolveDestination() }
+    }
+
+    @ViewBuilder
+    private func destinationView(_ destination: Destination) -> some View {
+        switch destination {
+        case .quest(let quest): QuestDetailView(quest: quest)
+        case .circle(let circle): CircleDetailView(circle: circle)
+        case .exercise(let exercise): LibraryExercisePlayerView(exercise: exercise, container: container)
+        case .program(let program): ProgramDetailView(program: program)
+        case .micro(let template):
+            MicroMomentPlayerView(template: template) { completion in
+                Task {
+                    do {
+                        _ = try await MicroMomentsService(supabase: container.supabase).recordCompletion(completion)
+                    } catch {
+                        appState.showError(.apiError("Couldn't save this micro-moment. Please try again."))
+                    }
+                }
+            }
+        case .sleep(let content):
+            DeepLinkedSleepView(content: content, container: container, appState: appState)
+        case .assessment(let template):
+            AssessmentFlowView(template: template, outcomeService: container.outcomeService,
+                               isPresented: Binding(get: { true }, set: { if !$0 { dismiss() } }))
+        case .screen(let route):
+            switch route {
+            case .mood: MoodCheckInView()
+            case .moodHistory: MoodHistoryView()
+            case .streak: ShieldHistoryView()
+            case .breathing: QuickBreathingView()
+            case .meditation, .exerciseLibrary: ExerciseLibraryView()
+            case .therapeuticPrograms:
+                TherapeuticProgramsListView(service: TherapeuticProgramService(supabase: container.supabase))
+            case .journal: JournalListView()
+            case .microMoments: MicroMomentsHubView(supabase: container.supabase)
+            case .sleep: SleepHomeView(container: container, appState: appState)
+            case .circles: CirclesListView()
+            case .insights: WeeklyInsightsView()
+            case .achievements: AchievementsView()
+            default: EmptyView()
+            }
+        }
+    }
+
+    private func resolveDestination() async {
+        guard let userID = appState.currentUser?.id,
+              appState.authState == .authenticated,
+              container.supabaseAuthService.userId == userID else { return }
+        destination = nil
+        errorMessage = nil
+        do {
+            let resolved: Destination
+            switch request.route {
+            case .quest(let id):
+                let linkedQuest: Quest?
+                if let id {
+                    linkedQuest = try await container.supabaseDataService.getQuest(id: id)
+                } else {
+                    linkedQuest = try await container.supabaseDataService.getTodayQuest()
+                }
+                guard let quest = linkedQuest else {
+                    throw DeepLinkRouter.DestinationError.unavailable
+                }
+                resolved = .quest(quest)
+            case .circles(let id?):
+                let detail = try await container.supabaseDataService.getCircle(id: id)
+                guard detail.members.contains(where: { UUID(uuidString: $0.userId) == userID }) else {
+                    throw DeepLinkRouter.DestinationError.unavailable
+                }
+                resolved = .circle(detail.circle)
+            case .exercise(let id):
+                let exercises = try await container.supabaseDataService.getExercises()
+                resolved = .exercise(try DeepLinkRouter.linkedItem(id: id, in: exercises))
+            case .program(let id):
+                let programs = try await container.supabaseDataService.getPrograms()
+                resolved = .program(try DeepLinkRouter.linkedItem(id: id, in: programs))
+            case .microMoments(let id?):
+                let templates = try await MicroMomentsService(supabase: container.supabase).fetchTemplates()
+                let template = try DeepLinkRouter.linkedItem(id: id, in: templates)
+                if template.isPremium { try await verifyPremiumAccess(userID: userID) }
+                resolved = .micro(template)
+            case .sleep(let id?):
+                let content = try await container.sleepService.fetchAllContent()
+                let item = try DeepLinkRouter.linkedItem(id: id, in: content)
+                if item.isPremium { try await verifyPremiumAccess(userID: userID) }
+                resolved = .sleep(item)
+            case .assessment(let code?):
+                guard AssessmentType(rawValue: code) != nil else { throw DeepLinkRouter.DestinationError.unavailable }
+                try await container.outcomeService.loadAssessmentTemplates()
+                guard let template = container.outcomeService.assessmentTemplates.first(where: { $0.code == code }) else {
+                    throw DeepLinkRouter.DestinationError.unavailable
+                }
+                resolved = .assessment(template)
+            default:
+                resolved = .screen(request.route)
+            }
+            try Task.checkCancellation()
+            guard router.requestID == request.id, appState.currentUser?.id == userID,
+                  container.supabaseAuthService.userId == userID, appState.authState == .authenticated else { return }
+            destination = resolved
+        } catch is CancellationError {
+            return
+        } catch {
+            guard !Task.isCancelled, router.requestID == request.id,
+                  appState.currentUser?.id == userID, container.supabaseAuthService.userId == userID,
+                  appState.authState == .authenticated else { return }
+            errorMessage = DeepLinkRouter.destinationError(for: error)?.errorDescription
+                ?? "Couldn't load this item. Check your connection and try again."
+        }
+    }
+
+    private func verifyPremiumAccess(userID: UUID) async throws {
+        // A restored session can still display a cached profile. Fetch the verified profile,
+        // including the auth service's sponsored-access mapping, before deciding access.
+        let profile = try await container.supabaseAuthService.fetchProfile()
+        try Task.checkCancellation()
+        guard profile.id == userID, appState.currentUser?.id == userID,
+              container.supabaseAuthService.userId == userID, appState.authState == .authenticated,
+              router.requestID == request.id else { throw CancellationError() }
+        let entitlements: Entitlements = profile.entitlements?.subscriptionTier == "premium" ? .premium : .free
+        appState.updateEntitlements(entitlements)
+        guard entitlements.tier == .premium else { throw DeepLinkRouter.DestinationError.premium }
+    }
+}
+
+/// Open the requested catalog item without starting audio merely because a notification was opened.
+private struct DeepLinkedSleepView: View {
+    let content: SleepContent
+    @EnvironmentObject private var appState: AppState
+    @StateObject private var viewModel: SleepViewModel
+    @State private var showPlayer = false
+
+    init(content: SleepContent, container: DependencyContainer, appState: AppState) {
+        self.content = content
+        _viewModel = StateObject(wrappedValue: SleepViewModel(container: container, appState: appState))
+    }
+
+    var body: some View {
+        SleepContentCard(content: content, isPremiumUser: appState.entitlements.tier == .premium) {
+            showPlayer = true
+        }
+        .padding()
+        .navigationTitle(content.title)
+        .sheet(isPresented: $showPlayer) {
+            SleepPlayerView(content: content, viewModel: viewModel)
+                .task { await viewModel.play(content) }
+        }
+    }
 }

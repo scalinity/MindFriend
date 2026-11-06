@@ -199,11 +199,12 @@ final class ActivationService: ObservableObject {
                 .execute()
                 .value
 
+            self.loadError = nil
             if response.justActivated == true {
                 // Already on MainActor (class is @MainActor)
                 self.isActivated = true
-                self.unlockedFeatures = Feature.allFeatures
                 self.justActivated = true
+                self.unlockedFeatures = Feature.allFeatures
 
                 // Track analytics with context
                 Analytics.shared.track(.activationCompleted, properties: [

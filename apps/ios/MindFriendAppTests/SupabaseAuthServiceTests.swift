@@ -1,32 +1,54 @@
 import XCTest
+import struct Supabase.Session
+import struct Supabase.User
 @testable import MindFriendApp
 
 /// Tests for SupabaseAuthService authentication flows
-/// These tests verify critical auth paths without hitting real network
+/// Session fixtures do not initialize the shared client or read device credentials.
 final class SupabaseAuthServiceTests: XCTestCase {
     
     // MARK: - Session Management Tests
     
-    func testIsAuthenticated_WhenNoSession_ReturnsFalse() async {
-        // Given
-        let service = await SupabaseAuthService()
-        
-        // Then
-        await MainActor.run {
-            XCTAssertFalse(service.isAuthenticated)
-            XCTAssertNil(service.userId)
+    func testValidatedSession_WhenSDKCannotReadSession_ThrowsSessionUnavailable() {
+        let signedIn = makeSession()
+
+        assertSessionUnavailable(nil, expectedUserId: signedIn.user.id)
+    }
+
+    func testValidatedSession_WhenStoredUserDiffers_ThrowsSessionUnavailable() {
+        assertSessionUnavailable(makeSession(), expectedUserId: UUID())
+    }
+
+    func testValidatedSession_WhenAccessTokenIsEmpty_ThrowsSessionUnavailable() {
+        let stored = makeSession(accessToken: "")
+        assertSessionUnavailable(stored, expectedUserId: stored.user.id)
+    }
+
+    func testValidatedSession_WhenExpiredOrInsideSDKExpiryBuffer_ThrowsSessionUnavailable() {
+        for lifetime: TimeInterval in [-60, 10] {
+            let stored = makeSession(expiresIn: lifetime)
+            assertSessionUnavailable(stored, expectedUserId: stored.user.id)
         }
     }
-    
-    func testRestoreSession_WhenNoExistingSession_ReturnsFalse() async {
-        // Given
-        let service = await SupabaseAuthService()
-        
-        // When
-        let hasSession = await service.restoreSession()
-        
-        // Then
-        XCTAssertFalse(hasSession)
+
+    func testValidatedSession_WhenReadableAndValid_ReturnsStoredSession() throws {
+        let stored = makeSession()
+
+        let validated = try SupabaseAuthService.validatedSession(stored, expectedUserId: stored.user.id)
+
+        XCTAssertEqual(validated, stored)
+    }
+
+    func testValidatedSession_WhenSameUserTokenRotates_AcceptsCurrentSDKSession() throws {
+        let signedIn = makeSession()
+        var refreshed = signedIn
+        refreshed.accessToken = "synthetic-refreshed-access-token"
+        refreshed.refreshToken = "synthetic-refreshed-refresh-token"
+        refreshed.expiresAt += 3600
+
+        let validated = try SupabaseAuthService.validatedSession(refreshed, expectedUserId: signedIn.user.id)
+
+        XCTAssertEqual(validated, refreshed)
     }
     
     // MARK: - Input Validation Tests
@@ -70,6 +92,8 @@ final class SupabaseAuthServiceTests: XCTestCase {
             .userNotFound,
             .accountNotFound,
             .sessionExpired,
+            .sessionUnavailable,
+            .profileUnavailable,
             .handleTaken,
             .invalidHandle,
             .unknown("Test error")
@@ -96,21 +120,50 @@ final class SupabaseAuthServiceTests: XCTestCase {
         XCTAssertEqual(error.errorDescription, "Your session has expired. Please sign in again")
     }
     
-    // MARK: - Sign Out State Cleanup Tests
-    
-    func testSignOut_ClearsLocalState() async {
-        // This tests that signOut properly clears the local state
-        // In a real test, we'd mock the Supabase client
-        let service = await SupabaseAuthService()
-        
-        // Verify initial state
-        await MainActor.run {
-            XCTAssertNil(service.session)
-            XCTAssertNil(service.currentUser)
-        }
+    func testAuthError_SessionUnavailable_DoesNotClaimAccountIsMissing() {
+        XCTAssertEqual(
+            AuthError.sessionUnavailable.errorDescription,
+            "Unable to keep you signed in. Please try signing in again."
+        )
+    }
+
+    func testAuthError_ProfileUnavailableOffersRetryWithoutAccountClaim() {
+        XCTAssertEqual(AuthError.profileUnavailable.errorDescription,
+                       "We couldn't load your profile. Check your connection and try again.")
     }
     
     // MARK: - Helper Functions
+
+    private func assertSessionUnavailable(_ stored: Session?, expectedUserId: UUID) {
+        do {
+            _ = try SupabaseAuthService.validatedSession(stored, expectedUserId: expectedUserId)
+            XCTFail("Expected session unavailable")
+        } catch AuthError.sessionUnavailable {
+        } catch {
+            XCTFail("Expected session unavailable, got \(error)")
+        }
+    }
+
+    private func makeSession(accessToken: String = "synthetic-access-token", expiresIn: TimeInterval = 3600) -> Session {
+        let now = Date()
+        let user = User(
+            id: UUID(),
+            appMetadata: [:],
+            userMetadata: [:],
+            aud: "authenticated",
+            createdAt: now,
+            role: "authenticated",
+            updatedAt: now
+        )
+        return Session(
+            accessToken: accessToken,
+            tokenType: "bearer",
+            expiresIn: expiresIn,
+            expiresAt: now.timeIntervalSince1970 + expiresIn,
+            refreshToken: "synthetic-refresh-token",
+            user: user
+        )
+    }
     
     private func isValidHandle(_ handle: String) -> Bool {
         let normalizedHandle = handle.lowercased().trimmingCharacters(in: .whitespaces)

@@ -15,6 +15,29 @@ final class MindFriendAppUITests: XCTestCase {
         app = nil
     }
 
+    func testInvalidSyntheticEmailLoginReturnsCredentialsError() throws {
+        app.launch()
+        let emailLogin = app.buttons["Continue with Email"]
+        XCTAssertTrue(emailLogin.waitForExistence(timeout: 15))
+        emailLogin.tap()
+        let email = app.textFields["Email"]
+        XCTAssertTrue(email.waitForExistence(timeout: 5))
+        email.tap()
+        email.typeText("restoration-probe@example.invalid")
+        let password = app.secureTextFields["Password"]
+        password.tap()
+        password.typeText("Synthetic-invalid-" + UUID().uuidString)
+        let signIn = app.buttons["Sign In"]
+        if !signIn.isHittable { app.swipeUp() }
+        signIn.tap()
+        let rejected = app.staticTexts["Incorrect email or password. Please try again."]
+        XCTAssertTrue(rejected.waitForExistence(timeout: 30), "Expected Auth rejection; a transport/DNS failure is not a passing login probe")
+        let evidence = XCTAttachment(screenshot: app.screenshot())
+        evidence.name = "Synthetic invalid-login rejection"
+        evidence.lifetime = .keepAlways
+        add(evidence)
+    }
+
     // MARK: - Launch Tests
 
     func testAppLaunches() throws {

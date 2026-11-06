@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import Supabase
 
 // MARK: - UUID Validation
 
@@ -60,30 +61,20 @@ enum DeepLinkRoute: Equatable {
 /// Centralized deep link router that parses URLs and manages navigation state
 @MainActor
 final class DeepLinkRouter: ObservableObject {
-    // MARK: - Published Navigation State
+    /// A new identity for every request, including repeated links to the same destination.
+    struct Request: Identifiable, Equatable {
+        let id: UUID
+        let route: DeepLinkRoute
+    }
 
-    /// The current pending deep link route (cleared after handling)
-    @Published var pendingRoute: DeepLinkRoute?
+    @Published private(set) var pendingRequest: Request?
+    @Published private(set) var requestID = UUID()
 
-    /// Counter to track route version for race condition prevention
-    private var routeVersion: UInt64 = 0
-
-    /// Navigation paths for specific features
-    @Published var breathingSheetPresented: Bool = false
-    @Published var moodSheetPresented: Bool = false
-    @Published var questDetailId: String?
-    @Published var exerciseDetailId: String?
-    @Published var chatConversationId: String?
-    @Published var circleDetailId: String?
-    @Published var programDetailId: String?
-    @Published var sleepContentId: String?
-    @Published var assessmentCode: String?
-
-    // MARK: - Singleton
+    var pendingRoute: DeepLinkRoute? { pendingRequest?.route }
 
     static let shared = DeepLinkRouter()
 
-    private init() {}
+    init() {}
 
     // MARK: - URL Parsing
 
@@ -93,6 +84,7 @@ final class DeepLinkRouter: ObservableObject {
 
         let host = url.host ?? ""
         let pathComponents = url.pathComponents.filter { $0 != "/" }
+        guard pathComponents.count <= 1 else { return .unknown }
 
         switch host {
         // Main tabs
@@ -102,8 +94,8 @@ final class DeepLinkRouter: ObservableObject {
             // SEC-CRIT-005: Validate conversation ID as UUID if provided
             if let conversationId = pathComponents.first {
                 guard conversationId.isValidUUID else {
-                    Log.general.warning("[DeepLink] Invalid conversation ID format: \(conversationId)")
-                    return .chat(conversationId: nil)
+                    Log.general.warning("[DeepLink] Invalid conversation ID format")
+                    return .unknown
                 }
                 return .chat(conversationId: conversationId)
             }
@@ -112,8 +104,8 @@ final class DeepLinkRouter: ObservableObject {
             // SEC-CRIT-005: Validate circle ID as UUID if provided
             if let circleId = pathComponents.first {
                 guard circleId.isValidUUID else {
-                    Log.general.warning("[DeepLink] Invalid circle ID format: \(circleId)")
-                    return .circles(circleId: nil)
+                    Log.general.warning("[DeepLink] Invalid circle ID format")
+                    return .unknown
                 }
                 return .circles(circleId: circleId)
             }
@@ -133,8 +125,8 @@ final class DeepLinkRouter: ObservableObject {
             // SEC-CRIT-005: Validate quest ID as UUID if provided
             if let questId = pathComponents.first {
                 guard questId.isValidUUID else {
-                    Log.general.warning("[DeepLink] Invalid quest ID format: \(questId)")
-                    return .quest(questId: nil)
+                    Log.general.warning("[DeepLink] Invalid quest ID format")
+                    return .unknown
                 }
                 return .quest(questId: questId)
             }
@@ -156,8 +148,8 @@ final class DeepLinkRouter: ObservableObject {
                 }
                 // SEC-CRIT-005: Validate exercise ID as UUID
                 guard exerciseId.isValidUUID else {
-                    Log.general.warning("[DeepLink] Invalid exercise ID format: \(exerciseId)")
-                    return .exerciseLibrary
+                    Log.general.warning("[DeepLink] Invalid exercise ID format")
+                    return .unknown
                 }
                 return .exercise(exerciseId: exerciseId)
             }
@@ -174,8 +166,8 @@ final class DeepLinkRouter: ObservableObject {
             if let programId = pathComponents.first {
                 // SEC-CRIT-005: Validate program ID as UUID
                 guard programId.isValidUUID else {
-                    Log.general.warning("[DeepLink] Invalid program ID format: \(programId)")
-                    return .programs
+                    Log.general.warning("[DeepLink] Invalid program ID format")
+                    return .unknown
                 }
                 return .program(programId: programId)
             }
@@ -185,8 +177,10 @@ final class DeepLinkRouter: ObservableObject {
         case "journal":
             return .journal
         case "micro", "micro-moments":
+            if let id = pathComponents.first, !id.isValidUUID { return .unknown }
             return .microMoments(templateId: pathComponents.first)
         case "sleep":
+            if let id = pathComponents.first, !id.isValidUUID { return .unknown }
             return .sleep(contentId: pathComponents.first)
         case "quote":
             return .quote
@@ -195,8 +189,8 @@ final class DeepLinkRouter: ObservableObject {
             if let code = pathComponents.first {
                 let codePattern = "^[A-Za-z0-9]{2,10}$"
                 guard code.range(of: codePattern, options: .regularExpression) != nil else {
-                    Log.general.warning("[DeepLink] Invalid assessment code format: \(code)")
-                    return .assessment(code: nil)
+                    Log.general.warning("[DeepLink] Invalid assessment code format")
+                    return .unknown
                 }
                 return .assessment(code: code.uppercased())
             }
@@ -226,189 +220,105 @@ final class DeepLinkRouter: ObservableObject {
         }
     }
     
-    // MARK: - Authentication Requirements
-    
-    /// Determines if a route requires authentication
-    private func routeRequiresAuthentication(_ route: DeepLinkRoute) -> Bool {
-        switch route {
-        case .home, .breathing, .meditation, .exerciseLibrary, .programs, .therapeuticPrograms, .unknown:
-            // Public routes that don't require auth
-            return false
-        case .chat, .circles, .profile, .settings, .mood, .moodHistory, .quest,
-             .streak, .progress, .exercise, .program, .journal, .microMoments,
-             .sleep, .quote, .buddy, .insights, .achievements, .assessment:
-            // Private routes that require authentication
-            return true
-        }
-    }
-
     // MARK: - Route Handling
 
-    /// Handle a deep link URL
     func handleURL(_ url: URL, appState: AppState) {
         guard let route = parseURL(url) else { return }
         handleRoute(route, appState: appState)
     }
 
-    /// Handle a parsed deep link route
+    /// Enqueue only. Authenticated views acknowledge a request after accepting its destination.
     func handleRoute(_ route: DeepLinkRoute, appState: AppState) {
-        Log.general.info("[DeepLink] Handling route: \(String(describing: route))")
-        
-        // SEC-CRIT-005: Validate authentication for sensitive routes
-        let requiresAuth = routeRequiresAuthentication(route)
-        if requiresAuth && appState.authState != .authenticated {
-            Log.general.warning("[DeepLink] Blocked unauthenticated access to: \(String(describing: route))")
-            // Store route to handle after authentication
-            pendingRoute = route
-            return
+        // Use the same identifier validation for notifications and direct route callers.
+        let validatedRoute = validate(route)
+        requestID = UUID()
+        pendingRequest = Request(id: requestID, route: validatedRoute)
+    }
+
+    func requestForPresentation(isAuthenticated: Bool) -> Request? {
+        isAuthenticated ? pendingRequest : nil
+    }
+
+    /// An older view must never consume a newer request.
+    @discardableResult
+    func consume(_ request: Request) -> Bool {
+        guard pendingRequest?.id == request.id else { return false }
+        pendingRequest = nil
+        return true
+    }
+
+    /// Invalidate in-flight lookups as well as pending destinations on logout or dismissal.
+    func clearNavigationState() {
+        requestID = UUID()
+        pendingRequest = nil
+    }
+
+    func dismiss(_ request: Request) {
+        guard requestID == request.id else { return }
+        clearNavigationState()
+    }
+
+    func isPending(_ route: DeepLinkRoute) -> Bool {
+        pendingRoute == route
+    }
+
+    func route(for notification: NotificationDeepLink) -> DeepLinkRoute? {
+        let route: DeepLinkRoute
+        switch notification {
+        case .quest(let id): route = .quest(questId: id)
+        case .chat(let id): route = .chat(conversationId: id)
+        case .circle(let id): route = .circles(circleId: id)
+        case .mood: route = .mood
+        case .settings: route = .settings
+        case .insights: route = .insights
+        case .buddy(let code): route = .buddy(code: code)
+        case .micro(let id): route = .microMoments(templateId: id)
+        case .sleep(let id): route = .sleep(contentId: id)
+        case .none: return nil
         }
+        return validate(route)
+    }
 
-        // Store pending route for views that need to respond
-        pendingRoute = route
-
-        switch route {
-        // Main navigation - update tab
-        case .home:
-            appState.selectedTab = .home
-
-        case .chat(let conversationId):
-            appState.selectedTab = .chat
-            chatConversationId = conversationId
-
-        case .circles(let circleId):
-            appState.selectedTab = .home
-            circleDetailId = circleId
-
-        case .profile:
-            appState.selectedTab = .profile
-
-        case .settings:
-            appState.selectedTab = .profile
-            // Settings is within profile tab
-
-        // Mood features
-        case .mood:
-            appState.selectedTab = .home
-            moodSheetPresented = true
-
-        case .moodHistory:
-            appState.selectedTab = .home
-            // Navigate to mood history view
-
-        // Quest
-        case .quest(let questId):
-            appState.selectedTab = .home
-            questDetailId = questId
-
-        case .streak:
-            appState.selectedTab = .home
-            // Show streak view or navigate to progress
-
-        case .progress:
-            appState.selectedTab = .home
-            // Navigate to progress view
-
-        // Exercises
-        case .breathing:
-            appState.selectedTab = .home
-            breathingSheetPresented = true
-
-        case .meditation:
-            appState.selectedTab = .programs
-            // Navigate to meditation exercises
-
-        case .exercise(let exerciseId):
-            appState.selectedTab = .programs
-            exerciseDetailId = exerciseId
-
-        case .exerciseLibrary:
-            appState.selectedTab = .programs
-
-        // Programs
-        case .programs:
-            appState.selectedTab = .programs
-
-        case .therapeuticPrograms:
-            appState.selectedTab = .programs
-            // Navigate to therapeutic programs section
-
-        case .program(let programId):
-            appState.selectedTab = .programs
-            programDetailId = programId
-
-        // Wellness
-        case .journal:
-            appState.selectedTab = .home
-            // Navigate to journal feature
-
-        case .microMoments(let templateId):
-            appState.selectedTab = .home
-            Log.general.info("[DeepLink] Navigate to micro-moments: \(templateId ?? "hub")")
-
-        case .sleep(let contentId):
-            appState.selectedTab = .home
-            sleepContentId = contentId
-
-        case .quote:
-            // Quote is informational - could show a quote detail or just go home
-            appState.selectedTab = .home
-
-        case .assessment(let code):
-            // Navigate to wellness tab and trigger assessment flow
-            appState.selectedTab = .home
-            assessmentCode = code
-            Log.general.info("[DeepLink] Navigate to assessment: \(code ?? "selection")")
-
-        // Social
-        case .buddy:
-            // Buddy invite handling is special - done at app level
-            break
-
-        // System
-        case .insights:
-            appState.selectedTab = .home
-            // Navigate to insights/weekly summary
-
-        case .achievements:
-            appState.selectedTab = .profile
-            // Navigate to achievements view
-
-        case .unknown:
-            Log.general.warning("[DeepLink] Unknown route")
+    private func validate(_ route: DeepLinkRoute) -> DeepLinkRoute {
+        guard let url = route.url, let parsed = parseURL(url) else { return .unknown }
+        if case .assessment(let code?) = route {
+            return parsed == .assessment(code: code.uppercased()) ? parsed : .unknown
         }
+        // An empty supplied identifier must not turn into an identifier-free collection route.
+        return parsed == route ? parsed : .unknown
+    }
 
-        // Clear pending route after a delay to allow views to consume it
-        // Track version to prevent race condition if a new route arrives during delay
-        routeVersion &+= 1
-        let capturedVersion = routeVersion
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(500))
-            // Only clear if no new route has arrived
-            if routeVersion == capturedVersion {
-                pendingRoute = nil
+    enum DestinationError: LocalizedError, Equatable {
+        case unavailable
+        case premium
+
+        var errorDescription: String? {
+            switch self {
+            case .unavailable:
+                return "This item is unavailable or you don't have access to it."
+            case .premium:
+                return "This content requires Premium. Open Subscription in More to review your plan."
             }
         }
     }
 
-    // MARK: - Sheet State Management
-
-    /// Clear all sheet/detail states
-    func clearNavigationState() {
-        breathingSheetPresented = false
-        moodSheetPresented = false
-        questDetailId = nil
-        exerciseDetailId = nil
-        chatConversationId = nil
-        circleDetailId = nil
-        programDetailId = nil
-        sleepContentId = nil
-        assessmentCode = nil
-        pendingRoute = nil
+    /// A missing or inaccessible row is different from a failed connection.
+    static func destinationError(for error: Error) -> DestinationError? {
+        if let destinationError = error as? DestinationError { return destinationError }
+        if let databaseError = error as? PostgrestError,
+           databaseError.code == "PGRST116" || databaseError.code == "42501" {
+            return .unavailable
+        }
+        return nil
     }
 
-    /// Check if a route matches the current pending route
-    func isPending(_ route: DeepLinkRoute) -> Bool {
-        pendingRoute == route
+    /// Match only within the records returned by the authenticated service lookup.
+    static func linkedItem<Item: Identifiable>(id: String, in items: [Item]) throws -> Item where Item.ID == String {
+        guard let identifier = UUID(uuidString: id),
+              let item = items.first(where: { UUID(uuidString: $0.id) == identifier }) else {
+            throw DestinationError.unavailable
+        }
+        return item
     }
 
     // MARK: - Tab Mapping
@@ -416,16 +326,18 @@ final class DeepLinkRouter: ObservableObject {
     /// Get the tab for a given route
     func tabForRoute(_ route: DeepLinkRoute) -> MainTab? {
         switch route {
-        case .home, .mood, .moodHistory, .quest, .streak, .progress,
-             .breathing, .journal, .microMoments, .quote, .insights, .assessment,
-             .circles, .sleep:
+        case .home, .mood, .moodHistory, .quest, .streak,
+             .breathing, .journal, .microMoments, .quote, .insights,
+             .circles, .sleep, .meditation, .exercise, .exerciseLibrary:
             return .home
         case .chat:
             return .chat
         case .profile, .settings, .achievements:
             return .profile
-        case .programs, .therapeuticPrograms, .program, .meditation, .exercise, .exerciseLibrary:
+        case .programs, .therapeuticPrograms, .program:
             return .programs
+        case .progress, .assessment:
+            return .outcomes
         case .buddy, .unknown:
             return nil
         }
