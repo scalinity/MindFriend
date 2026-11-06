@@ -28,7 +28,7 @@ public struct MentorshipProfile: Codable, Identifiable, Equatable {
         case availabilityHoursWeek = "availability_hours_week"
         case languages
         case timezone
-        case isVerified = "is_verified"
+        case isVerified = "verified"
         case mentorAlias = "mentor_alias"
         case createdAt = "created_at"
         case updatedAt = "updated_at"

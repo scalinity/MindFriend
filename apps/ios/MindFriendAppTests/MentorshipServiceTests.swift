@@ -1,344 +1,106 @@
 import XCTest
+import Supabase
 @testable import MindFriendApp
 
-// FIXME: These tests require proper SupabaseClient mocking - disabled for now
-/// Integration tests for MentorshipService behavioral methods
+@MainActor
 final class MentorshipServiceTests: XCTestCase {
+    private let owner = UUID(uuidString: "11111111-1111-4111-8111-111111111111")!
+    private let profileID = UUID(uuidString: "22222222-2222-4222-8222-222222222222")!
 
-    // Placeholder test to prevent empty test suite error
-    func testPlaceholder() {
-        XCTAssertTrue(true, "MentorshipService tests require SupabaseClient mocking - see TODO")
+    private var profileJSON: String {
+        """
+        {"id":"\(profileID)","user_id":"\(owner)","is_mentor_available":false,"expertise_areas":[],"seeking_areas":["stress"],"bio":null,"availability_hours_week":2,"languages":["en"],"timezone":"America/New_York","verified":true,"created_at":"2026-11-06T12:00:00Z","updated_at":"2026-11-06T12:00:00Z"}
+        """
     }
 
-    /*
-    var service: MentorshipService!
-    var mockSupabase: MockSupabaseClient!
-
-    override func setUp() {
-        super.setUp()
-        mockSupabase = MockSupabaseClient()
-        service = MentorshipService(supabase: mockSupabase)
+    private func service() -> MentorshipDataService {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MentorshipFixtureURLProtocol.self]
+        let client = SupabaseClient(supabaseURL: URL(string: "https://mentorship-fixture.invalid")!, supabaseKey: "synthetic-anon",
+            options: .init(auth: .init(storage: MentorshipFixtureStorage(), autoRefreshToken: false),
+                           global: .init(session: URLSession(configuration: configuration))))
+        return MentorshipDataService(supabase: client, userId: owner)
     }
 
-    override func tearDown() {
-        super.tearDown()
-        // Explicitly cleanup subscription resources
-        Task {
-            await service.cleanup()
+    func testExistingProfileDecodesDatabaseVerificationWithoutCreatingAnother() async throws {
+        MentorshipFixtureURLProtocol.fixture.prepare([(200, "[\(profileJSON)]")])
+        let profile = try await service().fetchOrCreateProfile()
+        XCTAssertEqual(profile.id, profileID)
+        XCTAssertTrue(profile.isVerified)
+        XCTAssertEqual(MentorshipFixtureURLProtocol.fixture.requests.map(\.method), ["GET"])
+    }
+
+    func testProfileReadFailureNeverBecomesCreate() async {
+        MentorshipFixtureURLProtocol.fixture.prepare([(400, "{\"message\":\"synthetic read failure\",\"code\":\"fixture\"}")])
+        do { _ = try await service().fetchOrCreateProfile(); XCTFail("A failed read must remain a failure") }
+        catch { }
+        XCTAssertEqual(MentorshipFixtureURLProtocol.fixture.requests.map(\.method), ["GET"])
+    }
+
+    func testEmptyProfileReadCreatesOnlyWritableFieldsAndReturnsSavedRow() async throws {
+        MentorshipFixtureURLProtocol.fixture.prepare([(200, "[]"), (201, "[\(profileJSON)]")])
+        let saved = try await service().fetchOrCreateProfile()
+        XCTAssertEqual(saved.id, profileID)
+        let requests = MentorshipFixtureURLProtocol.fixture.requests
+        XCTAssertEqual(requests.map(\.method), ["GET", "POST"])
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: requests[1].body) as? [String: Any])
+        XCTAssertEqual(Set(body.keys), ["user_id", "timezone"])
+        XCTAssertEqual(UUID(uuidString: try XCTUnwrap(body["user_id"] as? String)), owner)
+    }
+
+    func testZeroRowProfileUpdateCannotReportSuccess() async {
+        MentorshipFixtureURLProtocol.fixture.prepare([(200, "[]")])
+        do { _ = try await service().updateProfile(bio: "Synthetic bio"); XCTFail("Zero rows is not a saved profile") }
+        catch { }
+    }
+}
+
+private struct MentorshipFixtureStorage: AuthLocalStorage {
+    func store(key: String, value: Data) throws { }
+    func retrieve(key: String) throws -> Data? { nil }
+    func remove(key: String) throws { }
+}
+
+private final class MentorshipFixtureURLProtocol: URLProtocol {
+    static let fixture = MentorshipHTTPFixture()
+    override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "mentorship-fixture.invalid" }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let (status, body) = Self.fixture.respond(to: request)
+        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: status,
+            httpVersion: nil, headerFields: ["Content-Type": "application/json"])!, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(body.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() { }
+}
+
+private final class MentorshipHTTPFixture: @unchecked Sendable {
+    struct Request {
+        let method: String
+        let url: URL
+        let body: Data
+    }
+    private let lock = NSLock()
+    private var responses: [(Int, String)] = []
+    private var recorded: [Request] = []
+    var requests: [Request] { lock.lock(); defer { lock.unlock() }; return recorded }
+    func prepare(_ responses: [(Int, String)]) {
+        lock.lock(); defer { lock.unlock() }; self.responses = responses; recorded = []
+    }
+    func respond(to request: URLRequest) -> (Int, String) {
+        var body = request.httpBody ?? Data()
+        if let stream = request.httpBodyStream {
+            stream.open(); defer { stream.close() }
+            var bytes = [UInt8](repeating: 0, count: 4096)
+            while stream.hasBytesAvailable {
+                let count = stream.read(&bytes, maxLength: bytes.count)
+                if count <= 0 { break }
+                body.append(contentsOf: bytes.prefix(count))
+            }
         }
+        lock.lock(); defer { lock.unlock() }
+        recorded.append(Request(method: request.httpMethod ?? "GET", url: request.url!, body: body))
+        return responses.isEmpty ? (400, "{\"message\":\"Unexpected fixture request\"}") : responses.removeFirst()
     }
-
-    // MARK: - Fetch Profile Tests
-
-    @MainActor
-    func testFetchProfile_Success() async throws {
-        // Arrange
-        let expectedProfile = DBMentorshipProfile(
-            id: UUID(),
-            userId: UUID(),
-            isMentorAvailable: true,
-            expertiseAreas: ["anxiety", "stress"],
-            seekingAreas: ["relationships"],
-            bio: "Test mentor",
-            availabilityHoursWeek: 4,
-            languages: ["en"],
-            timezone: "America/New_York",
-            verified: true,
-            verifiedAt: Date(),
-            trainingCompleted: true,
-            trainingCompletedAt: Date(),
-            totalMentorships: 5,
-            avgRating: 4.5,
-            maxActiveMentees: 3,
-            mentorshipStyle: .supportive,
-            createdAt: Date(),
-            updatedAt: Date()
-        )
-        mockSupabase.mentorshipProfile = expectedProfile
-
-        // Act
-        try await service.fetchProfile()
-
-        // Assert
-        XCTAssertEqual(service.profile, expectedProfile)
-        XCTAssertNil(service.error)
-    }
-
-    @MainActor
-    func testFetchProfile_Timeout() async {
-        // Arrange
-        mockSupabase.shouldTimeout = true
-
-        // Act
-        await service.fetchProfile()
-
-        // Assert
-        XCTAssertNil(service.profile)
-        XCTAssertNotNil(service.error)
-        XCTAssertTrue(service.error?.contains("timeout") ?? false)
-    }
-
-    // MARK: - Find Matches Tests
-
-    @MainActor
-    func testFindMentorMatches_Success() async throws {
-        // Arrange
-        let expectedMatches = [
-            DBMentorshipMatch(
-                id: UUID(),
-                mentorId: UUID(),
-                menteeId: UUID(),
-                matchedAt: Date(),
-                status: .pending,
-                compatibilityScore: 85.0,
-                matchReason: "Experienced in anxiety",
-                expertiseMatchScore: 0.9,
-                languageMatchScore: 1.0,
-                timezoneMatchScore: 0.8,
-                availabilityMatchScore: 1.0,
-                introductionMessage: "Hi",
-                mentorResponse: nil,
-                startedAt: nil,
-                endedAt: nil,
-                endReason: nil,
-                durationWeeks: 0,
-                mentorAlias: "Wise Oak",
-                menteeAlias: "Calm River",
-                createdAt: Date(),
-                updatedAt: Date()
-            ),
-        ]
-        mockSupabase.mentorMatches = expectedMatches
-
-        // Act
-        try await service.findMentorMatches(
-            seekingAreas: ["anxiety"],
-            limit: 5
-        )
-
-        // Assert
-        XCTAssertEqual(service.matches, expectedMatches)
-        XCTAssertFalse(service.isLoading)
-    }
-
-    @MainActor
-    func testFindMentorMatches_EmptyResult() async throws {
-        // Arrange
-        mockSupabase.mentorMatches = []
-
-        // Act
-        try await service.findMentorMatches(
-            seekingAreas: ["anxiety"],
-            limit: 5
-        )
-
-        // Assert
-        XCTAssertTrue(service.matches.isEmpty)
-        XCTAssertNil(service.error)
-    }
-
-    // MARK: - Send Message Tests
-
-    @MainActor
-    func testSendMessage_Success() async throws {
-        // Arrange
-        let matchId = UUID()
-        let messageContent = "How can I help you today?"
-        mockSupabase.shouldSucceed = true
-
-        // Act
-        try await service.sendMessage(
-            matchId: matchId,
-            content: messageContent
-        )
-
-        // Assert
-        XCTAssertNil(service.error)
-    }
-
-    func testSendMessage_RateLimitExceeded() async throws {
-        // Arrange
-        let matchId = UUID()
-        mockSupabase.shouldRateLimitError = true
-
-        // Act & Assert
-        do {
-            try await service.sendMessage(
-                matchId: matchId,
-                content: "Test message"
-            )
-            XCTFail("Should have thrown rate limit error")
-        } catch {
-            XCTAssertTrue(error.localizedDescription.contains("rate limit") ||
-                         error.localizedDescription.contains("too many"))
-        }
-    }
-
-    func testSendMessage_Timeout() async throws {
-        // Arrange
-        let matchId = UUID()
-        mockSupabase.shouldTimeout = true
-
-        // Act & Assert
-        do {
-            try await service.sendMessage(
-                matchId: matchId,
-                content: "Test message"
-            )
-            XCTFail("Should have thrown timeout error")
-        } catch {
-            XCTAssertTrue(error.localizedDescription.contains("timeout"))
-        }
-    }
-
-    // MARK: - Subscription Tests
-
-    @MainActor
-    func testSubscribeToMessages_StoresChannel() async {
-        // Arrange
-        let matchId = UUID()
-
-        // Act
-        await service.subscribeToMessages(matchId: matchId)
-
-        // Assert
-        XCTAssertFalse(service.currentMessages.isEmpty || service.currentMessages.isEmpty)
-        // Subscription is active if no error occurs
-    }
-
-    func testSubscribeToMessages_ReplacesPreviousSubscription() async {
-        // Arrange
-        let firstMatchId = UUID()
-        let secondMatchId = UUID()
-
-        // Act
-        await service.subscribeToMessages(matchId: firstMatchId)
-        await service.subscribeToMessages(matchId: secondMatchId)
-
-        // Assert
-        // Second subscription replaces first (no error thrown)
-    }
-
-    // MARK: - Unsubscribe Tests
-
-    @MainActor
-    func testUnsubscribeFromMessages_ClearsMessages() async {
-        // Arrange
-        let matchId = UUID()
-        await service.subscribeToMessages(matchId: matchId)
-        // Simulate receiving messages
-        service.currentMessages = [
-            DBMentorshipMessage(
-                id: UUID(),
-                matchId: matchId,
-                senderId: UUID(),
-                content: "Test",
-                sentAt: Date(),
-                readAt: nil,
-                flagged: false,
-                flagReason: nil,
-                reviewed: false,
-                reviewedAt: nil,
-                reviewedBy: nil,
-                createdAt: Date()
-            ),
-        ]
-
-        // Act
-        await service.cleanup()
-
-        // Assert
-        XCTAssertTrue(service.currentMessages.isEmpty)
-    }
-
-    // MARK: - Cleanup Tests
-
-    @MainActor
-    func testCleanup_CancelsSubscription() async {
-        // Arrange
-        let matchId = UUID()
-        await service.subscribeToMessages(matchId: matchId)
-
-        // Act
-        await service.cleanup()
-
-        // Assert
-        XCTAssertTrue(service.currentMessages.isEmpty)
-    }
-
-    // MARK: - Request Mentorship Tests
-
-    @MainActor
-    func testRequestMentorship_Success() async throws {
-        // Arrange
-        let mentorId = UUID()
-        let introductionMessage = "I would love your guidance on managing anxiety."
-        mockSupabase.shouldSucceed = true
-
-        // Act
-        let matchId = try await service.requestMentorship(
-            mentorId: mentorId,
-            introductionMessage: introductionMessage
-        )
-
-        // Assert
-        XCTAssertNotNil(matchId)
-        XCTAssertNil(service.error)
-    }
-
-    func testRequestMentorship_InvalidMessage() async throws {
-        // Arrange
-        let mentorId = UUID()
-        let shortMessage = "Too short"
-
-        // Act & Assert
-        do {
-            _ = try await service.requestMentorship(
-                mentorId: mentorId,
-                introductionMessage: shortMessage
-            )
-            XCTFail("Should have thrown validation error")
-        } catch {
-            XCTAssertTrue(error.localizedDescription.contains("at least") ||
-                         error.localizedDescription.contains("short"))
-        }
-    }
-
-    // MARK: - Report Mentorship Tests
-
-    @MainActor
-    func testReportMentorship_Success() async throws {
-        // Arrange
-        let matchId = UUID()
-        let reportedUserId = UUID()
-        mockSupabase.shouldSucceed = true
-
-        // Act
-        try await service.reportIssue(
-            matchId: matchId,
-            reportedUserId: reportedUserId,
-            reason: DBMentorshipReport.ReportReason.boundaryViolation.rawValue,
-            description: "Asked for personal phone number"
-        )
-
-        // Assert
-        XCTAssertNil(service.error)
-    }
-
-    // MARK: - Mark Messages as Read Tests
-
-    @MainActor
-    func testMarkMessagesAsRead_Success() async throws {
-        // Arrange
-        let matchId = UUID()
-        mockSupabase.shouldSucceed = true
-
-        // Act
-        try await service.markMessagesAsRead(matchId: matchId)
-
-        // Assert
-        // If no error is thrown, test passes
-        XCTAssertNil(service.error)
-    }
-    */
 }

@@ -1,11 +1,17 @@
 import Foundation
 import Supabase
 
-// NOTE: This service is now functional and provides full mentorship feature support.
-// Original stub replaced with complete implementation as of 2026-01-27.
-// TD-CRIT-001: Mentorship feature now complete
-
 // MARK: - Request/Update DTOs for Supabase Operations
+
+private struct ProfileInsert: Encodable {
+    let userId: UUID
+    let timezone: String
+
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case timezone
+    }
+}
 
 private struct ProfileUpdate: Encodable {
     var isMentorAvailable: Bool?
@@ -83,14 +89,10 @@ actor MentorshipDataService {
     // MARK: - Profile Management
 
     func fetchOrCreateProfile() async throws -> MentorshipProfile {
-        do {
-            if let profile = try await fetchProfile() {
-                return profile
-            }
-            return try await createDefaultProfile()
-        } catch {
-            return try await createDefaultProfile()
+        if let profile = try await fetchProfile() {
+            return profile
         }
+        return try await createDefaultProfile()
     }
 
     func fetchProfile() async throws -> MentorshipProfile? {
@@ -104,22 +106,16 @@ actor MentorshipDataService {
     }
 
     func createDefaultProfile() async throws -> MentorshipProfile {
-        let profile = MentorshipProfile(
-            userId: userId,
-            isMentorAvailable: false,
-            expertiseAreas: [],
-            seekingAreas: [],
-            bio: nil,
-            availabilityHoursWeek: 0,
-            languages: ["en"],
-            timezone: TimeZone.current.identifier,
-            isVerified: false,
-            mentorAlias: nil
-        )
-        _ = try await supabase
+        // Server defaults own verification, qualifications, aliases and timestamps.
+        let profiles: [MentorshipProfile] = try await supabase
             .from("mentorship_profiles")
-            .insert(profile)
+            .insert(ProfileInsert(userId: userId, timezone: TimeZone.current.identifier))
+            .select()
             .execute()
+            .value
+        guard let profile = profiles.first, profile.userId == userId else {
+            throw MentorshipError.notFound("The mentorship profile was not saved.")
+        }
         return profile
     }
 
@@ -147,7 +143,10 @@ actor MentorshipDataService {
             .select()
             .execute()
             .value
-        return updated.first ?? MentorshipProfile(userId: userId, isMentorAvailable: false, expertiseAreas: [], seekingAreas: [], bio: nil, availabilityHoursWeek: 0, languages: ["en"], timezone: TimeZone.current.identifier, isVerified: false, mentorAlias: nil)
+        guard let profile = updated.first, profile.userId == userId else {
+            throw MentorshipError.notFound("The mentorship profile was not saved.")
+        }
+        return profile
     }
 
     // MARK: - Mentor Matching
