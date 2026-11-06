@@ -263,6 +263,7 @@ Deno.serve(async (req) => {
       let sent = false;
       let transient = false;
       let uncertain = false;
+      const providerResults: Array<{ apnsId?: string; statusCode?: number; success: boolean; reason?: string }> = [];
 
       if (isAPNsConfigured()) {
         const config = getAPNsConfig()!;
@@ -282,6 +283,12 @@ Deno.serve(async (req) => {
             teamId: config.teamId,
             privateKey: config.privateKey,
             production: config.production,
+          });
+          providerResults.push({
+            apnsId: result.apnsId,
+            statusCode: result.statusCode,
+            success: result.success,
+            reason: result.reason,
           });
 
           if (result.success) {
@@ -306,6 +313,7 @@ Deno.serve(async (req) => {
           : null,
         metadata: {
           ...attemptMetadata,
+          provider_results: providerResults,
           delivery_state: sent ? "sent" : uncertain ? "uncertain" : retry ? "retry_scheduled" : "failed",
         },
       });

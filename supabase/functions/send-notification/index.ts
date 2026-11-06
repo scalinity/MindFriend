@@ -48,6 +48,7 @@ interface NotificationRequest {
     totalMembers?: number;
     challengeTitle?: string;
     sessionId?: string;
+    capsuleId?: string;
   };
 }
 
@@ -279,6 +280,80 @@ Deno.serve(async (req) => {
         JSON.stringify({ error: "Forbidden notification type" }),
         { status: 403, headers },
       );
+    }
+
+    if (body.type === "capsule_ready") {
+      // Capsule delivery admits one durable notification; the queue applies the
+      // current preference/quiet-hours settings and owns all provider attempts.
+      const capsuleId = body.data.capsuleId;
+      if (
+        typeof capsuleId !== "string" ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          capsuleId,
+        )
+      ) {
+        return Response.json({ error: "Invalid capsuleId" }, {
+          status: 400,
+          headers,
+        });
+      }
+      const { data: capsule, error: capsuleError } = await supabaseAdmin
+        .from("time_capsules").select("id, title")
+        .eq("id", capsuleId).eq("user_id", body.recipientId)
+        .in("status", ["delivered", "opened"]).is("deleted_at", null)
+        .maybeSingle();
+      if (capsuleError) {
+        return Response.json({ error: "Capsule lookup failed" }, {
+          status: 503,
+          headers,
+        });
+      }
+      if (!capsule) {
+        return Response.json({ error: "Delivered capsule unavailable" }, {
+          status: 409,
+          headers,
+        });
+      }
+
+      const content = buildNotificationContent("capsule_ready", {
+        title: capsule.title,
+      });
+      const { error: insertError } = await supabaseAdmin.from(
+        "notification_history",
+      ).insert({
+        id: capsule.id,
+        user_id: body.recipientId,
+        notification_type: "capsule_ready",
+        title: content.title,
+        body: content.body,
+        deep_link: content.deepLink,
+        metadata: { capsuleId: capsule.id },
+        status: "pending",
+        scheduled_for: new Date().toISOString(),
+      });
+      if (insertError && insertError.code !== "23505") {
+        return Response.json({
+          success: false,
+          error: "notification_history_persistence_failed",
+        }, { status: 503, headers });
+      }
+      // Verify the exact existing admission after a duplicate or lost response.
+      const { data: admitted, error: admittedError } = await supabaseAdmin
+        .from("notification_history").select("id, status")
+        .eq("id", capsule.id).eq("user_id", body.recipientId)
+        .eq("notification_type", "capsule_ready").single();
+      if (admittedError || !admitted) {
+        return Response.json({
+          success: false,
+          error: "notification_admission_unconfirmed",
+        }, { status: 503, headers });
+      }
+      return Response.json({
+        success: true,
+        queued: admitted.status === "pending",
+        id: admitted.id,
+        status: admitted.status,
+      }, { headers });
     }
 
     // SECURITY FIX #001: Force senderId to authenticated caller (prevent spoofing)

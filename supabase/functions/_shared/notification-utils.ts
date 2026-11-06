@@ -26,6 +26,7 @@ export type NotificationType =
   // Buddy & Couples types
   | "buddy_encouragement"
   | "couples_exercise_invite"
+  | "capsule_ready"
   // Wellness Agent
   | "agent_action";
 
@@ -54,6 +55,7 @@ export const TYPE_TO_SETTING: Record<NotificationType, string> = {
   // Buddy & Couples - uses general reminders setting
   buddy_encouragement: "reminders_enabled",
   couples_exercise_invite: "reminders_enabled",
+  capsule_ready: "reminders_enabled",
   // Wellness Agent - uses proactive_enabled setting
   agent_action: "proactive_enabled",
 };
@@ -113,6 +115,7 @@ export interface NotificationData {
   messageType?: string;
   sessionId?: string;
   exerciseName?: string;
+  capsuleId?: string;
   // Wellness Agent fields
   title?: string;
   body?: string;
@@ -127,6 +130,15 @@ export function buildNotificationContent(
   data: NotificationData,
 ): NotificationContent {
   switch (type) {
+    case "capsule_ready":
+      return {
+        title: "Time Capsule Ready 💌",
+        body: data.title
+          ? `Your capsule "${data.title}" is ready to open!`
+          : "A message from your past self awaits...",
+        deepLink: "mindfriend://home",
+      };
+
     case "circle_activity":
       return {
         title: "Circle Update",

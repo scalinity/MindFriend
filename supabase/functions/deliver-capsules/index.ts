@@ -52,7 +52,8 @@ Deno.serve(async (req) => {
     const { data: dueCapsules, error: fetchError } = await supabase
       .from("time_capsules")
       .select("*")
-      .eq("status", "sealed")
+      .in("status", ["sealed", "delivered"])
+      .is("delivery_notification_queued_at", null)
       .is("deleted_at", null)
       .lte("deliver_at", now.toISOString())
       .order("deliver_at", { ascending: true })
@@ -81,6 +82,8 @@ Deno.serve(async (req) => {
 
     let successCount = 0;
     let failureCount = 0;
+    let notificationFailures = 0;
+    let notificationsAdmitted = 0;
 
     for (const capsule of dueCapsules) {
       try {
@@ -102,74 +105,87 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Capture current user snapshot
-        const nowSnapshot = await captureUserSnapshot(
-          supabase,
-          capsule.user_id,
-        );
-
-        // Get creation snapshot (handle null case)
-        const thenSnapshot = capsule.capsule_snapshots?.[0] || null;
-
-        // Generate companion letter (with comprehensive error handling)
-        let companionLetter: string;
-        try {
-          companionLetter = await generateCompanionLetter(
+        if (capsule.status === "sealed") {
+          // Capture current user snapshot
+          const nowSnapshot = await captureUserSnapshot(
             supabase,
-            capsule,
-            thenSnapshot,
-            nowSnapshot,
-            req.signal,
+            capsule.user_id,
           );
-        } catch (letterError) {
-          logError(
-            {
-              function: "deliver-capsules",
-              operation: "generate_companion_letter",
-              metadata: { capsuleId: capsule.id },
-            },
-            letterError,
-          );
-          // Use minimal fallback on total failure
-          companionLetter = `Dear friend,\n\nYour time capsule from the past is ready to open. We hope it brings back meaningful memories.\n\nKeep going! 🌱`;
-        }
 
-        // Update capsule status
-        const { error: updateError } = await supabase
-          .from("time_capsules")
-          .update({
-            status: "delivered",
-            delivered_at: new Date().toISOString(),
-            companion_letter: companionLetter,
-            companion_letter_generated_at: new Date().toISOString(),
-          })
-          .eq("id", capsule.id);
+          // Get creation snapshot (handle null case)
+          const thenSnapshot = capsule.capsule_snapshots?.[0] || null;
 
-        if (updateError) {
-          logError(
-            {
-              function: "deliver-capsules",
-              operation: "update_capsule_status",
-              metadata: { capsuleId: capsule.id },
-            },
-            updateError,
-          );
-          failureCount++;
-          continue;
+          // Generate companion letter (with comprehensive error handling)
+          let companionLetter: string;
+          try {
+            companionLetter = await generateCompanionLetter(
+              supabase,
+              capsule,
+              thenSnapshot,
+              nowSnapshot,
+              req.signal,
+            );
+          } catch (letterError) {
+            logError(
+              {
+                function: "deliver-capsules",
+                operation: "generate_companion_letter",
+                metadata: { capsuleId: capsule.id },
+              },
+              letterError,
+            );
+            // Use minimal fallback on total failure
+            companionLetter =
+              `Dear friend,\n\nYour time capsule from the past is ready to open. We hope it brings back meaningful memories.\n\nKeep going! 🌱`;
+          }
+
+          // Update capsule status
+          const { error: updateError } = await supabase
+            .from("time_capsules")
+            .update({
+              status: "delivered",
+              delivered_at: new Date().toISOString(),
+              companion_letter: companionLetter,
+              companion_letter_generated_at: new Date().toISOString(),
+            })
+            .eq("id", capsule.id);
+
+          if (updateError) {
+            logError(
+              {
+                function: "deliver-capsules",
+                operation: "update_capsule_status",
+                metadata: { capsuleId: capsule.id },
+              },
+              updateError,
+            );
+            failureCount++;
+            continue;
+          }
+
+          successCount++;
         }
 
         // Send push notification (non-blocking)
         try {
           await sendDeliveryNotification(supabase, capsule);
+          const { error: notificationMarkerError } = await supabase
+            .from("time_capsules")
+            .update({
+              delivery_notification_queued_at: new Date().toISOString(),
+            })
+            .eq("id", capsule.id);
+          if (notificationMarkerError) throw notificationMarkerError;
+          notificationsAdmitted++;
         } catch (notifError) {
           console.error(
             `Failed to send notification for capsule ${capsule.id}:`,
             notifError,
           );
-          // Don't fail delivery if notification fails
+          // The delivered capsule stays available; the missing marker retries
+          // admission with the same history UUID on the next run.
+          notificationFailures++;
         }
-
-        successCount++;
       } catch (error) {
         logError(
           {
@@ -191,6 +207,8 @@ Deno.serve(async (req) => {
       JSON.stringify({
         delivered: successCount,
         failed: failureCount,
+        notificationFailures,
+        notificationsAdmitted,
         total: dueCapsules.length,
       }),
       {
@@ -388,25 +406,15 @@ async function sendDeliveryNotification(
   supabase: SupabaseClient,
   capsule: TimeCapsule,
 ): Promise<void> {
-  try {
-    await supabase.functions.invoke("send-notification", {
-      body: {
-        userId: capsule.user_id,
-        title: "💌 Time Capsule Ready",
-        body: capsule.title
-          ? `Your capsule "${capsule.title}" is ready to open!`
-          : "A message from your past self awaits...",
-        data: {
-          type: "capsule_ready",
-          capsuleId: capsule.id,
-        },
-      },
-    });
-  } catch (error) {
-    console.error(
-      `Failed to send notification for capsule ${capsule.id}:`,
-      error,
-    );
-    // Don't fail delivery if notification fails
+  const { data, error } = await supabase.functions.invoke("send-notification", {
+    body: {
+      type: "capsule_ready",
+      recipientId: capsule.user_id,
+      data: { capsuleId: capsule.id },
+    },
+  });
+  if (error) throw error;
+  if (data?.success !== true) {
+    throw new Error("Capsule notification admission was not confirmed");
   }
 }

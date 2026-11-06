@@ -7,6 +7,7 @@ type Handler = (req: Request) => Response | Promise<Response>;
 let captured!: Handler;
 let sendHandler!: Handler;
 let queueHandler!: Handler;
+let capsuleHandler!: Handler;
 const originalServe = Deno.serve;
 try {
   Deno.serve = ((handler: Handler) => {
@@ -17,6 +18,8 @@ try {
   sendHandler = captured;
   await import("../process-notification-queue/index.ts");
   queueHandler = captured;
+  await import("../deliver-capsules/index.ts");
+  capsuleHandler = captured;
 } finally {
   Deno.serve = originalServe;
 }
@@ -55,6 +58,7 @@ const addedTypes = [
   "buddy_encouragement",
   "couples_exercise_invite",
   "agent_action",
+  "capsule_ready",
 ];
 const keyPair = await crypto.subtle.generateKey(
   { name: "ECDSA", namedCurve: "P-256" },
@@ -97,6 +101,16 @@ class Fixture {
   pushThrows = false;
   pushBodies: Row[] = [];
   deletedTokens: URL[] = [];
+  capsule: Row = {
+    id: "44444444-4444-4444-8444-444444444444",
+    user_id: recipient,
+    title: "A future note",
+    status: "delivered",
+    deliver_at: "2020-01-01T00:00:00Z",
+    deleted_at: null,
+    delivery_notification_queued_at: null,
+  };
+  notificationInvokeError = false;
 
   queue(type = "agent_action", id = crypto.randomUUID()) {
     this.rows.push({
@@ -148,7 +162,9 @@ class Fixture {
     if (url.hostname === "api.sandbox.push.apple.com") {
       this.events.push("apns.send");
       this.pushBodies.push(body);
-      if (this.pushThrows) throw new TypeError("Synthetic lost provider response");
+      if (this.pushThrows) {
+        throw new TypeError("Synthetic lost provider response");
+      }
       return this.pushStatus === 200
         ? new Response(null, {
           status: 200,
@@ -170,6 +186,26 @@ class Fixture {
     }
     const table = url.pathname.split("/").at(-1);
     const single = req.headers.get("accept")?.includes("vnd.pgrst.object+json");
+    if (url.pathname === "/functions/v1/send-notification") {
+      if (this.notificationInvokeError) return this.error("XX000", 503);
+      return await sendHandler(
+        new Request(req.url, {
+          method: "POST",
+          headers: req.headers,
+          body: JSON.stringify(body),
+        }),
+      );
+    }
+    if (table === "time_capsules") {
+      if (req.method === "PATCH") {
+        Object.assign(this.capsule, body);
+        return new Response(null, { status: 204 });
+      }
+      if (url.searchParams.has("id")) return this.json(this.capsule);
+      return this.json(
+        this.capsule.delivery_notification_queued_at ? [] : [this.capsule],
+      );
+    }
     if (table === "notification_history") {
       if (req.method === "HEAD") {
         return new Response(null, { headers: { "content-range": "*/0" } });
@@ -181,23 +217,27 @@ class Fixture {
         ) {
           return this.error("23514");
         }
-        assert(
-          !this.rows.some((r) => r.id === body.id),
-          "Primary key collision",
-        );
+        if (this.rows.some((r) => r.id === body.id)) {
+          return this.error("23505", 409);
+        }
         this.rows.push({ scheduled_for: null, sent_at: null, ...body });
         return new Response(null, { status: 201 });
       }
       if (req.method === "PATCH") {
         this.events.push("history.update");
-        if (this.updateError || (this.updateErrorAfterClaim && body.status)) return this.error("23514");
+        if (this.updateError || (this.updateErrorAfterClaim && body.status)) {
+          return this.error("23514");
+        }
         if (this.zeroUpdatedRows) return this.error("PGRST116", 406);
         const row = this.rows.find((r) =>
           `eq.${r.id}` === url.searchParams.get("id")
         );
         assert(row, "Update must address an existing notification UUID");
-        if (url.searchParams.has("scheduled_for") &&
-            (!row.scheduled_for || row.status !== "pending" || new Date(row.scheduled_for) > new Date())) {
+        if (
+          url.searchParams.has("scheduled_for") &&
+          (!row.scheduled_for || row.status !== "pending" ||
+            new Date(row.scheduled_for) > new Date())
+        ) {
           return this.json(null);
         }
         Object.assign(row, body);
@@ -206,6 +246,12 @@ class Fixture {
       // The restored schema has no direct relationship to user_settings.
       if (url.searchParams.get("select")?.includes("user_settings!inner")) {
         return this.error("PGRST200");
+      }
+      if (url.searchParams.has("id")) {
+        return this.json(
+          this.rows.find((r) => `eq.${r.id}` === url.searchParams.get("id")) ||
+            null,
+        );
       }
       return this.json(
         this.rows.filter((r) =>
@@ -289,7 +335,9 @@ class Fixture {
           body: JSON.stringify({
             type,
             recipientId: recipient.toUpperCase(),
-            data,
+            data: type === "capsule_ready"
+              ? { capsuleId: this.capsule.id, ...data }
+              : data,
           }),
         }),
       );
@@ -321,6 +369,13 @@ Deno.test("notification types: all current handler categories persist and delive
     const fixture = new Fixture();
     const result = await fixture.send(type);
     assertEquals(result.status, 200, type);
+    if (type === "capsule_ready") {
+      assertEquals(result.body.queued, true);
+      assertEquals(fixture.pushBodies.length, 0);
+      assertEquals((await fixture.process()).body.sent, 1);
+      assertEquals(fixture.rows[0].id, fixture.capsule.id);
+      continue;
+    }
     assertEquals(result.body.sent, true, type);
     assertEquals(fixture.rows[0].notification_type, type);
     assertEquals(fixture.rows[0].status, "sent");
@@ -331,6 +386,37 @@ Deno.test("notification types: all current handler categories persist and delive
       "history.update",
     ]);
   }
+});
+
+Deno.test("capsule delivery uses the real contract and retries durable admission without duplicates", async () => {
+  const fixture = new Fixture();
+  const deliver = () =>
+    fixture.run(async () => {
+      const response = await capsuleHandler(
+        new Request("http://localhost/deliver-capsules", {
+          headers: { Authorization: `Bearer ${serviceKey}` },
+        }),
+      );
+      return await response.json();
+    });
+  fixture.notificationInvokeError = true;
+  assertEquals((await deliver()).notificationFailures, 1);
+  assertEquals(fixture.capsule.status, "delivered");
+  assertEquals(fixture.capsule.delivery_notification_queued_at, null);
+  assertEquals(fixture.rows.length, 0);
+  fixture.notificationInvokeError = false;
+  assertEquals((await deliver()).notificationsAdmitted, 1);
+  assert(fixture.capsule.delivery_notification_queued_at);
+  assertEquals(fixture.rows[0].notification_type, "capsule_ready");
+  assertEquals(fixture.rows[0].id, fixture.capsule.id);
+  assertEquals(fixture.pushBodies.length, 0);
+  // A lost marker response must only confirm the existing queue admission.
+  fixture.capsule.delivery_notification_queued_at = null;
+  assertEquals((await deliver()).notificationsAdmitted, 1);
+  assertEquals(fixture.rows.length, 1);
+  fixture.settings.reminders_enabled = false;
+  assertEquals((await fixture.process()).body.skipped, 1);
+  assertEquals(fixture.pushBodies.length, 0);
 });
 
 Deno.test("legacy type constraint rejection prevents push; retry after repair sends once", async () => {
@@ -633,6 +719,7 @@ Deno.test("queue retries explicit 503 rejection with the same identity, then suc
   fixture.pushStatus = 200;
   assertEquals((await fixture.process()).body.sent, 1);
   assertEquals(fixture.rows[0].status, "sent");
+  assertEquals(fixture.rows[0].metadata.provider_results[0].apnsId, "mock-apns-id");
   assertEquals(fixture.pushBodies.map((p) => p.notification_id), [id, id]);
 });
 
@@ -668,9 +755,11 @@ Deno.test("concurrent queue runs claim one provider attempt", async () => {
   const fixture = new Fixture();
   fixture.queue();
   await fixture.run(async () => {
-    const request = () => new Request("http://localhost/process-notification-queue", {
-      method: "POST", headers: { Authorization: `Bearer ${serviceKey}` },
-    });
+    const request = () =>
+      new Request("http://localhost/process-notification-queue", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${serviceKey}` },
+      });
     await Promise.all([queueHandler(request()), queueHandler(request())]);
   });
   assertEquals(fixture.pushBodies.length, 1);
