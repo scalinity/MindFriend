@@ -280,6 +280,12 @@ final class BillingServiceTests: XCTestCase {
 
     // MARK: - Spec 15: HSA/FSA Receipt Tests
 
+    func testHSAReceiptRequestUsesEndpointSubscriptionKey() throws {
+        let request = BillingService.GenerateReceiptRequest(subscriptionId: "synthetic-subscription")
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: String])
+        XCTAssertEqual(body, ["subscriptionId": "synthetic-subscription"])
+    }
+
     func testGenerateHSAReceiptSuccess() async throws {
         // Test successful HSA receipt generation
         // Should call generate-hsa-receipt Edge Function

@@ -706,6 +706,10 @@ final class BillingService: ObservableObject {
 
     // MARK: - HSA/FSA
 
+    struct GenerateReceiptRequest: Encodable {
+        let subscriptionId: String
+    }
+
     /// Load HSA/FSA record for current user's subscription
     func loadHSARecord() async throws {
         guard let userId = authService.userId else { return }
@@ -733,14 +737,6 @@ final class BillingService: ObservableObject {
 
         guard let subscriptionId = subscription?.id else {
             throw BillingError.noActiveSubscription
-        }
-
-        struct GenerateReceiptRequest: Encodable {
-            let subscriptionId: String
-
-            enum CodingKeys: String, CodingKey {
-                case subscriptionId = "subscription_id"
-            }
         }
 
         let result: HSAReceiptResponse = try await supabase.functions.invoke(
