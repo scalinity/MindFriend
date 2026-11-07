@@ -110,6 +110,7 @@ Deno.serve(async (req) => {
       `,
       )
       .eq("user_id", user.id)
+      .eq("measurement_status", "observed")
       .gte("completion_count", 5); // Minimum 5 sessions for reliable data
 
     if (profilesError) {
@@ -206,7 +207,7 @@ Deno.serve(async (req) => {
         fallbackReason:
           profiles && profiles.length >= 3
             ? null
-            : "Showing popular exercises (complete 5 sessions per exercise for personalized recommendations)",
+            : "Showing suggested exercises; personalized efficacy requires supported emotional measurements.",
       }),
       {
         headers: { "Content-Type": "application/json" },

@@ -49,6 +49,9 @@ struct WatchBreathingView: View {
 
                     Text("Great job!")
                         .font(.headline)
+                    if let status = viewModel.syncStatus {
+                        Text(status).font(.caption2).multilineTextAlignment(.center)
+                    }
 
                     Button("Done") {
                         dismiss()

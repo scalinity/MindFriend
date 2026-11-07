@@ -1,4 +1,5 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
+import { authenticateStaffRequest } from "../_shared/staff-auth.ts";
+import { isAuthError } from "../_shared/auth.ts";
 
 interface CalculateRequest {
   periodMonth: string; // YYYY-MM
@@ -31,44 +32,9 @@ function getRevenueShareRate(verificationLevel: string): number {
 }
 
 Deno.serve(async (req) => {
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  );
-
-  // Authenticate request - must be admin or authorized cron job
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader) {
-    return new Response(
-      JSON.stringify({ error: "Missing authorization header" }),
-      { status: 401 },
-    );
-  }
-
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
-
-  if (authError || !user) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-    });
-  }
-
-  // Verify user is admin (check admin flag in profiles table)
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("is_admin")
-    .eq("id", user.id)
-    .single();
-
-  if (profileError || !profile?.is_admin) {
-    return new Response(
-      JSON.stringify({ error: "Only admins can calculate earnings" }),
-      { status: 403 },
-    );
-  }
+  const auth = await authenticateStaffRequest(req, ["admin"]);
+  if (isAuthError(auth)) return auth.response;
+  const { user, supabaseAdmin: supabase } = auth;
 
   const { periodMonth }: CalculateRequest = await req.json();
 

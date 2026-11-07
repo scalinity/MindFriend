@@ -3,6 +3,7 @@
 // Can be called by cron or manually
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
+import { isAuthorizedCronRequest } from "../_shared/auth.ts";
 
 interface GenerateAlertsResponse {
   success: boolean;
@@ -12,7 +13,7 @@ interface GenerateAlertsResponse {
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
-  // Allow both GET (for cron) and POST (for manual triggering)
+  // Allow GET and POST from an authorized scheduler or service caller.
   if (req.method !== "GET" && req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
@@ -20,10 +21,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
     });
   }
 
-  // For GET requests (cron), verify cron secret if provided
-  if (req.method === "GET") {
-    const authHeader = req.headers.get("Authorization");
-    // In production, verify cron signature here
+  if (!await isAuthorizedCronRequest(
+    req.headers, Deno.env.get("CRON_SECRET") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+  )) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { "Content-Type": "application/json" } });
   }
 
   const supabase = createClient(

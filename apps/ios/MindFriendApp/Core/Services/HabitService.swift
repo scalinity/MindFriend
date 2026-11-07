@@ -287,24 +287,23 @@ final class HabitService: ObservableObject {
             .execute()
             .value
         
-        guard !completions.isEmpty else {
-            // First completion
-            return 1
-        }
-        
-        let today = Calendar.current.startOfDay(for: Date())
+        return Self.nextStreak(after: completions.first, today: Date())
+    }
 
-        guard let lastCompletion = completions.first else {
-            // Should not happen due to guard above, but be safe
-            return 1
-        }
-        
+    nonisolated static func nextStreak(
+        after lastCompletion: HabitCompletion?, today: Date, calendar: Calendar = .current
+    ) -> Int {
+        guard let lastCompletion else { return 1 }
+
         // If last completion was skipped, reset streak
         if lastCompletion.skipped {
             return 1  // New streak starts today
         }
         
-        let daysBetween = Calendar.current.dateComponents([.day], from: lastCompletion.completedDate, to: today).day ?? 0
+        let daysBetween = calendar.dateComponents(
+            [.day], from: calendar.startOfDay(for: lastCompletion.completedDate),
+            to: calendar.startOfDay(for: today)
+        ).day ?? 0
 
         switch daysBetween {
         case 0:
@@ -336,19 +335,27 @@ final class HabitService: ObservableObject {
             .execute()
             .value
 
-        let today = Calendar.current.startOfDay(for: Date())
+        return Self.streakInfo(completions: completions, today: Date())
+    }
+
+    nonisolated static func streakInfo(
+        completions: [HabitCompletion], today: Date, calendar: Calendar = .current
+    ) -> HabitStreakInfo {
+        let today = calendar.startOfDay(for: today)
 
         // Calculate actual current streak based on last completion
         var currentStreak = 0
         var isCompletedToday = false
 
         if let lastCompletion = completions.first {
-            isCompletedToday = lastCompletion.completedDate == today && !lastCompletion.skipped
+            isCompletedToday = calendar.isDate(lastCompletion.completedDate, inSameDayAs: today) && !lastCompletion.skipped
 
             if lastCompletion.skipped {
                 currentStreak = 0
             } else {
-                let daysBetween = Calendar.current.dateComponents([.day], from: lastCompletion.completedDate, to: today).day ?? 0
+                let daysBetween = calendar.dateComponents(
+                    [.day], from: calendar.startOfDay(for: lastCompletion.completedDate), to: today
+                ).day ?? 0
 
                 switch daysBetween {
                 case 0:
@@ -555,17 +562,23 @@ final class HabitService: ObservableObject {
             .select()
             .eq("habit_id", value: habit.id.uuidString)
             .eq("user_id", value: userId.uuidString)
-            .gte("completed_date", value: ISO8601DateFormatter().string(from: weekAgo))
-            .lte("completed_date", value: ISO8601DateFormatter().string(from: today))
+            .gte("completed_date", value: HabitDateFormatter.dayOnly.string(from: weekAgo))
+            .lte("completed_date", value: HabitDateFormatter.dayOnly.string(from: today))
             .execute()
             .value
         
+        return Self.weeklyStats(completions: completions, today: today)
+    }
+
+    nonisolated static func weeklyStats(
+        completions: [HabitCompletion], today: Date, calendar: Calendar = .current
+    ) -> [Int] {
         // Build array of 7 days (0 = not completed, 1 = completed)
         var weekStats = Array(repeating: 0, count: 7)
         
         for i in 0..<7 {
-            let date = Calendar.current.date(byAdding: .day, value: i - 6, to: today)!
-            let completed = completions.contains { Calendar.current.isDate($0.completedDate, inSameDayAs: date) && !$0.skipped }
+            let date = calendar.date(byAdding: .day, value: i - 6, to: today)!
+            let completed = completions.contains { calendar.isDate($0.completedDate, inSameDayAs: date) && !$0.skipped }
             weekStats[i] = completed ? 1 : 0
         }
         

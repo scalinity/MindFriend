@@ -68,6 +68,9 @@ final class InterventionService: ObservableObject {
     private let timingAnalyzer: OptimalTimingAnalyzer
     private let notificationManager: InterventionNotificationManager
     private var monitoringTimer: Timer?
+    private var monitoringCheckTask: Task<Void, Never>?
+    private var accountId: UUID?
+    private var accountGeneration = 0
     private let monitoringInterval: TimeInterval = InterventionConstants.monitoringIntervalSeconds
     
     // Debouncing for preference updates
@@ -105,16 +108,47 @@ final class InterventionService: ObservableObject {
         monitoringTimer?.invalidate()
         monitoringTimer = nil
         preferencesSaveTask?.cancel()
+        monitoringCheckTask?.cancel()
     }
 
     // MARK: - Public Methods
 
+    func resetForAccountChange(to userId: UUID?) {
+        stopMonitoring()
+        accountId = userId
+        preferencesSaveTask?.cancel()
+        preferencesSaveTask = nil
+        preferences = nil
+        cachedPreferences = nil
+        preferencesCacheTimestamp = nil
+        pendingIntervention = nil
+        contextMessage = nil
+        recentDeliveries = []
+        calendarMonitor.resetForAccountChange(to: userId)
+        timingAnalyzer.resetForAccountChange(to: userId)
+    }
+
+    private func accountContext() async throws -> (owner: UUID, generation: Int) {
+        guard let owner = supabase.auth.currentUser?.id else { throw AuthError.sessionExpired }
+        if accountId != owner { resetForAccountChange(to: owner) }
+        let generation = accountGeneration
+        let session = try await supabase.auth.session
+        guard session.user.id == owner, isCurrent(owner, generation) else { throw CancellationError() }
+        return (owner, generation)
+    }
+
+    private func isCurrent(_ owner: UUID, _ generation: Int) -> Bool {
+        !Task.isCancelled && accountId == owner && accountGeneration == generation && supabase.auth.currentUser?.id == owner
+    }
+
     /// Start monitoring for trigger conditions (respects preferences)
     func startMonitoring() async throws {
+        let operation = try await accountContext()
         guard !isMonitoring else { return }
 
         // Load preferences first
         try await loadPreferences()
+        guard isCurrent(operation.owner, operation.generation), !isMonitoring else { return }
 
         // Only monitor if enabled
         guard preferences?.enabled == true else {
@@ -140,7 +174,7 @@ final class InterventionService: ObservableObject {
             repeats: true
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                await self?.checkTriggersAutomatically()
+                self?.beginAutomaticCheck()
             }
         }
 
@@ -152,9 +186,12 @@ final class InterventionService: ObservableObject {
 
     /// Stop monitoring
     func stopMonitoring() {
+        accountGeneration += 1
         isMonitoring = false
         monitoringTimer?.invalidate()
         monitoringTimer = nil
+        monitoringCheckTask?.cancel()
+        monitoringCheckTask = nil
         
         // Stop calendar and timing monitoring
         calendarMonitor.stopPeriodicScanning()
@@ -165,6 +202,7 @@ final class InterventionService: ObservableObject {
 
     /// Manually check if an intervention should be triggered
     func checkTriggers(context: TriggerContext? = nil) async throws -> CheckTriggersResponse {
+        let operation = try await accountContext()
         // Refresh session to ensure FunctionsClient auth token is fresh
         // This triggers functions.setAuth(token:) across the SDK
         let refreshedSession: Session
@@ -180,6 +218,7 @@ final class InterventionService: ObservableObject {
                 suppressionReason: "no_session"
             )
         }
+        guard isCurrent(operation.owner, operation.generation), refreshedSession.user.id == operation.owner else { throw CancellationError() }
 
         let contextToSend: TriggerContext
         if let context = context {
@@ -187,6 +226,7 @@ final class InterventionService: ObservableObject {
         } else {
             contextToSend = await gatherCurrentContext()
         }
+        guard isCurrent(operation.owner, operation.generation) else { throw CancellationError() }
 
         // CRITICAL: Sanitize context before network transmission
         // Removes PHI: biometric values → categories, calendar titles removed
@@ -202,6 +242,7 @@ final class InterventionService: ObservableObject {
                     body: request
                 )
             )
+            guard isCurrent(operation.owner, operation.generation) else { throw CancellationError() }
 
             // If intervention should trigger, store it
             if response.shouldTrigger, let intervention = response.intervention {
@@ -237,8 +278,8 @@ final class InterventionService: ObservableObject {
         triggerType: TriggerType?,
         context: [String: Any]?
     ) async throws -> UUID {
-        let session = try await supabase.auth.session
-        let userId = session.user.id
+        let operation = try await accountContext()
+        let userId = operation.owner
 
         // ✅ CORRECTNESS FIX: Validate UUID instead of creating random one on failure
         guard let parsedInterventionId = UUID(uuidString: interventionId) else {
@@ -271,6 +312,7 @@ final class InterventionService: ObservableObject {
             .from("intervention_deliveries")
             .insert(delivery)
             .execute()
+        guard isCurrent(operation.owner, operation.generation) else { throw CancellationError() }
 
         // Refresh recent deliveries
         try await loadRecentDeliveries()
@@ -285,6 +327,7 @@ final class InterventionService: ObservableObject {
         rating: Int? = nil,
         feedback: String? = nil
     ) async throws {
+        let operation = try await accountContext()
         // Build update struct
         struct DeliveryUpdate: Encodable {
             let completed: Bool
@@ -314,7 +357,9 @@ final class InterventionService: ObservableObject {
             .from("intervention_deliveries")
             .update(update)
             .eq("id", value: deliveryId.uuidString)
+            .eq("user_id", value: operation.owner.uuidString)
             .execute()
+        guard isCurrent(operation.owner, operation.generation) else { throw CancellationError() }
 
         // Refresh recent deliveries
         try await loadRecentDeliveries()
@@ -326,14 +371,14 @@ final class InterventionService: ObservableObject {
         preferencesSaveTask?.cancel()
 
         // Get the authenticated user ID to ensure it matches
-        let session = try await supabase.auth.session
-        let userId = session.user.id
+        let operation = try await accountContext()
+        let userId = operation.owner
 
         // Debounce: wait 500ms before saving
         let saveTask = Task { @MainActor in
             try await Task.sleep(nanoseconds: InterventionConstants.preferencesSaveDebounceNanoseconds)
 
-            guard !Task.isCancelled else { return }
+            guard isCurrent(operation.owner, operation.generation) else { return }
 
             // Ensure the preferences have the correct user ID
             var prefsToSave = preferences
@@ -354,6 +399,7 @@ final class InterventionService: ObservableObject {
                 .from("intervention_preferences")
                 .upsert(prefsToSave)
                 .execute()
+            guard isCurrent(operation.owner, operation.generation) else { return }
 
             self.preferences = prefsToSave
 
@@ -385,42 +431,41 @@ final class InterventionService: ObservableObject {
 
     /// Load user preferences from database (with caching)
     func loadPreferences() async throws {
+        let operation = try await accountContext()
         // Check cache first
         if let cached = cachedPreferences,
+           cached.userId == operation.owner,
            let timestamp = preferencesCacheTimestamp,
            Date().timeIntervalSince(timestamp) < InterventionConstants.preferencesCacheExpirationSeconds {
             self.preferences = cached
             return
         }
         
-        let session = try await supabase.auth.session
-        let userId = session.user.id
-
-        do {
-            let response: InterventionPreferences = try await supabase
+        let rows: [InterventionPreferences] = try await supabase
                 .from("intervention_preferences")
                 .select()
-                .eq("user_id", value: userId.uuidString)
-                .single()
+                .eq("user_id", value: operation.owner.uuidString)
+                .limit(1)
                 .execute()
                 .value
-
-            self.preferences = response
-            self.cachedPreferences = response
-            self.preferencesCacheTimestamp = Date()
-        } catch {
-            // No preferences exist - use defaults
-            let defaults = InterventionPreferences.default
-            self.preferences = defaults
-            self.cachedPreferences = defaults
-            self.preferencesCacheTimestamp = Date()
-        }
+        guard isCurrent(operation.owner, operation.generation) else { throw CancellationError() }
+        // Only a successful empty read means the account has no preferences.
+        let defaults = InterventionPreferences.default
+        let response = rows.first ?? InterventionPreferences(
+            id: defaults.id, userId: operation.owner, enabled: defaults.enabled,
+            maxDaily: defaults.maxDaily, quietHoursStart: defaults.quietHoursStart,
+            quietHoursEnd: defaults.quietHoursEnd, createdAt: defaults.createdAt, updatedAt: defaults.updatedAt
+        )
+        guard response.userId == operation.owner else { throw CancellationError() }
+        self.preferences = response
+        self.cachedPreferences = response
+        self.preferencesCacheTimestamp = Date()
     }
 
     /// Load recent delivery history
     func loadRecentDeliveries() async throws {
-        let session = try await supabase.auth.session
-        let userId = session.user.id
+        let operation = try await accountContext()
+        let userId = operation.owner
 
         let response: [InterventionDelivery] = try await supabase
             .from("intervention_deliveries")
@@ -430,13 +475,24 @@ final class InterventionService: ObservableObject {
             .limit(20)
             .execute()
             .value
-
+        guard isCurrent(operation.owner, operation.generation) else { throw CancellationError() }
         self.recentDeliveries = response
     }
 
     // MARK: - Private Methods
 
+    private func beginAutomaticCheck() {
+        guard isMonitoring, monitoringCheckTask == nil else { return }
+        let generation = accountGeneration
+        monitoringCheckTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { if accountGeneration == generation { monitoringCheckTask = nil } }
+            await checkTriggersAutomatically()
+        }
+    }
+
     private func checkTriggersAutomatically() async {
+        guard isMonitoring else { return }
         do {
             let response = try await checkTriggers()
             if !response.shouldTrigger {

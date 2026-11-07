@@ -245,10 +245,14 @@ final class CrashReporter {
 
     /// Scrub personally identifiable information from a Sentry event before transmission.
     /// Processes all event properties: message, exceptions, breadcrumbs, user, extra, tags.
-    private static func scrubPII(from event: Event) -> Event? {
+    static func scrubPII(from event: Event) -> Event? {
         // Scrub message
         if let message = event.message {
-            event.message?.message = scrubText(message.message) ?? ""
+            // Sentry sends formatted text independently from the optional raw template.
+            let scrubbed = SentryMessage(formatted: scrubText(message.formatted) ?? "")
+            scrubbed.message = scrubText(message.message)
+            scrubbed.params = message.params?.map { scrubText($0) ?? "" }
+            event.message = scrubbed
         }
 
         // Scrub exceptions
@@ -409,7 +413,7 @@ final class CrashReporter {
     /// Scrub PII from a Sentry log before transmission.
     /// Note: SentryLog properties are read-only, so we can only filter logs containing PII.
     /// Logs with detected PII patterns are dropped entirely for privacy protection.
-    private static func scrubPIIFromLog(_ log: SentryLog) -> SentryLog? {
+    static func scrubPIIFromLog(_ log: SentryLog) -> SentryLog? {
         // Check if the log message contains PII patterns
         // If PII is detected, drop the log entirely since we can't modify it
         let message = log.body

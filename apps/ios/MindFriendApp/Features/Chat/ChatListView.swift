@@ -25,6 +25,10 @@ struct ChatListView: View {
     @State private var showNewChat = false
     @State private var showVoiceChat = false
     @State private var loadError: String?
+    @State private var nextCursor: ChatHistoryCursor?
+    @State private var isLoadingMore = false
+    @State private var pageError: String?
+    @State private var listLoadGeneration = UUID()
     @State private var refreshTrigger = UUID() // Changes to trigger refresh
 
     // Chat tutorial state
@@ -72,6 +76,14 @@ struct ChatListView: View {
                             }
                         }
                         .onDelete(perform: deleteConversations)
+                        if let pageError { Text(pageError).font(.caption).foregroundStyle(.secondary) }
+                        if nextCursor != nil {
+                            Button(isLoadingMore ? "Loading…" : "Load older conversations") {
+                                Task { await loadMoreConversations() }
+                            }
+                            .disabled(isLoadingMore)
+                            .accessibilityIdentifier("chat-load-older-conversations")
+                        }
                     }
                     .listStyle(.plain)
                 }
@@ -206,6 +218,11 @@ struct ChatListView: View {
 
     private func loadConversations() async {
         Log.chat.debug("[ChatList] Starting to load conversations...")
+        let generation = UUID()
+        listLoadGeneration = generation
+        let owner = appState.currentUser?.id
+        isLoadingMore = false
+        pageError = nil
 
         // Only show loading indicator on initial load, not during refresh
         let isInitialLoad = conversations.isEmpty && loadError == nil
@@ -215,7 +232,7 @@ struct ChatListView: View {
         loadError = nil
 
         defer {
-            if isInitialLoad {
+            if isInitialLoad && listLoadGeneration == generation {
                 isLoading = false
             }
             Log.chat.debug("[ChatList] Finished loading, isLoading=false")
@@ -226,9 +243,9 @@ struct ChatListView: View {
             try Task.checkCancellation()
 
             // Add a timeout to prevent infinite waits
-            let result = try await withThrowingTaskGroup(of: [Conversation].self) { group in
+            let result = try await withThrowingTaskGroup(of: ChatHistoryPage<Conversation>.self) { group in
                 group.addTask {
-                    try await self.container.chatService.getConversations()
+                    try await self.container.chatService.getConversationPage()
                 }
 
                 group.addTask {
@@ -246,9 +263,10 @@ struct ChatListView: View {
 
             // Check for cancellation before updating UI
             try Task.checkCancellation()
-
-            conversations = result
-            Log.chat.debug("[ChatList] Loaded \(result.count) conversations")
+            guard listLoadGeneration == generation, appState.currentUser?.id == owner else { return }
+            conversations = result.items
+            nextCursor = result.nextCursor
+            Log.chat.debug("[ChatList] Loaded \(result.items.count) conversations")
         } catch is CancellationError {
             // SwiftUI cancelled the task (e.g., user released pull-to-refresh early)
             // This is normal behavior, not an error to show the user
@@ -262,6 +280,24 @@ struct ChatListView: View {
         } catch {
             Log.chat.error("[ChatList] Error loading conversations: \(error.localizedDescription)")
             loadError = error.localizedDescription
+        }
+    }
+
+    private func loadMoreConversations() async {
+        guard !isLoadingMore, let cursor = nextCursor else { return }
+        let generation = listLoadGeneration
+        let owner = appState.currentUser?.id
+        isLoadingMore = true
+        pageError = nil
+        defer { if listLoadGeneration == generation { isLoadingMore = false } }
+        do {
+            let page = try await container.chatService.getConversationPage(before: cursor)
+            guard !Task.isCancelled, listLoadGeneration == generation, appState.currentUser?.id == owner else { return }
+            let existing = Set(conversations.map { $0.id.lowercased() })
+            conversations.append(contentsOf: page.items.filter { !existing.contains($0.id.lowercased()) })
+            nextCursor = page.nextCursor
+        } catch {
+            if !Task.isCancelled, listLoadGeneration == generation { pageError = "Couldn't load older conversations. Try again." }
         }
     }
 

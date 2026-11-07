@@ -15,7 +15,17 @@ struct FamilyHubView: View {
 
     var body: some View {
         ZStack {
-            if let family = viewModel.familyGroup {
+            if viewModel.isLoading && viewModel.familyGroup == nil {
+                ProgressView("Loading family…")
+            } else if let error = viewModel.error, viewModel.familyGroup == nil {
+                ContentUnavailableView {
+                    Label("Family Unavailable", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(error)
+                } actions: {
+                    Button("Try Again") { Task { await reloadFamily() } }
+                }
+            } else if let family = viewModel.familyGroup {
                 TabView(selection: $selectedTab) {
                     // Overview Tab
                     overviewTabContent
@@ -231,14 +241,26 @@ struct FamilyHubView: View {
             Spacer()
         }
         .padding()
-        .sheet(isPresented: $showCreateFamilySheet) {
-            CreateFamilySheet(isPresented: $showCreateFamilySheet)
-                .environmentObject(container)
+        .sheet(isPresented: $showCreateFamilySheet, onDismiss: {
+            Task { await reloadFamily() }
+        }) {
+            NavigationStack {
+                CreateFamilySheet(isPresented: $showCreateFamilySheet)
+                    .environmentObject(container)
+            }
         }
-        .sheet(isPresented: $showJoinFamilySheet) {
-            JoinFamilySheet(isPresented: $showJoinFamilySheet)
-                .environmentObject(container)
+        .sheet(isPresented: $showJoinFamilySheet, onDismiss: {
+            Task { await reloadFamily() }
+        }) {
+            NavigationStack {
+                JoinFamilySheet(isPresented: $showJoinFamilySheet)
+                    .environmentObject(container)
+            }
         }
+    }
+
+    private func reloadFamily() async {
+        await viewModel.loadData(familyService: container.familyService, supabase: container.supabaseClient)
     }
 }
 

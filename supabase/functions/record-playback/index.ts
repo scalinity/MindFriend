@@ -8,6 +8,7 @@ interface PlaybackEvent {
   durationListenedSeconds?: number;
   source?: string;
   contextId?: string;
+  playbackSessionId?: string;
 }
 
 Deno.serve(async (req) => {
@@ -46,6 +47,17 @@ Deno.serve(async (req) => {
     }
 
     const body: PlaybackEvent = await req.json();
+    if (
+      body.playbackSessionId !== undefined &&
+      (typeof body.playbackSessionId !== "string" ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          body.playbackSessionId,
+        ))
+    ) {
+      return Response.json({ error: "Invalid playback session" }, {
+        status: 400,
+      });
+    }
 
     if (body.eventType === "start") {
       // Create new playback session
@@ -75,14 +87,17 @@ Deno.serve(async (req) => {
       });
     }
 
-    // For progress/complete/skip, find most recent playback for this track
-    const { data: recentPlayback, error: findError } = await supabase
+    // New clients identify the exact playback. Keep the track fallback for older
+    // installed clients, with the same authenticated owner and track filters.
+    let playbackQuery = supabase
       .from("playback_sessions")
       .select("id")
       .eq("user_id", user.id)
-      .eq("track_id", body.trackId)
-      .order("created_at", { ascending: false })
-      .limit(1)
+      .eq("track_id", body.trackId);
+    playbackQuery = body.playbackSessionId
+      ? playbackQuery.eq("id", body.playbackSessionId)
+      : playbackQuery.order("created_at", { ascending: false }).limit(1);
+    const { data: recentPlayback, error: findError } = await playbackQuery
       .single();
 
     if (findError || !recentPlayback) {
@@ -120,7 +135,9 @@ Deno.serve(async (req) => {
     const { error: updateError } = await supabase
       .from("playback_sessions")
       .update(updates)
-      .eq("id", recentPlayback.id);
+      .eq("id", recentPlayback.id)
+      .eq("user_id", user.id)
+      .eq("track_id", body.trackId);
 
     if (updateError) {
       return new Response(JSON.stringify({ error: updateError.message }), {

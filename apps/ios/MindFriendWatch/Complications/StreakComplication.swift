@@ -8,7 +8,7 @@ import SwiftUI
 
 // MARK: - Shared Defaults (App Group for cross-process access)
 
-private let sharedDefaults = UserDefaults(suiteName: "group.com.mindfriend.app") ?? .standard
+
 
 // MARK: - Streak Complication
 
@@ -40,13 +40,13 @@ struct StreakComplicationProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (StreakEntry) -> Void) {
-        let streak = sharedDefaults.integer(forKey: "watch_streak")
+        let streak = SharedDataStore.shared.currentStreak
         let entry = StreakEntry(date: Date(), streak: max(streak, 0), isPlaceholder: false)
         completion(entry)
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<StreakEntry>) -> Void) {
-        let streak = sharedDefaults.integer(forKey: "watch_streak")
+        let streak = SharedDataStore.shared.currentStreak
         let entry = StreakEntry(date: Date(), streak: max(streak, 0), isPlaceholder: false)
 
         // Refresh at midnight (streak only changes daily; data-driven updates use reloadTimelines)

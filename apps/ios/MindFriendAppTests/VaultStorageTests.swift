@@ -5,22 +5,24 @@ final class VaultStorageTests: XCTestCase {
 
     var sut: VaultStorageService!
     var encryptionService: VaultEncryptionService!
+    private var testDirectory: URL!
 
     override func setUp() async throws {
         try await super.setUp()
-        encryptionService = VaultEncryptionService()
-        sut = VaultStorageService(encryptionService: encryptionService)
-
-        // Ensure clean state
-        try await sut.deleteAllEntries()
+        testDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("MindFriend-VaultTests-\(UUID().uuidString)")
+        encryptionService = VaultEncryptionService(keychainService: "com.mindfriend.tests.vault.\(UUID().uuidString)")
+        sut = VaultStorageService(encryptionService: encryptionService, directoryURL: testDirectory.appendingPathComponent("Vault"))
     }
 
     override func tearDown() async throws {
-        // Clean up after tests
-        try await sut.deleteAllEntries()
-        try? await encryptionService.deleteKey()
+        // Only this test's temporary directory and unique key are owned here.
+        if FileManager.default.fileExists(atPath: testDirectory.path) {
+            try FileManager.default.removeItem(at: testDirectory)
+        }
+        try await encryptionService.deleteKey()
         sut = nil
         encryptionService = nil
+        testDirectory = nil
         try await super.tearDown()
     }
 
@@ -149,6 +151,22 @@ final class VaultStorageTests: XCTestCase {
 
         let entries = try await sut.listEntries()
         XCTAssertTrue(entries.isEmpty)
+    }
+
+    func testDeleteAllEntriesPreservesSiblingVault() async throws {
+        let sibling = VaultStorageService(encryptionService: encryptionService,
+                                          directoryURL: testDirectory.appendingPathComponent("OtherVault"))
+        let retained = VaultEntry(body: "Synthetic entry outside the selected vault")
+        try await sibling.saveEntry(retained)
+        try await sut.saveEntry(VaultEntry(body: "Synthetic entry to delete"))
+
+        try await sut.deleteAllEntries()
+
+        let remaining = try await sibling.getEntry(retained.id)
+        let selectedCount = await sut.entryCount()
+        XCTAssertEqual(remaining.id, retained.id)
+        XCTAssertEqual(selectedCount, 0)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: testDirectory.appendingPathComponent("OtherVault/\(retained.id.uuidString).vaultentry").path))
     }
 
     // MARK: - Error Handling Tests

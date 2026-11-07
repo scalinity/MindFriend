@@ -1,3 +1,4 @@
+import { refreshPremiumAccess } from "../_shared/entitlement.ts";
 // MindFriend Voice Synthesis Edge Function
 // Synthesize audio from existing generated_content using Google Cloud TTS
 // Supports re-synthesis with different voice settings
@@ -133,14 +134,7 @@ Deno.serve(async (req) => {
 
     // Check premium status - Google Cloud TTS voice synthesis is PREMIUM ONLY
     // Free tier users use native iOS AVSpeechSynthesizer instead (zero cost)
-    const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("subscription_tier")
-      .eq("id", user.id)
-      .single();
-
-    const isPremium = profile?.subscription_tier === "premium" ||
-      profile?.subscription_tier === "family";
+    const isPremium = await refreshPremiumAccess(supabaseAdmin, user.id);
 
     // PREMIUM GATE: Block free tier users from server-side TTS synthesis
     if (!isPremium) {

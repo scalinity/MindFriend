@@ -1,3 +1,4 @@
+import { refreshPremiumAccess } from "../_shared/entitlement.ts";
 // MindFriend Journal Analysis Edge Function
 // Analyzes journal entries using Grok AI to detect cognitive distortions
 // and provide supportive insights with gentle, non-clinical language
@@ -475,13 +476,7 @@ Deno.serve(async (req) => {
     }
 
     // Check premium status
-    const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("subscription_tier")
-      .eq("id", user.id)
-      .single();
-
-    const isPremium = profile?.subscription_tier === "premium";
+    const isPremium = await refreshPremiumAccess(supabaseAdmin, user.id);
 
     // Check daily quota for free users
     if (!isPremium) {

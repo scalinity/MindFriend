@@ -5,18 +5,19 @@ import CryptoKit
 final class VaultEncryptionTests: XCTestCase {
 
     var sut: VaultEncryptionService!
+    private var keychainService: String!
 
     override func setUp() async throws {
         try await super.setUp()
-        sut = VaultEncryptionService()
-        // Clean up any existing key from previous tests
-        try? await sut.deleteKey()
+        keychainService = "com.mindfriend.tests.vault.\(UUID().uuidString)"
+        sut = VaultEncryptionService(keychainService: keychainService)
     }
 
     override func tearDown() async throws {
         // Clean up test key
         try? await sut.deleteKey()
         sut = nil
+        keychainService = nil
         try await super.tearDown()
     }
 
@@ -40,7 +41,7 @@ final class VaultEncryptionTests: XCTestCase {
         try await sut.generateKey()
 
         // Create a new service instance
-        let newService = VaultEncryptionService()
+        let newService = VaultEncryptionService(keychainService: keychainService)
 
         // Key should still exist (persisted in Keychain)
         let keyExists = await newService.keyExists()
@@ -59,6 +60,29 @@ final class VaultEncryptionTests: XCTestCase {
         // Key should no longer exist
         let existsAfter = await sut.keyExists()
         XCTAssertFalse(existsAfter, "Key should not exist after deletion")
+    }
+
+    func testDeletingKeyPreservesOtherServicesAndAccounts() async throws {
+        let otherServiceName = "com.mindfriend.tests.vault.\(UUID().uuidString)"
+        let otherService = VaultEncryptionService(keychainService: otherServiceName)
+        let otherAccount = VaultEncryptionService(keychainService: keychainService, keychainAccount: "other-entry")
+        addTeardownBlock {
+            try await otherService.deleteKey()
+            try await otherAccount.deleteKey()
+        }
+        let entry = VaultEntry(body: "Synthetic retained entry")
+        let serviceData = try await otherService.encrypt(entry)
+        let accountData = try await otherAccount.encrypt(entry)
+        try await sut.generateKey()
+        try await sut.deleteKey()
+
+        // Reopen the keys so an in-memory cache cannot hide an overbroad deletion.
+        let reopenedService = VaultEncryptionService(keychainService: otherServiceName)
+        let reopenedAccount = VaultEncryptionService(keychainService: keychainService, keychainAccount: "other-entry")
+        let serviceEntry = try await reopenedService.decrypt(serviceData)
+        let accountEntry = try await reopenedAccount.decrypt(accountData)
+        XCTAssertEqual(serviceEntry.id, entry.id)
+        XCTAssertEqual(accountEntry.id, entry.id)
     }
 
     // MARK: - Encryption/Decryption Tests

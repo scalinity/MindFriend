@@ -93,8 +93,10 @@ final class CreativeExpressionService: ObservableObject {
 
     // MARK: - Init
 
-    init() {
-        // Uses global supabase client
+    private let deletionClient: SupabaseClient
+
+    init(deletionClient: SupabaseClient? = nil) {
+        self.deletionClient = deletionClient ?? supabase
     }
 
     // MARK: - Private Helpers
@@ -642,23 +644,48 @@ final class CreativeExpressionService: ObservableObject {
 
     /// Delete a creative work
     func deleteWork(id: String) async throws {
-        // Get storage path first
-        if let work = creativeWorks.first(where: { $0.id == id }),
-           let path = work.storagePath {
-            // Delete from storage
-            _ = try? await supabase.storage
+        guard let owner = deletionClient.auth.currentUser?.id else { throw CreativeError.notAuthenticated }
+        guard let workID = UUID(uuidString: id) else { throw CreativeError.workNotFound }
+        struct StoredWork: Decodable {
+            let storagePath: String?
+            enum CodingKeys: String, CodingKey { case storagePath = "storage_path" }
+        }
+        // A detail view need not be in the gallery cache. Retain this authoritative
+        // row until storage confirms removal so a failed delete remains retryable.
+        let work: StoredWork = try await deletionClient
+            .from(Tables.creativeWorks)
+            .select("storage_path")
+            .eq("id", value: workID)
+            .eq("user_id", value: owner)
+            .single()
+            .execute()
+            .value
+        try Task.checkCancellation()
+        guard deletionClient.auth.currentUser?.id == owner else { throw CreativeError.notAuthenticated }
+        if let path = work.storagePath {
+            guard path.split(separator: "/").first.map(String.init)?.lowercased() == owner.uuidString.lowercased() else {
+                throw CreativeError.deletionFailed
+            }
+            _ = try await deletionClient.storage
                 .from("creative-works")
                 .remove(paths: [path])
+            guard try await !deletionClient.storage.from("creative-works").exists(path: path) else {
+                throw CreativeError.deletionFailed
+            }
         }
 
-        // Delete from database (cascades to related tables)
-        try await supabase
+        try Task.checkCancellation()
+        guard deletionClient.auth.currentUser?.id == owner else { throw CreativeError.notAuthenticated }
+        // Delete from database only after media cleanup (cascades to related tables).
+        try await deletionClient
             .from(Tables.creativeWorks)
             .delete()
-            .eq("id", value: id)
+            .eq("id", value: workID)
+            .eq("user_id", value: owner)
             .execute()
 
-        // Remove from local cache
+        try Task.checkCancellation()
+        guard deletionClient.auth.currentUser?.id == owner else { throw CreativeError.notAuthenticated }
         creativeWorks.removeAll { $0.id == id }
     }
 
@@ -868,6 +895,7 @@ enum CreativeError: LocalizedError {
     case analysisFailed(String)
     case uploadFailed(String)
     case workNotFound
+    case deletionFailed
 
     var errorDescription: String? {
         switch self {
@@ -885,6 +913,8 @@ enum CreativeError: LocalizedError {
             return "Upload failed: \(message)"
         case .workNotFound:
             return "Creative work not found."
+        case .deletionFailed:
+            return "The saved media could not be deleted. Please try again."
         }
     }
 }

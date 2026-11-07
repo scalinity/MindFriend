@@ -73,6 +73,9 @@ final class AmbientThemeService: ObservableObject {
 
     /// Task for time-based monitoring
     private var timeMonitorTask: Task<Void, Never>?
+    private var accountId: UUID?
+    private var accountGeneration = 0
+    var isMonitoring: Bool { timeMonitorTask != nil }
 
     /// Debounce timer for save operations
     private var saveTask: Task<Void, Error>?
@@ -88,6 +91,7 @@ final class AmbientThemeService: ObservableObject {
     /// - Parameter dataProvider: Provider for persistence operations (usually SupabaseDataService)
     init(dataProvider: AmbientDataProviding) {
         self.dataProvider = dataProvider
+        self.accountId = dataProvider.currentUserId
         updateResolvedTheme()
     }
 
@@ -105,10 +109,14 @@ final class AmbientThemeService: ObservableObject {
 
     /// Start the service: load preferences and begin time monitoring
     func start() async {
+        guard let owner = dataProvider.currentUserId else { return }
+        if accountId != owner { resetForAccountChange(to: owner) }
+        let generation = accountGeneration
         logger.info("Starting AmbientThemeService")
 
         // Load preferences from Supabase
-        await loadPreferences()
+        await loadPreferences(owner: owner, generation: generation)
+        guard isCurrent(owner, generation) else { return }
 
         // Start time-based monitoring
         startTimeBasedMonitoring()
@@ -116,9 +124,28 @@ final class AmbientThemeService: ObservableObject {
 
     /// Stop time monitoring (call when app enters background for extended period)
     func stop() {
+        accountGeneration += 1
         logger.info("Stopping AmbientThemeService")
         timeMonitorTask?.cancel()
         timeMonitorTask = nil
+        saveTask?.cancel()
+        saveTask = nil
+    }
+
+    func resetForAccountChange(to userId: UUID?) {
+        stop()
+        accountId = userId
+        selectedTheme = .auto
+        backgroundType = .dynamic
+        isAutoAdjustEnabled = true
+        isLoading = false
+        errorMessage = nil
+        consecutiveSaveFailures = 0
+        updateResolvedTheme()
+    }
+
+    private func isCurrent(_ owner: UUID, _ generation: Int) -> Bool {
+        !Task.isCancelled && accountId == owner && accountGeneration == generation && dataProvider.currentUserId == owner
     }
 
     // MARK: - Theme Management
@@ -179,17 +206,18 @@ final class AmbientThemeService: ObservableObject {
     }
 
     /// Load preferences from Supabase
-    private func loadPreferences() async {
-        guard dataProvider.currentUserId != nil else {
+    private func loadPreferences(owner: UUID, generation: Int) async {
+        guard isCurrent(owner, generation) else {
             logger.warning("No user ID, using default preferences")
             return
         }
 
         isLoading = true
-        defer { isLoading = false }
+        defer { if accountId == owner, accountGeneration == generation { isLoading = false } }
 
         do {
             if let prefs = try await dataProvider.fetchAmbientPreferences() {
+                guard isCurrent(owner, generation), prefs.userId == owner else { return }
                 selectedTheme = prefs.activeTheme
                 backgroundType = prefs.backgroundType
                 isAutoAdjustEnabled = prefs.autoAdjustEnabled
@@ -199,6 +227,7 @@ final class AmbientThemeService: ObservableObject {
                 logger.info("No existing preferences, using defaults")
             }
         } catch {
+            guard isCurrent(owner, generation) else { return }
             logger.error("Failed to load ambient preferences: \(error.localizedDescription)")
             // Continue with defaults on error - user can still use the app with defaults
         }
@@ -207,19 +236,21 @@ final class AmbientThemeService: ObservableObject {
     /// Save preferences to Supabase with debouncing
     private func debouncedSave() {
         saveTask?.cancel()
+        guard let owner = accountId, dataProvider.currentUserId == owner else { return }
+        let generation = accountGeneration
 
         saveTask = Task {
             try await Task.sleep(nanoseconds: UInt64(saveDebounceInterval * 1_000_000_000))
 
-            guard !Task.isCancelled else { return }
+            guard isCurrent(owner, generation) else { return }
 
-            await savePreferences()
+            await savePreferences(owner: owner, generation: generation)
         }
     }
 
     /// Save current preferences to Supabase
-    private func savePreferences() async {
-        guard let userId = dataProvider.currentUserId else {
+    private func savePreferences(owner userId: UUID, generation: Int) async {
+        guard isCurrent(userId, generation) else {
             logger.warning("Cannot save preferences: no user ID")
             return
         }
@@ -234,13 +265,15 @@ final class AmbientThemeService: ObservableObject {
         )
 
         do {
-            try await saveWithRetry(prefs)
+            try await saveWithRetry(prefs, generation: generation)
+            guard isCurrent(userId, generation) else { return }
             consecutiveSaveFailures = 0
             logger.info("Saved ambient preferences successfully")
             errorMessage = nil
         } catch {
+            guard isCurrent(userId, generation) else { return }
             consecutiveSaveFailures += 1
-            logger.error("Failed to save ambient preferences (attempt \(consecutiveSaveFailures)): \(error.localizedDescription)")
+            logger.error("Failed to save ambient preferences (attempt \(self.consecutiveSaveFailures)): \(error.localizedDescription)")
 
             // Surface error after multiple consecutive failures
             if consecutiveSaveFailures >= maxConsecutiveFailuresBeforeAlert {
@@ -254,11 +287,12 @@ final class AmbientThemeService: ObservableObject {
     ///   - prefs: The preferences to save
     ///   - maxAttempts: Maximum retry attempts (default: 3)
     /// - Throws: The last error if all attempts fail
-    private func saveWithRetry(_ prefs: AmbientPreferences, maxAttempts: Int = 3) async throws {
+    private func saveWithRetry(_ prefs: AmbientPreferences, generation: Int, maxAttempts: Int = 3) async throws {
         var attempts = 0
         var lastError: Error?
 
         while attempts < maxAttempts {
+            guard isCurrent(prefs.userId, generation) else { throw CancellationError() }
             do {
                 try await dataProvider.upsertAmbientPreferences(prefs)
                 return

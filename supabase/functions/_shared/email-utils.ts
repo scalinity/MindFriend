@@ -307,15 +307,36 @@ async function isEmailTypeEnabled(
   }
 }
 
+// Apple relay state is service-managed app metadata, never editable user metadata.
+async function isAppleRelayEmailDisabled(
+  supabase: any,
+  userId: string,
+  recipientEmail: string,
+): Promise<boolean> {
+  const { data: { user }, error } = await supabase.auth.admin.getUserById(userId);
+  if (error || !user) throw new Error("Unable to verify Apple email delivery state");
+  const metadata = user.app_metadata;
+  return metadata?.apple_email_disabled === true &&
+    typeof metadata.apple_relay_email === "string" &&
+    metadata.apple_relay_email.toLowerCase().endsWith("@privaterelay.appleid.com") &&
+    metadata.apple_relay_email.toLowerCase() === recipientEmail.trim().toLowerCase();
+}
+
 // Check all conditions before sending email
 async function shouldSendEmail(
   supabase: any,
   userId: string,
   emailType: string,
+  recipientEmail: string,
 ): Promise<{
   shouldSend: boolean;
   reason?: string;
 }> {
+  // An unavailable Auth lookup must remain retryable, not become a permanently
+  // skipped queue item. The send handler retains it and returns an error.
+  if (await isAppleRelayEmailDisabled(supabase, userId, recipientEmail)) {
+    return { shouldSend: false, reason: "Apple email forwarding disabled" };
+  }
   try {
     // Check if email is suppressed (bounced/complained)
     const suppressed = await isEmailSuppressed(supabase, userId);
@@ -427,6 +448,7 @@ async function isEmailSuppressed(
 }
 
 export {
+  isAppleRelayEmailDisabled,
   SUPPORTED_TIMEZONES,
   validateTimezone,
   calculateScheduledTime,

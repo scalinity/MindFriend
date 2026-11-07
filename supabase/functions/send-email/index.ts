@@ -109,6 +109,7 @@ Deno.serve(async (req: Request) => {
       supabase,
       qi.user_id,
       qi.email_type,
+      userProfile.email,
     );
 
     if (!shouldSend) {

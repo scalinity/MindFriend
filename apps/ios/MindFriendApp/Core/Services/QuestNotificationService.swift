@@ -124,6 +124,7 @@ final class QuestNotificationService: QuestNotificationServicing {
     }
 
     func scheduleQuestReminder(hour: Int, minute: Int) async throws {
+        try Task.checkCancellation()
         // Validate input
         guard hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59 else {
             throw QuestNotificationError.schedulingFailed(
@@ -135,11 +136,13 @@ final class QuestNotificationService: QuestNotificationServicing {
 
         // Check permission first
         let status = await permissionManager.checkPermissionStatus()
+        try Task.checkCancellation()
 
         if status != .authorized {
             // Request permission if not determined
             if status == .notDetermined {
                 let granted = await permissionManager.requestPermission()
+                try Task.checkCancellation()
                 guard granted else {
                     throw QuestNotificationError.permissionDenied
                 }
@@ -151,6 +154,7 @@ final class QuestNotificationService: QuestNotificationServicing {
 
         // Cancel existing first
         await cancelQuestReminder()
+        try Task.checkCancellation()
 
         // Create notification content
         let content = UNMutableNotificationContent()

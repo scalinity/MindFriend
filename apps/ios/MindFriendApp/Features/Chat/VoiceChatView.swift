@@ -1,6 +1,13 @@
 import SwiftUI
 import Supabase
 
+struct VoiceTranscriptDraft: Codable, Equatable {
+    let ownerId: UUID
+    let conversationId: UUID
+    var title: String?
+    var messages: [VoiceTranscriptMessage]
+}
+
 struct VoiceChatView: View {
     @StateObject private var voiceService: GrokVoiceService
     @Environment(\.dismiss) private var dismiss
@@ -18,6 +25,12 @@ struct VoiceChatView: View {
     @State private var assistantTranscriptBaseline = ""
     @State private var assistantTranscriptInProgress = ""
     @State private var didPersistTranscript = false
+    @State private var transcriptDraft: VoiceTranscriptDraft?
+    @State private var transcriptOwnerId: UUID?
+    @State private var transcriptStorage: SecureStorage?
+    @State private var isSavingTranscript = false
+    @State private var hasEndedSession = false
+    @State private var hasDurableDraft = false
     
     // User message tracking
     @State private var userTranscriptSegments: [String] = []
@@ -29,6 +42,7 @@ struct VoiceChatView: View {
         _voiceService = StateObject(wrappedValue: GrokVoiceService(supabase: supabase))
         _voiceCoordinator = StateObject(wrappedValue: VoiceCoordinator())
         _targetConversationId = State(initialValue: conversationId)
+        _transcriptOwnerId = State(initialValue: supabase.auth.currentUser?.id)
     }
 
     var body: some View {
@@ -71,6 +85,16 @@ struct VoiceChatView: View {
         }
         .alert("Voice Error", isPresented: $showError) {
             Button("OK", role: .cancel) {}
+            if transcriptDraft != nil && !didPersistTranscript {
+                Button("Retry Save") {
+                    Task {
+                        if await endVoiceSession() { dismiss() }
+                    }
+                }
+                if hasDurableDraft {
+                    Button("Close for Now") { dismiss() }
+                }
+            }
             if shouldShowUpgradeButton {
                 Button("Upgrade") {
                     showUpgradeSheet = true
@@ -80,6 +104,7 @@ struct VoiceChatView: View {
             Text(errorMessage ?? "An error occurred")
         }
         .task {
+            guard prepareTranscriptStorage() else { return }
             // Configure coordinator callbacks
             voiceCoordinator.onStateEvent = { event in
                 _ = stateMachine.send(event)
@@ -132,9 +157,12 @@ struct VoiceChatView: View {
         .onDisappear {
             Task { await endVoiceSession() }
         }
+        .interactiveDismissDisabled(isSavingTranscript || (transcriptDraft != nil && !hasDurableDraft && !didPersistTranscript))
         .onChange(of: scenePhase) { _, phase in
             if phase == .background {
-                Task { await endVoiceSession(); dismiss() }
+                Task {
+                    if await endVoiceSession() { dismiss() }
+                }
             }
         }
     }
@@ -338,8 +366,7 @@ struct VoiceChatView: View {
 
             Button {
                 Task {
-                    await endVoiceSession()
-                    dismiss()
+                    if await endVoiceSession() { dismiss() }
                 }
             } label: {
                 Image(systemName: "phone.down.fill")
@@ -353,12 +380,14 @@ struct VoiceChatView: View {
                     .shadow(color: .red.opacity(0.4), radius: 15, x: 0, y: 8)
             }
             .accessibilityLabel("End voice session")
+            .disabled(isSavingTranscript)
         }
     }
 
     // MARK: - Actions
 
     private func startVoiceSession() async {
+        guard !hasEndedSession else { return }
         _ = stateMachine.send(.tapStart)
         _ = stateMachine.send(.micPermissionGranted)
 
@@ -377,13 +406,17 @@ struct VoiceChatView: View {
         }
     }
 
-    private func endVoiceSession() async {
+    @discardableResult
+    private func endVoiceSession() async -> Bool {
+        guard !isSavingTranscript else { return false }
+        isSavingTranscript = true
+        defer { isSavingTranscript = false }
+        hasEndedSession = true
         _ = stateMachine.send(.tapEnd)
         captureUserTranscriptIfNeeded()
         captureAssistantTranscriptIfNeeded()
-        let transcriptText = buildTranscriptText()
         await voiceService.disconnect()
-        await persistTranscriptIfNeeded(transcriptText)
+        return await persistTranscriptIfNeeded()
     }
 
     private func handleOrbTap() {
@@ -465,6 +498,7 @@ struct VoiceChatView: View {
         let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty, assistantTranscriptSegments.last != trimmed {
             assistantTranscriptSegments.append(trimmed)
+            appendTranscript(role: "assistant", content: trimmed)
         }
         assistantTranscriptInProgress = ""
         assistantTranscriptBaseline = ""
@@ -478,7 +512,7 @@ struct VoiceChatView: View {
         // Avoid duplicates - xAI sometimes sends the same transcript multiple times
         if userTranscriptSegments.last != trimmed {
             userTranscriptSegments.append(trimmed)
-            Log.voice.debug("[VoiceChatView] Captured user message: \(trimmed.prefix(50))...")
+            appendTranscript(role: "user", content: trimmed)
         }
     }
 
@@ -516,73 +550,98 @@ struct VoiceChatView: View {
         }
     }
 
-    private func buildTranscriptText() -> String {
-        var segments = assistantTranscriptSegments
-        let pending = trimmedTranscript(from: assistantTranscriptInProgress, baseline: "")
-        if !pending.isEmpty, segments.last != pending {
-            segments.append(pending)
+    private func prepareTranscriptStorage() -> Bool {
+        hasEndedSession = true
+        guard let owner = transcriptOwnerId,
+              container.supabaseClient.auth.currentUser?.id == owner else {
+            errorMessage = "Sign in again before starting voice chat."
+            showError = true
+            return false
         }
-        let cleaned = segments
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        guard !cleaned.isEmpty else { return "" }
-        if cleaned.count == 1 {
-            return cleaned[0]
+        let key = "voice-transcript.\(owner.uuidString.lowercased())"
+        let storage = SecureStorage(keyIdentifier: key)
+        transcriptStorage = storage
+        do {
+            if let draft = try storage.retrieve(forKey: key, as: VoiceTranscriptDraft.self) {
+                guard draft.ownerId == owner else {
+                    throw SecureStorage.SecureStorageError.invalidData
+                }
+                transcriptDraft = draft
+                targetConversationId = draft.conversationId.uuidString
+                hasDurableDraft = true
+                hasEndedSession = true
+                errorMessage = "A previous voice transcript is saved on this device. Retry saving it to your conversation before starting another session."
+                showError = true
+                return false
+            }
+            hasEndedSession = false
+            return true
+        } catch {
+            errorMessage = "Couldn't open your saved voice transcript. Please try again."
+            showError = true
+            return false
         }
-        let body = cleaned.joined(separator: "\n\n")
-        return "Voice session transcript:\n\n\(body)"
     }
 
-    private func persistTranscriptIfNeeded(_ transcriptText: String) async {
-        guard !didPersistTranscript else { return }
-        didPersistTranscript = true
-        
-        // Need at least one message to persist
-        guard !userTranscriptSegments.isEmpty || !assistantTranscriptSegments.isEmpty else { return }
+    private func appendTranscript(role: String, content: String) {
+        guard !didPersistTranscript, let owner = transcriptOwnerId else { return }
+        if transcriptDraft == nil {
+            transcriptDraft = VoiceTranscriptDraft(
+                ownerId: owner,
+                conversationId: targetConversationId.flatMap(UUID.init(uuidString:)) ?? UUID(),
+                title: nil,
+                messages: []
+            )
+        }
+        if transcriptDraft?.title == nil || (role == "user" && userTranscriptSegments.count == 1) {
+            transcriptDraft?.title = String(content.prefix(80))
+        }
+        transcriptDraft?.messages.append(VoiceTranscriptMessage(
+            id: UUID(), role: role, content: content, createdAt: Date()
+        ))
+        checkpointTranscript()
+    }
 
+    private func checkpointTranscript() {
+        guard let draft = transcriptDraft, let storage = transcriptStorage else { return }
         do {
-            if targetConversationId == nil {
-                let conversation = try await container.chatService.createConversation()
-                targetConversationId = conversation.id
-            }
-            guard let conversationId = targetConversationId else { return }
-            
-            // Interleave user and assistant messages (user speaks, then assistant responds)
-            let maxCount = max(userTranscriptSegments.count, assistantTranscriptSegments.count)
-            for i in 0..<maxCount {
-                // User message first (if exists)
-                if i < userTranscriptSegments.count {
-                    _ = try await container.chatService.insertMessage(
-                        conversationId: conversationId,
-                        role: .user,
-                        content: userTranscriptSegments[i]
-                    )
-                }
-                // Then assistant response (if exists)
-                if i < assistantTranscriptSegments.count {
-                    _ = try await container.chatService.insertMessage(
-                        conversationId: conversationId,
-                        role: .assistant,
-                        content: assistantTranscriptSegments[i]
-                    )
-                }
-            }
-
-            // Generate a title from the first user message (or assistant if no user messages)
-            let titleContent = userTranscriptSegments.first ?? assistantTranscriptSegments.first ?? ""
-            if !titleContent.isEmpty {
-                _ = try await container.chatService.generateConversationTitle(
-                    conversationId: conversationId,
-                    content: titleContent
-                )
-            }
-            
-            #if DEBUG
-            print("[VoiceChatView] Persisted conversation \(conversationId) with \(userTranscriptSegments.count) user + \(assistantTranscriptSegments.count) assistant messages")
-            #endif
+            try storage.store(draft, forKey: "voice-transcript.\(draft.ownerId.uuidString.lowercased())")
+            hasDurableDraft = true
         } catch {
-            errorMessage = "Couldn't save transcript. \(error.localizedDescription)"
+            hasDurableDraft = false
+            errorMessage = "Couldn't keep a local copy of this transcript. Keep this screen open and retry saving when connected."
             showError = true
+        }
+    }
+
+    private func persistTranscriptIfNeeded() async -> Bool {
+        if didPersistTranscript { return true }
+        guard let draft = transcriptDraft, !draft.messages.isEmpty else { return true }
+        checkpointTranscript()
+        guard container.supabaseClient.auth.currentUser?.id == draft.ownerId else {
+            errorMessage = "Sign back into the account that started this session to save its transcript."
+            showError = true
+            return false
+        }
+        do {
+            try await container.chatService.saveVoiceTranscript(
+                conversationId: draft.conversationId,
+                title: draft.title,
+                messages: draft.messages
+            )
+            guard container.supabaseClient.auth.currentUser?.id == draft.ownerId,
+                  transcriptDraft == draft else { return false }
+            didPersistTranscript = true
+            targetConversationId = draft.conversationId.uuidString
+            transcriptStorage?.remove(forKey: "voice-transcript.\(draft.ownerId.uuidString.lowercased())")
+            hasDurableDraft = false
+            return true
+        } catch {
+            errorMessage = hasDurableDraft
+                ? "Couldn't save this transcript to your conversation. It is kept on this device; retry now or reopen voice chat later."
+                : "Couldn't save this transcript. Keep this screen open and retry when connected."
+            showError = true
+            return false
         }
     }
 }

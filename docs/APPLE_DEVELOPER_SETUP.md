@@ -204,24 +204,7 @@ base64 -i AuthKey_XYZ1234567.p8 | tr -d '\n' | pbcopy
 
 ### 3.1 Update Development Team
 
-**Option A: Via project.yml (Recommended if using XcodeGen)**
-
-Edit `apps/ios/project.yml`:
-
-```yaml
-settings:
-  base:
-    DEVELOPMENT_TEAM: "ABC1234567" # Replace with your Team ID
-```
-
-Then regenerate:
-
-```bash
-cd apps/ios
-xcodegen generate
-```
-
-**Option B: Via Xcode GUI**
+The checked-in `apps/ios/MindFriendApp.xcodeproj` is the authoritative project, including the app, Watch app, widget extensions, test targets, and Debug/Release configuration-file mappings. Edit it in Xcode; do not regenerate it from a separate specification.
 
 1. Open `apps/ios/MindFriendApp.xcodeproj`
 2. Select MindFriendApp project in navigator
@@ -607,7 +590,7 @@ supabase secrets set APNS_ENVIRONMENT="production"
 **iOS App:**
 
 - `apps/ios/MindFriendApp.xcodeproj` - Xcode project
-- `apps/ios/project.yml` - XcodeGen configuration (if used)
+- `apps/ios/MindFriendApp.xcodeproj` - Authoritative Xcode project and target graph
 - `apps/ios/MindFriendApp/MindFriendApp.entitlements` - Entitlements file
 - `apps/ios/MindFriendApp/Info.plist` - App configuration
 - `apps/ios/MindFriendApp/Core/Services/BillingService.swift` - StoreKit product IDs

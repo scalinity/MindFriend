@@ -4,10 +4,15 @@ import CryptoKit
 
 /// Secure storage service using Keychain for encryption keys and encrypted UserDefaults storage
 final class SecureStorage {
-    private let keychainService = "app.mindfriend.secure-storage"
-    private let keyIdentifier = "encryption-key"
-    private let keychainQueue = DispatchQueue(label: "app.mindfriend.secure-storage.keychain", qos: .userInitiated)
+    private let keychainService: String
+    private let keyIdentifier: String
+    private static let keychainQueue = DispatchQueue(label: "app.mindfriend.secure-storage.keychain", qos: .userInitiated)
     private var cachedKey: SymmetricKey?
+
+    init(keychainService: String = "app.mindfriend.secure-storage", keyIdentifier: String = "encryption-key") {
+        self.keychainService = keychainService
+        self.keyIdentifier = keyIdentifier
+    }
 
     enum SecureStorageError: Error {
         case encryptionFailed
@@ -19,8 +24,8 @@ final class SecureStorage {
     // MARK: - Encryption Key Management
 
     /// Get or create encryption key from Keychain (thread-safe)
-    private func getOrCreateEncryptionKey() throws -> SymmetricKey {
-        try keychainQueue.sync {
+    private func encryptionKey(createIfMissing: Bool) throws -> SymmetricKey {
+        try Self.keychainQueue.sync {
             // Check cache first (fast path)
             if let cached = cachedKey {
                 return cached
@@ -32,7 +37,7 @@ final class SecureStorage {
                 cachedKey = existingKey
                 return existingKey
             } catch SecureStorageError.keychainError(let status) where status == errSecItemNotFound {
-                // Key doesn't exist - this is expected, continue to create
+                guard createIfMissing else { throw SecureStorageError.keychainError(status) }
             } catch {
                 // Unexpected error - log and rethrow
                 #if DEBUG
@@ -85,21 +90,6 @@ final class SecureStorage {
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         ]
 
-        // Delete any existing key first
-        let deleteQuery: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: keyIdentifier
-        ]
-        let deleteStatus = SecItemDelete(deleteQuery as CFDictionary)
-        
-        // Log if delete failed (except item not found, which is OK)
-        if deleteStatus != errSecSuccess && deleteStatus != errSecItemNotFound {
-            #if DEBUG
-            print("Keychain delete warning: \(deleteStatus)")
-            #endif
-        }
-
         let status = SecItemAdd(query as CFDictionary, nil)
         guard status == errSecSuccess else {
             throw SecureStorageError.keychainError(status)
@@ -110,7 +100,7 @@ final class SecureStorage {
 
     /// Encrypt data using AES-GCM
     func encrypt<T: Codable>(_ value: T) throws -> Data {
-        let key = try getOrCreateEncryptionKey()
+        let key = try encryptionKey(createIfMissing: true)
         let jsonData = try JSONEncoder().encode(value)
 
         let sealedBox = try AES.GCM.seal(jsonData, using: key)
@@ -123,7 +113,7 @@ final class SecureStorage {
 
     /// Decrypt data using AES-GCM
     func decrypt<T: Codable>(_ data: Data, as type: T.Type) throws -> T {
-        let key = try getOrCreateEncryptionKey()
+        let key = try encryptionKey(createIfMissing: false)
 
         let sealedBox = try AES.GCM.SealedBox(combined: data)
         let decryptedData = try AES.GCM.open(sealedBox, using: key)
@@ -155,9 +145,14 @@ final class SecureStorage {
 
     // MARK: - Keychain Cleanup
 
-    /// Delete encryption key from Keychain (e.g., on logout)
+    /// Evict decrypted key material without losing retained encrypted records.
+    func clearCachedKey() {
+        Self.keychainQueue.sync { cachedKey = nil }
+    }
+
+    /// Delete only after the corresponding encrypted records have been deliberately deleted.
     func deleteEncryptionKey() throws {
-        try keychainQueue.sync {
+        try Self.keychainQueue.sync {
             cachedKey = nil  // Clear cache
             
             let query: [String: Any] = [

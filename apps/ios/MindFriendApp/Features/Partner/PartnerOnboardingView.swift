@@ -132,7 +132,7 @@ struct PartnerOnboardingView: View {
             }
             .disabled(!viewModel.isCodeInputValid || viewModel.isValidatingCode)
             .accessibilityLabel("Connect with partner")
-            .accessibilityHint(viewModel.isCodeInputValid ? "Enter the 6-character code from your partner" : "Enter a valid 6-character code first")
+            .accessibilityHint(viewModel.isCodeInputValid ? "Enter the 8-character code from your partner" : "Enter a valid 8-character code first")
         }
         .padding(.horizontal, 24)
     }

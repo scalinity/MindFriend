@@ -35,32 +35,34 @@ struct ProgressWidgetProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (ProgressEntry) -> Void) {
-        let store = SharedDataStore.shared
+        let snapshot = SharedDataStore.shared.snapshot()
         let entry = ProgressEntry(
             date: Date(),
-            streak: store.currentStreak,
-            completedActivities: store.todayCompletedActivities,
-            goalActivities: store.todayGoalActivities,
-            currentMood: store.todayMood,
-            weekMoods: store.weekMoods,
+            streak: snapshot?.currentStreak ?? 0,
+            completedActivities: snapshot?.completedActivities ?? 0,
+            goalActivities: snapshot?.goalActivities ?? 3,
+            currentMood: snapshot?.todayMood,
+            weekMoods: snapshot?.weekMoods ?? [],
             isPlaceholder: false
         )
         completion(entry)
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<ProgressEntry>) -> Void) {
-        let store = SharedDataStore.shared
+        let snapshot = SharedDataStore.shared.snapshot()
         let entry = ProgressEntry(
             date: Date(),
-            streak: store.currentStreak,
-            completedActivities: store.todayCompletedActivities,
-            goalActivities: store.todayGoalActivities,
-            currentMood: store.todayMood,
-            weekMoods: store.weekMoods,
+            streak: snapshot?.currentStreak ?? 0,
+            completedActivities: snapshot?.completedActivities ?? 0,
+            goalActivities: snapshot?.goalActivities ?? 3,
+            currentMood: snapshot?.todayMood,
+            weekMoods: snapshot?.weekMoods ?? [],
             isPlaceholder: false
         )
 
-        let nextUpdate = Calendar.current.date(byAdding: .minute, value: 30, to: Date()) ?? Date()
+        let scheduledUpdate = Calendar.current.date(byAdding: .minute, value: 30, to: Date()) ?? Date()
+        let midnight = Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: Date())) ?? scheduledUpdate
+        let nextUpdate = min(scheduledUpdate, midnight)
         let timeline = Timeline(entries: [entry], policy: .after(nextUpdate))
         completion(timeline)
     }

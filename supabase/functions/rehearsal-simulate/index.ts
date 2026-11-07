@@ -1,3 +1,4 @@
+import { refreshPremiumAccess } from "../_shared/entitlement.ts";
 // MindFriend Conversation Rehearsal Edge Function
 // Handles scenario creation, AI role-play simulation, and communication feedback
 
@@ -549,13 +550,8 @@ async function handleStartSession(
   // Check if premium scenario and user has entitlement
   // Type narrowing: is_premium only exists on PrebuiltScenario (scenarioId case)
   if (scenarioId && "is_premium" in scenario && scenario.is_premium) {
-    const { data: profile } = await supabaseUser
-      .from("profiles")
-      .select("subscription_tier")
-      .eq("id", userId)
-      .single();
-
-    if (profile?.subscription_tier !== "premium") {
+    const isPremium = await refreshPremiumAccess(supabaseAdmin, userId);
+    if (!isPremium) {
       return {
         error: "premium_required",
         message: "This scenario requires a premium subscription",
@@ -786,7 +782,7 @@ async function handleSendMessage(
 
   // NOW check exchange limit (after crisis safety check)
   const transcript = session.transcript || [];
-  const subscriptionTier = await getProfileSubscriptionTier(supabaseUser, userId);
+  const subscriptionTier = (await refreshPremiumAccess(supabaseAdmin, userId)) ? "premium" : "free";
   
   // Parse transcript to check actual exchange count (not string length)
   const transcriptArray = parseTranscript(session.transcript);
@@ -1348,21 +1344,6 @@ async function logCrisisEvent(
     console.error("Crisis event insertion error:", crisisLogError);
     return { success: false, error: String(crisisLogError) };
   }
-}
-
-// FIX P1: Extract duplicated profile query into helper function
-// Subscription tier check is repeated in multiple handlers
-async function getProfileSubscriptionTier(
-  supabaseUser: UntypedSupabaseClient,
-  userId: string,
-): Promise<string | undefined> {
-  const { data: profile } = await supabaseUser
-    .from("profiles")
-    .select("subscription_tier")
-    .eq("id", userId)
-    .single();
-
-  return profile?.subscription_tier;
 }
 
 // Add response data types for handlers

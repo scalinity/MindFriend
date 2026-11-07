@@ -120,17 +120,17 @@ struct Habit: Identifiable, Codable {
 
 // MARK: - Habit Completion Model
 
-/// YYYY-MM-DD formatter used for PostgreSQL DATE columns. Fixed to UTC and
-/// POSIX locale so the serialized day doesn't shift under device timezone/locale.
+/// PostgreSQL DATE values describe the local calendar day, not a UTC instant.
+/// Recreate the formatter so a device time-zone change also applies to later reads.
 enum HabitDateFormatter {
-    static let dayOnly: DateFormatter = {
+    static var dayOnly: DateFormatter {
         let f = DateFormatter()
         f.calendar = Calendar(identifier: .gregorian)
         f.locale = Locale(identifier: "en_US_POSIX")
-        f.timeZone = TimeZone(identifier: "UTC")
+        f.timeZone = NSTimeZone.default
         f.dateFormat = "yyyy-MM-dd"
         return f
-    }()
+    }
 }
 
 struct HabitCompletion: Identifiable, Codable {

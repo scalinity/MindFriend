@@ -99,6 +99,17 @@ Deno.serve(async (req) => {
       );
     } catch (error) {
       if (!(error instanceof TransactionVerificationError)) throw error;
+      if (error.revokedTransaction) {
+        // The verifier attaches these IDs only after signature and account-token
+        // validation. The RPC requires this owner's exact stored transaction and
+        // cannot cancel a newer renewal or another account's purchase.
+        const { error: revokeError } = await supabaseAdmin.rpc("revoke_verified_apple_transaction", {
+          p_user_id: user.id,
+          p_original_transaction_id: error.revokedTransaction.originalTransactionId,
+          p_transaction_id: error.revokedTransaction.transactionId,
+        });
+        if (revokeError) throw new Error("Purchase revocation could not be saved");
+      }
       log.warn("Transaction verification rejected", { code: error.code });
       return new Response(
         JSON.stringify({

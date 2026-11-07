@@ -175,6 +175,9 @@ struct MoodSlider: View {
                         .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("\(label), \(moods[index - 1].label)")
+                    .accessibilityValue("\(index) of 5")
+                    .accessibilityAddTraits(value == index ? .isSelected : [])
                 }
             }
 
@@ -230,6 +233,9 @@ struct EnergySlider: View {
                         .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Energy, \(levels[index - 1].label)")
+                    .accessibilityValue("\(index) of 5")
+                    .accessibilityAddTraits(value == index ? .isSelected : [])
                 }
             }
 

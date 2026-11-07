@@ -76,15 +76,19 @@ final class SupabaseAuthService: ObservableObject {
     @Published var requiresPasswordReset = false
     @Published private(set) var currentUser: User?
     @Published private(set) var session: Session?
+    @Published private(set) var signOutWarning: String?
 
     // MARK: - Dependencies
     private let secureStorage: SecureStorage
     // ✅ ARCHITECTURE FIX: Remove PathwayCacheService dependency (breaks circular reference)
     // Use closure injection instead
     private var onLogoutHandler: (() -> Void)?
+    private var onAccountChangeHandler: ((UUID?) -> Void)?
+    private var beforeSignOutHandler: ((UUID) async -> Void)?
     private let authStorage = AuthClient.Configuration.defaultLocalStorage
     private let recoveryIntentKey = "com.mindfriend.passwordRecoveryIntent"
     private var logoutCleanupTask: Task<Void, Never>?
+    private var signOutTask: Task<Void, Error>?
     private var handledSignOutEvents = 0
 
     // MARK: - Caching Keys
@@ -124,6 +128,19 @@ final class SupabaseAuthService: ObservableObject {
         self.onLogoutHandler = handler
     }
 
+    func setAccountChangeHandler(_ handler: @escaping (UUID?) -> Void) {
+        onAccountChangeHandler = handler
+    }
+
+    func setBeforeSignOutHandler(_ handler: @escaping (UUID) async -> Void) {
+        beforeSignOutHandler = handler
+    }
+
+    private func waitForLogout() async {
+        _ = try? await signOutTask?.value
+        await logoutCleanupTask?.value
+    }
+
     // MARK: - Auth State Listener
 
     /// Listen for auth state changes from Supabase
@@ -147,6 +164,7 @@ final class SupabaseAuthService: ObservableObject {
                     continue
                 }
             } else {
+                if currentUser != nil { onAccountChangeHandler?(nil) }
                 self.session = nil
                 self.currentUser = nil
             }
@@ -189,7 +207,7 @@ final class SupabaseAuthService: ObservableObject {
 
     /// Restore existing session on app launch (optimized - skips network refresh if token still valid)
     func restoreSession() async -> Bool {
-        await logoutCleanupTask?.value
+        await waitForLogout()
         do {
             let currentSession = try await supabase.auth.session
             try applyValidatedSession(currentSession)
@@ -208,6 +226,7 @@ final class SupabaseAuthService: ObservableObject {
                     // Token might still work for a bit, don't clear immediately
                     // Only clear if it's actually expired
                     if isTokenExpired(currentSession) {
+                        onAccountChangeHandler?(nil)
                         session = nil
                         currentUser = nil
                         clearCachedAuthState()
@@ -227,6 +246,7 @@ final class SupabaseAuthService: ObservableObject {
             return true
         } catch {
             Log.auth.debug("No existing session: \(error.localizedDescription)")
+            if currentUser != nil { onAccountChangeHandler?(nil) }
             session = nil
             currentUser = nil
             clearCachedAuthState()
@@ -247,12 +267,16 @@ final class SupabaseAuthService: ObservableObject {
     private func applyValidatedSession(_ candidate: Session) throws {
         // A delayed event for another account must not clear a newer session.
         guard let stored = supabase.auth.currentSession else {
+            if currentUser != nil { onAccountChangeHandler?(nil) }
             session = nil
             currentUser = nil
             clearCachedAuthState()
             throw AuthError.sessionUnavailable
         }
         let validated = try Self.validatedSession(stored, expectedUserId: candidate.user.id)
+        if currentUser?.id != validated.user.id {
+            onAccountChangeHandler?(validated.user.id)
+        }
         session = validated
         currentUser = validated.user
     }
@@ -289,7 +313,7 @@ final class SupabaseAuthService: ObservableObject {
     }
 
     func handleAuthCallback(_ url: URL) async throws -> UserProfile {
-        await logoutCleanupTask?.value
+        await waitForLogout()
         guard url.scheme == SupabaseConfig.redirectURL.scheme,
               url.host == SupabaseConfig.redirectURL.host,
               url.path == SupabaseConfig.redirectURL.path else { throw AuthError.invalidCredentials }
@@ -337,7 +361,7 @@ final class SupabaseAuthService: ObservableObject {
         fullName: PersonNameComponents?,
         email: String?
     ) async throws -> UserProfile {
-        await logoutCleanupTask?.value
+        await waitForLogout()
         guard let tokenString = String(data: identityToken, encoding: .utf8) else {
             throw AuthError.invalidCredentials
         }
@@ -389,7 +413,7 @@ final class SupabaseAuthService: ObservableObject {
     // MARK: - Google Sign-In
 
     func signInWithGoogle(idToken: String, accessToken: String) async throws -> UserProfile {
-        await logoutCleanupTask?.value
+        await waitForLogout()
         isSigningIn = true
         defer { isSigningIn = false }
 
@@ -426,7 +450,7 @@ final class SupabaseAuthService: ObservableObject {
     // MARK: - Email/Password Sign Up
 
     func signUp(email: String, password: String, displayName: String?) async throws -> UserProfile {
-        await logoutCleanupTask?.value
+        await waitForLogout()
         guard !isSigningIn else { throw AuthError.unknown("An authentication request is already in progress.") }
         isSigningIn = true
         defer { isSigningIn = false }
@@ -467,7 +491,7 @@ final class SupabaseAuthService: ObservableObject {
     // MARK: - Email/Password Sign In
 
     func signIn(email: String, password: String) async throws -> UserProfile {
-        await logoutCleanupTask?.value
+        await waitForLogout()
         isSigningIn = true
         defer { isSigningIn = false }
 
@@ -513,7 +537,7 @@ final class SupabaseAuthService: ObservableObject {
     // MARK: - Password Reset
 
     func resetPassword(email: String) async throws {
-        await logoutCleanupTask?.value
+        await waitForLogout()
         guard !isSigningIn else { throw AuthError.unknown("An authentication request is already in progress.") }
         isSigningIn = true
         defer { isSigningIn = false }
@@ -528,28 +552,65 @@ final class SupabaseAuthService: ObservableObject {
     // MARK: - Sign Out
 
     func signOut() async throws {
+        if let signOutTask { return try await signOutTask.value }
+        let task = Task { try await performSignOut() }
+        signOutTask = task
+        defer { signOutTask = nil }
+        try await task.value
+    }
+
+    private func performSignOut() async throws {
         isLoading = true
         defer { isLoading = false }
-        
-        // Store userId before clearing session for offline cleanup
-        let userIdForCleanup = currentUser?.id.uuidString ?? session?.user.id.uuidString
-        let expectsSDKSignOutEvent = supabase.auth.currentSession != nil
-
-        do {
-            try await supabase.auth.signOut()
-            if currentUser != nil || logoutCleanupTask == nil {
-                // The SDK event can be delivered after signOut returns and another login starts.
-                if expectsSDKSignOutEvent { handledSignOutEvents += 1 }
+        signOutWarning = nil
+        let departingOwner = currentUser?.id ?? session?.user.id
+        let userIdForCleanup = departingOwner?.uuidString
+        if let departingOwner { await beforeSignOutHandler?(departingOwner) }
+        // Consume exactly the event produced by this explicit operation. Cleanup below
+        // is awaited even if remote revocation fails after the SDK removes its session.
+        if supabase.auth.currentSession != nil { handledSignOutEvents += 1 }
+        let remoteFailed = try await Self.finishLogout(
+            revokeRemote: { try await supabase.auth.signOut() },
+            removeLocalCredentials: { try self.removeLocalSDKSession() },
+            cleanup: {
                 clearLocalAuthState(userId: userIdForCleanup)
+                await logoutCleanupTask?.value
             }
-            await logoutCleanupTask?.value
-        } catch {
-            throw AuthError.signOutFailed(error.localizedDescription)
+        )
+        if remoteFailed {
+            signOutWarning = "Signed out on this device. The server could not confirm sign-out on other devices."
+            Log.auth.warning("Local sign-out completed; remote revocation was unavailable")
+        }
+    }
+
+    /// Keep remote revocation failure separate from the local logout guarantee.
+    static func finishLogout(
+        revokeRemote: () async throws -> Void,
+        removeLocalCredentials: () throws -> Void,
+        cleanup: () async -> Void
+    ) async throws -> Bool {
+        var remoteFailed = false
+        do { try await revokeRemote() } catch { remoteFailed = true }
+        try removeLocalCredentials()
+        await cleanup()
+        return remoteFailed
+    }
+
+    private func removeLocalSDKSession() throws {
+        // The SDK logs storage-delete failures rather than throwing them. Remove and
+        // verify its configured default keys before presenting a successful logout.
+        let project = SupabaseConfig.projectURL.host!.split(separator: ".")[0]
+        try authStorage.remove(key: "sb-\(project)-auth-token")
+        try authStorage.remove(key: "supabase.session")
+        try authStorage.remove(key: pkceVerifierKey)
+        guard supabase.auth.currentSession == nil else {
+            throw AuthError.signOutFailed("Unable to remove this device's saved session. Please try again.")
         }
     }
 
     private func clearLocalAuthState(userId: String?) {
         if userId == nil, currentUser == nil, session == nil, logoutCleanupTask != nil { return }
+        onAccountChangeHandler?(nil)
         session = nil
         currentUser = nil
         requiresPasswordReset = false
@@ -561,11 +622,9 @@ final class SupabaseAuthService: ObservableObject {
         // Clear process caches synchronously, before another account can sign in.
         onLogoutHandler?()
         try? authStorage.remove(key: recoveryIntentKey)
-        do {
-            try secureStorage.deleteEncryptionKey()
-        } catch {
-            Log.auth.warning("Failed to clear secure storage on logout: \(error.localizedDescription)")
-        }
+        // The legacy key also protects persisted pathway journals. Logout may evict
+        // plaintext/key caches, but must not destroy the only key for retained data.
+        secureStorage.clearCachedKey()
         let previousCleanup = logoutCleanupTask
         logoutCleanupTask = Task { @MainActor in
             await previousCleanup?.value
@@ -746,6 +805,15 @@ final class SupabaseAuthService: ObservableObject {
         }
     }
 
+    nonisolated static func normalizedHandle(_ handle: String) throws -> String {
+        let normalizedHandle = handle.lowercased().trimmingCharacters(in: .whitespaces)
+        let handleRegex = /^[a-z0-9_]{3,30}$/
+        guard normalizedHandle.wholeMatch(of: handleRegex) != nil else {
+            throw AuthError.invalidHandle
+        }
+        return normalizedHandle
+    }
+
     func updateProfile(displayName: String? = nil, handle: String? = nil, timezone: String? = nil) async throws {
         guard let userId = userId else { return }
 
@@ -758,14 +826,7 @@ final class SupabaseAuthService: ObservableObject {
         }
 
         if let handle = handle {
-            // Normalize handle: lowercase, trimmed
-            let normalizedHandle = handle.lowercased().trimmingCharacters(in: .whitespaces)
-
-            // Validate handle format (letters, numbers, underscores only)
-            let handleRegex = /^[a-z0-9_]{3,30}$/
-            guard normalizedHandle.wholeMatch(of: handleRegex) != nil else {
-                throw AuthError.invalidHandle
-            }
+            let normalizedHandle = try Self.normalizedHandle(handle)
 
             // Check if handle is available
             let isAvailable = try await isHandleAvailable(normalizedHandle, excludingUserId: userId)
@@ -831,7 +892,7 @@ final class SupabaseAuthService: ObservableObject {
     // MARK: - Account Management
 
     func deleteAccount() async throws {
-        guard userId != nil else {
+        guard let departingOwner = userId else {
             throw AuthError.userNotFound
         }
 
@@ -852,12 +913,24 @@ final class SupabaseAuthService: ObservableObject {
             if let error = response.error {
                 throw AuthError.unknown(error)
             }
+            guard response.success == true else {
+                throw AuthError.unknown("The server did not confirm account deletion.")
+            }
 
-            // Clear local state
-            session = nil
-            currentUser = nil
-            CrashReporter.shared.clearUser()
-            Analytics.shared.reset()
+            // Server deletion is confirmed. Remove only keys and drafts owned by this
+            // account; the shared legacy journal key may still protect another account.
+            let ownerKey = departingOwner.uuidString.lowercased()
+            var retainedKeyError: Error?
+            for key in ["pathway.\(ownerKey)", "voice-transcript.\(ownerKey)"] {
+                do { try SecureStorage(keyIdentifier: key).deleteEncryptionKey() }
+                catch { retainedKeyError = error }
+            }
+            UserDefaults.standard.removeObject(forKey: "voice-transcript.\(ownerKey)")
+            try await signOut()
+            signOutWarning = nil
+            if retainedKeyError != nil {
+                throw AuthError.unknown("Your account was deleted and signed out, but a local encryption key could not be removed.")
+            }
 
             Log.auth.info("Account deleted successfully")
         } catch {

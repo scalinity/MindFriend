@@ -32,6 +32,7 @@ final class MentorshipProfileService: ObservableObject {
         do {
             profile = try await dataService.fetchOrCreateProfile()
         } catch {
+            if error is CancellationError { return }
             self.error = error
         }
 
@@ -50,6 +51,7 @@ final class MentorshipProfileService: ObservableObject {
                 profile = currentProfile
             }
         } catch {
+            if error is CancellationError { return }
             self.error = error
         }
 
@@ -64,6 +66,7 @@ final class MentorshipProfileService: ObservableObject {
         do {
             profile = try await dataService.updateProfile(expertiseAreas: areas)
         } catch {
+            if error is CancellationError { return }
             self.error = error
         }
 
@@ -78,6 +81,7 @@ final class MentorshipProfileService: ObservableObject {
         do {
             profile = try await dataService.updateProfile(seekingAreas: areas)
         } catch {
+            if error is CancellationError { return }
             self.error = error
         }
 
@@ -92,6 +96,7 @@ final class MentorshipProfileService: ObservableObject {
         do {
             profile = try await dataService.updateProfile(bio: bio)
         } catch {
+            if error is CancellationError { return }
             self.error = error
         }
 
@@ -106,6 +111,7 @@ final class MentorshipProfileService: ObservableObject {
         do {
             profile = try await dataService.updateProfile(availabilityHoursWeek: hours)
         } catch {
+            if error is CancellationError { return }
             self.error = error
         }
 
@@ -120,6 +126,7 @@ final class MentorshipProfileService: ObservableObject {
         do {
             profile = try await dataService.updateProfile(languages: languages)
         } catch {
+            if error is CancellationError { return }
             self.error = error
         }
 
@@ -148,6 +155,7 @@ final class MentorshipProfileService: ObservableObject {
                 languages: languages
             )
         } catch {
+            if error is CancellationError { return }
             self.error = error
         }
 

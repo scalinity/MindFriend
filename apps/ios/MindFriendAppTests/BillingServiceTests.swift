@@ -6,6 +6,15 @@ import XCTest
 @MainActor
 final class BillingServiceTests: XCTestCase {
 
+    func testFamilyAdminIdentityUsesUUIDSemantics() {
+        let owner = UUID(uuidString: "ABCDEFAB-1234-4234-8234-1234567890AB")!
+        XCTAssertTrue(BillingService.isFamilyAdmin(adminUserId: owner.uuidString.lowercased(), userId: owner))
+        XCTAssertTrue(BillingService.isFamilyAdmin(adminUserId: owner.uuidString, userId: owner))
+        XCTAssertFalse(BillingService.isFamilyAdmin(adminUserId: UUID().uuidString, userId: owner))
+        XCTAssertFalse(BillingService.isFamilyAdmin(adminUserId: "invalid", userId: owner))
+        XCTAssertFalse(BillingService.isFamilyAdmin(adminUserId: nil, userId: nil))
+    }
+
     // MARK: - Product ID Mapping Tests
 
     func testProductPlanTypeMappingIndividual() {
@@ -110,7 +119,8 @@ final class BillingServiceTests: XCTestCase {
     }
 
     func testGenerateDisplayCodeExcludesConfusingChars() {
-        let confusingChars = "O01IL"
+        // The canonical server alphabet includes uppercase L.
+        let confusingChars = "O01I"
 
         // Generate 100 codes and check none contain confusing characters
         for _ in 0..<100 {
@@ -270,6 +280,12 @@ final class BillingServiceTests: XCTestCase {
     }
 
     // MARK: - Spec 15: HSA/FSA Receipt Tests
+
+    func testHSAReceiptRequestUsesEndpointSubscriptionKey() throws {
+        let request = BillingService.GenerateReceiptRequest(subscriptionId: "synthetic-subscription")
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: String])
+        XCTAssertEqual(body, ["subscriptionId": "synthetic-subscription"])
+    }
 
     func testGenerateHSAReceiptSuccess() async throws {
         // Test successful HSA receipt generation

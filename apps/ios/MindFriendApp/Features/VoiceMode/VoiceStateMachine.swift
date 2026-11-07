@@ -248,6 +248,7 @@ struct VoiceStateMachine {
     private(set) var isMuted: Bool
     private(set) var captionsEnabled: Bool
     private(set) var selectedVoiceId: String?
+    private var bargeInStartedWithSpeech = false
 
     // MARK: - Initialization
 
@@ -388,9 +389,11 @@ struct VoiceStateMachine {
 
         case (.thinking, .speechStart):
             // Barge-in while thinking
+            bargeInStartedWithSpeech = true
             state = .bargeIn
 
         case (.thinking, .tapInterrupt):
+            bargeInStartedWithSpeech = false
             state = .bargeIn
 
         case (.thinking, .disconnected):
@@ -408,9 +411,11 @@ struct VoiceStateMachine {
             state = .ready
 
         case (.processing, .speechStart):
+            bargeInStartedWithSpeech = true
             state = .bargeIn
 
         case (.processing, .tapInterrupt):
+            bargeInStartedWithSpeech = false
             state = .bargeIn
 
         case (.processing, .disconnected):
@@ -420,9 +425,11 @@ struct VoiceStateMachine {
 
         case (.speaking, .speechStart):
             // Barge-in: user started speaking while AI is speaking
+            bargeInStartedWithSpeech = true
             state = .bargeIn
 
         case (.speaking, .tapInterrupt):
+            bargeInStartedWithSpeech = false
             state = .bargeIn
 
         case (.speaking, .audioPlaybackFinished):
@@ -447,8 +454,8 @@ struct VoiceStateMachine {
         // MARK: - Barge-In State Transitions
 
         case (.bargeIn, .audioPlaybackFinished):
-            // Playback stopped, check if user is speaking
-            state = .listening
+            // Stopping playback must preserve speech already observed; a tap alone has no utterance.
+            state = bargeInStartedWithSpeech ? .userSpeaking : .listening
 
         case (.bargeIn, .speechStart):
             // User started/is speaking during barge-in
@@ -459,8 +466,8 @@ struct VoiceStateMachine {
             state = .endOfUtterance
 
         case (.bargeIn, .serverResponseDone):
-            // Previous response cancelled, ready to listen
-            state = .listening
+            // Cancellation completes the previous response, not the user's interruption.
+            state = bargeInStartedWithSpeech ? .userSpeaking : .listening
 
         case (.bargeIn, .disconnected):
             state = .reconnecting
@@ -585,6 +592,7 @@ struct VoiceStateMachine {
     mutating func reset() {
         state = .idle
         isMuted = false
+        bargeInStartedWithSpeech = false
     }
 
     /// Check if a specific event would cause a state transition

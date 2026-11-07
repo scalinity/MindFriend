@@ -13,8 +13,16 @@ final class ChatService: ObservableObject {
         try await dataService.createConversation(title: title)
     }
 
+    func saveVoiceTranscript(conversationId: UUID, title: String?, messages: [VoiceTranscriptMessage]) async throws {
+        try await dataService.saveVoiceTranscript(conversationId: conversationId, title: title, messages: messages)
+    }
+
     func getConversations() async throws -> [Conversation] {
         try await dataService.getConversations()
+    }
+
+    func getConversationPage(before cursor: ChatHistoryCursor? = nil) async throws -> ChatHistoryPage<Conversation> {
+        try await dataService.getConversationPage(before: cursor)
     }
 
     func deleteConversation(id: String) async throws {
@@ -23,6 +31,10 @@ final class ChatService: ObservableObject {
 
     func getMessages(conversationId: String, limit: Int = 50) async throws -> [Message] {
         try await dataService.getMessages(conversationId: conversationId, limit: limit)
+    }
+
+    func getMessagePage(conversationId: String, before cursor: ChatHistoryCursor? = nil) async throws -> ChatHistoryPage<Message> {
+        try await dataService.getMessagePage(conversationId: conversationId, before: cursor)
     }
 
     /// Send a message and get AI response via Edge Function

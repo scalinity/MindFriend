@@ -396,11 +396,11 @@ struct MentorshipMatchDetailsView: View {
     private func statusColor(_ status: MentorshipStatus) -> Color {
         switch status {
         case .pending: return .orange
-        case .active: return .green
+        case .active, .accepted: return .green
         case .completed: return .blue
-        case .cancelled: return .gray
+        case .cancelled, .declined: return .gray
         case .ended: return .gray
-        case .expired: return .red
+        case .expired, .suspended: return .red
         }
     }
 

@@ -15,29 +15,31 @@ struct GoalSettingView: View {
     @State private var isSaving = false
     @State private var showingConfirmation = false
     
+    var assessmentType: AssessmentType? { AssessmentType(rawValue: template.code) }
     var baselineScore: Int { response.totalScore }
     var maxScore: Int { AssessmentType(rawValue: template.code)?.maxScore ?? 27 }
     var recommendedTargetScore: Int {
-        let reduction = max(1, Int(Double(baselineScore) * 0.25)) // 25% reduction target
-        return max(0, baselineScore - reduction)
+        assessmentType?.suggestedTargetScore(from: baselineScore) ?? baselineScore
     }
     
     var selectedTargetScore: Int {
-        if let custom = Int(customTargetScore), custom > 0 {
+        if let custom = Int(customTargetScore) {
             return custom
         }
         return recommendedTargetScore
     }
     
     var scoreImprovement: Int {
-        baselineScore - selectedTargetScore
+        assessmentType?.improvement(from: baselineScore, to: selectedTargetScore) ?? 0
     }
     
-    var scoreImprovementPercentage: Double {
-        guard baselineScore > 0 else { return 0 }
-        return Double(scoreImprovement) / Double(baselineScore) * 100
+    var isValidTarget: Bool {
+        guard response.availableScore != nil, let assessmentType,
+              customTargetScore.isEmpty || Int(customTargetScore) != nil else { return false }
+        return (0...maxScore).contains(selectedTargetScore)
+            && assessmentType.improvement(from: baselineScore, to: selectedTargetScore) >= 0
     }
-    
+
     var body: some View {
         ZStack {
             // Background
@@ -144,7 +146,7 @@ struct GoalSettingView: View {
                                                 .foregroundColor(.gray)
                                         }
 
-                                        Text("\(scoreImprovement) point reduction (~\(Int(scoreImprovementPercentage))%)")
+                                        Text("\(scoreImprovement) point \(assessmentType?.higherScoresAreBetter == true ? "increase" : "reduction")")
                                             .font(.system(size: 12, weight: .regular, design: .default))
                                             .foregroundColor(.gray)
                                     }
@@ -297,7 +299,7 @@ struct GoalSettingView: View {
                                 )
                         }
                     }
-                    .disabled(isSaving)
+                    .disabled(isSaving || !isValidTarget)
                     
                     Button(action: {
                         isPresented = false
@@ -332,6 +334,7 @@ struct GoalSettingView: View {
     }
     
     private func saveGoal() {
+        guard isValidTarget, !isSaving else { return }
         isSaving = true
         Task {
             defer { isSaving = false }
@@ -343,7 +346,8 @@ struct GoalSettingView: View {
                     baselineScore: baselineScore,
                     targetScore: selectedTargetScore,
                     targetDate: targetDate,
-                    notes: notes.isEmpty ? nil : notes
+                    notes: notes.isEmpty ? nil : notes,
+                    baselineResponseId: response.id
                 )
                 
                 // Close the sheet on success

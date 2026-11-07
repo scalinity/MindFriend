@@ -142,7 +142,8 @@ final class AccessibilityService: ObservableObject {
         let bundle: LocalizedStringBundle = try await supabase.functions
             .invoke(
                 "get-localized-strings",
-                options: FunctionInvokeOptions(body: data)
+                options: FunctionInvokeOptions(body: data),
+                decoder: .supabaseDecoder
             )
 
         cachedStrings[cacheKey] = bundle

@@ -62,6 +62,8 @@ function state() {
     quota: "allowed" as "allowed" | "denied" | "error" | "malformed",
     quotaArray: true,
     premium: false,
+    staleProfilePremium: false,
+    entitlementUnavailable: false,
     language: "en",
     sponsored: false,
     invalidNegativeQuota: false,
@@ -251,8 +253,9 @@ Deno.test("issue 15: offline admission, durable explicit retry and legacy chat c
           reset_at: s.rateReset,
         }]);
       }
-      if (name === "refresh_sponsored_entitlement") {
-        return Response.json(s.sponsored);
+      if (name === "refresh_user_entitlement") {
+        if (s.entitlementUnavailable) return dbError();
+        return Response.json(s.premium || s.sponsored);
       }
       if (name === "check_and_increment_ai_quota") {
         s.quotaCalls++;
@@ -307,7 +310,7 @@ Deno.test("issue 15: offline admission, durable explicit retry and legacy chat c
     }
     if (table === "profiles") {
       return Response.json({
-        subscription_tier: s.premium ? "premium" : "free",
+        subscription_tier: s.premium || s.staleProfilePremium ? "premium" : "free",
         preferred_language: s.language,
         last_absence_days: null,
       });
@@ -475,6 +478,21 @@ Deno.test("issue 15: offline admission, durable explicit retry and legacy chat c
     });
     await import("../functions/chat/index.ts");
 
+    await t.step("expired premium profile receives the free quota", async () => {
+      s = state();
+      s.staleProfilePremium = true;
+      const data = await result(await chat());
+      equal(data.quotaLimit, 5);
+      assert(s.calls.includes("refresh_user_entitlement"));
+    });
+    await t.step("entitlement lookup failure stops provider work", async () => {
+      s = state();
+      s.staleProfilePremium = true;
+      s.entitlementUnavailable = true;
+      const response = await chat();
+      equal(response.status, 503);
+      equal([s.providerCalls, s.userInserts, s.quotaCalls], [0, 0, 0]);
+    });
     for (const tier of ["premium", "sponsored"] as const) {
       await t.step(
         `${tier} preserves the established unlimited quota sentinel`,
@@ -642,7 +660,10 @@ Deno.test("issue 15: offline admission, durable explicit retry and legacy chat c
         s.providerRelease.resolve();
         const responses = await Promise.all(attempts);
         equal(responses.map((response) => response.status).sort(), [200, 409]);
-        for (const response of responses) await response.text();
+        for (const response of responses) {
+          if (response.status === 409) await failure(response, "chat_request_pending", false, null);
+          else await response.text();
+        }
         equal([s.userInserts, savedUsers().length, s.providerCalls], [1, 1, 2]);
       },
     );
@@ -804,7 +825,9 @@ Deno.test("issue 15: offline admission, durable explicit retry and legacy chat c
         );
         receipt().response = null;
         receipt().response_status = null;
-        equal((await chat({ retryFailed: true })).status, 409);
+        const pending = await chat({ retryFailed: true });
+        equal(pending.status, 409);
+        await failure(pending, "chat_request_pending", false, null);
         equal([s.providerCalls, s.quotaCalls, s.userInserts], [1, 1, 1]);
       },
     );

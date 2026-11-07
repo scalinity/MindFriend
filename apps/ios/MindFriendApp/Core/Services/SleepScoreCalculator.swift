@@ -118,8 +118,9 @@ struct SleepScoreCalculator {
         let bedtimeMinutes = (bedtimeComponents.hour ?? 0) * 60 + (bedtimeComponents.minute ?? 0)
         let targetMinutes = (targetComponents.hour ?? 0) * 60 + (targetComponents.minute ?? 0)
 
-        // Calculate absolute difference
-        let diff = abs(bedtimeMinutes - targetMinutes)
+        // Compare wall-clock times along the shorter arc across midnight.
+        let absoluteDiff = abs(bedtimeMinutes - targetMinutes)
+        let diff = min(absoluteDiff, 24 * 60 - absoluteDiff)
 
         // Score based on proximity to target
         if diff <= 15 { return 20 }

@@ -11,6 +11,7 @@ final class WatchBreathingViewModel: ObservableObject {
     @Published var isActive = false
     @Published var isComplete = false
     @Published var currentCycle = 1
+    @Published var syncStatus: String?
     @Published var currentPhase: BreathPhase = .ready
 
     // MARK: - Configuration
@@ -45,10 +46,10 @@ final class WatchBreathingViewModel: ObservableObject {
 
     // MARK: - Initialization
 
-    init(haptics: HapticProviding = HapticManager.shared,
-         connectivity: ConnectivityProviding = WatchConnectivityManager.shared) {
-        self.haptics = haptics
-        self.connectivity = connectivity
+    init(haptics: HapticProviding? = nil,
+         connectivity: ConnectivityProviding? = nil) {
+        self.haptics = haptics ?? HapticManager.shared
+        self.connectivity = connectivity ?? WatchConnectivityManager.shared
     }
 
     // MARK: - Computed Properties
@@ -145,7 +146,10 @@ final class WatchBreathingViewModel: ObservableObject {
         haptics.playSessionComplete()
 
         // Sync breathing completion to iOS app
-        connectivity.sendBreathingCompletedToPhone(cycles: totalCycles)
+        do {
+            try connectivity.sendBreathingCompletedToPhone(cycles: totalCycles)
+            syncStatus = "Waiting to sync with iPhone"
+        } catch { syncStatus = error.localizedDescription }
     }
 
     // MARK: - Timer

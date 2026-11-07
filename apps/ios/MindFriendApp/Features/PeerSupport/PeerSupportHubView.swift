@@ -550,12 +550,189 @@ struct WisdomCard: View {
 // MARK: - Placeholder Views
 
 struct SupportSessionView: View {
-    let session: DBSupportSession
-    let service: PeerSupportService
+    @ObservedObject var service: PeerSupportService
+    @State private var session: DBSupportSession
+    @State private var messages: [DBSupportMessage] = []
+    @State private var myRole: DBSupportMessage.SenderType?
+    @State private var draft = ""
+    @State private var isBusy = false
+    @State private var errorMessage: String?
+    @State private var showEndConfirmation = false
+    @State private var revision = 0
+
+    init(session: DBSupportSession, service: PeerSupportService) {
+        _session = State(initialValue: session)
+        self.service = service
+    }
 
     var body: some View {
-        Text("Session: \(session.sessionType.displayName)")
-            .navigationTitle("Support Session")
+        VStack(spacing: 0) {
+            HStack {
+                Label(session.status.displayName, systemImage: session.sessionType.icon)
+                Spacer()
+                if isBusy { ProgressView() }
+            }
+            .font(.subheadline).padding()
+            .background(Color(.secondarySystemBackground))
+
+            if let errorMessage {
+                HStack(alignment: .top) {
+                    Text(errorMessage).font(.caption).foregroundStyle(.red)
+                    Spacer()
+                    Button("Retry") { Task { await refresh() } }.font(.caption)
+                }.padding(.horizontal).padding(.vertical, 8)
+            }
+
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        if messages.isEmpty {
+                            Text(session.status == .active ? "Your conversation can begin here." : "Messages will appear when the conversation begins.")
+                                .font(.subheadline).foregroundStyle(.secondary).padding(.vertical, 32)
+                        }
+                        ForEach(messages) { message in
+                            messageRow(message).id(message.id)
+                        }
+                    }.padding()
+                }
+                .onChange(of: messages.last?.id) { _, id in
+                    if let id { withAnimation { proxy.scrollTo(id, anchor: .bottom) } }
+                }
+            }
+
+            if session.status == .active {
+                HStack(alignment: .bottom, spacing: 12) {
+                    TextField("Message", text: $draft, axis: .vertical)
+                        .lineLimit(1...5).textFieldStyle(.roundedBorder)
+                        .accessibilityLabel("Message to your support partner")
+                    Button { Task { await send() } } label: {
+                        Image(systemName: "arrow.up.circle.fill").font(.title)
+                    }
+                    .accessibilityLabel("Send message")
+                    .disabled(isBusy || myRole == nil || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }.padding()
+            } else if session.status == .matched || session.status == .pending {
+                VStack(spacing: 12) {
+                    if session.status == .matched && myRole == .listener {
+                        Button("Begin Conversation") { Task { await begin() } }.buttonStyle(.borderedProminent)
+                    } else {
+                        Text(session.status == .pending ? "Waiting for an available peer listener." : "Your listener will begin the conversation shortly.")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                    }
+                    Button("Cancel Request", role: .destructive) { Task { await cancel() } }
+                }.padding().disabled(isBusy || myRole == nil)
+            } else {
+                Text("This conversation has ended.").font(.subheadline).foregroundStyle(.secondary).padding()
+            }
+        }
+        .navigationTitle("Peer Support")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if session.status == .active {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("End", role: .destructive) { showEndConfirmation = true }.disabled(isBusy)
+                }
+            }
+        }
+        .confirmationDialog("End this support session?", isPresented: $showEndConfirmation, titleVisibility: .visible) {
+            Button("End Session", role: .destructive) { Task { await end() } }
+            Button("Keep Talking", role: .cancel) { }
+        }
+        .onReceive(service.$currentSessionMessages) { mergeMessages($0) }
+        .task(id: session.id) {
+            await refresh()
+            guard !Task.isCancelled else { return }
+            var subscriptionId: UUID?
+            if session.status.isActive {
+                do { subscriptionId = try await service.subscribeToSessionMessages(sessionId: session.id) }
+                catch is CancellationError { return }
+                catch { errorMessage = "Live updates are unavailable. Messages will refresh automatically." }
+            }
+            while !Task.isCancelled && session.status.isActive {
+                if !isBusy { await refresh() }
+                do { try await Task.sleep(for: .seconds(3)) } catch { break }
+            }
+            if let subscriptionId { await service.unsubscribeFromSessionMessages(subscriptionId: subscriptionId) }
+        }
+    }
+
+    @ViewBuilder
+    private func messageRow(_ message: DBSupportMessage) -> some View {
+        if message.senderType == .system {
+            Text(message.content).font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity)
+        } else {
+            let isMine = message.senderType == myRole
+            HStack {
+                if isMine { Spacer(minLength: 40) }
+                VStack(alignment: isMine ? .trailing : .leading, spacing: 4) {
+                    Text(isMine ? "You" : message.senderType == .listener ? "Listener" : "Support partner")
+                        .font(.caption2).foregroundStyle(.secondary)
+                    Text(message.content).textSelection(.enabled)
+                        .padding(12)
+                        .background(isMine ? Color.accentColor.opacity(0.16) : Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14))
+                    Text(message.sentAt, style: .time).font(.caption2).foregroundStyle(.secondary)
+                }
+                if !isMine { Spacer(minLength: 40) }
+            }
+        }
+    }
+
+    private func mergeMessages(_ incoming: [DBSupportMessage]) {
+        var byId = Dictionary(uniqueKeysWithValues: messages.map { ($0.id, $0) })
+        for message in incoming where message.sessionId == session.id { byId[message.id] = message }
+        messages = byId.values.sorted { $0.sentAt == $1.sentAt ? $0.id.uuidString < $1.id.uuidString : $0.sentAt < $1.sentAt }
+    }
+
+    private func refresh() async {
+        let startedRevision = revision
+        do {
+            let saved = try await service.fetchSession(sessionId: session.id)
+            let role = try await service.participantType(for: saved)
+            let savedMessages = try await service.fetchSessionMessages(sessionId: session.id)
+            try Task.checkCancellation()
+            guard revision == startedRevision else { return }
+            session = saved
+            myRole = role
+            mergeMessages(savedMessages)
+            errorMessage = nil
+        } catch is CancellationError { } catch PeerSupportError.notAuthenticated {
+            messages = []; myRole = nil; errorMessage = PeerSupportError.notAuthenticated.localizedDescription
+        } catch { errorMessage = error.localizedDescription }
+    }
+
+    private func send() async {
+        guard !isBusy else { return }
+        let capturedDraft = draft
+        isBusy = true
+        defer { isBusy = false }
+        do {
+            let saved = try await service.sendMessage(sessionId: session.id, content: capturedDraft)
+            mergeMessages([saved])
+            if draft == capturedDraft { draft = "" }
+            errorMessage = nil
+        } catch { errorMessage = error.localizedDescription }
+    }
+
+    private func begin() async {
+        guard !isBusy else { return }
+        isBusy = true; revision += 1
+        defer { isBusy = false }
+        do { session = try await service.startSession(sessionId: session.id); errorMessage = nil }
+        catch { errorMessage = error.localizedDescription }
+    }
+    private func end() async {
+        guard !isBusy else { return }
+        isBusy = true; revision += 1
+        defer { isBusy = false }
+        do { session = try await service.endSession(sessionId: session.id, moodAfter: nil); errorMessage = nil }
+        catch { errorMessage = error.localizedDescription }
+    }
+    private func cancel() async {
+        guard !isBusy else { return }
+        isBusy = true; revision += 1
+        defer { isBusy = false }
+        do { session = try await service.cancelSession(sessionId: session.id); errorMessage = nil }
+        catch { errorMessage = error.localizedDescription }
     }
 }
 

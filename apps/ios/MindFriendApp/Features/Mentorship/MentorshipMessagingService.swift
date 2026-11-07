@@ -26,29 +26,38 @@ final class MentorshipMessagingService: ObservableObject {
 
     // MARK: - Cleanup
 
-    func cleanup() async {
+    func cleanup() async { reset() }
+
+    func reset() {
         stopAutoUpdate()
         messages = []
         unreadCount = 0
         currentMatchId = nil
+        isLoading = false
+        isSending = false
+        error = nil
     }
 
     // MARK: - Loading Messages
 
     /// Load messages for a mentorship match
     func loadMessages(matchId: UUID, limit: Int = 50, offset: Int = 0) async {
+        if currentMatchId != matchId { messages = []; unreadCount = 0 }
         self.currentMatchId = matchId
         isLoading = true
         error = nil
 
         do {
-            messages = try await dataService.fetchMessages(
+            let page = try await dataService.fetchMessages(
                 matchId: matchId,
                 limit: limit,
                 offset: offset
             )
+            guard currentMatchId == matchId else { return }
+            mergeMessages(page)
             updateUnreadCount(matchId: matchId)
         } catch {
+            if error is CancellationError { return }
             self.error = error
         }
 
@@ -66,8 +75,11 @@ final class MentorshipMessagingService: ObservableObject {
                 limit: limit,
                 offset: offset
             )
-            messages.insert(contentsOf: moreMessages, at: 0)
+            guard currentMatchId == matchId else { return }
+            mergeMessages(moreMessages)
+            updateUnreadCount(matchId: matchId)
         } catch {
+            if error is CancellationError { return }
             self.error = error
         }
 
@@ -85,9 +97,7 @@ final class MentorshipMessagingService: ObservableObject {
                     try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
                     
                     if !Task.isCancelled {
-                        let messages = try await dataService.fetchMessages(matchId: matchId)
-                        self.messages = messages
-                        updateUnreadCount(matchId: matchId)
+                        try await refreshMessages(matchId: matchId)
                     }
                 } catch {
                     // Silently handle cancellation
@@ -96,6 +106,22 @@ final class MentorshipMessagingService: ObservableObject {
                     }
                 }
             }
+        }
+    }
+
+    /// Refresh the newest page without discarding loaded history.
+    func refreshMessages(matchId: UUID) async throws {
+        let page = try await dataService.fetchMessages(matchId: matchId)
+        guard currentMatchId == matchId else { return }
+        mergeMessages(page)
+        updateUnreadCount(matchId: matchId)
+    }
+
+    private func mergeMessages(_ page: [MentorshipMessage]) {
+        var byID = Dictionary(uniqueKeysWithValues: messages.map { ($0.id, $0) })
+        for message in page { byID[message.id] = message }
+        messages = byID.values.sorted {
+            $0.createdAt == $1.createdAt ? $0.id.uuidString < $1.id.uuidString : $0.createdAt < $1.createdAt
         }
     }
 
@@ -110,10 +136,15 @@ final class MentorshipMessagingService: ObservableObject {
     /// Send a message in the mentorship
     func sendMessage(matchId: UUID, content: String) async throws {
         isSending = true
+        error = nil
         defer { isSending = false }
-
-        let message = try await dataService.sendMessage(matchId: matchId, content: content)
-        messages.append(message)
+        do {
+            let message = try await dataService.sendMessage(matchId: matchId, content: content)
+            if currentMatchId == matchId { mergeMessages([message]) }
+        } catch {
+            if !(error is CancellationError) { self.error = error }
+            throw error
+        }
     }
 
     // MARK: - Message Management
@@ -126,12 +157,13 @@ final class MentorshipMessagingService: ObservableObject {
             try await dataService.markMessagesAsRead(matchId: matchId)
             
             // Update local messages
-            for i in messages.indices {
+            for i in messages.indices where messages[i].senderId != dataService.currentUserId {
                 messages[i].isRead = true
             }
             
             updateUnreadCount(matchId: matchId)
         } catch {
+            if error is CancellationError { return }
             self.error = error
         }
     }
@@ -159,6 +191,7 @@ final class MentorshipMessagingService: ObservableObject {
                 messages[index].flaggedAt = Date()
             }
         } catch {
+            if error is CancellationError { return }
             self.error = error
         }
     }
@@ -166,7 +199,7 @@ final class MentorshipMessagingService: ObservableObject {
     // MARK: - Private Helpers
 
     private func updateUnreadCount(matchId: UUID) {
-        unreadCount = messages.filter { !($0.isRead ?? false) }.count
+        unreadCount = messages.filter { $0.senderId != dataService.currentUserId && !($0.isRead ?? false) }.count
     }
 
     // MARK: - Computed Properties
@@ -196,7 +229,7 @@ final class MentorshipMessagingService: ObservableObject {
     }
 
     var unreadMessages: [MentorshipMessage] {
-        messages.filter { !($0.isRead ?? false) }
+        messages.filter { $0.senderId != dataService.currentUserId && !($0.isRead ?? false) }
     }
 
     /// Messages grouped by day

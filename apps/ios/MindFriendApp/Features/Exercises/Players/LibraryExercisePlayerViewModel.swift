@@ -511,6 +511,7 @@ class LibraryExercisePlayerViewModel: ObservableObject {
 
     private func stopEfficacyTracking() async {
         guard let engine = efficacyEngine, isTrackingEfficacy else { return }
+        defer { isTrackingEfficacy = false }
 
         do {
             _ = try await engine.endSession()

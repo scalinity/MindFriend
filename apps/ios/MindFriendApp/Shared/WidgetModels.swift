@@ -181,28 +181,13 @@ public enum WidgetMoodHelper {
     }
 
     public static func emoji(for mood: String) -> String {
-        // Delegate to MoodEmojiMapper for canonical mood names
-        let mapped = MoodEmojiMapper.emoji(for: mood)
-        // MoodEmojiMapper returns "🙂" for unknown moods; handle extra synonyms here
-        if mapped != "🙂" || mood.lowercased() == "good" || mood.lowercased() == "happy" {
-            return mapped
-        }
-        // Handle synonyms not in MoodEmojiMapper
         switch mood.lowercased() {
-        case "amazing", "excellent":
-            return "😁"
-        case "happy":
-            return "🙂"
-        case "neutral", "fine":
-            return "😐"
-        case "sad", "down":
-            return "😕"
-        case "anxious", "worried":
-            return "😔"
-        case "angry", "frustrated":
-            return "😔"
-        default:
-            return "🙂"
+        case "great", "amazing", "excellent": return "😁"
+        case "good", "happy": return "🙂"
+        case "okay", "neutral", "fine": return "😐"
+        case "low", "sad", "down": return "😕"
+        case "stressed", "anxious", "worried", "angry", "frustrated": return "😔"
+        default: return "🙂"
         }
     }
 
@@ -283,5 +268,108 @@ public enum WidgetDeepLink {
 
     public static func quest(id: String) -> String {
         return "mindfriend://quest/\(id)"
+    }
+}
+
+/// A single confirmed view of one account on one local calendar day.
+public struct WidgetSnapshot: Codable, Sendable {
+    public let ownerID: UUID
+    public let localDate: String
+    public let updatedAt: Date
+    public var currentStreak: Int = 0
+    public var todayMood: String?
+    public var todayMoodScore: Int?
+    public var completedActivities: Int = 0
+    public var goalActivities: Int = 3
+    public var userName: String?
+    public var weekMoods: [WidgetDailyMood] = []
+    public var dailyQuest: WidgetDailyQuest?
+    public var dailyQuote: WidgetDailyQuote?
+    public var quickActions: [WidgetQuickAction] = WidgetQuickAction.defaults
+    public var wellnessScore: Int?
+    public var wellnessScoreTrend: Int = 0
+    public var lastBreathingSessionTime: Date?
+    public var weeklyExercisesCompleted: Int = 0
+    public var dailyAffirmation: WidgetAffirmation?
+
+    public init(ownerID: UUID, localDate: String, updatedAt: Date = Date()) {
+        self.ownerID = ownerID
+        self.localDate = localDate
+        self.updatedAt = updatedAt
+    }
+
+    public static func dayLabel(for date: Date, calendar: Calendar = .current) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
+    }
+}
+
+/// A durable user action. Its identity and original day survive transport retries.
+public struct CompanionAction: Codable, Sendable, Equatable, Identifiable {
+    public enum Kind: String, Codable, Sendable { case mood, quest, breathing }
+    public let id: UUID
+    public let ownerID: UUID
+    public let kind: Kind
+    public let observedAt: Date
+    public let localDate: String
+    public let timeZoneID: String
+    public let moodScore: Int?
+    public let questID: UUID?
+    public let breathingCycles: Int?
+
+    public init(id: UUID = UUID(), ownerID: UUID, kind: Kind, observedAt: Date = Date(),
+                calendar: Calendar = .current, moodScore: Int? = nil, questID: UUID? = nil,
+                breathingCycles: Int? = nil) {
+        self.id = id
+        self.ownerID = ownerID
+        self.kind = kind
+        self.observedAt = observedAt
+        self.localDate = WidgetSnapshot.dayLabel(for: observedAt, calendar: calendar)
+        self.timeZoneID = calendar.timeZone.identifier
+        self.moodScore = moodScore
+        self.questID = questID
+        self.breathingCycles = breathingCycles
+    }
+
+    public var isValid: Bool {
+        switch kind {
+        case .mood: return moodScore.map { (1...5).contains($0) } == true && questID == nil && breathingCycles == nil
+        case .quest: return questID != nil && moodScore == nil && breathingCycles == nil
+        case .breathing: return breathingCycles.map { (1...100).contains($0) } == true && moodScore == nil && questID == nil
+        }
+    }
+}
+
+public struct CompanionActionReceipt: Codable, Sendable, Equatable {
+    public enum Status: String, Codable, Sendable {
+        case applied
+        case preservedNewer = "preserved_newer"
+        case preservedExisting = "preserved_existing"
+    }
+    public let eventID: UUID
+    public let ownerID: UUID
+    public let status: Status
+
+    enum CodingKeys: String, CodingKey {
+        case eventID = "event_id"
+        case ownerID = "owner_id"
+        case status
+    }
+}
+
+public struct CompanionDaySummary: Codable, Sendable {
+    public let breathingCount: Int
+    public let lastBreathingAt: Date?
+    public let todayExerciseCount: Int
+    public let weeklyExerciseCount: Int
+    enum CodingKeys: String, CodingKey {
+        case breathingCount = "breathing_count"
+        case lastBreathingAt = "last_breathing_at"
+        case todayExerciseCount = "today_exercise_count"
+        case weeklyExerciseCount = "weekly_exercise_count"
     }
 }

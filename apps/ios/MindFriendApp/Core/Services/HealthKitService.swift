@@ -202,19 +202,18 @@ final class HealthKitService: ObservableObject {
             guard let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) else { continue }
 
             let dateFormatter = DateFormatter()
+            dateFormatter.calendar = Calendar(identifier: .gregorian)
+            dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+            dateFormatter.timeZone = calendar.timeZone
             dateFormatter.dateFormat = "yyyy-MM-dd"
             let dateString = dateFormatter.string(from: dayStart)
 
             var summary = BiometricSyncPayload.DailySummaryPayload(date: dateString)
 
             // Fetch each metric type
-            if authorizedTypes.contains(.sleep) {
-                let sleepData = try await fetchSleepData(from: dayStart, to: dayEnd)
-                summary.sleepDurationMinutes = sleepData.durationMinutes
-                summary.sleepQualityScore = sleepData.qualityScore
-                summary.sleepStartTime = sleepData.startTime
-                summary.sleepEndTime = sleepData.endTime
-                summary.timeInBedMinutes = sleepData.timeInBed
+            if authorizedTypes.contains(.sleep),
+               let sleepData = try await fetchSleepData(from: dayStart, to: dayEnd) {
+                summary = sleepData.dailySummary(for: dateString, calendar: calendar)
             }
 
             if authorizedTypes.contains(.hrv) {
@@ -279,12 +278,14 @@ final class HealthKitService: ObservableObject {
 
     // MARK: - Sleep Data
 
-    private func fetchSleepData(from start: Date, to end: Date) async throws -> (durationMinutes: Int?, qualityScore: Double?, startTime: String?, endTime: String?, timeInBed: Int?) {
+    private func fetchSleepData(from start: Date, to end: Date) async throws -> MeasuredSleep? {
         guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
-            return (nil, nil, nil, nil, nil)
+            return nil
         }
 
-        let predicate = HKQuery.predicateForSamples(withStart: start, end: end)
+        // Read complete sessions on either side of midnight before assigning a wake day.
+        let window = SleepHealthKitManager.sampleQueryWindow(wakingFrom: start, through: end)
+        let predicate = HKQuery.predicateForSamples(withStart: window.start, end: window.end)
         let samples = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[HKCategorySample], Error>) in
             let query = HKSampleQuery(
                 sampleType: sleepType,
@@ -301,46 +302,51 @@ final class HealthKitService: ObservableObject {
             healthStore.execute(query)
         }
 
-        // Filter for actual sleep (not in bed)
-        let sleepSamples = samples.filter { sample in
-            if #available(iOS 16.0, *) {
-                let value = HKCategoryValueSleepAnalysis(rawValue: sample.value)
-                return value == .asleepCore || value == .asleepDeep || value == .asleepREM || value == .asleepUnspecified
-            } else {
-                return sample.value == HKCategoryValueSleepAnalysis.asleep.rawValue
-            }
+        return Self.measuredSleep(from: samples, wakingFrom: start, before: end)
+    }
+
+    /// The same measured intervals feed the daily payload and chronotype input.
+    struct MeasuredSleep {
+        let start: Date
+        let end: Date
+        let asleepSeconds: TimeInterval
+        let inBedSeconds: TimeInterval
+
+        func dailySummary(for date: String, calendar: Calendar = .current) -> BiometricSyncPayload.DailySummaryPayload {
+            let formatter = DateFormatter()
+            formatter.calendar = calendar
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = calendar.timeZone
+            formatter.dateFormat = "HH:mm"
+            var summary = BiometricSyncPayload.DailySummaryPayload(date: date)
+            summary.sleepDurationMinutes = Int(asleepSeconds / 60)
+            summary.timeInBedMinutes = Int(inBedSeconds / 60)
+            summary.sleepQualityScore = min(asleepSeconds / inBedSeconds, 1)
+            summary.sleepStartTime = formatter.string(from: start)
+            summary.sleepEndTime = formatter.string(from: end)
+            return summary
         }
 
-        guard !sleepSamples.isEmpty else {
-            return (nil, nil, nil, nil, nil)
+        func record(for date: Date, calendar: Calendar = .current) -> SleepRecord {
+            SleepRecord(date: date, startTime: start, endTime: end, duration: asleepSeconds,
+                        isWeekend: calendar.isDateInWeekend(date))
         }
+    }
 
-        // Calculate total sleep duration
-        let totalSleep = sleepSamples.reduce(0.0) { sum, sample in
-            sum + sample.endDate.timeIntervalSince(sample.startDate)
-        }
-        let durationMinutes = Int(totalSleep / 60)
-
-        // Get sleep window
-        guard let firstSleep = sleepSamples.first,
-              let lastSleep = sleepSamples.last else {
-            return (durationMinutes, nil, nil, nil, nil)
-        }
-
-        let timeFormatter = DateFormatter()
-        timeFormatter.dateFormat = "HH:mm"
-
-        let startTime = timeFormatter.string(from: firstSleep.startDate)
-        let endTime = timeFormatter.string(from: lastSleep.endDate)
-
-        // Time in bed
-        let timeInBed = Int(lastSleep.endDate.timeIntervalSince(firstSleep.startDate) / 60)
-
-        // Quality score (simplified: based on efficiency)
-        let efficiency = timeInBed > 0 ? Double(durationMinutes) / Double(timeInBed) : 0
-        let qualityScore = min(efficiency, 1.0)
-
-        return (durationMinutes, qualityScore, startTime, endTime, timeInBed)
+    static func measuredSleep(from samples: [HKCategorySample], wakingFrom start: Date, before end: Date,
+                              calendar: Calendar = .current) -> MeasuredSleep? {
+        let daily = SleepHealthKitManager.dailySleepSamples(from: samples, wakingFrom: start,
+                                                            through: end, calendar: calendar)
+        // Selecting the local day also excludes a session waking exactly at the next midnight.
+        guard let samples = daily[calendar.startOfDay(for: start)] else { return nil }
+        let asleepValues: Set<Int> = [HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue,
+            HKCategoryValueSleepAnalysis.asleepCore.rawValue, HKCategoryValueSleepAnalysis.asleepDeep.rawValue,
+            HKCategoryValueSleepAnalysis.asleepREM.rawValue]
+        let asleep = samples.filter { asleepValues.contains($0.value) }
+        guard let first = asleep.map(\.startDate).min(), let last = asleep.map(\.endDate).max() else { return nil }
+        let durations = SleepHealthKitManager.sleepDurations(samples)
+        guard durations.asleep >= 60, durations.inBed >= durations.asleep else { return nil }
+        return MeasuredSleep(start: first, end: last, asleepSeconds: durations.asleep, inBedSeconds: durations.inBed)
     }
 
     /// Fetch sleep records from HealthKit for chronotype analysis
@@ -367,64 +373,8 @@ final class HealthKitService: ObservableObject {
                 continue
             }
 
-            let sleepData = try await fetchSleepData(from: dayStartOfDay, to: dayEnd)
-
-            // Only include days with valid sleep data
-            guard let durationMin = sleepData.durationMinutes,
-                  let startTimeStr = sleepData.startTime,
-                  let endTimeStr = sleepData.endTime,
-                  durationMin > 0 else {
-                continue
-            }
-
-            // Parse time strings to Date objects
-            let formatter = DateFormatter()
-            formatter.dateFormat = "HH:mm"
-
-            // Handle sleep that crosses midnight (start time is previous day)
-            let sleepStartDate: Date
-            if let startTime = formatter.date(from: startTimeStr) {
-                let startComponents = calendar.dateComponents([.hour, .minute], from: startTime)
-                if let hour = startComponents.hour, hour > 12 {
-                    // Evening start - use previous day
-                    guard let previousDay = calendar.date(byAdding: .day, value: -1, to: dayStartOfDay),
-                          let start = calendar.date(bySettingHour: hour, minute: startComponents.minute ?? 0, second: 0, of: previousDay) else {
-                        continue
-                    }
-                    sleepStartDate = start
-                } else {
-                    // Morning start (rare) - use same day
-                    guard let start = calendar.date(bySettingHour: startComponents.hour ?? 0, minute: startComponents.minute ?? 0, second: 0, of: dayStartOfDay) else {
-                        continue
-                    }
-                    sleepStartDate = start
-                }
-            } else {
-                continue
-            }
-
-            let sleepEndDate: Date
-            if let endTime = formatter.date(from: endTimeStr) {
-                let endComponents = calendar.dateComponents([.hour, .minute], from: endTime)
-                guard let end = calendar.date(bySettingHour: endComponents.hour ?? 0, minute: endComponents.minute ?? 0, second: 0, of: dayStartOfDay) else {
-                    continue
-                }
-                sleepEndDate = end
-            } else {
-                continue
-            }
-
-            // Create SleepRecord
-            let record = SleepRecord(
-                id: UUID(),
-                date: dayStartOfDay,
-                startTime: sleepStartDate,
-                endTime: sleepEndDate,
-                duration: TimeInterval(durationMin * 60),
-                isWeekend: calendar.isDateInWeekend(dayStartOfDay)
-            )
-
-            records.append(record)
+            guard let sleepData = try await fetchSleepData(from: dayStartOfDay, to: dayEnd) else { continue }
+            records.append(sleepData.record(for: dayStartOfDay, calendar: calendar))
         }
 
         return records.sorted(by: { $0.date < $1.date })

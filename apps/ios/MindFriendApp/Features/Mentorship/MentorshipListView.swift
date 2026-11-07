@@ -145,15 +145,15 @@ struct MatchCard: View {
         switch match.status {
         case .pending:
             return .orange
-        case .active:
+        case .active, .accepted:
             return .green
         case .completed:
             return .blue
-        case .cancelled:
+        case .cancelled, .declined:
             return .gray
         case .ended:
             return .gray
-        case .expired:
+        case .expired, .suspended:
             return .red
         }
     }
@@ -226,15 +226,15 @@ struct MatchCard: View {
         switch match.status {
         case .pending:
             return "clock"
-        case .active:
+        case .active, .accepted:
             return "checkmark.circle.fill"
         case .completed:
             return "star.circle.fill"
-        case .cancelled:
+        case .cancelled, .declined:
             return "minus.circle.fill"
         case .ended:
             return "xmark.circle.fill"
-        case .expired:
+        case .expired, .suspended:
             return "exclamationmark.circle.fill"
         }
     }

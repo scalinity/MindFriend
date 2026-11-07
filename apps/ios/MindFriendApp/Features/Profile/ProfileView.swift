@@ -457,16 +457,13 @@ struct ProfileView: View {
 
     private func logout() {
         Task {
-            // Stop ambient theme monitoring
-            container.ambientThemeService.stop()
-            
             do {
                 try await container.supabaseAuthService.signOut()
+                container.ambientThemeService.stop()
+                appState.setUnauthenticated()
             } catch {
                 Log.auth.error("Logout error", error: error)
-            }
-            await MainActor.run {
-                appState.setUnauthenticated()
+                appState.showError(.apiError(error.localizedDescription))
             }
         }
     }
@@ -695,6 +692,7 @@ struct NotificationSettingsView: View {
             }
 
             // Parse quiet hours
+            quietHoursEnabled = false
             if let start = settings.quietHoursStartLocal,
                let end = settings.quietHoursEndLocal {
                 quietHoursEnabled = true
@@ -748,33 +746,68 @@ struct NotificationSettingsView: View {
     /// Performs the actual save operation to the database.
     @MainActor
     private func performSave() async {
+        guard let ownerId = appState.currentUser?.id else { return }
         isSaving = true
         defer { isSaving = false }
+        let saved = (
+            questTime: formatTime(questTime),
+            quietStart: quietHoursEnabled ? formatTime(quietStart) : nil,
+            quietEnd: quietHoursEnabled ? formatTime(quietEnd) : nil,
+            reminders: remindersEnabled,
+            circle: notifyCircleActivity, hugs: notifyHugs, challenges: notifyChallenges,
+            streak: notifyStreakRisk, weekly: notifyWeeklySummary, hour: preferredNotifyHour
+        )
+        let reminderTime = Calendar.current.dateComponents([.hour, .minute], from: questTime)
 
         do {
             try await container.supabaseDataService.updateUserSettings(
-                dailyQuestTimeLocal: formatTime(questTime),
-                quietHoursStartLocal: quietHoursEnabled ? formatTime(quietStart) : nil,
-                quietHoursEndLocal: quietHoursEnabled ? formatTime(quietEnd) : nil,
-                remindersEnabled: remindersEnabled,
-                notifyCircleActivity: notifyCircleActivity,
-                notifyHugs: notifyHugs,
-                notifyChallenges: notifyChallenges,
-                notifyStreakRisk: notifyStreakRisk,
-                notifyWeeklySummary: notifyWeeklySummary,
-                preferredNotifyHour: preferredNotifyHour
+                dailyQuestTimeLocal: saved.questTime,
+                quietHoursStartLocal: saved.quietStart,
+                quietHoursEndLocal: saved.quietEnd,
+                clearQuietHours: saved.quietStart == nil,
+                remindersEnabled: saved.reminders,
+                notifyCircleActivity: saved.circle,
+                notifyHugs: saved.hugs,
+                notifyChallenges: saved.challenges,
+                notifyStreakRisk: saved.streak,
+                notifyWeeklySummary: saved.weekly,
+                preferredNotifyHour: saved.hour
             )
+
+            guard let current = appState.currentUser, current.id == ownerId else { return }
+            if var settings = current.settings {
+                settings.dailyQuestTimeLocal = saved.questTime
+                settings.quietHoursStartLocal = saved.quietStart
+                settings.quietHoursEndLocal = saved.quietEnd
+                settings.remindersEnabled = saved.reminders
+                settings.notifyCircleActivity = saved.circle
+                settings.notifyHugs = saved.hugs
+                settings.notifyChallenges = saved.challenges
+                settings.notifyStreakRisk = saved.streak
+                settings.notifyWeeklySummary = saved.weekly
+                settings.preferredNotifyHour = saved.hour
+                appState.currentUser = UserProfile(
+                    id: current.id, handle: current.handle, displayName: current.displayName,
+                    email: current.email, avatarUrl: current.avatarUrl, timezone: current.timezone,
+                    createdAt: current.createdAt, onboardingCompletedAt: current.onboardingCompletedAt,
+                    stats: current.stats, settings: settings, entitlements: current.entitlements,
+                    badges: current.badges, activationCompletedAt: current.activationCompletedAt,
+                    firstQuestCompletedAt: current.firstQuestCompletedAt,
+                    firstMoodLoggedAt: current.firstMoodLoggedAt,
+                    firstChatMessageAt: current.firstChatMessageAt, unlockedFeatures: current.unlockedFeatures
+                )
+            } else {
+                let refreshed = try await container.supabaseAuthService.fetchProfile()
+                guard refreshed.id == ownerId, appState.currentUser?.id == ownerId else { return }
+                appState.currentUser = refreshed
+            }
 
             // Schedule/cancel local quest reminder notification
-            let components = Calendar.current.dateComponents([.hour, .minute], from: questTime)
             try await container.questNotificationService.updateSchedule(
-                enabled: remindersEnabled,
-                hour: components.hour ?? 9,
-                minute: components.minute ?? 0
+                enabled: saved.reminders,
+                hour: reminderTime.hour ?? 9,
+                minute: reminderTime.minute ?? 0
             )
-
-            // Note: Settings are saved to database. AppState will be refreshed on next fetch.
-            // We could fetch the updated profile here if needed for immediate UI updates.
         } catch {
             appState.showError(.apiError(error.localizedDescription))
         }
@@ -975,7 +1008,9 @@ struct DataExportView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
     @State private var isExporting = false
-    @State private var exportData: UserDataExport?
+    @State private var exportURL: URL?
+    @State private var showingExportSheet = false
+    @State private var exportTask: Task<Void, Never>?
 
     var body: some View {
         VStack(spacing: 24) {
@@ -1005,26 +1040,74 @@ struct DataExportView: View {
             .buttonStyle(.borderedProminent)
             .disabled(isExporting)
 
+            Text("Choose Save to Files or a share destination when your JSON export is ready.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
             Spacer()
         }
         .padding()
         .navigationTitle("Export Data")
+        .sheet(isPresented: $showingExportSheet, onDismiss: removeTemporaryExport) {
+            if let exportURL {
+                ShareSheet(items: [exportURL])
+            }
+        }
+        .onDisappear {
+            exportTask?.cancel()
+            if !showingExportSheet { removeTemporaryExport() }
+        }
+        .onChange(of: appState.currentUser?.id) { _, _ in
+            exportTask?.cancel()
+            showingExportSheet = false
+            removeTemporaryExport()
+        }
     }
 
+    @MainActor
     private func performExport() {
+        guard !isExporting, let ownerId = appState.currentUser?.id else { return }
+        removeTemporaryExport()
+        guard exportURL == nil else {
+            appState.showError(.apiError("Could not remove the previous temporary export. Please try again."))
+            return
+        }
         isExporting = true
-        Task {
+        exportTask = Task { @MainActor in
+            defer { isExporting = false }
             do {
                 let data = try await container.supabaseDataService.exportUserData()
-                // In real app, would share the data file
-                Log.data.info("Exported: \(String(describing: data), privacy: .private)")
+                guard !Task.isCancelled, appState.currentUser?.id == ownerId else { return }
+                exportURL = try UserDataExportFile.write(data)
+                showingExportSheet = true
             } catch {
-                await MainActor.run {
-                    appState.showError(.apiError(error.localizedDescription))
-                }
+                guard !Task.isCancelled else { return }
+                appState.showError(.apiError(error.localizedDescription))
             }
-            isExporting = false
         }
+    }
+
+    private func removeTemporaryExport() {
+        guard let exportURL else { return }
+        do {
+            try FileManager.default.removeItem(at: exportURL)
+            self.exportURL = nil
+        } catch {
+            Log.data.error("Could not remove temporary export file")
+        }
+    }
+}
+
+private enum UserDataExportFile {
+    static func write(_ export: UserDataExport) throws -> URL {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(export)
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MindFriend-export-\(UUID().uuidString).json")
+        try data.write(to: url, options: [.atomic, .completeFileProtection])
+        return url
     }
 }
 

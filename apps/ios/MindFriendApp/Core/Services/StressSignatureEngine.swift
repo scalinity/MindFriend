@@ -60,10 +60,6 @@ final class StressSignatureEngine: ObservableObject {
     @Published private(set) var lastDetectionResult: PatternEmergenceResult?
     @Published private(set) var accuracyStats: SignatureAccuracyStats?
 
-    // Private state
-    private var cancellables = Set<AnyCancellable>()
-    private var detectionTask: Task<Void, Never>?
-    
     // Actor-based coordinator for atomic alert creation
     private let alertCoordinator = AlertCreationCoordinator()
 
@@ -81,10 +77,6 @@ final class StressSignatureEngine: ObservableObject {
         self._interventionService = interventionService
 
         setupSignalObserver()
-    }
-
-    deinit {
-        detectionTask?.cancel()
     }
 
     // MARK: - Public API
@@ -106,20 +98,16 @@ final class StressSignatureEngine: ObservableObject {
         // Load accuracy stats
         accuracyStats = try await fetchAccuracyStats()
 
-        // Start signal monitoring
-        signalMonitor.startObserving()
+        // SignalMonitor owns the hourly measurement loop. Its updates trigger
+        // detection through setupSignalObserver without measuring a second time.
         isMonitoring = true
-
-        // Schedule periodic detection
-        schedulePeriodicDetection()
+        signalMonitor.startObserving()
     }
 
     /// Stop monitoring
     func stopMonitoring() {
         isMonitoring = false
         signalMonitor.stopObserving()
-        detectionTask?.cancel()
-        detectionTask = nil
     }
 
     /// Get or refresh the current signature
@@ -271,7 +259,7 @@ final class StressSignatureEngine: ObservableObject {
 
     private func handleSignalUpdate(_ signal: SignalUpdate) async {
         // Run detection if we have enough recent signals
-        guard let signature = currentSignature else { return }
+        guard isMonitoring, let signature = currentSignature else { return }
 
         let signals = signalMonitor.getCurrentSignals()
         guard signals.count >= 2 else { return }
@@ -285,24 +273,6 @@ final class StressSignatureEngine: ObservableObject {
 
         if result.isEmerging {
             try? await handlePatternEmergence(result: result, signature: signature)
-        }
-    }
-
-    private func schedulePeriodicDetection() {
-        detectionTask = Task { [weak self] in
-            while !Task.isCancelled {
-                // Run detection every hour
-                try? await Task.sleep(nanoseconds: 60 * 60 * 1_000_000_000)
-
-                guard let self = self, self.isMonitoring else { continue }
-
-                do {
-                    _ = try await self.detectPatternNow()
-                } catch {
-                    // Log without exposing sensitive user data
-                    print("[StressSignatureEngine] Periodic detection error occurred")
-                }
-            }
         }
     }
 

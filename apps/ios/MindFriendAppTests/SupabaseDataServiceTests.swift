@@ -115,6 +115,19 @@ final class SupabaseDataServiceTests: XCTestCase {
         XCTAssertFalse(service.isUniqueConstraintViolation(genericError))
     }
 
+    func testQuietHourUpdatesDistinguishOmittedValuesFromExplicitClear() throws {
+        func payload(_ updates: [String: AnyEncodable]) throws -> [String: Any] {
+            try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(updates)) as? [String: Any])
+        }
+        XCTAssertTrue(try payload(SupabaseDataService.quietHourUpdates(start: nil, end: nil, clear: false)).isEmpty)
+        let enabled = try payload(SupabaseDataService.quietHourUpdates(start: "22:00", end: "07:00", clear: false))
+        XCTAssertEqual(enabled["quiet_hours_start_local"] as? String, "22:00")
+        XCTAssertEqual(enabled["quiet_hours_end_local"] as? String, "07:00")
+        let cleared = try payload(SupabaseDataService.quietHourUpdates(start: "22:00", end: "07:00", clear: true))
+        XCTAssertTrue(cleared["quiet_hours_start_local"] is NSNull)
+        XCTAssertTrue(cleared["quiet_hours_end_local"] is NSNull)
+    }
+
     // MARK: - Invite Code Generation Tests
 
     func testGenerateInviteCode_Format() {
@@ -134,7 +147,7 @@ final class SupabaseDataServiceTests: XCTestCase {
 
     func testDataError_CircleFullDescription() {
         let error = DataError.circleFull
-        XCTAssertEqual(error.errorDescription, "This circle is full")
+        XCTAssertEqual(error.errorDescription, "Circle is full")
     }
 
     func testDataError_CustomDescription() {
@@ -696,7 +709,7 @@ final class ChatRequestTransportTests: XCTestCase {
             (503,["error":"AI_MONTHLY_BUDGET_REACHED","retryable":true,"messageSaved":false],.sharedBudget),
             (429,["error":"Too many requests","retryAfter":9],.rateLimited),
             (503,["code":"chat_provider_unavailable","retryable":true,"messageSaved":true],.provider),
-            (409,["error":"Request outcome pending. Reload history before sending again."],.pending),
+            (409,["code":"chat_request_pending","error":"Request outcome pending. Reload history before sending again.","retryable":false,"messageSaved":NSNull()],.pending),
             (401,["error":"Unauthorized"],.signIn),
             (500,["error":"Unknown service failure"],.unconfirmed)
         ] as [(Int,[String:Any],ChatRequestFailure.Kind)] {
@@ -707,6 +720,7 @@ final class ChatRequestTransportTests: XCTestCase {
                 if kind == .quota { XCTAssertEqual(failure.quotaUsed,5);XCTAssertEqual(failure.quotaLimit,5);XCTAssertEqual(failure.messageSaved,false);XCTAssertNil(failure.resetAt) }
                 if kind == .rateLimited { XCTAssertNotNil(failure.retryAt) }
                 if kind == .pending || kind == .unconfirmed { XCTAssertFalse(failure.retryable) }
+                if kind == .pending { XCTAssertTrue(failure.canRetryRequest) }
             }
         }
     }
@@ -766,4 +780,281 @@ private final class ChatTransportFixture: @unchecked Sendable {
     private let lock=NSLock();private var value=Value(status:200,mime:"application/json",chunks:[],failure:nil,keepOpen:false)
     func prepare(status:Int,mime:String,chunks:[Data],failure:URLError?,keepOpen:Bool) {lock.lock();defer{lock.unlock()};value=Value(status:status,mime:mime,chunks:chunks,failure:failure,keepOpen:keepOpen)}
     func snapshot()->Value {lock.lock();defer{lock.unlock()};return value}
+}
+
+@MainActor
+final class ForumLoadingTests: XCTestCase {
+    private func makeService() -> ForumService {
+        ForumLoadingURLProtocol.fixture.reset()
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [ForumLoadingURLProtocol.self]
+        let client = SupabaseClient(supabaseURL: URL(string: "https://forum-fixture.invalid")!, supabaseKey: "synthetic-anon",
+            options: .init(auth: .init(storage: AvatarFixtureAuthStorage(), autoRefreshToken: false),
+                           global: .init(session: URLSession(configuration: config))))
+        return ForumService(supabase: client, currentUserId: { ForumLoadingHTTP.owner })
+    }
+
+    func testReplyPageBatchesHelpfulStateIntoOneRequest() async throws {
+        let service = makeService()
+        let replies = try await service.fetchReplies(threadId: ForumLoadingHTTP.thread, limit: 50)
+        XCTAssertEqual(replies.count, 50)
+        XCTAssertEqual(replies.filter(\.isHelpfulByMe).count, 25)
+        XCTAssertTrue(replies.enumerated().allSatisfy { $0.element.isHelpfulByMe == ($0.offset % 2 == 0) })
+        let requests = ForumLoadingURLProtocol.fixture.requests
+        XCTAssertEqual(requests.count, 2)
+        let helpful = try XCTUnwrap(requests.first { $0.url?.lastPathComponent == "forum_helpful" })
+        let query = URLComponents(url: helpful.url!, resolvingAgainstBaseURL: false)!.queryItems!
+        XCTAssertEqual(query.first { $0.name == "user_id" }?.value, "eq.\(ForumLoadingHTTP.owner.uuidString)")
+        XCTAssertEqual(query.first { $0.name == "reply_id" }?.value?.split(separator: ",").count, 50)
+    }
+
+    func testRefreshRetainsLoadedReplyPagesAndDoesNotReplaceContentWithSpinner() async {
+        let model = ThreadViewModel(forumService: makeService(), threadId: ForumLoadingHTTP.thread)
+        await model.load()
+        await model.loadMoreReplies()
+        let loadedIDs = model.replies.map(\.id)
+        XCTAssertEqual(loadedIDs.count, 100)
+        let refresh = Task { await model.refresh() }
+        await Task.yield()
+        XCTAssertFalse(model.isLoading)
+        await refresh.value
+        XCTAssertEqual(model.replies.map(\.id), loadedIDs)
+        XCTAssertTrue(model.hasMoreReplies)
+    }
+}
+
+private final class ForumLoadingURLProtocol: URLProtocol {
+    static let fixture = ForumLoadingHTTP()
+    override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "forum-fixture.invalid" }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let data = Self.fixture.respond(request)
+        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil,
+            headerFields: ["Content-Type": "application/json"])!, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: data)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
+private final class ForumLoadingHTTP: @unchecked Sendable {
+    static let owner = UUID(uuidString: "11111111-1111-4111-8111-111111111111")!
+    static let thread = UUID(uuidString: "22222222-2222-4222-8222-222222222222")!
+    private let lock = NSLock()
+    private var recorded: [URLRequest] = []
+    var requests: [URLRequest] { lock.lock(); defer { lock.unlock() }; return recorded }
+    func reset() { lock.lock(); defer { lock.unlock() }; recorded = [] }
+    private func id(_ index: Int) -> String { String(format: "33333333-3333-4333-8333-%012d", index) }
+    func respond(_ request: URLRequest) -> Data {
+        lock.lock(); defer { lock.unlock() }
+        recorded.append(request)
+        let query = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!.queryItems ?? []
+        let value: (String) -> String? = { key in query.first { $0.name == key }?.value }
+        let formatter = ISO8601DateFormatter()
+        let start = Date(timeIntervalSince1970: 1_710_000_000)
+        let body: Any
+        switch request.url!.lastPathComponent {
+        case "forum_helpful":
+            let filter = value("reply_id") ?? ""
+            body = (0..<120).filter { $0 % 2 == 0 && filter.contains(id($0)) }.map { ["reply_id": id($0)] }
+        case "forum_threads":
+            body = ["id": Self.thread.uuidString, "board_id": Self.thread.uuidString, "author_id": Self.owner.uuidString,
+                    "is_anonymous": false, "title": "Synthetic discussion", "content": "Synthetic content", "status": "approved",
+                    "is_crisis": false, "reply_count": 120, "helpful_count": 0,
+                    "created_at": formatter.string(from: start), "updated_at": formatter.string(from: start)]
+        default:
+            let after = value("created_at").flatMap { formatter.date(from: String($0.dropFirst(3))) }
+            let indexes = (0..<120).filter { after == nil || start.addingTimeInterval(Double($0)) > after! }
+                .prefix(Int(value("limit") ?? "50") ?? 50)
+            body = indexes.map { index -> [String: Any] in
+                let date = formatter.string(from: start.addingTimeInterval(Double(index)))
+                return ["id": id(index), "thread_id": Self.thread.uuidString, "author_id": Self.owner.uuidString,
+                        "is_anonymous": false, "content": "Synthetic reply \(index)", "status": "approved",
+                        "is_crisis": false, "helpful_count": 0, "depth": 0, "created_at": date, "updated_at": date]
+            }
+        }
+        return try! JSONSerialization.data(withJSONObject: body)
+    }
+}
+
+@MainActor
+final class ChatHistoryPaginationTests: XCTestCase {
+    private func service() -> SupabaseDataService {
+        ChatHistoryURLProtocol.fixture.reset()
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [ChatHistoryURLProtocol.self]
+        config.timeoutIntervalForRequest = 5
+        config.timeoutIntervalForResource = 10
+        let client = SupabaseClient(supabaseURL: URL(string: "https://chat-history-fixture.invalid")!, supabaseKey: "synthetic-anon",
+            options: .init(auth: .init(storage: AvatarFixtureAuthStorage(), autoRefreshToken: false),
+                           global: .init(session: URLSession(configuration: config))))
+        return SupabaseDataService(authService: DependencyContainer.preview.supabaseAuthService,
+                                   historyClient: client, historyUserId: { ChatHistoryHTTP.owner })
+    }
+
+    func testAllConversationsRemainReachableAcrossEqualTimestamps() async throws {
+        let service = service()
+        var cursor: ChatHistoryCursor?
+        var ids: [String] = []
+        for _ in 0..<8 {
+            let page = try await service.getConversationPage(before: cursor)
+            XCTAssertLessThanOrEqual(page.items.count, 100)
+            ids += page.items.map { $0.id.lowercased() }
+            cursor = page.nextCursor
+            if cursor == nil { break }
+        }
+        XCTAssertNil(cursor, "Conversation pagination must terminate within the fixture's bounded page count")
+        XCTAssertEqual(ids.count, 101)
+        XCTAssertEqual(Set(ids).count, 101)
+        let requests = ChatHistoryURLProtocol.fixture.requests
+        XCTAssertEqual(requests.count, 2)
+        let lastRequest = try XCTUnwrap(requests.last)
+        let lastQuery = try XCTUnwrap(URLComponents(url: lastRequest.url!, resolvingAgainstBaseURL: false)?.queryItems)
+        XCTAssertEqual(lastQuery.first { $0.name == "updated_at" }?.value?.lowercased(), "is.null")
+        XCTAssertEqual(lastQuery.first { $0.name == "id" }?.value?.lowercased(), "lt.\(ChatHistoryHTTP.id(1))")
+        XCTAssertEqual(ids, (0..<101).reversed().map(ChatHistoryHTTP.id))
+    }
+
+    func testMessagesTraverseBoundedPagesWithoutGapsOrDuplicates() async throws {
+        let service = service()
+        var cursor: ChatHistoryCursor?
+        var ids: [String] = []
+        for _ in 0..<8 {
+            let page = try await service.getMessagePage(conversationId: ChatHistoryHTTP.conversation.uuidString, before: cursor)
+            XCTAssertLessThanOrEqual(page.items.count, 50)
+            ids.insert(contentsOf: page.items.map(\.id), at: 0)
+            if ids.count == 50 { XCTAssertEqual(page.nextCursor?.timestamp, "2026-10-22T12:00:00.123456+00:00") }
+            cursor = page.nextCursor
+            if cursor == nil { break }
+        }
+        XCTAssertNil(cursor, "Message pagination must terminate within the fixture's bounded page count")
+        XCTAssertEqual(ids, (0..<151).map(ChatHistoryHTTP.id))
+        XCTAssertEqual(Set(ids).count, 151)
+        let requests = ChatHistoryURLProtocol.fixture.requests
+        XCTAssertEqual(requests.count, 4)
+        let secondQuery = URLComponents(url: requests[1].url!, resolvingAgainstBaseURL: false)!.queryItems!
+        XCTAssertEqual(secondQuery.first { $0.name == "or" }?.value,
+                       "(created_at.lt.2026-10-22T12:00:00.123456+00:00,and(created_at.eq.2026-10-22T12:00:00.123456+00:00,id.lt.\(ChatHistoryHTTP.id(101).uppercased())),created_at.is.null)")
+        XCTAssertEqual(secondQuery.first { $0.name == "order" }?.value, "created_at.desc.nullslast,id.desc.nullslast")
+    }
+}
+
+private final class ChatHistoryURLProtocol: URLProtocol {
+    static let fixture = ChatHistoryHTTP()
+    override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "chat-history-fixture.invalid" }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let body = Self.fixture.respond(request)
+        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil,
+            headerFields: ["Content-Type": "application/json"])!, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: body)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
+private final class ChatHistoryHTTP: @unchecked Sendable {
+    static let owner = UUID(uuidString: "11111111-1111-4111-8111-111111111111")!
+    static let conversation = UUID(uuidString: "22222222-2222-4222-8222-222222222222")!
+    static func id(_ index: Int) -> String { String(format: "33333333-3333-4333-8333-%012d", index) }
+    private let lock = NSLock()
+    private var recorded: [URLRequest] = []
+    var requests: [URLRequest] { lock.lock(); defer { lock.unlock() }; return recorded }
+    func reset() { lock.lock(); defer { lock.unlock() }; recorded = [] }
+    func respond(_ request: URLRequest) -> Data {
+        lock.lock(); defer { lock.unlock() }; recorded.append(request)
+        let query = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!.queryItems ?? []
+        let conversations = request.url!.lastPathComponent == "conversations"
+        let timestampField = conversations ? "updated_at" : "created_at"
+        var rows: [[String: Any]] = (0..<(conversations ? 101 : 151)).reversed().map { index in
+            let date: Any = index < 3 ? NSNull() : index < 25 ? "2026-10-22T12:00:00.123455+00:00" : "2026-10-22T12:00:00.123456+00:00"
+            if conversations {
+                return ["id": Self.id(index), "user_id": Self.owner.uuidString, "title": "Synthetic \(index)",
+                        "created_at": date, "updated_at": date]
+            }
+            return ["id": Self.id(index), "conversation_id": Self.conversation.uuidString, "role": "user",
+                    "content": "Synthetic \(index)", "created_at": date]
+        }
+        if let filter = query.first(where: { $0.name == "or" })?.value {
+            let timestamp = String(filter.dropFirst("(\(timestampField).lt.".count)).components(separatedBy: ",and(")[0]
+            let id = filter.components(separatedBy: "id.lt.").last!.components(separatedBy: ")")[0].lowercased()
+            rows = rows.filter {
+                guard let date = $0[timestampField] as? String else { return true }
+                return date < timestamp || (date == timestamp && ($0["id"] as! String) < id)
+            }
+        }
+        if query.contains(where: { $0.name == timestampField && $0.value?.lowercased() == "is.null" }) {
+            let id = String(query.first(where: { $0.name == "id" })!.value!.dropFirst(3)).lowercased()
+            rows = rows.filter { $0[timestampField] is NSNull && ($0["id"] as! String) < id }
+        }
+        let limit = Int(query.first(where: { $0.name == "limit" })?.value ?? "0") ?? 0
+        return try! JSONSerialization.data(withJSONObject: Array(rows.prefix(limit)))
+    }
+}
+
+@MainActor
+final class CompanionActionServiceTests: XCTestCase {
+    func testCompanionPayloadRetainsOriginalIdentityDayAndFractionalTime() async throws {
+        let owner = UUID()
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/New_York")!
+        let action = CompanionAction(ownerID: owner, kind: .mood,
+                                     observedAt: Date(timeIntervalSince1970: 1_710_000_000.125), calendar: calendar, moodScore: 4)
+        let receipt = CompanionActionReceipt(eventID: action.id, ownerID: owner, status: .preservedNewer)
+        let result = try await SupabaseDataService.performCompanionAction(action, currentOwner: { owner }) { payload in
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(payload)) as? [String: Any])
+            XCTAssertEqual(json["event_id"] as? String, action.id.uuidString)
+            XCTAssertEqual(json["owner_id"] as? String, owner.uuidString)
+            XCTAssertEqual(json["kind"] as? String, "mood")
+            XCTAssertEqual(json["observed_at"] as? String, "2024-03-09T16:00:00.125Z")
+            XCTAssertEqual(json["local_date"] as? String, action.localDate)
+            XCTAssertEqual(json["time_zone"] as? String, "America/New_York")
+            XCTAssertEqual(json["mood_score"] as? Int, 4)
+            XCTAssertNil(json["quest_id"])
+            XCTAssertNil(json["breathing_cycles"])
+            return receipt
+        }
+        XCTAssertEqual(result, receipt)
+    }
+
+    func testCompanionActionRejectsWrongOwnerBeforeSending() async {
+        let action = CompanionAction(ownerID: UUID(), kind: .breathing, breathingCycles: 5)
+        var called = false
+        do {
+            _ = try await SupabaseDataService.performCompanionAction(action, currentOwner: { UUID() }) { _ in
+                called = true
+                return CompanionActionReceipt(eventID: action.id, ownerID: action.ownerID, status: .applied)
+            }
+            XCTFail("Wrong-owner action must fail")
+        } catch { XCTAssertFalse(called) }
+    }
+
+    func testInvalidCompanionActionIsRejectedBeforeSending() async {
+        let owner = UUID()
+        let action = CompanionAction(ownerID: owner, kind: .mood, moodScore: 0)
+        var called = false
+        do {
+            _ = try await SupabaseDataService.performCompanionAction(action, currentOwner: { owner }) { _ in
+                called = true
+                return CompanionActionReceipt(eventID: action.id, ownerID: owner, status: .applied)
+            }
+            XCTFail("Invalid action must fail")
+        } catch { XCTAssertFalse(called) }
+    }
+
+    func testCompanionReceiptRejectsAccountSwitchOrMismatchedIdentity() async {
+        let owner = UUID()
+        let action = CompanionAction(ownerID: owner, kind: .quest, questID: UUID())
+        for mode in 0..<3 {
+            var currentOwner: UUID? = owner
+            do {
+                _ = try await SupabaseDataService.performCompanionAction(action, currentOwner: { currentOwner }) { _ in
+                    if mode == 0 { currentOwner = UUID() }
+                    return CompanionActionReceipt(eventID: mode == 1 ? UUID() : action.id,
+                                                  ownerID: mode == 2 ? UUID() : owner, status: .applied)
+                }
+                XCTFail("Changed owner or mismatched receipt must not be acknowledged")
+            } catch { }
+        }
+    }
 }

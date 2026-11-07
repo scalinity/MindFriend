@@ -220,11 +220,11 @@ private struct MatchRow: View {
     private var statusColor: Color {
         switch match.status {
         case .pending: return .orange
-        case .active: return .green
+        case .active, .accepted: return .green
         case .completed: return .purple
-        case .cancelled: return .gray
+        case .cancelled, .declined: return .gray
         case .ended: return .gray
-        case .expired: return .red
+        case .expired, .suspended: return .red
         }
     }
 

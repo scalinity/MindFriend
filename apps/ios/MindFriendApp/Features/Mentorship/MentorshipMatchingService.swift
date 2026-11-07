@@ -41,6 +41,7 @@ final class MentorshipMatchingService: ObservableObject {
             let response = try await dataService.findMentorMatches(limit: limit, offset: offset)
             mentorMatches = response.matches
         } catch {
+            if error is CancellationError { return }
             self.error = error
         }
 
@@ -56,6 +57,7 @@ final class MentorshipMatchingService: ObservableObject {
             let response = try await dataService.findMentorMatches(limit: limit, offset: offset)
             mentorMatches.append(contentsOf: response.matches)
         } catch {
+            if error is CancellationError { return }
             self.error = error
         }
 
@@ -68,32 +70,24 @@ final class MentorshipMatchingService: ObservableObject {
     func requestMentorship(
         mentorId: UUID,
         introductionMessage: String
-    ) async {
+    ) async throws -> UUID {
         isLoading = true
         error = nil
-
+        defer { isLoading = false }
         do {
-            let response = try await dataService.requestMentorship(
-                mentorId: mentorId,
-                introductionMessage: introductionMessage
-            )
-
-            if response.success, let matchId = response.matchId {
-                // Add to pending requests
-                let match = MentorshipMatch(
-                    id: matchId,
-                    mentorId: mentorId,
-                    menteeId: UUID(),
-                    status: .pending,
-                    introductionMessage: introductionMessage
-                )
-                pendingRequests.append(match)
+            let response = try await dataService.requestMentorship(mentorId: mentorId, introductionMessage: introductionMessage)
+            guard response.success, let matchId = response.matchId else {
+                throw MentorshipError.networkError("The mentorship request was not confirmed.")
             }
+            let match = try await dataService.fetchMatch(matchId: matchId)
+            pendingRequests.removeAll { $0.id == match.id }
+            pendingRequests.append(match)
+            return match.id
         } catch {
+            if error is CancellationError { throw error }
             self.error = error
+            throw error
         }
-
-        isLoading = false
     }
 
     // MARK: - Loading Matches
@@ -106,11 +100,13 @@ final class MentorshipMatchingService: ObservableObject {
         do {
             let matches = try await dataService.fetchMatches(role: .both)
             userMatches = matches
+            self.matches = matches
 
             // Separate by status
             pendingRequests = matches.filter { $0.status == .pending }
             activeMatches = matches.filter { $0.status == .active }
         } catch {
+            if error is CancellationError { return }
             self.error = error
         }
 
@@ -126,6 +122,7 @@ final class MentorshipMatchingService: ObservableObject {
             let matches = try await dataService.fetchMatches(role: .mentor)
             pendingRequests = matches.filter { $0.status == .pending }
         } catch {
+            if error is CancellationError { return }
             self.error = error
         }
 
@@ -141,6 +138,7 @@ final class MentorshipMatchingService: ObservableObject {
             let matches = try await dataService.fetchMatches(role: .both)
             activeMatches = matches.filter { $0.status == .active }
         } catch {
+            if error is CancellationError { return }
             self.error = error
         }
 
@@ -163,6 +161,7 @@ final class MentorshipMatchingService: ObservableObject {
             }
             activeMatches.append(updated)
         } catch {
+            if error is CancellationError { return }
             self.error = error
         }
 
@@ -182,6 +181,7 @@ final class MentorshipMatchingService: ObservableObject {
                 pendingRequests.remove(at: index)
             }
         } catch {
+            if error is CancellationError { return }
             self.error = error
         }
 
@@ -201,6 +201,7 @@ final class MentorshipMatchingService: ObservableObject {
                 activeMatches.remove(at: index)
             }
         } catch {
+            if error is CancellationError { return }
             self.error = error
         }
 

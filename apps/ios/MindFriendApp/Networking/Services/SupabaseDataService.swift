@@ -136,6 +136,75 @@ enum DataError: LocalizedError {
 
 // MARK: - Chat Response Types
 
+struct VoiceTranscriptMessage: Codable, Equatable {
+    let id: UUID
+    let role: String
+    let content: String
+    let createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, role, content
+        case createdAt = "created_at"
+    }
+}
+
+/// Keep the database timestamp text so sub-millisecond precision survives paging.
+struct ChatHistoryCursor: Equatable {
+    let timestamp: String?
+    let id: UUID
+}
+
+struct ChatHistoryPage<Item> {
+    let items: [Item]
+    let nextCursor: ChatHistoryCursor?
+}
+
+private struct ConversationPageRow: Decodable {
+    let value: DBConversation
+    let cursor: ChatHistoryCursor
+    enum CodingKeys: String, CodingKey { case updatedAt = "updated_at" }
+    init(from decoder: Decoder) throws {
+        value = try DBConversation(from: decoder)
+        let fields = try decoder.container(keyedBy: CodingKeys.self)
+        guard let id = value.id else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Missing conversation ID"))
+        }
+        cursor = ChatHistoryCursor(timestamp: try fields.decodeIfPresent(String.self, forKey: .updatedAt), id: id)
+    }
+}
+
+private struct MessagePageRow: Decodable {
+    let value: DBMessage
+    let cursor: ChatHistoryCursor
+    enum CodingKeys: String, CodingKey { case createdAt = "created_at" }
+    init(from decoder: Decoder) throws {
+        value = try DBMessage(from: decoder)
+        let fields = try decoder.container(keyedBy: CodingKeys.self)
+        guard let id = value.id else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Missing message ID"))
+        }
+        cursor = ChatHistoryCursor(timestamp: try fields.decodeIfPresent(String.self, forKey: .createdAt), id: id)
+    }
+}
+
+private struct SharedPartnerActivity: Decodable {
+    let partnerId: UUID
+    let partnerName: String
+    let partnerStreak: Int
+    let hasCompletedToday: Bool
+    let lastActive: Date
+    let isSharingMood: Bool
+    let isSharingExercises: Bool
+    let moods: [DBMood]
+    let quest: DBQuestWithTemplate?
+    enum CodingKeys: String, CodingKey {
+        case partnerId = "partner_id", partnerName = "partner_name", partnerStreak = "partner_streak"
+        case hasCompletedToday = "has_completed_today", lastActive = "last_active"
+        case isSharingMood = "is_sharing_mood", isSharingExercises = "is_sharing_exercises"
+        case moods, quest
+    }
+}
+
 struct ChatResponse: Codable {
     var userMessage: Message? = nil
     let message: Message
@@ -177,14 +246,22 @@ final class SupabaseDataService: ObservableObject {
     private let authService: SupabaseAuthService
     private let avatarClient: SupabaseClient
     private let avatarUserId: () throws -> UUID
+    private let historyClient: SupabaseClient
+    private let historyUserId: () throws -> UUID
 
     /// In-memory cache for methodology info (static reference data)
     private var methodologyCache: [String: MethodologyInfo] = [:]
 
-    init(authService: SupabaseAuthService, avatarClient: SupabaseClient? = nil, avatarUserId: (() throws -> UUID)? = nil) {
+    init(authService: SupabaseAuthService, avatarClient: SupabaseClient? = nil, avatarUserId: (() throws -> UUID)? = nil,
+         historyClient: SupabaseClient? = nil, historyUserId: (() throws -> UUID)? = nil) {
         self.authService = authService
         self.avatarClient = avatarClient ?? supabase
         self.avatarUserId = avatarUserId ?? {
+            guard let id = authService.userId else { throw DataError.notAuthenticated }
+            return id
+        }
+        self.historyClient = historyClient ?? supabase
+        self.historyUserId = historyUserId ?? {
             guard let id = authService.userId else { throw DataError.notAuthenticated }
             return id
         }
@@ -210,6 +287,47 @@ final class SupabaseDataService: ObservableObject {
     }
 
     // MARK: - Moods
+
+    func ingestCompanionAction(_ action: CompanionAction) async throws -> CompanionActionReceipt {
+        try await Self.performCompanionAction(action, currentOwner: { self.currentUserId }) { payload in
+            try await supabase.rpc("ingest_companion_action", params: ["p_action": AnyEncodable(payload)]).execute().value
+        }
+    }
+
+    static func performCompanionAction(
+        _ action: CompanionAction,
+        currentOwner: () -> UUID?,
+        persist: ([String: AnyEncodable]) async throws -> CompanionActionReceipt
+    ) async throws -> CompanionActionReceipt {
+        guard let owner = currentOwner(), owner == action.ownerID else { throw DataError.notAuthenticated }
+        guard action.isValid else { throw DataError.operationFailed("Invalid companion action.") }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        var payload: [String: AnyEncodable] = [
+            "event_id": AnyEncodable(action.id), "owner_id": AnyEncodable(owner),
+            "kind": AnyEncodable(action.kind.rawValue),
+            "observed_at": AnyEncodable(formatter.string(from: action.observedAt)),
+            "local_date": AnyEncodable(action.localDate), "time_zone": AnyEncodable(action.timeZoneID)
+        ]
+        if let score = action.moodScore { payload["mood_score"] = AnyEncodable(score) }
+        if let quest = action.questID { payload["quest_id"] = AnyEncodable(quest) }
+        if let cycles = action.breathingCycles { payload["breathing_cycles"] = AnyEncodable(cycles) }
+        let receipt = try await persist(payload)
+        guard currentOwner() == owner else { throw DataError.notAuthenticated }
+        guard receipt.eventID == action.id, receipt.ownerID == owner else {
+            throw DataError.operationFailed("The companion action could not be confirmed.")
+        }
+        return receipt
+    }
+
+    func getCompanionDaySummary(localDate: String, timeZone: String = TimeZone.current.identifier) async throws -> CompanionDaySummary {
+        let owner = try userId
+        let result: CompanionDaySummary = try await supabase.rpc("get_companion_day_summary", params: [
+            "p_local_date": localDate, "p_time_zone": timeZone
+        ]).execute().value
+        guard try userId == owner else { throw DataError.notAuthenticated }
+        return result
+    }
 
     func createMood(_ mood: MoodEntry) async throws {
         let dbMood = DBMood(
@@ -925,6 +1043,7 @@ final class SupabaseDataService: ObservableObject {
             "p_note": AnyEncodable(note)
         ]).execute().value
         if newlyCompleted {
+            DebtSourceChanges.saved()
             Analytics.shared.track(.exerciseCompleted, properties: [
                 "session_id": sessionId, "rating": rating ?? 0
             ])
@@ -934,31 +1053,33 @@ final class SupabaseDataService: ObservableObject {
     // MARK: - Conversations
 
     func getConversations() async throws -> [Conversation] {
-        Log.data.debug("[Data] getConversations: Starting...")
-        let uid = try userId
-        Log.data.debug("[Data] getConversations: Got userId=\(uid)")
+        try await getConversationPage().items
+    }
 
-        // PERF-HIGH-001: Added limit to prevent unbounded data fetching
-        let conversations: [DBConversation] = try await supabase
-            .from(Tables.conversations)
-            .select()
-            .eq("user_id", value: uid)
-            .order("updated_at", ascending: false)
-            .limit(100) // Limit conversations, implement pagination for more
-            .execute()
-            .value
-
-        Log.data.debug("[Data] getConversations: Fetched \(conversations.count) conversations")
-        return conversations.map { conv in
-            Conversation(
-                id: conv.id?.uuidString ?? "",
-                title: conv.title,
-                status: .active,
-                createdAt: conv.createdAt ?? Date(),
-                updatedAt: conv.updatedAt ?? Date(),
-                lastMessage: nil
-            )
+    func getConversationPage(before cursor: ChatHistoryCursor? = nil, limit: Int = 100) async throws -> ChatHistoryPage<Conversation> {
+        let owner = try historyUserId()
+        let pageSize = min(100, max(1, limit))
+        var query = historyClient.from(Tables.conversations).select().eq("user_id", value: owner)
+        if let cursor {
+            if let timestamp = cursor.timestamp {
+                query = query.or("updated_at.lt.\(timestamp),and(updated_at.eq.\(timestamp),id.lt.\(cursor.id.uuidString)),updated_at.is.null")
+            } else {
+                query = query.is("updated_at", value: nil).lt("id", value: cursor.id)
+            }
         }
+        let rows: [ConversationPageRow] = try await query
+            .order("updated_at", ascending: false, nullsFirst: false)
+            .order("id", ascending: false)
+            .limit(pageSize + 1)
+            .execute().value
+        guard try historyUserId() == owner else { throw DataError.notAuthenticated }
+        let page = Array(rows.prefix(pageSize))
+        let conversations = page.map { row in
+            let conv = row.value
+            return Conversation(id: row.cursor.id.uuidString, title: conv.title, status: .active,
+                                createdAt: conv.createdAt ?? Date(), updatedAt: conv.updatedAt ?? Date(), lastMessage: nil)
+        }
+        return ChatHistoryPage(items: conversations, nextCursor: rows.count > pageSize ? page.last?.cursor : nil)
     }
 
     /// Resolve a linked conversation independently of the paginated history list.
@@ -1022,6 +1143,31 @@ final class SupabaseDataService: ObservableObject {
         )
     }
 
+    func saveVoiceTranscript(conversationId: UUID, title: String?, messages: [VoiceTranscriptMessage]) async throws {
+        let owner = try userId
+        struct TranscriptPayload: Encodable {
+            let id: UUID
+            let role: String
+            let content: String
+            let created_at: String
+        }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let payload = messages.map {
+            TranscriptPayload(id: $0.id, role: $0.role, content: $0.content,
+                              created_at: formatter.string(from: $0.createdAt))
+        }
+        let savedId: UUID = try await supabase.rpc("save_voice_transcript", params: [
+            "p_conversation_id": AnyEncodable(conversationId),
+            "p_title": AnyEncodable(title),
+            "p_messages": AnyEncodable(payload)
+        ]).execute().value
+        guard try userId == owner else { throw DataError.notAuthenticated }
+        guard savedId == conversationId else {
+            throw DataError.operationFailed("The saved conversation could not be confirmed.")
+        }
+    }
+
     func deleteConversation(id: String) async throws {
         guard let convId = UUID(uuidString: id) else {
             throw DataError.invalidId
@@ -1070,26 +1216,34 @@ final class SupabaseDataService: ObservableObject {
     }
 
     func getMessages(conversationId: String, limit: Int = 50) async throws -> [Message] {
-        guard let convId = UUID(uuidString: conversationId) else { return [] }
+        try await getMessagePage(conversationId: conversationId, limit: limit).items
+    }
 
-        let messages: [DBMessage] = try await supabase
-            .from(Tables.messages)
-            .select()
-            .eq("conversation_id", value: convId)
-            .order("created_at", ascending: false)
-            .limit(limit)
-            .execute()
-            .value
-
-        return messages.reversed().map { msg in
-            Message(
-                id: msg.id?.uuidString.lowercased() ?? "",
-                role: MessageRole(rawValue: msg.role) ?? .user,
-                content: msg.content,
-                createdAt: msg.createdAt ?? Date(),
-                blocked: false
-            )
+    func getMessagePage(conversationId: String, before cursor: ChatHistoryCursor? = nil, limit: Int = 50) async throws -> ChatHistoryPage<Message> {
+        guard let convId = UUID(uuidString: conversationId) else { throw DataError.invalidId }
+        let owner = try historyUserId()
+        let pageSize = min(100, max(1, limit))
+        var query = historyClient.from(Tables.messages).select().eq("conversation_id", value: convId)
+        if let cursor {
+            if let timestamp = cursor.timestamp {
+                query = query.or("created_at.lt.\(timestamp),and(created_at.eq.\(timestamp),id.lt.\(cursor.id.uuidString)),created_at.is.null")
+            } else {
+                query = query.is("created_at", value: nil).lt("id", value: cursor.id)
+            }
         }
+        let rows: [MessagePageRow] = try await query
+            .order("created_at", ascending: false, nullsFirst: false)
+            .order("id", ascending: false)
+            .limit(pageSize + 1)
+            .execute().value
+        guard try historyUserId() == owner else { throw DataError.notAuthenticated }
+        let page = Array(rows.prefix(pageSize))
+        let messages = page.reversed().map { row in
+            let msg = row.value
+            return Message(id: row.cursor.id.uuidString.lowercased(), role: MessageRole(rawValue: msg.role) ?? .user,
+                           content: msg.content, createdAt: msg.createdAt ?? Date(), blocked: false)
+        }
+        return ChatHistoryPage(items: messages, nextCursor: rows.count > pageSize ? page.last?.cursor : nil)
     }
 
     /// Send a message and get AI response via Edge Function
@@ -2367,146 +2521,48 @@ final class SupabaseDataService: ObservableObject {
             throw CouplesModeError.notPartnered
         }
 
-        let currentUserId = try userId
-        let isUser1 = link.userId1 == currentUserId
-
-        let updateData: [String: AnyEncodable] = isUser1
-            ? ["user_1_share_mood": AnyEncodable(shareMood),
-               "user_1_share_exercises": AnyEncodable(shareExercises),
-               "updated_at": AnyEncodable(Date())]
-            : ["user_2_share_mood": AnyEncodable(shareMood),
-               "user_2_share_exercises": AnyEncodable(shareExercises),
-               "updated_at": AnyEncodable(Date())]
-
-        try await supabase
-            .from("partner_links")
-            .update(updateData)
-            .eq("id", value: link.id)
-            .execute()
-    }
-
-    /// End current partnership
-    func endPartnership() async throws {
-        guard let link = try await getActivePartnerLink() else {
-            throw CouplesModeError.notPartnered
-        }
-
-        try await supabase
-            .from("partner_links")
-            .update([
-                "status": AnyEncodable("ended"),
-                "ended_at": AnyEncodable(Date())
-            ])
-            .eq("id", value: link.id)
-            .execute()
-    }
-
-    /// Get partner's mood history (respects sharing settings)
-    func getPartnerMoodHistory(partnerId: UUID) async throws -> [MoodEntry] {
-        guard let link = try await getActivePartnerLink() else {
-            throw CouplesModeError.notPartnered
-        }
-
-        let currentUserId = try userId
-        let partnerSettings = link.partnerSharingSettings(for: currentUserId)
-
-        guard partnerSettings.shareMood else {
-            throw CouplesModeError.partnerNotSharing
-        }
-
-        // Get moods from past 7 days
-        guard let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) else {
-            throw DataError.operationFailed("Failed to calculate date range")
-        }
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd"
-
-        let startDate = dateFormatter.string(from: sevenDaysAgo)
-
-        let moods: [DBMood] = try await supabase
-            .from("moods")
-            .select()
-            .eq("user_id", value: partnerId)
-            .gte("local_date", value: startDate)
-            .order("local_date", ascending: false)
-            .limit(7)
-            .execute()
-            .value
-
-        return moods.map { $0.toMoodEntry() }
-    }
-
-    /// Get partner's today's quest status (respects sharing settings)
-    func getPartnerQuestStatus(partnerId: UUID) async throws -> Quest? {
-        guard let link = try await getActivePartnerLink() else {
-            throw CouplesModeError.notPartnered
-        }
-
-        let currentUserId = try userId
-        let partnerSettings = link.partnerSharingSettings(for: currentUserId)
-
-        guard partnerSettings.shareExercises else {
-            throw CouplesModeError.partnerNotSharing
-        }
-
-        // Note: This query doesn't fetch the template, so we can't construct a full Quest object
-        // The function signature should probably return DBQuest or change to fetch with template
-        return nil
-    }
-
-    /// Get partner info for dashboard
-    func getPartnerInfo() async throws -> PartnerInfo? {
-        guard let link = try await getActivePartnerLink() else {
-            return nil
-        }
-
-        let currentUserId = try userId
-        guard let partnerId = link.partnerId(for: currentUserId) else {
-            return nil
-        }
-
-        // Get partner profile
-        let profiles: [DBProfile] = try await supabase
-            .from("profiles")
-            .select()
-            .eq("id", value: partnerId)
-            .limit(1)
-            .execute()
-            .value
-
-        guard let partnerProfile = profiles.first else {
-            return nil
-        }
-
-        // Check if partner completed quest today
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd"
-        let today = dateFormatter.string(from: Date())
-
-        let todayQuests: [DBQuest] = try await supabase
-            .from("quests")
-            .select()
-            .eq("user_id", value: partnerId)
-            .eq("local_date", value: today)
-            .eq("status", value: "completed")
-            .limit(1)
-            .execute()
-            .value
-
-        let hasCompletedToday = !todayQuests.isEmpty
-
-        // Get partner's sharing settings (what they share with us)
-        let partnerSettings = link.partnerSharingSettings(for: currentUserId)
-
-        return PartnerInfo(
-            partnerId: partnerId,
-            partnerName: partnerProfile.displayName ?? "Partner",
-            partnerStreak: partnerProfile.currentStreakDays,
-            hasCompletedToday: hasCompletedToday,
-            lastActive: partnerProfile.lastActiveAt ?? partnerProfile.createdAt,
-            isSharingMood: partnerSettings.shareMood,
-            isSharingExercises: partnerSettings.shareExercises
+        try await supabase.functions.invoke(
+            "couples-partner-links-settings/\(link.id.uuidString)/settings",
+            options: .init(method: .patch, body: ["shareMood": shareMood, "shareExercises": shareExercises])
         )
+    }
+
+    /// End current partnership through the participant-validated endpoint.
+    func endPartnership() async throws {
+        guard let link = try await getActivePartnerLink() else { throw CouplesModeError.notPartnered }
+        try await supabase.functions.invoke(
+            "couples-partner-links-delete/\(link.id.uuidString)", options: .init(method: .delete)
+        )
+    }
+
+    private func getSharedPartnerActivity(partnerId: UUID? = nil) async throws -> SharedPartnerActivity? {
+        let owner = try userId
+        let result: SharedPartnerActivity? = try await supabase.rpc("get_shared_partner_activity", params: [
+            "p_partner_id": AnyEncodable(partnerId)
+        ]).execute().value
+        guard try userId == owner else { throw DataError.notAuthenticated }
+        return result
+    }
+
+    /// Only the active partner's consented mood scores are returned by the server.
+    func getPartnerMoodHistory(partnerId: UUID) async throws -> [MoodEntry] {
+        guard let activity = try await getSharedPartnerActivity(partnerId: partnerId) else { throw CouplesModeError.notPartnered }
+        guard activity.isSharingMood else { throw CouplesModeError.partnerNotSharing }
+        return activity.moods.map { $0.toMoodEntry() }
+    }
+
+    func getPartnerQuestStatus(partnerId: UUID) async throws -> Quest? {
+        guard let activity = try await getSharedPartnerActivity(partnerId: partnerId) else { throw CouplesModeError.notPartnered }
+        guard activity.isSharingExercises else { throw CouplesModeError.partnerNotSharing }
+        return activity.quest?.toQuest()
+    }
+
+    func getPartnerInfo() async throws -> PartnerInfo? {
+        guard let activity = try await getSharedPartnerActivity() else { return nil }
+        return PartnerInfo(partnerId: activity.partnerId, partnerName: activity.partnerName,
+                           partnerStreak: activity.partnerStreak, hasCompletedToday: activity.hasCompletedToday,
+                           lastActive: activity.lastActive, isSharingMood: activity.isSharingMood,
+                           isSharingExercises: activity.isSharingExercises)
     }
 
     /// Get list of couples exercises
@@ -2656,18 +2712,20 @@ final class SupabaseDataService: ObservableObject {
     // MARK: - Device Registration
 
     func registerDevice(apnsToken: String) async throws {
-        let device = DBDevice(
-            id: nil,
-            userId: try userId,
-            deviceToken: apnsToken,
-            platform: "ios",
-            createdAt: nil,
-            updatedAt: Date()
-        )
+        let owner = try userId
+        let registeredOwner: UUID = try await supabase.rpc("register_current_device", params: [
+            "p_device_token": apnsToken, "p_platform": "ios"
+        ]).execute().value
+        guard try userId == owner, registeredOwner == owner else { throw DataError.notAuthenticated }
+    }
 
+    func unregisterDevice(apnsToken: String, userId outgoingUserId: UUID) async throws {
+        guard try userId == outgoingUserId else { throw DataError.notAuthenticated }
         try await supabase
             .from(Tables.pushTokens)
-            .upsert(device, onConflict: "user_id,device_token")
+            .delete()
+            .eq("user_id", value: outgoingUserId)
+            .eq("device_token", value: apnsToken)
             .execute()
     }
 
@@ -2729,6 +2787,7 @@ final class SupabaseDataService: ObservableObject {
         dailyQuestTimeLocal: String? = nil,
         quietHoursStartLocal: String? = nil,
         quietHoursEndLocal: String? = nil,
+        clearQuietHours: Bool = false,
         remindersEnabled: Bool? = nil,
         nudgeAfterDaysInactive: Int? = nil,
         shareMoodInCircles: Bool? = nil,
@@ -2746,12 +2805,7 @@ final class SupabaseDataService: ObservableObject {
         if let dailyQuestTimeLocal = dailyQuestTimeLocal {
             updates["daily_quest_time_local"] = AnyEncodable(dailyQuestTimeLocal)
         }
-        if let quietHoursStartLocal = quietHoursStartLocal {
-            updates["quiet_hours_start_local"] = AnyEncodable(quietHoursStartLocal)
-        }
-        if let quietHoursEndLocal = quietHoursEndLocal {
-            updates["quiet_hours_end_local"] = AnyEncodable(quietHoursEndLocal)
-        }
+        updates.merge(Self.quietHourUpdates(start: quietHoursStartLocal, end: quietHoursEndLocal, clear: clearQuietHours)) { _, new in new }
         if let remindersEnabled = remindersEnabled {
             updates["reminders_enabled"] = AnyEncodable(remindersEnabled)
         }
@@ -2798,6 +2852,18 @@ final class SupabaseDataService: ObservableObject {
     }
 
     // MARK: - Smart Notifications
+
+    /// Omission preserves saved settings; an explicit clear sends database nulls.
+    nonisolated static func quietHourUpdates(start: String?, end: String?, clear: Bool) -> [String: AnyEncodable] {
+        if clear {
+            return ["quiet_hours_start_local": AnyEncodable(Optional<String>.none),
+                    "quiet_hours_end_local": AnyEncodable(Optional<String>.none)]
+        }
+        var updates: [String: AnyEncodable] = [:]
+        if let start { updates["quiet_hours_start_local"] = AnyEncodable(start) }
+        if let end { updates["quiet_hours_end_local"] = AnyEncodable(end) }
+        return updates
+    }
 
     /// Update notification preferences
     func updateNotificationSettings(
@@ -2913,19 +2979,6 @@ final class SupabaseDataService: ObservableObject {
             .value
 
         Log.data.info("Weekly summaries found: \(summaries.count)")
-
-        if summaries.isEmpty {
-            // Debug: Try fetching any summary to see if any exist
-            let anySummaries: [DBWeeklySummary] = try await supabase
-                .from("weekly_summaries")
-                .select()
-                .eq("user_id", value: try userId)
-                .order("week_start", ascending: false)
-                .limit(3)
-                .execute()
-                .value
-            Log.data.info("Any summaries in DB: \(anySummaries.count), week_starts: \(anySummaries.map { $0.weekStart })")
-        }
 
         guard let summary = summaries.first else {
             return nil
