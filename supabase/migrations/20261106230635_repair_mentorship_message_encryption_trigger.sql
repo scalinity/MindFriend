@@ -8,7 +8,7 @@ BEGIN
     NEW.content := replace(NEW.content, '>', '&gt;');
     NEW.content := replace(NEW.content, '"', '&quot;');
     NEW.content := replace(NEW.content, '''', '&#x27;');
-    
+
     -- Trim and limit length
     NEW.content := trim(NEW.content);
     IF length(NEW.content) > 2000 THEN

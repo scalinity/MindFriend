@@ -79,7 +79,7 @@ final class MentorshipServiceTests: XCTestCase {
         XCTAssertEqual(messaging.latestMessage?.content, "Message 150")
         let url = try XCTUnwrap(MentorshipFixtureURLProtocol.fixture.requests.first?.url)
         let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
-        XCTAssertEqual(query.first { $0.name == "order" }?.value, "created_at.desc,id.desc")
+        XCTAssertEqual(query.first { $0.name == "order" }?.value, "created_at.desc.nullslast,id.desc.nullslast")
         XCTAssertEqual(query.first { $0.name == "limit" }?.value, "50")
     }
 
