@@ -85,18 +85,25 @@ enum SupabaseStorageMedia {
 }
 
 /// Shared Supabase client instance
-let supabase = SupabaseClient(
-    supabaseURL: SupabaseConfig.projectURL,
-    supabaseKey: SupabaseConfig.anonKey,
-    options: SupabaseClientOptions(
-        auth: .init(
-            redirectToURL: SupabaseConfig.redirectURL,
-            flowType: .pkce,
-            emitLocalSessionAsInitialSession: true
-        ),
-        global: .init(session: SupabaseConfig.networkSession)
+let supabase: SupabaseClient = {
+    #if DEBUG
+    if ProcessInfo.processInfo.arguments.contains("--auth-ui-test") {
+        return AuthUITestBackend.makeClient()
+    }
+    #endif
+    return SupabaseClient(
+        supabaseURL: SupabaseConfig.projectURL,
+        supabaseKey: SupabaseConfig.anonKey,
+        options: SupabaseClientOptions(
+            auth: .init(
+                redirectToURL: SupabaseConfig.redirectURL,
+                flowType: .pkce,
+                emitLocalSessionAsInitialSession: true
+            ),
+            global: .init(session: SupabaseConfig.networkSession)
+        )
     )
-)
+}()
 
 // MARK: - Database Table Names
 

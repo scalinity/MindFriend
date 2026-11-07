@@ -170,7 +170,12 @@ struct OutcomeHomeView: View {
                                             }
                                         }
                                     }) {
-                                        OutcomeGoalCard(goal: goal)
+                                        OutcomeGoalCard(goal: goal,
+                                            assessmentType: outcomeService.assessmentTemplates.first { $0.id == goal.assessmentTemplateId }
+                                                .flatMap { AssessmentType(rawValue: $0.code) },
+                                            currentScore: outcomeService.recentResponses
+                                                .filter { $0.assessmentTemplateId == goal.assessmentTemplateId }
+                                                .sorted { $0.completedAt > $1.completedAt }.first?.availableScore)
                                     }
                                     .padding(.horizontal, 20)
                                 }
@@ -350,14 +355,17 @@ struct RecentResultCard: View {
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Score: \(response.totalScore)")
+                Text(response.availableScore.map { "Score: \($0)" } ?? "Score unavailable")
                     .font(.system(size: 18, weight: .bold, design: .default))
                     .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
                 
-                Text(response.severityLevel)
+                Text(response.availableScore == nil ? "Retake this assessment for a current score" : response.severityLevel)
                     .font(.system(size: 13, weight: .semibold, design: .default))
                     .foregroundColor(severityColor)
                 
+                if response.scoreStatus == .recalculated {
+                    Text("Recalculated from saved answers").font(.caption).foregroundColor(.secondary)
+                }
                 Text(response.completedAt.formatted(date: .abbreviated, time: .omitted))
                     .font(.system(size: 12, weight: .regular, design: .default))
                     .foregroundColor(.gray)
@@ -381,12 +389,14 @@ struct RecentResultCard: View {
 struct OutcomeGoalCard: View {
     let goal: OutcomeGoal
     
-    var progress: Double {
-        let range = Double(goal.targetScore - goal.baselineScore)
-        guard range != 0 else { return 0 }
-        return (Double(goal.targetScore - goal.baselineScore) / range).clamped(to: 0...1)
+    let assessmentType: AssessmentType?
+    let currentScore: Int?
+
+    var progress: Double? {
+        guard let assessmentType else { return nil }
+        return goal.progress(currentScore: currentScore, type: assessmentType)
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -403,8 +413,15 @@ struct OutcomeGoalCard: View {
                 Spacer()
             }
             
-            ProgressView(value: progress)
-                .tint(Color(red: 0.2, green: 0.6, blue: 0.4))
+            if let progress {
+                ProgressView(value: progress)
+                    .tint(Color(red: 0.2, green: 0.6, blue: 0.4))
+            } else {
+                Text(assessmentType.map { goal.requiresScoreReview(for: $0) } == true
+                     ? "Review this target after scoring corrections" : "No current score available")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
         }
         .padding(14)
         .background(

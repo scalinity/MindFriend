@@ -601,7 +601,7 @@ final class SupportLiveHistoryReader: SupportHistoryStandaloneSource {
     private func conversations(after cursor: SupportHistoryCursor?) async throws -> SupportStandalonePage {
         let page = try await dataService.getConversationPage(
             owner: owner,
-            cursor: cursor.map { SupportConversationCursor(createdAt: $0.createdAt, id: $0.id) },
+            cursor: cursor.map { SupportConversationCursor(updatedAt: $0.createdAt, id: $0.id) },
             ownerProof: ownerProof)
         let items = page.items.compactMap { conversation -> SupportStandaloneRecord? in
             guard let id = UUID(uuidString: conversation.id) else { return nil }
@@ -611,7 +611,7 @@ final class SupportLiveHistoryReader: SupportHistoryStandaloneSource {
                 createdAt: dated ? conversation.createdAt : nil, updatedAt: dated ? conversation.updatedAt : nil)
         }
         return SupportStandalonePage(
-            items: items, nextCursor: page.nextCursor.map { SupportHistoryCursor(createdAt: $0.createdAt, id: $0.id) })
+            items: items, nextCursor: page.nextCursor.map { SupportHistoryCursor(createdAt: $0.updatedAt, id: $0.id) })
     }
 
     private struct Row: Decodable {

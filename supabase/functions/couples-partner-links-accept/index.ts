@@ -25,22 +25,18 @@ Deno.serve(async (req) => {
     }
 
     // Initialize Supabase client with service role
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      global: {
-        headers: { Authorization: req.headers.get("Authorization")! },
-      },
-    });
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Authenticate user from JWT
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    if (!authHeader?.startsWith("Bearer ") || !authHeader.slice(7).trim()) {
       return CouplesErrors.missingAuth();
     }
 
     const {
       data: { user },
       error: authError,
-    } = await supabase.auth.getUser();
+    } = await supabase.auth.getUser(authHeader.slice(7));
 
     if (authError || !user) {
       return CouplesErrors.missingAuth();
@@ -63,99 +59,42 @@ Deno.serve(async (req) => {
       return CouplesErrors.missingField("inviteCode");
     }
 
-    // Check if user already has active partner
-    const { data: existingPartnership } = await supabase
-      .from("partner_links")
-      .select("id")
-      .or(`user_id_1.eq.${userId},user_id_2.eq.${userId}`)
-      .eq("status", "active")
-      .maybeSingle();
-
-    if (existingPartnership) {
-      return CouplesErrors.activePartnershipExists();
+    // Keep the Base58 code case-sensitive and bound before hashing.
+    if (!/^[1-9A-HJ-NP-Za-km-z]{8}$/.test(inviteCode)) {
+      return CouplesErrors.invalidFieldValue("inviteCode", "Expected an 8-character invitation code");
     }
-
-    // Check rate limit for failed attempts (5/minute)
-    const tooManyAttempts = await tooManyFailedAttempts(supabase, userId);
-    if (tooManyAttempts) {
+    if (await tooManyFailedAttempts(supabase, userId)) {
       return CouplesErrors.tooManyFailedAttempts();
     }
 
-    // Hash the invite code
-    const inviteCodeHash = await sha256Hash(inviteCode);
-
-    // Find partner_link by invite_code_hash
-    const { data: partnerLink, error: fetchError } = await supabase
-      .from("partner_links")
-      .select("*")
-      .eq("invite_code_hash", inviteCodeHash)
-      .eq("status", "pending")
-      .maybeSingle();
-
-    if (fetchError) {
-      console.error("Failed to fetch partner link:", fetchError);
-      await logRateLimitAttempt(supabase, userId, "failed_invite_attempt");
-      return CouplesErrors.databaseError(fetchError);
+    // The transaction rechecks expiry, both accounts' active partnerships and
+    // the pending row under locks, then preserves consent when sorting UUIDs.
+    const { data: result, error: acceptError } = await supabase.rpc("accept_partner_invite", {
+      p_user_id: userId,
+      p_invite_code_hash: await sha256Hash(inviteCode),
+    });
+    if (acceptError || !result) {
+      return CouplesErrors.databaseError(acceptError ?? undefined);
     }
-
-    if (!partnerLink) {
+    if (!result.success) {
       await logRateLimitAttempt(supabase, userId, "failed_invite_attempt");
-      return CouplesErrors.partnerLinkNotFound();
+      switch (result.code) {
+        case "NOT_FOUND": return CouplesErrors.partnerLinkNotFound();
+        case "EXPIRED": return CouplesErrors.inviteExpired();
+        case "ALREADY_ACCEPTED": return CouplesErrors.inviteAlreadyAccepted();
+        case "ACTIVE_PARTNERSHIP": return CouplesErrors.activePartnershipExists();
+        case "SELF_INVITE": return CouplesErrors.invalidFieldValue("inviteCode", "You cannot partner with yourself");
+        default: return CouplesErrors.unexpectedError();
+      }
     }
-
-    // Validate not expired
-    const expiresAt = new Date(partnerLink.expires_at);
-    if (expiresAt < new Date()) {
-      await logRateLimitAttempt(supabase, userId, "failed_invite_attempt");
-      return CouplesErrors.inviteExpired();
-    }
-
-    // Validate not already accepted
-    if (partnerLink.user_id_2 !== null) {
-      await logRateLimitAttempt(supabase, userId, "failed_invite_attempt");
-      return CouplesErrors.inviteAlreadyAccepted();
-    }
-
-    // Validate not self-invite
-    if (partnerLink.user_id_1 === userId) {
-      await logRateLimitAttempt(supabase, userId, "failed_invite_attempt");
-      return CouplesErrors.invalidFieldValue(
-        "inviteCode",
-        "You cannot partner with yourself",
-      );
-    }
-
-    // Update partner_link to accept the invite
-    const { data: updatedLink, error: updateError } = await supabase
-      .from("partner_links")
-      .update({
-        user_id_2: userId,
-        status: "active",
-        activated_at: new Date().toISOString(),
-      })
-      .eq("id", partnerLink.id)
-      .eq("status", "pending") // Only update if still pending
-      .is("user_id_2", null) // Only update if no user_id_2 yet
-      .select()
-      .maybeSingle();
-
-    if (updateError) {
-      console.error("Failed to update partner link:", updateError);
-      await logRateLimitAttempt(supabase, userId, "failed_invite_attempt");
-      return CouplesErrors.databaseError(updateError);
-    }
-
-    if (!updatedLink) {
-      // Another request already accepted this invite
-      await logRateLimitAttempt(supabase, userId, "failed_invite_attempt");
-      return CouplesErrors.inviteAlreadyAccepted();
-    }
+    const updatedLink = result.partner_link;
+    const partnerId = result.partner_id;
 
     // Get partner's profile for name
     const { data: partnerProfile } = await supabase
       .from("profiles")
       .select("display_name")
-      .eq("id", partnerLink.user_id_1)
+      .eq("id", partnerId)
       .single();
 
     const partnerName = partnerProfile?.display_name || "Your partner";
@@ -164,7 +103,7 @@ Deno.serve(async (req) => {
     return formatSuccess(
       {
         partnerLinkId: updatedLink.id,
-        partnerId: partnerLink.user_id_1,
+        partnerId,
         partnerName,
         status: "active",
         activatedAt: updatedLink.activated_at,

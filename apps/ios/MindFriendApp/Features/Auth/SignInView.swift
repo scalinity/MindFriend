@@ -35,6 +35,14 @@ struct SignInView: View {
     @State private var showSuccessMessage = false
     @State private var successMessage = ""
 
+    #if DEBUG
+    private var testEmailSignIn: ((String, String) async throws -> UserProfile)?
+
+    init(testEmailSignIn: ((String, String) async throws -> UserProfile)? = nil) {
+        self.testEmailSignIn = testEmailSignIn
+    }
+    #endif
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -250,11 +258,20 @@ struct SignInView: View {
         }
     }
 
+    private func signInWithEmail(email: String, password: String) async throws -> UserProfile {
+        #if DEBUG
+        if let testEmailSignIn {
+            return try await testEmailSignIn(email, password)
+        }
+        #endif
+        return try await container.supabaseAuthService.signIn(email: email, password: password)
+    }
+
     private func handleEmailSignIn(email: String, password: String) {
         Task {
             isLoading = true
             do {
-                let user = try await container.supabaseAuthService.signIn(email: email, password: password)
+                let user = try await signInWithEmail(email: email, password: password)
                 await MainActor.run {
                     showEmailAuth = false
                     appState.setAuthenticated(user: user)

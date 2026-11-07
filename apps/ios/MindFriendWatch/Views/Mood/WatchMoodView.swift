@@ -2,6 +2,8 @@ import SwiftUI
 
 struct WatchMoodView: View {
     @State private var selectedMood: String?
+    @State private var saveError: String?
+    @ObservedObject private var connectivity = WatchConnectivityManager.shared
 
     /// Moods ordered low→high (stressed=1 to great=5) for consistent UX with iOS
     private var moods: [(String, String)] {
@@ -13,11 +15,14 @@ struct WatchMoodView: View {
             Text("How are you?")
                 .font(.headline)
 
+            if let status = saveError ?? connectivity.actionStatus {
+                Text(status).font(.caption2).multilineTextAlignment(.center)
+            }
+
             ScrollView {
                 VStack(spacing: 8) {
                     ForEach(moods, id: \.0) { mood, emoji in
                         Button {
-                            selectedMood = mood
                             saveMood(mood)
                         } label: {
                             HStack {
@@ -46,13 +51,13 @@ struct WatchMoodView: View {
     private func saveMood(_ mood: String) {
         let score = MoodEmojiMapper.score(for: mood)
 
-        // Update mood history for stats (thread-safe)
-        MoodHistoryManager.addMoodEntry(mood)
-
-        // Sync mood to iOS app (this also stores locally via storeMoodLocally)
-        WatchConnectivityManager.shared.sendMoodToPhone(mood, score: score)
-
-        // Haptic confirmation
-        HapticManager.shared.playSuccess()
+        do {
+            try connectivity.sendMoodToPhone(mood, score: score)
+            selectedMood = mood
+            saveError = nil
+            HapticManager.shared.playSuccess()
+        } catch {
+            saveError = error.localizedDescription
+        }
     }
 }

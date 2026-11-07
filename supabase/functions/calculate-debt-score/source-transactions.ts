@@ -1,3 +1,4 @@
+import { RECOVERY_POINTS } from "../_shared/recovery-points.ts";
 import { checkedTimeZone, localDateFormatter, localDayStart } from "./calendar.ts";
 import { withoutContainedSleepImports } from "../_shared/sleep-session-records.ts";
 import type { Transaction } from "../_shared/wellbeing-debt-types.ts";
@@ -132,7 +133,7 @@ export async function currentSourceTransactions(
       date,
       "deposit",
       "exercise_completion",
-      dayExercises.length * 8,
+      dayExercises.length * RECOVERY_POINTS.exercise,
       "exercise_sessions",
       dayExercises,
       `${dayExercises.length} completed exercises`,
@@ -142,7 +143,7 @@ export async function currentSourceTransactions(
       date,
       "deposit",
       "social_connection",
-      Math.min(12, dayPosts.length * 3),
+      Math.min(RECOVERY_POINTS.circleDailyCap, dayPosts.length * RECOVERY_POINTS.circlePost),
       "circle_posts",
       dayPosts,
       `${dayPosts.length} circle posts`,
@@ -154,7 +155,7 @@ export async function currentSourceTransactions(
       date,
       "deposit",
       "quest_completion",
-      dayQuests.length * 8,
+      dayQuests.length * RECOVERY_POINTS.quest,
       "quests",
       dayQuests,
       `${dayQuests.length} completed quests`,

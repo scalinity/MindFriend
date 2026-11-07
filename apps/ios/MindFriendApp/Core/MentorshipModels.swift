@@ -28,7 +28,7 @@ public struct MentorshipProfile: Codable, Identifiable, Equatable {
         case availabilityHoursWeek = "availability_hours_week"
         case languages
         case timezone
-        case isVerified = "is_verified"
+        case isVerified = "verified"
         case mentorAlias = "mentor_alias"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
@@ -153,6 +153,9 @@ public enum MentorshipRole: String, Codable, Equatable {
 public enum MentorshipStatus: String, Codable, Equatable {
     case pending = "pending"
     case active = "active"
+    case accepted = "accepted"
+    case declined = "declined"
+    case suspended = "suspended"
     case completed = "completed"
     case cancelled = "cancelled"
     case ended = "ended"
@@ -167,7 +170,10 @@ public struct MentorshipMessage: Codable, Identifiable, Equatable {
     public let matchId: UUID
     public let senderId: UUID
     public let content: String
-    public var isRead: Bool?
+    public var isRead: Bool? {
+        get { readAt != nil }
+        set { readAt = newValue == true ? (readAt ?? Date()) : nil }
+    }
     public let createdAt: Date
     public var readAt: Date?
     public var isFlagged: Bool?
@@ -178,11 +184,9 @@ public struct MentorshipMessage: Codable, Identifiable, Equatable {
         case matchId = "match_id"
         case senderId = "sender_id"
         case content
-        case isRead = "is_read"
         case createdAt = "created_at"
         case readAt = "read_at"
-        case isFlagged = "is_flagged"
-        case flaggedAt = "flagged_at"
+        case isFlagged = "flagged"
     }
 
     public init(
@@ -200,9 +204,8 @@ public struct MentorshipMessage: Codable, Identifiable, Equatable {
         self.matchId = matchId
         self.senderId = senderId
         self.content = content
-        self.isRead = isRead
         self.createdAt = createdAt
-        self.readAt = readAt
+        self.readAt = readAt ?? (isRead == true ? Date() : nil)
         self.isFlagged = isFlagged
         self.flaggedAt = flaggedAt
     }
@@ -233,14 +236,14 @@ public struct MentorshipReport: Codable, Identifiable, Equatable {
         case id
         case matchId = "match_id"
         case reporterId = "reporter_id"
-        case reportedUserId = "reported_user_id"
+        case reportedUserId = "reported_id"
         case reason
         case status
         case description
         case messageIds = "message_ids"
         case createdAt = "created_at"
-        case reviewedAt = "reviewed_at"
-        case reviewedBy = "reviewed_by"
+        case reviewedAt = "resolved_at"
+        case reviewedBy = "resolved_by"
         case resolution
     }
 
@@ -283,6 +286,7 @@ public struct MentorshipReport: Codable, Identifiable, Equatable {
 
 /// Status of a report
 public enum ReportStatus: String, Codable {
+    case investigating // Review is in progress
     case pending       // Awaiting moderator review
     case resolved      // Reviewed and action taken
     case dismissed     // No violation found
@@ -391,7 +395,7 @@ public struct FindMentorMatchesResponse: Codable {
     }
 
     public struct MentorMatch: Codable, Identifiable {
-        public let id: UUID
+        public var id: UUID { mentorId }
         public let mentorId: UUID
         public let mentorName: String
         public let mentorAlias: String
@@ -404,7 +408,6 @@ public struct FindMentorMatchesResponse: Codable {
         public let isVerified: Bool
 
         enum CodingKeys: String, CodingKey {
-            case id
             case mentorId = "mentor_id"
             case mentorName = "mentor_name"
             case mentorAlias = "mentor_alias"

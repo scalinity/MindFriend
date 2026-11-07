@@ -1,3 +1,4 @@
+import { refreshPremiumAccess } from "../_shared/entitlement.ts";
 // MindFriend Generate Content Edge Function
 // AI-powered content generation with TTS for personalized wellness content
 // Supports: sleep stories, meditations, breathing exercises, grounding, mindfulness, affirmations
@@ -401,14 +402,7 @@ Deno.serve(async (req) => {
     }
 
     // Check premium status for quota
-    const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("subscription_tier")
-      .eq("id", user.id)
-      .single();
-
-    const isPremium = profile?.subscription_tier === "premium" ||
-      profile?.subscription_tier === "family";
+    const isPremium = await refreshPremiumAccess(supabaseAdmin, user.id);
 
     const title = generateTitle(request.contentType, request.params);
     let contentId: string | undefined;

@@ -8,9 +8,11 @@ import Supabase
 @MainActor
 final class ForumService: ObservableObject {
     let supabase: SupabaseClient  // Internal for Realtime subscriptions
+    private let currentUserId: () -> UUID?
 
-    init(supabase: SupabaseClient) {
+    init(supabase: SupabaseClient, currentUserId: (() -> UUID?)? = nil) {
         self.supabase = supabase
+        self.currentUserId = currentUserId ?? { supabase.auth.currentUser?.id }
     }
 
     // MARK: - Categories & Boards
@@ -249,10 +251,18 @@ final class ForumService: ObservableObject {
             .limit(limit)
             .execute().value
 
-        // Fetch helpful state for each reply
+        guard !replies.isEmpty, let userId = currentUserId() else { return replies }
+        struct HelpfulReply: Decodable { let reply_id: UUID }
+        let helpful: [HelpfulReply] = try await supabase
+            .from("forum_helpful")
+            .select("reply_id")
+            .eq("user_id", value: userId.uuidString)
+            .in("reply_id", values: replies.map { $0.id.uuidString })
+            .execute().value
+        let helpfulIDs = Set(helpful.map(\.reply_id))
         var repliesWithState = replies
         for (index, reply) in replies.enumerated() {
-            repliesWithState[index].isHelpfulByMe = try await isMarkedHelpful(threadId: nil, replyId: reply.id)
+            repliesWithState[index].isHelpfulByMe = helpfulIDs.contains(reply.id)
         }
 
         return repliesWithState

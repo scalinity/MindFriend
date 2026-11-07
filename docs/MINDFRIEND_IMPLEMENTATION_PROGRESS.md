@@ -8,6 +8,23 @@ The only inherited local file was untracked `supabase/operations/20261022_repair
 
 Production data/schema/deployment, live configuration/billing/secrets and App Store actions were not performed. The existing Docker stack `stir`, its ports and unrelated simulators were not reset or modified.
 
+## Integration with the app repair branch
+
+The complete feature implementation was committed as `5122419ba043edf477e131bc126406a60c8b94b8`; its GitHub Actions run [42400202390](https://github.com/scalinity/MindFriend/actions/runs/42400202390) succeeded. The feature branch integrates pinned `main` revision `66633ef440bf82e07f71d4205b1b3aba70bd9109`, preserving its SDK authentication/logout fixes, account-service lifecycle, chat keyset paging, observed-speech handling, Health sleep import, companion ingestion and authorization migrations. The separately owned privacy worktree is unchanged by this task.
+
+The pre-integration checks below apply to `5122419`. Current combined-source checks are recorded separately; they are not inferred from those earlier results. Fourteen merge conflicts were reconciled without regenerating the Xcode project or removing Watch targets. Memory suggestions now verify current entitlement through the same `refresh_user_entitlement` authority as Chat and reject stale cached premium flags.
+
+| Combined-source check | Result | Evidence / limits |
+|---|---|---|
+| Final combined Swift selection | PASS: 569 tests, 0 failures | `integrated-final-swift-tests-r2.log`; complete union of the Support/auth/data/voice/history/Health/offline and main lifecycle/sleep selections, plus actual SDK credential-failure/deleted-owner restore and page-boundary voice regressions. Earlier separate 379/184 runs are retained and are not added again |
+| Backend handler fixtures | PASS: 228 tests / 143 steps | `integrated-backend-fixtures-r2.log`; no network permission. R1 failed because the Chat fixture still modeled the older entitlement RPC; the corrected fixture is retained alongside that failure |
+| Backend entrypoint typecheck | PASS | `integrated-backend-typecheck-r1.log`; four affected entrypoints |
+| Fresh combined forward SQL chain | PASS | `integrated-support-fresh-summary-r2.json`; 212 unchanged frozen baseline migrations, then all 48 sorted forward files (12 support, 35 app-repair and one integration correction). All seven additional overlap fixtures and 45 recorded concurrency/trigger checks pass; exact container removed |
+| Modeled combined forward SQL chain | FAIL; restoration promotion blocked | `integrated-support-modeled-summary-r1.json`; stops in inherited `20261106225731_repair_mentorship_discovery_contract.sql` before the new feature contract checks: the October schema has `calculate_timezone_overlap(tz1 text,tz2 text)`, while the migration declares `p_tz1`/`p_tz2`. PostgreSQL refuses the parameter-name change. No destructive drop or historical rewrite was attempted; exact container removed |
+| Integration regression reproduction | EXPECTED FAIL on the prior 47-file chain | `integration-negative-control-summary.json`; the new cross-path fixture rejects the old arrival-clock result. This is defect reproduction, not a feature PASS |
+| Combined native journeys | PASS: 7 selected tests | `current-main-integrated-ui-r1.log`; auth rejection, consent/Help, selected-answer editable draft, memory default-off/dark preview, termination/relaunch, grounding and saved-step History rename/search/delete. Synthetic account/network-denied fixture; captures exported and selected Chat/memory/History screens inspected |
+| Integration independent review | Collected and reconciled | Three native Claude Sonnet phases returned INT001–INT012. The bounded SQL proposal was approved for synthetic execution. Final fixes follow the reviewed day-lock/warning/dependency/fixture remedies and are verified by the parent; see `SUPPORT_SESSION_REVIEW.md` |
+
 ## Current usable implementation
 
 Today, Chat, Explore and You are stable destinations. Today has one local start/resume card, optional mood entry, at most three explicit pins, and direct crisis resources. Simpler view is immediately reversible. First-run setup captures the original 13+ and consent requirements without a simulated conversation or compulsory wellness taxonomy.
@@ -27,7 +44,7 @@ These are implemented development paths. Authenticated service/provider acceptan
 | M0 | implemented | Exact source/instructions/baseline/inherited-file and 26-route inventory; consent SQL/wire/native controls; full authenticated route matrix and human first-use wording unrun |
 | M1 | implemented | Journal, owner/epoch, quota, offline handler and transcript foundations pass focused registered tests and synthetic failure/race checks |
 | M2 | implemented | Four-destination shell and actual compact/iPad journeys; final actual-appearance matrix passed and is recorded below; full device/settings matrix remains partial |
-| M3 | implemented | Full new schema/RLS/RPC/privacy/memory/history/Generate/export chain passes both disposable paths; exact real environment ledger/HTTP behavior unverified |
+| M3 | implemented; restoration gate remains | Current fresh combined chain and all contract fixtures pass. The modeled combined chain stops at the inherited mentorship parameter-name conflict; its later feature checks are NOT_RUN. Exact real environment ledger/HTTP behavior remains unverified |
 | M4 | implemented | Strict Responses/handler/receipt/proposal fixtures pass; live Luna schema/stream smoke blocked on a nonproduction target |
 | M5 | implemented | Three complete local loops, selected-answer preview/draft, reflection/Done/Close/Discard and reminder domain verified; OS notification delivery unrun |
 | M6 | implemented | Voice/context/transcript/return/history source and focused fixtures verified; physical audio and live relay continuity unrun |
@@ -38,13 +55,13 @@ These are implemented development paths. Authenticated service/provider acceptan
 | G0 | PASS, source/local | Verified checkout and preserved work, current toolchain/destinations, original consent requirement located and implemented |
 | G1 | PASS, tested local scope | Durable owner-bound journal, immutable operation/result recovery, privacy suppression and no Home quota reset; physical protected-data behavior belongs to G4 |
 | G2 | BLOCKED | No explicitly established nonproduction service/provider target with bounded credentials/budget. No real AI request was made; injected fetches are fixtures |
-| G3 | PARTIAL | Fresh and modeled restoration-chain applicability, two-owner RLS/RPC, export/replay/locking pass. Production ledger, storage policy parity, PostgREST and released-client matrix are unverified |
-| G4 | PARTIAL | Actual Xcode simulator builds, native journeys and selected accessibility audits. Final device inventory contains only simulators; physical Health/audio/permissions/protected-data checks NOT_RUN |
+| G3 | PARTIAL; release blocked | Fresh combined chain, two-owner RLS/RPC, export/replay/locking pass. Modeled combined chain fails at the inherited mentorship argument-name conflict. Production ledger, storage policy parity, PostgREST and released-client matrix are unverified |
+| G4 | PARTIAL | Actual Xcode simulator builds, native journeys and selected accessibility audits. No physical iPhone is available in the final inventory; accessible destinations are simulators. Physical Health/audio/permissions/protected-data checks NOT_RUN |
 | G5 | NOT_RUN | Five representative first-use/context-comprehension participants were not available; no clinical usefulness claim |
 
 ## Executed checks
 
-All logs, results, manifests, screenshots, review packets and retained failures are under the ignored `artifacts/support-session/` directory. Checks are not summed across overlapping runs.
+All logs, results, manifests, screenshots, review packets and retained failures are under the ignored `artifacts/support-session/` directory. The table above is the current combined-source evidence. The following table retains component/pre-integration evidence at `5122419`; those passes do not override the current modeled-chain failure. Checks are not summed across overlapping runs.
 
 | Check | Result | Evidence / limits |
 |---|---|---|
@@ -70,7 +87,7 @@ All logs, results, manifests, screenshots, review packets and retained failures 
 
 The final iPad actual-appearance run also passes all 3 selected tests (`ui-ipad-actual-appearance-r1.log`): real landscape/four destinations, dark full-source memory preview and largest-text Chat accessibility audit. Actual dark compact captures were inspected after export; earlier light captures mislabeled dark are retained as failed validation evidence.
 
-The canonical full-suite baseline has an unrelated CircleFull wording failure (`m0-focused-tests-retry.log`, 40/41). A worker's broader backend run reported an unchanged image-generation test failure; that is not a parent whole-suite pass or a reason to modify the unrelated image feature.
+The historical pre-integration full-suite baseline recorded an unrelated CircleFull wording failure (`m0-focused-tests-retry.log`, 40/41). A worker's broader backend run reported an unchanged image-generation test failure; that is not a parent whole-suite pass or a reason to modify the unrelated image feature.
 
 ## Acceptance ledger
 
@@ -78,7 +95,7 @@ PASS (local) means the listed local/automated/simulator criterion was demonstrat
 
 | ID | Result | Evidence / remaining boundary |
 |---|---|---|
-| AC-01 | PARTIAL until close-out | Identity/base/inherited file recorded; final named-path commit and preservation check below |
+| AC-01 | PASS (local close-out) | Identity/base/inherited file recorded; exact spec and all 212 baseline files preserved; implementation and integration commits are recorded in Git/final report |
 | AC-02 | PARTIAL | All 26 legacy routes mapped and focused navigation tests pass; exhaustive authenticated native route matrix unrun |
 | AC-03 | PASS (local/simulator) | Real atomic file fault/recovery tests and acknowledged Untangle termination/relaunch restoration |
 | AC-04 | PASS (synthetic DB) | 100 exact replays, changed payload rejection, simultaneous completion cases and one 30 XP reward |
@@ -96,7 +113,7 @@ PASS (local) means the listed local/automated/simulator criterion was demonstrat
 | AC-16 | PASS (source/fixtures) | 4,000 UTF-16 input, 128,000-byte prompt, 500-token main chat, budget/quota/cancellation/claim and safety/key/provider boundaries retained; live configuration not inferred |
 | AC-17 | PARTIAL | Authoritative usage/period/entitlement fixtures and daily quota SQL pass; StoreKit sandbox and complete runtime entitlement matrix unrun |
 | AC-18 | PASS (synthetic DB) | Two-owner RLS/RPC, direct-write/anon denial, forged attachment/completion/reward and zero-row classification |
-| AC-19 | PARTIAL | Both exact disposable paths and missing-capability/legacy fixtures pass; actual selected-environment ledger/storage/client parity unverified |
+| AC-19 | PARTIAL; restoration blocked | Current fresh combined path passes; current modeled path fails on inherited mentorship argument names before the feature checks. Missing-capability/legacy fixtures pass. Actual selected-environment ledger/storage/client parity remains unverified |
 | AC-20 | PASS (source/local/synthetic) | Bounded content-free logs; new records covered by explicit export/delete with owner/epoch and pending/rejected states; Private Vault boundary retained |
 | AC-21 | PASS (local/simulator/synthetic) | Grounding checkpoints, silent/Skip/Finish semantics, canonical registry and exactly-once completion/reward |
 | AC-22 | PASS (local/simulator) | Original Untangle answers retained; deliberate field preview/draft; no implicit journal/XP; discard scrubs queued/conflict copies |
@@ -113,7 +130,7 @@ PASS (local) means the listed local/automated/simulator criterion was demonstrat
 | AC-33 | NOT_RUN | Five-person first-use study unavailable |
 | AC-34 | NOT_RUN | Five-person context-comprehension study unavailable |
 | AC-35 | NOT_RUN | Named physical device/network/provider timing and 30-sample captures unavailable; targets not relaxed |
-| AC-36 | PARTIAL until final report | Independent review dispositions recorded; final report must retain these separate evidence layers and no-release boundary |
+| AC-36 | PASS (reporting scope) | Independent review dispositions, current fresh PASS/modeled FAIL, and all unrun service/device/human/performance gates are recorded separately; no production or App Store action |
 
 ## Review, rollout and remaining work
 
@@ -129,4 +146,8 @@ Open `apps/ios/MindFriendApp.xcodeproj`, scheme `MindFriendApp`. The DEBUG-only 
 
 Focused commands are recorded in the logs/acceptance scripts. The SQL harness is `artifacts/support-session/validate_support_sql.py fresh|modeled`, with hash-pinned schema-only fixtures and exact local image; it creates no host ports/mounts and always records exact-container teardown. Its source inputs are pinned in `candidate-reviewed-inputs.json`. Do not replace this with a reset of the existing `stir` stack.
 
-Close-out remains in progress: reconcile owned test processes, inspect final worktree/branch/artifact sizes, retain NativePeers workspaces refused by its cleanup planner, remove only regenerable task build caches, verify the inherited file hash, commit/push named intended paths, and close notifications QUIET immediately before the final report. No unrelated simulator or shared helper may be stopped.
+The implementation and integration are recorded on `implementation/support-session-20261106`; the final report records the exact pushed revision and CI state. The inherited cron SQL and supplied specification are unchanged, and all 212 frozen baseline migrations match byte for byte. All owned test processes and disposable containers have finished. The earlier three task simulators and the later combined-acceptance simulator were removed; the unrelated booted simulator was observed unchanged.
+
+Cleanup retained the exact compiled app/dylib/Info hashes and verified all 15 package checkouts clean before deleting regenerated task build/package/module caches. The final cleanup removed 6,189,641,728 allocated bytes of caches and 2,781,880,320 allocated bytes from the last owned simulator; these measurements are not a volume free-space delta and are separate from the earlier cleanup. Reports/logs/manifests/xcresults remain under `artifacts/support-session` (about 105 MiB). Ten tool-owned NativePeers worktrees remain (about 483 MiB): its fresh planner refuses retirement of resumed histories. Exact paths, sizes and reasons are in `artifacts/support-session/retained-native-workspaces.json`; they were not force-removed. The existing CodeGraph index, other branches and shared services are preserved.
+
+No production SQL/deployment/configuration/billing/secret or App Store action occurred. G2–G5 and the modeled restoration prerequisite remain as stated above; this branch is not approval to release.

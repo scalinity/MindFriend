@@ -21,11 +21,8 @@ final class FamilyHubViewModel: ObservableObject {
 
         do {
             // Load family group
-            if let family = try await familyService.fetchFamilyGroup() {
-                await MainActor.run {
-                    self.familyGroup = family
-                }
-            }
+            familyGroup = try await familyService.fetchFamilyGroup()
+            userRole = .child
 
             // Load family members
             let members = try await familyService.fetchFamilyMembers()
@@ -35,7 +32,7 @@ final class FamilyHubViewModel: ObservableObject {
 
             // Determine user role
             if let userId = supabase.auth.currentUser?.id,
-               let currentMember = members.first(where: { $0.userId == userId.uuidString }) {
+               let currentMember = members.first(where: { UUID(uuidString: $0.userId) == userId }) {
                 await MainActor.run {
                     self.userRole = currentMember.role
                 }

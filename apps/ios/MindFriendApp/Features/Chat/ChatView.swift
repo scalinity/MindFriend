@@ -32,6 +32,12 @@ struct ChatView: View {
     @State private var localVoiceEvents: [SupportTranscriptEvent] = []
     @State private var activityEvents: [SupportActivityChatEvent] = []
     @State private var removingVoiceEvent: SupportTranscriptEvent?
+    @State private var olderCursor: ChatHistoryCursor?
+    @State private var hasLoadedOlderPages = false
+    @State private var isLoadingOlder = false
+    @State private var olderLoadTask: Task<Void, Never>?
+    @State private var olderLoadError: String?
+    @State private var prependAnchor: String?
     @State private var inputText = ""
     @State private var isLoading = true
     @State private var isSending = false
@@ -75,6 +81,14 @@ struct ChatView: View {
                         if dynamicTypeSize.isAccessibilitySize {
                             Text(displayTitle).font(.headline).accessibilityAddTraits(.isHeader)
                                 .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        if let olderLoadError { Text(olderLoadError).font(.caption).foregroundStyle(.secondary) }
+                        if olderCursor != nil {
+                            Button(isLoadingOlder ? "Loading…" : "Load earlier messages") {
+                                olderLoadTask = Task { await loadOlderMessages() }
+                            }
+                            .disabled(isLoadingOlder || isLoading || isSending)
+                            .accessibilityIdentifier("chat-load-earlier-messages")
                         }
                         ForEach(SupportChatRow.merge(messages: messages, localEvents: localVoiceEvents, activityEvents: activityEvents)) { row in
                             switch row {
@@ -185,8 +199,11 @@ struct ChatView: View {
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .onChange(of: messages.count) { _, _ in
-                    withAnimation {
-                        proxy.scrollTo(messages.last?.id, anchor: .bottom)
+                    if let anchor = prependAnchor {
+                        proxy.scrollTo(anchor, anchor: .top)
+                        prependAnchor = nil
+                    } else {
+                        withAnimation { proxy.scrollTo(messages.last?.id, anchor: .bottom) }
                     }
                 }
                 .onChange(of: sendFailure?.kind) { _, value in
@@ -322,7 +339,7 @@ struct ChatView: View {
             if let previous, previous != current {
                 messages = []; localVoiceEvents = []; activityEvents = []; pendingSend = nil; sendFailure = nil
                 isVisible = false; viewGeneration = UUID()
-                sendTask?.cancel(); reconciliationTask?.cancel()
+                sendTask?.cancel(); reconciliationTask?.cancel(); olderLoadTask?.cancel()
                 dismiss()
             }
         }
@@ -331,6 +348,7 @@ struct ChatView: View {
             viewGeneration = UUID()
             sendTask?.cancel()
             reconciliationTask?.cancel()
+            olderLoadTask?.cancel()
             sendTask = nil
             reconciliationTask = nil
             isSending = false
@@ -343,6 +361,11 @@ struct ChatView: View {
             sendTask?.cancel()
             reconciliationTask?.cancel()
             messages = []
+            olderCursor = nil
+            hasLoadedOlderPages = false
+            isLoadingOlder = false
+            olderLoadError = nil
+            prependAnchor = nil
             pendingSend = nil
             sendFailure = nil
             isSending = false
@@ -380,6 +403,8 @@ struct ChatView: View {
         let generation = viewGeneration
         let request = UUID()
         messageLoadGeneration = request
+        olderLoadTask?.cancel()
+        isLoadingOlder = false
         isLoading = true
         defer {
             if viewGeneration == generation && messageLoadGeneration == request { isLoading = false }
@@ -387,11 +412,25 @@ struct ChatView: View {
 
         do {
             let loaded: [Message]
-            if let loadOperation { loaded = try await loadOperation() }
-            else { loaded = try await container.chatService.getMessages(conversationId: conversation.id) }
+            let page: ChatHistoryPage<Message>?
+            if let loadOperation { loaded = try await loadOperation(); page = nil }
+            else {
+                let result = try await container.chatService.getMessagePage(conversationId: conversation.id)
+                loaded = result.items
+                page = result
+            }
             guard !Task.isCancelled, isVisible, viewGeneration == generation,
                   messageLoadGeneration == request else { return }
-            messages = loaded
+            if hasLoadedOlderPages {
+                let currentPageIDs = Set(loaded.map { $0.id.lowercased() })
+                let older = messages.filter {
+                    !currentPageIDs.contains($0.id.lowercased()) && $0.id.lowercased() != pendingSend?.messageId
+                }
+                messages = older + loaded
+            } else {
+                messages = loaded
+                olderCursor = page?.nextCursor
+            }
             // An unconfirmed send may have failed before a user row existed.
             // Keep the exact draft visible without inventing a saved message ID.
             if let pendingSend, sendFailure != nil, inputText.isEmpty,
@@ -404,6 +443,31 @@ struct ChatView: View {
                   (error as? URLError)?.code != .cancelled, isVisible,
                   viewGeneration == generation, messageLoadGeneration == request else { return }
             if sendFailure == nil { sendFailure = ChatRequestFailure(kind: .network) }
+        }
+    }
+
+    private func loadOlderMessages() async {
+        guard !isLoadingOlder, let cursor = olderCursor else { return }
+        let generation = viewGeneration
+        let loadGeneration = messageLoadGeneration
+        isLoadingOlder = true
+        olderLoadError = nil
+        defer { if viewGeneration == generation && messageLoadGeneration == loadGeneration { isLoadingOlder = false } }
+        do {
+            let page = try await container.chatService.getMessagePage(conversationId: conversation.id, before: cursor)
+            guard !Task.isCancelled, isVisible, viewGeneration == generation, messageLoadGeneration == loadGeneration else { return }
+            let existing = Set(messages.map { $0.id.lowercased() })
+            let earlier = page.items.filter { !existing.contains($0.id.lowercased()) }
+            if !earlier.isEmpty {
+                prependAnchor = messages.first?.id
+                messages.insert(contentsOf: earlier, at: 0)
+            }
+            hasLoadedOlderPages = true
+            olderCursor = page.nextCursor
+        } catch {
+            if !Task.isCancelled, isVisible, viewGeneration == generation, messageLoadGeneration == loadGeneration {
+                olderLoadError = "Couldn't load earlier messages. Try again."
+            }
         }
     }
 

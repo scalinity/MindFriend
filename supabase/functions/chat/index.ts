@@ -1,3 +1,4 @@
+import { refreshPremiumAccess } from "../_shared/entitlement.ts";
 // MindFriend Chat Edge Function
 // Handles AI conversation with quota enforcement and crisis detection
 
@@ -505,7 +506,7 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
             return new Response(JSON.stringify({ error: "Unable to confirm retry claim" }), { status: 503, headers: responseHeaders });
           }
           if (!claimed) {
-            return new Response(JSON.stringify({ error: "Request outcome pending. Reload history before sending again." }), { status: 409, headers: responseHeaders });
+            return new Response(JSON.stringify({ code: "chat_request_pending", requestId, error: "Request outcome pending. Reload history before sending again." }), { status: 409, headers: responseHeaders });
           }
           execution.receipt = { userId: user.id, requestId };
           execution.messageSaved = previous.messageSaved === false ? false : null;
@@ -522,7 +523,7 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
             throw new Error("RETRY_MESSAGE_UNCONFIRMED");
           }
         } else {
-          return new Response(JSON.stringify({ error: "Request outcome pending. Reload history before sending again." }), { status: 409, headers: responseHeaders });
+          return new Response(JSON.stringify({ code: "chat_request_pending", requestId, error: "Request outcome pending. Reload history before sending again." }), { status: 409, headers: responseHeaders });
         }
       }
       if (!claimError) execution.messageSaved = false;
@@ -534,7 +535,7 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
     // Get user profile to check subscription tier
     const { data: profile, error: profileError } = await supabaseAdmin
       .from("profiles")
-      .select("subscription_tier, preferred_language")
+      .select("preferred_language")
       .eq("id", user.id)
       .single();
 
@@ -574,15 +575,15 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
           : aiToneRaw; // gentle and motivational map directly
 
     const now = new Date();
-    const { data: sponsoredAccess, error: sponsoredError } = await supabaseAdmin
-      .rpc("refresh_sponsored_entitlement", { p_user_id: user.id });
-    if (sponsoredError || typeof sponsoredAccess !== "boolean") {
+    let isPremium: boolean;
+    try {
+      isPremium = await refreshPremiumAccess(supabaseAdmin, user.id);
+    } catch {
       return new Response(JSON.stringify({ error: "Unable to verify access" }), {
         status: 503,
         headers: responseHeaders,
       });
     }
-    const isPremium = profile.subscription_tier === "premium" || sponsoredAccess;
 
     let quotaUsed = 0;
     let quotaLimit = 0;

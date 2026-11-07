@@ -5,12 +5,29 @@ struct MentorshipChatView: View {
     let matchId: UUID
     @EnvironmentObject var container: DependencyContainer
 
+    var body: some View {
+        MentorshipChatContent(matchId: matchId, service: container.mentorshipService)
+    }
+}
+
+private struct MentorshipChatContent: View {
+    let matchId: UUID
+    @ObservedObject var service: MentorshipService
+    @ObservedObject var messagingService: MentorshipMessagingService
+
+    init(matchId: UUID, service: MentorshipService) {
+        self.matchId = matchId
+        self.service = service
+        self.messagingService = service.messagingService
+    }
+
     @State private var messageText = ""
     @State private var showingReportSheet = false
     @State private var showingEndSheet = false
+    @State private var mentorshipEnded = false
+    @Environment(\.dismiss) private var dismiss
 
-    private var messagingService: MentorshipMessagingService { container.mentorshipService.messagingService }
-    private var safetyService: MentorshipSafetyService { container.mentorshipService.safetyService }
+    private var safetyService: MentorshipSafetyService { service.safetyService }
 
     var body: some View {
         ZStack {
@@ -23,6 +40,7 @@ struct MentorshipChatView: View {
                         LazyVStack(spacing: 8, pinnedViews: []) {
                             ForEach(messagingService.messages) { message in
                                 MentorshipMessageBubble(message: message)
+                                    .environment(\.currentUser, service.currentUserId)
                                     .id(message.id)
                             }
                         }
@@ -42,6 +60,10 @@ struct MentorshipChatView: View {
 
                 // Message input
                 VStack(spacing: 8) {
+                    if messagingService.error != nil {
+                        Text("Unable to complete the message request. Your draft is still here; please try again.")
+                            .font(.callout).foregroundStyle(.red)
+                    }
                     HStack(spacing: 8) {
                         TextField("Type a message...", text: $messageText)
                             .textFieldStyle(.roundedBorder)
@@ -49,16 +71,12 @@ struct MentorshipChatView: View {
 
                         Button(action: {
                             if !messageText.trimmingCharacters(in: .whitespaces).isEmpty {
+                                let draft = messageText
                                 Task {
                                     do {
-                                        try await messagingService.sendMessage(
-                                            matchId: matchId,
-                                            content: messageText
-                                        )
-                                        messageText = ""
-                                    } catch {
-                                        // Error handled by messagingService.error
-                                    }
+                                        try await messagingService.sendMessage(matchId: matchId, content: draft)
+                                        if messageText == draft { messageText = "" }
+                                    } catch { /* The observed service keeps the failure visible and draft intact. */ }
                                 }
                             }
                         }) {
@@ -112,22 +130,22 @@ struct MentorshipChatView: View {
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showingReportSheet) {
             ReportSafetySheet(
-                matchId: matchId,
                 isPresented: $showingReportSheet,
                 onReport: { reason, description in
-                    Task {
-                        await safetyService.reportMentorship(
-                            matchId: matchId,
-                            reportedUserId: UUID(),  // Would come from match data
-                            reason: reason,
-                            description: description
-                        )
-                    }
+                    try await safetyService.reportMentorship(
+                        matchId: matchId, reason: reason, description: description
+                    )
                 }
             )
         }
-        .sheet(isPresented: $showingEndSheet) {
-            EndMentorshipSheet(isPresented: $showingEndSheet)
+        .sheet(isPresented: $showingEndSheet, onDismiss: {
+            if mentorshipEnded { dismiss() }
+        }) {
+            EndMentorshipSheet(isPresented: $showingEndSheet) { reason in
+                try await service.endMentorship(matchId, reason: reason.isEmpty ? "completed" : reason)
+                messagingService.stopAutoUpdate()
+                mentorshipEnded = true
+            }
         }
         .onAppear {
             Task {
@@ -148,8 +166,7 @@ struct MentorshipMessageBubble: View {
     @Environment(\.currentUser) var currentUser
 
     var isCurrentUser: Bool {
-        // Compare sender ID with current user ID
-        true  // Placeholder - would check actual user
+        currentUser == message.senderId
     }
 
     var body: some View {
@@ -194,13 +211,13 @@ struct MentorshipMessageBubble: View {
 // MARK: - Report Safety Sheet
 
 struct ReportSafetySheet: View {
-    let matchId: UUID
     @Binding var isPresented: Bool
-    let onReport: (String, String?) -> Void
+    let onReport: (String, String?) async throws -> Void
 
     @State private var selectedReason: String = ""
     @State private var detailsText = ""
     @State private var isSending = false
+    @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -215,7 +232,7 @@ struct ReportSafetySheet: View {
                             Text(reason).tag(reason)
                         }
                     }
-                    .pickerStyle(.segmented)
+                    .pickerStyle(.menu)
                 }
 
                 // Details
@@ -236,9 +253,15 @@ struct ReportSafetySheet: View {
                 VStack(spacing: 12) {
                     Button(action: {
                         isSending = true
-                        onReport(selectedReason, detailsText.isEmpty ? nil : detailsText)
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                            isPresented = false
+                        errorMessage = nil
+                        Task {
+                            defer { isSending = false }
+                            do {
+                                try await onReport(selectedReason, detailsText.isEmpty ? nil : detailsText)
+                                isPresented = false
+                            } catch {
+                                errorMessage = "The report could not be saved. Your details are still here; please try again."
+                            }
                         }
                     }) {
                         if isSending {
@@ -253,6 +276,9 @@ struct ReportSafetySheet: View {
                     .foregroundColor(.white)
                     .cornerRadius(8)
                     .disabled(selectedReason.isEmpty || isSending)
+                    if let errorMessage {
+                        Text(errorMessage).font(.caption).foregroundColor(.red)
+                    }
 
                     Button(action: { isPresented = false }) {
                         Text("Cancel")
@@ -264,6 +290,8 @@ struct ReportSafetySheet: View {
                 }
             }
             .padding()
+            .disabled(isSending)
+            .interactiveDismissDisabled(isSending)
             .navigationTitle("Report Safety Concern")
             .navigationBarTitleDisplayMode(.inline)
         }
@@ -274,6 +302,8 @@ struct ReportSafetySheet: View {
 
 struct EndMentorshipSheet: View {
     @Binding var isPresented: Bool
+    let onEnd: (String) async throws -> Void
+    @State private var errorMessage: String?
     @State private var reasonText = ""
     @State private var isSending = false
 
@@ -292,12 +322,21 @@ struct EndMentorshipSheet: View {
                 }
 
                 Spacer()
-
+                if let errorMessage {
+                    Text(errorMessage).foregroundStyle(.red).font(.callout)
+                }
                 VStack(spacing: 12) {
                     Button(action: {
                         isSending = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                            isPresented = false
+                        errorMessage = nil
+                        Task {
+                            defer { isSending = false }
+                            do {
+                                try await onEnd(reasonText.trimmingCharacters(in: .whitespacesAndNewlines))
+                                isPresented = false
+                            } catch {
+                                errorMessage = "The mentorship could not be ended. Please try again."
+                            }
                         }
                     }) {
                         if isSending {
@@ -320,9 +359,11 @@ struct EndMentorshipSheet: View {
                             .background(Color(.quaternarySystemFill))
                             .cornerRadius(8)
                     }
+                    .disabled(isSending)
                 }
             }
             .padding()
+            .interactiveDismissDisabled(isSending)
             .navigationTitle("End Mentorship")
             .navigationBarTitleDisplayMode(.inline)
         }

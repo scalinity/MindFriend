@@ -51,33 +51,63 @@ fi
 # Check 2: Remote-ledger consistency. Skipped unless explicitly requested,
 # since it requires a linked Supabase project and a few seconds of network IO.
 # -----------------------------------------------------------------------------
-if command -v supabase >/dev/null 2>&1 && [ -n "${CHECK_REMOTE_MIGRATIONS:-}" ]; then
+if [ "${CHECK_REMOTE_MIGRATIONS:-}" = "1" ]; then
+    if ! command -v supabase >/dev/null 2>&1; then
+        echo "✗ Remote ledger check requested, but the Supabase CLI is unavailable" >&2
+        exit 1
+    fi
     echo "→ Querying remote ledger for name/version drift…"
-    # Build local map: version -> name (without timestamp prefix and .sql suffix)
-    local_pairs=$(
-        cd "$MIGRATIONS_DIR" && \
-        ls *.sql 2>/dev/null | \
-        sed -E 's/^([0-9]{14})_(.*)\.sql$/\1 \2/'
-    )
+    if ! remote_json=$(supabase db query --linked --output json \
+        "SELECT version, name FROM supabase_migrations.schema_migrations ORDER BY version;"); then
+        echo "✗ Remote ledger query failed; migration consistency is unverified" >&2
+        exit 1
+    fi
 
-    # Pull remote ledger as JSON via supabase db query --linked
-    remote_json=$(supabase db query --linked \
-        "SELECT version, name FROM supabase_migrations.schema_migrations ORDER BY version;" 2>/dev/null || echo "")
+    if ! REMOTE_MIGRATION_JSON="$remote_json" python3 - "$MIGRATIONS_DIR" <<'PYTHON'
+import json
+import os
+from pathlib import Path
+import re
+import sys
 
-    drift=0
-    while read -r version local_name; do
-        [ -z "$version" ] && continue
-        # Look up remote name for this version (best-effort grep, no jq dependency)
-        remote_name=$(echo "$remote_json" | grep -A1 "\"version\": \"${version}\"" | grep '"name"' | head -1 | sed -E 's/.*"name": "([^"]+)".*/\1/' || echo "")
-        if [ -n "$remote_name" ] && [ "$remote_name" != "$local_name" ]; then
-            echo "✗ Drift at ${version}: local='${local_name}' remote='${remote_name}'"
-            drift=1
-        fi
-    done <<< "$local_pairs"
+try:
+    payload = json.loads(os.environ["REMOTE_MIGRATION_JSON"])
+    rows = payload.get("rows") if isinstance(payload, dict) else payload
+    if not isinstance(rows, list):
+        raise ValueError("expected a JSON row array or an object containing rows")
+    remote = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ValueError("invalid ledger row")
+        version, name = row.get("version"), row.get("name")
+        if not isinstance(version, str) or not re.fullmatch(r"[0-9]{14}", version):
+            raise ValueError("invalid ledger version")
+        if not isinstance(name, str) or not name or version in remote:
+            raise ValueError("missing name or duplicate ledger version")
+        remote[version] = name
+except (ValueError, KeyError) as error:
+    print(f"✗ Remote ledger response is invalid: {error}", file=sys.stderr)
+    sys.exit(1)
 
-    if [ "$drift" -eq 0 ]; then
-        echo "✓ Local migration names match remote ledger"
-    else
+shared = 0
+drift = False
+for path in Path(sys.argv[1]).glob("*.sql"):
+    match = re.fullmatch(r"([0-9]{14})_(.+)\.sql", path.name)
+    if not match:
+        print(f"✗ Invalid local migration filename: {path.name}", file=sys.stderr)
+        drift = True
+        continue
+    version, local_name = match.groups()
+    if version in remote:
+        shared += 1
+        if remote[version] != local_name:
+            print(f"✗ Drift at {version}: local={local_name!r} remote={remote[version]!r}")
+            drift = True
+if drift:
+    sys.exit(1)
+print(f"✓ No name drift among {shared} shared versions ({len(remote)} remote rows checked)")
+PYTHON
+    then
         failed=1
     fi
 else
@@ -88,4 +118,4 @@ if [ "$failed" -ne 0 ]; then
     exit 1
 fi
 echo
-echo "All migration checks passed."
+echo "All requested migration checks passed."

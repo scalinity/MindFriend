@@ -25,15 +25,12 @@ const handler = createMemorySuggestionHandler({
       // Service role; the handler only ever passes the verified user id as the owner argument.
       adminRpc: (fn, args) => auth.supabaseAdmin.rpc(fn, args),
       async readAccount() {
-        const [settings, profile] = await Promise.all([
-          auth.supabaseAdmin.from("user_settings").select("privacy_mode").eq("user_id", userId).maybeSingle(),
-          auth.supabaseAdmin.from("profiles").select("subscription_tier").eq("id", userId).maybeSingle(),
-        ]);
-        // Missing/unreadable settings or profile must not opt anyone into saved personal context.
-        if (settings.error || !settings.data || profile.error || !profile.data) return null;
+        const settings = await auth.supabaseAdmin.from("user_settings")
+          .select("privacy_mode").eq("user_id", userId).maybeSingle();
+        // Missing/unreadable settings must not opt anyone into saved personal context.
+        if (settings.error || !settings.data) return null;
         return {
           privacyMode: typeof settings.data.privacy_mode === "string" ? settings.data.privacy_mode : null,
-          subscriptionTier: typeof profile.data.subscription_tier === "string" ? profile.data.subscription_tier : null,
         };
       },
       // Same helper and feature label as the baseline chat memory extraction.

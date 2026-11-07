@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 
 /// View for together sessions (synchronized family activities)
 struct TogetherSessionsView: View {
@@ -6,7 +7,9 @@ struct TogetherSessionsView: View {
     @State private var sessions: [TogetherSession] = []
     @State private var templates: [TogetherTemplate] = []
     @State private var isLoading = false
-    @State private var showStartSession = false
+    @State private var isStarting = false
+    @State private var selectedSession: TogetherSession?
+    @State private var errorMessage: String?
     let familyGroup: FamilyWellnessGroup
 
     var activeSessions: [TogetherSession] {
@@ -29,7 +32,7 @@ struct TogetherSessionsView: View {
                                 .padding(.horizontal)
 
                             ForEach(activeSessions, id: \.id) { session in
-                                TogetherActiveSessionCard(session: session)
+                                TogetherActiveSessionCard(session: session) { selectedSession = session }
                             }
                         }
                     }
@@ -42,7 +45,8 @@ struct TogetherSessionsView: View {
                                 .padding(.horizontal)
 
                             ForEach(upcomingSessions, id: \.id) { session in
-                                SessionCard(session: session)
+                                Button { selectedSession = session } label: { SessionCard(session: session) }
+                                    .buttonStyle(.plain)
                             }
                         }
                     }
@@ -55,11 +59,15 @@ struct TogetherSessionsView: View {
 
                         ForEach(templates.prefix(4), id: \.id) { template in
                             TogetherTemplateCard(template: template) {
-                                // Start session with this template
+                                Task { await start(template) }
                             }
+                            .disabled(isStarting)
                         }
                     }
 
+                    if let errorMessage {
+                        Text(errorMessage).foregroundStyle(.red).padding(.horizontal)
+                    }
                     if sessions.isEmpty && templates.isEmpty && !isLoading {
                         VStack(spacing: 16) {
                             Image(systemName: "person.2.circle")
@@ -76,13 +84,35 @@ struct TogetherSessionsView: View {
                 .padding(.vertical)
             }
 
-            if isLoading {
+            if isLoading || isStarting {
                 ProgressView()
             }
         }
         .navigationTitle("Together Sessions")
-        .task {
-            await loadData()
+        .task { await loadData() }
+        .refreshable { await loadData() }
+        .sheet(item: $selectedSession, onDismiss: { Task { await loadData() } }) { session in
+            NavigationStack {
+                TogetherSessionDetailView(
+                    session: session,
+                    template: templates.first { $0.id == session.togetherTemplateId },
+                    service: container.familyService,
+                    userId: container.supabaseAuthService.userId
+                )
+            }
+        }
+    }
+
+    private func start(_ template: TogetherTemplate) async {
+        guard !isStarting else { return }
+        isStarting = true
+        errorMessage = nil
+        defer { isStarting = false }
+        do {
+            selectedSession = try await container.familyService.startTogetherSession(templateId: template.id, title: template.title)
+            sessions = container.familyService.togetherSessions
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -96,9 +126,146 @@ struct TogetherSessionsView: View {
 
             sessions = try await sessionsTask
             templates = try await templatesTask
+            errorMessage = nil
         } catch {
+            errorMessage = error.localizedDescription
             Log.family.error("Failed to load data", error: error)
         }
+    }
+}
+
+private struct TogetherSessionDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var service: FamilyService
+    @State private var session: TogetherSession
+    let template: TogetherTemplate?
+    let userId: UUID?
+    @State private var participants: [TogetherParticipant] = []
+    @State private var members: [FamilyWellnessMember] = []
+    @State private var isBusy = false
+    @State private var errorMessage: String?
+    @State private var revision = 0
+    @State private var audioPlayer: AVPlayer?
+    @State private var isPlaying = false
+
+    init(session: TogetherSession, template: TogetherTemplate?, service: FamilyService, userId: UUID?) {
+        _session = State(initialValue: session)
+        self.template = template
+        self.service = service
+        self.userId = userId
+    }
+
+    private var myParticipant: TogetherParticipant? {
+        guard let userId, let member = members.first(where: { UUID(uuidString: $0.userId) == userId }) else { return nil }
+        return participants.first { $0.memberId == member.id }
+    }
+    private var isCreator: Bool { userId != nil && UUID(uuidString: session.createdBy) == userId }
+    private var isOpen: Bool { session.status == .pending || session.status == .inProgress }
+
+    var body: some View {
+        List {
+            Section {
+                Text(session.title).font(.headline)
+                Text(session.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
+                    .foregroundStyle(.secondary)
+                if let template {
+                    if let description = template.description { Text(description) }
+                    Label(template.formattedDuration, systemImage: "clock")
+                }
+                if session.status == .pending {
+                    Text("Waiting for at least \(session.minimumParticipants) participants to join.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Section("Participants") {
+                ForEach(participants) { participant in
+                    HStack {
+                        Text(members.first { $0.id == participant.memberId }?.displayName ?? "Family member")
+                        Spacer()
+                        Text(participant.status.displayName).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            if let audioPlayer {
+                Section("Guidance") {
+                    Button(isPlaying ? "Pause guidance" : "Play guidance", systemImage: isPlaying ? "pause.fill" : "play.fill") {
+                        if isPlaying { audioPlayer.pause() } else { audioPlayer.play() }
+                        isPlaying.toggle()
+                    }
+                    .disabled(session.status != .inProgress || myParticipant?.status != .joined)
+                }
+            }
+            if isOpen {
+                Section {
+                    if myParticipant?.status == .invited {
+                        Button("Join Activity") { Task { await perform { try await service.joinTogetherSession(sessionId: session.id) } } }
+                    }
+                    if isCreator && session.status == .pending {
+                        Button("Begin Activity") { Task { await perform { try await service.beginTogetherSession(sessionId: session.id) } } }
+                            .disabled(participants.filter { $0.status == .joined }.count < session.minimumParticipants)
+                    }
+                    if isCreator && session.status == .inProgress {
+                        Button("Finish Activity") { Task { await perform { try await service.completeTogetherSession(sessionId: session.id) } } }
+                    }
+                    if isBusy { ProgressView() }
+                }
+                .disabled(isBusy)
+            }
+            if let errorMessage {
+                Section {
+                    Text(errorMessage).foregroundStyle(.red)
+                    Button("Refresh") { Task { await refresh() } }
+                }
+            }
+        }
+        .navigationTitle("Family Activity")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        .task {
+            if let urlString = template?.audioUrl, let url = URL(string: urlString) { audioPlayer = AVPlayer(url: url) }
+            while !Task.isCancelled {
+                if !isBusy { await refresh() }
+                if !isOpen { return }
+                do { try await Task.sleep(for: .seconds(5)) } catch { return }
+            }
+        }
+        .refreshable { await refresh() }
+        .onDisappear { audioPlayer?.pause() }
+        .onReceive(NotificationCenter.default.publisher(for: .AVPlayerItemDidPlayToEndTime)) { notification in
+            guard let item = notification.object as? AVPlayerItem, item === audioPlayer?.currentItem else { return }
+            isPlaying = false
+            audioPlayer?.seek(to: .zero)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .AVPlayerItemFailedToPlayToEndTime)) { notification in
+            guard let item = notification.object as? AVPlayerItem, item === audioPlayer?.currentItem else { return }
+            isPlaying = false
+            errorMessage = "Guided audio could not play. Try again when your connection is available."
+        }
+    }
+
+    private func refresh() async {
+        let startedRevision = revision
+        do {
+            async let savedSession = service.fetchTogetherSession(sessionId: session.id)
+            async let savedParticipants = service.fetchSessionParticipants(sessionId: session.id)
+            async let savedMembers = service.fetchFamilyMembers()
+            let refreshed = try await (savedSession, savedParticipants, savedMembers)
+            try Task.checkCancellation()
+            guard revision == startedRevision else { return }
+            session = refreshed.0
+            participants = refreshed.1
+            members = refreshed.2
+            if !isOpen { audioPlayer?.pause(); isPlaying = false }
+            errorMessage = nil
+        } catch is CancellationError { } catch { errorMessage = error.localizedDescription }
+    }
+
+    private func perform(_ action: () async throws -> Void) async {
+        guard !isBusy else { return }
+        isBusy = true
+        revision += 1
+        defer { isBusy = false }
+        do { try await action(); await refresh() } catch { errorMessage = error.localizedDescription }
     }
 }
 
@@ -106,6 +273,7 @@ struct TogetherSessionsView: View {
 
 struct TogetherActiveSessionCard: View {
     let session: TogetherSession
+    let action: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -133,7 +301,7 @@ struct TogetherActiveSessionCard: View {
                 }
             }
 
-            Button(action: {}) {
+            Button(action: action) {
                 Text("View Details")
                     .frame(maxWidth: .infinity)
                     .padding()

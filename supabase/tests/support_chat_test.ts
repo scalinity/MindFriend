@@ -777,7 +777,7 @@ Deno.test("M4 support chat: real route, both stream modes, fake REST/RPC/provide
             remaining: 9,
             reset_at: new Date(Date.now() + 60_000).toISOString(),
           }]);
-        case "refresh_sponsored_entitlement":
+        case "refresh_user_entitlement":
           return Response.json(false);
         case "check_and_increment_ai_quota": {
           if (s.fail.quotaRpc) return dbErrorQuoting(s.sentinel);

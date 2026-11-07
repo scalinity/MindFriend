@@ -28,12 +28,29 @@ private enum TimingConstants {
 
 @MainActor
 final class OptimalTimingAnalyzer: @preconcurrency OptimalTimingAnalyzing {
+    /// The edge response uses camelCase and does not supply an analysis timestamp.
+    private struct TimingAnalysisResponse: Decodable {
+        struct Metrics: Decodable {
+            let completionRate: Double
+            let avgRating: Double
+            let dismissRate: Double
+            let confidence: Double
+            let sampleCount: Int
+        }
+        let hourlyConfidence: [Int: Metrics]
+        let sampleCount: Int
+        let minimumDataMet: Bool
+    }
+
     // MARK: - Properties
 
     private let supabase: SupabaseClient
     private var cachedPreferences: TimingPreferences?
     private var cacheTimestamp: Date?
     private var refreshTimer: Timer?
+    private var refreshTask: Task<Void, Never>?
+    private var accountId: UUID?
+    private var accountGeneration = 0
 
     // MARK: - Initialization
 
@@ -48,7 +65,23 @@ final class OptimalTimingAnalyzer: @preconcurrency OptimalTimingAnalyzing {
 
     // MARK: - Public Methods
 
+    func resetForAccountChange(to userId: UUID?) {
+        stopPeriodicRefresh()
+        accountId = userId
+        cachedPreferences = nil
+        cacheTimestamp = nil
+    }
+
+    private func isCurrent(_ owner: UUID, _ generation: Int) -> Bool {
+        !Task.isCancelled && accountId == owner && accountGeneration == generation && supabase.auth.currentUser?.id == owner
+    }
+
     func analyzePatterns() async throws -> TimingPreferences {
+        guard let owner = supabase.auth.currentUser?.id else { throw AuthError.sessionExpired }
+        if accountId != owner { resetForAccountChange(to: owner) }
+        let generation = accountGeneration
+        let session = try await supabase.auth.session
+        guard session.user.id == owner, isCurrent(owner, generation) else { throw CancellationError() }
         // Check cache first
         if let cached = cachedPreferences,
            let timestamp = cacheTimestamp,
@@ -56,17 +89,24 @@ final class OptimalTimingAnalyzer: @preconcurrency OptimalTimingAnalyzing {
             return cached
         }
 
-        // Get fresh session token for explicit auth header
-        let session = try await supabase.auth.session
-
         // Call Edge Function to perform server-side analysis
         struct EmptyRequest: Codable {}
-        let response: TimingPreferences = try await supabase.functions.invoke(
+        let analysis: TimingAnalysisResponse = try await supabase.functions.invoke(
             "analyze-intervention-patterns",
             options: FunctionInvokeOptions(
                 headers: ["Authorization": "Bearer \(session.accessToken)"],
                 body: EmptyRequest()
             )
+        )
+        guard isCurrent(owner, generation) else { throw CancellationError() }
+
+        // This is the local receipt time, not a server measurement timestamp.
+        let response = TimingPreferences(
+            hourlyConfidence: analysis.hourlyConfidence.mapValues {
+                HourlyMetrics(completionRate: $0.completionRate, avgRating: $0.avgRating,
+                              dismissRate: $0.dismissRate, confidence: $0.confidence, sampleCount: $0.sampleCount)
+            },
+            lastUpdated: Date(), sampleCount: analysis.sampleCount, minimumDataMet: analysis.minimumDataMet
         )
 
         // Cache result
@@ -74,13 +114,14 @@ final class OptimalTimingAnalyzer: @preconcurrency OptimalTimingAnalyzing {
         cacheTimestamp = Date()
 
         // Persist to database (intervention_preferences.preferred_times)
-        try await persistToDatabase(response)
+        try await persistToDatabase(response, owner: owner, generation: generation)
+        guard isCurrent(owner, generation) else { throw CancellationError() }
 
         return response
     }
 
     func getConfidenceBoost(for hour: Int) -> Double {
-        guard let preferences = cachedPreferences else {
+        guard let accountId, supabase.auth.currentUser?.id == accountId, let preferences = cachedPreferences else {
             return 0.0 // Neutral (no learning data)
         }
 
@@ -113,6 +154,8 @@ final class OptimalTimingAnalyzer: @preconcurrency OptimalTimingAnalyzing {
     // MARK: - Periodic Refresh
 
     func startPeriodicRefresh() {
+        guard let owner = supabase.auth.currentUser?.id else { return }
+        if accountId != owner { resetForAccountChange(to: owner) }
         refreshTimer?.invalidate()
 
         refreshTimer = Timer.scheduledTimer(
@@ -120,16 +163,20 @@ final class OptimalTimingAnalyzer: @preconcurrency OptimalTimingAnalyzing {
             repeats: true
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                do {
-                    try await self?.refreshPatterns()
-                } catch {
-                    print("Periodic timing refresh failed: \(error.localizedDescription)")
-                }
+                self?.beginRefresh()
             }
         }
 
         // Perform initial analysis
-        Task {
+        beginRefresh()
+    }
+
+    private func beginRefresh() {
+        guard refreshTask == nil else { return }
+        let generation = accountGeneration
+        refreshTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { if accountGeneration == generation { refreshTask = nil } }
             do {
                 try await refreshPatterns()
             } catch let functionsError as FunctionsError {
@@ -146,15 +193,17 @@ final class OptimalTimingAnalyzer: @preconcurrency OptimalTimingAnalyzing {
     }
 
     func stopPeriodicRefresh() {
+        accountGeneration += 1
         refreshTimer?.invalidate()
         refreshTimer = nil
+        refreshTask?.cancel()
+        refreshTask = nil
     }
 
     // MARK: - Private Methods
 
-    private func persistToDatabase(_ preferences: TimingPreferences) async throws {
-        let session = try await supabase.auth.session
-        let userId = session.user.id
+    private func persistToDatabase(_ preferences: TimingPreferences, owner userId: UUID, generation: Int) async throws {
+        guard isCurrent(userId, generation) else { throw CancellationError() }
 
         // Convert preferences to JSONB format
         let encoder = JSONEncoder()
@@ -195,7 +244,7 @@ final class OptimalTimingAnalyzer: @preconcurrency OptimalTimingAnalyzing {
 
     /// Get best hours (highest completion rates) for UI display
     func getBestHours() -> [Int] {
-        guard let preferences = cachedPreferences else {
+        guard let accountId, supabase.auth.currentUser?.id == accountId, let preferences = cachedPreferences else {
             return []
         }
         return preferences.bestHours()
@@ -203,7 +252,7 @@ final class OptimalTimingAnalyzer: @preconcurrency OptimalTimingAnalyzing {
 
     /// Get worst hours (highest dismissal rates) for UI display
     func getWorstHours() -> [Int] {
-        guard let preferences = cachedPreferences else {
+        guard let accountId, supabase.auth.currentUser?.id == accountId, let preferences = cachedPreferences else {
             return []
         }
         return preferences.worstHours()

@@ -3,44 +3,94 @@ name: CI
 on: [push, pull_request]
 
 jobs:
-  # Validate iOS build
-  ios-build:
+  ios-tests:
     runs-on: macos-latest
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v3
-
-      # Debug.xcconfig holds real credentials and is gitignored, so CI builds
-      # against the committed sample's placeholder values.
+      - uses: actions/checkout@v4
       - name: Create build settings from samples
         run: |
           cp apps/ios/Debug.xcconfig.sample apps/ios/Debug.xcconfig
           cp apps/ios/Release.xcconfig.sample apps/ios/Release.xcconfig
-
-      # CI has no signing certificate or provisioning profiles, so compile
-      # without signing.
-      - name: Build iOS app
+      - name: Select an available iPhone simulator
         run: |
-          xcodebuild build \
+          xcrun simctl list devices available --json > "$RUNNER_TEMP/simulators.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          data = json.loads(Path(os.environ["RUNNER_TEMP"], "simulators.json").read_text())
+          phones = [device for runtime, devices in data["devices"].items() if ".iOS-" in runtime
+                    for device in devices if device["isAvailable"] and device["name"].startswith("iPhone")]
+          if not phones:
+              raise SystemExit("No available iPhone simulator")
+          with open(os.environ["GITHUB_ENV"], "a") as output:
+              output.write("SIMULATOR_ID=" + phones[0]["udid"] + "\n")
+          PY
+      - name: Compile both test bundles and run deterministic regressions
+        run: |
+          mkdir -p artifacts
+          xcodebuild test \
             -project apps/ios/MindFriendApp.xcodeproj \
             -scheme MindFriendApp \
             -configuration Debug \
-            -destination 'generic/platform=iOS' \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
             -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY=""
+            -resultBundlePath artifacts/ios-regressions.xcresult \
+            -parallel-testing-enabled NO \
+            -only-testing:MindFriendAppTests/VaultEncryptionTests \
+            -only-testing:MindFriendAppTests/VaultStorageTests \
+            -only-testing:MindFriendAppTests/InterventionNotificationManagerTests \
+            -only-testing:MindFriendAppTests/AuthUITestIsolationTests \
+            -only-testing:MindFriendAppTests/AvatarPersistenceTests \
+            -only-testing:MindFriendAppTests/SleepHealthImportRegressionTests \
+            -only-testing:MindFriendAppTests/SleepImportPersistenceRegressionTests \
+            -only-testing:MindFriendAppTests/FamilyWellnessIntegrationTests/testAgeFilterFlow_ChildAgeChanges_ContentAccessUpdates \
+            -only-testing:MindFriendAppTests/CrashReporterTests \
+            -only-testing:MindFriendAppTests/CoreCompletionContractTests \
+            -only-testing:MindFriendAppUITests/MindFriendAppUITests \
+            CODE_SIGNING_ALLOWED=YES \
+            CODE_SIGNING_REQUIRED=YES \
+            CODE_SIGN_INJECT_BASE_ENTITLEMENTS=YES \
+            CODE_SIGN_IDENTITY=- \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM= \
+            PROVISIONING_PROFILE_SPECIFIER=
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-regressions
+          path: artifacts/ios-regressions.xcresult
+          if-no-files-found: ignore
 
-  # Basic repo structure checks
-  validate:
+  deno-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v3
-
-      - name: Check repository structure
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.9.8
+      # No --allow-net: unexpected service/provider calls fail the tests.
+      - name: Run synthetic handler and accounting regressions
         run: |
-          # Verify key directories exist
-          [ -f "supabase/config.toml" ] || (echo "Missing supabase/config.toml" && exit 1)
-          [ -d "supabase/functions" ] || (echo "Missing supabase/functions" && exit 1)
-          [ -d "supabase/migrations" ] || (echo "Missing supabase/migrations" && exit 1)
-          [ -d "apps/ios" ] || (echo "Missing apps/ios" && exit 1)
-          echo "✓ Repository structure is valid"
+          deno test --allow-env --allow-read \
+            supabase/tests/issue15_chat_test.ts \
+            supabase/tests/monthly-ai-budget.test.ts \
+            supabase/tests/family_handlers_test.ts \
+            supabase/functions/_shared/sleep-session-records.test.ts \
+            supabase/functions/_shared/sleep-session-readers.test.ts \
+            supabase/functions/manage-safety-plan/handler.test.ts
+
+  sql-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run SQL regressions in a disposable isolated database
+        run: python3 supabase/tests/ci/run_sql.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sql-regressions
+          path: artifacts/ci-sql
+          if-no-files-found: ignore

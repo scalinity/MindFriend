@@ -134,6 +134,32 @@ final class SleepScoreCalculatorTests: XCTestCase {
         XCTAssertLessThanOrEqual(breakdown.timing, 8)
     }
 
+    func testTimingScore_AcrossMidnight_Returns20InBothDirections() {
+        let calendar = Calendar.current
+        let day = calendar.date(from: DateComponents(year: 2026, month: 11, day: 6))!
+        let beforeMidnight = calendar.date(bySettingHour: 23, minute: 50, second: 0, of: day)!
+        let afterMidnight = calendar.date(bySettingHour: 0, minute: 5, second: 0, of: day)!
+        for (bedtime, target) in [(beforeMidnight, afterMidnight), (afterMidnight, beforeMidnight)] {
+            goals.targetBedtime = target
+            XCTAssertEqual(calculator.calculateScore(entry: createEntry(bedtime: bedtime), goals: goals).timing, 20)
+        }
+    }
+
+    func testTimingScore_CircularDistancePreservesEveryBoundary() {
+        let calendar = Calendar.current
+        let midnight = calendar.date(from: DateComponents(year: 2026, month: 11, day: 6))!
+        goals.targetBedtime = midnight
+        let cases = [(0, 20), (15, 20), (16, 17), (30, 17), (31, 14), (45, 14),
+                     (46, 11), (60, 11), (61, 8), (90, 8), (91, 5), (720, 5)]
+        for (minutes, expectedScore) in cases {
+            for direction in [-1, 1] {
+                let bedtime = calendar.date(byAdding: .minute, value: direction * minutes, to: midnight)!
+                XCTAssertEqual(calculator.calculateScore(entry: createEntry(bedtime: bedtime), goals: goals).timing,
+                               expectedScore, "Offset: \(direction * minutes) minutes")
+            }
+        }
+    }
+
     // MARK: - Stages Score Tests (0-20 points)
 
     func testStagesScore_OptimalDeepAndREM_Returns20() {
@@ -837,16 +863,16 @@ final class SleepEntryDecodingRegressionTests: XCTestCase {
         XCTAssertNil(model.errorMessage)
     }
     func testAsleepStagesCannotExceedTimeAsleep() async {
-        await XCTAssertThrowsError(try decode(deep: 91))
+        await XCTAssertThrowsErrorAsync(try decode(deep: 91))
     }
     func testSleepAndAwakeCannotExceedTimeInBed() async {
-        await XCTAssertThrowsError(try decode(awake: 31))
+        await XCTAssertThrowsErrorAsync(try decode(awake: 31))
     }
     func testPartialSleepTotalsStillValidateAgainstTimeInBed() async throws {
         let entry = try decode(asleep: nil)
         XCTAssertNil(entry.timeAsleepMinutes)
         XCTAssertNil(entry.displayableScore)
-        await XCTAssertThrowsError(try decode(asleep: nil, awake: 31))
+        await XCTAssertThrowsErrorAsync(try decode(asleep: nil, awake: 31))
     }
 }
 
@@ -1457,5 +1483,102 @@ final class SleepHistoryImportRegressionTests: XCTestCase {
             calendar: calendar, importBatch: { _, _ in calls += 1 }, saveCheckpoint: { finalCheckpoint = $0 })
         XCTAssertEqual(calls, 2)
         XCTAssertEqual(finalCheckpoint, older)
+    }
+}
+
+@MainActor
+final class HealthKitSleepSummaryTests: XCTestCase {
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/New_York")!
+        return calendar
+    }
+
+    func testOverlappingSourcesUseOneDurationInBiometricPayloadAndChronotype() throws {
+        let start = date("2026-11-05T22:00:00-05:00")
+        let end = date("2026-11-06T06:00:00-05:00")
+        let day = calendar.startOfDay(for: end)
+        let samples = [
+            sample(.asleepUnspecified, start, end),
+            sample(.asleepCore, start, date("2026-11-06T02:00:00-05:00")),
+            sample(.asleepDeep, date("2026-11-06T02:00:00-05:00"), date("2026-11-06T04:00:00-05:00")),
+            sample(.asleepREM, date("2026-11-06T04:00:00-05:00"), end),
+            sample(.asleepREM, date("2026-11-06T05:00:00-05:00"), date("2026-11-06T05:30:00-05:00")),
+            sample(.inBed, date("2026-11-05T21:45:00-05:00"), date("2026-11-06T06:15:00-05:00"))
+        ]
+        let measured = try XCTUnwrap(HealthKitService.measuredSleep(from: samples, wakingFrom: day,
+            before: calendar.date(byAdding: .day, value: 1, to: day)!, calendar: calendar))
+        let summary = measured.dailySummary(for: "2026-11-06", calendar: calendar)
+        let payload = BiometricSyncPayload(dailySummaries: [summary], workouts: [])
+        let decoded = try JSONDecoder().decode(BiometricSyncPayload.self, from: JSONEncoder().encode(payload)).dailySummaries[0]
+        XCTAssertEqual(decoded.sleepDurationMinutes, 480)
+        XCTAssertEqual(decoded.timeInBedMinutes, 510)
+        XCTAssertEqual(try XCTUnwrap(decoded.sleepQualityScore), 480.0 / 510.0, accuracy: 0.000001)
+        XCTAssertEqual(decoded.sleepStartTime, "22:00")
+        XCTAssertEqual(decoded.sleepEndTime, "06:00")
+        let record = measured.record(for: day, calendar: calendar)
+        XCTAssertEqual(record.date, day)
+        XCTAssertEqual(record.duration, 8 * 3600)
+        XCTAssertEqual(record.startTime, start)
+        XCTAssertEqual(record.endTime, end)
+    }
+
+    func testDailyUnionIncludesNapsWithoutCountingUncoveredGapsOrAdjacentNights() throws {
+        let day = date("2026-11-06T00:00:00-05:00")
+        let nextDay = date("2026-11-07T00:00:00-05:00")
+        let samples = [
+            sample(.asleepUnspecified, date("2026-11-04T22:00:00-05:00"), date("2026-11-05T06:00:00-05:00")),
+            sample(.asleepCore, date("2026-11-05T23:00:00-05:00"), date("2026-11-06T01:00:00-05:00")),
+            sample(.asleepDeep, date("2026-11-06T03:00:00-05:00"), date("2026-11-06T06:00:00-05:00")),
+            sample(.asleepUnspecified, date("2026-11-06T14:00:00-05:00"), date("2026-11-06T14:30:00-05:00")),
+            sample(.asleepUnspecified, date("2026-11-06T22:00:00-05:00"), date("2026-11-07T06:00:00-05:00"))
+        ]
+        let measured = try XCTUnwrap(HealthKitService.measuredSleep(from: samples, wakingFrom: day,
+            before: nextDay, calendar: calendar))
+        let summary = measured.dailySummary(for: "2026-11-06", calendar: calendar)
+        XCTAssertEqual(summary.sleepDurationMinutes, 330)
+        XCTAssertEqual(summary.timeInBedMinutes, 330)
+        XCTAssertEqual(summary.sleepEndTime, "14:30")
+        XCTAssertEqual(measured.record(for: day, calendar: calendar).duration, 330 * 60)
+        let following = try XCTUnwrap(HealthKitService.measuredSleep(from: samples, wakingFrom: nextDay,
+            before: calendar.date(byAdding: .day, value: 1, to: nextDay)!, calendar: calendar))
+        XCTAssertEqual(following.asleepSeconds, 8 * 3600)
+    }
+
+    func testChronotypePreservesAfternoonAndDaylightSavingDates() throws {
+        for (startText, endText, hours) in [
+            ("2026-11-06T14:00:00-05:00", "2026-11-06T15:00:00-05:00", 1),
+            ("2026-10-31T22:00:00-04:00", "2026-11-01T06:00:00-05:00", 9),
+            ("2026-03-07T22:00:00-05:00", "2026-03-08T06:00:00-04:00", 7)
+        ] {
+            let start = date(startText), end = date(endText)
+            let day = calendar.startOfDay(for: end)
+            let samples = [sample(.asleepUnspecified, start, end), sample(.asleepCore, start, end)]
+            let measured = try XCTUnwrap(HealthKitService.measuredSleep(from: samples, wakingFrom: day,
+                before: calendar.date(byAdding: .day, value: 1, to: day)!, calendar: calendar))
+            let record = measured.record(for: day, calendar: calendar)
+            XCTAssertEqual(record.startTime, start)
+            XCTAssertEqual(record.endTime, end)
+            XCTAssertEqual(record.duration, Double(hours * 3600))
+        }
+    }
+
+    func testEmptyAndInBedOnlySamplesDoNotCreateSleepMeasurements() {
+        let day = date("2026-11-06T00:00:00-05:00")
+        let nextDay = date("2026-11-07T00:00:00-05:00")
+        XCTAssertNil(HealthKitService.measuredSleep(from: [], wakingFrom: day, before: nextDay, calendar: calendar))
+        let inBed = sample(.inBed, day, day.addingTimeInterval(3600))
+        XCTAssertNil(HealthKitService.measuredSleep(from: [inBed], wakingFrom: day, before: nextDay, calendar: calendar))
+        let atNextMidnight = sample(.asleepUnspecified, nextDay.addingTimeInterval(-3600), nextDay)
+        XCTAssertNil(HealthKitService.measuredSleep(from: [atNextMidnight], wakingFrom: day, before: nextDay, calendar: calendar))
+        XCTAssertNotNil(HealthKitService.measuredSleep(from: [atNextMidnight], wakingFrom: nextDay,
+            before: calendar.date(byAdding: .day, value: 1, to: nextDay)!, calendar: calendar))
+    }
+
+    private func date(_ value: String) -> Date { ISO8601DateFormatter().date(from: value)! }
+
+    private func sample(_ value: HKCategoryValueSleepAnalysis, _ start: Date, _ end: Date) -> HKCategorySample {
+        HKCategorySample(type: HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!, value: value.rawValue,
+                         start: start, end: end)
     }
 }

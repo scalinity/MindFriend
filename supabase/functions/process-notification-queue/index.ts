@@ -107,6 +107,8 @@ Deno.serve(async (req) => {
       failed: 0,
       noToken: 0,
       skipped: 0,
+      uncertain: 0,
+      claimFailures: 0,
     };
 
     const now = new Date();
@@ -172,6 +174,7 @@ Deno.serve(async (req) => {
       status: string;
       sent_at: string | null;
       metadata?: Record<string, unknown>;
+      scheduled_for?: string | null;
     }> = [];
     const invalidTokens: Array<{ user_id: string; token: string }> = [];
 
@@ -182,7 +185,7 @@ Deno.serve(async (req) => {
     const processNotification = async (
       notification: NotificationWithJoins,
     ): Promise<{
-      result: "sent" | "failed" | "queued" | "no_token" | "skipped";
+      result: "sent" | "failed" | "queued" | "no_token" | "skipped" | "uncertain" | "claim_failed";
     }> => {
       // Use joined data directly (no extra queries!)
       const timezone = notification.profiles?.timezone || "America/Los_Angeles";
@@ -235,8 +238,32 @@ Deno.serve(async (req) => {
         return { result: "no_token" };
       }
 
-      // Send notification
+      // Remove retry eligibility before contacting APNs. A lost response or a
+      // failed final status write must not cause another provider submission.
+      const priorAttempts = Number(notification.metadata?.delivery_attempts || 0);
+      const attempt = (Number.isSafeInteger(priorAttempts) && priorAttempts >= 0 ? priorAttempts : 0) + 1;
+      const attemptMetadata = {
+        ...notification.metadata,
+        delivery_attempts: attempt,
+        delivery_state: "attempting",
+        last_attempt_at: now.toISOString(),
+      };
+      const { data: claimed, error: claimError } = await supabaseAdmin
+        .from("notification_history")
+        .update({ scheduled_for: null, metadata: attemptMetadata })
+        .eq("id", notification.id)
+        .eq("status", "pending")
+        .lte("scheduled_for", now.toISOString())
+        .select("id")
+        .maybeSingle();
+      if (claimError) return { result: "claim_failed" };
+      if (!claimed) return { result: "skipped" };
+
+      // Send notification; retry only an explicit temporary rejection.
       let sent = false;
+      let transient = false;
+      let uncertain = false;
+      const providerResults: Array<{ apnsId?: string; statusCode?: number; success: boolean; reason?: string }> = [];
 
       if (isAPNsConfigured()) {
         const config = getAPNsConfig()!;
@@ -257,22 +284,41 @@ Deno.serve(async (req) => {
             privateKey: config.privateKey,
             production: config.production,
           });
+          providerResults.push({
+            apnsId: result.apnsId,
+            statusCode: result.statusCode,
+            success: result.success,
+            reason: result.reason,
+          });
 
           if (result.success) {
             sent = true;
           } else if (result.statusCode === 410) {
             invalidTokens.push({ user_id: notification.user_id, token });
+          } else if (result.statusCode === undefined) {
+            uncertain = true;
+          } else if (result.statusCode === 429 || result.statusCode >= 500) {
+            transient = true;
           }
         }
       }
 
+      const retry = !sent && !uncertain && transient && attempt < 4;
       notificationUpdates.push({
         id: notification.id,
-        status: sent ? "sent" : "failed",
+        status: sent ? "sent" : (retry || uncertain) ? "pending" : "failed",
         sent_at: sent ? now.toISOString() : null,
+        scheduled_for: retry
+          ? new Date(now.getTime() + 15 * 60 * 1000 * 2 ** (attempt - 1)).toISOString()
+          : null,
+        metadata: {
+          ...attemptMetadata,
+          provider_results: providerResults,
+          delivery_state: sent ? "sent" : uncertain ? "uncertain" : retry ? "retry_scheduled" : "failed",
+        },
       });
 
-      return { result: sent ? "sent" : "failed" };
+      return { result: sent ? "sent" : uncertain ? "uncertain" : retry ? "queued" : "failed" };
     };
 
     // Process in batches with concurrency limit
@@ -301,6 +347,12 @@ Deno.serve(async (req) => {
             case "skipped":
               results.skipped++;
               break;
+            case "uncertain":
+              results.uncertain++;
+              break;
+            case "claim_failed":
+              results.claimFailures++;
+              break;
           }
         } else {
           console.error("Notification processing error:", res.reason);
@@ -318,6 +370,7 @@ Deno.serve(async (req) => {
           status: update.status,
           sent_at: update.sent_at,
           ...(update.metadata ? { metadata: update.metadata } : {}),
+          ...(update.scheduled_for !== undefined ? { scheduled_for: update.scheduled_for } : {}),
         })
         .eq("id", update.id)
         .select("id")
@@ -334,15 +387,19 @@ Deno.serve(async (req) => {
         .eq("device_token", token);
     }
 
-    if (persistenceFailures) {
-      // A pending row can be retried after APNs accepted it; its existing UUID
-      // correlates attempts but does not guarantee provider deduplication.
+    if (persistenceFailures || results.claimFailures || results.uncertain) {
+      // Claimed rows stay unscheduled if the provider outcome or its persistence
+      // is unknown. Preserve their IDs/attempt metadata for reconciliation.
       return new Response(
         JSON.stringify({
           success: false,
           ...results,
           persistenceFailures,
-          error: "notification_status_persistence_failed",
+          error: persistenceFailures
+            ? "notification_status_persistence_failed"
+            : results.claimFailures
+            ? "notification_claim_failed"
+            : "notification_delivery_uncertain",
         }),
         { status: 500, headers },
       );

@@ -10,6 +10,9 @@ private let _globalSupabaseClient: SupabaseClient = supabase
 /// Dependency injection container for all app services
 @MainActor
 final class DependencyContainer: ObservableObject {
+    private var accountGeneration = 0
+    private var startupOwnerId: UUID?
+    private var accountStartupTask: Task<Void, Never>?
     /// Reference to the global Supabase client (defined in SupabaseClient.swift)
     /// Captured via _globalSupabaseClient to avoid circular reference issues.
     let supabaseClient: SupabaseClient = _globalSupabaseClient
@@ -213,6 +216,14 @@ final class DependencyContainer: ObservableObject {
             guard let self else { return }
             try await self.removeDeletedSupportJournal(ownerID: owner)
         }
+        service.setAccountChangeHandler { [weak self] userId in
+            self?.endSupportSessionScope()
+            self?.resetAccountServices(to: userId)
+            self?.healthKitService.ownerDidChange(userId)
+        }
+        service.setBeforeSignOutHandler { userId in
+            await NotificationManager.shared.prepareForSignOut(userId: userId)
+        }
         return service
     }()
 
@@ -310,8 +321,9 @@ final class DependencyContainer: ObservableObject {
 
     // MARK: - Mentorship
     lazy var mentorshipService: MentorshipService = {
-        let userId = self.supabaseAuthService.currentUser?.id ?? UUID()
-        return MentorshipService(supabase: self.supabaseClient, userId: userId)
+        MentorshipService(supabase: self.supabaseClient, userIdProvider: { [weak self] in
+            self?.supabaseAuthService.currentUser?.id
+        })
     }()
 
     lazy var sleepService: SleepService = {
@@ -369,7 +381,8 @@ final class DependencyContainer: ObservableObject {
     lazy var dailyBriefingViewModel: DailyBriefingViewModel = {
         DailyBriefingViewModel(
             briefingService: self.dailyBriefingService,
-            calendarService: self.calendarService
+            calendarService: self.calendarService,
+            currentUserId: { [weak self] in self?.supabaseAuthService.currentUser?.id }
         )
     }()
 
@@ -737,6 +750,68 @@ final class DependencyContainer: ObservableObject {
 
     // MARK: - Shared Instance
 
+    /// Invalidate the outgoing account synchronously, before publishing a new identity.
+    private func resetAccountServices(to userId: UUID?) {
+        accountGeneration += 1
+        accountStartupTask?.cancel()
+        accountStartupTask = nil
+        startupOwnerId = nil
+        pathwayEncryptionService.setCurrentUser(userId)
+        pathwayCacheService.clearAllCaches()
+        ProgressStoryLoadCache.clear()
+        dailyBriefingViewModel.resetForAccountChange(to: userId)
+        mentorshipService.resetForAccountChange()
+        interventionService.resetForAccountChange(to: userId)
+        ambientThemeService.resetForAccountChange(to: userId)
+        NotificationManager.shared.resetForAccountChange(to: userId)
+        CompanionSyncCoordinator.shared.reset(to: userId)
+    }
+
+    private func isCurrentAccount(_ userId: UUID, generation: Int) -> Bool {
+        !Task.isCancelled && accountGeneration == generation && supabaseAuthService.currentUser?.id == userId
+    }
+
+    /// This path is shared by restored sessions, interactive sign-in and onboarding.
+    func startAuthenticatedServices(for userId: UUID, appState: AppState) async {
+        guard appState.authenticatedAccountID == userId,
+              supabaseAuthService.currentUser?.id == userId else { return }
+        if startupOwnerId == userId, let accountStartupTask {
+            await accountStartupTask.value
+            return
+        }
+        accountStartupTask?.cancel()
+        startupOwnerId = userId
+        let generation = accountGeneration
+        let task = Task { @MainActor [weak self] in
+            guard let self, isCurrentAccount(userId, generation: generation) else { return }
+            NotificationManager.shared.configure(container: self)
+            await NotificationManager.shared.activateAccount(userId)
+            guard isCurrentAccount(userId, generation: generation) else { return }
+            await ambientThemeService.start()
+            guard isCurrentAccount(userId, generation: generation) else { return }
+            do { try await questNotificationService.scheduleIfEnabled() }
+            catch { error.report(context: ["action": "schedule_quest_reminder"]) }
+            guard isCurrentAccount(userId, generation: generation) else { return }
+            do { try await interventionService.startMonitoring() }
+            catch {
+                if !(error is CancellationError) { error.report(context: ["action": "start_intervention_monitoring"]) }
+            }
+            guard isCurrentAccount(userId, generation: generation) else { return }
+            await CompanionSyncCoordinator.shared.start(userId: userId, dataService: supabaseDataService, authService: supabaseAuthService)
+        }
+        accountStartupTask = task
+        await task.value
+    }
+
+    func refreshAuthenticatedIntegrations(appState: AppState) async {
+        guard let owner = appState.authenticatedAccountID,
+              supabaseAuthService.currentUser?.id == owner else { return }
+        let generation = accountGeneration
+        await NotificationManager.shared.activateAccount(owner)
+        guard isCurrentAccount(owner, generation: generation) else { return }
+        await CompanionSyncCoordinator.shared.refresh()
+    }
+
     /// Shared singleton instance for the app
     static let shared = DependencyContainer()
 
@@ -765,7 +840,7 @@ final class DependencyContainer: ObservableObject {
 
     // ✅ ARCHITECTURE FIX: Centralize PathwayEncryptionService creation
     lazy var pathwayEncryptionService: PathwayEncryptionService = {
-        PathwayEncryptionService(secureStorage: secureStorage)
+        PathwayEncryptionService(secureStorage: secureStorage, userId: supabaseAuthService.currentUser?.id)
     }()
 
     // ✅ ARCHITECTURE FIX: Centralize NetworkRetryService creation

@@ -13,7 +13,9 @@ struct AssessmentFlowView: View {
     @State private var isSubmitting = false
     @State private var showingCrisisAlert = false
     @State private var crisisContext: [String: Int]? = nil
-    @State private var dismissTrigger = UUID()
+    @State private var submission: OutcomeAssessmentSubmission?
+    @State private var submissionError: String?
+    @State private var showingSubmissionError = false
     
     var currentQuestion: AssessmentQuestion? {
         guard currentQuestionIndex < template.questions.count else { return nil }
@@ -25,7 +27,8 @@ struct AssessmentFlowView: View {
     }
     
     var canSubmit: Bool {
-        answers.count == template.questions.count
+        guard let type = AssessmentType(rawValue: template.code) else { return false }
+        return (try? type.score(answers: answers, questions: template.questions)) != nil
     }
     
     var progressPercentage: Double {
@@ -126,6 +129,7 @@ struct AssessmentFlowView: View {
                                     let isSelected = answers[question.id] == index
 
                                     Button(action: {
+                                        guard submission == nil else { return }
                                         answers[question.id] = index
                                         // Check for crisis after selection
                                         if isPHQ9Q9 && index > 0 {
@@ -180,6 +184,7 @@ struct AssessmentFlowView: View {
                                     .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
                                 
                                 TextEditor(text: $notes)
+                                    .disabled(submission != nil)
                                     .font(.system(size: 14, weight: .regular, design: .default))
                                     .frame(height: 100)
                                     .padding(10)
@@ -268,8 +273,8 @@ struct AssessmentFlowView: View {
                 .background(Color.white)
             }
             
-            // Crisis alert overlay
-            if showingCrisisAlert && isPHQ9Q9 {
+            // Crisis resources stay available even if saving fails.
+            if showingCrisisAlert {
                 ZStack {
                     Color.black.opacity(0.4)
                         .ignoresSafeArea()
@@ -342,24 +347,33 @@ struct AssessmentFlowView: View {
             }
         }
         .navigationBarBackButtonHidden(true)
+        .alert("Assessment not saved", isPresented: $showingSubmissionError) {
+            Button("Retry") { Task { await submitAssessment() } }
+            Button("Support Resources") { showingCrisisAlert = true }
+            Button("Stay Here", role: .cancel) {}
+        } message: {
+            Text(submissionError ?? "Your answers are kept on this screen. Try saving again.")
+        }
     }
     
     private func submitAssessment() async {
+        guard !isSubmitting, let type = AssessmentType(rawValue: template.code) else { return }
         isSubmitting = true
+        defer { isSubmitting = false }
         do {
-            _ = try await outcomeService.submitAssessment(
-                type: AssessmentType(rawValue: template.code) ?? .phq9,
-                answers: answers,
-                notes: notes.isEmpty ? nil : notes
-            )
-            
+            if submission == nil {
+                submission = try outcomeService.makeAssessmentSubmission(type: type,
+                    answers: answers, notes: notes.isEmpty ? nil : notes)
+            }
+            guard let submission else { return }
+            _ = try await outcomeService.submitAssessment(submission)
             isPresented = false
         } catch {
-            // Error is already logged by the service
-            print("Failed to submit assessment: \(error)")
+            submissionError = "Your answers are kept on this screen. Retry to save this assessment. Support resources remain available."
+            showingSubmissionError = true
         }
-        isSubmitting = false
     }
+
 }
 
 #if DEBUG

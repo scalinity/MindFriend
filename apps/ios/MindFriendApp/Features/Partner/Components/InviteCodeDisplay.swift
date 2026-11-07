@@ -15,13 +15,13 @@ struct InviteCodeDisplay: View {
                     .foregroundStyle(.secondary)
 
                 // Code display
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     ForEach(Array(code.enumerated()), id: \.offset) { _, char in
                         Text(String(char))
-                            .font(.title)
+                            .font(.title3.monospaced())
                             .fontWeight(.bold)
                             .foregroundStyle(.primary)
-                            .frame(width: 40, height: 48)
+                            .frame(maxWidth: .infinity, minHeight: 48)
                             .background(Color(.tertiarySystemBackground))
                             .cornerRadius(8)
                     }
@@ -79,7 +79,7 @@ struct InviteCodeDisplay: View {
         """
         Join me on MindFriend! Use my partner code: \(code)
 
-        Or tap this link: mindfriend://partner/accept?code=\(code)
+        Open Partner Mode in MindFriend and enter this 8-character code exactly as shown. Uppercase and lowercase letters are different.
 
         Download MindFriend: https://getmindfriend.app
         """
@@ -111,7 +111,7 @@ struct InviteCodeDisplay: View {
 
 #Preview {
     InviteCodeDisplay(
-        code: "AB7X2Q",
+        code: "Ab7x2Qp9",
         expiresAt: Date().addingTimeInterval(30 * 24 * 60 * 60)
     )
     .padding()

@@ -457,16 +457,13 @@ struct ProfileView: View {
 
     private func logout() {
         Task {
-            // Stop ambient theme monitoring
-            container.ambientThemeService.stop()
-            
             do {
                 try await container.supabaseAuthService.signOut()
+                container.ambientThemeService.stop()
+                appState.setUnauthenticated()
             } catch {
                 Log.auth.error("Logout error", error: error)
-            }
-            await MainActor.run {
-                appState.setUnauthenticated()
+                appState.showError(.apiError(error.localizedDescription))
             }
         }
     }
@@ -697,6 +694,7 @@ struct NotificationSettingsView: View {
             }
 
             // Parse quiet hours
+            quietHoursEnabled = false
             if let start = settings.quietHoursStartLocal,
                let end = settings.quietHoursEndLocal {
                 quietHoursEnabled = true
@@ -750,33 +748,68 @@ struct NotificationSettingsView: View {
     /// Performs the actual save operation to the database.
     @MainActor
     private func performSave() async {
+        guard let ownerId = appState.currentUser?.id else { return }
         isSaving = true
         defer { isSaving = false }
+        let saved = (
+            questTime: formatTime(questTime),
+            quietStart: quietHoursEnabled ? formatTime(quietStart) : nil,
+            quietEnd: quietHoursEnabled ? formatTime(quietEnd) : nil,
+            reminders: remindersEnabled,
+            circle: notifyCircleActivity, hugs: notifyHugs, challenges: notifyChallenges,
+            streak: notifyStreakRisk, weekly: notifyWeeklySummary, hour: preferredNotifyHour
+        )
+        let reminderTime = Calendar.current.dateComponents([.hour, .minute], from: questTime)
 
         do {
             try await container.supabaseDataService.updateUserSettings(
-                dailyQuestTimeLocal: formatTime(questTime),
-                quietHoursStartLocal: quietHoursEnabled ? formatTime(quietStart) : nil,
-                quietHoursEndLocal: quietHoursEnabled ? formatTime(quietEnd) : nil,
-                remindersEnabled: remindersEnabled,
-                notifyCircleActivity: notifyCircleActivity,
-                notifyHugs: notifyHugs,
-                notifyChallenges: notifyChallenges,
-                notifyStreakRisk: notifyStreakRisk,
-                notifyWeeklySummary: notifyWeeklySummary,
-                preferredNotifyHour: preferredNotifyHour
+                dailyQuestTimeLocal: saved.questTime,
+                quietHoursStartLocal: saved.quietStart,
+                quietHoursEndLocal: saved.quietEnd,
+                clearQuietHours: saved.quietStart == nil,
+                remindersEnabled: saved.reminders,
+                notifyCircleActivity: saved.circle,
+                notifyHugs: saved.hugs,
+                notifyChallenges: saved.challenges,
+                notifyStreakRisk: saved.streak,
+                notifyWeeklySummary: saved.weekly,
+                preferredNotifyHour: saved.hour
             )
+
+            guard let current = appState.currentUser, current.id == ownerId else { return }
+            if var settings = current.settings {
+                settings.dailyQuestTimeLocal = saved.questTime
+                settings.quietHoursStartLocal = saved.quietStart
+                settings.quietHoursEndLocal = saved.quietEnd
+                settings.remindersEnabled = saved.reminders
+                settings.notifyCircleActivity = saved.circle
+                settings.notifyHugs = saved.hugs
+                settings.notifyChallenges = saved.challenges
+                settings.notifyStreakRisk = saved.streak
+                settings.notifyWeeklySummary = saved.weekly
+                settings.preferredNotifyHour = saved.hour
+                appState.currentUser = UserProfile(
+                    id: current.id, handle: current.handle, displayName: current.displayName,
+                    email: current.email, avatarUrl: current.avatarUrl, timezone: current.timezone,
+                    createdAt: current.createdAt, onboardingCompletedAt: current.onboardingCompletedAt,
+                    stats: current.stats, settings: settings, entitlements: current.entitlements,
+                    badges: current.badges, activationCompletedAt: current.activationCompletedAt,
+                    firstQuestCompletedAt: current.firstQuestCompletedAt,
+                    firstMoodLoggedAt: current.firstMoodLoggedAt,
+                    firstChatMessageAt: current.firstChatMessageAt, unlockedFeatures: current.unlockedFeatures
+                )
+            } else {
+                let refreshed = try await container.supabaseAuthService.fetchProfile()
+                guard refreshed.id == ownerId, appState.currentUser?.id == ownerId else { return }
+                appState.currentUser = refreshed
+            }
 
             // Schedule/cancel local quest reminder notification
-            let components = Calendar.current.dateComponents([.hour, .minute], from: questTime)
             try await container.questNotificationService.updateSchedule(
-                enabled: remindersEnabled,
-                hour: components.hour ?? 9,
-                minute: components.minute ?? 0
+                enabled: saved.reminders,
+                hour: reminderTime.hour ?? 9,
+                minute: reminderTime.minute ?? 0
             )
-
-            // Note: Settings are saved to database. AppState will be refreshed on next fetch.
-            // We could fetch the updated profile here if needed for immediate UI updates.
         } catch {
             appState.showError(.apiError(error.localizedDescription))
         }

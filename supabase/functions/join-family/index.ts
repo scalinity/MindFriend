@@ -3,8 +3,8 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import {
-  validateFamilyInviteCode,
   isValidInviteCode,
+  validateFamilyInviteCode,
 } from "../_shared/validation.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { checkRateLimit, getRateLimitHeaders } from "../_shared/ratelimit.ts";
@@ -64,7 +64,7 @@ function validateBirthDate(birthDate: string | undefined): string | null {
   }
 
   const date = new Date(birthDate);
-  if (isNaN(date.getTime())) {
+  if (isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== birthDate) {
     throw new Error("Invalid birth date");
   }
 
@@ -141,10 +141,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   // Rate limit: 10 requests per minute per user
   // Prevents brute-force enumeration of invite codes
-  const rateLimit = await checkRateLimit(supabaseAdmin, user.id, "join-family", {
-    windowMs: 60 * 1000, // 1 minute
-    maxRequests: 10,
-  });
+  const rateLimit = await checkRateLimit(
+    supabaseAdmin,
+    user.id,
+    "join-family",
+    {
+      windowMs: 60 * 1000, // 1 minute
+      maxRequests: 10,
+    },
+  );
 
   if (!rateLimit.allowed) {
     return new Response(
@@ -167,7 +172,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const body: JoinFamilyRequest = await req.json();
     const { inviteCode, nickname, birthDate } = body;
 
-    if (!inviteCode) {
+    if (typeof inviteCode !== "string" || !inviteCode) {
       return new Response(
         JSON.stringify({ error: "Invite code is required" }),
         {
@@ -203,10 +208,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
     } catch (validationError) {
       return new Response(
         JSON.stringify({
-          error:
-            validationError instanceof Error
-              ? validationError.message
-              : "Invalid input",
+          error: validationError instanceof Error
+            ? validationError.message
+            : "Invalid input",
         }),
         {
           status: 400,
@@ -215,149 +219,36 @@ Deno.serve(async (req: Request): Promise<Response> => {
       );
     }
 
-    // Find family by invite code using validated, normalized code
-    const { data: family, error: familyError } = await supabaseAdmin
-      .from("family_groups")
-      .select("*")
-      .eq("invite_code", validationResult.normalized)
-      .single();
-
-    // SECURITY: Use constant-time response to prevent timing attacks
-    // Return identical error for all failure modes (invalid code, already member, etc)
-    // Add random jitter to obscure timing side-channel
-
-    if (familyError || !family) {
-      // Add random delay (5-50ms) to obscure timing information
-      const jitterMs = Math.floor(Math.random() * 45) + 5;
-      await new Promise((resolve) => setTimeout(resolve, jitterMs));
-
-      return new Response(
-        JSON.stringify({
-          error: "Invalid request or insufficient permissions",
-        }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    // Check if user is already a member of this family
-    const { data: existingMember } = await supabaseAdmin
-      .from("family_members")
-      .select("id")
-      .eq("family_id", family.id)
-      .eq("user_id", user.id)
-      .eq("status", "active")
-      .maybeSingle();
-
-    if (existingMember) {
-      // Use SAME error message for all failure modes (prevent enumeration)
-      // Add random delay to obscure timing information
-      const jitterMs = Math.floor(Math.random() * 45) + 5;
-      await new Promise((resolve) => setTimeout(resolve, jitterMs));
-
-      return new Response(
-        JSON.stringify({
-          error: "Invalid request or insufficient permissions",
-        }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    // Check for invitation record to get role and birth date
-    const { data: invitation } = await supabaseAdmin
-      .from("family_invitations")
-      .select("*")
-      .eq("family_id", family.id)
-      .eq("invite_code", validationResult.normalized)
-      .eq("status", "pending")
-      .single();
-
-    let role = "child";
-    let memberBirthDate = validatedBirthDate;
-
-    let explicitRole = false;
-
-    if (invitation) {
-      const invitationRole = invitation.intended_role;
-      role = invitationRole || "child";
-      explicitRole = !!invitationRole && invitationRole !== "child";
-      memberBirthDate = memberBirthDate || invitation.intended_birth_date;
-
-      // Mark invitation as accepted
-      const { error: inviteUpdateError } = await supabaseAdmin
-        .from("family_invitations")
-        .update({
-          status: "accepted",
-          accepted_by: user.id,
-        })
-        .eq("id", invitation.id);
-
-      if (inviteUpdateError) {
-        console.error(
-          "Failed to mark invitation as accepted",
-          inviteUpdateError.code,
-        );
-        // Don't block the flow - invitation status update is non-critical
-      }
-    }
-
-    // Calculate age-based role only if no explicit role was set via invitation
-    if (memberBirthDate && !explicitRole) {
-      const age = calculateAge(new Date(memberBirthDate));
-      if (age >= 18) role = "parent";
-      else if (age >= 13) role = "teen";
-      else role = "child";
-    }
-
-    // Use atomic RPC to add family member
-    // This prevents TOCTOU race condition by checking member limit and inserting in single transaction
-    const { data: rpcResult, error: rpcError } = await supabaseAdmin.rpc(
-      "add_family_member",
+    const { data: result, error } = await supabaseAdmin.rpc(
+      "join_family_atomic",
       {
-        p_family_id: family.id,
         p_user_id: user.id,
-        p_role: role,
+        p_invite_code: validationResult.normalized,
         p_nickname: validatedNickname,
-        p_birth_date: memberBirthDate,
+        p_birth_date: validatedBirthDate,
       },
     );
-
-    if (rpcError || !rpcResult) {
-      console.error("Failed to add family member", rpcError?.code);
+    if (error || !result?.success) {
+      const status = error?.code === "42501"
+        ? 403
+        : error?.code === "22023"
+        ? 400
+        : 500;
       return new Response(
         JSON.stringify({
-          error: "Failed to add family member",
+          error: status < 500 ? error?.message : "Failed to join family",
         }),
         {
-          status: 400,
+          status,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         },
       );
     }
-
-    // Check if RPC succeeded (could return failure as JSON due to constraints)
-    if (!rpcResult.success) {
-      return new Response(
-        JSON.stringify({ error: rpcResult.error || "Failed to join family" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    // Extract member data from RPC result
+    const family = { id: result.family_id, name: result.family_name };
     const member = {
-      id: rpcResult.member_id,
-      role: rpcResult.role,
-      family_id: rpcResult.family_id,
-      user_id: rpcResult.user_id,
-      joined_at: rpcResult.joined_at,
+      id: result.member_id,
+      role: result.role,
+      family_id: result.family_id,
     };
 
     // Notify family admins via notification_history table
@@ -419,19 +310,3 @@ Deno.serve(async (req: Request): Promise<Response> => {
     );
   }
 });
-
-// Helper function: Calculate age from birth date
-function calculateAge(birthDate: Date): number {
-  const today = new Date();
-  let age = today.getFullYear() - birthDate.getFullYear();
-  const monthDiff = today.getMonth() - birthDate.getMonth();
-
-  if (
-    monthDiff < 0 ||
-    (monthDiff === 0 && today.getDate() < birthDate.getDate())
-  ) {
-    age--;
-  }
-
-  return age;
-}

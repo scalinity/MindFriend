@@ -1770,7 +1770,7 @@ struct Message: Codable, Identifiable, Equatable {
     var voiceEventOrder: Int64? = nil
 }
 
-/// Keeps the server's authoritative order while inserting finals still held on this device.
+/// Keeps plain-message order and each known voice call's provider sequence while inserting local finals.
 enum SupportChatRow: Identifiable {
     case message(Message)
     case localVoice(SupportTranscriptEvent)
@@ -1809,7 +1809,20 @@ enum SupportChatRow: Identifiable {
     }
 
     static func merge(messages: [Message], localEvents: [SupportTranscriptEvent], activityEvents: [SupportActivityChatEvent] = []) -> [SupportChatRow] {
-        var rows = messages.map(Self.message)
+        let calls = Dictionary(grouping: messages, by: \.voiceCallID)
+        var emittedCalls = Set<UUID>()
+        var rows: [Self] = []
+        for message in messages {
+            if let call = message.voiceCallID {
+                guard emittedCalls.insert(call).inserted else { continue }
+                let turns = (calls[call] ?? []).sorted {
+                    ($0.voiceEventOrder ?? Int64.max, $0.id.lowercased()) < ($1.voiceEventOrder ?? Int64.max, $1.id.lowercased())
+                }
+                rows.append(contentsOf: turns.map(Self.message))
+            } else {
+                rows.append(.message(message))
+            }
+        }
         let acknowledged = Set(rows.map(\.id))
         let pending = localEvents.filter { $0.syncState != .saved && !acknowledged.contains($0.id.uuidString.lowercased()) }
             .sorted {

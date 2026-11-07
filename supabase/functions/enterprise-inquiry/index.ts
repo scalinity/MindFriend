@@ -27,7 +27,7 @@ const MAX_MESSAGE_LENGTH = 2000;
 const DUPLICATE_WINDOW_MINUTES = 5;
 const MAX_INQUIRIES_PER_DAY = 10;
 
-Deno.serve(async (req) => {
+export async function handleEnterpriseInquiry(req: Request): Promise<Response> {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 
@@ -235,6 +235,8 @@ Deno.serve(async (req) => {
       try {
         // Escape user content to prevent XSS in email
         const safeName = escapeHtml(sanitizedName);
+        const safeEmail = escapeHtml(sanitizedEmail);
+        const safeMailto = escapeHtml(`mailto:${encodeURIComponent(sanitizedEmail)}`);
         const safeCompany = escapeHtml(sanitizedCompany);
         const safeEmployeeCount = escapeHtml(employeeCount);
         const safeMessage = sanitizedMessage
@@ -267,7 +269,7 @@ Deno.serve(async (req) => {
                   <tr>
                     <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280; font-weight: 500;">Email</td>
                     <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; color: #111827;">
-                      <a href="mailto:${sanitizedEmail}" style="color: #6366f1;">${sanitizedEmail}</a>
+                      <a href="${safeMailto}" style="color: #6366f1;">${safeEmail}</a>
                     </td>
                   </tr>
                   <tr>
@@ -356,4 +358,6 @@ Inquiry ID: ${inquiry.id}
       },
     );
   }
-});
+}
+
+if (import.meta.main) Deno.serve(handleEnterpriseInquiry);

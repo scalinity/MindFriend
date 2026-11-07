@@ -34,6 +34,7 @@ struct ChatListView: View {
     @State private var voiceTextConversation: Conversation?
     @State private var showVoiceText = false
     @State private var loadError: String?
+    @State private var pageError: String?
     @State private var refreshTrigger = UUID() // Changes to trigger refresh
 
     // Chat tutorial state
@@ -80,9 +81,11 @@ struct ChatListView: View {
                             }
                         }
                         .onDelete(perform: deleteConversations)
+                        if let pageError { Text(pageError).font(.caption).foregroundStyle(.secondary) }
                         if hasMore {
                             Button("Load older conversations") { Task { await loadConversations(more: true) } }
                                 .disabled(loadingMore)
+                                .accessibilityIdentifier("chat-load-older-conversations")
                         }
                         if loadingMore { ProgressView("Loading older conversations") }
                     }
@@ -247,7 +250,7 @@ struct ChatListView: View {
         if !more { loadGeneration = generation }
         let cursor = more ? nextCursor : nil
         if more { loadingMore = true } else if conversations.isEmpty { isLoading = true }
-        loadError = nil
+        if more { pageError = nil } else { loadError = nil; pageError = nil }
         let proof: @Sendable () async -> OfflineOwnerProof? = { await MainActor.run {
             guard appState.currentUser?.id == id, appState.accountEpoch == owner.epoch else { return nil }
             return owner
@@ -268,7 +271,8 @@ struct ChatListView: View {
         } catch is CancellationError { }
         catch {
             guard await proof() == owner, loadGeneration == generation else { return }
-            loadError = "Conversations could not be loaded. Your local drafts and practices remain available."
+            if more { pageError = "Couldn't load older conversations. Try again." }
+            else { loadError = "Conversations could not be loaded. Your local drafts and practices remain available." }
         }
     }
 

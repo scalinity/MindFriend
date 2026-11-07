@@ -160,7 +160,7 @@ struct SupportChatCapabilities: Decodable, Equatable, Sendable {
 
 struct SupportConversationCursor: Equatable, Sendable {
     /// The verbatim server timestamp retains the precision of the cursor; nil pages undated legacy records.
-    let createdAt: String?
+    let updatedAt: String?
     let id: UUID
 }
 

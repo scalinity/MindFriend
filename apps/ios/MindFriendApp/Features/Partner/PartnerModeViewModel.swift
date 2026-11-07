@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import Supabase
 
 /// ViewModel for Partner Mode feature
 /// Manages partner state, invite codes, sharing settings, and encouragement
@@ -8,6 +9,8 @@ final class PartnerModeViewModel: ObservableObject {
     // MARK: - Dependencies
 
     private let dataService: SupabaseDataService
+    private let invitationAPI: PartnerInvitationClient
+    private var inviteOwnerId: UUID?
 
     // MARK: - Published State
 
@@ -40,8 +43,9 @@ final class PartnerModeViewModel: ObservableObject {
 
     // MARK: - Initialization
 
-    init(dataService: SupabaseDataService) {
+    init(dataService: SupabaseDataService, inviteClient: SupabaseClient? = nil) {
         self.dataService = dataService
+        self.invitationAPI = PartnerInvitationClient(client: inviteClient ?? supabase)
     }
     
     // PERF-CRIT-002: Clean up timer on deallocation
@@ -54,6 +58,7 @@ final class PartnerModeViewModel: ObservableObject {
 
     /// Load all partner data
     func loadPartnerData() async {
+        guard !isLoading else { return }
         isLoading = true
         defer { isLoading = false }
 
@@ -64,18 +69,32 @@ final class PartnerModeViewModel: ObservableObject {
             }
         } catch is TimeoutError {
             partnerState = .noPartner
+            partnerMoods = []
+            partnerQuest = nil
             showError(message: "Connection timed out. Please check your network and try again.")
         } catch {
             // CRITICAL FIX: Update state so UI doesn't hang forever
             partnerState = .noPartner
+            partnerMoods = []
+            partnerQuest = nil
             handleError(error)
         }
     }
     
     /// Internal implementation of partner data loading
     private func _loadPartnerDataInternal() async throws {
+        let owner = dataService.currentUserId
         // Check for active partner
         if let partnerInfo = try await dataService.getPartnerInfo() {
+            guard owner == dataService.currentUserId else { throw CancellationError() }
+            if case .hasPartner(let previous) = partnerState, previous.partnerId == partnerInfo.partnerId {
+                // The same partner can retain data only while each sharing read succeeds.
+            } else {
+                partnerMoods = []
+                partnerQuest = nil
+            }
+            inviteCode = nil
+            inviteExpiresAt = nil
             partnerState = .hasPartner(partnerInfo)
 
             // Load partner's shared data
@@ -87,8 +106,10 @@ final class PartnerModeViewModel: ObservableObject {
                 mySharingSettings = link.mySharingSettings(for: currentUserId)
             }
         } else {
-            // Check for pending invite
-            if let (code, expiresAt) = try? await getPendingInvite() {
+            partnerMoods = []
+            partnerQuest = nil
+            // The server retains only a hash; reuse the current view's unexpired code.
+            if let (code, expiresAt) = getPendingInvite() {
                 partnerState = .pendingInvite(code: code, expiresAt: expiresAt)
                 inviteCode = code
                 inviteExpiresAt = expiresAt
@@ -101,10 +122,14 @@ final class PartnerModeViewModel: ObservableObject {
     /// Load partner's shared mood and quest data
     private func loadPartnerSharedData(partnerInfo: PartnerInfo) async {
         // Load moods if shared
+        let owner = dataService.currentUserId
         if partnerInfo.isSharingMood {
             do {
-                partnerMoods = try await dataService.getPartnerMoodHistory(partnerId: partnerInfo.partnerId)
+                let moods = try await dataService.getPartnerMoodHistory(partnerId: partnerInfo.partnerId)
+                guard owner == dataService.currentUserId else { partnerMoods = []; partnerQuest = nil; return }
+                partnerMoods = moods
             } catch {
+                partnerMoods = []
                 Log.data.warning("[PartnerMode] Failed to load partner moods: \(error)")
             }
         } else {
@@ -114,8 +139,11 @@ final class PartnerModeViewModel: ObservableObject {
         // Load quest if shared
         if partnerInfo.isSharingExercises {
             do {
-                partnerQuest = try await dataService.getPartnerQuestStatus(partnerId: partnerInfo.partnerId)
+                let quest = try await dataService.getPartnerQuestStatus(partnerId: partnerInfo.partnerId)
+                guard owner == dataService.currentUserId else { partnerMoods = []; partnerQuest = nil; return }
+                partnerQuest = quest
             } catch {
+                partnerQuest = nil
                 Log.data.warning("[PartnerMode] Failed to load partner quest: \(error)")
             }
         } else {
@@ -124,10 +152,10 @@ final class PartnerModeViewModel: ObservableObject {
     }
 
     /// Get existing pending invite if any
-    private func getPendingInvite() async throws -> (String, Date)? {
-        let invites = try await dataService.getPendingBuddyInvites()
-        guard let invite = invites.first else { return nil }
-        return (invite.inviteCode, invite.expiresAt)
+    private func getPendingInvite() -> (String, Date)? {
+        guard inviteOwnerId == dataService.currentUserId,
+              let inviteCode, let inviteExpiresAt, inviteExpiresAt > Date() else { return nil }
+        return (inviteCode, inviteExpiresAt)
     }
 
     // MARK: - Invite Code Actions
@@ -138,10 +166,17 @@ final class PartnerModeViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            let (code, expiresAt) = try await dataService.getOrCreatePartnerInviteCode()
-            inviteCode = code
-            inviteExpiresAt = expiresAt
-            partnerState = .pendingInvite(code: code, expiresAt: expiresAt)
+            if let (code, expiresAt) = getPendingInvite() {
+                partnerState = .pendingInvite(code: code, expiresAt: expiresAt)
+                return
+            }
+            let owner = dataService.currentUserId
+            let invitation = try await invitationAPI.create()
+            guard owner == dataService.currentUserId else { throw CancellationError() }
+            inviteOwnerId = owner
+            inviteCode = invitation.code
+            inviteExpiresAt = invitation.expiresAt
+            partnerState = .pendingInvite(code: invitation.code, expiresAt: invitation.expiresAt)
 
             Analytics.shared.track(.buddyInviteSent, properties: [
                 "method": "link",
@@ -154,9 +189,10 @@ final class PartnerModeViewModel: ObservableObject {
 
     /// Accept an invite code
     func acceptInviteCode() async {
-        let code = codeInput.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        guard code.count == 6 else {
-            showError(message: "Please enter a 6-character code")
+        guard !isValidatingCode else { return }
+        let code = codeInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard Self.isValidInviteCode(code) else {
+            showError(message: "Please enter the 8-character code exactly as shared")
             return
         }
 
@@ -164,8 +200,10 @@ final class PartnerModeViewModel: ObservableObject {
         defer { isValidatingCode = false }
 
         do {
-            _ = try await dataService.acceptBuddyInvite(code: code)
+            try await invitationAPI.accept(code: code)
             codeInput = ""
+            inviteCode = nil
+            inviteExpiresAt = nil
 
             // Reload partner data
             await loadPartnerData()
@@ -332,17 +370,17 @@ final class PartnerModeViewModel: ObservableObject {
 extension PartnerModeViewModel {
     /// Whether the code input is valid
     var isCodeInputValid: Bool {
-        codeInput.count == 6
+        Self.isValidInviteCode(codeInput.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
     /// Formatted invite code (with spaces)
     var formattedInviteCode: String {
         guard let code = inviteCode else { return "" }
-        let chars = Array(code)
-        if chars.count == 6 {
-            return "\(chars[0])\(chars[1])\(chars[2]) \(chars[3])\(chars[4])\(chars[5])"
-        }
         return code
+    }
+
+    nonisolated static func isValidInviteCode(_ code: String) -> Bool {
+        PartnerInvitationClient.isValidCode(code)
     }
 
     /// Days until invite expires
@@ -356,6 +394,36 @@ extension PartnerModeViewModel {
     var partnerHasSharedData: Bool {
         guard case .hasPartner(let info) = partnerState else { return false }
         return info.isSharingMood || info.isSharingExercises
+    }
+}
+
+/// The existing couples endpoints store hashed, case-sensitive partner codes.
+struct PartnerInvitationClient {
+    let client: SupabaseClient
+
+    func create() async throws -> (code: String, expiresAt: Date) {
+        struct Invite: Decodable { let inviteCode: String; let expiresAt: String }
+        let response: Invite = try await client.functions.invoke("couples-partner-links", options: .init(body: [:] as [String: String]))
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        guard Self.isValidCode(response.inviteCode), let expiresAt = formatter.date(from: response.expiresAt) else {
+            throw CouplesModeError.internalError
+        }
+        return (response.inviteCode, expiresAt)
+    }
+
+    func accept(code: String) async throws {
+        guard Self.isValidCode(code) else { throw CouplesModeError.inviteInvalid }
+        struct Accepted: Decodable { let status: String }
+        let result: Accepted = try await client.functions.invoke(
+            "couples-partner-links-accept", options: .init(body: ["inviteCode": code])
+        )
+        guard result.status == "active" else { throw CouplesModeError.inviteInvalid }
+    }
+
+    static func isValidCode(_ code: String) -> Bool {
+        let alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+        return code.count == 8 && code.allSatisfy { alphabet.contains($0) }
     }
 }
 

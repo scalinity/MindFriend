@@ -88,8 +88,15 @@ struct EfficacyDashboardView: View {
     private func dashboardContent(data: EfficacyDashboardData) -> some View {
         ScrollView {
             VStack(spacing: 24) {
-                // Insights Summary Cards
-                insightsSummary(insights: data.insights)
+                if data.recentSessions.isEmpty {
+                    ContentUnavailableView(
+                        "Efficacy unavailable",
+                        systemImage: "waveform.path",
+                        description: Text("No supported emotional measurements have been recorded. You can still complete exercises and receive suggestions.")
+                    )
+                } else {
+                    insightsSummary(insights: data.insights)
+                }
 
                 // Top Exercises Section
                 if !data.topExercises.isEmpty {

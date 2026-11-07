@@ -27,6 +27,7 @@ actor VaultStorageService: VaultStoring {
 
     private let encryptionService: VaultEncrypting
     private let fileManager: FileManager
+    private let directoryURL: URL?
 
     // MARK: - Cached State
 
@@ -34,9 +35,10 @@ actor VaultStorageService: VaultStoring {
 
     // MARK: - Initialization
 
-    init(encryptionService: VaultEncrypting, fileManager: FileManager = .default) {
+    init(encryptionService: VaultEncrypting, fileManager: FileManager = .default, directoryURL: URL? = nil) {
         self.encryptionService = encryptionService
         self.fileManager = fileManager
+        self.directoryURL = directoryURL
     }
 
     // MARK: - Public Interface
@@ -174,16 +176,20 @@ actor VaultStorageService: VaultStoring {
             return cached
         }
 
-        let appSupport = try fileManager.url(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        )
-
-        let vaultDir = appSupport
-            .appendingPathComponent(appDirectoryName, isDirectory: true)
-            .appendingPathComponent(vaultDirectoryName, isDirectory: true)
+        let vaultDir: URL
+        if let directoryURL {
+            vaultDir = directoryURL
+        } else {
+            let appSupport = try fileManager.url(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: true
+            )
+            vaultDir = appSupport
+                .appendingPathComponent(appDirectoryName, isDirectory: true)
+                .appendingPathComponent(vaultDirectoryName, isDirectory: true)
+        }
 
         var isDirectory: ObjCBool = false
         if !fileManager.fileExists(atPath: vaultDir.path, isDirectory: &isDirectory) {

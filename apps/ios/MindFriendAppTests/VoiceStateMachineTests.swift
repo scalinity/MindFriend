@@ -1,6 +1,33 @@
 import XCTest
 @testable import MindFriendApp
 
+final class VoiceTranscriptDraftTests: XCTestCase {
+    func testEncryptedDraftRestoresStableIdentityAndRemainsAccountScoped() throws {
+        let namespace = "test.voice-draft.\(UUID().uuidString)"
+        let owner = UUID()
+        let otherOwner = UUID()
+        let storage = SecureStorage(keychainService: namespace, keyIdentifier: owner.uuidString)
+        let otherStorage = SecureStorage(keychainService: namespace, keyIdentifier: otherOwner.uuidString)
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: namespace))
+        defer {
+            defaults.removePersistentDomain(forName: namespace)
+            try? storage.deleteEncryptionKey()
+            try? otherStorage.deleteEncryptionKey()
+        }
+        let draft = VoiceTranscriptDraft(
+            ownerId: owner, conversationId: UUID(), title: "Voice conversation",
+            messages: [VoiceTranscriptMessage(id: UUID(), role: "user", content: "Keep this thought", createdAt: Date())]
+        )
+        try storage.store(draft, forKey: owner.uuidString, in: defaults)
+        let reopened = SecureStorage(keychainService: namespace, keyIdentifier: owner.uuidString)
+        let restored = try reopened.retrieve(forKey: owner.uuidString, as: VoiceTranscriptDraft.self, from: defaults)
+        XCTAssertEqual(restored, draft)
+        XCTAssertNil(try otherStorage.retrieve(forKey: otherOwner.uuidString, as: VoiceTranscriptDraft.self, from: defaults))
+        XCTAssertThrowsError(try otherStorage.retrieve(forKey: owner.uuidString, as: VoiceTranscriptDraft.self, from: defaults))
+        XCTAssertEqual(restored?.messages.first?.id, draft.messages.first?.id)
+    }
+}
+
 final class VoiceStateMachineTests: XCTestCase {
 
     // MARK: - Initial State Tests
@@ -237,9 +264,58 @@ final class VoiceStateMachineTests: XCTestCase {
     // MARK: - Barge-In State Transitions
 
     func testBargeInToUserSpeakingOnPlaybackFinished() {
-        var machine = VoiceStateMachine(initialState: .bargeIn)
+        var machine = VoiceStateMachine(initialState: .speaking)
+        XCTAssertEqual(machine.send(.speechStart), .bargeIn)
         let newState = machine.send(.audioPlaybackFinished)
         XCTAssertEqual(newState, .userSpeaking)
+    }
+
+    func testBargeInWithoutObservedSpeechReturnsToListeningOnPlaybackFinished() {
+        var machine = VoiceStateMachine(initialState: .bargeIn)
+        XCTAssertEqual(machine.send(.audioPlaybackFinished), .listening)
+    }
+
+    func testSilentTapInterruptWaitsForSpeechAfterPlaybackStops() {
+        var machine = VoiceStateMachine(initialState: .speaking)
+        XCTAssertEqual(machine.send(.tapInterrupt), .bargeIn)
+        XCTAssertEqual(machine.send(.audioPlaybackFinished), .listening)
+        XCTAssertEqual(machine.send(.speechStart), .userSpeaking)
+        XCTAssertEqual(machine.send(.speechEnd), .endOfUtterance)
+    }
+
+    func testResponseCancellationPreservesSpeechButDoesNotInventItAfterATap() {
+        for initialState in [VoiceStateMachine.State.thinking, .processing, .speaking] {
+            var speaking = VoiceStateMachine(initialState: initialState)
+            XCTAssertEqual(speaking.send(.speechStart), .bargeIn)
+            XCTAssertEqual(speaking.send(.serverResponseDone), .userSpeaking)
+            XCTAssertEqual(speaking.send(.audioPlaybackFinished), .userSpeaking)
+            XCTAssertEqual(speaking.send(.speechEnd), .endOfUtterance)
+
+            var silent = VoiceStateMachine(initialState: initialState)
+            XCTAssertEqual(silent.send(.tapInterrupt), .bargeIn)
+            XCTAssertEqual(silent.send(.serverResponseDone), .listening)
+            XCTAssertEqual(silent.send(.audioPlaybackFinished), .listening)
+            XCTAssertEqual(silent.send(.speechStart), .userSpeaking)
+        }
+    }
+
+    func testSpeechEndingBeforePlaybackStopsRemainsReadyToSubmit() {
+        var machine = VoiceStateMachine(initialState: .speaking)
+        XCTAssertEqual(machine.send(.speechStart), .bargeIn)
+        XCTAssertEqual(machine.send(.speechEnd), .endOfUtterance)
+        XCTAssertEqual(machine.send(.audioPlaybackFinished), .endOfUtterance)
+        XCTAssertEqual(machine.send(.serverResponseDone), .endOfUtterance)
+    }
+
+    func testNewSilentInterruptionDoesNotReusePreviousSpeech() {
+        var machine = VoiceStateMachine(initialState: .speaking)
+        XCTAssertEqual(machine.send(.speechStart), .bargeIn)
+        XCTAssertEqual(machine.send(.audioPlaybackFinished), .userSpeaking)
+        XCTAssertEqual(machine.send(.speechEnd), .endOfUtterance)
+        XCTAssertEqual(machine.send(.serverThinking), .thinking)
+        XCTAssertEqual(machine.send(.serverAudioChunk(Data())), .speaking)
+        XCTAssertEqual(machine.send(.tapInterrupt), .bargeIn)
+        XCTAssertEqual(machine.send(.audioPlaybackFinished), .listening)
     }
 
     func testBargeInToEndOfUtteranceOnSpeechEnd() {

@@ -1,3 +1,4 @@
+import { refreshPremiumAccess } from "../_shared/entitlement.ts";
 // Boundary & Needs Planner: Generate Scripts
 // Endpoint: POST /functions/v1/generate-scripts
 // Generates boundary conversation scripts from templates with placeholder replacement
@@ -216,15 +217,7 @@ Deno.serve(async (req) => {
       .eq("user_id", user.id)
       .single();
 
-    // Get user's subscription tier
-    const { data: subscription } = await supabase
-      .from("subscriptions")
-      .select("subscription_tier")
-      .eq("user_id", user.id)
-      .single();
-
-    const tier = subscription?.subscription_tier || "free";
-    const isPremium = tier === "premium";
+    const isPremium = await refreshPremiumAccess(supabase, user.id);
 
     // Get user's locale (default to 'en')
     const locale = "en"; // TODO: Get from user profile when localization is implemented

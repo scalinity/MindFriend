@@ -233,8 +233,8 @@ export interface SuggestionCaller {
   userRpc(fn: string, args: Record<string, unknown>): PromiseLike<RpcResult>;
   /** Service role, used only with `userId` as the explicit owner argument. */
   adminRpc(fn: string, args: Record<string, unknown>): PromiseLike<RpcResult>;
-  /** user_settings.privacy_mode + profiles.subscription_tier; null = unreadable (fail closed). */
-  readAccount(): Promise<{ privacyMode: string | null; subscriptionTier: string | null } | null>;
+  /** user_settings.privacy_mode; null = unreadable (fail closed). */
+  readAccount(): Promise<{ privacyMode: string | null } | null>;
   /** Existing chat.memory monthly budget reservation (one call per provider submission). */
   reserveBudget(signal: AbortSignal): (microdollars: number) => Promise<boolean>;
 }
@@ -617,12 +617,12 @@ export function createMemorySuggestionHandler(deps: SuggestionDeps): (req: Reque
           }
           const apiKey = deps.apiKey();
           if (!apiKey) { await preFail("provider_not_configured"); return failure("TEMPORARY_FAILURE", "provider_not_configured"); }
-          const sponsored = await callAdmin("refresh_sponsored_entitlement", {}, "p_user_id");
-          if (sponsored.error || typeof sponsored.data !== "boolean") {
+          const entitlement = await callAdmin("refresh_user_entitlement", {}, "p_user_id");
+          if (entitlement.error || typeof entitlement.data !== "boolean") {
             await preFail("entitlement_unverified");
             return failure("TEMPORARY_FAILURE", "entitlement_unverified");
           }
-          const isPremium = account.subscriptionTier === "premium" || sponsored.data;
+          const isPremium = entitlement.data;
 
           const signal = AbortSignal.timeout(L.providerTimeoutMs);
           let dispatched = false;

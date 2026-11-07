@@ -287,7 +287,7 @@ function completed(text: string): Response {
   return Response.json({ status: "completed", output: [{ type: "message", content: [{ type: "output_text", text }] }] });
 }
 
-function harness(over: { privacyMode?: string | null; account?: "unreadable"; budget?: "ok" | "exhausted" | "disabled" | "error"; key?: string | undefined; sponsored?: unknown; quota?: unknown } = {}) {
+function harness(over: { privacyMode?: string | null; account?: "unreadable"; budget?: "ok" | "exhausted" | "disabled" | "error"; key?: string | undefined; premium?: unknown; quota?: unknown } = {}) {
   const clock = { t: Date.parse("2026-11-07T12:00:00Z") };
   const db = new FakeDb(clock); db.seed();
   const state = {
@@ -296,7 +296,7 @@ function harness(over: { privacyMode?: string | null; account?: "unreadable"; bu
     account: over.account,
     budget: over.budget ?? "ok",
     key: "key" in over ? over.key : NONIMAGE_KEY,
-    sponsored: over.sponsored ?? false,
+    premium: over.premium ?? false,
     quota: over.quota ?? { allowed: true, quota_used: 1, quota_limit: 5, was_reset: false },
   };
   const fetchCalls: { url: string; headers: Record<string, string>; body: Record<string, any> }[] = [];
@@ -341,7 +341,7 @@ function harness(over: { privacyMode?: string | null; account?: "unreadable"; bu
         case "support_memory_suggestion_finish": return { data: db.finish(args), error: null };
         case "support_memory_suggestion_commit": return { data: db.commit(args), error: null };
         case "support_memory_suggestion_status": return { data: db.status(args), error: null };
-        case "refresh_sponsored_entitlement": assert(args.p_user_id === U1); return { data: state.sponsored, error: null };
+        case "refresh_user_entitlement": assert(args.p_user_id === U1); return { data: state.premium, error: null };
         case "check_and_increment_ai_quota": throw new Error("the Edge function must not debit quota outside the dispatch RPC");
       }
       throw new Error(`unexpected admin rpc ${fn}`);
@@ -689,11 +689,13 @@ Deno.test("budget denial, quota denial and unverifiable entitlement happen BEFOR
   eq((await h.call(h.gen())).json.message, "dispatch_unconfirmed");
   h = harness({ quota: { allowed: true, quota_used: 3, quota_limit: -1 } });
   h.state.tier = "premium";
+  eq((await h.call(h.gen())).json.message, "dispatch_unconfirmed", "a stale cached premium tier cannot grant unlimited quota");
+  h = harness({ premium: true, quota: { allowed: true, quota_used: 3, quota_limit: -1 } });
   eq((await h.call(h.gen())).json.status, "saved");
   eq(h.quotaCalls, [{ premium: true }], "the verified entitlement is what dispatch receives");
 
   // Entitlement refresh unverifiable.
-  h = harness({ sponsored: "not-a-boolean" });
+  h = harness({ premium: "not-a-boolean" });
   r = await h.call(h.gen());
   eq([r.status, r.json.message, h.fetchCalls.length, h.quotaCalls.length, h.budgetCalls.length], [503, "entitlement_unverified", 0, 0, 0]);
 });

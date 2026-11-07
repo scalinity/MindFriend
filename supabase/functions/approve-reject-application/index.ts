@@ -1,4 +1,5 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
+import { authenticateStaffRequest } from "../_shared/staff-auth.ts";
+import { isAuthError } from "../_shared/auth.ts";
 
 interface ReviewRequest {
   applicationId: string;
@@ -29,36 +30,9 @@ function validateUUID(uuid: string): boolean {
 }
 
 Deno.serve(async (req) => {
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  );
-
-  // Verify admin/authentication
-  const authHeader = req.headers.get("Authorization")!;
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
-
-  if (authError || !user) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-    });
-  }
-
-  // Check if user has admin role (would be implemented with custom claims or role table)
-  const { data: adminCheck } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single();
-
-  if (adminCheck?.role !== "admin") {
-    return new Response(JSON.stringify({ error: "Admin access required" }), {
-      status: 403,
-    });
-  }
+  const auth = await authenticateStaffRequest(req, ["admin"]);
+  if (isAuthError(auth)) return auth.response;
+  const { user, supabaseAdmin: supabase } = auth;
 
   const review: ReviewRequest = await req.json();
 

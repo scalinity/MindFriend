@@ -41,6 +41,7 @@ Deno.serve(async (req) => {
     const { data: recentRecords, error: recordsError } = await supabaseAdmin
       .from("intervention_efficacy")
       .select("user_id, exercise_id")
+      .eq("measurement_status", "observed")
       .gte("completed_at", sevenDaysAgo.toISOString());
 
     if (recordsError) {
@@ -75,6 +76,7 @@ Deno.serve(async (req) => {
     const { data: allRecords, error: allRecordsError } = await supabaseAdmin
       .from("intervention_efficacy")
       .select("*")
+      .eq("measurement_status", "observed")
       .in(
         "user_id",
         Array.from(
@@ -123,6 +125,7 @@ Deno.serve(async (req) => {
       exercise_id: string;
       overall_efficacy_score: number;
       completion_count: number;
+      measurement_status: "observed";
       confidence: number;
       efficacy_by_state: Record<string, number>;
       efficacy_by_time_of_day: Record<string, number>;
@@ -164,12 +167,14 @@ Deno.serve(async (req) => {
       const byEmotion: Record<string, number[]> = {};
 
       records.forEach((record) => {
-        const state = record.starting_state?.nervousSystemState || "unknown";
+        const state = record.starting_state?.nervousSystemState;
         const time = record.time_of_day;
         const emotion = record.starting_state?.primaryEmotion || "neutral";
 
-        if (!byState[state]) byState[state] = [];
-        byState[state].push(record.efficacy_score);
+        if (typeof state === "string" && state && state !== "unknown") {
+          if (!byState[state]) byState[state] = [];
+          byState[state].push(record.efficacy_score);
+        }
 
         if (!byTime[time]) byTime[time] = [];
         byTime[time].push(record.efficacy_score);
@@ -235,6 +240,7 @@ Deno.serve(async (req) => {
         exercise_id: exerciseId,
         overall_efficacy_score: Math.round(overallEfficacy * 100) / 100,
         completion_count: records.length,
+        measurement_status: "observed",
         confidence: Math.round(confidence * 100) / 100,
         efficacy_by_state: efficacyByState,
         efficacy_by_time_of_day: efficacyByTime,

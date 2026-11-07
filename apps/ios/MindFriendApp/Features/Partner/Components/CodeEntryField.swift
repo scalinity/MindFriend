@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 6-character code entry field with individual boxes
+/// 8-character code entry field with individual boxes
 struct CodeEntryField: View {
     @Binding var code: String
     @FocusState private var isFocused: Bool
@@ -11,24 +11,23 @@ struct CodeEntryField: View {
             TextField("", text: $code)
                 .keyboardType(.asciiCapable)
                 .textContentType(.oneTimeCode)
-                .autocapitalization(.allCharacters)
+                .textInputAutocapitalization(.never)
                 .disableAutocorrection(true)
                 .focused($isFocused)
                 .opacity(0)
                 .onChange(of: code) { _, newValue in
-                    // Limit to 6 characters, uppercase only
+                    // Partner codes are case-sensitive Base58 values.
                     let filtered = newValue
-                        .uppercased()
-                        .filter { $0.isLetter || $0.isNumber }
-                        .prefix(6)
+                        .filter { "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz".contains($0) }
+                        .prefix(8)
                     if code != String(filtered) {
                         code = String(filtered)
                     }
                 }
 
             // Visual display
-            HStack(spacing: 8) {
-                ForEach(0..<6, id: \.self) { index in
+            HStack(spacing: 6) {
+                ForEach(0..<8, id: \.self) { index in
                     CodeBox(
                         character: character(at: index),
                         isActive: index == code.count && isFocused
@@ -42,7 +41,7 @@ struct CodeEntryField: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Partner code entry")
         .accessibilityValue(code.isEmpty ? "Empty" : code.map { String($0) }.joined(separator: ", "))
-        .accessibilityHint("Enter the 6-character code from your partner")
+        .accessibilityHint("Enter the 8-character code from your partner")
     }
 
     private func character(at index: Int) -> Character? {
@@ -78,7 +77,7 @@ private struct CodeBox: View {
                     .opacity(0.8)
             }
         }
-        .frame(width: 44, height: 52)
+        .frame(maxWidth: .infinity, minHeight: 48)
     }
 }
 
@@ -86,7 +85,7 @@ private struct CodeBox: View {
     VStack(spacing: 32) {
         CodeEntryField(code: .constant(""))
         CodeEntryField(code: .constant("AB7"))
-        CodeEntryField(code: .constant("AB7X2Q"))
+        CodeEntryField(code: .constant("Ab7x2Qp9"))
     }
     .padding()
 }

@@ -43,6 +43,9 @@ final class CalendarTriggerMonitor: @preconcurrency CalendarTriggerMonitoring {
     private var eventStore: EKEventStore
     private let supabase: SupabaseClient
     private var scanTimer: Timer?
+    private var scanTask: Task<Void, Never>?
+    private var accountId: UUID?
+    private var accountGeneration = 0
     private var cachedConfig: CalendarTriggerConfig?
     private var lastScanDate: Date?
 
@@ -62,9 +65,31 @@ final class CalendarTriggerMonitor: @preconcurrency CalendarTriggerMonitoring {
     deinit {
         scanTimer?.invalidate()
         scanTimer = nil
+        scanTask?.cancel()
     }
 
     // MARK: - Public Methods
+
+    func resetForAccountChange(to userId: UUID?) {
+        stopPeriodicScanning()
+        accountId = userId
+        cachedConfig = nil
+        lastScanDate = nil
+        lastPermissionError = nil
+    }
+
+    private func accountContext() async throws -> (owner: UUID, generation: Int) {
+        guard let owner = supabase.auth.currentUser?.id else { throw AuthError.sessionExpired }
+        if accountId != owner { resetForAccountChange(to: owner) }
+        let generation = accountGeneration
+        let session = try await supabase.auth.session
+        guard session.user.id == owner, isCurrent(owner, generation) else { throw CancellationError() }
+        return (owner, generation)
+    }
+
+    private func isCurrent(_ owner: UUID, _ generation: Int) -> Bool {
+        !Task.isCancelled && accountId == owner && accountGeneration == generation && supabase.auth.currentUser?.id == owner
+    }
 
     /// Last error from permission request (for debugging)
     var lastPermissionError: String?
@@ -114,11 +139,13 @@ final class CalendarTriggerMonitor: @preconcurrency CalendarTriggerMonitoring {
     }
 
     func scanUpcomingEvents(window: TimeInterval = CalendarConstants.defaultScanWindow) async throws -> [ClassifiedEvent] {
+        let operation = try await accountContext()
         guard hasCalendarPermission() else {
             throw CalendarError.permissionDenied
         }
 
         let config = try await getTriggerConfig()
+        guard isCurrent(operation.owner, operation.generation) else { throw CancellationError() }
 
         // If no calendars enabled, return empty
         guard !config.enabledCalendarIds.isEmpty else {
@@ -223,8 +250,8 @@ final class CalendarTriggerMonitor: @preconcurrency CalendarTriggerMonitoring {
     }
 
     func updateTriggerConfig(_ config: CalendarTriggerConfig) async throws {
-        let session = try await supabase.auth.session
-        let userId = session.user.id
+        let operation = try await accountContext()
+        let userId = operation.owner
 
         // Find or create calendar trigger
         let triggers: [InterventionTrigger] = try await supabase
@@ -234,6 +261,7 @@ final class CalendarTriggerMonitor: @preconcurrency CalendarTriggerMonitoring {
             .eq("trigger_type", value: "calendar")
             .execute()
             .value
+        guard isCurrent(operation.owner, operation.generation) else { throw CancellationError() }
 
         if let existingTrigger = triggers.first {
             // Update existing
@@ -259,6 +287,7 @@ final class CalendarTriggerMonitor: @preconcurrency CalendarTriggerMonitoring {
                 .from("intervention_triggers")
                 .update(update)
                 .eq("id", value: existingTrigger.id.uuidString)
+                .eq("user_id", value: userId.uuidString)
                 .execute()
         } else {
             // Create new
@@ -293,23 +322,26 @@ final class CalendarTriggerMonitor: @preconcurrency CalendarTriggerMonitoring {
         }
 
         // Update cache
+        guard isCurrent(operation.owner, operation.generation) else { throw CancellationError() }
         cachedConfig = config
     }
 
     func markEventAsNeedsArmor(_ eventId: String) async throws {
+        let operation = try await accountContext()
         var config = try await getTriggerConfig()
+        guard isCurrent(operation.owner, operation.generation) else { throw CancellationError() }
         config.needsArmorEventIds.insert(eventId)
         try await updateTriggerConfig(config)
     }
 
     func getTriggerConfig() async throws -> CalendarTriggerConfig {
+        let operation = try await accountContext()
         // Return cached if available and recent
         if let cached = cachedConfig {
             return cached
         }
 
-        let session = try await supabase.auth.session
-        let userId = session.user.id
+        let userId = operation.owner
 
         // Fetch from database
         let triggers: [InterventionTrigger] = try await supabase
@@ -319,6 +351,7 @@ final class CalendarTriggerMonitor: @preconcurrency CalendarTriggerMonitoring {
             .eq("trigger_type", value: "calendar")
             .execute()
             .value
+        guard isCurrent(operation.owner, operation.generation) else { throw CancellationError() }
 
         if let trigger = triggers.first {
             // Decode config from JSONB - use JSONEncoder since triggerConfig is [String: AnyCodableValue]
@@ -340,6 +373,8 @@ final class CalendarTriggerMonitor: @preconcurrency CalendarTriggerMonitoring {
     // MARK: - Periodic Scanning
 
     func startPeriodicScanning() {
+        guard let owner = supabase.auth.currentUser?.id else { return }
+        if accountId != owner { resetForAccountChange(to: owner) }
         scanTimer?.invalidate()
 
         scanTimer = Timer.scheduledTimer(
@@ -347,19 +382,30 @@ final class CalendarTriggerMonitor: @preconcurrency CalendarTriggerMonitoring {
             repeats: true
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                await self?.performPeriodicScan()
+                self?.beginPeriodicScan()
             }
         }
 
         // Perform initial scan
-        Task {
-            await performPeriodicScan()
-        }
+        beginPeriodicScan()
     }
 
     func stopPeriodicScanning() {
+        accountGeneration += 1
         scanTimer?.invalidate()
         scanTimer = nil
+        scanTask?.cancel()
+        scanTask = nil
+    }
+
+    private func beginPeriodicScan() {
+        guard scanTask == nil else { return }
+        let generation = accountGeneration
+        scanTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { if accountGeneration == generation { scanTask = nil } }
+            await performPeriodicScan()
+        }
     }
 
     private func performPeriodicScan() async {

@@ -322,6 +322,11 @@ final class ThreadViewModel: ObservableObject {
 
     private var realtimeChannel: RealtimeChannelV2?
     private var replySubscription: RealtimeSubscription?
+    private var statusSubscription: RealtimeSubscription?
+    private var flatReplies: [ForumReply] = []
+    private var loadedReplyPages = 1
+    private var isFetchingReplies = false
+    private var needsReplyRefresh = false
     private var replyRefreshTask: Task<Void, Never>?
     private var realtimeGeneration = UUID()
     private var pollingTask: Task<Void, Never>?
@@ -339,6 +344,7 @@ final class ThreadViewModel: ObservableObject {
     deinit {
         pollingTask?.cancel()
         replySubscription?.cancel()
+        statusSubscription?.cancel()
         replyRefreshTask?.cancel()
         let channel = MainActor.assumeIsolated { self.realtimeChannel }
         Task { @MainActor in
@@ -346,50 +352,72 @@ final class ThreadViewModel: ObservableObject {
         }
     }
 
-    func load() async {
-        isLoading = true
+    func load(preservingPages: Bool = false, generation: UUID? = nil) async {
+        guard !isFetchingReplies else {
+            if generation == realtimeGeneration { needsReplyRefresh = true }
+            return
+        }
+        isFetchingReplies = true
+        isLoading = thread == nil
         error = nil
+        defer { finishReplyLoad() }
 
         do {
-            // Load thread
-            thread = try await forumService.fetchThread(id: threadId)
-
-            // Load replies
-            let fetchedReplies = try await forumService.fetchReplies(
-                threadId: threadId,
-                cursor: nil,
-                limit: 50
-            )
-            replies = ForumThread.buildReplyTree(replies: fetchedReplies)
-            hasMoreReplies = fetchedReplies.count >= 50
-            lastReplyCursor = fetchedReplies.last?.createdAt
+            let fetchedThread = try await forumService.fetchThread(id: threadId)
+            var fetchedReplies: [ForumReply] = []
+            var cursor: Date?
+            var hasMore = false
+            let pageCount = preservingPages ? loadedReplyPages : 1
+            for _ in 0..<pageCount {
+                try Task.checkCancellation()
+                let page = try await forumService.fetchReplies(threadId: threadId, cursor: cursor, limit: 50)
+                fetchedReplies.append(contentsOf: page)
+                cursor = page.last?.createdAt
+                hasMore = page.count == 50
+                if !hasMore { break }
+            }
+            guard !Task.isCancelled, generation == nil || generation == realtimeGeneration else { return }
+            thread = fetchedThread
+            flatReplies = fetchedReplies
+            replies = ForumThread.buildReplyTree(replies: flatReplies)
+            hasMoreReplies = hasMore
+            lastReplyCursor = cursor
+            if !preservingPages { loadedReplyPages = 1 }
         } catch {
-            self.error = error.localizedDescription
+            if !Task.isCancelled { self.error = error.localizedDescription }
         }
-
-        isLoading = false
     }
 
     func loadMoreReplies() async {
-        guard hasMoreReplies, let cursor = lastReplyCursor else { return }
-
+        guard !isFetchingReplies, hasMoreReplies, let cursor = lastReplyCursor else { return }
+        isFetchingReplies = true
+        defer { finishReplyLoad() }
         do {
-            let newReplies = try await forumService.fetchReplies(
-                threadId: threadId,
-                cursor: cursor,
-                limit: 50
-            )
-            // Merge into tree (simplified - should rebuild entire tree)
-            replies.append(contentsOf: newReplies)
-            hasMoreReplies = newReplies.count >= 50
+            let newReplies = try await forumService.fetchReplies(threadId: threadId, cursor: cursor, limit: 50)
+            guard !Task.isCancelled else { return }
+            flatReplies.append(contentsOf: newReplies)
+            replies = ForumThread.buildReplyTree(replies: flatReplies)
+            loadedReplyPages += 1
+            hasMoreReplies = newReplies.count == 50
             lastReplyCursor = newReplies.last?.createdAt
         } catch {
-            print("Error loading more replies:", error)
+            if !Task.isCancelled { self.error = error.localizedDescription }
         }
     }
 
     func refresh() async {
-        await load()
+        await load(preservingPages: true)
+    }
+
+    private func finishReplyLoad() {
+        isFetchingReplies = false
+        isLoading = false
+        guard needsReplyRefresh else { return }
+        needsReplyRefresh = false
+        let generation = realtimeGeneration
+        replyRefreshTask = Task { [weak self] in
+            await self?.load(preservingPages: true, generation: generation)
+        }
     }
 
     func subscribeToRealtime() async {
@@ -415,45 +443,52 @@ final class ThreadViewModel: ObservableObject {
             }
 
         realtimeChannel = channel
-        try? await channel.subscribeWithError()
+        statusSubscription = channel.onStatusChange { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.realtimeGeneration == generation else { return }
+                if self.realtimeChannel?.status == .subscribed {
+                    let wasUnavailable = self.pollingTask != nil
+                    self.pollingTask?.cancel()
+                    self.pollingTask = nil
+                    if wasUnavailable {
+                        await self.load(preservingPages: true, generation: generation)
+                    }
+                } else {
+                    self.startPollingFallback(generation: generation)
+                }
+            }
+        }
+        do { try await channel.subscribeWithError() }
+        catch { startPollingFallback(generation: generation) }
         guard !Task.isCancelled, realtimeGeneration == generation else {
             await forumService.supabase.removeChannel(channel)
             return
         }
 
-        // Start polling fallback (30s intervals)
-        startPollingFallback()
     }
 
     private func handleNewReply(_ record: JSONObject, generation: UUID) async {
-        // Refresh replies to get the new one
-        do {
-            let allReplies = try await forumService.fetchReplies(
-                threadId: threadId,
-                cursor: nil,
-                limit: 100
-            )
-            guard !Task.isCancelled, realtimeGeneration == generation else { return }
-            replies = ForumThread.buildReplyTree(replies: allReplies)
-        } catch {
-            print("Error fetching new replies:", error)
-        }
+        await load(preservingPages: true, generation: generation)
     }
 
-    private func startPollingFallback() {
-        pollingTask?.cancel()
+    private func startPollingFallback(generation: UUID) {
+        guard pollingTask == nil else { return }
         pollingTask = Task { [weak self] in
             while !Task.isCancelled {
                 do { try await Task.sleep(for: .seconds(30)) } catch { break }
-                await self?.refresh()
+                guard let self, self.realtimeGeneration == generation else { break }
+                await self.load(preservingPages: true, generation: generation)
             }
         }
     }
 
     func stopRealtime() {
         realtimeGeneration = UUID()
+        needsReplyRefresh = false
         replySubscription?.cancel()
         replySubscription = nil
+        statusSubscription?.cancel()
+        statusSubscription = nil
         replyRefreshTask?.cancel()
         replyRefreshTask = nil
         pollingTask?.cancel()

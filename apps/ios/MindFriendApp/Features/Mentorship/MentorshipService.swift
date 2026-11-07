@@ -55,17 +55,11 @@ final class MentorshipService: ObservableObject {
     let encryptionService: MentorshipEncryptionService
     private let lifecycleService: MentorshipLifecycleService
 
-    // MARK: - Observation
-
-    private var observationTask: Task<Void, Never>?
-    private var matchesObservationTask: Task<Void, Never>?  // ✅ ADDED: Store matches observation
-    private var messagesObservationTask: Task<Void, Never>?  // ✅ ADDED: Store messages observation
-
     // MARK: - Initialization
 
-    init(supabase: SupabaseClient, userId: UUID) {
+    init(supabase: SupabaseClient, userIdProvider: @escaping @MainActor () -> UUID?) {
         // Build dependency graph with authenticated user ID
-        let data = MentorshipDataService(supabase: supabase, userId: userId)
+        let data = MentorshipDataService(supabase: supabase, userIdProvider: userIdProvider)
         let encryption = MentorshipEncryptionService(dataService: data)
         let profile = MentorshipProfileService(dataService: data)
         let matching = MentorshipMatchingService(dataService: data)
@@ -86,45 +80,29 @@ final class MentorshipService: ObservableObject {
     }
 
     private func setupObservation() {
-        observationTask = Task { [weak self] in
-            guard let self = self else { return }
-
-            // Sync profile changes
-            for await profile in self.profileService.$profile.values {
-                self.profile = profile
-            }
-        }
-
-        // Additional observation tasks for other services
-        matchesObservationTask = Task { [weak self] in  // ✅ CHANGED: Store task
-            guard let self = self else { return }
-            for await matches in self.matchingService.$matches.values {
-                self.matches = matches
-            }
-        }
-
-        messagesObservationTask = Task { [weak self] in  // ✅ CHANGED: Store task
-            guard let self = self else { return }
-            for await messages in self.messagingService.$messages.values {
-                self.currentMessages = messages
-            }
-        }
+        profileService.$profile.assign(to: &$profile)
+        matchingService.$matches.assign(to: &$matches)
+        messagingService.$messages.assign(to: &$currentMessages)
     }
 
-    // MARK: - Cleanup
+    var currentUserId: UUID? { dataService.currentUserId }
 
-    func cleanup() async {
-        observationTask?.cancel()
-        matchesObservationTask?.cancel()  // ✅ ADDED: Cancel matches observation
-        messagesObservationTask?.cancel()  // ✅ ADDED: Cancel messages observation
-        await messagingService.cleanup()
+    /// Invalidate in-flight work before clearing account-scoped UI state.
+    func resetForAccountChange() {
+        dataService.resetForAccountChange()
+        messagingService.reset()
         profileService.reset()
         matchingService.reset()
         safetyService.reset()
         lifecycleService.reset()
+        profile = nil
+        matches = []
         currentMessages = []
+        isLoading = false
         error = nil
     }
+
+    func cleanup() async { resetForAccountChange() }
 
     // MARK: - Profile Operations (Delegated)
 

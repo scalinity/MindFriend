@@ -39,6 +39,13 @@ struct LibraryExercisePlayerView: View {
             ) {
                 submitCompletion()
             }
+            .safeAreaInset(edge: .bottom) {
+                Text("Efficacy unavailable: no emotional measurements were recorded. You can still save your exercise.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding()
+            }
         }
         .fullScreenCover(isPresented: $viewModel.showBreakthroughCelebration) {
             BreakthroughCelebrationView(breakthroughSecond: viewModel.breakthroughSecond) {

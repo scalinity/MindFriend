@@ -4,7 +4,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { createLogger } from "../_shared/logger.ts";
-import { handleError, errorResponse } from "../_shared/error-handler.ts";
+import { errorResponse } from "../_shared/error-handler.ts";
+import { deleteAccountMedia } from "./storage-cleanup.ts";
 
 const log = createLogger("delete-account");
 
@@ -85,6 +86,10 @@ Deno.serve(async (req) => {
     }
     log.info("Deleting account", { userId });
 
+    // Keep all account rows (including capsule media references) until storage
+    // cleanup succeeds. A failed request can then safely retry the same account.
+    await deleteAccountMedia(supabaseAdmin.storage, userId);
+
     // Delete from tables that don't have ON DELETE CASCADE FKs to profiles
     // Most tables cascade automatically when the auth user is deleted
     // because profiles.id references auth.users(id) with CASCADE
@@ -152,35 +157,6 @@ Deno.serve(async (req) => {
 
     // Remove user from circles they're a member of (not owner)
     await supabaseAdmin.from("circle_members").delete().eq("user_id", userId);
-
-    // 7. Clean up Storage objects for the user
-    const storageBuckets = [
-      "profile-pictures",
-      "creative-works",
-      "capsules",
-      "voice-synthesis",
-      "audio",
-      "generated-audio",
-    ];
-    for (const bucket of storageBuckets) {
-      try {
-        const { data: files } = await supabaseAdmin.storage
-          .from(bucket)
-          .list(userId);
-        if (files && files.length > 0) {
-          const filePaths = files.map(
-            (f: { name: string }) => `${userId}/${f.name}`,
-          );
-          await supabaseAdmin.storage.from(bucket).remove(filePaths);
-          log.info(`Cleaned up ${files.length} files from ${bucket}`);
-        }
-      } catch (storageError) {
-        // Log but don't fail - some buckets may not have user files
-        log.warn(`Storage cleanup failed for ${bucket}`, {
-          error: String(storageError),
-        });
-      }
-    }
 
     // 8. Delete the auth user - this cascades to profiles and most other data
     const { error: deleteAuthError } =

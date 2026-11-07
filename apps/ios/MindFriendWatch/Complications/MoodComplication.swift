@@ -8,7 +8,7 @@ import SwiftUI
 
 // MARK: - Shared Defaults (App Group for cross-process access)
 
-private let sharedDefaults = UserDefaults(suiteName: "group.com.mindfriend.app") ?? .standard
+
 
 // MARK: - Mood Complication
 
@@ -35,9 +35,8 @@ struct MoodComplicationProvider: TimelineProvider {
     typealias Entry = MoodComplicationEntry
 
     func placeholder(in context: Context) -> MoodComplicationEntry {
-        let mood = sharedDefaults.string(forKey: "watch_today_mood_display")
-        let moodDate = sharedDefaults.object(forKey: "watch_mood_date_display") as? Date
-        let hasLoggedToday = moodDate.map { Calendar.current.isDateInToday($0) } ?? false
+        let mood = SharedDataStore.shared.todayMood
+        let hasLoggedToday = mood != nil
 
         let entry = MoodComplicationEntry(
             date: Date(),
@@ -50,9 +49,8 @@ struct MoodComplicationProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (MoodComplicationEntry) -> Void) {
-        let mood = sharedDefaults.string(forKey: "watch_today_mood_display")
-        let moodDate = sharedDefaults.object(forKey: "watch_mood_date_display") as? Date
-        let hasLoggedToday = moodDate.map { Calendar.current.isDateInToday($0) } ?? false
+        let mood = SharedDataStore.shared.todayMood
+        let hasLoggedToday = mood != nil
 
         let entry = MoodComplicationEntry(
             date: Date(),
@@ -65,9 +63,8 @@ struct MoodComplicationProvider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<MoodComplicationEntry>) -> Void) {
-        let mood = sharedDefaults.string(forKey: "watch_today_mood_display")
-        let moodDate = sharedDefaults.object(forKey: "watch_mood_date_display") as? Date
-        let hasLoggedToday = moodDate.map { Calendar.current.isDateInToday($0) } ?? false
+        let mood = SharedDataStore.shared.todayMood
+        let hasLoggedToday = mood != nil
 
         let entry = MoodComplicationEntry(
             date: Date(),

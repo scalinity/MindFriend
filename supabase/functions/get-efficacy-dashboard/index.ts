@@ -58,12 +58,13 @@ Deno.serve(async (req) => {
         *,
         exercises:exercise_id (
           id,
-          name,
+          name:title,
           type
         )
       `,
       )
       .eq("user_id", user.id)
+      .eq("measurement_status", "observed")
       .order("overall_efficacy_score", { ascending: false })
       .limit(5);
 
@@ -87,12 +88,13 @@ Deno.serve(async (req) => {
         *,
         exercises:exercise_id (
           id,
-          name,
+          name:title,
           type
         )
       `,
       )
       .eq("user_id", user.id)
+      .eq("measurement_status", "observed")
       .order("completed_at", { ascending: false })
       .limit(10);
 
@@ -183,6 +185,7 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({
+        measurementStatus: recentSessions?.length ? "observed" : "unavailable",
         topExercises:
           topExercises?.map((profile: any) => ({
             exerciseId: profile.exercise_id,

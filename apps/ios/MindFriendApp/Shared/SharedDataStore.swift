@@ -1,244 +1,170 @@
 import Foundation
 import WidgetKit
 
-/// Shared data store for widget and app communication via App Group
-/// Uses UserDefaults with a shared App Group suite for cross-process data sharing
+/// The app publishes confirmed snapshots; extensions append independent pending action files.
+/// Keeping each action in its own file prevents an app acknowledgment from overwriting a new widget tap.
 public final class SharedDataStore: Sendable {
     public static let shared = SharedDataStore()
-
-    private let suiteName = "group.com.mindfriend.app"
     private nonisolated(unsafe) let userDefaults: UserDefaults?
-
-    private init() {
-        self.userDefaults = UserDefaults(suiteName: suiteName)
-    }
-
-    // MARK: - Widget Data Keys
+    private let actionDirectory: URL?
+    private let notifyChanges: Bool
+    static let actionNotification = "com.mindfriend.companion-actions"
 
     private enum Keys {
-        static let currentStreak = "widget_current_streak"
-        static let todayMood = "widget_today_mood"
-        static let todayMoodScore = "widget_today_mood_score"
-        static let todayCompletedActivities = "widget_today_completed"
-        static let todayGoalActivities = "widget_today_goal"
-        static let weekMoods = "widget_week_moods"
-        static let lastUpdated = "widget_last_updated"
-        static let dailyQuote = "widget_daily_quote"
-        static let dailyQuest = "widget_daily_quest"
-        static let quickActions = "widget_quick_actions"
-        static let userPreferences = "widget_user_preferences"
-        static let userName = "widget_user_name"
-        static let pendingQuestCompletions = "widget_pending_quest_completions"
+        static let owner = "companion_active_owner_v1"
+        static let snapshot = "companion_snapshot_v1"
     }
 
-    // MARK: - Read Methods
-
-    public var currentStreak: Int {
-        userDefaults?.integer(forKey: Keys.currentStreak) ?? 0
-    }
-
-    public var todayMood: String? {
-        userDefaults?.string(forKey: Keys.todayMood)
-    }
-
-    public var todayMoodScore: Int? {
-        let score = userDefaults?.integer(forKey: Keys.todayMoodScore) ?? 0
-        return score == 0 ? nil : score
-    }
-
-    public var todayCompletedActivities: Int {
-        userDefaults?.integer(forKey: Keys.todayCompletedActivities) ?? 0
-    }
-
-    public var todayGoalActivities: Int {
-        let goal = userDefaults?.integer(forKey: Keys.todayGoalActivities) ?? 0
-        return goal > 0 ? goal : 3 // Default to 3 activities
-    }
-
-    public var weekMoods: [WidgetDailyMood] {
-        guard let data = userDefaults?.data(forKey: Keys.weekMoods),
-              let moods = try? JSONDecoder().decode([WidgetDailyMood].self, from: data) else {
-            return []
+    public enum StoreError: LocalizedError {
+        case unavailable, signInRequired, invalidAction, conflictingAction
+        public var errorDescription: String? {
+            switch self {
+            case .unavailable: return "This action could not be saved. Open MindFriend and try again."
+            case .signInRequired: return "Open MindFriend to sign in and refresh your widgets."
+            case .invalidAction: return "This action is no longer available. Open MindFriend to refresh."
+            case .conflictingAction: return "This action has conflicting saved details. Open MindFriend to continue."
+            }
         }
-        return moods
     }
 
-    public var dailyQuote: WidgetDailyQuote? {
-        guard let data = userDefaults?.data(forKey: Keys.dailyQuote),
-              let quote = try? JSONDecoder().decode(WidgetDailyQuote.self, from: data) else {
-            return nil
+    private convenience init() {
+        self.init(userDefaults: UserDefaults(suiteName: "group.com.mindfriend.app"),
+                  actionDirectory: FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.com.mindfriend.app")?
+                    .appendingPathComponent("CompanionActions", isDirectory: true), notifyChanges: true)
+    }
+
+    init(userDefaults: UserDefaults?, actionDirectory: URL?, notifyChanges: Bool = false) {
+        self.userDefaults = userDefaults
+        self.actionDirectory = actionDirectory
+        self.notifyChanges = notifyChanges
+    }
+
+    public var activeOwnerID: UUID? {
+        userDefaults?.string(forKey: Keys.owner).flatMap(UUID.init(uuidString:))
+    }
+
+    /// Clear visible data immediately at identity changes; pending actions retain their original owner.
+    public func reset(to ownerID: UUID?) {
+        userDefaults?.removeObject(forKey: Keys.snapshot)
+        if let ownerID { userDefaults?.set(ownerID.uuidString, forKey: Keys.owner) }
+        else { userDefaults?.removeObject(forKey: Keys.owner) }
+        // Legacy keys have no reliable account identity and cannot be shown after the upgrade.
+        for key in ["widget_current_streak", "widget_today_mood", "widget_today_mood_score", "widget_today_completed",
+                    "widget_today_goal", "widget_week_moods", "widget_last_updated", "widget_daily_quote", "widget_daily_quest",
+                    "widget_quick_actions", "widget_user_preferences", "widget_user_name", "widget_wellness_score",
+                    "widget_wellness_score_trend", "widget_last_breathing_session_time", "widget_daily_affirmation"] {
+            userDefaults?.removeObject(forKey: key)
         }
-        return quote
-    }
-
-    public var dailyQuest: WidgetDailyQuest? {
-        guard let data = userDefaults?.data(forKey: Keys.dailyQuest),
-              let quest = try? JSONDecoder().decode(WidgetDailyQuest.self, from: data) else {
-            return nil
-        }
-        // Only return if it's today's quest
-        return quest.isToday ? quest : nil
-    }
-
-    public var quickActions: [WidgetQuickAction] {
-        guard let data = userDefaults?.data(forKey: Keys.quickActions),
-              let actions = try? JSONDecoder().decode([WidgetQuickAction].self, from: data) else {
-            return WidgetQuickAction.defaults
-        }
-        return actions
-    }
-
-    public var lastUpdated: Date? {
-        userDefaults?.object(forKey: Keys.lastUpdated) as? Date
-    }
-
-    public var userName: String? {
-        userDefaults?.string(forKey: Keys.userName)
-    }
-
-    // MARK: - Write Methods (Called from main app)
-
-    public func updateStreak(_ streak: Int) {
-        userDefaults?.set(streak, forKey: Keys.currentStreak)
-        updateTimestamp()
         reloadWidgets()
     }
 
-    public func updateTodayMood(_ mood: String?, score: Int?) {
-        userDefaults?.set(mood, forKey: Keys.todayMood)
-        if let score = score {
-            userDefaults?.set(score, forKey: Keys.todayMoodScore)
-        } else {
-            userDefaults?.removeObject(forKey: Keys.todayMoodScore)
-        }
-        updateTimestamp()
+    public func snapshot(at now: Date = Date(), calendar: Calendar = .current) -> WidgetSnapshot? {
+        guard let owner = activeOwnerID, let data = userDefaults?.data(forKey: Keys.snapshot),
+              let snapshot = try? JSONDecoder().decode(WidgetSnapshot.self, from: data),
+              snapshot.ownerID == owner,
+              snapshot.localDate == WidgetSnapshot.dayLabel(for: now, calendar: calendar) else { return nil }
+        return snapshot
+    }
+
+    @discardableResult
+    public func publish(_ snapshot: WidgetSnapshot) throws -> Bool {
+        guard snapshot.ownerID == activeOwnerID, userDefaults != nil else { return false }
+        userDefaults?.set(try JSONEncoder().encode(snapshot), forKey: Keys.snapshot)
         reloadWidgets()
+        return true
     }
 
-    public func updateTodayProgress(completed: Int, goal: Int) {
-        userDefaults?.set(completed, forKey: Keys.todayCompletedActivities)
-        userDefaults?.set(goal, forKey: Keys.todayGoalActivities)
-        updateTimestamp()
-        reloadWidgets()
+    public var currentStreak: Int { snapshot()?.currentStreak ?? 0 }
+    public var todayMood: String? { snapshot()?.todayMood }
+    public var todayMoodScore: Int? { snapshot()?.todayMoodScore }
+    public var todayCompletedActivities: Int { snapshot()?.completedActivities ?? 0 }
+    public var todayGoalActivities: Int { snapshot()?.goalActivities ?? 3 }
+    public var weekMoods: [WidgetDailyMood] { snapshot()?.weekMoods ?? [] }
+    public var dailyQuote: WidgetDailyQuote? { snapshot()?.dailyQuote }
+    public var dailyQuest: WidgetDailyQuest? { snapshot()?.dailyQuest }
+    public var quickActions: [WidgetQuickAction] { snapshot()?.quickActions ?? WidgetQuickAction.defaults }
+    public var lastUpdated: Date? { snapshot()?.updatedAt }
+    public var userName: String? { snapshot()?.userName }
+    public var wellnessScore: Int? { snapshot()?.wellnessScore }
+    public var wellnessScoreTrend: Int { snapshot()?.wellnessScoreTrend ?? 0 }
+    public var lastBreathingSessionTime: Date? { snapshot()?.lastBreathingSessionTime }
+    public var dailyAffirmation: WidgetAffirmation? { snapshot()?.dailyAffirmation }
+
+    @discardableResult
+    public func queueMood(score: Int, now: Date = Date(), calendar: Calendar = .current) throws -> CompanionAction {
+        guard let snapshot = snapshot(at: now, calendar: calendar) else { throw StoreError.signInRequired }
+        let action = CompanionAction(ownerID: snapshot.ownerID, kind: .mood, observedAt: now, calendar: calendar, moodScore: score)
+        try storePending(action)
+        return action
     }
 
-    public func updateWeekMoods(_ moods: [WidgetDailyMood]) {
-        if let data = try? JSONEncoder().encode(moods) {
-            userDefaults?.set(data, forKey: Keys.weekMoods)
-            updateTimestamp()
-            reloadWidgets()
-        }
+    @discardableResult
+    public func queueQuest(questID: String, now: Date = Date(), calendar: Calendar = .current) throws -> CompanionAction {
+        guard let snapshot = snapshot(at: now, calendar: calendar) else { throw StoreError.signInRequired }
+        guard let id = UUID(uuidString: questID), snapshot.dailyQuest?.id == questID,
+              snapshot.dailyQuest?.isCompleted == false else { throw StoreError.invalidAction }
+        let action = CompanionAction(ownerID: snapshot.ownerID, kind: .quest, observedAt: now, calendar: calendar, questID: id)
+        try storePending(action)
+        return action
     }
 
-    public func updateDailyQuote(_ quote: WidgetDailyQuote) {
-        if let data = try? JSONEncoder().encode(quote) {
-            userDefaults?.set(data, forKey: Keys.dailyQuote)
-            updateTimestamp()
-            reloadWidgets()
-        }
-    }
-
-    public func updateDailyQuest(_ quest: WidgetDailyQuest) {
-        if let data = try? JSONEncoder().encode(quest) {
-            userDefaults?.set(data, forKey: Keys.dailyQuest)
-            updateTimestamp()
-            reloadWidgets()
-        }
-    }
-
-    public func markQuestCompleted(questId: String) {
-        guard let existingQuest = dailyQuest,
-              existingQuest.id == questId else {
+    /// Also used when a paired Watch delivers an action for an account that is currently signed out.
+    public func storePending(_ action: CompanionAction) throws {
+        guard action.isValid else { throw StoreError.invalidAction }
+        let url = try actionURL(ownerID: action.ownerID, eventID: action.id)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if let existing = try? Data(contentsOf: url) {
+            guard try JSONDecoder().decode(CompanionAction.self, from: existing) == action else { throw StoreError.conflictingAction }
             return
         }
-
-        let completedQuest = WidgetDailyQuest(
-            id: existingQuest.id,
-            title: existingQuest.title,
-            description: existingQuest.description,
-            category: existingQuest.category,
-            xpReward: existingQuest.xpReward,
-            isCompleted: true,
-            assignedDate: existingQuest.assignedDate
-        )
-        updateDailyQuest(completedQuest)
-
-        // Track for backend sync when main app opens
-        addPendingQuestCompletion(questId: questId)
-    }
-
-    // MARK: - Pending Quest Completions (for backend sync)
-
-    /// Quest completions made from widgets that need to be synced to backend
-    public var pendingQuestCompletions: [String] {
-        userDefaults?.stringArray(forKey: Keys.pendingQuestCompletions) ?? []
-    }
-
-    /// Add a quest completion that needs backend sync
-    private func addPendingQuestCompletion(questId: String) {
-        var pending = pendingQuestCompletions
-        if !pending.contains(questId) {
-            pending.append(questId)
-            userDefaults?.set(pending, forKey: Keys.pendingQuestCompletions)
+        try JSONEncoder().encode(action).write(to: url, options: .atomic)
+        reloadWidgets()
+        if notifyChanges {
+            CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
+                CFNotificationName(Self.actionNotification as CFString), nil, nil, true)
         }
     }
 
-    /// Clear a pending quest completion after successful backend sync
-    public func clearPendingQuestCompletion(questId: String) {
-        var pending = pendingQuestCompletions
-        pending.removeAll { $0 == questId }
-        userDefaults?.set(pending, forKey: Keys.pendingQuestCompletions)
+    public func pendingActions(for ownerID: UUID) throws -> [CompanionAction] {
+        guard let directory = actionDirectory?.appendingPathComponent(ownerID.uuidString, isDirectory: true) else { throw StoreError.unavailable }
+        guard FileManager.default.fileExists(atPath: directory.path) else { return [] }
+        return try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "json" }
+            .compactMap { url -> CompanionAction? in
+                guard let action = try? JSONDecoder().decode(CompanionAction.self, from: Data(contentsOf: url)),
+                      action.ownerID == ownerID, action.id.uuidString == url.deletingPathExtension().lastPathComponent,
+                      action.isValid else { return nil }
+                return action
+            }
+            .sorted { $0.observedAt == $1.observedAt ? $0.id.uuidString < $1.id.uuidString : $0.observedAt < $1.observedAt }
     }
 
-    /// Clear all pending quest completions
-    public func clearAllPendingQuestCompletions() {
-        userDefaults?.set([String](), forKey: Keys.pendingQuestCompletions)
-    }
-
-    public func updateQuickActions(_ actions: [WidgetQuickAction]) {
-        if let data = try? JSONEncoder().encode(actions) {
-            userDefaults?.set(data, forKey: Keys.quickActions)
-            reloadWidgets()
-        }
-    }
-
-    public func updateUserName(_ name: String?) {
-        userDefaults?.set(name, forKey: Keys.userName)
+    public func acknowledge(_ receipt: CompanionActionReceipt) throws {
+        let url = try actionURL(ownerID: receipt.ownerID, eventID: receipt.eventID)
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        let action = try JSONDecoder().decode(CompanionAction.self, from: Data(contentsOf: url))
+        guard action.id == receipt.eventID, action.ownerID == receipt.ownerID else { throw StoreError.invalidAction }
+        try FileManager.default.removeItem(at: url)
         reloadWidgets()
     }
 
-    /// Sync all widget data from app state
-    public func syncFromAppState(
-        streak: Int,
-        todayMood: String?,
-        todayMoodScore: Int?,
-        completedActivities: Int,
-        goalActivities: Int,
-        userName: String?
-    ) {
-        userDefaults?.set(streak, forKey: Keys.currentStreak)
-        userDefaults?.set(todayMood, forKey: Keys.todayMood)
-        if let score = todayMoodScore {
-            userDefaults?.set(score, forKey: Keys.todayMoodScore)
-        }
-        userDefaults?.set(completedActivities, forKey: Keys.todayCompletedActivities)
-        userDefaults?.set(goalActivities, forKey: Keys.todayGoalActivities)
-        userDefaults?.set(userName, forKey: Keys.userName)
-        updateTimestamp()
-        reloadWidgets()
+    public var pendingMood: CompanionAction? {
+        guard let owner = activeOwnerID else { return nil }
+        let day = WidgetSnapshot.dayLabel(for: Date())
+        return (try? pendingActions(for: owner))?.last { $0.kind == .mood && $0.localDate == day }
     }
 
-    // MARK: - Helpers
-
-    private func updateTimestamp() {
-        userDefaults?.set(Date(), forKey: Keys.lastUpdated)
+    public func isQuestPending(_ questID: String) -> Bool {
+        guard let owner = activeOwnerID else { return false }
+        return (try? pendingActions(for: owner))?.contains { $0.kind == .quest && $0.questID?.uuidString.lowercased() == questID.lowercased() } == true
     }
 
-    private func reloadWidgets() {
-        WidgetCenter.shared.reloadAllTimelines()
+    private func actionURL(ownerID: UUID, eventID: UUID) throws -> URL {
+        guard let actionDirectory else { throw StoreError.unavailable }
+        return actionDirectory.appendingPathComponent(ownerID.uuidString, isDirectory: true)
+            .appendingPathComponent(eventID.uuidString).appendingPathExtension("json")
     }
 
-    public func reloadSpecificWidget(kind: String) {
-        WidgetCenter.shared.reloadTimelines(ofKind: kind)
-    }
+    private func reloadWidgets() { WidgetCenter.shared.reloadAllTimelines() }
+    public func reloadSpecificWidget(kind: String) { WidgetCenter.shared.reloadTimelines(ofKind: kind) }
 }

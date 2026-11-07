@@ -6,7 +6,6 @@
 
 import Foundation
 import UserNotifications
-import UIKit
 
 // MARK: - Protocol
 
@@ -19,6 +18,25 @@ protocol InterventionNotificationManaging {
     func updateBadgeCount() async
     func cancelPendingInterventions() async
     func getPendingCount() async -> Int
+}
+
+/// The notification operations used by interventions. Tests supply an in-memory center.
+@MainActor
+protocol InterventionNotificationCenter {
+    func requestAuthorization(options: UNAuthorizationOptions) async throws -> Bool
+    func authorizationStatus() async -> UNAuthorizationStatus
+    func add(_ request: UNNotificationRequest) async throws
+    func pendingNotificationRequests() async -> [UNNotificationRequest]
+    func removePendingNotificationRequests(withIdentifiers identifiers: [String])
+    func removeDeliveredNotifications(withIdentifiers identifiers: [String])
+    func setNotificationCategories(_ categories: Set<UNNotificationCategory>)
+    func setBadgeCount(_ newBadgeCount: Int) async throws
+}
+
+extension UNUserNotificationCenter: InterventionNotificationCenter {
+    func authorizationStatus() async -> UNAuthorizationStatus {
+        await notificationSettings().authorizationStatus
+    }
 }
 
 // MARK: - Configuration Constants
@@ -38,13 +56,13 @@ private enum NotificationConstants {
 final class InterventionNotificationManager: NSObject, InterventionNotificationManaging {
     // MARK: - Properties
 
-    private let notificationCenter: UNUserNotificationCenter
+    private let notificationCenter: InterventionNotificationCenter
     private var pendingInterventionCount = 0
 
     // MARK: - Initialization
 
-    override init() {
-        self.notificationCenter = UNUserNotificationCenter.current()
+    init(notificationCenter: InterventionNotificationCenter = UNUserNotificationCenter.current()) {
+        self.notificationCenter = notificationCenter
         super.init()
         setupNotificationCategories()
     }
@@ -62,8 +80,7 @@ final class InterventionNotificationManager: NSObject, InterventionNotificationM
     }
 
     func hasNotificationPermission() async -> Bool {
-        let settings = await notificationCenter.notificationSettings()
-        return settings.authorizationStatus == .authorized
+        await notificationCenter.authorizationStatus() == .authorized
     }
 
     func deliverIntervention(_ intervention: MicroMomentTemplate, context: String, deliveryId: UUID) async throws {
@@ -163,7 +180,7 @@ final class InterventionNotificationManager: NSObject, InterventionNotificationM
 
     func updateBadgeCount() async {
         let pending = await getPendingCount()
-        try? await UNUserNotificationCenter.current().setBadgeCount(pending)
+        try? await notificationCenter.setBadgeCount(pending)
     }
 
     func cancelPendingInterventions() async {

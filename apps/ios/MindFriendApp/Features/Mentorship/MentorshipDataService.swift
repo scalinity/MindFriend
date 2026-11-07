@@ -1,11 +1,17 @@
 import Foundation
 import Supabase
 
-// NOTE: This service is now functional and provides full mentorship feature support.
-// Original stub replaced with complete implementation as of 2026-01-27.
-// TD-CRIT-001: Mentorship feature now complete
-
 // MARK: - Request/Update DTOs for Supabase Operations
+
+private struct ProfileInsert: Encodable {
+    let userId: UUID
+    let timezone: String
+
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case timezone
+    }
+}
 
 private struct ProfileUpdate: Encodable {
     var isMentorAvailable: Bool?
@@ -29,35 +35,14 @@ private struct MatchStatusUpdate: Encodable {
     let status: String
 }
 
-private struct MatchEndUpdate: Encodable {
-    let status: String
-    let endedAt: String
-    let endReason: String?
-
+private struct MessageInsert: Encodable {
+    let matchId: UUID
+    let senderId: UUID
+    let content: String
     enum CodingKeys: String, CodingKey {
-        case status
-        case endedAt = "ended_at"
-        case endReason = "end_reason"
-    }
-}
-
-private struct MessageReadUpdate: Encodable {
-    let isRead: Bool
-
-    enum CodingKeys: String, CodingKey {
-        case isRead = "is_read"
-    }
-}
-
-private struct MessageFlagUpdate: Encodable {
-    let isFlagged: Bool
-    let flaggedAt: String
-    let flagReason: String
-
-    enum CodingKeys: String, CodingKey {
-        case isFlagged = "is_flagged"
-        case flaggedAt = "flagged_at"
-        case flagReason = "flag_reason"
+        case matchId = "match_id"
+        case senderId = "sender_id"
+        case content
     }
 }
 
@@ -71,56 +56,75 @@ private struct FindMentorMatchesBody: Encodable {
 private struct EmptyBody: Encodable {}
 
 /// Data access layer for mentorship operations
-actor MentorshipDataService {
+@MainActor
+final class MentorshipDataService {
     private let supabase: SupabaseClient
-    private let userId: UUID
+    private let userIdProvider: @MainActor () -> UUID?
+    private(set) var accountGeneration = 0
+    var currentUserId: UUID? { userIdProvider() }
 
-    init(supabase: SupabaseClient, userId: UUID) {
+    init(supabase: SupabaseClient, userIdProvider: @escaping @MainActor () -> UUID?) {
         self.supabase = supabase
-        self.userId = userId
+        self.userIdProvider = userIdProvider
+    }
+
+    func resetForAccountChange() { accountGeneration += 1 }
+
+    private func perform<Value>(_ operation: (UUID) async throws -> Value) async throws -> Value {
+        try Task.checkCancellation()
+        guard let owner = userIdProvider() else { throw MentorshipError.notAuthenticated }
+        let generation = accountGeneration
+        do {
+            let value = try await operation(owner)
+            try Task.checkCancellation()
+            guard generation == accountGeneration, userIdProvider() == owner else { throw CancellationError() }
+            return value
+        } catch {
+            guard generation == accountGeneration, userIdProvider() == owner else { throw CancellationError() }
+            throw error
+        }
     }
 
     // MARK: - Profile Management
 
     func fetchOrCreateProfile() async throws -> MentorshipProfile {
-        do {
-            if let profile = try await fetchProfile() {
+        return try await perform { userId in
+            if let profile = try await self.fetchProfile() {
                 return profile
             }
-            return try await createDefaultProfile()
-        } catch {
-            return try await createDefaultProfile()
+            return try await self.createDefaultProfile()
+
         }
     }
 
     func fetchProfile() async throws -> MentorshipProfile? {
-        let profiles: [MentorshipProfile] = try await supabase
-            .from("mentorship_profiles")
-            .select()
-            .eq("user_id", value: userId.uuidString)
-            .execute()
-            .value
-        return profiles.first
+        return try await perform { userId in
+            let profiles: [MentorshipProfile] = try await self.supabase
+                .from("mentorship_profiles")
+                .select()
+                .eq("user_id", value: userId.uuidString)
+                .execute()
+                .value
+            return profiles.first
+
+        }
     }
 
     func createDefaultProfile() async throws -> MentorshipProfile {
-        let profile = MentorshipProfile(
-            userId: userId,
-            isMentorAvailable: false,
-            expertiseAreas: [],
-            seekingAreas: [],
-            bio: nil,
-            availabilityHoursWeek: 0,
-            languages: ["en"],
-            timezone: TimeZone.current.identifier,
-            isVerified: false,
-            mentorAlias: nil
-        )
-        _ = try await supabase
-            .from("mentorship_profiles")
-            .insert(profile)
-            .execute()
-        return profile
+        return try await perform { userId in
+            // Server defaults own verification, qualifications, aliases and timestamps.
+            let profiles: [MentorshipProfile] = try await self.supabase
+                .from("mentorship_profiles")
+                .insert(ProfileInsert(userId: userId, timezone: TimeZone.current.identifier))
+                .select()
+                .execute()
+                .value
+            guard let profile = profiles.first, profile.userId == userId else {
+                throw MentorshipError.notFound("The mentorship profile was not saved.")
+            }
+            return profile
+
+        }
     }
 
     func updateProfile(
@@ -131,194 +135,229 @@ actor MentorshipDataService {
         availabilityHoursWeek: Int? = nil,
         languages: [String]? = nil
     ) async throws -> MentorshipProfile {
-        let updates = ProfileUpdate(
-            isMentorAvailable: isMentorAvailable,
-            expertiseAreas: expertiseAreas,
-            seekingAreas: seekingAreas,
-            bio: bio,
-            availabilityHoursWeek: availabilityHoursWeek,
-            languages: languages
-        )
+        return try await perform { userId in
+            let updates = ProfileUpdate(
+                isMentorAvailable: isMentorAvailable,
+                expertiseAreas: expertiseAreas,
+                seekingAreas: seekingAreas,
+                bio: bio,
+                availabilityHoursWeek: availabilityHoursWeek,
+                languages: languages
+            )
 
-        let updated: [MentorshipProfile] = try await supabase
-            .from("mentorship_profiles")
-            .update(updates)
-            .eq("user_id", value: userId.uuidString)
-            .select()
-            .execute()
-            .value
-        return updated.first ?? MentorshipProfile(userId: userId, isMentorAvailable: false, expertiseAreas: [], seekingAreas: [], bio: nil, availabilityHoursWeek: 0, languages: ["en"], timezone: TimeZone.current.identifier, isVerified: false, mentorAlias: nil)
+            let updated: [MentorshipProfile] = try await self.supabase
+                .from("mentorship_profiles")
+                .update(updates)
+                .eq("user_id", value: userId.uuidString)
+                .select()
+                .execute()
+                .value
+            guard let profile = updated.first, profile.userId == userId else {
+                throw MentorshipError.notFound("The mentorship profile was not saved.")
+            }
+            return profile
+
+        }
     }
 
     // MARK: - Mentor Matching
 
     func findMentorMatches(limit: Int = 5, offset: Int = 0) async throws -> FindMentorMatchesResponse {
-        let body = FindMentorMatchesBody(limit: limit, offset: offset)
-        let response: FindMentorMatchesResponse = try await supabase.functions.invoke(
-            "find-mentor-matches",
-            options: .init(body: body)
-        )
-        return response
+        return try await perform { userId in
+            let body = FindMentorMatchesBody(limit: limit, offset: offset)
+            let response: FindMentorMatchesResponse = try await self.supabase.functions.invoke(
+                "find-mentor-matches",
+                options: .init(body: body)
+            )
+            return response
+
+        }
     }
 
     func requestMentorship(mentorId: UUID, introductionMessage: String) async throws -> RequestMentorshipResponse {
-        let body = RequestMentorshipBody(mentorId: mentorId, introductionMessage: introductionMessage)
-        let response: RequestMentorshipResponse = try await supabase.functions.invoke(
-            "request-mentorship",
-            options: .init(body: body)
-        )
-        return response
+        return try await perform { userId in
+            let body = RequestMentorshipBody(mentorId: mentorId, introductionMessage: introductionMessage)
+            let response: RequestMentorshipResponse = try await self.supabase.functions.invoke(
+                "request-mentorship",
+                options: .init(body: body)
+            )
+            return response
+
+        }
     }
 
     // MARK: - Match Management
 
     func fetchMatches(role: MentorshipRole) async throws -> [MentorshipMatch] {
-        // Fetch all matches for the user (as mentor or mentee)
-        let matches: [MentorshipMatch] = try await supabase
-            .from("mentorship_matches")
-            .select()
-            .or("mentor_id.eq.\(userId.uuidString),mentee_id.eq.\(userId.uuidString)")
-            .execute()
-            .value
-        return matches
+        return try await perform { userId in
+            // Fetch all matches for the user (as mentor or mentee)
+            let matches: [MentorshipMatch] = try await self.supabase
+                .from("mentorship_matches")
+                .select()
+                .or("mentor_id.eq.\(userId.uuidString),mentee_id.eq.\(userId.uuidString)")
+                .execute()
+                .value
+            return matches
+
+        }
+    }
+
+    func fetchMatch(matchId: UUID) async throws -> MentorshipMatch {
+        return try await perform { userId in
+            let rows: [MentorshipMatch] = try await self.supabase.from("mentorship_matches")
+                .select().eq("id", value: matchId.uuidString).execute().value
+            guard let match = rows.first, match.mentorId == userId || match.menteeId == userId else {
+                throw MentorshipError.notFound("The mentorship could not be loaded.")
+            }
+            return match
+
+        }
     }
 
     func acceptMentorshipRequest(matchId: UUID) async throws -> MentorshipMatch {
-        let update = MatchStatusUpdate(status: "active")
-        let updated: [MentorshipMatch] = try await supabase
-            .from("mentorship_matches")
-            .update(update)
-            .eq("id", value: matchId.uuidString)
-            .select()
-            .execute()
-            .value
-        return updated.first ?? MentorshipMatch(id: matchId, mentorId: UUID(), menteeId: UUID(), status: .active, introductionMessage: "")
+        return try await perform { userId in
+            let update = MatchStatusUpdate(status: "active")
+            let updated: [MentorshipMatch] = try await self.supabase
+                .from("mentorship_matches")
+                .update(update)
+                .eq("id", value: matchId.uuidString)
+                .select()
+                .execute()
+                .value
+            return updated.first ?? MentorshipMatch(id: matchId, mentorId: UUID(), menteeId: UUID(), status: .active, introductionMessage: "")
+
+        }
     }
 
     func rejectMentorshipRequest(matchId: UUID) async throws {
-        _ = try await supabase
-            .from("mentorship_matches")
-            .delete()
-            .eq("id", value: matchId.uuidString)
-            .execute()
+        return try await perform { userId in
+            _ = try await self.supabase
+                .from("mentorship_matches")
+                .delete()
+                .eq("id", value: matchId.uuidString)
+                .execute()
+
+        }
     }
 
     func endMentorship(matchId: UUID, reason: String? = nil) async throws {
-        let update = MatchEndUpdate(
-            status: "completed",
-            endedAt: ISO8601DateFormatter().string(from: Date()),
-            endReason: reason
-        )
-        _ = try await supabase
-            .from("mentorship_matches")
-            .update(update)
-            .eq("id", value: matchId.uuidString)
-            .execute()
+        try await perform { _ in
+            let confirmed: Bool = try await self.supabase.rpc("end_mentorship", params: [
+                "p_match_id": matchId.uuidString, "p_reason": reason ?? "completed"
+            ]).execute().value
+            guard confirmed else { throw MentorshipError.networkError("The mentorship was not ended.") }
+        }
     }
 
     // MARK: - Messaging
 
     func sendMessage(matchId: UUID, content: String) async throws -> MentorshipMessage {
-        let message = MentorshipMessage(
-            id: UUID(),
-            matchId: matchId,
-            senderId: userId,
-            content: content,
-            isFlagged: false,
-            flaggedAt: nil
-        )
-        _ = try await supabase
-            .from("mentorship_messages")
-            .insert(message)
-            .execute()
-        return message
+        try await perform { userId in
+            guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, content.count <= 2000 else {
+                throw MentorshipError.validationError("Enter a message of up to 2,000 characters.")
+            }
+            let rows: [MentorshipMessage] = try await self.supabase.from("mentorship_messages")
+                .insert(MessageInsert(matchId: matchId, senderId: userId, content: content))
+                .select().execute().value
+            guard let saved = rows.first, saved.matchId == matchId, saved.senderId == userId else {
+                throw MentorshipError.networkError("Your message was not confirmed. Please try again.")
+            }
+            return saved
+        }
     }
 
     func fetchMessages(matchId: UUID, limit: Int = 50, offset: Int = 0) async throws -> [MentorshipMessage] {
-        let messages: [MentorshipMessage] = try await supabase
-            .from("mentorship_messages")
-            .select()
-            .eq("match_id", value: matchId.uuidString)
-            .order("created_at", ascending: true)
-            .range(from: offset, to: offset + limit - 1)
-            .execute()
-            .value
-        return messages
+        return try await perform { _ in
+            guard (1...100).contains(limit), offset >= 0 else {
+                throw MentorshipError.validationError("Invalid message page.")
+            }
+            let messages: [MentorshipMessage] = try await self.supabase
+                .from("mentorship_messages")
+                .select()
+                .eq("match_id", value: matchId.uuidString)
+                .order("created_at", ascending: false)
+                .order("id", ascending: false)
+                .range(from: offset, to: offset + limit - 1)
+                .execute()
+                .value
+            return messages.reversed()
+
+        }
     }
 
     func markMessagesAsRead(matchId: UUID) async throws {
-        let update = MessageReadUpdate(isRead: true)
-        _ = try await supabase
-            .from("mentorship_messages")
-            .update(update)
-            .eq("match_id", value: matchId.uuidString)
-            .execute()
+        try await perform { _ in
+            let confirmed: Bool = try await self.supabase.rpc("mark_messages_read", params: ["p_match_id": matchId.uuidString]).execute().value
+            guard confirmed else { throw MentorshipError.networkError("Read receipts were not saved.") }
+        }
     }
 
     func flagMessage(messageId: UUID, reason: String) async throws {
-        let update = MessageFlagUpdate(
-            isFlagged: true,
-            flaggedAt: ISO8601DateFormatter().string(from: Date()),
-            flagReason: reason
-        )
-        _ = try await supabase
-            .from("mentorship_messages")
-            .update(update)
-            .eq("id", value: messageId.uuidString)
-            .execute()
+        try await perform { _ in
+            let confirmed: Bool = try await self.supabase.rpc("flag_mentorship_message", params: ["p_message_id": messageId.uuidString, "p_reason": reason]).execute().value
+            guard confirmed else { throw MentorshipError.networkError("The message flag was not saved.") }
+        }
     }
 
     func deleteMessage(messageId: UUID) async throws {
-        _ = try await supabase
-            .from("mentorship_messages")
-            .delete()
-            .eq("id", value: messageId.uuidString)
-            .execute()
+        try await perform { _ in
+            let confirmed: Bool = try await self.supabase.rpc("delete_mentorship_message", params: ["p_message_id": messageId.uuidString]).execute().value
+            guard confirmed else { throw MentorshipError.networkError("The message was not deleted.") }
+        }
     }
 
     // MARK: - Safety & Reporting
 
     func createReport(
         matchId: UUID,
-        reportedUserId: UUID,
+        reportedUserId: UUID? = nil,
         reason: String,
-        description: String? = nil,
-        messageIds: [UUID]? = nil
+        description: String? = nil
     ) async throws -> MentorshipReport {
-        let report = MentorshipReport(
-            id: UUID(),
-            matchId: matchId,
-            reporterId: userId,
-            reportedUserId: reportedUserId,
-            reason: reason,
-            status: .pending,
-            description: description,
-            messageIds: messageIds,
-            createdAt: Date()
-        )
-        _ = try await supabase
-            .from("mentorship_reports")
-            .insert(report)
-            .execute()
-        return report
+        try await perform { userId in
+            let match = try await self.fetchMatch(matchId: matchId)
+            let otherParticipant = match.mentorId == userId ? match.menteeId : match.mentorId
+            guard reportedUserId == nil || reportedUserId == otherParticipant else {
+                throw MentorshipError.validationError("Select the other participant in this mentorship.")
+            }
+            let reportId: UUID = try await self.supabase.rpc("report_mentorship_issue", params: [
+                "p_match_id": matchId.uuidString,
+                "p_reported_id": otherParticipant.uuidString,
+                "p_reason": reason,
+                "p_description": description ?? ""
+            ]).execute().value
+            let rows: [MentorshipReport] = try await self.supabase.from("mentorship_reports")
+                .select().eq("id", value: reportId.uuidString).execute().value
+            guard let report = rows.first, report.id == reportId, report.matchId == matchId,
+                  report.reporterId == userId, report.reportedUserId == otherParticipant else {
+                throw MentorshipError.networkError("The report could not be confirmed. Please try again.")
+            }
+            return report
+        }
     }
 
     func fetchReports(matchId: UUID) async throws -> [MentorshipReport] {
-        let reports: [MentorshipReport] = try await supabase
-            .from("mentorship_reports")
-            .select()
-            .eq("match_id", value: matchId.uuidString)
-            .execute()
-            .value
-        return reports
+        return try await perform { userId in
+            let reports: [MentorshipReport] = try await self.supabase
+                .from("mentorship_reports")
+                .select()
+                .eq("match_id", value: matchId.uuidString)
+                .execute()
+                .value
+            return reports
+
+        }
     }
 
     func runSafetyCheck() async throws -> SafetyCheckResponse {
-        let body = EmptyBody()
-        let response: SafetyCheckResponse = try await supabase.functions.invoke(
-            "mentorship-safety-check",
-            options: .init(body: body)
-        )
-        return response
+        return try await perform { userId in
+            let body = EmptyBody()
+            let response: SafetyCheckResponse = try await self.supabase.functions.invoke(
+                "mentorship-safety-check",
+                options: .init(body: body)
+            )
+            return response
+
+        }
     }
 }

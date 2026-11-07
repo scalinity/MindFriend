@@ -14,10 +14,14 @@ struct ResultsView: View {
     @State private var recommendations: [AssessmentExerciseRecommendation] = []
     @State private var isLoadingRecommendations = false
     @State private var selectedExercise: Exercise?
+    @State private var previousResponse: AssessmentResponse?
+    @State private var isLoadingTrend = true
+    @State private var trendUnavailable = false
 
     var recommendationService: AssessmentRecommendationService?
     
     var severityColor: Color {
+        guard response.availableScore != nil else { return .gray }
         switch response.severityLevel.lowercased() {
         case "minimal": return Color(red: 0.2, green: 0.6, blue: 0.4)
         case "mild": return Color(red: 0.3, green: 0.7, blue: 0.5)
@@ -34,6 +38,7 @@ struct ResultsView: View {
 
     /// Formatted severity level with proper capitalization
     var formattedSeverityLevel: String {
+        guard response.availableScore != nil else { return "Unavailable" }
         let severity = response.severityLevel.lowercased()
         switch severity {
         case "moderately_severe":
@@ -60,22 +65,23 @@ struct ResultsView: View {
     }
     
     var trendIndicator: (image: String, color: Color, label: String) {
-        let recentHistory = outcomeService.recentResponses
-            .filter { $0.assessmentTemplateId == response.assessmentTemplateId }
-            .sorted { $0.completedAt > $1.completedAt }
-            .prefix(5)
-        
-        guard recentHistory.count >= 2 else {
-            return (image: "minus.circle.fill", color: Color.gray, label: "No trend")
+        guard response.availableScore != nil else {
+            return (image: "minus.circle.fill", color: .gray, label: "No trend")
         }
+        guard !isLoadingTrend else {
+            return (image: "minus.circle.fill", color: .gray, label: "Loading trend")
+        }
+        guard !trendUnavailable, let previousScore = previousResponse?.availableScore,
+              let type = AssessmentType(rawValue: template.code) else {
+            return (image: "minus.circle.fill", color: .gray,
+                    label: trendUnavailable ? "Trend unavailable" : "No earlier score")
+        }
+        let scoreDelta = type.improvement(from: previousScore, to: response.totalScore)
         
-        let previousScore = recentHistory.dropFirst().first?.totalScore ?? response.totalScore
-        let scoreDelta = response.totalScore - previousScore
-        
-        if scoreDelta < 0 {
-            return (image: "arrow.down.circle.fill", color: Color(red: 0.2, green: 0.6, blue: 0.4), label: String(localized: "Improving"))
-        } else if scoreDelta > 0 {
-            return (image: "arrow.up.circle.fill", color: Color(red: 1.0, green: 0.2, blue: 0.2), label: String(localized: "Worsening"))
+        if scoreDelta > 0 {
+            return (image: type.higherScoresAreBetter ? "arrow.up.circle.fill" : "arrow.down.circle.fill", color: Color(red: 0.2, green: 0.6, blue: 0.4), label: String(localized: "Improving"))
+        } else if scoreDelta < 0 {
+            return (image: type.higherScoresAreBetter ? "arrow.down.circle.fill" : "arrow.up.circle.fill", color: Color(red: 1.0, green: 0.2, blue: 0.2), label: String(localized: "Worsening"))
         } else {
             return (image: "minus.circle.fill", color: Color.gray, label: String(localized: "Stable"))
         }
@@ -130,7 +136,7 @@ struct ResultsView: View {
                                     .foregroundColor(.gray)
                                 
                                 HStack(alignment: .firstTextBaseline, spacing: 4) {
-                                    Text("\(response.totalScore)")
+                                    Text(response.availableScore.map(String.init) ?? "—")
                                         .font(.system(size: 56, weight: .bold, design: .default))
                                         .foregroundColor(severityColor)
                                     
@@ -140,6 +146,11 @@ struct ResultsView: View {
                                 }
                             }
                             
+                            if let explanation = response.scoreStatus.explanation {
+                                Text(explanation)
+                                    .font(.footnote)
+                                    .foregroundColor(.secondary)
+                            }
                             Divider()
                                 .padding(.vertical, 4)
                             
@@ -395,6 +406,7 @@ struct ResultsView: View {
                                 )
                             }
                             
+                            .disabled(response.availableScore == nil)
                             Button(action: {
                                 isSharing = true
                             }) {
@@ -415,6 +427,7 @@ struct ResultsView: View {
                                 )
                             }
                         }
+                        .disabled(response.availableScore == nil)
                         .padding(20)
                     }
                     .padding(.vertical, 20)
@@ -444,13 +457,25 @@ struct ResultsView: View {
         .sheet(item: $selectedExercise) { exercise in
             ExercisePlayerView(exercise: exercise)
         }
-        .task {
+        .task(id: response.id) {
+            isLoadingTrend = true
+            trendUnavailable = false
+            previousResponse = nil
+            do {
+                let previous = try await outcomeService.getPreviousAssessmentResponse(to: response)
+                guard !Task.isCancelled else { return }
+                previousResponse = previous
+            } catch {
+                guard !Task.isCancelled else { return }
+                trendUnavailable = true
+            }
+            isLoadingTrend = false
             await loadRecommendations()
         }
     }
 
     private func loadRecommendations() async {
-        guard let service = recommendationService else { return }
+        guard response.availableScore != nil, let service = recommendationService else { return }
         isLoadingRecommendations = true
         defer { isLoadingRecommendations = false }
 
@@ -466,6 +491,7 @@ struct ResultsView: View {
     }
 
     private func interpretationText() -> String {
+        guard response.availableScore != nil else { return response.scoreStatus.explanation ?? "Score unavailable." }
         let severity = response.severityLevel.lowercased()
         switch severity {
         case "minimal":

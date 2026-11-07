@@ -2,6 +2,15 @@ import SwiftUI
 import UIKit
 import Supabase
 
+// Compatibility model for the unreleased legacy draft format. This entry point
+// records the typed journal; account removal also erases retained legacy draft bytes.
+struct VoiceTranscriptDraft: Codable, Equatable {
+    let ownerId: UUID
+    let conversationId: UUID
+    var title: String?
+    var messages: [VoiceTranscriptMessage]
+}
+
 /// Voice entry for a support session. Nothing here connects, prepares a session, or touches the
 /// microphone until the person taps "Start voice". Without support-session access the view shows a
 /// truthful unavailable state and offers text instead; there is no legacy fallback.

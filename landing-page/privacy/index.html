@@ -481,7 +481,7 @@
           <span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
           Effective November 6, 2026
         </span>
-        <span class="text-xs text-gray-400">Last updated November 6, 2026</span>
+        <span class="text-xs text-gray-400">Last updated November 7, 2026</span>
       </div>
     </div>
   </header>
@@ -640,6 +640,10 @@
         <li>Detailed medical records</li>
         <li>Genetic or biometric identifiers</li>
       </ul>
+
+      <h3 id="apple-health">2.9 Optional Apple Health synchronization</h3>
+      <p>If you connect Apple Health (HealthKit) and enable synchronization, MindFriend can read the health categories you allow and upload health summaries and workout records to your account in Supabase. These may include sleep duration and timing, heart rate and heart rate variability (HRV), steps, distance, active energy, exercise and mindful minutes, and workout details such as type, start/end times and duration.</p>
+      <p>These cloud records support your biometric history, personal baselines, correlations and insights. They are stored with our cloud provider and handled under this Policy&#x2019;s retention, security and data-rights provisions.</p>
 
       <hr>
 
@@ -835,7 +839,7 @@
         <tbody>
           <tr>
             <td>AI chat companion</td>
-            <td>The message you send and up to the most recent 20 messages of conversation context for that thread</td>
+            <td>The message you send and up to the most recent 20 messages of conversation context for that thread; when Privacy Mode is off, saved facts, preferences and events from earlier conversations, active Memory Vault entries, and your current daily intent if set</td>
             <td>OpenAI</td>
             <td>Generate the AI&#x2019;s reply</td>
           </tr>
@@ -883,13 +887,14 @@
           </tr>
         </tbody>
       </table>
+      <p>Saved chat context is stored with your account in Supabase and can be reused in later chats beyond the recent-message window. It includes facts, preferences and events extracted from earlier conversations, memories you save in Memory Vault, and your current daily intent if set. When Privacy Mode is on, chat uses your message and recent conversation history without adding those saved memory and daily-intent records.</p>
       <p>We do <strong>not</strong> send to any AI provider:</p>
       <ul>
         <li>Your email address or sign-in identifiers</li>
         <li>Your subscription or payment information</li>
         <li>Content from other users (e.g., other Circle members&#x2019; posts)</li>
-        <li>Information from Apple Health (HealthKit) data &#x2014; this stays on your device unless explicitly logged into a journal or mood entry</li>
       </ul>
+      <p>Apple Health synchronization is separate from AI processing: the synchronization service stores health summaries and workouts in Supabase and does not itself call an AI provider. If you separately include health information in a journal entry, mood note or AI conversation, it is processed with that content as described in the table above.</p>
       <p>You may revoke any of these consents at any time in <strong>Settings &#x2192; Privacy &#x2192; AI &amp; Data Sharing</strong>. Revocation takes effect immediately and prevents future data from being sent.</p>
 
       <hr>

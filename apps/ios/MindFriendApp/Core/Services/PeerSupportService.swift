@@ -24,18 +24,22 @@ final class PeerSupportService: ObservableObject {
     // MARK: - Private Properties
 
     private let supabase: SupabaseClient
+    private let userIdProvider: () -> UUID?
+    var currentUserId: UUID? { userIdProvider() }
+    private var messageSubscriptionId: UUID?
     private var sessionChannel: RealtimeChannelV2?
     private var subscriptionTask: Task<Void, Never>?
 
     // MARK: - Initialization
 
-    init(supabase: SupabaseClient) {
+    init(supabase: SupabaseClient, currentUserId: (() -> UUID?)? = nil) {
         self.supabase = supabase
+        self.userIdProvider = currentUserId ?? { supabase.auth.currentUser?.id }
     }
 
     deinit {
         subscriptionTask?.cancel()
-        Task { [sessionChannel] in
+        Task { [sessionChannel, supabase] in
             if let channel = sessionChannel { await supabase.removeChannel(channel) }
         }
     }
@@ -254,52 +258,77 @@ final class PeerSupportService: ObservableObject {
         return response
     }
 
-    /// Start an active session (for listeners accepting a match)
-    func startSession(sessionId: UUID) async throws {
-        try await supabase
-            .from("support_sessions")
-            .update(["status": "active", "started_at": Date().ISO8601Format()])
-            .eq("id", value: sessionId)
-            .execute()
-
-        activeSessions = try await fetchActiveSessions()
+    func fetchSession(sessionId: UUID) async throws -> DBSupportSession {
+        guard let owner = currentUserId else { throw PeerSupportError.notAuthenticated }
+        let session: DBSupportSession = try await supabase.from("support_sessions").select()
+            .eq("id", value: sessionId).single().execute().value
+        guard currentUserId == owner else { throw PeerSupportError.notAuthenticated }
+        return session
     }
 
-    /// End a session
-    func endSession(sessionId: UUID, moodAfter: Int?) async throws {
+    func participantType(for session: DBSupportSession) async throws -> DBSupportMessage.SenderType {
+        guard let userId = currentUserId else { throw PeerSupportError.notAuthenticated }
+        if session.seekerId == userId { return .seeker }
+        guard let listenerId = session.listenerId else { throw PeerSupportError.sessionNotFound }
+        struct ListenerIdentity: Decodable { let id: UUID }
+        let listeners: [ListenerIdentity] = try await supabase.from("listeners").select("id")
+            .eq("id", value: listenerId).eq("user_id", value: userId).limit(1).execute().value
+        guard currentUserId == userId, listeners.first?.id == listenerId else { throw PeerSupportError.sessionNotFound }
+        return .listener
+    }
+
+    /// Only the matched listener begins the conversation.
+    @discardableResult
+    func startSession(sessionId: UUID) async throws -> DBSupportSession {
+        let session = try await fetchSession(sessionId: sessionId)
+        guard session.status == .matched, try await participantType(for: session) == .listener else {
+            throw PeerSupportError.sessionUnavailable
+        }
+        let updated: [DBSupportSession] = try await supabase.from("support_sessions")
+            .update(["status": "active", "started_at": Date().ISO8601Format()])
+            .eq("id", value: sessionId).eq("status", value: "matched").select().execute().value
+        guard let saved = updated.first else { throw PeerSupportError.sessionUnavailable }
+        if let index = activeSessions.firstIndex(where: { $0.id == sessionId }) { activeSessions[index] = saved }
+        return saved
+    }
+
+    @discardableResult
+    func endSession(sessionId: UUID, moodAfter: Int?) async throws -> DBSupportSession {
+        let session = try await fetchSession(sessionId: sessionId)
+        let role = try await participantType(for: session)
+        guard session.status == .active else { throw PeerSupportError.sessionUnavailable }
         var updates: [String: PeerSupportAnyEncodable] = [
             "status": PeerSupportAnyEncodable("completed"),
             "ended_at": PeerSupportAnyEncodable(Date().ISO8601Format())
         ]
-
-        if let moodAfter = moodAfter {
+        if let moodAfter {
+            guard role == .seeker else { throw PeerSupportError.sessionUnavailable }
             updates["seeker_mood_after"] = PeerSupportAnyEncodable(moodAfter)
         }
-
-        try await supabase
-            .from("support_sessions")
-            .update(updates)
-            .eq("id", value: sessionId)
-            .execute()
-
-        activeSessions = try await fetchActiveSessions()
+        let updated: [DBSupportSession] = try await supabase.from("support_sessions").update(updates)
+            .eq("id", value: sessionId).eq("status", value: "active").select().execute().value
+        guard let saved = updated.first else { throw PeerSupportError.sessionUnavailable }
+        activeSessions.removeAll { $0.id == sessionId }
+        return saved
     }
 
-    /// Cancel a pending session
-    func cancelSession(sessionId: UUID) async throws {
-        try await supabase
-            .from("support_sessions")
-            .update(["status": "cancelled"])
-            .eq("id", value: sessionId)
-            .execute()
-
-        activeSessions = try await fetchActiveSessions()
+    @discardableResult
+    func cancelSession(sessionId: UUID) async throws -> DBSupportSession {
+        let session = try await fetchSession(sessionId: sessionId)
+        _ = try await participantType(for: session)
+        guard session.status == .pending || session.status == .matched else { throw PeerSupportError.sessionUnavailable }
+        let updated: [DBSupportSession] = try await supabase.from("support_sessions").update(["status": "cancelled"])
+            .eq("id", value: sessionId).eq("status", value: session.status.rawValue).select().execute().value
+        guard let saved = updated.first else { throw PeerSupportError.sessionUnavailable }
+        activeSessions.removeAll { $0.id == sessionId }
+        return saved
     }
 
     // MARK: - Session Messages
 
     /// Fetch messages for a session
     func fetchSessionMessages(sessionId: UUID) async throws -> [DBSupportMessage] {
+        guard let owner = currentUserId else { throw PeerSupportError.notAuthenticated }
         let response: [DBSupportMessage] = try await supabase
             .from("support_messages")
             .select()
@@ -308,67 +337,75 @@ final class PeerSupportService: ObservableObject {
             .execute()
             .value
 
+        guard currentUserId == owner else { throw PeerSupportError.notAuthenticated }
         return response
     }
 
-    /// Send a message in a session
-    func sendMessage(sessionId: UUID, content: String, senderType: DBSupportMessage.SenderType) async throws {
+    /// Derive the sender from the authenticated participant, then return the saved message.
+    @discardableResult
+    func sendMessage(sessionId: UUID, content: String) async throws -> DBSupportMessage {
+        let text = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { throw PeerSupportError.emptyMessage }
+        let session = try await fetchSession(sessionId: sessionId)
+        guard session.status == .active else { throw PeerSupportError.sessionUnavailable }
+        let senderType = try await participantType(for: session)
         let message: [String: PeerSupportAnyEncodable] = [
             "session_id": PeerSupportAnyEncodable(sessionId),
             "sender_type": PeerSupportAnyEncodable(senderType.rawValue),
-            "content": PeerSupportAnyEncodable(content)
+            "content": PeerSupportAnyEncodable(text)
         ]
-
-        try await supabase
-            .from("support_messages")
-            .insert(message)
-            .execute()
+        return try await supabase.from("support_messages").insert(message).select().single().execute().value
     }
 
-    /// Subscribe to realtime messages for a session
-    func subscribeToSessionMessages(sessionId: UUID) async {
-        // Cancel any existing subscription
-        subscriptionTask?.cancel()
-        if let channel = sessionChannel { await supabase.removeChannel(channel) }
-
-        let channel = supabase.realtimeV2.channel("session:\(sessionId)")
-
-        let insertions = channel.postgresChange(
-            InsertAction.self,
-            schema: "public",
-            table: "support_messages",
-            filter: "session_id=eq.\(sessionId)"
-        )
-
-        try? await channel.subscribeWithError()
-
-        // Store task so it can be cancelled
-        subscriptionTask = Task {
-            for await insertion in insertions {
-                // Check for cancellation before processing
-                if Task.isCancelled { break }
-
-                if let message = try? insertion.decodeRecord(as: DBSupportMessage.self, decoder: JSONDecoder()) {
-                    await MainActor.run {
-                        // Check cancellation again before UI update
-                        if !Task.isCancelled {
-                            self.currentSessionMessages.append(message)
-                        }
-                    }
+    /// A subscription token prevents a closing destination from removing a newer channel.
+    func subscribeToSessionMessages(sessionId: UUID) async throws -> UUID {
+        try Task.checkCancellation()
+        guard let owner = currentUserId else { throw PeerSupportError.notAuthenticated }
+        await unsubscribeFromSessionMessages()
+        try Task.checkCancellation()
+        guard currentUserId == owner else { throw PeerSupportError.notAuthenticated }
+        let subscriptionId = UUID()
+        messageSubscriptionId = subscriptionId
+        let channel = supabase.realtimeV2.channel("peer-session:\(sessionId)")
+        let insertions = channel.postgresChange(InsertAction.self, schema: "public", table: "support_messages", filter: "session_id=eq.\(sessionId)")
+        sessionChannel = channel
+        do {
+            try await channel.subscribeWithError()
+            try Task.checkCancellation()
+            guard messageSubscriptionId == subscriptionId, currentUserId == owner else { throw CancellationError() }
+        } catch {
+            if messageSubscriptionId == subscriptionId {
+                await unsubscribeFromSessionMessages(subscriptionId: subscriptionId)
+            } else {
+                await supabase.removeChannel(channel)
+            }
+            throw error
+        }
+        subscriptionTask = Task { [weak self] in
+            for await _ in insertions {
+                guard !Task.isCancelled, let self, self.messageSubscriptionId == subscriptionId, self.currentUserId == owner else { break }
+                do {
+                    // Use the configured database date decoder; realtime JSONDecoder's default rejects sent_at strings.
+                    let messages = try await self.fetchSessionMessages(sessionId: sessionId)
+                    guard !Task.isCancelled, self.messageSubscriptionId == subscriptionId, self.currentUserId == owner else { break }
+                    self.currentSessionMessages = messages
+                } catch {
+                    Log.social.warning("Failed to refresh peer messages: \(error.localizedDescription)")
                 }
             }
         }
-
-        sessionChannel = channel
+        return subscriptionId
     }
 
-    /// Unsubscribe from session messages
-    func unsubscribeFromSessionMessages() async {
+    func unsubscribeFromSessionMessages(subscriptionId: UUID? = nil) async {
+        if let subscriptionId, messageSubscriptionId != subscriptionId { return }
+        messageSubscriptionId = nil
         subscriptionTask?.cancel()
         subscriptionTask = nil
-        if let channel = sessionChannel { await supabase.removeChannel(channel) }
+        let channel = sessionChannel
         sessionChannel = nil
         currentSessionMessages = []
+        if let channel { await supabase.removeChannel(channel) }
     }
 
     // MARK: - Session Feedback
@@ -725,6 +762,8 @@ struct MentorCandidate: Identifiable {
 enum PeerSupportError: LocalizedError {
     case notAuthenticated
     case sessionNotFound
+    case sessionUnavailable
+    case emptyMessage
     case joinRoomFailed
     case matchFailed(String)
     case invalidRating
@@ -738,6 +777,10 @@ enum PeerSupportError: LocalizedError {
             return "You must be signed in to use peer support features."
         case .sessionNotFound:
             return "The support session could not be found."
+        case .sessionUnavailable:
+            return "This session changed or is no longer available. Refresh and try again."
+        case .emptyMessage:
+            return "Enter a message before sending."
         case .joinRoomFailed:
             return "Failed to join the anonymous room."
         case .matchFailed(let reason):

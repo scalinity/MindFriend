@@ -1,3 +1,4 @@
+import { refreshPremiumAccess } from "../_shared/entitlement.ts";
 // Boundary & Needs Planner: Generate Boundary
 // Endpoint: POST /functions/v1/generate-boundary
 // Creates a defined boundary with initial draft status
@@ -47,17 +48,10 @@ async function checkTierLimit(
   supabase: any,
   userId: string,
 ): Promise<{ allowed: boolean; count: number }> {
-  // Check subscription tier
-  const { data: subscription } = await supabase
-    .from("subscriptions")
-    .select("subscription_tier")
-    .eq("user_id", userId)
-    .single();
-
-  const tier = subscription?.subscription_tier || "free";
+  const isPremium = await refreshPremiumAccess(supabase, userId);
 
   // Premium users have unlimited boundaries
-  if (tier === "premium") {
+  if (isPremium) {
     return { allowed: true, count: 0 };
   }
 

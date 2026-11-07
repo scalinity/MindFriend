@@ -28,15 +28,17 @@ struct WellnessScoreWidgetProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (WellnessScoreEntry) -> Void) {
-        let score = SharedDataStore.shared.wellnessScore ?? 0
-        let trend = SharedDataStore.shared.wellnessScoreTrend
+        let snapshot = SharedDataStore.shared.snapshot()
+        let score = snapshot?.wellnessScore ?? 0
+        let trend = snapshot?.wellnessScoreTrend ?? 0
         let entry = WellnessScoreEntry(date: Date(), score: score, trend: trend, isPlaceholder: false)
         completion(entry)
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<WellnessScoreEntry>) -> Void) {
-        let score = SharedDataStore.shared.wellnessScore ?? 0
-        let trend = SharedDataStore.shared.wellnessScoreTrend
+        let snapshot = SharedDataStore.shared.snapshot()
+        let score = snapshot?.wellnessScore ?? 0
+        let trend = snapshot?.wellnessScoreTrend ?? 0
         let entry = WellnessScoreEntry(date: Date(), score: score, trend: trend, isPlaceholder: false)
 
         // Refresh every 4 hours
@@ -44,7 +46,8 @@ struct WellnessScoreWidgetProvider: TimelineProvider {
         let now = Date()
         let nextRefresh = Calendar.current.date(byAdding: .hour, value: 4, to: now)
             ?? now.addingTimeInterval(14400) // 4 hours in seconds
-        let timeline = Timeline(entries: [entry], policy: .after(nextRefresh))
+        let midnight = Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: now)) ?? nextRefresh
+        let timeline = Timeline(entries: [entry], policy: .after(min(nextRefresh, midnight)))
         completion(timeline)
     }
 }

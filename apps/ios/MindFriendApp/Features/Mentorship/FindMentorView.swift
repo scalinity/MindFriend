@@ -94,21 +94,12 @@ struct FindMentorView: View {
                     introductionText: $introductionText,
                     isPresented: $showingRequestSheet,
                     onRequest: { message in
-                        Task {
-                            await matchingService.requestMentorship(
-                                mentorId: mentor.id,
-                                introductionMessage: message
-                            )
-                            showingRequestSheet = false
-                            introductionText = ""
-                            
-                            // Navigate to the newly created match after a brief delay
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                if let newMatch = matchingService.pendingRequests.first {
-                                    navigationPath.append(.chat(matchId: newMatch.id))
-                                }
-                            }
-                        }
+                        let matchId = try await matchingService.requestMentorship(
+                            mentorId: mentor.mentorId,
+                            introductionMessage: message
+                        )
+                        introductionText = ""
+                        navigationPath.append(.matchDetails(matchId: matchId))
                     }
                 )
             }
@@ -243,8 +234,9 @@ struct RequestMentorshipSheet: View {
     let mentor: FindMentorMatchesResponse.MentorMatch
     @Binding var introductionText: String
     @Binding var isPresented: Bool
-    let onRequest: (String) -> Void
+    let onRequest: (String) async throws -> Void
     @State private var isSending = false
+    @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -282,7 +274,7 @@ struct RequestMentorshipSheet: View {
                         .background(Color(.tertiarySystemBackground))
                         .cornerRadius(8)
 
-                    Text("\(introductionText.count)/500")
+                    Text("\(introductionText.count)/1000")
                         .font(.caption2)
                         .foregroundColor(.secondary)
                         .frame(maxWidth: .infinity, alignment: .trailing)
@@ -294,13 +286,22 @@ struct RequestMentorshipSheet: View {
 
                 Spacer()
 
+                if let errorMessage {
+                    Text(errorMessage).foregroundStyle(.red).font(.callout)
+                }
                 // Action buttons
                 VStack(spacing: 12) {
                     Button(action: {
                         isSending = true
-                        onRequest(introductionText)
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                            isPresented = false
+                        errorMessage = nil
+                        Task {
+                            defer { isSending = false }
+                            do {
+                                try await onRequest(introductionText)
+                                isPresented = false
+                            } catch {
+                                errorMessage = "Your request could not be confirmed. Please try again."
+                            }
                         }
                     }) {
                         if isSending {
@@ -317,7 +318,7 @@ struct RequestMentorshipSheet: View {
                                 .cornerRadius(8)
                         }
                     }
-                    .disabled(introductionText.count < 10 || introductionText.count > 500 || isSending)
+                    .disabled(introductionText.trimmingCharacters(in: .whitespacesAndNewlines).count < 20 || introductionText.count > 1000 || isSending)
 
                     Button(action: { isPresented = false }) {
                         Text("Cancel")
@@ -329,6 +330,7 @@ struct RequestMentorshipSheet: View {
                 }
             }
             .padding()
+            .interactiveDismissDisabled(isSending)
             .navigationTitle("Request Mentorship")
             .navigationBarTitleDisplayMode(.inline)
         }

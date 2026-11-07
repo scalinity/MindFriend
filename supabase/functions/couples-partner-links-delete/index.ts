@@ -20,22 +20,18 @@ Deno.serve(async (req) => {
     }
 
     // Initialize Supabase client with service role
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      global: {
-        headers: { Authorization: req.headers.get("Authorization")! },
-      },
-    });
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Authenticate user from JWT
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    if (!authHeader?.startsWith("Bearer ") || !authHeader.slice(7).trim()) {
       return CouplesErrors.missingAuth();
     }
 
     const {
       data: { user },
       error: authError,
-    } = await supabase.auth.getUser();
+    } = await supabase.auth.getUser(authHeader.slice(7));
 
     if (authError || !user) {
       return CouplesErrors.missingAuth();
@@ -80,7 +76,8 @@ Deno.serve(async (req) => {
         status: "ended",
         ended_at: new Date().toISOString(),
       })
-      .eq("id", partnerLinkId);
+      .eq("id", partnerLinkId)
+      .eq(partnerLink.user_id_1 === userId ? "user_id_1" : "user_id_2", userId);
 
     if (updateError) {
       console.error("Failed to end partnership:", updateError);

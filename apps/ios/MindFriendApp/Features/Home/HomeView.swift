@@ -778,7 +778,41 @@ struct HomeView: View {
         // completion and wasting bandwidth/battery.
         await withTaskCancellationHandler {
             let questResult = await questTask.value
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                // Update quest state (protect completed status from race condition)
+                if let quest = questResult {
+                    // Don't overwrite completed status with assigned status
+                    let shouldUpdate: Bool
+                    switch questState {
+                    case .loaded(let current):
+                        shouldUpdate = quest.status == .completed || current.status != .completed
+                    default:
+                        shouldUpdate = true
+                    }
+                    if shouldUpdate {
+                        questState = .loaded(quest)
+                        appState.todayQuest = quest
+                    }
+                } else if case .loaded = questState {
+                    // Keep existing loaded state if we have one
+                } else {
+                    questState = .noQuest
+                }
+
+            }
+            loadHomeContextInBackground()
             let profileResult = await profileTask.value
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                // Update user profile (keep previous value if profile fetch failed)
+                if let profileResult, appState.currentUser?.id == profileResult.id {
+                    appState.refreshProfileEntitlements(profileResult)
+                    appState.currentUser = profileResult
+                    appState.currentStreak = profileResult.stats?.currentStreakDays ?? 0
+                }
+
+            }
             let actionPlanResult = await actionPlanTask.value
             let events = (await eventsTask.value) ?? []
             let participation = (await participationTask.value) ?? []
@@ -797,6 +831,8 @@ struct HomeView: View {
             let pathwaysResult = (await pathwaysTask.value) ?? []
             // Await streak protection (runs in parallel, nil on failure)
             let protectionResult = await protectionTask.value
+
+            guard !Task.isCancelled else { return }
 
             // Compute level info from user_stats (via achievementService)
             let levelResult: UserLevel
@@ -825,42 +861,12 @@ struct HomeView: View {
                 // Track load time for stale state prevention
                 lastLoadTime = Date()
 
-                // Update quest state (protect completed status from race condition)
-                if let quest = questResult {
-                    // Don't overwrite completed status with assigned status
-                    let shouldUpdate: Bool
-                    switch questState {
-                    case .loaded(let current):
-                        shouldUpdate = quest.status == .completed || current.status != .completed
-                    default:
-                        shouldUpdate = true
-                    }
-                    if shouldUpdate {
-                        questState = .loaded(quest)
-                        appState.todayQuest = quest
-                    }
-                } else if case .loaded = questState {
-                    // Keep existing loaded state if we have one
-                } else {
-                    questState = .noQuest
-                }
-
                 if let actionPlanResult {
                     appState.todayActionPlan = actionPlanResult.0
                     appState.todayActionPlanItems = actionPlanResult.1
                 } else {
                     appState.todayActionPlan = nil
                     appState.todayActionPlanItems = []
-                }
-
-                // Update user profile (keep previous value if profile fetch failed)
-                if let profileResult {
-                    if appState.currentUser?.id == profileResult.id {
-                        appState.refreshProfileEntitlements(profileResult)
-                        appState.currentUser = profileResult
-                        appState.currentStreak = profileResult.stats?.currentStreakDays ?? 0
-                    }
-
                 }
 
                 // Set level info
@@ -937,13 +943,6 @@ struct HomeView: View {
                 }
             }
 
-            // Load home context in background without blocking main content.
-            // Skip if the parent task was cancelled while we were awaiting above —
-            // starting a new background task during teardown would race with view
-            // destruction and log spurious failures.
-            if !Task.isCancelled {
-                loadHomeContextInBackground()
-            }
         } onCancel: {
             protectionTask.cancel()
             questTask.cancel()
