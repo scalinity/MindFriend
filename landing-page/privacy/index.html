@@ -839,7 +839,7 @@
         <tbody>
           <tr>
             <td>AI chat companion</td>
-            <td>The message you send and up to the most recent 20 messages of conversation context for that thread</td>
+            <td>The message you send and up to the most recent 20 messages of conversation context for that thread; when Privacy Mode is off, saved facts, preferences and events from earlier conversations, active Memory Vault entries, and your current daily intent if set</td>
             <td>OpenAI</td>
             <td>Generate the AI&#x2019;s reply</td>
           </tr>
@@ -887,6 +887,7 @@
           </tr>
         </tbody>
       </table>
+      <p>Saved chat context is stored with your account in Supabase and can be reused in later chats beyond the recent-message window. It includes facts, preferences and events extracted from earlier conversations, memories you save in Memory Vault, and your current daily intent if set. When Privacy Mode is on, chat uses your message and recent conversation history without adding those saved memory and daily-intent records.</p>
       <p>We do <strong>not</strong> send to any AI provider:</p>
       <ul>
         <li>Your email address or sign-in identifiers</li>
