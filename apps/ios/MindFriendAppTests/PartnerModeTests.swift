@@ -123,12 +123,13 @@ final class PartnerModeTests: XCTestCase {
 
     func testPartnerState_Equatable_HasPartner() {
         let partnerId = UUID()
+        let lastActive = Date(timeIntervalSince1970: 1_700_000_000)
         let info1 = PartnerInfo(
             partnerId: partnerId,
             partnerName: "Test",
             partnerStreak: 3,
             hasCompletedToday: false,
-            lastActive: Date(),
+            lastActive: lastActive,
             isSharingMood: true,
             isSharingExercises: true
         )
@@ -137,11 +138,22 @@ final class PartnerModeTests: XCTestCase {
             partnerName: "Test",
             partnerStreak: 3,
             hasCompletedToday: false,
-            lastActive: Date(),
+            lastActive: lastActive,
             isSharingMood: true,
             isSharingExercises: true
         )
         XCTAssertEqual(PartnerState.hasPartner(info1), PartnerState.hasPartner(info2))
+
+        let recentlyActiveInfo = PartnerInfo(
+            partnerId: partnerId,
+            partnerName: "Test",
+            partnerStreak: 3,
+            hasCompletedToday: false,
+            lastActive: lastActive.addingTimeInterval(0.25),
+            isSharingMood: true,
+            isSharingExercises: true
+        )
+        XCTAssertNotEqual(PartnerState.hasPartner(info1), PartnerState.hasPartner(recentlyActiveInfo))
     }
 
     // MARK: - CouplesModeError Tests
