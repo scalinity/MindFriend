@@ -2082,3 +2082,17 @@ Each streamed partial image adds 100 output tokens ($0.003). The two functions' 
 **Alternative left open:** `gpt-image-2.5-flare` is not deprecated, costs a quarter as much at low quality, and looked as good in a side-by-side of the same prompt. It is also on OpenAI's zero-data-retention image list, which 2.6 is not yet. Switching is a one-line change in `_shared/image-model.ts` (`IMAGE_MODEL = "gpt-image-2.5-flare"`, output 196 tokens → reserve 5_880).
 
 **Chosen and deployed:** `gpt-image-2.6-flare` at low quality. `generate-art` and `generate-profile-picture` were deployed to production at 3:47 PM EST on 2026-11-06, one function per command: the bulk deploy was refused with "402: Max number of functions reached" (210 functions on the project), although both functions already existed. The deployed sources match the repo, and an unauthenticated request to each returns 401.
+
+## 2026-11-06: AI provider switch turned on in production
+
+`AI_PROVIDER=standard` was set on production at 6:11 PM EST on 2026-11-06, after the privacy policy and terms naming OpenAI were published (4:22 PM EST) and the migration was merged to `main` (`bba67bb`).
+
+**Deployed first, from a clean checkout of `bba67bb`, one function per command** (the bulk deploy hits the project's function limit): `analyze-decision`, `analyze-journal`, `analyze-thought-record`, `analyze-voice-journal`, `chat`, `generate-conversation-title`, `generate-milestone-narrative`, `moderate-forum-content`, `test-auth-diagnostic` (with `--no-verify-jwt`, matching production; it is not in `config.toml`), `agent-monitor`, `deliver-capsules`, `detect-distortion`, `generate-content`, `generate-rewrites`, `generate-sleep-audio`, `generate-weekly-summary`, `rehearsal-simulate`. `voice-token` was not deployed: production's copy is the direct-to-xAI token service that app 1.0.3 uses.
+
+The last eight were older on production than `main`: they predated the 2026-11-05 budget-reservation and `Deno.serve` changes and called xAI directly, so the switch could not reach them until they were deployed. A review of those eight found no change to any request or response the iOS app uses. Behavior that did change: AI calls reserve from the shared monthly budget first, `deliver-capsules` now requires the cron secret or service-role key (nothing in production calls it), and `generate-sleep-audio` requires the exact service-role key.
+
+**Checks:** every deployed source matches `bba67bb` file for file; every function boots and rejects unauthenticated requests with 401; `verify_jwt` is unchanged on all seventeen. Secret digests confirm `AI_PROVIDER` is exactly `standard` and that the production OpenAI and xAI keys match the local copies, and live calls with that key through the deployed code succeeded: `journal.analysis` (valid JSON, 2.8 s), `rehearsal.reply` (in character), a realtime client secret for `gpt-realtime-2.1-mini`, and a `gpt-transcribe` transcription. Not run: a signed-in request through production, and a live voice session from a device.
+
+**Rollback:** `supabase secrets unset AI_PROVIDER --project-ref zfaucivtzfwnrijsbfug` returns every feature to xAI with no deploy.
+
+**Found while deploying, not changed:** `CRON_SECRET` is not set on production, so the two-hourly `agent-monitor-periodic` job is refused (before and after this deploy). `XAI_API_KEY` must stay set: the text seam rejects an empty key before routing, and app 1.0.3's voice uses it.
