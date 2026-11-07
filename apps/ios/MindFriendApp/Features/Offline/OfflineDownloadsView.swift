@@ -92,8 +92,9 @@ struct OfflineDownloadsView: View {
             titleVisibility: .visible
         ) {
             Button("Delete All", role: .destructive) {
+                guard let binding = OfflineScope.shared.binding else { return }
                 Task {
-                    try? await offlineService.deleteAllDownloads()
+                    try? await offlineService.deleteAllDownloads(binding: binding)
                     storageInfo = await offlineService.getStorageInfo()
                 }
             }
@@ -104,10 +105,11 @@ struct OfflineDownloadsView: View {
     }
 
     private func deleteDownloads(at offsets: IndexSet) {
+        guard let binding = OfflineScope.shared.binding else { return }
+        let ids = offsets.compactMap { downloadManager.downloads.indices.contains($0) ? downloadManager.downloads[$0].id : nil }
         Task {
-            for index in offsets {
-                let content = downloadManager.downloads[index]
-                try? await offlineService.deleteDownload(contentId: content.id)
+            for id in ids {
+                try? await offlineService.deleteDownload(contentId: id, binding: binding)
             }
             storageInfo = await offlineService.getStorageInfo()
         }
@@ -317,8 +319,9 @@ private struct DownloadedContentRow: View {
             titleVisibility: .visible
         ) {
             Button("Delete", role: .destructive) {
+                guard let binding = OfflineScope.shared.binding else { return }
                 Task {
-                    try? await offlineService.deleteDownload(contentId: content.id)
+                    try? await offlineService.deleteDownload(contentId: content.id, binding: binding)
                 }
             }
             Button("Cancel", role: .cancel) {}

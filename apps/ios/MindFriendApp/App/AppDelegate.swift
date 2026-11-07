@@ -8,6 +8,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        #if DEBUG
+        if SupportSessionUIFixture.isEnabled { Analytics.shared.setEnabled(false); return true }
+        #endif
         // Initialize crash reporting first (before anything else can crash)
         CrashReporter.shared.initialize()
         CrashReporter.shared.setAppContext()

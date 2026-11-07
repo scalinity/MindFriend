@@ -1,11 +1,21 @@
 import SwiftUI
+import Combine
 import OSLog
 
 struct ChatView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let conversation: Conversation
+    private let suppliedSessionID: UUID?
+    private let sendOnOpen: Bool
+    @State private var didSendOnOpen = false
+    @State private var chatCapabilitiesVerified = false
+    @State private var latestSupport: SupportChatMetadata?
+    @State private var showSupportContext = false
+    @State private var showManualChoices = false
+    @State private var proposalError: String?
     typealias SendOperation = @MainActor (String, UUID, Bool, @escaping (String) -> Void) async throws -> SendMessageResponse
     private let sendOperation: SendOperation?
     private let loadOperation: (@MainActor () async throws -> [Message])?
@@ -19,6 +29,9 @@ struct ChatView: View {
     @State private var sendFailure: ChatRequestFailure?
 
     @State private var messages: [Message] = []
+    @State private var localVoiceEvents: [SupportTranscriptEvent] = []
+    @State private var activityEvents: [SupportActivityChatEvent] = []
+    @State private var removingVoiceEvent: SupportTranscriptEvent?
     @State private var inputText = ""
     @State private var isLoading = true
     @State private var isSending = false
@@ -32,13 +45,19 @@ struct ChatView: View {
     @State private var streamingText = ""
     @FocusState private var isInputFocused: Bool
     @State private var showVoiceMode = false
+    @State private var voiceAccess: SessionVoiceAccess?
     @State private var latestCoachData: CoachData?
     @StateObject private var coachViewModel: CoachViewModel
 
     private let quotaWarningThreshold = 3
     
-    init(conversation: Conversation, initialDraft: String = "", send: SendOperation? = nil, load: (@MainActor () async throws -> [Message])? = nil, recordMessage: (@MainActor () async -> Void)? = nil) {
+    init(conversation: Conversation, initialDraft: String = "", supportSessionID: UUID? = nil,
+         sendOnOpen: Bool = false, capabilitiesVerified: Bool = false,
+         send: SendOperation? = nil, load: (@MainActor () async throws -> [Message])? = nil, recordMessage: (@MainActor () async -> Void)? = nil) {
         self.conversation = conversation
+        self.suppliedSessionID = supportSessionID
+        self.sendOnOpen = sendOnOpen
+        _chatCapabilitiesVerified = State(initialValue: capabilitiesVerified)
         self.sendOperation = send; self.loadOperation = load; self.recordMessage = recordMessage
         _inputText = State(initialValue: initialDraft)
         // Initialize CoachViewModel - will be injected via container in body
@@ -53,7 +72,13 @@ struct ChatView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 12) {
-                        ForEach(messages) { message in
+                        if dynamicTypeSize.isAccessibilitySize {
+                            Text(displayTitle).font(.headline).accessibilityAddTraits(.isHeader)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        ForEach(SupportChatRow.merge(messages: messages, localEvents: localVoiceEvents, activityEvents: activityEvents)) { row in
+                            switch row {
+                            case .message(let message):
                             VStack(spacing: 4) {
                                 MessageBubble(message: message)
                                     .accessibilityIdentifier("chat-message-\(message.id.lowercased())")
@@ -64,6 +89,38 @@ struct ChatView: View {
                                 }
                             }
                             .id(message.id)
+                            case .localVoice(let event):
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(event.syncState == .rejected ? "Voice turn · not saved to account" : "Voice turn · saved on this device, account sync pending")
+                                    .font(.caption).foregroundStyle(.secondary)
+                                Text(event.role == .user ? "You" : "MindFriend").font(.subheadline.bold())
+                                Text(event.text).textSelection(.enabled)
+                                if event.syncState == .rejected {
+                                    Text("The account did not accept this turn. Its local copy is kept here.").font(.subheadline)
+                                    Button("Try saving again") { retryVoiceEvent(event) }
+                                }
+                                Button("Copy voice turn") {
+                                    UIPasteboard.general.setObjects([event.text as NSString], localOnly: true,
+                                        expirationDate: Date().addingTimeInterval(120))
+                                }
+                                Button("Remove local copy", role: .destructive) { removingVoiceEvent = event }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding().background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+                            case .activity(let event):
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Label(event.template.title, systemImage: "checklist").font(.headline)
+                                    Text(event.stepState.map(SupportHistoryText.stepState) ?? SupportHistoryText.activityStatus(event.status))
+                                    if let reflection = event.reflection { Text("Your reflection: " + reflection.displayTitle) }
+                                    Text(event.answersShared ? "Written answers may be used as session context by your choice." : "Activity answers excluded from automatic session context. Answers you send in Chat are part of that message.")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                    NavigationLink("View session") { SupportHistoryDetailView(sessionID: event.sessionID) }
+                                        .frame(minHeight: 44)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading).padding()
+                                .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: 12))
+                                .accessibilityIdentifier("chat-activity-" + event.activityID.uuidString.lowercased())
+                            }
                         }
 
                         // Coach card - show after assistant's latest message
@@ -111,8 +168,10 @@ struct ChatView: View {
                         }
 
                         if isSending && !streamingText.isEmpty {
-                            MessageBubble(message: Message(id: "streaming", role: .assistant, content: streamingText, createdAt: Date(), blocked: false))
-                                .id("streaming")
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Reply in progress · not yet saved").font(.caption).foregroundStyle(.secondary)
+                                MessageBubble(message: Message(id: "streaming", role: .assistant, content: streamingText, createdAt: Date(), blocked: false))
+                            }.id("streaming")
                         }
                         if isSending && streamingText.isEmpty {
                             TypingIndicator()
@@ -151,6 +210,16 @@ struct ChatView: View {
 
             Divider()
 
+            if !isSending, let metadata = latestSupport, !metadata.suppressOrdinaryCards,
+               let coordinator = container.supportSessionCoordinator,
+               let id = resolvedSessionID, let session = coordinator.journal.sessions[id],
+               let revision = container.supportSync?.privacyRevision,
+               let proposal = metadata.actionableProposal(now: Date(), scope: session.contextScope, privacyRevision: revision),
+               coordinator.journal.declinedTemplates[id]?.contains(proposal.template) != true {
+                supportProposal(proposal, sessionID: id)
+            }
+            if let proposalError { Text(proposalError).font(.subheadline).padding(.horizontal) }
+
             // Input
             ChatInputBar(
                 text: $inputText,
@@ -160,15 +229,18 @@ struct ChatView: View {
             .focused($isInputFocused)
         }
         .sentryMaskChat()
-        .navigationTitle(displayTitle)
+        .navigationTitle(dynamicTypeSize.isAccessibilitySize ? "Chat" : displayTitle)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             displayTitle = conversation.title ?? "Chat"
         }
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
+                if resolvedSessionID != nil { Button("Context") { showSupportContext = true } }
                 Button {
                     if appState.entitlements.tier == .premium {
+                        voiceAccess = SessionVoiceAccess(container: container, appState: appState,
+                            sessionID: resolvedSessionID, conversationID: UUID(uuidString: conversation.id))
                         showVoiceMode = true
                     } else {
                         appState.showPaywall = true
@@ -193,11 +265,62 @@ struct ChatView: View {
             isInputFocused = true
             reconcileMessages(generation: viewGeneration)
         }) {
-            VoiceChatView(supabase: container.supabaseClient, conversationId: conversation.id)
+            VoiceChatView(supabase: container.supabaseClient, conversationId: conversation.id, supportAccess: voiceAccess)
+        }
+        .sheet(isPresented: $showSupportContext) {
+            if let id = resolvedSessionID { SupportContextView(sessionID: id, receipt: latestSupport?.contextReceipt) }
+        }
+        .confirmationDialog("Remove this local voice turn?", isPresented: Binding(get: { removingVoiceEvent != nil }, set: { if !$0 { removingVoiceEvent = nil } })) {
+            if let event = removingVoiceEvent {
+                Button("Remove local copy", role: .destructive) {
+                    removingVoiceEvent = nil
+                    Task {
+                        guard let coordinator = container.supportSessionCoordinator,
+                              coordinator.identity.ownerID == appState.currentUser?.id else { return }
+                        do { try await coordinator.repository.discardTranscriptEvents(epoch: coordinator.identity.epochID, ids: [event.id]) }
+                        catch { proposalError = SupportSessionCoordinator.message(for: error) }
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) { removingVoiceEvent = nil }
+        } message: { Text("Copy anything you want to keep before removing this device’s copy. An upload already in progress may still save an account copy.") }
+        .confirmationDialog("Choose an option", isPresented: $showManualChoices, titleVisibility: .visible) {
+            ForEach(SupportActivityTemplateKey.allCases, id: \.self) { template in
+                Button(template.title) { startManual(template) }
+            }
+        }
+        .onChange(of: inputText) { _, value in
+            if !value.isEmpty || !isSending, let id = resolvedSessionID {
+                container.supportSessionCoordinator?.scheduleDraft(value, sessionID: id)
+            }
+        }
+        .onReceive(supportChatDraftHandoffs.receive(on: DispatchQueue.main)) { handoff in
+            guard let handoff, handoff.sessionID == resolvedSessionID, !isSending, pendingSend == nil,
+                  let coordinator = container.supportSessionCoordinator,
+                  coordinator.identity.ownerID == appState.currentUser?.id,
+                  let accepted = coordinator.consumeChatDraftHandoff(handoff.id, sessionID: handoff.sessionID) else { return }
+            inputText = accepted.text
+        }
+        .onReceive(supportJournalUpdates) { journal in
+            guard journal.ownerID == appState.currentUser?.id else { localVoiceEvents = []; activityEvents = []; return }
+            let activitySessionID = suppliedSessionID ?? journal.sessions.values.first {
+                $0.conversationID == UUID(uuidString: conversation.id) && $0.status != .deleted
+            }?.id
+            activityEvents = activitySessionID.map { SupportActivityChatEvent.rows(in: journal, sessionID: $0) } ?? []
+            localVoiceEvents = journal.transcriptEvents.filter {
+                $0.conversationID == UUID(uuidString: conversation.id) && $0.syncState != .saved
+            }.sorted { ($0.sequence, $0.id.uuidString) < ($1.sequence, $1.id.uuidString) }
+            let pending = pendingSend.flatMap { journal.pendingChatRequests[$0.id] }
+            let changedScope = pending.map { journal.sessions[$0.sessionID]?.contextScope != $0.scope } == true
+            let changedRevision = pending.map { (journal.accountPrivacyRevision ?? $0.privacyRevision) > $0.privacyRevision } == true
+            if isSending, journal.personalizedCloudPaused || changedScope || changedRevision {
+                sendTask?.cancel()
+                sendFailure = ChatRequestFailure(kind: .contextChanged)
+            }
         }
         .onChange(of: appState.currentUser?.id) { previous, current in
             if let previous, previous != current {
-                messages = []; pendingSend = nil; sendFailure = nil
+                messages = []; localVoiceEvents = []; activityEvents = []; pendingSend = nil; sendFailure = nil
                 isVisible = false; viewGeneration = UUID()
                 sendTask?.cancel(); reconciliationTask?.cancel()
                 dismiss()
@@ -226,6 +349,30 @@ struct ChatView: View {
             streamingText = ""
             displayTitle = conversation.title ?? "Chat"
             await loadMessages()
+            await restoreSupportDraft()
+            if sendOnOpen, !didSendOnOpen, pendingSend == nil, !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                didSendOnOpen = true
+                sendMessage()
+            }
+        }
+    }
+
+    private func retryVoiceEvent(_ event: SupportTranscriptEvent) {
+        guard let coordinator = container.supportSessionCoordinator,
+              let sync = container.supportSync, coordinator.identity.ownerID == appState.currentUser?.id else { return }
+        let owner = coordinator.identity.ownerID, accountEpoch = appState.accountEpoch
+        Task {
+            do {
+                guard container.supportSessionCoordinator === coordinator,
+                      appState.currentUser?.id == owner, appState.accountEpoch == accountEpoch else { return }
+                try await coordinator.repository.retryRejectedTranscriptEvent(epoch: coordinator.identity.epochID, id: event.id)
+                try await sync.retry()
+            } catch {
+                if container.supportSessionCoordinator === coordinator,
+                   appState.currentUser?.id == owner, appState.accountEpoch == accountEpoch {
+                    proposalError = SupportSessionCoordinator.message(for: error)
+                }
+            }
         }
     }
 
@@ -325,6 +472,7 @@ struct ChatView: View {
 
     private func startSend(_ pending: PendingSend, retryFailed: Bool) {
         guard !isSending else { return }
+        let quotaOwner = appState.currentUser?.id
         let tempMessageId = pending.messageId
         let content = pending.content
         if !messages.contains(where: { $0.id.lowercased() == tempMessageId }) {
@@ -352,8 +500,7 @@ struct ChatView: View {
                 try Task.checkCancellation()
 
                 let operation = sendOperation ?? { content, id, retry, delta in
-                    try await container.chatService.sendMessage(conversationId: conversation.id, content: content,
-                        requestId: id, retryFailed: retry, onDelta: delta)
+                    try await sendSupportMessage(content: content, requestID: id, retryFailed: retry, onDelta: delta)
                 }
                 let response = try await operation(content, pending.id, retryFailed) {
                     if isVisible && viewGeneration == generation { streamingText += $0 }
@@ -371,12 +518,12 @@ struct ChatView: View {
                 }
                 pendingSend = nil
                 sendFailure = nil
+                latestSupport = response.support
 
                 // Update quota tracking from server (authoritative source)
                 if appState.entitlements.tier != .premium, let serverUsed = response.quotaUsed {
                     // Sync from server-provided value (not local increment)
-                    let limit = response.quotaLimit.flatMap { $0 > 0 ? $0 : nil } ?? appState.entitlements.dailyAiQuota
-                    appState.entitlements = Entitlements(tier: appState.entitlements.tier, dailyAiQuota: limit, dailyAiUsed: serverUsed)
+                    if let quotaOwner { appState.recordChatQuota(ownerID: quotaOwner, used: serverUsed, limit: response.quotaLimit) }
                     // Only show warning if not unlimited (Int.max) and near limit
                     showQuotaWarning = response.quotaRemaining < Int.max && response.quotaRemaining <= quotaWarningThreshold
                 } else {
@@ -418,9 +565,7 @@ struct ChatView: View {
                 guard !Task.isCancelled, isVisible, viewGeneration == generation else { return }
                 let failure = error as? ChatRequestFailure ?? ChatRequestFailure(kind: .unconfirmed)
                 sendFailure = failure
-                let used = failure.quotaUsed.flatMap { $0 >= 0 ? $0 : nil } ?? appState.entitlements.dailyAiUsed
-                let limit = failure.quotaLimit.flatMap { $0 > 0 ? $0 : nil } ?? appState.entitlements.dailyAiQuota
-                appState.entitlements = Entitlements(tier: appState.entitlements.tier, dailyAiQuota: limit, dailyAiUsed: used)
+                if let quotaOwner { appState.recordChatQuota(ownerID: quotaOwner, used: failure.quotaUsed, limit: failure.quotaLimit) }
                 if failure.messageSaved == false {
                     messages.removeAll { $0.id.lowercased() == tempMessageId }
                     if inputText.isEmpty { inputText = content }
@@ -431,6 +576,122 @@ struct ChatView: View {
             }
         }
     }
+    private var resolvedSessionID: UUID? {
+        suppliedSessionID ?? container.supportSessionCoordinator?.journal.sessions.values.first(where: {
+            $0.conversationID == UUID(uuidString: conversation.id) && $0.status != .deleted
+        })?.id
+    }
+
+    private var supportChatDraftHandoffs: AnyPublisher<SupportChatDraftHandoff?, Never> {
+        container.supportSessionCoordinator?.$chatDraftHandoff.eraseToAnyPublisher() ?? Empty().eraseToAnyPublisher()
+    }
+
+    private var supportJournalUpdates: AnyPublisher<SupportJournal, Never> {
+        container.supportSessionCoordinator?.$journal.eraseToAnyPublisher() ?? Empty().eraseToAnyPublisher()
+    }
+
+    private func restoreSupportDraft() async {
+        guard sendOperation == nil, let coordinator = container.supportSessionCoordinator else { return }
+        do {
+            let session: SupportSession
+            if let id = resolvedSessionID, let existing = coordinator.journal.sessions[id] { session = existing }
+            else {
+                guard let id = UUID(uuidString: conversation.id) else { return }
+                session = try await coordinator.createSession(conversationID: id)
+            }
+            if let pending = coordinator.journal.pendingChatRequests.values.first(where: { $0.sessionID == session.id }) {
+                pendingSend = PendingSend(id: pending.id, content: pending.content)
+                sendFailure = ChatRequestFailure(kind: .pending)
+                if inputText.isEmpty { inputText = pending.content }
+            } else if inputText.isEmpty { inputText = coordinator.journal.drafts[session.id] ?? "" }
+        } catch { proposalError = SupportSessionCoordinator.message(for: error) }
+    }
+
+    private func sendSupportMessage(content: String, requestID: UUID, retryFailed: Bool,
+                                    onDelta: @escaping (String) -> Void) async throws -> SendMessageResponse {
+        guard let coordinator = container.supportSessionCoordinator, let sync = container.supportSync,
+              let id = resolvedSessionID else { throw ChatRequestFailure(kind: .contractUnavailable) }
+        let owner = coordinator.identity.ownerID, epoch = appState.accountEpoch
+        let proof: @Sendable () async -> OfflineOwnerProof? = { await MainActor.run {
+            guard appState.currentUser?.id == owner, appState.accountEpoch == epoch,
+                  container.supportSessionCoordinator === coordinator else { return nil }
+            return .init(userId: owner, epoch: epoch)
+        } }
+        try await coordinator.flushDraft(content, sessionID: id)
+        guard !coordinator.journal.personalizedCloudPaused else { throw ChatRequestFailure(kind: .contextChanged) }
+        if !chatCapabilitiesVerified {
+            _ = try await container.supabaseDataService.supportChatCapabilities(owner: .init(userId: owner, epoch: epoch), ownerProof: proof)
+            chatCapabilitiesVerified = true
+        }
+        try await sync.synchronize()
+        guard await proof() != nil else { throw CancellationError() }
+        let journal = try await coordinator.repository.currentJournal(epoch: coordinator.identity.epochID)
+        guard !journal.personalizedCloudPaused, let session = journal.sessions[id], session.status == .open,
+              session.syncStatus == .synced, let privacyRevision = sync.privacyRevision else { throw ChatRequestFailure(kind: .contextChanged) }
+        let pending: SupportPendingChatRequest
+        if let existing = journal.pendingChatRequests[requestID] { pending = existing }
+        else {
+            pending = try await coordinator.repository.prepareChatRequest(epoch: coordinator.identity.epochID,
+                sessionID: id, requestID: requestID, content: content, scope: session.contextScope, privacyRevision: privacyRevision)
+        }
+        guard pending.content == content, pending.conversationID == UUID(uuidString: conversation.id) else { throw ChatRequestFailure(kind: .contextChanged) }
+        let context = SupportChatRequestContext(owner: .init(userId: owner, epoch: epoch), sessionID: id,
+            scope: pending.scope, privacyRevision: pending.privacyRevision)
+        do {
+            let response = try await container.chatService.sendMessage(conversationId: conversation.id, content: content,
+                requestId: requestID, retryFailed: retryFailed, supportContext: context, ownerProof: proof, onDelta: onDelta)
+            guard await proof() != nil else { throw CancellationError() }
+            try await coordinator.repository.settleChatRequest(epoch: coordinator.identity.epochID, requestID: requestID)
+            return response
+        } catch let failure as ChatRequestFailure {
+            if failure.messageSaved == false {
+                try await coordinator.repository.settleChatRequest(epoch: coordinator.identity.epochID, requestID: requestID, rejectedBeforeSend: true)
+            }
+            throw failure
+        }
+    }
+
+    private func supportProposal(_ proposal: SupportChatProposal, sessionID: UUID) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("A small next step").font(.headline)
+            Text(proposal.template.title).font(.title3.weight(.semibold))
+            Text(proposal.reason).font(.subheadline)
+            if proposal.reasonCode == "approved_preference" { Button("Why this?") { showSupportContext = true } }
+            HStack {
+                Button("Start") { acceptProposal(proposal, sessionID: sessionID) }.buttonStyle(.borderedProminent)
+                Button("Another option") { showManualChoices = true }
+                Button("Not now") {
+                    Task {
+                        do { try await container.supportSessionCoordinator?.suppressTemplate(proposal.template, sessionID: sessionID); latestSupport = nil }
+                        catch { proposalError = SupportSessionCoordinator.message(for: error) }
+                    }
+                }
+            }
+        }.padding().frame(maxWidth: .infinity, alignment: .leading).background(SupportTheme.surface)
+    }
+
+    private func acceptProposal(_ proposal: SupportChatProposal, sessionID: UUID) {
+        Task {
+            do {
+                guard let coordinator = container.supportSessionCoordinator, let sync = container.supportSync else { return }
+                try await coordinator.acceptProposal(proposal, sessionID: sessionID, sync: sync,
+                    conversationID: try conversationUUID())
+                latestSupport = nil
+            } catch { proposalError = "This suggestion could not be started. Your conversation is saved; choose another option or keep talking." }
+        }
+    }
+    private func conversationUUID() throws -> UUID {
+        guard let id = UUID(uuidString: conversation.id) else { throw DataError.invalidId }
+        return id
+    }
+    private func startManual(_ template: SupportActivityTemplateKey) {
+        guard let id = resolvedSessionID, let conversationID = UUID(uuidString: conversation.id) else { return }
+        Task { do {
+            try await container.supportSessionCoordinator?.flushDraft(inputText, sessionID: id)
+            _ = try await container.supportSessionCoordinator?.start(template, in: id, origin: .chat(conversationID: conversationID))
+        }
+               catch { proposalError = SupportSessionCoordinator.message(for: error) } }
+    }
 }
 
 struct MessageBubble: View {
@@ -439,7 +700,7 @@ struct MessageBubble: View {
     var isUser: Bool { message.role == .user }
 
     private var accessibilityLabel: String {
-        let sender = isUser ? "You said" : "MindFriend said"
+        let sender = isUser ? "You said" : message.contentOrigin == .interfaceFallback ? "App guidance" : "MindFriend said"
         let time = message.createdAt.formatted(date: .omitted, time: .shortened)
         return "\(sender): \(message.content). Sent at \(time)"
     }
@@ -449,6 +710,7 @@ struct MessageBubble: View {
             if isUser { Spacer(minLength: 60) }
 
             VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
+                if message.contentOrigin == .interfaceFallback { Text("App guidance").font(.caption.weight(.semibold)) }
                 // MarkdownContentView handles all styling internally
                 MarkdownContentView(content: message.content, isUserMessage: isUser)
 
@@ -575,70 +837,7 @@ struct QuotaWarningBanner: View {
 }
 
 struct NewChatView: View {
-    @EnvironmentObject var appState: AppState
-    @EnvironmentObject var container: DependencyContainer
-    @Environment(\.dismiss) var dismiss
-
-    @State private var conversation: Conversation?
-    @State private var errorMessage: String?
-    @State private var isRetrying = false
-
-    var body: some View {
-        Group {
-            if let conversation = conversation {
-                ChatView(conversation: conversation)
-            } else if let error = errorMessage {
-                VStack(spacing: 16) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.largeTitle)
-                        .foregroundStyle(.secondary)
-
-                    Text("Couldn't start conversation")
-                        .font(.headline)
-
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-
-                    Button {
-                        isRetrying = true
-                        errorMessage = nil
-                        Task {
-                            await createChat()
-                        }
-                    } label: {
-                        Label("Try Again", systemImage: "arrow.clockwise")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(isRetrying)
-                }
-                .padding()
-            } else {
-                ProgressView("Starting conversation...")
-            }
-        }
-        .task {
-            await createChat()
-        }
-    }
-
-    private func createChat() async {
-        do {
-            // Debug: Check if authenticated
-            guard container.supabaseAuthService.userId != nil else {
-                Log.chat.warning("User not authenticated when creating chat")
-                errorMessage = "Please sign in to start a chat"
-                return
-            }
-
-            conversation = try await container.chatService.createConversation()
-        } catch {
-            Log.chat.error("Error creating conversation: \(error.localizedDescription)")
-            errorMessage = error.localizedDescription
-        }
-        isRetrying = false
-    }
+    var body: some View { SupportChatEntryView() }
 }
 
 #Preview {

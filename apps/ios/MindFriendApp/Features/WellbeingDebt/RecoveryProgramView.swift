@@ -100,7 +100,7 @@ struct RecoveryProgramView: View {
                 Text("Start Recovery Program")
                     .font(.title2.bold())
 
-                Text("Generate a personalized 7-day plan to reduce your wellbeing debt and prevent crashes.")
+                Text("Generate a personalized 7-day plan to reduce your wellbeing debt and explore a steadier pace.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

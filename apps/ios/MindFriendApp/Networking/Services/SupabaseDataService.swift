@@ -30,7 +30,7 @@ enum APIError: LocalizedError {
 
 /// The server decides quota and admission; a retry retains the original request ID.
 struct ChatRequestFailure: LocalizedError {
-    enum Kind: Equatable { case quota, sharedBudget, rateLimited, provider, network, pending, unconfirmed, signIn }
+    enum Kind: Equatable { case quota, sharedBudget, rateLimited, provider, network, pending, unconfirmed, signIn, contractUnavailable, contextChanged }
     let kind: Kind
     let code: String?
     let retryable: Bool
@@ -57,6 +57,8 @@ struct ChatRequestFailure: LocalizedError {
         case .network: return "Connection interrupted"
         case .pending: return "Your request is still being checked"
         case .unconfirmed: return "The reply wasn’t confirmed"
+        case .contractUnavailable: return "Private chat is unavailable"
+        case .contextChanged: return "Review the shared context"
         case .signIn: return "Sign in again to continue"
         }
     }
@@ -73,6 +75,8 @@ struct ChatRequestFailure: LocalizedError {
         case .network: return "Check your connection, then retry the same request. A saved reply will be recovered without sending it twice."
         case .pending: return "The earlier request has not returned a confirmed result. Check its response or reload history before sending it again."
         case .unconfirmed: return "Reload history to check what was saved before sending this message again."
+        case .contractUnavailable: return "This service has not confirmed support for the selected privacy controls. Your draft is saved here; you can choose a local practice."
+        case .contextChanged: return "Your context or privacy settings changed. The earlier request will not be treated as a current reply. Review the context before sending again."
         case .signIn: return "Your draft is kept. Sign in before sending another request."
         }
     }
@@ -84,6 +88,9 @@ struct ChatRequestFailure: LocalizedError {
         case "chat_quota_exhausted", "AI_QUOTA_EXCEEDED": kind = .quota
         case "chat_shared_budget_exhausted", "chat_shared_budget_unavailable", "AI_MONTHLY_BUDGET_REACHED", "AI_MONTHLY_BUDGET_UNAVAILABLE": kind = .sharedBudget
         case "chat_rate_limited", "Too many requests": kind = .rateLimited
+        case "chat_support_unavailable", "chat_support_schema_unsupported", "chat_context_unavailable": kind = .contractUnavailable
+        case "chat_privacy_revision_stale", "chat_support_session_closed": kind = .contextChanged
+        case "chat_owner_mismatch": kind = .signIn
         case "chat_provider_unavailable": kind = .provider
         case "chat_request_pending", "Request outcome pending. Reload history before sending again.": kind = .pending
         default: kind = status == 401 ? .signIn : status == 429 ? .rateLimited : .unconfirmed
@@ -144,6 +151,9 @@ struct ChatResponse: Codable {
     let quotaLimit: Int?
     let conversationTitle: String?
     let coachData: CoachData?
+    var memoryUsed: Bool? = nil
+    var memoryIdsUsed: [String]? = nil
+    var support: SupportChatMetadata? = nil
 }
 
 struct ChatFunctionResponse: Codable {
@@ -154,6 +164,9 @@ struct ChatFunctionResponse: Codable {
     let quotaLimit: Int?
     let conversationTitle: String?
     let coachData: CoachData?
+    var memoryUsed: Bool? = nil
+    var memoryIdsUsed: [String]? = nil
+    var support: SupportChatMetadata? = nil
 
     static func decode(_ data: Data) throws -> ChatFunctionResponse {
         let decoder = JSONDecoder()
@@ -176,13 +189,15 @@ private struct DBMethodologyInfo: Codable {
 final class SupabaseDataService: ObservableObject {
     private let authService: SupabaseAuthService
     private let avatarClient: SupabaseClient
+    private let chatSession: URLSession
     private let avatarUserId: () throws -> UUID
 
     /// In-memory cache for methodology info (static reference data)
     private var methodologyCache: [String: MethodologyInfo] = [:]
 
-    init(authService: SupabaseAuthService, avatarClient: SupabaseClient? = nil, avatarUserId: (() throws -> UUID)? = nil) {
+    init(authService: SupabaseAuthService, avatarClient: SupabaseClient? = nil, avatarUserId: (() throws -> UUID)? = nil, chatSession: URLSession = .shared) {
         self.authService = authService
+        self.chatSession = chatSession
         self.avatarClient = avatarClient ?? supabase
         self.avatarUserId = avatarUserId ?? {
             guard let id = authService.userId else { throw DataError.notAuthenticated }
@@ -210,32 +225,6 @@ final class SupabaseDataService: ObservableObject {
     }
 
     // MARK: - Moods
-
-    func createMood(_ mood: MoodEntry) async throws {
-        let dbMood = DBMood(
-            id: nil,
-            userId: try userId,
-            localDate: mood.localDate,
-            moodScore: mood.moodScore,
-            anxietyScore: mood.anxietyScore,
-            energyScore: mood.energyScore,
-            note: mood.note,
-            encryptedNote: nil,
-            noteEncryptionKeyId: nil,
-            createdAt: nil
-        )
-
-        try await supabase
-            .from(Tables.moods)
-            .upsert(dbMood, onConflict: "user_id,local_date")
-            .execute()
-
-        DebtSourceChanges.saved(date: mood.localDate)
-        Analytics.shared.track(.moodLogged, properties: [
-            "mood_score": mood.moodScore,
-            "has_note": mood.note != nil
-        ])
-    }
 
     func getMoods(from startDate: String, to endDate: String, limit: Int = 100, offset: Int = 0) async throws -> [MoodEntry] {
         let moods: [DBMood] = try await supabase
@@ -269,9 +258,7 @@ final class SupabaseDataService: ObservableObject {
     /// Fetches today's mood entry if one exists
     /// Used by HomeView to determine whether to show mood check-in prompt
     func getTodayMood() async throws -> MoodEntry? {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        let today = formatter.string(from: Date())
+        let today = OfflineLocalDay.string(for: Date())
 
         let moods = try await getMoods(from: today, to: today, limit: 1)
         return moods.first
@@ -447,33 +434,6 @@ final class SupabaseDataService: ObservableObject {
         guard try userId == ownerId else { throw CancellationError() }
         guard let quest = quests.first, quest.userId == ownerId else { return nil }
         return quest.toQuest()
-    }
-
-    func completeQuest(id: String, reflectionNote: String?, rating: Int?) async throws {
-        guard let questId = UUID(uuidString: id) else { return }
-
-        let updates: [String: AnyEncodable] = [
-            "status": AnyEncodable("completed"),
-            "reflection_note": AnyEncodable(reflectionNote),
-            "rating": AnyEncodable(rating),
-            "completed_at": AnyEncodable(ISO8601DateFormatter().string(from: Date()))
-        ]
-
-        try await supabase
-            .from(Tables.quests)
-            .update(updates)
-            .eq("id", value: questId)
-            .eq("user_id", value: try userId)
-            .execute()
-
-        DebtSourceChanges.saved()
-        // Note: Stats/streak updates are handled by database trigger (trg_quest_completed_stats)
-
-        Analytics.shared.track(.questCompleted, properties: [
-            "quest_id": id,
-            "has_reflection": reflectionNote != nil,
-            "rating": rating ?? 0
-        ])
     }
 
     func skipQuest(id: String) async throws {
@@ -961,6 +921,43 @@ final class SupabaseDataService: ObservableObject {
         }
     }
 
+    /// Stable keyset pagination includes undated legacy rows after dated rows, without a recent-100 cutoff.
+    func getConversationPage(owner: OfflineOwnerProof, cursor: SupportConversationCursor? = nil,
+                             ownerProof: @Sendable () async -> OfflineOwnerProof?) async throws -> SupportConversationPage {
+        guard await ownerProof() == owner, authService.userId == owner.userId else { throw CancellationError() }
+        struct Row: Decodable {
+            let id: UUID
+            let title: String?
+            let createdAt: String?
+            let updatedAt: String?
+            enum CodingKeys: String, CodingKey { case id, title; case createdAt = "created_at", updatedAt = "updated_at" }
+        }
+        var query = supabase.from(Tables.conversations).select("id,title,created_at,updated_at").eq("user_id", value: owner.userId)
+        if let cursor {
+            if let date = cursor.createdAt {
+                guard date.utf8.count <= 64, SupportChatTimestamp.date(date) != nil else { throw DataError.invalidId }
+                query = query.or("created_at.lt.\(date),and(created_at.eq.\(date),id.lt.\(cursor.id.uuidString)),created_at.is.null")
+            } else {
+                query = query.is("created_at", value: nil).lt("id", value: cursor.id)
+            }
+        }
+        let rows: [Row] = try await query.order("created_at", ascending: false, nullsFirst: false)
+            .order("id", ascending: false).limit(50).execute().value
+        guard await ownerProof() == owner, authService.userId == owner.userId, !Task.isCancelled else { throw CancellationError() }
+        guard Set(rows.map(\.id)).count == rows.count else { throw DataError.operationFailed("History returned duplicate record identities.") }
+        let items = rows.map { row in
+            let created = row.createdAt.flatMap(SupportChatTimestamp.date)
+            let updated = row.updatedAt.flatMap(SupportChatTimestamp.date)
+            var conversation = Conversation(id: row.id.uuidString, title: row.title, status: .active,
+                createdAt: created ?? .distantPast, updatedAt: updated ?? created ?? .distantPast, lastMessage: nil)
+            conversation.dateIsKnown = updated != nil || created != nil
+            return conversation
+        }
+        let next = rows.count == 50 ? rows.last.map { SupportConversationCursor(createdAt: $0.createdAt, id: $0.id) } : nil
+        guard next == nil || next != cursor else { throw DataError.operationFailed("History cursor did not advance.") }
+        return SupportConversationPage(items: items, nextCursor: next)
+    }
+
     /// Resolve a linked conversation independently of the paginated history list.
     func getConversation(id: String) async throws -> Conversation? {
         guard let conversationId = UUID(uuidString: id) else { throw DataError.invalidId }
@@ -984,26 +981,36 @@ final class SupabaseDataService: ObservableObject {
         )
     }
 
-    func createConversation(title: String?) async throws -> Conversation {
+    func createConversation(title: String?, id: UUID? = nil, expectedOwner: UUID? = nil) async throws -> Conversation {
         let currentUserId = try self.userId
-        Log.data.debug("[Data] Creating conversation for user: \(currentUserId)")
+        if let expectedOwner, expectedOwner != currentUserId { throw CancellationError() }
+        Log.data.debug("[Data] Creating conversation")
 
         let conversation = DBConversation(
-            id: nil,
-            userId: try userId,
+            id: id,
+            userId: currentUserId,
             title: title,
             createdAt: nil,
             updatedAt: nil
         )
 
-        let result: DBConversation = try await supabase
+        let result: DBConversation
+        do { result = try await supabase
             .from(Tables.conversations)
             .insert(conversation)
             .select()
             .single()
             .execute()
             .value
-
+        } catch let error as PostgrestError where error.code == "23505" && id != nil {
+            // The first insert may have committed before its response was lost. Reconcile the same ID;
+            // never make a second empty conversation and never overwrite an existing title.
+            guard authService.userId == currentUserId, let id,
+                  let existing = try await getConversation(id: id.uuidString) else { throw error }
+            guard authService.userId == currentUserId else { throw CancellationError() }
+            return existing
+        }
+        guard authService.userId == currentUserId, result.userId == currentUserId else { throw CancellationError() }
         guard let conversationId = result.id else {
             Log.data.error("[Data] Conversation created but no ID returned")
             throw DataError.operationFailed("Failed to create conversation - no ID returned")
@@ -1044,7 +1051,7 @@ final class SupabaseDataService: ObservableObject {
             let title: String
         }
 
-        Log.data.debug("[Data] Generating title for conversation \(conversationId) with content: '\(content.prefix(50))...'")
+        Log.data.debug("[Data] Generating conversation title")
 
         do {
             // Refresh session to ensure we have a valid token
@@ -1061,40 +1068,56 @@ final class SupabaseDataService: ObservableObject {
                 )
             )
 
-            Log.data.debug("[Data] Generated title: '\(response.title)'")
+            Log.data.debug("[Data] Conversation title generated")
             return response.title
         } catch {
-            Log.data.error("[Data] Failed to generate conversation title: \(error)")
+            Log.data.error("[Data] Conversation title generation failed")
             throw error
         }
     }
 
     func getMessages(conversationId: String, limit: Int = 50) async throws -> [Message] {
         guard let convId = UUID(uuidString: conversationId) else { return [] }
-
-        let messages: [DBMessage] = try await supabase
-            .from(Tables.messages)
-            .select()
-            .eq("conversation_id", value: convId)
-            .order("created_at", ascending: false)
-            .limit(limit)
-            .execute()
-            .value
-
-        return messages.reversed().map { msg in
+        guard (1...100).contains(limit) else { throw DataError.operationFailed("Message page limit is invalid") }
+        let owner = try userId
+        struct HistoryParams: Encodable {
+            let p_expected_owner: UUID
+            let p_conversation_id: UUID
+            let p_limit: Int
+        }
+        let messages: [DBMessage]
+        do {
+            // The server orders voice turns by their call and provider sequence before taking
+            // the newest page. Final-arrival timestamps and UUID ordering are not voice order.
+            messages = try await supabase.rpc("support_get_conversation_messages",
+                params: HistoryParams(p_expected_owner: owner, p_conversation_id: convId, p_limit: limit))
+                .execute().value
+        } catch let error as PostgrestError where error.code == "PGRST202" {
+            // PGRST202 means this RPC signature is unavailable in the current schema cache.
+            // Retain legacy chronological reads for compatibility; voice ordering needs the
+            // migrated reader. Temporary/auth errors never use this fallback.
+            let legacy: [DBMessage] = try await supabase.from(Tables.messages).select()
+                .eq("conversation_id", value: convId).order("created_at", ascending: false)
+                .limit(limit).execute().value
+            messages = Array(legacy.reversed())
+        }
+        guard authService.userId == owner else { throw CancellationError() }
+        return messages.map { msg in
             Message(
                 id: msg.id?.uuidString.lowercased() ?? "",
                 role: MessageRole(rawValue: msg.role) ?? .user,
                 content: msg.content,
                 createdAt: msg.createdAt ?? Date(),
-                blocked: false
+                blocked: false,
+                contentOrigin: msg.contentOrigin.flatMap(SupportMessageOrigin.init(rawValue:)),
+                voiceCallID: msg.voiceCallID, voiceEventOrder: msg.voiceEventOrder
             )
         }
     }
 
     /// Send a message and get AI response via Edge Function
     /// Returns the assistant's response message
-    func sendMessage(conversationId: String, content: String, requestId: UUID = UUID(), retryFailed: Bool = false, onDelta: ((String) -> Void)? = nil) async throws -> ChatResponse {
+    func sendMessage(conversationId: String, content: String, requestId: UUID = UUID(), retryFailed: Bool = false, supportContext: SupportChatRequestContext? = nil, ownerProof: (@Sendable () async -> OfflineOwnerProof?)? = nil, onDelta: ((String) -> Void)? = nil) async throws -> ChatResponse {
         Log.data.debug("[Data] Invoking chat function for conversation: \(conversationId)")
 
         // Validate conversation ID
@@ -1103,6 +1126,10 @@ final class SupabaseDataService: ObservableObject {
             throw DataError.invalidId
         }
 
+        if let supportContext {
+            guard let ownerProof, await ownerProof() == supportContext.owner,
+                  authService.userId == supportContext.owner.userId else { throw CancellationError() }
+        }
         // Ensure we have a valid session before calling Edge Function
         guard let _ = authService.session?.accessToken else {
             Log.data.warning("[Data] No access token available")
@@ -1113,13 +1140,17 @@ final class SupabaseDataService: ObservableObject {
         do {
             try await authService.ensureValidSession()
         } catch {
-            Log.data.warning("[Data] Session validation failed: \(error)")
+            Log.data.warning("[Data] Session validation failed")
             if error is URLError {
                 throw ChatRequestFailure(kind: .network, retryable: true)
             }
             throw ChatRequestFailure(kind: .signIn)
         }
 
+        if let supportContext {
+            guard let ownerProof, await ownerProof() == supportContext.owner,
+                  authService.userId == supportContext.owner.userId else { throw CancellationError() }
+        }
         // Get the refreshed access token
         guard let refreshedToken = authService.session?.accessToken else {
             Log.data.warning("[Data] No access token after refresh")
@@ -1139,9 +1170,27 @@ final class SupabaseDataService: ObservableObject {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         request.setValue(requestId, forHTTPHeaderField: "X-Request-ID")
-        struct ChatBody: Encodable { let conversationId: String; let content: String; let requestId: String; let retryFailed: Bool }
-        request.httpBody = try JSONEncoder().encode(ChatBody(conversationId: conversationId, content: content, requestId: requestId, retryFailed: retryFailed))
-        let chatResponse = try await Self.chatResponse(for: request, onDelta: onDelta)
+        request.httpBody = try Self.chatRequestBody(conversationID: conversationId, content: content,
+            requestID: requestId, retryFailed: retryFailed, context: supportContext)
+        let chatResponse: ChatFunctionResponse
+        do { chatResponse = try await Self.chatResponse(for: request, session: chatSession, onDelta: onDelta) }
+        catch {
+            if let supportContext {
+                guard let ownerProof, await ownerProof() == supportContext.owner,
+                      authService.userId == supportContext.owner.userId else { throw CancellationError() }
+            }
+            throw error
+        }
+        if let supportContext {
+            guard let ownerProof, await ownerProof() == supportContext.owner,
+                  authService.userId == supportContext.owner.userId else { throw CancellationError() }
+            guard let conversation = UUID(uuidString: conversationId), let id = UUID(uuidString: requestId),
+                  let metadata = chatResponse.support,
+                  metadata.validates(context: supportContext, conversationID: conversation, requestID: id,
+                    assistantID: chatResponse.message.id, isSafety: chatResponse.isCrisisResponse == true) else {
+                throw ChatRequestFailure(kind: .contractUnavailable, code: "chat_unconfirmed_support_contract")
+            }
+        }
 
         Analytics.shared.track(.chatMessageSent)
 
@@ -1156,14 +1205,56 @@ final class SupabaseDataService: ObservableObject {
                 role: .assistant,
                 content: chatResponse.message.content,
                 createdAt: chatResponse.message.createdAt,
-                blocked: chatResponse.message.blocked
+                blocked: chatResponse.message.blocked,
+                contentOrigin: chatResponse.support?.contentOrigin ?? chatResponse.message.contentOrigin
             ),
             isCrisisResponse: chatResponse.isCrisisResponse ?? false,
             quotaUsed: chatResponse.quotaUsed,
             quotaLimit: chatResponse.quotaLimit,
             conversationTitle: chatResponse.conversationTitle,
-            coachData: chatResponse.coachData
+            coachData: chatResponse.coachData,
+            memoryUsed: chatResponse.memoryUsed,
+            memoryIdsUsed: chatResponse.memoryIdsUsed,
+            support: chatResponse.support
         )
+    }
+
+    /// Shared request encoder: retries use the durable request's exact context and content.
+    static func chatRequestBody(conversationID: String, content: String, requestID: String, retryFailed: Bool,
+                                context: SupportChatRequestContext?) throws -> Data {
+        struct Body: Encodable {
+            let conversationId: String; let content: String; let requestId: String; let retryFailed: Bool
+            let schema_version: Int?; let support_session_id: String?; let context_scope: String?
+            let expected_privacy_revision: Int64?; let expected_owner: String?
+        }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return try encoder.encode(Body(conversationId: conversationID, content: content, requestId: requestID,
+            retryFailed: retryFailed, schema_version: context == nil ? nil : 1,
+            support_session_id: context?.sessionID.uuidString.lowercased(), context_scope: context?.scope.rawValue,
+            expected_privacy_revision: context?.privacyRevision, expected_owner: context?.owner.userId.uuidString.lowercased()))
+    }
+
+    /// Verify the deployed function as well as database support. A missing handshake never falls back to legacy chat.
+    func supportChatCapabilities(owner: OfflineOwnerProof, ownerProof: @Sendable () async -> OfflineOwnerProof?) async throws -> SupportChatCapabilities {
+        guard await ownerProof() == owner, authService.userId == owner.userId else { throw CancellationError() }
+        try await authService.ensureValidSession()
+        guard await ownerProof() == owner, authService.userId == owner.userId,
+              let token = authService.session?.accessToken else { throw CancellationError() }
+        var request = URLRequest(url: SupabaseConfig.projectURL.appendingPathComponent("functions/v1/chat"))
+        request.httpMethod = "POST"; request.timeoutInterval = 15
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue(SupabaseConfig.anonKey, forHTTPHeaderField: "apikey")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Data(#"{"op":"capabilities","schema_version":1}"#.utf8)
+        let (data, response) = try await chatSession.data(for: request)
+        try Task.checkCancellation()
+        guard await ownerProof() == owner, authService.userId == owner.userId else { throw CancellationError() }
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200, data.count < 65_536,
+              let capabilities = try? JSONDecoder().decode(SupportChatCapabilities.self, from: data), capabilities.allowsSessionChat else {
+            throw ChatRequestFailure(kind: .contractUnavailable)
+        }
+        return capabilities
     }
 
     /// Read one confirmed chat result or a typed failure; always close its URLSession task.
@@ -2983,10 +3074,9 @@ final class SupabaseDataService: ObservableObject {
             Log.data.info("[generateWeeklyInsight] Edge function completed successfully")
         } catch let error as FunctionsError {
             switch error {
-            case .httpError(let code, let data):
-                let responseBody = String(data: data, encoding: .utf8) ?? "unknown"
-                Log.data.error("[generateWeeklyInsight] HTTP error \(code): \(responseBody)")
-                throw DataError.operationFailed("Edge Function error (\(code)): \(responseBody)")
+            case .httpError(let code, _):
+                Log.data.error("[generateWeeklyInsight] HTTP error \(code)")
+                throw DataError.operationFailed("Summary service error (\(code)). Try again later.")
             case .relayError:
                 Log.data.error("[generateWeeklyInsight] Relay error - unable to reach server")
                 throw DataError.operationFailed("Unable to reach server")
@@ -3295,44 +3385,27 @@ final class SupabaseDataService: ObservableObject {
         ])
     }
 
-    /// Mark onboarding as complete for the current user
-    func markOnboardingComplete() async throws {
-        let currentUserId = try userId
-        let now = ISO8601DateFormatter().string(from: Date())
-        Log.data.debug("[Data] Marking onboarding complete for user: \(currentUserId)")
-
-        try await supabase
-            .from(Tables.profiles)
-            .update(["onboarding_completed_at": now])
-            .eq("id", value: currentUserId)
-            .execute()
-
-        Log.data.debug("[Data] Onboarding marked complete at: \(now)")
-        Analytics.shared.track(.onboardingCompleted)
+    /// Acknowledges age/consent and completion together; missing server support fails closed.
+    struct OnboardingParameters: Encodable {
+        let p_expected_user: UUID
+        let p_birth_year: Int
+        let p_confirms_thirteen: Bool
+        let p_accepts_terms: Bool
+        let p_consent_version: String
+    }
+    struct OnboardingReceipt: Decodable {
+        let user_id: UUID
+        let consent_version: String
     }
 
-    /// Complete onboarding in a single atomic operation
-    func completeOnboarding(focus: WellnessFocus) async throws {
-        let currentUserId = try userId
-        let now = ISO8601DateFormatter().string(from: Date())
-        Log.data.debug("[Data] Completing onboarding with focus '\(focus.rawValue)' for user: \(currentUserId)")
-
-        // Single atomic update
-        try await supabase
-            .from(Tables.profiles)
-            .update([
-                "wellness_focus": focus.rawValue,
-                "onboarding_completed_at": now
-            ])
-            .eq("id", value: currentUserId)
-            .execute()
-
-        Log.data.debug("[Data] Onboarding completed successfully")
-        Analytics.shared.track(.onboardingStepCompleted, properties: [
-            "step": "quiz",
-            "wellness_focus": focus.rawValue
-        ])
-        Analytics.shared.track(.onboardingCompleted)
+    func completeOnboarding(expectedOwner: UUID, birthYear: Int, confirmsThirteen: Bool, acceptsTerms: Bool) async throws {
+        guard try userId == expectedOwner else { throw DataError.notAuthenticated }
+        let receipt: OnboardingReceipt = try await supabase.rpc("complete_support_onboarding", params: OnboardingParameters(
+            p_expected_user: expectedOwner, p_birth_year: birthYear, p_confirms_thirteen: confirmsThirteen,
+            p_accepts_terms: acceptsTerms, p_consent_version: OnboardingConsent.version
+        )).execute().value
+        guard try userId == expectedOwner, receipt.user_id == expectedOwner,
+              receipt.consent_version == OnboardingConsent.version else { throw DataError.notAuthenticated }
     }
 
     // MARK: - XP & Progression

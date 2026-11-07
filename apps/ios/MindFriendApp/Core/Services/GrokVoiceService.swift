@@ -3,13 +3,374 @@ import AVFoundation
 import Combine
 import Supabase
 import OSLog
+import UIKit
 
-/// Service for real-time voice conversations using Grok Voice Agent API
+// MARK: - Seams
+//
+// These protocols exist so the lifecycle can be exercised deterministically without a microphone,
+// a socket or a server. Production types conform below; tests inject fakes.
+
+/// Authenticated identity at the moment of the call.
+struct VoiceAuthSnapshot: Equatable, Sendable {
+    let userID: UUID
+    let accessToken: String
+}
+
+/// Admission body for the fixed-host `test-auth-diagnostic` relay (new contract). The server owns the
+/// packet and the actual provider route. The client never sends instructions or context text.
+struct VoiceAdmissionRequestBody: Encodable, Equatable, Sendable {
+    static let schemaVersion = 1
+
+    let transport: String
+    let schemaVersion: Int
+    let expectedOwner: UUID
+    let supportSessionID: UUID
+    let conversationID: UUID
+    let contextScope: String
+    let expectedPrivacyRevision: Int64?
+
+    init(binding: VoiceSupportBinding) {
+        transport = "relay"
+        schemaVersion = Self.schemaVersion
+        expectedOwner = binding.ownerUUID
+        supportSessionID = binding.supportSessionUUID
+        conversationID = binding.conversationUUID
+        contextScope = binding.scope.rawValue
+        expectedPrivacyRevision = binding.privacyRevision
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case transport
+        case schemaVersion = "schema_version"
+        case expectedOwner = "expected_owner"
+        case supportSessionID = "support_session_id"
+        case conversationID = "conversation_id"
+        case contextScope = "context_scope"
+        case expectedPrivacyRevision = "expected_privacy_revision"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(transport, forKey: .transport)
+        try container.encode(schemaVersion, forKey: .schemaVersion)
+        // Lower-case so server-side string comparison with the auth user id cannot differ by case.
+        try container.encode(expectedOwner.uuidString.lowercased(), forKey: .expectedOwner)
+        try container.encode(supportSessionID.uuidString.lowercased(), forKey: .supportSessionID)
+        try container.encode(conversationID.uuidString.lowercased(), forKey: .conversationID)
+        try container.encode(contextScope, forKey: .contextScope)
+        try container.encodeIfPresent(expectedPrivacyRevision, forKey: .expectedPrivacyRevision)
+    }
+}
+
+/// One admission answer: the existing token response plus the nested `voice_context` outcome.
+/// `voiceContext` is either a structurally valid claim or the narrow reason it is unusable; it is never
+/// derived from top-level fields.
+struct VoiceAdmission: Sendable {
+    let token: VoiceTokenResponse
+    let voiceContext: Result<VoiceContextClaim, VoiceSupportAccessError>
+}
+
+struct VoiceSessionEndRequest: Encodable, Equatable, Sendable {
+    let sessionId: String
+    let durationSeconds: Int
+    let messagesCount: Int
+    let wasQuotaLimited: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case sessionId = "session_id"
+        case durationSeconds = "duration_seconds"
+        case messagesCount = "messages_count"
+        case wasQuotaLimited = "was_quota_limited"
+    }
+}
+
+/// Server calls made on behalf of one voice session. Every call carries an explicit token so the
+/// caller decides which owner it acts for; nothing here reads ambient auth implicitly.
+@MainActor
+protocol VoiceRelayBackend: AnyObject {
+    func authSnapshot() async throws -> VoiceAuthSnapshot
+    func admit(_ body: VoiceAdmissionRequestBody, authorization token: String) async throws -> VoiceAdmission
+    /// Reports honestly: `.confirmed` only for a successful server answer, otherwise `.unconfirmed`.
+    func endSession(_ request: VoiceSessionEndRequest, authorization token: String) async -> VoiceAccountingResult
+    /// Persists the preferred voice. When `expectedOwner` is set and the ambient account differs,
+    /// nothing is written.
+    func saveVoicePreference(_ voice: GrokVoice, expectedOwner: UUID?) async throws
+}
+
+/// Fixed-host relay socket.
+@MainActor
+protocol VoiceRelayTransport: AnyObject {
+    var onMessage: ((URLSessionWebSocketTask.Message) -> Void)? { get set }
+    var onConnectionLost: ((_ sessionLimitReached: Bool) -> Void)? { get set }
+    func connect(sessionId: String, userToken: String) async throws
+    func disconnect()
+    func send(_ message: [String: Any])
+}
+
+extension VoiceWebSocketManager: VoiceRelayTransport {}
+
+@MainActor
+protocol VoiceCaptureControlling: AnyObject {
+    /// Delivered synchronously on the main actor, stamped with the generation that produced it.
+    var onAudioData: ((Data, VoiceCaptureGeneration) -> Void)? { get set }
+    var onMicLevelUpdate: ((Float, VoiceCaptureGeneration) -> Void)? { get set }
+    /// Returns the generation of this capture start.
+    @discardableResult
+    func startCapture() throws -> VoiceCaptureGeneration
+    func stopCapture()
+    func forceStop()
+}
+
+extension VoiceAudioCapture: VoiceCaptureControlling {}
+
+@MainActor
+protocol VoicePlaybackControlling: AnyObject {
+    var onPlaybackStart: (() -> Void)? { get set }
+    var onPlaybackEnd: (() -> Void)? { get set }
+    var onPlaybackLevelUpdate: ((Float) -> Void)? { get set }
+    var lastPlaybackEndTime: Date? { get }
+    var echoCooldownSeconds: TimeInterval { get }
+    func queueAudioChunk(_ audioData: Data)
+    func stop()
+}
+
+extension VoiceAudioPlayback: VoicePlaybackControlling {}
+
+// MARK: - Production backend
+
+/// Refuses every redirect, so a bearer token can never be forwarded to a host other than the one the
+/// request was built for.
+final class VoiceNoRedirectDelegate: NSObject, URLSessionTaskDelegate {
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        completionHandler(nil)
+    }
+}
+
+/// Relay calls made on behalf of one voice session.
+///
+/// `admit` and `endSession` are raw fixed-host requests that carry EXACTLY the token the caller
+/// supplies. They deliberately do not go through the Supabase SDK's functions client, which can
+/// replace a supplied Authorization header with the ambient session's token. Only `authSnapshot`
+/// (and the voice-preference write) use the SDK, where refresh and ownership checks are wanted.
+///
+/// Errors are mapped to narrow categories; response bodies, tokens and provider text are never logged.
+@MainActor
+final class SupabaseVoiceRelayBackend: VoiceRelayBackend {
+    static let admissionFunction = "test-auth-diagnostic"
+    static let sessionEndFunction = "voice-session-end"
+
+    private let supabase: SupabaseClient
+    private let session: URLSession
+    private let projectURL: URL
+    private let anonKey: String
+
+    /// - Parameters:
+    ///   - session: Injectable for synthetic wire tests. Defaults to `makeSession()`.
+    ///   - projectURL / anonKey: Default to the app configuration; the host is never taken from a response.
+    init(
+        supabase: SupabaseClient,
+        session: URLSession? = nil,
+        projectURL: URL = SupabaseConfig.projectURL,
+        anonKey: String = SupabaseConfig.anonKey
+    ) {
+        self.supabase = supabase
+        self.session = session ?? Self.makeSession()
+        self.projectURL = projectURL
+        self.anonKey = anonKey
+    }
+
+    /// An ephemeral session that follows no redirects and keeps no cookies or cache.
+    /// `extraProtocolClasses` lets tests answer requests in-process without any network.
+    nonisolated static func makeSession(extraProtocolClasses: [AnyClass] = []) -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 30
+        configuration.timeoutIntervalForResource = 60
+        configuration.waitsForConnectivity = false
+        configuration.httpCookieStorage = nil
+        configuration.urlCache = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        if !extraProtocolClasses.isEmpty {
+            configuration.protocolClasses = extraProtocolClasses + (configuration.protocolClasses ?? [])
+        }
+        return URLSession(configuration: configuration, delegate: VoiceNoRedirectDelegate(), delegateQueue: nil)
+    }
+
+    /// `https://<configured project host>/functions/v1/<name>`; nothing else is ever contacted.
+    nonisolated static func functionURL(_ name: String, projectURL: URL) throws -> URL {
+        guard var components = URLComponents(
+                url: projectURL.appendingPathComponent("functions/v1/\(name)"),
+                resolvingAgainstBaseURL: false
+              ), components.scheme == "https", let host = components.host, !host.isEmpty else {
+            throw VoiceError.connectionFailed("Invalid secure voice relay session")
+        }
+        components.query = nil
+        components.fragment = nil
+        components.user = nil
+        components.password = nil
+        guard let url = components.url else {
+            throw VoiceError.connectionFailed("Invalid secure voice relay URL")
+        }
+        return url
+    }
+
+    /// The exact request that is sent. Exposed so the wire contract can be verified without a network.
+    nonisolated static func makeRequest(
+        function name: String,
+        body: Data,
+        token: String,
+        projectURL: URL,
+        anonKey: String,
+        timeout: TimeInterval
+    ) throws -> URLRequest {
+        guard !token.isEmpty else { throw VoiceError.notAuthorized }
+        var request = URLRequest(url: try functionURL(name, projectURL: projectURL), timeoutInterval: timeout)
+        request.httpMethod = "POST"
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.httpShouldHandleCookies = false
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue(anonKey, forHTTPHeaderField: "apikey")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.httpBody = body
+        return request
+    }
+
+    func authSnapshot() async throws -> VoiceAuthSnapshot {
+        do {
+            let session = try await supabase.auth.session
+            return VoiceAuthSnapshot(userID: session.user.id, accessToken: session.accessToken)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw VoiceError.notAuthorized
+        }
+    }
+
+    func admit(_ body: VoiceAdmissionRequestBody, authorization token: String) async throws -> VoiceAdmission {
+        do {
+            let request = try Self.makeRequest(
+                function: Self.admissionFunction,
+                body: try JSONEncoder().encode(body),
+                token: token, projectURL: projectURL, anonKey: anonKey, timeout: 30
+            )
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse else { throw VoiceError.networkUnavailable }
+            if http.value(forHTTPHeaderField: "x-relay-error") == "true" { throw VoiceError.networkUnavailable }
+            guard (200..<300).contains(http.statusCode) else {
+                throw Self.admissionError(status: http.statusCode, code: (try? JSONDecoder().decode(ErrorBody.self, from: data))?.code)
+            }
+            let tokenResponse = try JSONDecoder().decode(VoiceTokenResponse.self, from: data)
+            // Only the nested, versioned object admits a session. Top-level fields are ignored.
+            return VoiceAdmission(token: tokenResponse, voiceContext: VoiceContextClaim.parse(responseData: data))
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as URLError where error.code == .cancelled {
+            throw CancellationError()
+        } catch is URLError {
+            throw VoiceError.networkUnavailable
+        } catch let error as VoiceError {
+            throw error
+        } catch let error as VoiceSupportAccessError {
+            throw error
+        } catch {
+            throw VoiceError.tokenGenerationFailed
+        }
+    }
+
+    func endSession(_ request: VoiceSessionEndRequest, authorization token: String) async -> VoiceAccountingResult {
+        // Unknown unless the server answers successfully: a thrown error, timeout or non-2xx is
+        // `.unconfirmed`. Nothing is retried here and nothing is refunded on the strength of it.
+        do {
+            let urlRequest = try Self.makeRequest(
+                function: Self.sessionEndFunction,
+                body: try JSONEncoder().encode(request),
+                token: token, projectURL: projectURL, anonKey: anonKey, timeout: 20
+            )
+            let (_, response) = try await session.data(for: urlRequest)
+            guard let http = response as? HTTPURLResponse,
+                  http.value(forHTTPHeaderField: "x-relay-error") != "true",
+                  (200..<300).contains(http.statusCode) else {
+                #if DEBUG
+                Log.voice.debug("[Voice] Session-end accounting not confirmed")
+                #endif
+                return .unconfirmed
+            }
+            return .confirmed
+        } catch {
+            #if DEBUG
+            Log.voice.debug("[Voice] Session-end accounting failed")
+            #endif
+            return .unconfirmed
+        }
+    }
+
+    func saveVoicePreference(_ voice: GrokVoice, expectedOwner: UUID?) async throws {
+        guard let session = try? await supabase.auth.session else { return }
+        if let expectedOwner, session.user.id != expectedOwner { return }
+
+        try await supabase
+            .from("voice_settings")
+            .upsert([
+                "user_id": session.user.id.uuidString,
+                "preferred_voice": voice.rawValue,
+                "updated_at": ISO8601DateFormatter().string(from: Date()),
+            ])
+            .execute()
+    }
+
+    private struct ErrorBody: Decodable {
+        let code: String?
+    }
+
+    /// Narrow mapping from an admission failure to a user-safe error.
+    nonisolated static func admissionError(status: Int, code: String?) -> Error {
+        if let contextError = VoiceSupportAccessError.fromServerCode(code) {
+            return contextError
+        }
+        switch code {
+        case "SESSION_LIMIT_REACHED":
+            return VoiceError.connectionFailed(VoiceStopReason.sessionLimit.statusMessage ?? "Voice session limit reached.")
+        case "QUOTA_EXCEEDED":
+            return VoiceError.quotaExceeded
+        case "UNAUTHORIZED", "AUTH_REQUIRED":
+            return VoiceError.notAuthorized
+        case "RATE_LIMITED":
+            return VoiceError.networkUnavailable
+        default:
+            break
+        }
+        switch status {
+        case 403: return VoiceError.quotaExceeded
+        case 401: return VoiceError.notAuthorized
+        case 429: return VoiceError.networkUnavailable
+        default: return VoiceError.tokenGenerationFailed
+        }
+    }
+}
+
+// MARK: - Service
+
+/// Service for real-time voice conversations over the fixed-host relay.
+///
+/// Lifecycle contract:
+/// - Voice only runs against an immutable `VoiceSupportBinding`. There is no unbound or legacy path.
+/// - Starting is always an explicit call; nothing connects on presentation.
+/// - Every stop goes through `stopNow(_:)`, which halts capture and playback and closes the socket
+///   synchronously BEFORE any network await. The microphone is never restarted automatically.
+/// - The service is the authority for the explicit mute choice.
+/// - Only FINAL transcript events are appended durably, through `VoiceSupportAccess`; "saved" is set
+///   only after the access confirms.
 @MainActor
 final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
 
     // MARK: - Type Aliases
-    
+
     /// Backward compatibility: existing code uses GrokVoiceService.ConnectionState
     typealias ConnectionState = VoiceConnectionState
 
@@ -54,8 +415,8 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
             }
         }
     }
-    
-    /// Transcribed text of user's speech (from input audio transcription)
+
+    /// Transcribed text of user's speech (live caption only; durable turns use typed events).
     @Published private(set) var userTranscribedText = "" {
         didSet {
             if userTranscribedText != oldValue {
@@ -63,7 +424,7 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
             }
         }
     }
-    
+
     @Published private(set) var minutesRemaining: Double = 0 {
         didSet {
             if minutesRemaining != oldValue {
@@ -98,45 +459,54 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
         }
     }
 
-    // MARK: - Emotion State
+    /// The explicit mute choice. The service is the single authority; views only display it.
+    @Published private(set) var isMuted = false
 
-    /// Current detected emotion (nil if no emotion detected or analysis disabled)
+    /// Why the last session stopped. Nil while a session is starting or running.
+    @Published private(set) var lastStopReason: VoiceStopReason?
+
+    /// The caption currently on screen, with its actual finality (live, complete, interrupted).
+    @Published private(set) var caption: VoiceCaption?
+
+    /// Final transcript events accepted by the access, and those still waiting or rejected.
+    @Published private(set) var savedTranscriptCount = 0
+    @Published private(set) var unsavedTranscriptCount = 0
+    @Published private(set) var rejectedTranscriptCount = 0
+
+    // MARK: - Emotion State (inert)
+    //
+    // Voice sessions do not analyze emotion and no capability is advertised to the provider or the
+    // person. These remain only so existing protocol consumers keep compiling; they are never set.
+
     @Published private(set) var currentEmotion: EmotionResult?
-
-    /// Emotion history for current session
     @Published private(set) var emotionHistory: [EmotionSnapshot] = []
-
-    /// Confidence score for current emotion (0.0 - 1.0)
     @Published private(set) var emotionConfidence: Double = 0
 
-    // MARK: - Delegate
+    // MARK: - Delegate / typed events
 
     weak var delegate: VoiceServiceDelegate?
 
+    /// Receives every typed transcript observation (partial, final, abandoned).
+    var transcriptEventHandler: ((VoiceTranscriptEvent) -> Void)?
+
     // MARK: - Private Properties
 
-    private let supabase: SupabaseClient
-    
-    // Specialized components
-    private let webSocketManager = VoiceWebSocketManager()
-    private let audioCapture = VoiceAudioCapture()
-    private let audioPlayback = VoiceAudioPlayback()
+    private let backend: any VoiceRelayBackend
+    private let microphonePermission: @MainActor () async throws -> Void
 
-    // Emotion analysis
-    private let emotionAnalyzer = EmotionAnalyzer()
-    // Emotion analysis enabled by default - uses Accelerate/vDSP for fast FFT
-    private var emotionAnalysisEnabled: Bool = UserDefaults.standard.object(forKey: "voiceEmotionAnalysisEnabled") as? Bool ?? false
-    private var emotionSensitivityThreshold: Double = 0.6
-    private var lastEmotionAnalysisTime: Date?
-    private let emotionAnalysisCooldown: TimeInterval = 2.0  // Min 2s between analyses
-    private var emotionAnalysisTask: Task<Void, Never>?
-    private let maxEmotionHistorySize = 100  // Cap history at ~3 minutes at 2s intervals
+    // Specialized components
+    private let transport: any VoiceRelayTransport
+    private let audioCapture: any VoiceCaptureControlling
+    private let audioPlayback: any VoicePlaybackControlling
 
     // Session tracking
     private var connectionGeneration = UUID()
-    private var isDisconnecting = false
+    private var attemptActive = false
+    private var pendingRemoteStops = 0
+    /// The only capture generation whose audio may be sent. Cleared before capture is stopped.
+    private var captureGeneration: VoiceCaptureGeneration?
+    private var captionTracker = VoiceCaptionTracker()
     private var lifecycleSubscriptions = Set<AnyCancellable>()
-    private var sessionId: String?
     private var sessionStartTime: Date?
     private var initialMinutesRemaining: Double = 0
     private var messageCount = 0
@@ -149,11 +519,48 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
     private var isWaitingForResponse = false
     private var usageTimer: Timer?
     private var sessionLimitTask: Task<Void, Never>?
-    private let sessionLimitMessage = "Voice session ended. Sessions last up to two minutes, or your remaining monthly allowance. Tap to start a new session."
+    private var validityTimer: Timer?
+    private var invalidationTask: Task<Void, Never>?
+
+    // Bound session
+    private struct AdmittedSession {
+        let sessionId: String
+        let ownerID: UUID
+        /// Token captured for the owner at admission; used only to account for this admission.
+        let capturedToken: String
+    }
+
+    private struct BoundSession {
+        let binding: VoiceSupportBinding
+        let access: any VoiceSupportAccess
+        let journal: VoiceTranscriptJournal
+        var assembler: VoiceTranscriptAssembler
+    }
+
+    private struct StopSnapshot {
+        var admission: AdmittedSession?
+        var durationSeconds = 0
+        var messageCount = 0
+        var binding: VoiceSupportBinding?
+        var access: (any VoiceSupportAccess)?
+        var journal: VoiceTranscriptJournal?
+    }
+
+    private var admission: AdmittedSession?
+    /// The verified voice-context claim of the running session (receipt, packet hash, provider route).
+    /// Nil whenever no session is admitted. Only identifiers and hashes: never the packet itself.
+    private(set) var admittedContext: VoiceContextClaim?
+    /// What is known about accounting for the most recent obsolete admission (one that was superseded
+    /// while in flight). `.pending` until the server answers; `.unconfirmed` if the call failed.
+    private(set) var obsoleteAdmissionAccounting: VoiceAccountingStatus = .notApplicable
+    private var obsoleteAccountingToken = UUID()
+    private var bound: BoundSession?
+    /// Journals of this and earlier sessions that may still hold unsaved finals.
+    private var journals: [VoiceTranscriptJournal] = []
 
     // MARK: - Idle Management
 
-    /// Timer that checks for idle state and disconnects WebSocket
+    /// Timer that checks for idle state and ends the relay session
     private var idleDisconnectTimer: Timer?
 
     /// Last time speech activity was detected
@@ -162,83 +569,90 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
     /// Threshold in seconds before idle disconnect (90 seconds)
     private let idleDisconnectThreshold: TimeInterval = 90
 
-    // Voice instructions for MindFriend personality
-    private let voiceInstructions = """
-    You are a warm, supportive AI companion for MindFriend, a mental wellness app.
-
-    IMPORTANT: You have access to real-time voice emotion detection. The app analyzes the user's tone of voice and may provide emotion context (like "[Detected emotion: sad]") in system messages. When you see this:
-    - Acknowledge and validate the detected emotion naturally
-    - Tailor your response to match their emotional state
-    - Don't explicitly say "I detected you're feeling X" - instead respond with appropriate empathy
-
-    Guidelines:
-    - Be empathetic, understanding, and non-judgmental
-    - Use a conversational, friendly tone
-    - Ask follow-up questions to understand feelings better
-    - Offer gentle suggestions without being prescriptive
-    - If user expresses self-harm or crisis, immediately provide crisis resources and the number 988
-    - Keep responses concise for voice (2-3 sentences typically)
-    - Acknowledge emotions before offering perspectives
-    - Never diagnose or provide medical advice
-    """
-
     // MARK: - Initialization
 
-    init(supabase: SupabaseClient) {
-        self.supabase = supabase
+    convenience init(supabase: SupabaseClient) {
+        self.init(
+            backend: SupabaseVoiceRelayBackend(supabase: supabase),
+            transport: VoiceWebSocketManager(),
+            capture: VoiceAudioCapture(),
+            playback: VoiceAudioPlayback()
+        )
+    }
+
+    /// - Parameter microphonePermission: Requests microphone access. Defaults to the system prompt;
+    ///   injectable so tests never trigger it.
+    init(
+        backend: any VoiceRelayBackend,
+        transport: any VoiceRelayTransport,
+        capture: any VoiceCaptureControlling,
+        playback: any VoicePlaybackControlling,
+        microphonePermission: (@MainActor () async throws -> Void)? = nil
+    ) {
+        self.backend = backend
+        self.microphonePermission = microphonePermission ?? { try await GrokVoiceService.requestSystemMicrophonePermission() }
+        self.transport = transport
+        self.audioCapture = capture
+        self.audioPlayback = playback
         setupComponentCallbacks()
+        observeSystemLifecycle()
+    }
+
+    private func observeSystemLifecycle() {
+        // All of these converge on the same synchronous stop. None of them restarts the microphone
+        // when the interruption ends: starting voice again is always a deliberate act.
         NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] notification in
                 guard let raw = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
                       AVAudioSession.InterruptionType(rawValue: raw) == .began else { return }
-                Task { @MainActor in
-                    self?.finishSession(message: "Audio was interrupted. Tap to start a new voice session.")
-                }
+                MainActor.assumeIsolated { _ = self?.stopNow(.audioInterrupted) }
             }.store(in: &lifecycleSubscriptions)
         NotificationCenter.default.publisher(for: AVAudioSession.routeChangeNotification)
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] notification in
                 guard let raw = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
                       AVAudioSession.RouteChangeReason(rawValue: raw) == .oldDeviceUnavailable else { return }
-                Task { @MainActor in
-                    self?.finishSession(message: "Audio device disconnected. Tap to start a new voice session.")
-                }
+                MainActor.assumeIsolated { _ = self?.stopNow(.routeLost) }
             }.store(in: &lifecycleSubscriptions)
-
-        // Grant consent if user previously enabled emotion analysis (persisted in UserDefaults)
-        // This respects the user's previous opt-in choice
-        if emotionAnalysisEnabled {
-            emotionAnalyzer.setVoiceConsent(true)
-            audioCapture.emotionBufferEnabled = true
-            #if DEBUG
-            print("[GrokVoiceService] Init: emotion analysis enabled from UserDefaults, consent granted")
-            #endif
-        }
+        NotificationCenter.default.publisher(for: AVAudioSession.mediaServicesWereResetNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                MainActor.assumeIsolated { _ = self?.stopNow(.audioInterrupted) }
+            }.store(in: &lifecycleSubscriptions)
+        NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                MainActor.assumeIsolated { _ = self?.stopNow(.appBackgrounded) }
+            }.store(in: &lifecycleSubscriptions)
+        NotificationCenter.default.publisher(for: UIApplication.protectedDataWillBecomeUnavailableNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                MainActor.assumeIsolated { _ = self?.stopNow(.deviceLocked) }
+            }.store(in: &lifecycleSubscriptions)
     }
-    
+
     private func setupComponentCallbacks() {
         // WebSocket callbacks
-        webSocketManager.onMessage = { [weak self] message in
+        transport.onMessage = { [weak self] message in
             self?.handleWebSocketMessage(message)
         }
-        
-        webSocketManager.onConnectionLost = { [weak self] reachedLimit in
-            guard let self else { return }
-            self.finishSession(message: reachedLimit ? self.sessionLimitMessage :
-                "Connection lost. Tap to start a new voice session.")
+
+        transport.onConnectionLost = { [weak self] reachedLimit in
+            self?.stopNow(reachedLimit ? .sessionLimit : .connectionLost)
         }
 
         // Audio capture callbacks
-        audioCapture.onAudioData = { [weak self] audioData in
-            Task { @MainActor in
-                self?.sendAudioData(audioData)
-            }
+        // Capture delivers on the main actor already, so there is no second asynchronous hop that could
+        // outlive a mute/stop/restart. Each delivery names the capture generation that produced it and
+        // is dropped unless that is the generation currently in use.
+        audioCapture.onAudioData = { [weak self] audioData, generation in
+            self?.sendAudioData(audioData, generation: generation)
         }
 
-        audioCapture.onMicLevelUpdate = { [weak self] level in
-            Task { @MainActor in
-                guard let self, self.isListening else { return }
-                self.micLevel = level
-            }
+        audioCapture.onMicLevelUpdate = { [weak self] level, generation in
+            guard let self, generation == self.captureGeneration, self.isListening else { return }
+            self.micLevel = level
         }
 
         // Audio playback callbacks
@@ -248,13 +662,13 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
                 self.isSpeaking = true
             }
         }
-        
+
         audioPlayback.onPlaybackEnd = { [weak self] in
             Task { @MainActor in
                 self?.isSpeaking = false
             }
         }
-        
+
         audioPlayback.onPlaybackLevelUpdate = { [weak self] level in
             Task { @MainActor in
                 guard let self else { return }
@@ -263,72 +677,171 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
         }
     }
 
-    // MARK: - Public Methods
+    // MARK: - Derived state
 
-    /// Connect to voice service
+    /// A stop's remote work (accounting, transcript flush, reconcile) is still running. This is
+    /// informational only: it never blocks an explicit new start, which has its own binding.
+    var isEnding: Bool { pendingRemoteStops > 0 }
+
+    /// Whether any finals are still waiting to be confirmed.
+    var hasUnsavedTranscript: Bool { unsavedTranscriptCount > 0 }
+
+    /// Finals that are pending, in flight or rejected. Leaving with any of them is an explicit choice.
+    var hasUnresolvedTranscript: Bool { unsavedTranscriptCount > 0 || rejectedTranscriptCount > 0 }
+
+    /// How long an explicit End waits for noncritical remote work before reporting a truthful state.
+    var endRemoteTimeout: TimeInterval = 3
+
+    // MARK: - Connect (bound only)
+
+    /// The unbound path no longer exists: voice always runs against a support session.
     func connect() async throws {
-        try await connect(startMuted: false)
+        throw VoiceSupportAccessError.unavailable
     }
 
-    func connect(startMuted: Bool) async throws {
-        guard !isDisconnecting else {
-            throw VoiceError.connectionFailed("The previous voice session is ending. Try again shortly.")
-        }
+    /// Explicit "Start voice". Prepares the support binding through `access` (which may create or
+    /// attach the conversation), then connects. Nothing here runs unless the caller invokes it.
+    func startVoice(access: any VoiceSupportAccess, startMuted: Bool = false) async throws {
         guard connectionState != .connected && connectionState != .connecting else { return }
 
-        connectionState = .connecting
+        let generation = beginAttempt(startMuted: startMuted)
+        do {
+            let binding: VoiceSupportBinding
+            do {
+                binding = try await access.prepare()
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch let error as VoiceSupportAccessError {
+                throw error
+            } catch {
+                throw VoiceSupportAccessError.unavailable
+            }
+            try checkpoint(generation, binding, access)
+            try await performConnect(generation: generation, binding: binding, access: access)
+        } catch {
+            throw await failAttempt(generation, error)
+        }
+    }
+
+    /// Connect using an already prepared immutable binding.
+    func connect(bound binding: VoiceSupportBinding, access: any VoiceSupportAccess, startMuted: Bool = false) async throws {
+        guard connectionState != .connected && connectionState != .connecting else { return }
+        guard access.isCurrent(binding) else { throw VoiceSupportAccessError.bindingNotCurrent }
+
+        let generation = beginAttempt(startMuted: startMuted)
+        do {
+            try await performConnect(generation: generation, binding: binding, access: access)
+        } catch {
+            throw await failAttempt(generation, error)
+        }
+    }
+
+    private func beginAttempt(startMuted: Bool) -> UUID {
         let generation = UUID()
         connectionGeneration = generation
-
+        attemptActive = true
+        connectionState = .connecting
+        lastStopReason = nil
+        isMuted = startMuted
         // Every explicit connection starts a new relay session.
         isIdleDisconnected = false
+        transcribedText = ""
+        userTranscribedText = ""
+        captionTracker.clear()
+        caption = nil
+        return generation
+    }
 
-        do {
-            try await requestMicrophonePermission()
-            try Task.checkCancellation()
-            guard connectionGeneration == generation else { throw CancellationError() }
+    /// Validity point used after every suspension: cancellation, generation, then binding.
+    private func checkpoint(_ generation: UUID, _ binding: VoiceSupportBinding, _ access: any VoiceSupportAccess) throws {
+        try Task.checkCancellation()
+        guard connectionGeneration == generation else { throw CancellationError() }
+        guard access.isCurrent(binding) else { throw VoiceSupportAccessError.bindingNotCurrent }
+    }
 
-            let tokenResponse = try await fetchVoiceToken()
-            guard !Task.isCancelled, connectionGeneration == generation else {
-                // This response belongs to an obsolete attempt, never the active session.
-                // A new task lets the compensating request run even if connect was cancelled.
-                await Task { @MainActor in
-                    await endSession(sessionId: tokenResponse.sessionId, durationSeconds: 0, messagesCount: 0)
-                }.value
-                throw CancellationError()
-            }
+    private func performConnect(generation: UUID, binding: VoiceSupportBinding, access: any VoiceSupportAccess) async throws {
+        // 1. Owner check before the microphone prompt and before anything is dispatched.
+        var auth = try await backend.authSnapshot()
+        try checkpoint(generation, binding, access)
+        guard auth.userID == binding.ownerUUID else { throw VoiceSupportAccessError.ownerMismatch }
 
-            minutesRemaining = tokenResponse.minutesRemaining
-            initialMinutesRemaining = tokenResponse.minutesRemaining
-            isPremium = tokenResponse.isPremium
-            availableVoices = tokenResponse.grokAvailableVoices
-            currentVoice = tokenResponse.grokVoice
-            sessionId = tokenResponse.sessionId
-            sessionStartTime = Date()
+        try await microphonePermission()
+        try checkpoint(generation, binding, access)
 
-            guard let duration = tokenResponse.relayDurationSeconds else {
-                throw VoiceError.connectionFailed("Secure voice relay is unavailable. A compatible app and voice server are required.")
-            }
-            // Secondary client cap. The relay enforces the authoritative session limit.
-            sessionLimitTask = Task { @MainActor [weak self] in
-                do { try await Task.sleep(nanoseconds: UInt64(duration) * 1_000_000_000) }
-                catch { return }
-                guard let self, self.connectionGeneration == generation else { return }
-                self.finishSession(message: self.sessionLimitMessage)
-            }
-            let userSession = try await supabase.auth.session
-            try Task.checkCancellation()
-            guard connectionGeneration == generation else { throw CancellationError() }
-            didReceiveSessionCreated = false
-            try await webSocketManager.connect(sessionId: tokenResponse.sessionId, userToken: userSession.accessToken)
-            try Task.checkCancellation()
-            guard connectionGeneration == generation else { throw CancellationError() }
+        // 2. Admission. The owner is re-verified from a fresh token with no suspension between the
+        //    check and the dispatch.
+        auth = try await backend.authSnapshot()
+        try checkpoint(generation, binding, access)
+        guard auth.userID == binding.ownerUUID else { throw VoiceSupportAccessError.ownerMismatch }
 
-            // Wait for session.created event from the server
-            #if DEBUG
-            Log.voice.debug("[Voice] Waiting for session.created event...")
-            #endif
-            if !didReceiveSessionCreated {
+        let admitted = try await backend.admit(VoiceAdmissionRequestBody(binding: binding), authorization: auth.accessToken)
+        let admittedSession = AdmittedSession(
+            sessionId: admitted.token.sessionId,
+            ownerID: binding.ownerUUID,
+            capturedToken: auth.accessToken
+        )
+        // Superseded while the admission was in flight (End, Cancel, background, account change, or a
+        // newer Start). The stop that took over never saw this admission, so it is accounted for on its
+        // own, with the captured owner token. That is bounded and never attached to whatever is running
+        // now, and this start refuses promptly instead of waiting on auth or accounting.
+        guard connectionGeneration == generation else {
+            await accountForObsoleteAdmission(admittedSession)
+            throw CancellationError()
+        }
+
+        // From here the admission belongs to this attempt: any failure below, including a cancelled task
+        // or a stale binding, accounts for it through the central bounded stop.
+        admission = admittedSession
+        sessionStartTime = Date()
+        guard !Task.isCancelled else { throw CancellationError() }
+        guard access.isCurrent(binding) else { throw VoiceSupportAccessError.bindingNotCurrent }
+
+        // Fail closed BEFORE any socket or microphone: only a nested, versioned voice_context that
+        // matches this binding exactly admits the session. Its absence means a legacy relay, which is
+        // never used as a fallback. (The admitted session is still accounted for by the central stop.)
+        switch admitted.voiceContext {
+        case .failure(let contractError):
+            throw contractError
+        case .success(let claim):
+            try claim.validate(against: binding)
+            admittedContext = claim
+        }
+
+        let journal = VoiceTranscriptJournal(binding: binding, access: access)
+        journal.onChange = { [weak self] in self?.republishTranscriptCounts() }
+        journals.append(journal)
+        bound = BoundSession(binding: binding, access: access, journal: journal,
+                             assembler: VoiceTranscriptAssembler(binding: binding))
+
+        let tokenResponse = admitted.token
+        minutesRemaining = tokenResponse.minutesRemaining
+        initialMinutesRemaining = tokenResponse.minutesRemaining
+        isPremium = tokenResponse.isPremium
+        availableVoices = tokenResponse.grokAvailableVoices
+        currentVoice = tokenResponse.grokVoice
+        startValidityMonitoring(access: access)
+
+        guard let duration = tokenResponse.relayDurationSeconds else {
+            throw VoiceError.connectionFailed("Secure voice relay is unavailable. A compatible app and voice server are required.")
+        }
+        // Secondary client cap. The relay enforces the authoritative session limit.
+        sessionLimitTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(nanoseconds: UInt64(duration) * 1_000_000_000) }
+            catch { return }
+            guard let self, self.connectionGeneration == generation else { return }
+            self.stopNow(.sessionLimit)
+        }
+
+        // 3. Socket. Same owner check; the fixed-host relay URL is built from configuration only.
+        let socketAuth = try await backend.authSnapshot()
+        try checkpoint(generation, binding, access)
+        guard socketAuth.userID == binding.ownerUUID else { throw VoiceSupportAccessError.ownerMismatch }
+        didReceiveSessionCreated = false
+        try await transport.connect(sessionId: tokenResponse.sessionId, userToken: socketAuth.accessToken)
+        try checkpoint(generation, binding, access)
+
+        // Wait for session.created event from the server
+        if !didReceiveSessionCreated {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
                 sessionCreatedContinuation = continuation
 
@@ -343,21 +856,16 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
                     }
                 }
             }
+        }
+        try checkpoint(generation, binding, access)
 
-            }
-            // Now configure the session with our settings
-            try Task.checkCancellation()
-            guard connectionGeneration == generation else { throw CancellationError() }
-            didReceiveSessionUpdated = false
-            try await configureSession()
-            try Task.checkCancellation()
-            guard connectionGeneration == generation else { throw CancellationError() }
+        // Configure voice/audio/VAD preferences only. Instructions and context are server-owned.
+        didReceiveSessionUpdated = false
+        configureSession()
+        try checkpoint(generation, binding, access)
 
-            // Wait for session.updated confirmation
-            #if DEBUG
-            Log.voice.debug("[Voice] Waiting for session.updated...")
-            #endif
-            if !didReceiveSessionUpdated {
+        // Wait for session.updated confirmation
+        if !didReceiveSessionUpdated {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
                 sessionUpdatedContinuation = continuation
 
@@ -371,67 +879,188 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
                     }
                 }
             }
+        }
+        try checkpoint(generation, binding, access)
 
+        connectionState = .connected
+        messageCount = 0
+
+        // Start live usage timer for non-premium users
+        if !isPremium {
+            startUsageTimer()
+        }
+
+        // Start idle disconnect timer
+        startIdleTimer()
+
+        // The explicit mute choice decides whether capture starts; nothing else does.
+        if !isMuted { try startCaptureNow() }
+    }
+
+    /// Accounts for an admission that no attempt owns any more. The call is independent and bounded:
+    /// it waits at most `endRemoteTimeout`, records what is known (`pending` until answered,
+    /// `unconfirmed` on failure, never success unless the server confirmed), and refunds nothing.
+    private func accountForObsoleteAdmission(_ admitted: AdmittedSession) async {
+        let token = UUID()
+        obsoleteAccountingToken = token
+        obsoleteAdmissionAccounting = .pending
+        pendingRemoteStops += 1
+        let task = Task { @MainActor in
+            let answer = await self.performEndSession(admitted, durationSeconds: 0, messagesCount: 0)
+            if self.obsoleteAccountingToken == token {
+                self.obsoleteAdmissionAccounting = answer == .confirmed ? .confirmed : .unconfirmed
             }
-            try Task.checkCancellation()
-            guard connectionGeneration == generation else { throw CancellationError() }
-            connectionState = .connected
-            messageCount = 0
-            #if DEBUG
-            Log.voice.debug("[Voice] Connection complete, ready for audio")
-            #endif
+            self.pendingRemoteStops -= 1
+        }
+        _ = await waitBounded(for: task, seconds: endRemoteTimeout)
+    }
 
-            // Start live usage timer for non-premium users
-            if !isPremium {
-                startUsageTimer()
-            }
+    /// Unwinds a failed attempt through the central stop and returns the narrowed error to throw.
+    private func failAttempt(_ generation: UUID, _ error: Error) async -> Error {
+        let narrowedError = narrowed(error)
+        // Another stop already took over this attempt.
+        guard connectionGeneration == generation else { return narrowedError }
 
-            // Start idle disconnect timer
-            startIdleTimer()
+        let reason: VoiceStopReason
+        var message: String?
+        if narrowedError is CancellationError {
+            reason = .userEnded
+        } else if let accessError = narrowedError as? VoiceSupportAccessError, accessError.isContextInvalidation {
+            reason = .contextInvalidated
+        } else if let voiceError = narrowedError as? VoiceError, case .quotaExceeded = voiceError {
+            reason = .quotaReached
+        } else {
+            reason = .failedToStart
+            message = narrowedError.localizedDescription
+        }
+        _ = await end(reason: reason, failureMessage: message)
+        return narrowedError
+    }
 
-            // Preserve the microphone choice when explicitly starting a new session.
-            if !startMuted { try startListening() }
-        } catch {
-            if connectionGeneration == generation {
-                await disconnect()
-                if !(error is CancellationError) { connectionState = .error(error.localizedDescription) }
-            }
-            throw error
+    private func narrowed(_ error: Error) -> Error {
+        switch error {
+        case is CancellationError, is VoiceError, is VoiceSupportAccessError:
+            return error
+        case let error as URLError:
+            return error.code == .cancelled ? CancellationError() : VoiceError.networkUnavailable
+        default:
+            return VoiceError.tokenGenerationFailed
         }
     }
 
-    /// Disconnect from voice service
+    // MARK: - Central stop
+
+    /// Disconnect from voice service (deliberate stop).
     func disconnect() async {
-        await disconnect(endingState: .disconnected)
+        await end(reason: .userEnded)
     }
 
-    private func disconnect(endingState: ConnectionState) async {
-        guard !isDisconnecting else { return }
-        isDisconnecting = true
+    /// Stops locally and immediately, then waits for the noncritical remote work only up to
+    /// `endRemoteTimeout`. A suspended append, reconcile or accounting call can therefore never hold
+    /// navigation: the outcome simply reports what is unresolved. Remote work that has not finished
+    /// keeps running in the background, is idempotent, and is never reported as done.
+    @discardableResult
+    func end(reason: VoiceStopReason) async -> VoiceEndOutcome {
+        await end(reason: reason, failureMessage: nil)
+    }
+
+    private func end(reason: VoiceStopReason, failureMessage: String?) async -> VoiceEndOutcome {
+        let (remote, result) = scheduleStop(reason, failureMessage: failureMessage)
+        let completed = await waitBounded(for: remote, seconds: endRemoteTimeout)
+        republishTranscriptCounts()
+        return VoiceEndOutcome(
+            unsavedTranscripts: unsavedTranscriptCount,
+            rejectedTranscripts: rejectedTranscriptCount,
+            remoteWorkCompleted: completed,
+            // Honest: still `.pending` unless the session-end call actually answered, and
+            // `.unconfirmed` (never success) when it failed or its outcome is unknown.
+            accounting: result.accounting
+        )
+    }
+
+    /// What the stop's session-end call has established so far.
+    @MainActor
+    private final class StopResult {
+        var accounting: VoiceAccountingStatus
+        init(accounting: VoiceAccountingStatus) { self.accounting = accounting }
+    }
+
+    /// The one stop path. Synchronously halts capture, playback, timers and the socket, then
+    /// schedules the remote work (transcript flush and reconcile, session accounting) as an
+    /// independent task. Safe to call at any time and from any lifecycle observer; repeated calls are
+    /// harmless and never queue behind an earlier stop's remote work.
+    @discardableResult
+    func stopNow(_ reason: VoiceStopReason, failureMessage: String? = nil) -> Task<Void, Never> {
+        scheduleStop(reason, failureMessage: failureMessage).0
+    }
+
+    private func scheduleStop(_ reason: VoiceStopReason, failureMessage: String?) -> (Task<Void, Never>, StopResult) {
+        let snapshot = haltLocalNow(reason, failureMessage: failureMessage)
+        let result = StopResult(accounting: snapshot.admission == nil ? .notApplicable : .pending)
+
+        pendingRemoteStops += 1
+        let task = Task { @MainActor in
+            await self.finishRemote(snapshot, result: result)
+            self.pendingRemoteStops -= 1
+        }
+        return (task, result)
+    }
+
+    private final class BoundedWait {
+        var resolved = false
+    }
+
+    /// Returns true if `task` finished within the bound, false if the bound elapsed first. The task
+    /// itself is never cancelled or abandoned.
+    private func waitBounded(for task: Task<Void, Never>, seconds: TimeInterval) async -> Bool {
+        let state = BoundedWait()
+        return await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+            Task { @MainActor in
+                await task.value
+                if !state.resolved {
+                    state.resolved = true
+                    continuation.resume(returning: true)
+                }
+            }
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: UInt64(max(0, seconds) * 1_000_000_000))
+                if !state.resolved {
+                    state.resolved = true
+                    continuation.resume(returning: false)
+                }
+            }
+        }
+    }
+
+    /// Everything here is synchronous: no network await can delay releasing the microphone.
+    private func haltLocalNow(_ reason: VoiceStopReason, failureMessage: String?) -> StopSnapshot {
+        let wasActive = attemptActive
+        attemptActive = false
+        // Obsolete every in-flight connect step and generation-guarded timer.
         connectionGeneration = UUID()
-        defer { isDisconnecting = false }
-        stopListening()
+
+        // Invalidate the capture generation first, so nothing the old capture already queued can be
+        // sent, then release hardware: playback before capture so the audio session can deactivate.
+        // Capture is unwound unconditionally, so a failed start that never set any flag is cleaned too.
+        captureGeneration = nil
         audioPlayback.stop()
+        audioCapture.forceStop()
+        isListening = false
         isSpeaking = false
         isUserSpeaking = false
+        isWaitingForResponse = false
         micLevel = 0
         playbackLevel = 0
+
         stopUsageTimer()
+        stopIdleTimer()
+        stopValidityMonitoring()
         sessionLimitTask?.cancel()
         sessionLimitTask = nil
-        stopIdleTimer()
-
-        // Cancel emotion analysis task
-        emotionAnalysisTask?.cancel()
-        emotionAnalysisTask = nil
-
-        // Cancel any pending timeout tasks first
         sessionCreatedTimeoutTask?.cancel()
         sessionCreatedTimeoutTask = nil
         sessionUpdatedTimeoutTask?.cancel()
         sessionUpdatedTimeoutTask = nil
-
-        // Cancel any pending continuations
         if let continuation = sessionCreatedContinuation {
             sessionCreatedContinuation = nil
             continuation.resume(throwing: CancellationError())
@@ -441,119 +1070,153 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
             continuation.resume(throwing: CancellationError())
         }
 
-        webSocketManager.disconnect()
+        // Closing the socket is local and non-blocking; no further frames are sent or received.
+        transport.disconnect()
 
-        let endedSessionId = sessionId
-        let elapsedSeconds = max(0, Date().timeIntervalSince(sessionStartTime ?? Date()))
-        let durationSeconds = Int(elapsedSeconds)
-        if !isPremium { minutesRemaining = max(0, initialMinutesRemaining - elapsedSeconds / 60) }
-        let endedMessageCount = messageCount
-        sessionId = nil
+        var snapshot = StopSnapshot()
+        if let admission {
+            let elapsedSeconds = max(0, Date().timeIntervalSince(sessionStartTime ?? Date()))
+            snapshot.admission = admission
+            snapshot.durationSeconds = Int(elapsedSeconds)
+            snapshot.messageCount = messageCount
+            if !isPremium { minutesRemaining = max(0, initialMinutesRemaining - elapsedSeconds / 60) }
+        }
+        if var current = bound {
+            // Open turns end here without inventing completion; nothing partial becomes durable.
+            for event in current.assembler.abandonOpenTurns() { publish(event) }
+            snapshot.binding = current.binding
+            snapshot.access = current.access
+            snapshot.journal = current.journal
+            bound = nil
+        }
+        admission = nil
+        admittedContext = nil
         sessionStartTime = nil
-        connectionState = endingState
-        transcribedText = ""
-        isWaitingForResponse = false
+        messageCount = 0
+        captionTracker.clear()
+        caption = nil
 
-        // Clear idle state
+        if wasActive {
+            lastStopReason = reason
+            if reason.isFailure {
+                connectionState = .error(failureMessage ?? reason.statusMessage ?? "Voice session ended.")
+            } else {
+                connectionState = .disconnected
+            }
+        }
+        transcribedText = ""
+        userTranscribedText = ""
+
+        // Clear idle and echo suppression state
         isIdleDisconnected = false
         lastSpeechActivityTime = nil
-
-        // Clear echo suppression state
         playbackStartTime = nil
         echoGateFramesAboveThreshold = 0
         echoGateFramesBelowThreshold = 0
 
-        // Clear emotion state
-        currentEmotion = nil
-        emotionConfidence = 0
-        emotionHistory = []
-        lastEmotionAnalysisTime = nil
-        audioCapture.clearRollingBuffer()
-
-        if let endedSessionId {
-            await endSession(sessionId: endedSessionId, durationSeconds: durationSeconds, messagesCount: endedMessageCount)
-        }
+        return snapshot
     }
 
-    private func finishSession(message: String) {
-        guard !isDisconnecting, connectionState != .disconnected else { return }
-        let generation = connectionGeneration
-        Task { @MainActor [weak self] in
-            guard let self, self.connectionGeneration == generation else { return }
-            await self.disconnect(endingState: .error(message))
-        }
+    /// Transcript durability and session accounting are independent: neither waits for the other, so
+    /// a suspended append or reconcile cannot delay accounting, and vice versa.
+    private func finishRemote(_ snapshot: StopSnapshot, result: StopResult) async {
+        async let transcripts: Void = finishTranscripts(snapshot)
+        async let accounting: Void = finishAccounting(snapshot, result: result)
+        await transcripts
+        await accounting
     }
 
-    /// Start listening for voice input
+    private func finishTranscripts(_ snapshot: StopSnapshot) async {
+        guard let journal = snapshot.journal, let access = snapshot.access, let binding = snapshot.binding else { return }
+        await journal.flush()
+        if !journal.isBindingStale { await access.reconcile(binding) }
+        republishTranscriptCounts()
+    }
+
+    private func finishAccounting(_ snapshot: StopSnapshot, result: StopResult) async {
+        guard let admission = snapshot.admission else { return }
+        let answer = await performEndSession(admission, durationSeconds: snapshot.durationSeconds, messagesCount: snapshot.messageCount)
+        result.accounting = answer == .confirmed ? .confirmed : .unconfirmed
+    }
+
+    // MARK: - Audio control
+
+    /// Start listening for voice input. This is a deliberate unmute.
     func startListening() throws {
-        #if DEBUG
-        Log.voice.debug("[Voice] startListening called, connectionState: \(self.connectionState)")
-        #endif
-        guard connectionState.isConnected else {
-            #if DEBUG
-            Log.voice.debug("[Voice] Not connected, cannot start listening")
-            #endif
-            throw VoiceError.notConnected
-        }
+        guard connectionState.isConnected else { throw VoiceError.notConnected }
+        try setMuted(false)
+    }
 
-        guard !isListening else {
-            #if DEBUG
-            Log.voice.debug("[Voice] Already listening, skipping")
-            #endif
-            return
-        }
+    /// Stop listening without requesting response. This IS the explicit mute.
+    func stopListening() {
+        try? setMuted(true)
+    }
 
-        try audioCapture.startCapture()
+    /// Sets the explicit mute choice. Muting stops capture immediately. Unmuting restarts capture
+    /// only through this deliberate call, and only while connected.
+    func setMuted(_ muted: Bool) throws {
+        if muted {
+            isMuted = true
+            stopCaptureOnly()
+        } else {
+            let wasMuted = isMuted
+            isMuted = false
+            guard connectionState.isConnected else { return }  // capture starts when the connection completes
+            do {
+                try startCaptureNow()
+            } catch {
+                // Capture cleaned itself up; the displayed state must match the real one.
+                isMuted = wasMuted
+                throw error
+            }
+        }
+    }
+
+    /// The single place capture starts (connect, explicit unmute, `startListening`). Every start is
+    /// gated on the immutable owner / account epoch / session / conversation / scope / privacy binding
+    /// being current RIGHT NOW. A stale binding stops the session before hardware is touched; it never
+    /// starts the microphone first and relies on the next frame or tick to notice.
+    private func startCaptureNow() throws {
+        guard connectionState.isConnected || connectionState == .connecting else { throw VoiceError.notConnected }
+        guard attemptActive, let bound else { throw VoiceError.notConnected }
+        guard bound.access.isCurrent(bound.binding) else {
+            stopNow(.contextInvalidated)
+            throw VoiceSupportAccessError.bindingNotCurrent
+        }
+        guard !isListening else { return }
+        captureGeneration = try audioCapture.startCapture()
         isListening = true
-        
-        #if DEBUG
-        Log.voice.debug("[Voice] Now listening for audio input")
-        #endif
+    }
+
+    private func stopCaptureOnly() {
+        // Invalidate before stopping, so audio the old capture already produced cannot be sent after a
+        // later unmute starts a new capture.
+        captureGeneration = nil
+        audioCapture.stopCapture()
+        isListening = false
+        micLevel = 0
     }
 
     /// Force commit audio buffer and get response (for edge cases when VAD doesn't trigger)
     /// With server_vad enabled, the server will auto-respond after commit
     func stopListeningAndRespond() {
-        guard connectionState.isConnected else {
-            #if DEBUG
-            Log.voice.debug("[Voice] Not connected, cannot send")
-            #endif
-            return
-        }
+        guard connectionState.isConnected else { return }
+        guard !isWaitingForResponse else { return }
 
-        guard !isWaitingForResponse else {
-            #if DEBUG
-            Log.voice.debug("[Voice] Already waiting for response, ignoring")
-            #endif
-            return
-        }
-
-        #if DEBUG
-        Log.voice.debug("[Voice] Force commit (turn \(self.messageCount + 1))...")
-        #endif
         isWaitingForResponse = true
         transcribedText = ""
 
         // Just commit - with server_vad + create_response: true, server will auto-respond
-        webSocketManager.send(["type": "input_audio_buffer.commit"])
-
-        // Note: We don't stop listening or send response.create
-        // The server handles everything after commit
-        // Audio capture continues for the next turn
+        transport.send(["type": "input_audio_buffer.commit"])
+        // The server handles everything after commit; audio capture continues for the next turn.
     }
 
     /// Interrupt assistant playback immediately for barge-in.
-    /// This stops audio, cancels any pending server response, and prepares for user input.
+    /// Stops audio and cancels any pending server response. It never starts, stops or changes
+    /// microphone capture: an explicit mute stays muted, and a stopped microphone stays stopped.
     func interruptPlayback() {
         guard connectionState.isConnected else { return }
-
-        // Check if there's actually something to interrupt
-        let wasPlaying = isSpeaking || isWaitingForResponse
-        guard wasPlaying else { return }
-
-        #if DEBUG
-        Log.voice.debug("[Voice] Barge-in: interrupting playback")
-        #endif
+        guard isSpeaking || isWaitingForResponse else { return }
 
         // 1. Stop audio playback immediately
         audioPlayback.stop()
@@ -562,46 +1225,17 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
         isWaitingForResponse = false
         isSpeaking = false
 
-        // 3. Reset echo gate counter for fresh start
+        // 3. Reset echo gate state for a fresh start
         echoGateFramesAboveThreshold = 0
+        echoGateFramesBelowThreshold = 0
+        playbackStartTime = nil
 
-        // 4. Send response.cancel to stop server from generating more audio
-        webSocketManager.send(["type": "response.cancel"])
-        #if DEBUG
-        Log.voice.debug("[Voice] Barge-in: sent response.cancel to server")
-        #endif
+        // 4. Stop the server from generating more audio and clear its input buffer
+        transport.send(["type": "response.cancel"])
+        transport.send(["type": "input_audio_buffer.clear"])
 
-        // 5. Clear the input audio buffer on server to start fresh
-        webSocketManager.send(["type": "input_audio_buffer.clear"])
-
-        // 6. Notify delegate of barge-in
+        // 5. Notify delegate of barge-in
         delegate?.voiceService(self, didEmit: .bargeInTriggered)
-
-        // 7. Ensure microphone capture continues for user's new input
-        if !isListening {
-            do {
-                try startListening()
-                #if DEBUG
-                Log.voice.debug("[Voice] Barge-in: restarted listening")
-                #endif
-            } catch {
-                #if DEBUG
-                Log.voice.error("[Voice] Barge-in: failed to restart listening: \(error)")
-                #endif
-            }
-        }
-    }
-
-    /// Just stop listening without requesting response (for muting)
-    func stopListening() {
-        guard isListening else { return }
-
-        audioCapture.stopCapture()
-        isListening = false
-        
-        #if DEBUG
-        Log.voice.debug("[Voice] Stopped listening (muted)")
-        #endif
     }
 
     /// Change the AI voice (premium only for non-ara voices)
@@ -613,52 +1247,63 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
         currentVoice = voice
 
         if connectionState.isConnected {
-            try await configureSession()
+            configureSession()
         }
 
-        try await saveVoicePreference(voice)
+        try await backend.saveVoicePreference(voice, expectedOwner: bound?.binding.ownerUUID)
     }
 
-    // MARK: - Emotion Settings
+    // MARK: - Emotion settings (inert)
 
-    /// Enable or disable emotion analysis
-    /// Consent is granted/revoked based on this setting for privacy compliance
-    func setEmotionAnalysisEnabled(_ enabled: Bool) {
-        emotionAnalysisEnabled = enabled
+    /// Retained for source compatibility. Voice sessions do not analyze emotion, so this does nothing.
+    func setEmotionAnalysisEnabled(_ enabled: Bool) {}
 
-        // Persist the setting
-        UserDefaults.standard.set(enabled, forKey: "voiceEmotionAnalysisEnabled")
+    /// Retained for source compatibility. Voice sessions do not analyze emotion, so this does nothing.
+    func setEmotionSensitivity(_ threshold: Double) {}
 
-        // Enable/disable audio buffer accumulation (critical for performance)
-        audioCapture.emotionBufferEnabled = enabled
+    // MARK: - Transcript durability
 
-        // Grant or revoke consent based on user preference
-        emotionAnalyzer.setVoiceConsent(enabled)
-
-        if !enabled {
-            // Clear all emotion state when disabled
-            currentEmotion = nil
-            emotionConfidence = 0
-            emotionHistory = []  // Clear history to respect user's privacy choice
-            lastEmotionAnalysisTime = nil
-            audioCapture.clearRollingBuffer()
+    /// Re-attempts finals that were not confirmed, then reconciles journals with nothing left pending.
+    /// Rejected finals are retried only when the person asks (`includeRejected`).
+    func retryUnsavedTranscript(includeRejected: Bool = false) async {
+        for journal in journals where journal.unresolvedCount > 0 {
+            await journal.retry(includeRejected: includeRejected)
+            if !journal.isBindingStale, journal.unsavedCount == 0 {
+                await journal.access.reconcile(journal.binding)
+            }
         }
-        #if DEBUG
-        Log.voice.debug("[Voice] Emotion analysis \(enabled ? "enabled" : "disabled"), consent \(enabled ? "granted" : "revoked")")
-        #endif
+        republishTranscriptCounts()
     }
 
-    /// Set emotion sensitivity threshold (0.4 - 0.8)
-    func setEmotionSensitivity(_ threshold: Double) {
-        emotionSensitivityThreshold = max(0.4, min(0.8, threshold))
-        #if DEBUG
-        Log.voice.debug("[Voice] Emotion sensitivity set to \(self.emotionSensitivityThreshold)")
-        #endif
+    /// Explicitly gives up finals that were not acknowledged. Nothing is marked saved, and an append
+    /// that is already in flight cannot be recalled; this only stops the app holding the text.
+    func discardUnresolvedTranscript() {
+        for journal in journals { journal.discardUnresolved() }
+        republishTranscriptCounts()
+    }
+
+    private func republishTranscriptCounts() {
+        // Earlier sessions with nothing pending, in flight or rejected are released.
+        journals.removeAll { $0 !== bound?.journal && $0.unresolvedCount == 0 }
+        savedTranscriptCount = journals.reduce(0) { $0 + $1.savedCount }
+        unsavedTranscriptCount = journals.reduce(0) { $0 + $1.unsavedCount }
+        rejectedTranscriptCount = journals.reduce(0) { $0 + $1.rejectedCount }
+    }
+
+    private func publish(_ event: VoiceTranscriptEvent) {
+        transcriptEventHandler?(event)
+        // The caption follows typed finality, never the transient string.
+        captionTracker.apply(event)
+        caption = captionTracker.current
+        // Only finals are durable; partials and abandoned turns are display-only.
+        if event.finality == .final, let journal = bound?.journal {
+            journal.submitFinal(event)
+        }
     }
 
     // MARK: - Private Methods - Connection
 
-    private func requestMicrophonePermission() async throws {
+    private static func requestSystemMicrophonePermission() async throws {
         let audioApp = AVAudioApplication.shared
         switch audioApp.recordPermission {
         case .granted:
@@ -679,138 +1324,15 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
         }
     }
 
-    private func fetchVoiceToken() async throws -> VoiceTokenResponse {
-        let generation = connectionGeneration
-        do {
-            // Refresh session to ensure we have a valid token
-            #if DEBUG
-            Log.voice.debug("[VoiceToken] Refreshing session...")
-            #endif
-
-            // First try to get the current session
-            let currentSession = try? await supabase.auth.session
-            #if DEBUG
-            if let current = currentSession {
-                Log.voice.debug("[VoiceToken] Current session exists, user: \(current.user.id)")
-                Log.voice.debug("[VoiceToken] Token expires at: \(current.expiresAt)")
-            } else {
-                Log.voice.debug("[VoiceToken] No current session found")
-            }
-            #endif
-
-            // Always refresh to get a fresh token
-            let session = try await supabase.auth.session
-            #if DEBUG
-            Log.voice.debug("[VoiceToken] Session refreshed successfully, user: \(session.user.id)")
-            Log.voice.debug("[VoiceToken] New token expires at: \(session.expiresAt)")
-            Log.voice.debug("[VoiceToken] Access token retrieved (redacted), length: \(session.accessToken.count)")
-            #endif
-
-            // Use the global supabase client which should now have the refreshed session
-            #if DEBUG
-            Log.voice.debug("[VoiceToken] Calling voice-token function...")
-            #endif
-
-            // Use typed response - SDK will decode automatically
-            // SDK should include auth header automatically after session refresh
-            // But we explicitly pass it to ensure the refreshed token is used
-            let authHeader = "Bearer \(session.accessToken)"
-            #if DEBUG
-            Log.voice.debug("[VoiceToken] Auth header constructed successfully")
-            #endif
-
-            try Task.checkCancellation()
-            guard connectionGeneration == generation else { throw CancellationError() }
-            let tokenResponse: VoiceTokenResponse = try await supabase.functions.invoke(
-                "test-auth-diagnostic",
-                options: FunctionInvokeOptions(
-                    headers: ["Authorization": authHeader],
-                    body: ["transport": "relay"]
-                )
-            )
-            guard !Task.isCancelled, connectionGeneration == generation else {
-                await Task { @MainActor in
-                    await endSession(sessionId: tokenResponse.sessionId, durationSeconds: 0, messagesCount: 0)
-                }.value
-                throw CancellationError()
-            }
-            #if DEBUG
-            Log.voice.debug("[VoiceToken] Got token for voice successfully (token redacted from logs)")
-            #endif
-            return tokenResponse
-        } catch let error as FunctionsError {
-            #if DEBUG
-            Log.voice.debug("[VoiceToken] FunctionsError: \(error)")
-            #endif
-            switch error {
-            case .httpError(let code, let data):
-                #if DEBUG
-                Log.voice.debug("[VoiceToken] HTTP error status: \(code)")
-                // Always log raw data for debugging
-                if let rawString = String(data: data, encoding: .utf8) {
-                    Log.voice.debug("[VoiceToken] Raw error response: \(rawString)")
-                } else {
-                    Log.voice.debug("[VoiceToken] Raw error data (non-UTF8): \(data.count) bytes")
-                }
-                #endif
-
-                // Try to decode the error response
-                let errorResponse = try? JSONDecoder().decode(VoiceErrorResponse.self, from: data)
-                #if DEBUG
-                if let errorResponse = errorResponse {
-                    Log.voice.debug("[VoiceToken] Decoded error - code: \(errorResponse.code), message: \(errorResponse.error)")
-                } else {
-                    Log.voice.debug("[VoiceToken] Failed to decode error response as VoiceErrorResponse")
-                }
-                #endif
-
-                // Handle specific error codes
-                if errorResponse?.code == "SESSION_LIMIT_REACHED" {
-                    throw VoiceError.connectionFailed(sessionLimitMessage)
-                }
-                if errorResponse?.code == "QUOTA_EXCEEDED" || code == 403 {
-                    // 403 Forbidden typically means quota exceeded for this endpoint
-                    throw VoiceError.quotaExceeded
-                }
-                if errorResponse?.code == "UNAUTHORIZED" || code == 401 {
-                    throw VoiceError.notAuthorized
-                }
-                if errorResponse?.code == "RATE_LIMITED" || code == 429 {
-                    throw VoiceError.networkUnavailable
-                }
-
-                throw VoiceError.tokenGenerationFailed
-            case .relayError:
-                throw VoiceError.networkUnavailable
-            }
-        } catch let error as VoiceError {
-            throw error
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch let error as URLError where error.code == .cancelled {
-            throw CancellationError()
-        } catch {
-            #if DEBUG
-            Log.voice.debug("[VoiceToken] Unknown error: \(error)")
-            #endif
-            throw VoiceError.tokenGenerationFailed
-        }
-    }
-
-    private func configureSession() async throws {
-        #if DEBUG
-        Log.voice.debug("[Voice] Configuring session with voice: \(self.currentVoice.rawValue)")
-        #endif
-
-        // xAI Grok Voice API session configuration
-        // Using server VAD for natural conversation flow
-        // The server handles: speech detection → auto-commit → auto-respond
-        // We just stream audio continuously and handle playback/barge-in
+    /// Sends voice/audio/VAD preferences only. Instructions and context are owned by the server for
+    /// every session; the client never supplies them.
+    private func configureSession() {
+        // Using server VAD for natural conversation flow. The server handles speech detection,
+        // auto-commit and auto-respond; we stream audio and handle playback/barge-in.
         let config: [String: Any] = [
             "type": "session.update",
             "session": [
                 "modalities": ["audio", "text"],
-                "instructions": voiceInstructions,
                 "voice": currentVoice.rawValue,
                 "audio": [
                     "input": [
@@ -829,14 +1351,7 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
             ],
         ]
 
-        #if DEBUG
-        if let jsonData = try? JSONSerialization.data(withJSONObject: config, options: .prettyPrinted),
-           let jsonStr = String(data: jsonData, encoding: .utf8) {
-            Log.voice.debug("[Voice] Session config: \(jsonStr)")
-        }
-        #endif
-
-        webSocketManager.send(config)
+        transport.send(config)
     }
 
     // MARK: - Private Methods - Audio
@@ -878,30 +1393,14 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
 
                 // Only allow audio after sustained speech is detected
                 if echoGateFramesAboveThreshold < echoGateRequiredFrames {
-                    #if DEBUG
-                    if echoGateFramesAboveThreshold == 1 {
-                        Log.voice.debug("[Voice] Echo gate: potential speech detected, waiting for sustained input (mic: \(self.micLevel))")
-                    }
-                    #endif
                     return true  // Suppress until sustained speech confirmed
                 }
-
-                #if DEBUG
-                if echoGateFramesAboveThreshold == echoGateRequiredFrames {
-                    Log.voice.debug("[Voice] Echo gate: sustained speech confirmed, allowing barge-in (mic: \(self.micLevel))")
-                }
-                #endif
             } else {
                 // Track consecutive low frames with grace period to avoid audio gaps on brief pauses
                 echoGateFramesBelowThreshold += 1
 
                 // Only reset after grace period expires (allows brief pauses in natural speech)
                 if echoGateFramesBelowThreshold > echoGateGracePeriodFrames {
-                    if echoGateFramesAboveThreshold > 0 {
-                        #if DEBUG
-                        Log.voice.debug("[Voice] Echo gate: level dropped for \(self.echoGateFramesBelowThreshold) frames, resetting (mic: \(self.micLevel))")
-                        #endif
-                    }
                     echoGateFramesAboveThreshold = 0
                     echoGateFramesBelowThreshold = 0
                 }
@@ -924,89 +1423,103 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
         return false  // No suppression needed, audio can be sent
     }
 
-    private func sendAudioData(_ audioData: Data) {
+    private func sendAudioData(_ audioData: Data, generation: VoiceCaptureGeneration) {
+        // Only audio from the capture that is running now may reach the socket. Frames produced by an
+        // earlier capture (before a mute, stop or restart) are dropped, whenever they are delivered.
+        guard generation == captureGeneration, isListening, !isMuted, connectionState.isConnected else { return }
+        guard enforceBindingValidity() else { return }
+
         // Check all echo suppression conditions
         if shouldSuppressAudioForEcho() {
             return
         }
 
         let base64 = audioData.base64EncodedString()
-        webSocketManager.send([
+        transport.send([
             "type": "input_audio_buffer.append",
             "audio": base64,
         ])
     }
 
-    /// Inject emotion context into the conversation so AI can respond appropriately
-    /// TEMPORARILY DISABLED - emotion analysis disabled
-    private func injectEmotionContext(_ emotion: String, confidence: Double) {
-        // DISABLED: Emotion analysis disabled
-        return
+    // MARK: - Binding validity
+
+    private func startValidityMonitoring(access: any VoiceSupportAccess) {
+        stopValidityMonitoring()
+        validityTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.enforceBindingValidity()
+            }
+        }
+        if let stream = access.invalidations() {
+            invalidationTask = Task { @MainActor [weak self] in
+                for await _ in stream {
+                    self?.enforceBindingValidity()
+                }
+            }
+        }
+    }
+
+    private func stopValidityMonitoring() {
+        validityTimer?.invalidate()
+        validityTimer = nil
+        invalidationTask?.cancel()
+        invalidationTask = nil
+    }
+
+    /// Stops the session when the account, epoch, session or privacy state no longer matches the
+    /// binding. Checked on every incoming event, every outgoing frame, and on a timer.
+    @discardableResult
+    private func enforceBindingValidity() -> Bool {
+        guard attemptActive, let bound else { return true }
+        if bound.access.isCurrent(bound.binding) { return true }
+        stopNow(.contextInvalidated)
+        return false
     }
 
     // MARK: - Private Methods - WebSocket
 
     private func handleWebSocketMessage(_ message: URLSessionWebSocketTask.Message) {
+        // Message bodies are user content: nothing from them is logged.
+        let data: Data
         switch message {
         case .string(let text):
-            guard let data = text.data(using: .utf8) else {
-                #if DEBUG
-                Log.voice.debug("[Voice] Failed to convert message to data")
-                #endif
-                return
-            }
-
-            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                #if DEBUG
-                Log.voice.debug("[Voice] Failed to parse JSON: \(String(text.prefix(200)))")
-                #endif
-                return
-            }
-
-            guard let type = json["type"] as? String else {
-                #if DEBUG
-                Log.voice.debug("[Voice] No 'type' in message: \(String(text.prefix(200)))")
-                #endif
-                return
-            }
-
-            handleEvent(type: type, json: json)
-        case .data(let data):
-            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                #if DEBUG
-                Log.voice.debug("[Voice] Failed to parse binary JSON")
-                #endif
-                return
-            }
-
-            guard let type = json["type"] as? String else {
-                #if DEBUG
-                Log.voice.debug("[Voice] No 'type' in binary message")
-                #endif
-                return
-            }
-
-            handleEvent(type: type, json: json)
+            guard let encoded = text.data(using: .utf8) else { return }
+            data = encoded
+        case .data(let raw):
+            data = raw
         @unknown default:
-            #if DEBUG
-            Log.voice.debug("[Voice] Unknown message format")
-            #endif
-            break
+            return
         }
+
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let type = json["type"] as? String else {
+            #if DEBUG
+            Log.voice.debug("[Voice] Ignored malformed message (\(data.count) bytes)")
+            #endif
+            return
+        }
+
+        handleEvent(type: type, json: json)
     }
 
     private func handleEvent(type: String, json: [String: Any]) {
+        // Events from a stopped or obsolete session are ignored.
+        guard attemptActive else { return }
+        guard enforceBindingValidity() else { return }
+
         #if DEBUG
-        // Log all events for debugging
         Log.voice.debug("[Voice] Received event: \(type)")
         #endif
+
+        // Typed transcript identity first, so every provider event passes through one assembler.
+        if bound != nil {
+            let events = bound?.assembler.ingest(type: type, json: json) ?? []
+            for event in events { publish(event) }
+        }
 
         switch type {
         case "session.created", "conversation.created":
             didReceiveSessionCreated = true
-            #if DEBUG
-            Log.voice.debug("[Voice] Session/conversation created successfully")
-            #endif
             // Cancel timeout task and resume continuation
             sessionCreatedTimeoutTask?.cancel()
             sessionCreatedTimeoutTask = nil
@@ -1017,9 +1530,6 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
 
         case "session.updated":
             didReceiveSessionUpdated = true
-            #if DEBUG
-            Log.voice.debug("[Voice] Session updated")
-            #endif
             // Cancel timeout task and resume continuation
             sessionUpdatedTimeoutTask?.cancel()
             sessionUpdatedTimeoutTask = nil
@@ -1030,13 +1540,9 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
 
         case "ping":
             // Respond to ping with pong to keep connection alive
-            webSocketManager.send(["type": "pong"])
+            transport.send(["type": "pong"])
 
         case "input_audio_buffer.speech_started":
-            #if DEBUG
-            Log.voice.debug("[Voice] VAD detected speech start")
-            #endif
-
             // Reset idle timer on speech activity
             resetIdleTimer()
 
@@ -1044,18 +1550,11 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
             let isBargeIn = isSpeaking || isWaitingForResponse
 
             if isBargeIn {
-                #if DEBUG
-                Log.voice.debug("[Voice] Barge-in detected: user speaking during AI response")
-                #endif
-
                 // 1. Stop audio playback immediately
                 audioPlayback.stop()
 
                 // 2. Cancel the ongoing response from server
-                webSocketManager.send(["type": "response.cancel"])
-                #if DEBUG
-                Log.voice.debug("[Voice] Barge-in: sent response.cancel")
-                #endif
+                transport.send(["type": "response.cancel"])
 
                 // 3. Update state
                 isSpeaking = false
@@ -1073,94 +1572,35 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
             isUserSpeaking = true
 
         case "input_audio_buffer.speech_stopped":
-            #if DEBUG
-            Log.voice.debug("[Voice] VAD detected speech stop - server will auto-commit and respond")
-            #endif
-
             // Reset idle timer on speech activity
             resetIdleTimer()
 
             isUserSpeaking = false
-            // With server_vad + create_response: true, the server will:
-            // 1. Automatically commit the audio buffer
-            // 2. Automatically create a response
-            // We don't need to do anything here - just wait for the response
-
-            // Trigger emotion analysis (async, non-blocking)
-            analyzeEmotionIfNeeded()
-
-        case "input_audio_buffer.committed":
-            #if DEBUG
-            // Log details for debugging multi-turn issues
-            if let itemId = json["item_id"] as? String {
-                Log.voice.debug("[Voice] Audio buffer committed, item_id: \(itemId)")
-            } else {
-                Log.voice.debug("[Voice] Audio buffer committed (no item_id in response)")
-            }
-            #endif
-
-        case "conversation.item.created":
-            #if DEBUG
-            if let item = json["item"] as? [String: Any],
-               let itemId = item["id"] as? String,
-               let role = item["role"] as? String {
-                Log.voice.debug("[Voice] Conversation item created: id=\(itemId), role=\(role)")
-            } else {
-                Log.voice.debug("[Voice] Conversation item created")
-            }
-            #endif
+            // With server_vad + create_response: true, the server commits and responds on its own.
 
         case "conversation.item.input_audio_transcription.updated", "conversation.item.input_audio_transcription.completed":
-            // User's speech has been transcribed
+            // Live caption only. Durable turns come from the typed events above.
             if let transcript = json["transcript"] as? String {
-                #if DEBUG
-                Log.voice.debug("[Voice] User transcript received")
-                #endif
                 userTranscribedText = transcript
             }
 
         case "response.created":
-            #if DEBUG
-            Log.voice.debug("[Voice] Response started (turn \(self.messageCount + 1))")
-            #endif
             isWaitingForResponse = true
             isSpeaking = true
             playbackStartTime = Date()  // Track when playback started for echo suppression
 
-        case "response.output_item.added":
-            #if DEBUG
-            Log.voice.debug("[Voice] Output item added")
-            #endif
-
         case "response.audio.delta", "response.output_audio.delta":
             if let delta = json["delta"] as? String,
                let audioData = Data(base64Encoded: delta) {
-                #if DEBUG
-                Log.voice.debug("[Voice] Received audio delta: \(audioData.count) bytes")
-                #endif
                 audioPlayback.queueAudioChunk(audioData)
             }
 
-        case "response.audio_transcript.delta", "response.output_audio_transcript.delta":
+        case "response.audio_transcript.delta", "response.output_audio_transcript.delta", "response.text.delta":
             if let delta = json["delta"] as? String {
-                #if DEBUG
-                Log.voice.debug("[Voice] Transcript delta received")
-                #endif
-                transcribedText += delta
-            }
-
-        case "response.text.delta":
-            if let delta = json["delta"] as? String {
-                #if DEBUG
-                Log.voice.debug("[Voice] Text delta: \(delta)")
-                #endif
                 transcribedText += delta
             }
 
         case "response.done":
-            #if DEBUG
-            Log.voice.debug("[Voice] Response complete (turn \(self.messageCount + 1))")
-            #endif
             self.messageCount += 1
             // NOTE: Do NOT set isSpeaking = false here!
             // Audio buffers are still playing. isSpeaking is set to false
@@ -1177,29 +1617,30 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
                 catch { return }
                 guard let self, self.connectionGeneration == generation, !self.isWaitingForResponse else { return }
                 self.transcribedText = ""
+                self.captionTracker.clearIfComplete()
+                self.caption = self.captionTracker.current
             }
-
-        case "response.audio.done", "response.text.done":
-            #if DEBUG
-            Log.voice.debug("[Voice] Audio/text stream done")
-            #endif
 
         case "error", "session.error":
+            // Provider/server text is never shown or kept; only the category matters.
             let error = json["error"] as? [String: Any] ?? json
-            let code = error["code"] as? String
-            let message = error["message"] as? String ?? "Voice session ended. Tap to start a new session."
-            let reachedLimit = code == "SESSION_LIMIT_REACHED" || message.lowercased() == "session limit reached"
-            finishSession(message: reachedLimit ? sessionLimitMessage : message)
+            let code = (error["code"] as? String) ?? (json["code"] as? String)
+            let message = error["message"] as? String
+            let reachedLimit = code == "SESSION_LIMIT_REACHED" || message?.lowercased() == "session limit reached"
+            if reachedLimit {
+                stopNow(.sessionLimit)
+            } else if code == "PRIVACY_LEASE_EXPIRED" {
+                // Terminal: the relay could not refresh its privacy lease in time. Nothing resumes.
+                stopNow(.privacyLeaseExpired)
+            } else if code == "PRIVACY_REVISION_CHANGED" || VoiceSupportAccessError.fromServerCode(code) != nil {
+                // Terminal: the privacy revision or voice context changed under the session.
+                stopNow(.contextInvalidated)
+            } else {
+                stopNow(.serverError)
+            }
 
         default:
-            #if DEBUG
-            // Log ALL unknown events to discover xAI's actual event names
-            Log.voice.debug("[Voice] Unhandled event type: \(type)")
-            if let jsonData = try? JSONSerialization.data(withJSONObject: json, options: .prettyPrinted),
-               let jsonStr = String(data: jsonData, encoding: .utf8) {
-                Log.voice.debug("[Voice] Event data received")
-            }
-            #endif
+            break
         }
     }
 
@@ -1209,7 +1650,6 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
         stopUsageTimer() // Clear any existing timer
 
         // Update every 5 seconds - quota display doesn't need 1s precision
-        // Reduces main thread work by 80%
         usageTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.updateMinutesRemaining()
@@ -1235,10 +1675,6 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
                 self?.checkIdleTimeout()
             }
         }
-
-        #if DEBUG
-        Log.voice.debug("[Voice] Idle timer started (threshold: \(self.idleDisconnectThreshold)s)")
-        #endif
     }
 
     /// Stop the idle disconnect timer
@@ -1250,10 +1686,6 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
     /// Reset the idle timer when speech activity is detected
     private func resetIdleTimer() {
         lastSpeechActivityTime = Date()
-
-        #if DEBUG
-        Log.voice.debug("[Voice] Idle timer reset")
-        #endif
     }
 
     /// Check if idle threshold has been exceeded
@@ -1264,158 +1696,39 @@ final class GrokVoiceService: ObservableObject, VoiceServiceProtocol {
 
         let elapsed = Date().timeIntervalSince(lastActivity)
         if elapsed >= idleDisconnectThreshold {
-            finishSession(message: "Voice session ended after inactivity. Tap to start a new session.")
+            stopNow(.idleTimeout)
         }
     }
 
     private func updateMinutesRemaining() {
         guard let startTime = sessionStartTime else { return }
-        
+
         let elapsedSeconds = Date().timeIntervalSince(startTime)
         let elapsedMinutes = elapsedSeconds / 60.0
         minutesRemaining = max(0, initialMinutesRemaining - elapsedMinutes)
-        
-        // Stop session when quota is exhausted
+
+        // Stop session when the local allowance estimate is exhausted. The server stays authoritative.
         if minutesRemaining <= 0 {
-            finishSession(message: "Monthly voice quota reached. Your three free minutes have been used. Premium includes unlimited monthly minutes, with sessions up to two minutes.")
+            stopNow(.quotaReached)
         }
     }
 
-    private func endSession(sessionId: String, durationSeconds: Int, messagesCount: Int) async {
-        struct EndSessionRequest: Encodable {
-            let sessionId: String
-            let durationSeconds: Int
-            let messagesCount: Int
-            let wasQuotaLimited: Bool
-
-            enum CodingKeys: String, CodingKey {
-                case sessionId = "session_id"
-                case durationSeconds = "duration_seconds"
-                case messagesCount = "messages_count"
-                case wasQuotaLimited = "was_quota_limited"
-            }
+    /// Accounts for an admitted session on behalf of its owner. Uses the ambient token only when it
+    /// still belongs to that owner; otherwise the token captured at admission, never another account's.
+    /// Returns what the server established; `.unconfirmed` is never promoted to success.
+    private func performEndSession(_ admission: AdmittedSession, durationSeconds: Int, messagesCount: Int) async -> VoiceAccountingResult {
+        var token = admission.capturedToken
+        if let ambient = try? await backend.authSnapshot(), ambient.userID == admission.ownerID {
+            token = ambient.accessToken
         }
-
-        do {
-            // Refresh session to ensure we have a valid token (not stale)
-            let session = try await supabase.auth.session
-            _ = try await supabase.functions.invoke(
-                "voice-session-end",
-                options: FunctionInvokeOptions(
-                    headers: ["Authorization": "Bearer \(session.accessToken)"],
-                    body: EndSessionRequest(
-                        sessionId: sessionId,
-                        durationSeconds: durationSeconds,
-                        messagesCount: messagesCount,
-                        wasQuotaLimited: false
-                    )
-                )
-            )
-        } catch {
-            #if DEBUG
-            Log.voice.debug("Failed to end session: \(error)")
-            #endif
-        }
-    }
-
-    private func saveVoicePreference(_ voice: GrokVoice) async throws {
-        guard let session = try? await supabase.auth.session else { return }
-
-        try await supabase
-            .from("voice_settings")
-            .upsert([
-                "user_id": session.user.id.uuidString,
-                "preferred_voice": voice.rawValue,
-                "updated_at": ISO8601DateFormatter().string(from: Date()),
-            ])
-            .execute()
-    }
-
-    // MARK: - Private Methods - Emotion Analysis
-
-    /// Analyze emotion from recent audio buffer after speech ends
-    /// Runs asynchronously without blocking voice flow
-    /// TEMPORARILY DISABLED - causing voice latency issues
-    private func analyzeEmotionIfNeeded() {
-        // DISABLED: Emotion analysis causing voice latency/cutoff issues
-        // TODO: Re-enable after fixing performance problems
-        return
-
-    }
-
-    /// Resample audio buffer - static function to allow calling from detached task
-    /// - Parameters:
-    ///   - inputBuffer: Source audio samples
-    ///   - fromRate: Source sample rate (e.g., 24000)
-    ///   - toRate: Target sample rate (e.g., 16000)
-    /// - Returns: Resampled audio buffer
-    private nonisolated static func resampleAudio(_ inputBuffer: [Float], fromRate: Double, toRate: Double) -> [Float] {
-        // Validate inputs to prevent division by zero or invalid calculations
-        guard !inputBuffer.isEmpty, fromRate > 0, toRate > 0 else { return [] }
-
-        let ratio = fromRate / toRate
-        let outputLength = Int(Double(inputBuffer.count) / ratio)
-
-        guard outputLength > 0 else { return [] }
-
-        var outputBuffer = [Float](repeating: 0, count: outputLength)
-
-        // Linear interpolation resampling
-        for i in 0..<outputLength {
-            let sourceIndex = Double(i) * ratio
-            let lowerIndex = Int(sourceIndex)
-            let upperIndex = min(lowerIndex + 1, inputBuffer.count - 1)
-            let fraction = Float(sourceIndex - Double(lowerIndex))
-
-            outputBuffer[i] = inputBuffer[lowerIndex] * (1 - fraction) + inputBuffer[upperIndex] * fraction
-        }
-
-        return outputBuffer
-    }
-
-    /// Handle successful emotion analysis result
-    private func handleEmotionResult(_ result: EmotionResult) {
-        currentEmotion = result
-        emotionConfidence = result.confidence
-
-        // Add to history with timestamp (fallback to Date() if session not started)
-        let startTime = sessionStartTime ?? Date()
-        let snapshot = EmotionSnapshot(
-            from: result,
-            sessionStartTime: startTime,
-            transcript: nil
+        return await backend.endSession(
+            VoiceSessionEndRequest(
+                sessionId: admission.sessionId,
+                durationSeconds: durationSeconds,
+                messagesCount: messagesCount,
+                wasQuotaLimited: false
+            ),
+            authorization: token
         )
-        emotionHistory.append(snapshot)
-
-        // Enforce max history size (FIFO - remove oldest entries)
-        if emotionHistory.count > maxEmotionHistorySize {
-            emotionHistory.removeFirst(emotionHistory.count - maxEmotionHistorySize)
-        }
-
-        // Inject emotion context into conversation for AI awareness
-        // This will be visible to the AI for subsequent responses
-        injectEmotionContext(result.emotion, confidence: result.confidence)
-
-        // Emit event to delegate
-        delegate?.voiceService(self, didEmit: .emotionDetected(result))
-
-        #if DEBUG
-        Log.voice.debug("[Voice] Emotion detected: \(result.emotion) @ \(result.confidence) (history: \(self.emotionHistory.count))")
-        #endif
-    }
-}
-
-// MARK: - Helper Types
-
-private struct VoiceErrorResponse: Codable {
-    let error: String
-    let code: String
-    let minutesRemaining: Double?
-    let upgradeRequired: Bool?
-
-    enum CodingKeys: String, CodingKey {
-        case error, code
-        case minutesRemaining = "minutes_remaining"
-        case upgradeRequired = "upgrade_required"
     }
 }
