@@ -264,9 +264,58 @@ final class VoiceStateMachineTests: XCTestCase {
     // MARK: - Barge-In State Transitions
 
     func testBargeInToUserSpeakingOnPlaybackFinished() {
-        var machine = VoiceStateMachine(initialState: .bargeIn)
+        var machine = VoiceStateMachine(initialState: .speaking)
+        XCTAssertEqual(machine.send(.speechStart), .bargeIn)
         let newState = machine.send(.audioPlaybackFinished)
         XCTAssertEqual(newState, .userSpeaking)
+    }
+
+    func testBargeInWithoutObservedSpeechReturnsToListeningOnPlaybackFinished() {
+        var machine = VoiceStateMachine(initialState: .bargeIn)
+        XCTAssertEqual(machine.send(.audioPlaybackFinished), .listening)
+    }
+
+    func testSilentTapInterruptWaitsForSpeechAfterPlaybackStops() {
+        var machine = VoiceStateMachine(initialState: .speaking)
+        XCTAssertEqual(machine.send(.tapInterrupt), .bargeIn)
+        XCTAssertEqual(machine.send(.audioPlaybackFinished), .listening)
+        XCTAssertEqual(machine.send(.speechStart), .userSpeaking)
+        XCTAssertEqual(machine.send(.speechEnd), .endOfUtterance)
+    }
+
+    func testResponseCancellationPreservesSpeechButDoesNotInventItAfterATap() {
+        for initialState in [VoiceStateMachine.State.thinking, .processing, .speaking] {
+            var speaking = VoiceStateMachine(initialState: initialState)
+            XCTAssertEqual(speaking.send(.speechStart), .bargeIn)
+            XCTAssertEqual(speaking.send(.serverResponseDone), .userSpeaking)
+            XCTAssertEqual(speaking.send(.audioPlaybackFinished), .userSpeaking)
+            XCTAssertEqual(speaking.send(.speechEnd), .endOfUtterance)
+
+            var silent = VoiceStateMachine(initialState: initialState)
+            XCTAssertEqual(silent.send(.tapInterrupt), .bargeIn)
+            XCTAssertEqual(silent.send(.serverResponseDone), .listening)
+            XCTAssertEqual(silent.send(.audioPlaybackFinished), .listening)
+            XCTAssertEqual(silent.send(.speechStart), .userSpeaking)
+        }
+    }
+
+    func testSpeechEndingBeforePlaybackStopsRemainsReadyToSubmit() {
+        var machine = VoiceStateMachine(initialState: .speaking)
+        XCTAssertEqual(machine.send(.speechStart), .bargeIn)
+        XCTAssertEqual(machine.send(.speechEnd), .endOfUtterance)
+        XCTAssertEqual(machine.send(.audioPlaybackFinished), .endOfUtterance)
+        XCTAssertEqual(machine.send(.serverResponseDone), .endOfUtterance)
+    }
+
+    func testNewSilentInterruptionDoesNotReusePreviousSpeech() {
+        var machine = VoiceStateMachine(initialState: .speaking)
+        XCTAssertEqual(machine.send(.speechStart), .bargeIn)
+        XCTAssertEqual(machine.send(.audioPlaybackFinished), .userSpeaking)
+        XCTAssertEqual(machine.send(.speechEnd), .endOfUtterance)
+        XCTAssertEqual(machine.send(.serverThinking), .thinking)
+        XCTAssertEqual(machine.send(.serverAudioChunk(Data())), .speaking)
+        XCTAssertEqual(machine.send(.tapInterrupt), .bargeIn)
+        XCTAssertEqual(machine.send(.audioPlaybackFinished), .listening)
     }
 
     func testBargeInToEndOfUtteranceOnSpeechEnd() {
