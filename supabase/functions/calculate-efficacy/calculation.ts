@@ -147,4 +147,3 @@ function detectBreakthrough(trajectory: TrajectoryPoint[]): {
 
   return { detected: false };
 }
-

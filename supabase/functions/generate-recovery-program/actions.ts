@@ -189,4 +189,3 @@ function selectExerciseForFocusArea(
   if (candidates.length === 0) return null;
   return candidates[Math.floor(Math.random() * candidates.length)];
 }
-

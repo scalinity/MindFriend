@@ -133,22 +133,41 @@ final class EfficacyCalculatorTests: XCTestCase {
         XCTAssertEqual(result!.trajectoryShape, .earlyPeak, "Should classify as early peak")
     }
 
-    func testDetermineTrajectoryShape_LateBreakthrough() {
-        // Given: trajectory flat then sudden improvement at end
+    func testDetermineTrajectoryShape_LateBreakthrough() throws {
+        // The shape contract is an initial dip, then improvement: midpoint < start.
+        // See claude-specs/013-intervention-efficacy-engine.md, EmotionalTrajectory.
+        let trajectory = [
+            createTrajectoryPoint(second: 0, score: -0.5),
+            createTrajectoryPoint(second: 20, score: -0.6),
+            createTrajectoryPoint(second: 40, score: -0.7),
+            createTrajectoryPoint(second: 60, score: -0.3),
+            createTrajectoryPoint(second: 80, score: 0.3)
+        ]
+
+        let result = try XCTUnwrap(calculator.calculateEfficacy(trajectory: trajectory, sessionDuration: 80))
+
+        XCTAssertEqual(result.trajectoryShape, .lateBreakthrough)
+        XCTAssertEqual(result.netEmotionalChange, 0.8, accuracy: 0.000001)
+        XCTAssertTrue(result.breakthroughDetected)
+        XCTAssertEqual(result.breakthroughSecond, 80)
+    }
+
+    func testImprovedMidpointRemainsSteadyDespiteLateRapidBreakthrough() throws {
+        // A late rapid shift and a late-breakthrough trajectory shape are separate metrics.
+        // This midpoint (-0.4) already improves on the starting score (-0.5).
         let trajectory = [
             createTrajectoryPoint(second: 0, score: -0.5),
             createTrajectoryPoint(second: 20, score: -0.5),
-            createTrajectoryPoint(second: 40, score: -0.4),  // Midpoint still low
+            createTrajectoryPoint(second: 40, score: -0.4),
             createTrajectoryPoint(second: 60, score: -0.3),
-            createTrajectoryPoint(second: 80, score: 0.3)    // Sudden improvement at end
+            createTrajectoryPoint(second: 80, score: 0.3)
         ]
 
-        // When: call calculateEfficacy
-        let result = calculator.calculateEfficacy(trajectory: trajectory, sessionDuration: 80)
+        let result = try XCTUnwrap(calculator.calculateEfficacy(trajectory: trajectory, sessionDuration: 80))
 
-        // Then: trajectoryShape = .lateBreakthrough
-        XCTAssertNotNil(result)
-        XCTAssertEqual(result!.trajectoryShape, .lateBreakthrough, "Should classify as late breakthrough")
+        XCTAssertEqual(result.trajectoryShape, .steadyImprovement)
+        XCTAssertTrue(result.breakthroughDetected)
+        XCTAssertEqual(result.breakthroughSecond, 80)
     }
 
     func testDetermineTrajectoryShape_Deterioration() {
