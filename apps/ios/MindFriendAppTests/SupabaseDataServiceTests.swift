@@ -147,7 +147,7 @@ final class SupabaseDataServiceTests: XCTestCase {
 
     func testDataError_CircleFullDescription() {
         let error = DataError.circleFull
-        XCTAssertEqual(error.errorDescription, "This circle is full")
+        XCTAssertEqual(error.errorDescription, "Circle is full")
     }
 
     func testDataError_CustomDescription() {
