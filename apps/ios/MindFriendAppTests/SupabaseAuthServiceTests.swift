@@ -307,21 +307,25 @@ final class SupabaseAuthServiceTests: XCTestCase {
     
     // MARK: - Input Validation Tests
     
-    func testHandleValidation_ValidHandle_Passes() async {
+    func testHandleValidation_ValidHandle_Passes() throws {
         // Valid handles: lowercase letters, numbers, underscores, 3-30 chars
         let validHandles = ["user_123", "john_doe", "a1b2c3", "abc", "a".padding(toLength: 30, withPad: "b", startingAt: 0)]
         
         for handle in validHandles {
-            let isValid = isValidHandle(handle)
-            XCTAssertTrue(isValid, "Handle '\(handle)' should be valid")
+            XCTAssertEqual(try SupabaseAuthService.normalizedHandle(handle), handle)
+        }
+    }
+
+    func testHandleValidation_NormalizesCaseAndSurroundingWhitespace() throws {
+        for (input, expected) in [("AB_CD", "ab_cd"), ("  User_123  ", "user_123"), (" JoHn_DoE ", "john_doe")] {
+            XCTAssertEqual(try SupabaseAuthService.normalizedHandle(input), expected)
         }
     }
     
-    func testHandleValidation_InvalidHandle_Fails() async {
-        // Invalid handles: too short, too long, uppercase, special chars
+    func testHandleValidation_InvalidHandle_Fails() {
+        // Invalid after normalization: too short, too long, or unsupported characters.
         let invalidHandles = [
             "ab",           // Too short
-            "AB_CD",        // Uppercase
             "user-name",    // Hyphen not allowed
             "user.name",    // Period not allowed
             "user name",    // Space not allowed
@@ -330,8 +334,11 @@ final class SupabaseAuthServiceTests: XCTestCase {
         ]
         
         for handle in invalidHandles {
-            let isValid = isValidHandle(handle)
-            XCTAssertFalse(isValid, "Handle '\(handle)' should be invalid")
+            XCTAssertThrowsError(try SupabaseAuthService.normalizedHandle(handle), "Handle '\(handle)' should be invalid") { error in
+                guard case AuthError.invalidHandle = error else {
+                    return XCTFail("Expected invalidHandle, received \(error)")
+                }
+            }
         }
     }
     
@@ -419,11 +426,6 @@ final class SupabaseAuthServiceTests: XCTestCase {
         )
     }
     
-    private func isValidHandle(_ handle: String) -> Bool {
-        let normalizedHandle = handle.lowercased().trimmingCharacters(in: .whitespaces)
-        let handleRegex = /^[a-z0-9_]{3,30}$/
-        return normalizedHandle.wholeMatch(of: handleRegex) != nil
-    }
 }
 
 // MARK: - Mock Helpers (for future expansion)

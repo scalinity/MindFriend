@@ -805,6 +805,15 @@ final class SupabaseAuthService: ObservableObject {
         }
     }
 
+    nonisolated static func normalizedHandle(_ handle: String) throws -> String {
+        let normalizedHandle = handle.lowercased().trimmingCharacters(in: .whitespaces)
+        let handleRegex = /^[a-z0-9_]{3,30}$/
+        guard normalizedHandle.wholeMatch(of: handleRegex) != nil else {
+            throw AuthError.invalidHandle
+        }
+        return normalizedHandle
+    }
+
     func updateProfile(displayName: String? = nil, handle: String? = nil, timezone: String? = nil) async throws {
         guard let userId = userId else { return }
 
@@ -817,14 +826,7 @@ final class SupabaseAuthService: ObservableObject {
         }
 
         if let handle = handle {
-            // Normalize handle: lowercase, trimmed
-            let normalizedHandle = handle.lowercased().trimmingCharacters(in: .whitespaces)
-
-            // Validate handle format (letters, numbers, underscores only)
-            let handleRegex = /^[a-z0-9_]{3,30}$/
-            guard normalizedHandle.wholeMatch(of: handleRegex) != nil else {
-                throw AuthError.invalidHandle
-            }
+            let normalizedHandle = try Self.normalizedHandle(handle)
 
             // Check if handle is available
             let isAvailable = try await isHandleAvailable(normalizedHandle, excludingUserId: userId)
