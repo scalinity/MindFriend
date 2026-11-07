@@ -27,15 +27,26 @@ final class MindFriendAppUITests: XCTestCase {
         let password = app.secureTextFields["Password"]
         password.tap()
         password.typeText("Synthetic-invalid-" + UUID().uuidString)
+        let keyboardDone = app.buttons["Done"]
+        XCTAssertTrue(keyboardDone.waitForExistence(timeout: 5))
+        keyboardDone.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
         let signIn = app.buttons["Sign In"]
-        if !signIn.isHittable { app.swipeUp() }
+        XCTAssertTrue(signIn.isEnabled)
+        XCTAssertTrue(signIn.isHittable)
         signIn.tap()
-        let rejected = app.staticTexts["Incorrect email or password. Please try again."]
-        XCTAssertTrue(rejected.waitForExistence(timeout: 30), "The deterministic authentication rejection must reach the production alert")
+        let alert = app.alerts["Sign In Error"]
+        let alertAppeared = alert.waitForExistence(timeout: 10)
         let evidence = XCTAttachment(screenshot: app.screenshot())
         evidence.name = "Offline sign-in rejection"
         evidence.lifetime = .keepAlways
         add(evidence)
+        let hierarchy = XCTAttachment(string: app.debugDescription)
+        hierarchy.name = "Offline sign-in rejection hierarchy"
+        hierarchy.lifetime = .keepAlways
+        add(hierarchy)
+        XCTAssertTrue(alertAppeared, "The deterministic authentication rejection must reach the production alert")
+        XCTAssertTrue(alert.staticTexts["Incorrect email or password. Please try again."].exists)
     }
 
     // MARK: - Launch Tests

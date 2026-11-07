@@ -14,6 +14,7 @@ struct AuthUITestView: View {
 
     var body: some View {
         SignInView(testEmailSignIn: { _, _ in
+            print("[AuthUITest] Synthetic email sign-in rejected")
             throw AuthError.invalidCredentials
         })
         .environmentObject(appState)
