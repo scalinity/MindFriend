@@ -114,6 +114,18 @@ final class CrashReporter {
     func initialize() {
         guard !isInitialized else { return }
 
+        // Test runs stay out of Sentry. The unit-test bundle is hosted in the
+        // app, so without this every test run started the live SDK and its
+        // failed-request capture logged the tests' stubbed 5xx responses
+        // (*.invalid fixture hosts) as HTTPClientError issues (MINDFRIEND-19).
+        // UI-test fixture launches are skipped for the same reason.
+        if TestRunDetector.isTestRun {
+            isInitialized = true
+            isSentryEnabled = false
+            logger.info("Sentry not started: test run")
+            return
+        }
+
         // Load DSN from Info.plist (set via xcconfig for different environments)
         guard let dsn = Bundle.main.object(forInfoDictionaryKey: "SENTRY_DSN") as? String,
               !dsn.isEmpty,
@@ -853,5 +865,49 @@ enum CrashReportingEnvironment {
             return testFlight
         }
         return production
+    }
+}
+
+// MARK: - Test Run Detection
+
+/// Whether this process is a test run that must not report to Sentry.
+///
+/// Two cases, both DEBUG only so a Release build can never skip reporting:
+/// - The app is hosting the `MindFriendAppTests` unit-test bundle (`TEST_HOST`).
+///   XCTest boots the full app before injecting the bundle and sets its
+///   configuration variables in the host's environment.
+/// - The app was launched by a UI test into a fixture screen, which UI tests
+///   select with a `--<name>-ui-test` launch argument (`--auth-ui-test`,
+///   `--sleep-ui-test` and so on).
+///
+/// A plain UI-test launch with no fixture argument runs the real app and still
+/// reports, since anything it hits is real backend behavior.
+enum TestRunDetector {
+    static var isTestRun: Bool {
+        #if DEBUG
+        let isDebugBuild = true
+        #else
+        let isDebugBuild = false
+        #endif
+        return resolve(
+            isDebugBuild: isDebugBuild,
+            environment: ProcessInfo.processInfo.environment,
+            arguments: ProcessInfo.processInfo.arguments
+        )
+    }
+
+    static func resolve(isDebugBuild: Bool, environment: [String: String], arguments: [String]) -> Bool {
+        guard isDebugBuild else { return false }
+        return isHostingUnitTests(environment: environment) || isUITestFixtureLaunch(arguments: arguments)
+    }
+
+    static func isHostingUnitTests(environment: [String: String]) -> Bool {
+        environment["XCTestConfigurationFilePath"] != nil
+            || environment["XCTestBundlePath"] != nil
+            || environment["XCTestSessionIdentifier"] != nil
+    }
+
+    static func isUITestFixtureLaunch(arguments: [String]) -> Bool {
+        arguments.contains { $0.hasPrefix("--") && $0.hasSuffix("-ui-test") }
     }
 }
