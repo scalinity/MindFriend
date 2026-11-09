@@ -16,12 +16,18 @@ actor OfflineCacheService {
 
     // MARK: - Properties
 
-    private let cacheDirectory: URL
+    /// Parent of all per-account cache folders. The legacy unscoped files that
+    /// older builds wrote directly into `OfflineCache/` are never read,
+    /// migrated or attributed to an account.
+    private let cacheRoot: URL
     private let fileManager = FileManager.default
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
-    // In-memory cache for frequently accessed items
+    private var binding: OfflineOwnerBinding?
+    private var highestEpoch: UInt64?
+
+    // In-memory cache for frequently accessed items (current binding only)
     private var memoryCache: [String: CacheEntry] = [:]
     private let maxMemoryCacheSize = 50
 
@@ -29,15 +35,12 @@ actor OfflineCacheService {
 
     init() {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-        cacheDirectory = caches.appendingPathComponent("MindFriend/OfflineCache", isDirectory: true)
+        self.init(rootDirectory: caches)
+    }
 
-        try? FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
-
-        // Set file protection to complete until first unlock for data-at-rest protection
-        try? (cacheDirectory as NSURL).setResourceValue(
-            URLFileProtection.completeUntilFirstUserAuthentication,
-            forKey: .fileProtectionKey
-        )
+    /// Test/embedding seam: roots the cache under a caller-provided directory.
+    init(rootDirectory: URL) {
+        cacheRoot = rootDirectory.appendingPathComponent("MindFriend/OfflineCache/accounts", isDirectory: true)
 
         encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
@@ -46,20 +49,91 @@ actor OfflineCacheService {
         decoder.dateDecodingStrategy = .iso8601
     }
 
-    /// Clear all cached data (call on user sign-out to prevent data leaking between accounts)
-    func clearAll() {
+    // MARK: - Binding
+
+    /// Bind the cache to the account lifecycle (use the binding returned by
+    /// `OfflineStorageManager.bind`). Until then every read and write fails with
+    /// `notBound`; there is no shared or identityless directory.
+    func bind(_ newBinding: OfflineOwnerBinding) throws {
+        guard OfflineStorageManager.isValidUserId(newBinding.userId) else { throw OfflineStorageError.invalidUserId }
+        if binding == newBinding { return }
+        if let highestEpoch, newBinding.epoch <= highestEpoch { throw OfflineStorageError.staleEpoch }
+        let directory = directory(for: newBinding.userId)
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        // Set file protection to complete until first unlock for data-at-rest protection
+        try? (directory as NSURL).setResourceValue(
+            URLFileProtection.completeUntilFirstUserAuthentication,
+            forKey: .fileProtectionKey
+        )
         memoryCache.removeAll()
-        try? fileManager.removeItem(at: cacheDirectory)
-        try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+        binding = newBinding
+        highestEpoch = newBinding.epoch
+    }
+
+    /// End the lifecycle; only the live binding can unbind. Disk files remain
+    /// until `purgeUserCache` (they are a regenerable cache).
+    func unbind(_ expected: OfflineOwnerBinding) {
+        guard binding == expected else { return }
+        binding = nil
+        memoryCache.removeAll()
+    }
+
+    func currentBinding() -> OfflineOwnerBinding? { binding }
+
+    /// Remove an account's cache folder (logout). Refuses while that account is bound.
+    func purgeUserCache(userId: String) throws {
+        guard OfflineStorageManager.isValidUserId(userId) else { throw OfflineStorageError.invalidUserId }
+        if binding?.userId == userId { throw OfflineStorageError.ownerIsBound }
+        let directory = directory(for: userId)
+        if fileManager.fileExists(atPath: directory.path) {
+            try fileManager.removeItem(at: directory)
+        }
+    }
+
+    private func directory(for userId: String) -> URL {
+        cacheRoot.appendingPathComponent(userId, isDirectory: true)
+    }
+
+    /// Verify the caller's captured binding against the live one, inside the
+    /// actor, immediately before touching memory or disk.
+    private func requireDirectory(_ expected: OfflineOwnerBinding) throws -> URL {
+        guard let live = binding else { throw OfflineStorageError.notBound }
+        guard live == expected else { throw OfflineStorageError.staleBinding }
+        return directory(for: live.userId)
+    }
+
+    private func liveBinding() throws -> OfflineOwnerBinding {
+        guard let binding else { throw OfflineStorageError.notBound }
+        return binding
+    }
+
+    /// Clear all cached data for the bound account
+    func clearAll() throws {
+        let directory = try requireDirectory(try liveBinding())
+        memoryCache.removeAll()
+        try? fileManager.removeItem(at: directory)
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
     // MARK: - Generic Cache Operations
 
-    /// Cache data with a key
-    func cache<T: Codable>(_ data: T, key: OfflineCacheKey) throws {
-        let path = cacheDirectory.appendingPathComponent("\(key.rawValue).json")
+    /// Cache data with a key. Pass the binding captured when the work began.
+    func cache<T: Codable>(_ data: T, key: OfflineCacheKey, binding expected: OfflineOwnerBinding) throws {
+        let directory = try requireDirectory(expected)
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        let path = directory.appendingPathComponent("\(key.rawValue).json")
         let encoded = try encoder.encode(data)
-        try encoded.write(to: path, options: .atomic)
+        // Same-directory temp file + rename: atomic without a system temp dir.
+        let staging = directory.appendingPathComponent(".\(key.rawValue).\(UUID().uuidString).tmp")
+        do {
+            try encoded.write(to: staging)
+            if rename(staging.path, path.path) != 0 {
+                throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+            }
+        } catch {
+            try? fileManager.removeItem(at: staging)
+            throw error
+        }
 
         // Update memory cache
         let entry = CacheEntry(
@@ -70,15 +144,23 @@ actor OfflineCacheService {
         updateMemoryCache(key: key.rawValue, entry: entry)
     }
 
+    /// Cache for the live account. Prefer the `binding:` form from tasks that
+    /// span suspension points; this form cannot detect an account change that
+    /// happened before the call.
+    func cache<T: Codable>(_ data: T, key: OfflineCacheKey) throws {
+        try cache(data, key: key, binding: try liveBinding())
+    }
+
     /// Retrieve cached data
-    func retrieve<T: Codable>(key: OfflineCacheKey, as type: T.Type) throws -> T? {
+    func retrieve<T: Codable>(key: OfflineCacheKey, as type: T.Type, binding expected: OfflineOwnerBinding) throws -> T? {
+        let directory = try requireDirectory(expected)
         // Check memory cache first
         if let entry = memoryCache[key.rawValue], !entry.isExpired {
             return try decoder.decode(type, from: entry.data)
         }
 
         // Fall back to disk
-        let path = cacheDirectory.appendingPathComponent("\(key.rawValue).json")
+        let path = directory.appendingPathComponent("\(key.rawValue).json")
         guard fileManager.fileExists(atPath: path.path) else { return nil }
 
         let data = try Data(contentsOf: path)
@@ -105,15 +187,20 @@ actor OfflineCacheService {
         return try decoder.decode(type, from: data)
     }
 
+    func retrieve<T: Codable>(key: OfflineCacheKey, as type: T.Type) throws -> T? {
+        try retrieve(key: key, as: type, binding: try liveBinding())
+    }
+
     /// Check if cache exists and is valid
     func exists(key: OfflineCacheKey) -> Bool {
+        guard let binding, let directory = try? requireDirectory(binding) else { return false }
         // Check memory cache
         if let entry = memoryCache[key.rawValue], !entry.isExpired {
             return true
         }
 
         // Check disk
-        let path = cacheDirectory.appendingPathComponent("\(key.rawValue).json")
+        let path = directory.appendingPathComponent("\(key.rawValue).json")
         guard fileManager.fileExists(atPath: path.path) else { return false }
 
         // Check expiration
@@ -130,16 +217,18 @@ actor OfflineCacheService {
 
     /// Invalidate a specific cache
     func invalidate(key: OfflineCacheKey) {
-        let path = cacheDirectory.appendingPathComponent("\(key.rawValue).json")
+        guard let binding, let directory = try? requireDirectory(binding) else { return }
+        let path = directory.appendingPathComponent("\(key.rawValue).json")
         try? fileManager.removeItem(at: path)
         memoryCache.removeValue(forKey: key.rawValue)
     }
 
-    /// Invalidate all caches
+    /// Invalidate all caches for the bound account
     func invalidateAll() {
-        try? fileManager.removeItem(at: cacheDirectory)
-        try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
         memoryCache.removeAll()
+        guard let binding, let directory = try? requireDirectory(binding) else { return }
+        try? fileManager.removeItem(at: directory)
+        try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
     // MARK: - Memory Cache Management
@@ -161,14 +250,6 @@ actor OfflineCacheService {
     /// Clear memory cache only (keeps disk cache)
     func clearMemoryCache() {
         memoryCache.removeAll()
-    }
-
-    /// Clear all caches on logout - invalidates all user-specific data
-    func clearOnLogout() {
-        // Clear memory cache
-        memoryCache.removeAll()
-        // Invalidate all disk cache (user-specific data)
-        invalidateAll()
     }
 
     // MARK: - Specific Cache Methods
@@ -227,7 +308,8 @@ actor OfflineCacheService {
 
     /// Get total cache size
     func getCacheSize() async -> Int64 {
-        guard fileManager.fileExists(atPath: cacheDirectory.path) else { return 0 }
+        guard let binding, let cacheDirectory = try? requireDirectory(binding),
+              fileManager.fileExists(atPath: cacheDirectory.path) else { return 0 }
 
         do {
             let contents = try fileManager.contentsOfDirectory(
@@ -247,7 +329,8 @@ actor OfflineCacheService {
 
     /// Get cache item count
     func getCacheItemCount() async -> Int {
-        guard fileManager.fileExists(atPath: cacheDirectory.path) else { return 0 }
+        guard let binding, let cacheDirectory = try? requireDirectory(binding),
+              fileManager.fileExists(atPath: cacheDirectory.path) else { return 0 }
 
         do {
             let contents = try fileManager.contentsOfDirectory(
@@ -279,36 +362,40 @@ private struct CacheEntry {
 
 extension OfflineCacheService {
 
-    /// Cache with automatic refresh if stale
+    /// Cache with automatic refresh if stale. The account binding is captured
+    /// before any suspension, so a fetch that finishes after an account change
+    /// cannot be written into the new account's cache.
     func getOrFetch<T: Codable>(
         key: OfflineCacheKey,
         as type: T.Type,
         fetch: () async throws -> T
     ) async throws -> T {
+        let binding = try liveBinding()
         // Try cache first
-        if let cached: T = try? retrieve(key: key, as: type) {
+        if let cached: T = try? retrieve(key: key, as: type, binding: binding) {
             return cached
         }
 
         // Fetch fresh data
         let fresh = try await fetch()
-        try? cache(fresh, key: key)
+        try? cache(fresh, key: key, binding: binding)
         return fresh
     }
 
-    /// Cache with background refresh
+    /// Cache with background refresh (binding captured up front, see `getOrFetch`)
     func getCachedOrRefresh<T: Codable>(
         key: OfflineCacheKey,
         as type: T.Type,
         forceRefresh: Bool = false,
         fetch: @escaping () async throws -> T
     ) async -> T? {
+        guard let binding = try? liveBinding() else { return nil }
         // Return cached if available and not forcing refresh
-        if !forceRefresh, let cached: T = try? retrieve(key: key, as: type) {
+        if !forceRefresh, let cached: T = try? retrieve(key: key, as: type, binding: binding) {
             // Schedule background refresh
             Task {
                 if let fresh = try? await fetch() {
-                    try? self.cache(fresh, key: key)
+                    try? self.cache(fresh, key: key, binding: binding)
                 }
             }
             return cached
@@ -316,11 +403,11 @@ extension OfflineCacheService {
 
         // Fetch fresh data
         if let fresh = try? await fetch() {
-            try? cache(fresh, key: key)
+            try? cache(fresh, key: key, binding: binding)
             return fresh
         }
 
         // Fall back to cached (even if expired)
-        return try? retrieve(key: key, as: type)
+        return try? retrieve(key: key, as: type, binding: binding)
     }
 }

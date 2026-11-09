@@ -24,7 +24,7 @@ struct HealthKitConnectionSheet: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.pink)
 
-                Text("MindFriend uses HealthKit to read your health data from the Apple Health app to provide personalized insights about how your physical wellness affects your mood.")
+                Text("Choose the data MindFriend may read from Apple Health. Recorded samples can help you explore patterns; they do not establish how you feel. Apple keeps your read choices private.")
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal)
@@ -87,7 +87,8 @@ struct HealthKitConnectionSheet: View {
 
         Task {
             do {
-                try await healthKit.requestAuthorization()
+                // Explicit Connect: the only action that enables sync (also after a disconnect).
+                try await healthKit.connect()
                 try await healthKit.syncBiometrics(days: 30)
                 onConnected?()
                 dismiss()
