@@ -13,6 +13,7 @@ struct SupportExploreView: View {
     @State private var circles: [FriendCircle] = []
     @State private var replaceCandidate: SupportPin?
     @State private var showInviteBuddy = false
+    @State private var openCategory: SupportSection?
 
     private var isSearching: Bool {
         !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -44,6 +45,9 @@ struct SupportExploreView: View {
             .searchable(text: $query, prompt: Text("Search practices, programs, and people"))
             .navigationDestination(for: SupportDestination.self) { destination in
                 SupportDestinationView(destination: destination)
+            }
+            .navigationDestination(item: $openCategory) { section in
+                categoryPage(section)
             }
             .sheet(item: $replaceCandidate) { candidate in
                 ReplacePinSheet(candidate: candidate)
@@ -90,6 +94,7 @@ struct SupportExploreView: View {
                                 }
                             }
                             .frame(width: SupportTheme.readableWidth / (dynamicTypeSize.isAccessibilitySize ? 2 : 3), alignment: .leading)
+                            .frame(maxHeight: .infinity, alignment: .topLeading)
                             .supportCard()
                         }
                         .buttonStyle(.plain)
@@ -99,6 +104,8 @@ struct SupportExploreView: View {
                         .contextMenu { pinSwipeAction(SupportPin(destination)) }
                     }
                 }
+                // Every card takes the tallest card's height, so the row has no ragged band.
+                .fixedSize(horizontal: false, vertical: true)
             }
             .listRowInsets(EdgeInsets(top: SupportTheme.Spacing.xs, leading: 0, bottom: SupportTheme.Spacing.xs, trailing: 0))
             .listRowBackground(SupportTheme.canvas)
@@ -107,20 +114,47 @@ struct SupportExploreView: View {
 
     private var categorySection: some View {
         Section("Browse by category") {
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), alignment: .top), count: dynamicTypeSize.isAccessibilitySize ? 1 : 2), alignment: .leading, spacing: SupportTheme.Spacing.s) {
-                ForEach(Self.exploreSections, id: \.self) { section in
-                    NavigationLink {
-                        categoryPage(section)
-                    } label: {
-                        SupportRowLabel(title: section.title, icon: categoryIcon(section))
-                            .supportCard()
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(spacing: SupportTheme.Spacing.s) {
+                        ForEach(Self.exploreSections, id: \.self) { categoryTile($0) }
                     }
-                    .buttonStyle(.plain)
+                } else {
+                    // A two-by-two grid: tiles in a row share its height, and titles wrap instead of clipping.
+                    Grid(horizontalSpacing: SupportTheme.Spacing.s, verticalSpacing: SupportTheme.Spacing.s) {
+                        ForEach(0..<(Self.exploreSections.count + 1) / 2, id: \.self) { row in
+                            GridRow {
+                                ForEach(Self.exploreSections[(row * 2)..<min(row * 2 + 2, Self.exploreSections.count)], id: \.self) {
+                                    categoryTile($0)
+                                }
+                            }
+                        }
+                    }
                 }
             }
             .listRowInsets(EdgeInsets(top: SupportTheme.Spacing.xs, leading: 0, bottom: SupportTheme.Spacing.xs, trailing: 0))
             .listRowBackground(SupportTheme.canvas)
         }
+    }
+
+    /// A button rather than a NavigationLink: inside a List, links gain a disclosure chevron outside the card.
+    private func categoryTile(_ section: SupportSection) -> some View {
+        Button { openCategory = section } label: {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
+                Image(systemName: categoryIcon(section))
+                    .font(.title2)
+                    .foregroundStyle(SupportTheme.accent)
+                    .accessibilityHidden(true)
+                Text(section.title)
+                    .font(.headline)
+                    .foregroundStyle(SupportTheme.textPrimary)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .supportCard()
+        }
+        .buttonStyle(.plain)
     }
 
     private func categoryPage(_ section: SupportSection) -> some View {
