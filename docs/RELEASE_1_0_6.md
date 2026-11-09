@@ -34,7 +34,7 @@ This file records the 1.0.6 release work: repository cleanup, the production-cop
 - Ten NativePeers worktrees, about 483 MiB, listed in `artifacts/support-session/retained-native-workspaces.json`, plus `.worktrees/website-umami` (clean).
 
 ### Production (project `zfaucivtzfwnrijsbfug`, read-only)
-- Migration ledger: 214 versions, last `20261105210400` (`honor_presence_privacy`).
+- Migration ledger: 212 versions, last `20261105210400` (`honor_presence_privacy`).
 - Repository: 251 migrations on `origin/main`, 264 on the support branch. Pending against production: every file newer than `20261105210400` (35 dated `20261106*` on main, plus 13 from the support branch).
 - Edge functions: 210 deployed. Updated on 6 November: the provider-switch set (`chat` v54, `analyze-*`, `generate-*`, `test-auth-diagnostic` v24 and others). `voice-token` is v50 from 30 January (the legacy, non-relay deployment). `verify-purchase` v33 from 25 October. `remove-family-member`, `support-session` and `support-memory-suggestions` are not deployed.
 
@@ -99,3 +99,81 @@ The two filenames that contained `:` now use `_`. "Fixed" means the repair is on
 | Sleep Tracking Chart Completely made up_no health data | #19 | Score 55 / 9h 15m with no Health or manual data | Fixed: PR #24, #43, #45, #47–#49, #51; `SleepDashboardView.swift:612-618`, `:465-469`, `SleepTrackingModels.swift:94-97` |
 
 The support-session branch (PR #62) reverts none of these fixes; it keeps the quota banner and has no "Stop response".
+
+## Phase 2: Database readiness against a copy of production
+
+### Copy of production
+- Link confirmed with `supabase projects list` (only `zfaucivtzfwnrijsbfug`, MindFriend, `linked: true`).
+- Schema-only dumps, 8 November 2026, 8:42–8:43 PM EST, no data (zero `INSERT`/`COPY` lines): `supabase db dump --linked` for `public`, and `-s auth,storage,supabase_migrations` for the managed schemas. They are kept in the ignored `.recovery/release-1.0.6/` folder.
+- Restored into a disposable `supabase/postgres:17.11.0.006` container with no network, synthetic `NOLOGIN` roles, and the two auth hooks attached after `public`. Each pending migration runs in its own transaction, in filename order, as `postgres` (production's migration role, so its default privileges apply), stopping at the first failure.
+- Ledger check (`CHECK_REMOTE_MIGRATIONS=1 scripts/check-migrations.sh` plus a version comparison): production has no version missing from the repository, and the repository has no unrecorded version older than `20261105210400`. Exactly the pending set below will be applied. The script's six name-only differences are at versions already applied; `db push` matches on version.
+
+### First run: the known blocker
+11 of 48 pending migrations applied. Then `20261106225731_repair_mentorship_discovery_contract.sql` failed with `cannot change name of input parameter "tz1"`.
+
+### Drift found and fixed
+- **`calculate_timezone_overlap`** (`20261106225731`, never applied anywhere, edited):
+  - Production names the parameters `tz1`/`tz2`; a fresh chain names them `p_tz1`/`p_tz2` (`20260124150000`).
+  - The function is now created through a `DO` block that keeps whichever names exist, so `CREATE OR REPLACE` succeeds on both and keeps the existing grants. No `DROP FUNCTION`.
+  - Every caller passes the arguments positionally: `find_mentor_matches` and `supabase/tests/mentorship_matching.sql`. No `p_tz1 =>` or `p_tz2 =>` exists anywhere.
+- **A catalog-wide audit found more.** The fresh chain at `20261105210400` was compared with production's dump. Production's ledger records several January migrations whose objects it never received:
+  - the wellness-score columns;
+  - predictive mood intelligence (`prediction_models` and its functions);
+  - `20260124150000` mentorship security fixes (`encrypt_message_content`, `report_mentorship_issue`, `mark_messages_read` and others);
+  - progressive disclosure caller checks;
+  - capacity, circadian, vulnerable-window and mentorship policies, and 14 indexes.
+
+  Pending `20261106230635` installs a trigger that calls `encrypt_message_content()`, so without a fix every mentorship message insert in production would fail.
+- **New migration `20261106000000_reconcile_production_drift.sql`**, sorted before the other pending migrations. It is generated from the fresh chain's catalog with `search_path = ''`, every statement is guarded or idempotent, and it is a no-op on a fresh chain.
+- **Where production was less safe, the safer definition wins.** `get_social_vitality_dashboard`, `check_activation_status` and the three `record_first_*` functions were `SECURITY DEFINER`, executable by `anon`, and had no caller check. They now reject anonymous callers and other users' ids. Released clients always pass their own id (`ActivationService.swift:98-198`, `SocialVitalityEngine.swift:48`).
+- **Where production was the safer one, production's definition wins** (`increment_shield_count`, `get_active_encryption_key`).
+- **Deliberately not changed:**
+  - production's extra objects from repository-disabled migrations;
+  - storage policies (they stay with the private-media operation);
+  - `submit_pathway_checkin` (service-role only).
+
+### Independent review (GPT-6.1 Sol, xhigh, read-only) and dispositions
+| Finding | Severity | Disposition |
+|---|---|---|
+| F001: the restored "Delete own match" policy let either participant delete an active match, cascading through both participants' messages and safety escalations | critical | Fixed: delete only by the mentor, only while pending (the released app's only delete, `rejectMentorshipRequest`) |
+| F002: the restored unconditional insert policy bypassed the rate-limited one (permissive policies combine with OR) | warning | Fixed: dropped; the rate-limited policy is the only direct insert path |
+| F003/F004: the update guards missed `id`, `mentor_response` and `started_at` | warning | Fixed |
+| F005: `get_prediction_features` referenced columns that exist nowhere | warning | Fixed: reads `date`, `sleep_duration_minutes`, `steps_count`, session durations and `current_streak_days` |
+| F006: the prediction trigger doubled 6–10 mood scores past its 1–10 range, rolling back the mood insert | warning | Fixed: clamped, and wrapped so bookkeeping can never reject a mood |
+
+**Automated security review.** It flagged anon-executable definer functions and broad message policies. Prediction, decryption and capacity-cleanup functions are now service-role only. `encrypt_message_content` stays callable by `authenticated`, because the message trigger runs as the sender. Released clients update matches directly (accept, end), so the match UPDATE policy stays, with a trigger limiting API callers to the status and end-detail columns.
+
+**A running test found one more.** The old "Users can mark own messages as read" policy recursed into its own table on every update, and "Update message flags" let a participant rewrite any field. Clients use the owner-run RPCs, so neither is restored, and both are dropped on fresh chains.
+
+### Issue 56
+- Production's live `get_moods_for_pattern_analysis(uuid,integer)` (read-only, 8 November) is the `NULL::text AS source` body with `EXECUTE` for `postgres` and `service_role` only (definition MD5 `fe58f5f163cc07e6c03e21c054b4ff82`).
+- A fresh `supabase db reset` produces the identical MD5 and ACL. Parity already holds, so no migration is needed.
+
+### Issue 57 gates
+| Gate | Status |
+|---|---|
+| Reconcile the ledger and inspect the pending plan | Done. `20261105210000`–`20261105210400` were already applied in production; 49 files are pending, listed below |
+| Verify the pending migrations and recovery on a disposable production-shaped database | Done, this phase. Recovery: Phase 6 records a fresh logical backup before the push |
+| Resolve #56 | Done; parity confirmed above |
+| Deploy with an explicit function list | Phase 5 list (65 functions) |
+| voice-token relay-only 426 | 1.0.4 and 1.0.5 never call `voice-token`. They POST `{"transport":"relay"}` to `test-auth-diagnostic` and open its WebSocket (`GrokVoiceService.swift:723-729`, `VoiceWebSocketManager.swift:29-46` at `ee886e1`), and that path is kept. `test-auth-diagnostic` keeps `verify_jwt = false` (PR #65) |
+| analyze-voice-journal 428 | Not in the deploy list. Released clients already send PCM WAV (`CreativeExpressionService.swift:395-411`) |
+| Private media stays separate | `20261106223813` (never applied, edited) no longer changes bucket visibility. `operations/20261022_private_media.sql` is still unapplied |
+
+### Final results (branch head at the time of the run)
+- **Copy of production:** 49 of 49 pending migrations apply.
+- **Post-deploy catalog vs fresh chain:** they converge. What remains is the intended differences above, plus constraint renderings that are equivalent.
+- **CI's SQL runner** (`supabase/tests/ci/run_sql.py`, now 13 suites including `mentorship_messages.sql` and the new `drift_reconciliation.sql`): PASS.
+- **Every `supabase/tests` SQL file**, each in its own clone named as the file requires:
+  - Fresh chain: 63/68 pass. Copy of production: 59/68 pass. `rate_limit_concurrency_test.sql` passes on the running local stack: 4 concurrent requests give 3 allowed and 1 denied, and the verify phase holds.
+  - Failing in both: `b2b/test_metrics_privacy_threshold.sql`, `b2b/test_organizations_schema.sql` and `b2b/test_saml_replay_prevention.sql`. These are test-first specs for an enterprise SAML feature that was never built: they expect `saml_assertions`/`organizations.saml_enabled`, and one says "ALL TESTS FAIL until saml_assertions table is created".
+  - Fresh only: `restoration_journeys.sql`, a limit of CI's storage stub. It passes against production's real storage schema.
+  - Copy of production only:
+    - `assessment_submission.sql`, `support_voice_context.sql` and `private_creative_media.sql` need reference rows a schema-only dump does not carry. Production has them (all four assessment templates, the voice budget row `daily_seconds=600`, and the buckets), checked read-only.
+    - `bounded_voice.sql` and `provider_cost_limits.sql` open a second `dblink` connection that the socket-only copy does not accept. Both are self-contained fixtures on an empty database and pass on the fresh chain.
+- **Test repairs made while running every file:**
+  - `get_stress_signature.test.sql`: removed column, unqualified `gen_salt`, short `VALUES` lists, top-level `PERFORM`.
+  - `sleep_recorded_periods.sql`: missing synthetic user; RLS assertion.
+  - Apple identities: CI fixture now has the real `provider_id NOT NULL`.
+
+Pending plan (49, filename order): `20261106000000` reconcile, then the 35 `20261106*` app-repair migrations and 13 support migrations through `20261107185417_reconcile_companion_canonical_actions.sql`.
