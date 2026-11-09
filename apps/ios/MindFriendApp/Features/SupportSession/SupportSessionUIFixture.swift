@@ -30,6 +30,11 @@ enum SupportSessionUIFixture {
         default: return .large
         }
     }
+    /// `--support-text-size system` leaves the system text size in control, so accessibility
+    /// audits can observe fonts scaling; any named size pins the fixture to that size.
+    static var textSizeRange: ClosedRange<DynamicTypeSize> {
+        value(after: "--support-text-size") == "system" ? DynamicTypeSize.xSmall...DynamicTypeSize.accessibility5 : textSize...textSize
+    }
     static let networkSession: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [SupportFixtureURLProtocol.self]
@@ -100,7 +105,7 @@ struct SupportSessionUIFixtureView: View {
             else if let error { Text(error).padding() }
             else { ProgressView("Preparing synthetic journal") }
         }
-        .dynamicTypeSize(SupportSessionUIFixture.textSize)
+        .dynamicTypeSize(SupportSessionUIFixture.textSizeRange)
         .overlay(alignment: .topTrailing) {
             SupportFixtureAppearanceLabel()
         }

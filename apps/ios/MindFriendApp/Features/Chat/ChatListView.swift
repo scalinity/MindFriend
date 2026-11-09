@@ -350,31 +350,51 @@ struct EmptyConversationsView: View {
     @Binding var showNewChat: Bool
 
     var body: some View {
+        // Centered when it fits; scrollable at large text sizes instead of truncating.
+        GeometryReader { proxy in
+            ScrollView {
+                content
+                    .padding(.vertical, 24)
+                    .frame(minHeight: proxy.size.height)
+            }
+        }
+    }
+
+    private var content: some View {
         VStack(spacing: 20) {
             Image(systemName: "bubble.left.and.bubble.right")
                 .font(.system(size: 60))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
+                .accessibilityHidden(true)
 
             Text("No conversations yet")
                 .font(.title2)
                 .fontWeight(.semibold)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
 
             Text("Start a conversation with your AI wellness companion")
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
+                .fixedSize(horizontal: false, vertical: true)
 
             Button {
                 showNewChat = true
             } label: {
                 Label("Start Chat", systemImage: "plus")
                     .font(.headline)
+                    .foregroundStyle(SupportTheme.onAccent)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 24)
                     .padding(.vertical, 12)
             }
             .buttonStyle(.borderedProminent)
+            .tint(SupportTheme.accent)
         }
+        .padding(.horizontal, 24)
+        .frame(maxWidth: .infinity)
     }
 }
 

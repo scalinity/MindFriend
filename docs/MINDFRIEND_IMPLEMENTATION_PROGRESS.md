@@ -54,10 +54,10 @@ These are implemented development paths. Authenticated service/provider acceptan
 |---|---|---|
 | G0 | PASS, source/local | Verified checkout and preserved work, current toolchain/destinations, original consent requirement located and implemented |
 | G1 | PASS, tested local scope | Durable owner-bound journal, immutable operation/result recovery, privacy suppression and no Home quota reset; physical protected-data behavior belongs to G4 |
-| G2 | BLOCKED | No explicitly established nonproduction service/provider target with bounded credentials/budget. No real AI request was made; injected fetches are fixtures |
+| G2 | PARTIAL (8 Nov) | Local nonproduction stack `mindfriend-release106` with real OpenAI/xAI calls and captured provider payloads: confirmation, owner/epoch, quota, old-client shape, memory and receipts PASS; live voice relay NOT_RUN (local WebSocket upgrades fail). See `docs/RELEASE_1_0_6.md` Phase 3 |
 | G3 | PARTIAL; release blocked | Fresh combined chain, two-owner RLS/RPC, export/replay/locking pass. Modeled combined chain fails at the inherited mentorship argument-name conflict. Production ledger, storage policy parity, PostgREST and released-client matrix are unverified |
 | G4 | PARTIAL | Actual Xcode simulator builds, native journeys and selected accessibility audits. No physical iPhone is available in the final inventory; accessible destinations are simulators. Physical Health/audio/permissions/protected-data checks NOT_RUN |
-| G5 | NOT_RUN | Five representative first-use/context-comprehension participants were not available; no clinical usefulness claim |
+| G5 | WAIVED by owner for 1.0.6 | The five-person studies are not required for this release; no clinical usefulness claim |
 
 ## Executed checks
 
@@ -99,21 +99,21 @@ PASS (local) means the listed local/automated/simulator criterion was demonstrat
 | AC-02 | PARTIAL | All 26 legacy routes mapped and focused navigation tests pass; exhaustive authenticated native route matrix unrun |
 | AC-03 | PASS (local/simulator) | Real atomic file fault/recovery tests and acknowledged Untangle termination/relaunch restoration |
 | AC-04 | PASS (synthetic DB) | 100 exact replays, changed payload rejection, simultaneous completion cases and one 30 XP reward |
-| AC-05 | PARTIAL | Owner/epoch/cache/queue/cloud/voice delayed-callback tests pass; real streaming/account-switch service/device scenario unrun |
-| AC-06 | PARTIAL | Local immediate suppression and server source/closure/revision tests pass; two-device HTTP scenario unrun |
-| AC-07 | PARTIAL | Conversation-only payload/receipt fixtures exclude all prohibited domains; actual nonproduction provider-bound request capture unrun |
+| AC-05 | PARTIAL; device part scheduled for Phase 9 | Service owner/epoch checks PASS on the local stack (8 Nov, release 1.0.6 G2 check 3): `expected_owner` mismatch 409 before any claim, stale privacy revision 409 without a debit, another account 404. Real-device account switch during streaming is scheduled for the Phase 9 physical-iPhone run |
+| AC-06 | PARTIAL | Server suppression, Forget and cross-account denial PASS over HTTP on the local stack (G2 checks 3 and 7). A second physical device was not used |
+| AC-07 | PASS (local service, captured provider payloads) | G2 check 7: the captured OpenAI request contains exactly the receipt's sources; journal, mood, HRV, other conversations, stopped/forgotten memories and pending suggestions are absent; `conversation_only` sends no saved memory |
 | AC-08 | PARTIAL | Transitive Forget/scrub/tombstone/conflict tests pass; complete live correction/receipt UI walkthrough unrun |
 | AC-09 | PARTIAL | Fixed four destinations and old routes in source/tests/native fixtures; every entitlement/account runtime combination unrun |
 | AC-10 | PARTIAL | One Today card inspected; three-pin/explicit replacement source and domain checks. Full native pin replacement matrix unrun |
 | AC-11 | PARTIAL | Direct retained hubs, Chat and offline Help verified in source/selected native checks; every root's exact Circles tap task unrun |
 | AC-12 | PARTIAL | Consent wire/SQL/first-run controls and public legal content pass; real consent HTTP/browser handoff and human wording review unrun |
 | AC-13 | PARTIAL | Unified state/provenance/contracts and explicit Generate preview implemented/tested; full native memory-state correction matrix unrun |
-| AC-14 | PARTIAL | Strict terminal parser and ambiguous-confirmation fixtures pass; bounded real-provider smoke unrun |
+| AC-14 | PARTIAL | Live completed stream PASS (G2 check 1): streamed text equals the confirmed text. Refusal and incomplete terminals could not be provoked live and remain fixture-only. Cancelled streams keep a non-retryable claim by design (`issue15_chat_test.ts`) |
 | AC-15 | PASS (local/synthetic) | One user acceptance creates one activity; proposal/chooser/Not now never generate automatically; untrusted URLs/IDs rejected |
 | AC-16 | PASS (source/fixtures) | 4,000 UTF-16 input, 128,000-byte prompt, 500-token main chat, budget/quota/cancellation/claim and safety/key/provider boundaries retained; live configuration not inferred |
 | AC-17 | PARTIAL | Authoritative usage/period/entitlement fixtures and daily quota SQL pass; StoreKit sandbox and complete runtime entitlement matrix unrun |
 | AC-18 | PASS (synthetic DB) | Two-owner RLS/RPC, direct-write/anon denial, forged attachment/completion/reward and zero-row classification |
-| AC-19 | PARTIAL; restoration blocked | Current fresh combined path passes; current modeled path fails on inherited mentorship argument names before the feature checks. Missing-capability/legacy fixtures pass. Actual selected-environment ledger/storage/client parity remains unverified |
+| AC-19 | PASS (copy of production); production apply in Phase 6 | All 49 pending migrations, including `20261106000000_reconcile_production_drift.sql`, apply to a restore of production's 8 November schema; the post-push catalog converges with the fresh chain (release record, Phase 2) |
 | AC-20 | PASS (source/local/synthetic) | Bounded content-free logs; new records covered by explicit export/delete with owner/epoch and pending/rejected states; Private Vault boundary retained |
 | AC-21 | PASS (local/simulator/synthetic) | Grounding checkpoints, silent/Skip/Finish semantics, canonical registry and exactly-once completion/reward |
 | AC-22 | PASS (local/simulator) | Original Untangle answers retained; deliberate field preview/draft; no implicit journal/XP; discard scrubs queued/conflict copies |
@@ -121,15 +121,15 @@ PASS (local) means the listed local/automated/simulator criterion was demonstrat
 | AC-24 | PASS (local/simulator) | Nonempty practical step, saved vs self-reported done vs dismiss, duplicate completion guard and native Saved-step journey |
 | AC-25 | PASS (local/fixtures/selected native) | Neutral reflection/no default, sharing off, exact approved excerpt and editable deliberate Chat handoff; no automatic paid return |
 | AC-26 | PARTIAL | Done/Close/reminder generation/projection/reconcile/cancel tests pass; real OS permission/delivery/clock behavior unrun |
-| AC-27 | PARTIAL | Server packet/lease/claim/relay and Swift lifecycle fixtures pass; live text→voice→text/provider continuity unrun |
-| AC-28 | NOT_RUN | No physical iPhone available; interruption/background/lock/Bluetooth/permission/audio acceptance requires one |
-| AC-29 | PARTIAL | Durable order/finality/retry/acknowledgement and SQL transcript races pass; real device/service interruptions unrun |
+| AC-27 | PARTIAL | Voice admission, packet, correction and text continuity PASS (G2 check 8); Enhanced Privacy now narrows voice like text (PR #68). The live relay socket and five-second lease could not run: WebSocket upgrades fail inside the local edge runtime. Scheduled for the Phase 9 device run against production |
+| AC-28 | Scheduled for Phase 9 | Physical iPhone: interruption, background/lock, Bluetooth/headphone loss, permissions and audio |
+| AC-29 | PARTIAL; device part scheduled for Phase 9 | Durable order/finality/retry and SQL transcript races pass; real device/service interruptions run in Phase 9 |
 | AC-30 | PASS (synthetic/local/selected native) | Cursor >100/tied dates, meaningful cloud summaries, preserved names, closed inspect/rename/delete/new linked continuation |
-| AC-31 | PARTIAL | Compact/full iPad/real landscape and selected native audits; actual-appearance matrix passed. Split/window resizing, VoiceOver, Reduce Transparency and Increase Contrast unrun |
-| AC-32 | PARTIAL | Distinct Health query/sample states, owner race and opt-out tests; physical permission/no-data cases unrun |
-| AC-33 | NOT_RUN | Five-person first-use study unavailable |
-| AC-34 | NOT_RUN | Five-person context-comprehension study unavailable |
-| AC-35 | NOT_RUN | Named physical device/network/provider timing and 30-sample captures unavailable; targets not relaxed |
+| AC-31 | PARTIAL | 8 Nov: every destination at every Dynamic Type size in light and dark on a compact iPhone, plus the full system accessibility audit (`.all`) per destination under default, dark, Increase Contrast and Reduce Motion + Reduce Transparency, on compact iPhone and iPad. Fixed: support-palette tint and prominent headers, Chat empty state scrolling, profile row stacking, on-accent button labels, "Not yet" placeholders. Open audit findings: "Plans and Premium" row reported clipped (not visible at AX5); text under the translucent tab bar and iPad sidebar vibrancy/offscreen panes. iPad window resizing and a live VoiceOver walkthrough are not automatable here and remain for the device run |
+| AC-32 | PARTIAL; device part scheduled for Phase 9 | Distinct Health query/sample states, owner race and opt-out tests pass; real permission/no-data/query-failure cases run in Phase 9 |
+| AC-33 | WAIVED by owner for 1.0.6 | The five-person first-use study is not required for this release |
+| AC-34 | WAIVED by owner for 1.0.6 | The five-person context-comprehension study is not required for this release |
+| AC-35 | PARTIAL; target not met | 8 Nov, Mac to local functions, providers over this Mac's connection, 10 samples each: non-streaming p95 2,361 ms (target ≤3,500, met); first text delta p95 1,662 ms (target ≤1,000, not met). Targets not relaxed. Named-device 30-sample capture scheduled for Phase 9 |
 | AC-36 | PASS (reporting scope) | Independent review dispositions, current fresh PASS/modeled FAIL, and all unrun service/device/human/performance gates are recorded separately; no production or App Store action |
 
 ## Review, rollout and remaining work

@@ -587,7 +587,9 @@ final class SupportSessionFlowUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Closed session"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Continue as a new session"].exists)
         capture("Support-History-closed-step", app: app)
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        // On iPad the first navigation-bar button is the sidebar toggle, not Back.
+        let back = app.navigationBars.buttons["Today"]
+        if back.exists { back.tap() } else { app.navigationBars.buttons.element(boundBy: 0).tap() }
         tap("View your history", in: app)
         XCTAssertTrue(app.navigationBars["History"].waitForExistence(timeout: 5), app.debugDescription)
         if app.buttons["Search"].exists { app.buttons["Search"].tap() }
@@ -671,6 +673,57 @@ final class SupportSessionFlowUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Context"].exists)
         capture("Support-Chat-draft-accessibility5-dark", app: app)
         try app.performAccessibilityAudit(for: [.textClipped, .sufficientElementDescription, .hitRegion])
+    }
+
+    private func open(_ destination: String, in app: XCUIApplication) {
+        let tab = app.tabBars.buttons[destination]
+        if tab.exists {
+            tab.tap()
+        } else {
+            let root = app.descendants(matching: .any)["support-root-\(destination)"].firstMatch
+            XCTAssertTrue(root.waitForExistence(timeout: 5), destination + "\n" + app.debugDescription)
+            root.tap()
+        }
+        XCTAssertTrue(app.navigationBars[destination].waitForExistence(timeout: 5)
+                      || app.staticTexts[destination].firstMatch.exists, destination + "\n" + app.debugDescription)
+    }
+
+    /// Every destination at every text size: the four destinations stay reachable and each screen is captured.
+    func testEveryDestinationAtEveryTextSize() throws {
+        continueAfterFailure = false
+        let appearance = ProcessInfo.processInfo.environment["SUPPORT_APPEARANCE"] ?? "light"
+        let sizes = ["xSmall", "small", "medium", "large", "xLarge", "xxLarge", "xxxLarge",
+                     "accessibility1", "accessibility2", "accessibility3", "accessibility4", "accessibility5"]
+        for size in sizes {
+            let app = launch(size: size, appearance: appearance)
+            assertFourDestinations(in: app)
+            for destination in ["Today", "Chat", "Explore", "You"] {
+                open(destination, in: app)
+                capture("Support-\(destination)-\(appearance)-\(size)", app: app)
+            }
+            app.terminate()
+        }
+    }
+
+    /// The full system audit on every destination, under whatever accessibility settings the simulator has.
+    func testEveryDestinationPassesTheFullAccessibilityAudit() throws {
+        continueAfterFailure = true
+        let environment = ProcessInfo.processInfo.environment
+        let appearance = environment["SUPPORT_APPEARANCE"] ?? "light"
+        let size = environment["SUPPORT_TEXT_SIZE"] ?? "system"
+        let label = environment["SUPPORT_SETTINGS_LABEL"] ?? "default"
+        let app = launch(size: size, appearance: appearance)
+        defer { app.terminate() }
+        for destination in ["Today", "Chat", "Explore", "You"] {
+            open(destination, in: app)
+            capture("Audit-\(destination)-\(label)-\(appearance)-\(size)", app: app)
+            try app.performAccessibilityAudit(for: .all) { issue in
+                // The DEBUG fixture's appearance overlay is test scaffolding, not app UI.
+                if issue.element?.identifier == "support-fixture-appearance" { return true }
+                XCTFail("\(destination) [\(label) \(appearance) \(size)]: \(issue.auditType) \(issue.compactDescription) — \(issue.element?.debugDescription ?? "no element")")
+                return true
+            }
+        }
     }
 
     func testAllTextSizesInBothAppearances() throws {
