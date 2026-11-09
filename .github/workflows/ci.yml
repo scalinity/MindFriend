@@ -1,6 +1,16 @@
 name: CI
 
-on: [push, pull_request]
+# Pull requests run once per commit (as pull_request); pushes run only for main.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A new commit on a pull request cancels that PR's superseded run. Runs on main
+# are keyed by run id, so they never cancel each other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
   ios-tests:
