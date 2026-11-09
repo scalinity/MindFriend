@@ -20,6 +20,8 @@ SUITES = (
     "family_member_removal.sql",
     "family_invitation_acceptance.sql",
     "apple_account_notifications.sql",
+    "mentorship_messages.sql",
+    "drift_reconciliation.sql",
 )
 
 
