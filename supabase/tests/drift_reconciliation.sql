@@ -15,6 +15,14 @@ INSERT INTO public.mentorship_matches(id,mentor_id,mentee_id,status,mentor_alias
  ('d2000000-0000-4000-8000-000000000001','d1000000-0000-4000-8000-000000000002','d1000000-0000-4000-8000-000000000001','pending','Synthetic mentor','Synthetic mentee'),
  ('d2000000-0000-4000-8000-000000000002','d1000000-0000-4000-8000-000000000002','d1000000-0000-4000-8000-000000000003','active','Synthetic mentor','Synthetic mentee two');
 
+-- Expired memory suggestions are blanked by a daily job.
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT FROM cron.job WHERE jobname='support-expire-memory-candidates'
+                 AND command='SELECT public.support_expire_candidates();') THEN
+    RAISE EXCEPTION 'Memory suggestion expiry is not scheduled';
+  END IF;
+END $$;
+
 -- Anonymous callers cannot read another user's dashboard (fail closed on a null uid).
 SET LOCAL ROLE anon;
 DO $$ BEGIN
