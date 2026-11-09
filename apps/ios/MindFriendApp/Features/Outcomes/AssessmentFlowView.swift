@@ -294,7 +294,7 @@ struct AssessmentFlowView: View {
                             }) {
                                 Text("988 Suicide & Crisis Lifeline")
                                     .font(.system(.subheadline, design: .default).weight(.semibold))
-                                    .foregroundColor(SupportTheme.textPrimary)
+                                    .foregroundColor(SupportTheme.onAccent)
                                     .frame(maxWidth: .infinity)
                                     .padding(SupportTheme.Spacing.s)
                                     .background(SupportTheme.accent)

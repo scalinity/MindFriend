@@ -75,7 +75,7 @@ struct SoundscapePlayerView: View {
 
                     Image(systemName: audioPlayer.isPlaying ? "pause.fill" : "play.fill")
                         .font(.title)
-                        .foregroundStyle(SupportTheme.textPrimary)
+                        .foregroundStyle(SupportTheme.onAccent)
                         .offset(x: audioPlayer.isPlaying ? 0 : 2)
                 }
                 .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)

@@ -53,16 +53,14 @@ struct SleepHomeView: View {
                                 routinesSection
                             }
                         }
-                        .padding(.bottom, SupportTheme.Spacing.xl) // Space for mini player
+                        .padding(.bottom, SupportTheme.Spacing.xl)
                     }
                 }
-
-                // Mini player overlay
+            }
+            // The mini player reserves its own height, so the last item scrolls clear of it at any text size.
+            .safeAreaInset(edge: .bottom) {
                 if viewModel.playerState.currentContent != nil {
-                    VStack {
-                        Spacer()
-                        miniPlayer
-                    }
+                    miniPlayer
                 }
             }
             .supportScreen()

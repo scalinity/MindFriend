@@ -374,7 +374,7 @@ struct ResultsView: View {
                                     Text("Set Outcome Goal")
                                         .font(.system(.subheadline, design: .default).weight(.semibold))
                                 }
-                                .foregroundColor(SupportTheme.textPrimary)
+                                .foregroundColor(SupportTheme.onAccent)
                                 .frame(maxWidth: .infinity)
                                 .padding(SupportTheme.Spacing.s)
                                 .background(

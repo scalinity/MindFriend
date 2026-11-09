@@ -148,7 +148,7 @@ struct ProgramHeaderView: View {
 
                 Image(systemName: program.category.icon)
                     .font(.system(.largeTitle))
-                    .foregroundStyle(SupportTheme.textPrimary)
+                    .foregroundStyle(SupportTheme.onAccent)
             }
             .accessibilityHidden(true)
 

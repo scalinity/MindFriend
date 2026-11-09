@@ -234,7 +234,7 @@ struct ProgramCard: View {
 
                 Image(systemName: program.category.icon)
                     .font(.largeTitle)
-                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.8))
+                    .foregroundStyle(SupportTheme.onAccent.opacity(0.8))
             }
             .frame(height: 100)
 

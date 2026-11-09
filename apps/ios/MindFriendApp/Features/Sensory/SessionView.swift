@@ -51,8 +51,13 @@ struct SessionView: View {
 
             if let error = viewModel.errorMessage {
                 SupportUnavailableState(title: "Session unavailable", message: error, actionTitle: "Close") {
-                    viewModel.errorMessage = nil
-                    dismiss()
+                    // A time-limit error leaves the shared service's session active; end it so the
+                    // next session can start and this one is recorded.
+                    Task {
+                        if viewModel.isPlaying { await viewModel.endSession() }
+                        viewModel.errorMessage = nil
+                        dismiss()
+                    }
                 }
                 .padding(SupportTheme.Spacing.m)
             } else if isLoading {

@@ -425,18 +425,13 @@ struct LiveSessionDetailSheet: View {
                         HStack {
                             if isJoining {
                                 ProgressView()
-                                    .tint(SupportTheme.accent)
+                                    .tint(SupportTheme.onAccent)
                             } else {
                                 Text(session.isLive ? "Join Now" : "Notify Me")
                             }
                         }
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(SupportTheme.Spacing.m)
-                        .background(session.isLive ? SupportTheme.accent : SupportTheme.textSecondary)
-                        .foregroundStyle(SupportTheme.textPrimary)
-                        .cornerRadius(SupportTheme.controlRadius)
                     }
+                    .buttonStyle(.supportPrimary)
                     .disabled(isJoining || !session.isLive)
                 }
                 .padding(SupportTheme.Spacing.m)

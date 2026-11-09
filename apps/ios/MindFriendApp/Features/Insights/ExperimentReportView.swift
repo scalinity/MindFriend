@@ -108,7 +108,7 @@ struct ExperimentReportView: View {
                 Label("Positive Results", systemImage: "arrow.up.circle.fill")
                     .font(.caption)
                     .fontWeight(.medium)
-                    .foregroundStyle(SupportTheme.textPrimary)
+                    .foregroundStyle(SupportTheme.onAccent)
                     .padding(.horizontal, SupportTheme.Spacing.s)
                     .padding(.vertical, SupportTheme.Spacing.xxs)
                     .background(SupportTheme.accent)

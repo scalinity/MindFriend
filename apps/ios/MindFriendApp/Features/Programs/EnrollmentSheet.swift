@@ -25,7 +25,7 @@ struct EnrollmentSheet: View {
 
                         Image(systemName: program.category.icon)
                             .font(.system(.largeTitle))
-                            .foregroundStyle(SupportTheme.textPrimary)
+                            .foregroundStyle(SupportTheme.onAccent)
                     }
 
                     Text(program.title)

@@ -150,13 +150,8 @@ struct LibraryJournalingPlayerView: View {
             viewModel.completeExercise()
         } label: {
             Text("Complete Journal Entry")
-                .font(.headline)
-                .foregroundStyle(SupportTheme.textPrimary)
-                .frame(maxWidth: .infinity)
-                .padding(SupportTheme.Spacing.m)
-                .background(SupportTheme.accent)
-                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
         }
+        .buttonStyle(.supportPrimary)
     }
 
     // MARK: - Fallback
@@ -195,13 +190,8 @@ struct LibraryJournalingPlayerView: View {
                 viewModel.completeExercise()
             } label: {
                 Text("Done")
-                    .font(.headline)
-                    .foregroundStyle(SupportTheme.textPrimary)
-                    .frame(maxWidth: .infinity)
-                    .padding(SupportTheme.Spacing.m)
-                    .background(SupportTheme.accent)
-                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
             }
+            .buttonStyle(.supportPrimary)
             .padding(.horizontal, SupportTheme.Spacing.m)
 
             Spacer()

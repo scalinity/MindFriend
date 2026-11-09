@@ -310,7 +310,7 @@ struct TherapistProfileView: View {
                 } label: {
                     Text("Book Session")
                         .font(.headline)
-                        .foregroundStyle(SupportTheme.textPrimary)
+                        .foregroundStyle(SupportTheme.onAccent)
                         .padding(.horizontal, SupportTheme.Spacing.l)
                         .padding(.vertical, SupportTheme.Spacing.s)
                         .background(SupportTheme.accent)

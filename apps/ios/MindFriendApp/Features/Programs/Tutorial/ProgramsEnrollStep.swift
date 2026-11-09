@@ -36,7 +36,7 @@ struct ProgramsEnrollStep: View {
 
                             Image(systemName: "brain.head.profile")
                                 .font(.title3)
-                                .foregroundStyle(SupportTheme.textPrimary)
+                                .foregroundStyle(SupportTheme.onAccent)
                         }
 
                         VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
