@@ -325,6 +325,7 @@ struct ChatView: View {
 
     private func startSend(_ pending: PendingSend, retryFailed: Bool) {
         guard !isSending else { return }
+        let quotaOwner = appState.currentUser?.id
         let tempMessageId = pending.messageId
         let content = pending.content
         if !messages.contains(where: { $0.id.lowercased() == tempMessageId }) {
@@ -375,8 +376,7 @@ struct ChatView: View {
                 // Update quota tracking from server (authoritative source)
                 if appState.entitlements.tier != .premium, let serverUsed = response.quotaUsed {
                     // Sync from server-provided value (not local increment)
-                    let limit = response.quotaLimit.flatMap { $0 > 0 ? $0 : nil } ?? appState.entitlements.dailyAiQuota
-                    appState.entitlements = Entitlements(tier: appState.entitlements.tier, dailyAiQuota: limit, dailyAiUsed: serverUsed)
+                    if let quotaOwner { appState.recordChatQuota(ownerID: quotaOwner, used: serverUsed, limit: response.quotaLimit) }
                     // Only show warning if not unlimited (Int.max) and near limit
                     showQuotaWarning = response.quotaRemaining < Int.max && response.quotaRemaining <= quotaWarningThreshold
                 } else {
@@ -418,9 +418,7 @@ struct ChatView: View {
                 guard !Task.isCancelled, isVisible, viewGeneration == generation else { return }
                 let failure = error as? ChatRequestFailure ?? ChatRequestFailure(kind: .unconfirmed)
                 sendFailure = failure
-                let used = failure.quotaUsed.flatMap { $0 >= 0 ? $0 : nil } ?? appState.entitlements.dailyAiUsed
-                let limit = failure.quotaLimit.flatMap { $0 > 0 ? $0 : nil } ?? appState.entitlements.dailyAiQuota
-                appState.entitlements = Entitlements(tier: appState.entitlements.tier, dailyAiQuota: limit, dailyAiUsed: used)
+                if let quotaOwner { appState.recordChatQuota(ownerID: quotaOwner, used: failure.quotaUsed, limit: failure.quotaLimit) }
                 if failure.messageSaved == false {
                     messages.removeAll { $0.id.lowercased() == tempMessageId }
                     if inputText.isEmpty { inputText = content }

@@ -37,8 +37,11 @@ struct BiometricsSettingsView: View {
     @State private var isLoading = true
     @State private var showDisconnectAlert = false
 
+    /// Set by the stable shell so pushed work adds no second NavigationStack; standalone callers keep their own.
+    @Environment(\.supportRootEmbedded) private var supportEmbedded
+
     var body: some View {
-        NavigationStack {
+        SupportRootNavigation(embedded: supportEmbedded) {
             Form {
                 Section {
                     HStack {

@@ -329,11 +329,19 @@ public struct UserEntitlements: Codable, Equatable, Sendable {
     var subscriptionTier: String
     var premiumExpiresAt: Date?
     var features: [String: Bool]
+    var dailyAiQuota: Int? = nil
+    var dailyAiUsed: Int? = nil
+    var quotaPeriodStartedAt: Date? = nil
+    var verifiedAt: Date? = nil
 
     enum CodingKeys: String, CodingKey {
         case subscriptionTier = "subscription_tier"
         case premiumExpiresAt = "premium_expires_at"
         case features
+        case dailyAiQuota = "daily_ai_quota"
+        case dailyAiUsed = "daily_ai_used"
+        case quotaPeriodStartedAt = "quota_reset_at"
+        case verifiedAt = "verified_at"
     }
 }
 
@@ -633,6 +641,8 @@ struct Entitlements: Codable, Equatable {
     let tier: Tier
     let dailyAiQuota: Int
     var dailyAiUsed: Int
+    var quotaPeriodStartedAt: Date? = nil
+    var verifiedAt: Date? = nil
 
     /// Remaining AI messages for the day. Premium users have unlimited (Int.max).
     var remaining: Int {
@@ -654,6 +664,46 @@ struct Entitlements: Codable, Equatable {
 
     static let free = Entitlements(tier: .free, dailyAiQuota: 5, dailyAiUsed: 0)
     static let premium = Entitlements(tier: .premium, dailyAiQuota: 9999, dailyAiUsed: 0)
+}
+
+/// Display authority for the current account. Unknown quota is kept distinct from zero.
+/// A server verifies every paid operation; a display snapshot cannot authorize one.
+struct EntitlementSnapshot: Equatable {
+    enum Source: String { case cachedProfile, serverProfile, serverBilling, chatReceipt }
+    let ownerID: UUID
+    var tier: Tier
+    var source: Source
+    var verifiedAt: Date?
+    var usage: Int?
+    var quota: Int?
+    var quotaPeriodStartedAt: Date?
+
+    var remaining: Int? {
+        guard let quota, let usage else { return nil }
+        return quota == -1 ? nil : max(0, quota - usage)
+    }
+    var isUnlimited: Bool { quota == -1 }
+    var legacy: Entitlements {
+        Entitlements(tier: tier, dailyAiQuota: quota ?? 5, dailyAiUsed: usage ?? 0,
+                     quotaPeriodStartedAt: quotaPeriodStartedAt, verifiedAt: verifiedAt)
+    }
+
+    mutating func merge(tier: Tier, usage: Int?, quota: Int?, period: Date?,
+                        verifiedAt: Date?, source: Source) {
+        self.tier = tier
+        self.source = source
+        // A decrease needs a newer server quota period. Refreshing metadata or
+        // retrying an older receipt never resets already acknowledged usage.
+        let previousBoundary = quotaPeriodStartedAt ?? (self.usage == nil ? .distantPast : (self.verifiedAt ?? .distantFuture))
+        let newPeriod = period.map { $0 > previousBoundary } ?? false
+        if let usage, usage >= 0 {
+            self.usage = newPeriod ? usage : max(self.usage ?? 0, usage)
+        }
+        if let quota, quota == -1 || (quota >= 0 && quota != 9999) { self.quota = quota }
+        if let period, period > (quotaPeriodStartedAt ?? .distantPast) { quotaPeriodStartedAt = period }
+        self.verifiedAt = verifiedAt ?? self.verifiedAt
+        if tier == .free && self.quota == -1 { self.quota = quota.flatMap { $0 >= 0 && $0 != 9999 ? $0 : nil } }
+    }
 }
 
 enum Tier: String, Codable {
@@ -1712,6 +1762,7 @@ struct Message: Codable, Identifiable, Equatable {
     let content: String
     let createdAt: Date
     let blocked: Bool
+    var contentOrigin: SupportMessageOrigin? = nil
 }
 
 enum MessageRole: String, Codable {
@@ -1735,6 +1786,7 @@ struct SendMessageResponse: Codable {
     let memoryUsed: Bool?    // Whether companion memory was used in this response
     let memoryIdsUsed: [String]?  // IDs of memories that were used
     let coachData: CoachData?
+    var support: SupportChatMetadata? = nil
 }
 
 // MARK: - Circle
