@@ -153,6 +153,17 @@ Deno.test("Apple verifier and verify-purchase handler with synthetic signatures 
       for (const part of signed.split(".")) assert.ok(!lines.join("\n").includes(part));
     });
 
+    await t.step("a certificate checked against a root of another key type reads as unsigned", async () => {
+      const production = await Deno.readTextFile(new URL("./apple-roots.ts", import.meta.url));
+      const roots = [...production.matchAll(/"([A-Za-z0-9+/=]{200,})"/g)]
+        .map((match) => new X509Certificate(Buffer.from(match[1], "base64")));
+      const rsaRoot = roots.find((root) => root.publicKey.asymmetricKeyType === "rsa")!;
+      const intermediate = new X509Certificate(Buffer.from(trustedChain.certificates[1], "base64"));
+      const root = new X509Certificate(trustedChain.root);
+      assert.equal(intermediate.verify(rsaRoot.publicKey), false);
+      assert.equal(intermediate.verify(root.publicKey), true);
+    });
+
     await t.step("a value that is not an Error is logged with the step that threw it and the chain", async () => {
       database.reset();
       // Some dependencies throw bare strings, which Apple's catch-all used to discard.

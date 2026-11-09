@@ -33,9 +33,16 @@ export class X509Certificate extends NativeX509Certificate {
     return this.pem;
   }
 
+  // Like native verify, a key that did not sign this certificate (including a key of
+  // another type) reads as false. jsrsasign throws a string for an RSA key on an ECDSA
+  // signature, and Apple's verifier tries every trusted root, RSA roots before G3.
   override verify(publicKey: KeyObject): boolean {
-    return this.parsed.verifySignature(
-      publicKey.export({ type: "spki", format: "pem" }) as string,
-    );
+    try {
+      return this.parsed.verifySignature(
+        publicKey.export({ type: "spki", format: "pem" }) as string,
+      );
+    } catch {
+      return false;
+    }
   }
 }
