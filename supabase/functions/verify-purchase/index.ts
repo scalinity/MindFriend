@@ -110,7 +110,10 @@ Deno.serve(async (req) => {
         });
         if (revokeError) throw new Error("Purchase revocation could not be saved");
       }
-      log.warn("Transaction verification rejected", { code: error.code });
+      log.warn("Transaction verification rejected", {
+        code: error.code,
+        verifiers: error.verifiers,
+      });
       return new Response(
         JSON.stringify({
           error: error.message,
@@ -171,7 +174,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    const planDetails = getPlanDetails(existingSubscription?.product_id ?? productId);
+    // Apple's verified product is authoritative: a renewal, upgrade or crossgrade
+    // inside the subscription group keeps the original transaction ID.
+    const planDetails = getPlanDetails(productId);
 
     const entitlementOwner = user.id;
 
@@ -192,9 +197,10 @@ Deno.serve(async (req) => {
         if (onlyMissing) {
           const { data, error } = await supabaseAdmin.from(table)
             .select(Object.keys(values).join(","))
-            .eq(ownerColumn, entitlementOwner).single<Record<string, unknown>>();
-          if (error || !data) throw new Error("Entitlements could not be read");
-          if (Object.entries(values).every(([key, value]) => data[key] === value)) continue;
+            .eq(ownerColumn, entitlementOwner).single();
+          const row = data as Record<string, unknown> | null;
+          if (error || !row) throw new Error("Entitlements could not be read");
+          if (Object.entries(values).every(([key, value]) => row[key] === value)) continue;
         }
         const { data, error } = await supabaseAdmin.from(table)
           .update(values).eq(ownerColumn, entitlementOwner).select(ownerColumn).single();
@@ -227,14 +233,25 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Renewal - same original transaction but new transaction ID
-      // Update expiry and transaction ID
+      // Renewal or crossgrade - same original transaction, new transaction ID.
+      // An upgrade into a family plan without a group continues to the purchase
+      // path below, which creates the group and rewrites this row.
+    }
+    if (
+      existingSubscription &&
+      !(isFamilyPlan(planDetails.planType) && !existingSubscription.family_id)
+    ) {
+      const currentTransactionId = transactionPayload.transactionId;
       const newExpiresAt = new Date(expiresDate);
 
       const { error: renewalError } = await supabaseAdmin
         .from("subscriptions")
         .update({
           last_transaction_id: currentTransactionId,
+          product_id: productId,
+          plan_type: planDetails.planType,
+          billing_period: planDetails.billingPeriod,
+          seats_total: planDetails.seatsTotal,
           expires_at: newExpiresAt.toISOString(),
           status: "active",
           updated_at: new Date().toISOString(),
@@ -255,9 +272,9 @@ Deno.serve(async (req) => {
       return new Response(
         JSON.stringify({
           valid: true,
-          productId: existingSubscription.product_id,
-          planType: existingSubscription.plan_type,
-          billingPeriod: existingSubscription.billing_period,
+          productId,
+          planType: planDetails.planType,
+          billingPeriod: planDetails.billingPeriod,
           expiresAt: newExpiresAt.toISOString(),
           familyId: existingSubscription.family_id,
           message: "Subscription renewed successfully",

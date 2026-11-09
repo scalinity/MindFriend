@@ -106,6 +106,14 @@ jobs:
             supabase/functions/manage-safety-plan/handler.test.ts \
             supabase/functions/delete-account/request-body.test.ts \
             supabase/functions/tests/voice_context_test.ts
+      # Synthetic certificate chains are generated with openssl into .cache;
+      # OCSP is served by an in-process fixture, so no network is needed.
+      - name: Run verify-purchase signature and handler tests
+        run: |
+          deno test --allow-env --allow-read --allow-write=.cache --allow-run=openssl \
+            --config supabase/functions/verify-purchase/deno.test.json \
+            supabase/functions/verify-purchase/apple-transaction.test.ts \
+            supabase/functions/verify-purchase/test.ts
 
   sql-tests:
     runs-on: ubuntu-latest

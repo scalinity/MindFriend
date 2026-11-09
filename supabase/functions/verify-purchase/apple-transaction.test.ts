@@ -133,6 +133,25 @@ Deno.test("Apple verifier and verify-purchase handler with synthetic signatures 
       } finally { setOCSPRevoked(false); }
     });
 
+    await t.step("rejection log records each verifier's status and cause without signed content", async () => {
+      database.reset();
+      const signed = untrustedChain.sign(testTransaction());
+      const lines: string[] = [];
+      const originalLog = console.log;
+      console.log = (line: string) => lines.push(line);
+      try {
+        assert.equal((await request(signed)).status, 400);
+      } finally { console.log = originalLog; }
+      const entry = lines.map((line) => JSON.parse(line))
+        .find((logged) => logged.message === "Transaction verification rejected");
+      assert.deepEqual(
+        entry.context.verifiers.map((v: { environment: string; status: number }) => [v.environment, v.status]),
+        [["Production", 1], ["Sandbox", 1]],
+      );
+      assert.match(entry.context.verifiers[0].at, /apple-verifier\.js:\d+/);
+      for (const part of signed.split(".")) assert.ok(!lines.join("\n").includes(part));
+    });
+
     await t.step("rejects tampered leaf and intermediate certificate signatures", async () => {
       const signed = trustedChain.sign(testTransaction());
       for (const index of [0, 1]) {
@@ -415,6 +434,50 @@ Deno.test("Apple verifier and verify-purchase handler with synthetic signatures 
           database.writes[0].data.expires_at,
           new Date(payload.expiresDate).toISOString(),
         );
+      },
+    );
+
+    await t.step(
+      "crossgrade in the same group stores and returns the verified product",
+      async () => {
+        database.reset();
+        database.subscription = existingSubscription();
+        const payload = testTransaction({
+          transactionId: "200000000000003",
+          productId: "com.mindfriend.premium.yearly",
+        });
+        const response = await request(trustedChain.sign(payload));
+        assert.equal(response.status, 200);
+        const body = await response.json();
+        assert.equal(body.productId, "com.mindfriend.premium.yearly");
+        assert.equal(body.billingPeriod, "annual");
+        const write = database.writes.find((w) => w.table === "subscriptions");
+        assert.equal(write?.data.product_id, "com.mindfriend.premium.yearly");
+        assert.equal(write?.data.plan_type, "individual");
+        assert.equal(write?.data.billing_period, "annual");
+        assert.equal(write?.data.seats_total, 1);
+        assert.equal(write?.data.last_transaction_id, payload.transactionId);
+        assert.equal(database.profile.premium_badge, "annual_achiever");
+      },
+    );
+
+    await t.step(
+      "upgrade into a couples plan creates its family group",
+      async () => {
+        database.reset();
+        database.subscription = existingSubscription();
+        const response = await request(trustedChain.sign(testTransaction({
+          transactionId: "200000000000004",
+          productId: "com.mindfriend.couples.monthly",
+        })));
+        assert.equal(response.status, 200);
+        const body = await response.json();
+        assert.equal(body.productId, "com.mindfriend.couples.monthly");
+        assert.equal(body.planType, "couples");
+        assert.ok(body.familyId);
+        const write = database.writes.find((w) => w.table === "subscriptions");
+        assert.equal(write?.data.plan_type, "couples");
+        assert.equal(write?.data.seats_total, 2);
       },
     );
 
