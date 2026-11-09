@@ -231,7 +231,7 @@ SELECT is(
 );
 
 -- Fetch signature (creates audit log)
-PERFORM get_stress_signature('00000000-0000-0000-0000-000000000006'::uuid);
+SELECT get_stress_signature('00000000-0000-0000-0000-000000000006'::uuid);
 
 -- Verify audit log created
 SELECT is(
