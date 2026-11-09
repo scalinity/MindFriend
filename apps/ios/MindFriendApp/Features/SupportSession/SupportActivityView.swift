@@ -35,10 +35,15 @@ struct SupportActivityView: View {
         return activity.templateKey.prompts[promptIndex]
     }
 
+    /// Height of the floating keyboard toolbar (Skip, Next, Done) plus its gap above the keyboard.
+    @ScaledMetric(relativeTo: .body) private var keyboardToolbarClearance: CGFloat = 60
+    private static let fieldScrollID = "activity-field"
+
     var body: some View {
         NavigationStack {
             Group {
                 if let activity {
+                    ScrollViewReader { proxy in
                     ScrollView {
                         VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
                             VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
@@ -58,10 +63,22 @@ struct SupportActivityView: View {
                         .padding(SupportTheme.Spacing.m).frame(maxWidth: .infinity)
                     }
                     .scrollDismissesKeyboard(.interactively)
+                    .onChange(of: fieldFocused) { _, focused in
+                        guard focused else { return }
+                        // Keyboard avoidance only reveals the cursor line; once the keyboard has settled, bring
+                        // the whole field above the keyboard toolbar.
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(350))
+                            withAnimation { proxy.scrollTo(Self.fieldScrollID, anchor: .center) }
+                        }
+                    }
+                    }
                     .supportScreen()
                     .safeAreaInset(edge: .bottom) {
-                        // While typing, Next and Skip move into the keyboard toolbar.
-                        if !fieldFocused && !activity.status.isTerminal && activity.kind != .chooseStep { progression(activity) }
+                        // While typing, Next and Skip move into the keyboard toolbar. That toolbar floats above the
+                        // keyboard without taking space, so the same height is reserved to keep the field in view.
+                        if fieldFocused { Color.clear.frame(height: keyboardToolbarClearance) }
+                        else if !activity.status.isTerminal && activity.kind != .chooseStep { progression(activity) }
                     }
                     .navigationTitle(activity.templateKey.title)
                     .navigationBarTitleDisplayMode(.inline)
@@ -122,9 +139,11 @@ struct SupportActivityView: View {
         .task(id: presentation.id) { loadAnswer(); activeSince = Date() }
         .onChange(of: answer) { _, _ in scheduleSave() }
         .onChange(of: scenePhase) { _, phase in
-            if phase != .active {
-                if activity?.status.isUnfinished == true { pause() }
-            }
+            // Locking or leaving the app saves the step and stops the practice clock; the activity stays
+            // open, so unlocking returns to the same step. If the app ends meanwhile, Today offers to continue.
+            guard activity?.status.isUnfinished == true else { return }
+            if phase != .active, activeSince != nil { saveForBackground() }
+            if phase == .active, activeSince == nil { activeSince = Date() }
         }
         .onDisappear { draftTask?.cancel() }
     }
@@ -149,7 +168,7 @@ struct SupportActivityView: View {
         }
         TextField(activity.kind == .chooseStep ? "Your next step" : "Optional response", text: $answer, axis: .vertical)
             .lineLimit(3...10).supportField()
-            .focused($fieldFocused)
+            .focused($fieldFocused).id(Self.fieldScrollID)
             .disabled(isSaving)
             .accessibilityLabel(activity.kind == .chooseStep ? "Your next step" : "Optional response")
         if activity.kind == .chooseStep {
@@ -206,7 +225,7 @@ struct SupportActivityView: View {
         } else {
             Text("How was that for you?").font(.title2).accessibilityAddTraits(.isHeader)
             TextField("Optional note", text: $note, axis: .vertical).lineLimit(2...6).supportField()
-                .focused($fieldFocused).disabled(isSaving)
+                .focused($fieldFocused).id(Self.fieldScrollID).disabled(isSaving)
             Toggle("Include my written answers in the conversation", isOn: $includeAnswers).disabled(isSaving)
             Text(includeAnswers ? "Only the written preview below may be included in later AI context for this session." : "This written preview stays out of automatic session context. Answers you sent in Chat remain in that conversation.")
                 .font(.subheadline).foregroundStyle(SupportTheme.textSecondary)
@@ -315,6 +334,17 @@ struct SupportActivityView: View {
             } else if let value = checkpoint() { try await coordinator.pause(activity.id, checkpoint: value) }
             activeSince = nil
             dismiss()
+        }
+    }
+
+    private func saveForBackground() {
+        perform {
+            guard let activity else { return }
+            if activity.kind == .chooseStep {
+                var value = activity.checkpoint; value.responses["action"] = answer
+                try await coordinator.checkpoint(activity.id, value: value)
+            } else if let value = checkpoint() { try await coordinator.checkpoint(activity.id, value: value) }
+            activeSince = nil
         }
     }
 
