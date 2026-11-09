@@ -358,31 +358,6 @@ final class AudioContentService {
 
     // MARK: - Statistics
 
-    /// Get user's listening statistics
-    func getUserStatistics() async throws -> AudioStatistics {
-        guard let userId = supabase.auth.currentUser?.id else {
-            throw AudioServiceError.notAuthenticated
-        }
-
-        struct SessionStats: Codable {
-            let count: Int?
-            let total_duration: Int?
-        }
-
-        let stats: [SessionStats] = try await supabase
-            .rpc("get_user_audio_stats", params: ["user_id": userId.uuidString])
-            .execute()
-            .value
-
-        let stat = stats.first ?? SessionStats(count: 0, total_duration: 0)
-
-        return AudioStatistics(
-            totalSessionsCompleted: stat.count ?? 0,
-            totalMinutesListened: (stat.total_duration ?? 0) / 60,
-            favoriteCount: try await fetchFavoriteTracks().count,
-            lastPlayedAt: nil
-        )
-    }
 }
 
 // MARK: - Models
@@ -401,13 +376,6 @@ struct AudioCollection: Codable, Identifiable {
         case isActive = "is_active"
         case createdAt = "created_at"
     }
-}
-
-struct AudioStatistics {
-    let totalSessionsCompleted: Int
-    let totalMinutesListened: Int
-    let favoriteCount: Int
-    let lastPlayedAt: Date?
 }
 
 // MARK: - Errors

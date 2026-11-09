@@ -695,34 +695,6 @@ final class BillingService: ObservableObject {
         return url
     }
 
-    /// Generate a Letter of Medical Necessity for HSA/FSA reimbursement
-    func generateLetterOfMedicalNecessity() async throws -> URL {
-        guard let subscriptionId = subscription?.id else {
-            throw BillingError.noActiveSubscription
-        }
-
-        struct GenerateLOMNRequest: Encodable {
-            let subscriptionId: String
-
-            enum CodingKeys: String, CodingKey {
-                case subscriptionId = "subscription_id"
-            }
-        }
-
-        let result: LOmnResponse = try await supabase.functions.invoke(
-            "generate-lomn",
-            options: .init(body: GenerateLOMNRequest(subscriptionId: subscriptionId))
-        )
-
-        guard result.success, let url = URL(string: result.lomnUrl) else {
-            throw BillingError.lomnGenerationFailed
-        }
-
-        // Update local HSA record
-        try await loadHSARecord()
-
-        return url
-    }
 
     // MARK: - Private
 
@@ -842,7 +814,6 @@ enum BillingError: Error, LocalizedError, Equatable {
     case giftRedemptionFailed
     case noActiveSubscription
     case hsaReceiptGenerationFailed
-    case lomnGenerationFailed
     case productNotFound
     case purchaseInProgress
     case entitlementPending
@@ -880,8 +851,6 @@ enum BillingError: Error, LocalizedError, Equatable {
             return "No active subscription found"
         case .hsaReceiptGenerationFailed:
             return "Failed to generate HSA/FSA receipt"
-        case .lomnGenerationFailed:
-            return "Failed to generate Letter of Medical Necessity"
         case .productNotFound:
             return "This subscription is unavailable from the App Store. Try loading plans again."
         case .purchaseInProgress:
@@ -904,19 +873,6 @@ enum BillingError: Error, LocalizedError, Equatable {
 struct GiftRedeemResponse: Codable {
     let success: Bool
     let message: String?
-}
-
-/// Response from generate-lomn Edge Function
-struct LOmnResponse: Codable {
-    let success: Bool
-    let lomnUrl: String
-    let lomnNumber: String
-
-    enum CodingKeys: String, CodingKey {
-        case success
-        case lomnUrl = "lomn_url"
-        case lomnNumber = "lomn_number"
-    }
 }
 
 // MARK: - Helper for invite code generation (client-side display)
