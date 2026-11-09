@@ -32,7 +32,13 @@ Billable job-min/run p50: 10 (the repository is public, so standard hosted runne
 ## Changes
 | # | Commit | Change | Signal it targets | Critical path p50 / p90 before -> after | n | Cost delta | Kept |
 |---|---|---|---|---|---|---|---|
+| 1 | d2b1936 | Push runs only on `main`; one `pull_request` run per PR commit; `concurrency` cancels a PR's superseded run | ios-tests waiting p90 49m57s (macOS queue); 2 macOS jobs per PR commit | macOS jobs per PR commit 2 -> 1 (observed on this PR's first push: one `pull_request` run, no `push` run). Queue-time effect on wall-clock p50/p90 can only be measured across real PR traffic: measure after merge | 1 | None; halves macOS minutes per PR commit | Yes |
 
 ### Considered and not applied
 - **Cache Swift package checkouts** (setup, up to 1m26s). The resolved packages are 3.5 GB, of which 3.2 GB is `sentry-cocoa`'s six prebuilt framework variants (SwiftPM downloads every binary target although the app links one). Caching them would take about a third of the repository's 10 GB cache allowance to save at most ~1 minute, minus the multi-gigabyte restore. Not applied.
 - **Faster or larger macOS runners** (waiting and running). They cost money; not proposed without approval.
+- **`COMPILER_INDEX_STORE_ENABLE=NO`** (compile). Local clean `build-for-testing` with already-resolved packages, Apple silicon Mac: index store on 94 s, off 118 s (n=1 each; the second build overlapped another build, so the comparison is noisy). No evidence of a win, so not applied.
+
+## Where the time is now
+The same clean compile that takes about 1.5 minutes on a local Apple silicon Mac takes 13 minutes on the standard `macos-latest` runner (3 vCPU), so `ios-tests` running time is bound by runner speed. The remaining levers are a larger macOS runner (paid; needs approval and a monthly estimate) or building less on PRs (for example an affected-only rule that skips the iOS job for backend-only changes, which needs the skip-logic canary guard). Rerun rate (10.4%) comes from simulator launch/terminate failures on busy runners; fewer concurrent macOS jobs after change 1 should lower it, measured after merge.
+
