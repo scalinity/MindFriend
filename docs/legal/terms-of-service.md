@@ -1,7 +1,7 @@
 # MindFriend Terms of Service
 
-**Last Updated:** January 14, 2026
-**Effective Date:** January 14, 2026
+**Last Updated:** November 9, 2026
+**Effective Date:** November 9, 2026
 
 These Terms of Service (the "**Terms**" or "**Agreement**") are a legally binding contract between you ("**you**" or "**User**") and **Daniel Escalante** ("**MindFriend**," "**we**," "**us**," or "**our**") governing your access to and use of **MindFriend** (the "**Service**"), including the MindFriend mobile application (the "**App**"), related websites, features, content, and subscriptions.
 
@@ -41,12 +41,13 @@ If you do not agree to updated Terms, you must stop using the Service and may de
 
 For clarity, the following definitions apply:
 
-- **"AI Companion"** means the AI-powered conversational feature of the Service that generates responses to your messages.
+- **"AI Companion"** means the AI-powered features of the Service that generate responses or content for you, including chat and live voice conversations, memory suggestions, analysis of journal, thought-record, voice-journal and decision entries, thought rewrites, personalized exercises and meditations, weekly insights, milestone messages, and image generation.
 - **"Content"** means text, images, audio, video, and other materials made available through the Service, including our materials and User Content.
-- **"User Content"** means any content you submit, store, transmit, publish, or otherwise make available through the Service (e.g., mood notes, Circle check-ins, chat messages).
+- **"User Content"** means any content you submit, store, transmit, publish, or otherwise make available through the Service (e.g., mood notes, community posts, chat messages).
 - **"Circle"** means a private group feature within the Service where members can share check-ins and related content.
+- **"Community features"** means the parts of the Service where you share with other people: Circles, mentorship, peer support, partner and family.
 - **"Subscription"** means a paid recurring plan or in-app purchase that unlocks premium features.
-- **"Third-Party Services"** means services provided by third parties (e.g., Apple App Store, analytics providers, cloud hosting).
+- **"Third-Party Services"** means services provided by third parties (e.g., Apple App Store, cloud hosting, crash reporting, email delivery, AI providers).
 - **"Device"** means the mobile device you use to access the Service.
 - **"Applicable Law"** means laws and regulations that apply based on your location, including consumer protection and privacy laws.
 
@@ -56,7 +57,7 @@ For clarity, the following definitions apply:
 
 ### 3.1 Eligibility and Age Requirements
 
-You must be at least **13 years old** to use the Service. If you are under the age of majority where you live, you represent that you have permission from a parent or legal guardian to use the Service.
+You must be at least **13 years old** to use the Service. When you sign up, we ask for your birth year and for you to confirm that you are 13 or older. If you are under the age of majority where you live, you represent that you have permission from a parent or legal guardian to use the Service.
 
 We do not knowingly allow children under 13 to use the Service. If we learn that a user is under 13, we may delete the account and associated data.
 
@@ -72,7 +73,7 @@ You may need an account to use certain features. When creating an account, you a
 
 You are responsible for all activity that occurs under your account, including activity by anyone who gains access to your account due to your actions or failure to secure credentials.
 
-Notify us promptly at support@mindfriend.app if you suspect unauthorized access.
+Notify us promptly at [support@mindfriend.app](mailto:support@mindfriend.app) if you suspect unauthorized access.
 
 ### 3.4 Acceptable Use Responsibility
 
@@ -108,10 +109,10 @@ If you have questions about a medical condition or mental health symptoms, seek 
 
 ### 4.2 Not for Emergencies
 
-If you are experiencing an emergency or are at risk of harming yourself or others:
-
-- Call your local emergency number immediately
-- Seek immediate help from qualified professionals
+> If you are experiencing an emergency or are at risk of harming yourself or others:\
+> **Call your local emergency number immediately** (in the US, 911).\
+> In the US, you can also call or text 988 (Suicide & Crisis Lifeline).\
+> Seek immediate help from qualified professionals.
 
 The Service may provide crisis resources, but it is not an emergency service and cannot guarantee real-time intervention.
 
@@ -168,7 +169,7 @@ You retain ownership of your User Content as between you and us, subject to the 
 To operate the Service, you grant MindFriend a worldwide, non-exclusive, royalty-free license to:
 
 - Host, store, reproduce, process, adapt, and display your User Content
-- Use your User Content to provide features you request (e.g., generating an AI response, showing your check-in to your Circle)
+- Use your User Content to provide features you request (e.g., generating an AI response, showing your check-in to the people in a community feature you joined)
 - Use de-identified and aggregated versions of User Content for analytics and improvement (as described in the Privacy Policy)
 
 This license ends when your User Content is deleted from our systems, except that:
@@ -176,11 +177,11 @@ This license ends when your User Content is deleted from our systems, except tha
 - Copies may remain in backups for a limited time, and
 - We may retain de-identified/aggregated data that cannot reasonably identify you.
 
-### 6.3 Circles and Sharing
+### 6.3 Community Features and Sharing
 
-If you post in a Circle, other Circle members may view your Circle posts. You understand that:
+If you post or share in community features (Circles, mentorship, peer support, partner and family), the other people in that group or connection may see it. You understand that:
 
-- Circle content is intended to be private to that Circle
+- That content is meant to stay within that group or connection
 - We cannot control what other users do with content once they see it (e.g., screenshots)
 - You are responsible for what you choose to share
 
@@ -218,12 +219,12 @@ You agree not to:
    - Attempts to generate instructions for wrongdoing or self-harm
    - Prompt injection or attempts to bypass safety policies
    - Using the AI Companion to generate content that violates these Terms
-6. Post content in Circles that violates Section 6.4
+6. Post content in community features that violates Section 6.4
 7. Impersonate others or misrepresent your affiliation
 8. Use the Service to collect information about other users without permission
 9. Resell, rent, or sublicense access to the Service
 
-Violation may result in suspension or termination (see Section 14).
+Violation may result in suspension or termination (see Section 15).
 
 ---
 
@@ -241,7 +242,7 @@ If you submit feedback, ideas, or suggestions ("Feedback"), you agree we may use
 
 ### 8.3 Copyright Complaints (DMCA or Similar Laws)
 
-If you believe content on the Service infringes your copyright, contact us at support@mindfriend.app with:
+If you believe content on the Service infringes your copyright, contact us at [support@mindfriend.app](mailto:support@mindfriend.app) with:
 
 - A description of the copyrighted work
 - Identification of the allegedly infringing material and its location
@@ -265,7 +266,7 @@ You understand that the Service may process sensitive wellness-related informati
 
 ### 9.3 Data Processing and Service Providers
 
-We use service providers to operate the Service (e.g., hosting, analytics, AI processing). See the Privacy Policy for details.
+We use service providers to operate the Service (e.g., hosting, crash reporting, email delivery, AI processing). AI Companion features are processed by third-party AI providers; the [Privacy Policy](/privacy/#per-feature-ai) lists what each feature sends and to which provider.
 
 ---
 
@@ -314,7 +315,7 @@ Refund policies for App Store purchases are determined by Apple. We cannot guara
 
 ### 11.1 Third-Party Services
 
-The Service may integrate with Third-Party Services (e.g., Apple authentication, Apple billing, cloud services, analytics, AI providers). These services have their own terms and privacy practices. We are not responsible for Third-Party Services.
+The Service may integrate with Third-Party Services (e.g., Apple and Google sign-in, Apple billing, cloud services, crash reporting, email delivery, AI providers). These services have their own terms and privacy practices. We are not responsible for Third-Party Services.
 
 ### 11.2 Third-Party Content
 
@@ -338,7 +339,7 @@ We do not guarantee that:
 
 ### 12.3 User Interactions
 
-We are not responsible for interactions between users, including in Circles. You are responsible for your communications and what you share.
+We are not responsible for interactions between users, including in community features (Circles, mentorship, peer support, partner and family). You are responsible for your communications and what you share.
 
 ### 12.4 Platform Disclaimers (Apple)
 
@@ -384,7 +385,7 @@ We may assume control of the defense of any matter subject to indemnification, a
 
 ### 15.1 Termination by You
 
-You may stop using the Service at any time. You may delete your account through the App or by contacting support at support@mindfriend.app (see Privacy Policy for data deletion terms).
+You may stop using the Service at any time. You may delete your account through the App or by contacting support at [support@mindfriend.app](mailto:support@mindfriend.app) (see Privacy Policy for data deletion terms).
 
 ### 15.2 Suspension or Termination by Us
 
@@ -412,7 +413,7 @@ Sections that by their nature should survive will survive (including Sections 8,
 
 ### 16.1 Informal Resolution First
 
-Before filing a claim, you agree to contact us at support@mindfriend.app and try to resolve the dispute informally. Include:
+Before filing a claim, you agree to contact us at [support@mindfriend.app](mailto:support@mindfriend.app) and try to resolve the dispute informally. Include:
 
 - Your name and account email/handle
 - A description of the issue
@@ -456,4 +457,4 @@ Our failure to enforce any provision is not a waiver of our right to enforce it 
 
 Questions about these Terms should be sent to:
 
-**Email:** support@mindfriend.app
+**Email:** [support@mindfriend.app](mailto:support@mindfriend.app)
